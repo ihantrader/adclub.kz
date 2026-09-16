@@ -1,0 +1,16 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# dependencies / build
+node_modules/
+dist/
+build/
+.turbo/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

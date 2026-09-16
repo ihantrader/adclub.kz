@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "main": "index.ts",
   "dependencies": {
+    "@adclub/api-client": "workspace:*",
+    "@adclub/contracts": "workspace:*",
+    "@adclub/domain": "workspace:*",
+    "@adclub/i18n": "workspace:*",
     "expo": "~57.0.23",
+    "expo-constants": "~57.0.18",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3"
@@ -12,7 +17,8 @@
     "@adclub/config": "workspace:*",
     "@types/react": "~19.2.2",
     "eslint": "^10.10.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "^5.0.1"
   },
   "scripts": {
     "start": "expo start",
@@ -20,7 +26,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "expo export --platform ios --platform android --output-dir dist",
+    "test": "vitest run"
   },
   "private": true
 }

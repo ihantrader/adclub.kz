@@ -12,4 +12,15 @@ module.exports = [
       },
     },
   },
+  {
+    // Metro loads its config as a CommonJS Node module.
+    files: ["metro.config.js"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { require: "readonly", module: "writable", __dirname: "readonly" },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ];

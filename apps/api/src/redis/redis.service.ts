@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, type OnApplicationShutdown } from "@nestjs/
 import type { DependencyCheck } from "@adclub/contracts";
 import { Redis } from "ioredis";
 import { APP_CONFIG, type AppConfig } from "../config";
+import { describeError } from "../common/health/describe-error";
 import { measureCheck } from "../common/health/measure-check";
 
 @Injectable()
@@ -23,7 +24,7 @@ export class RedisService implements OnApplicationShutdown {
     // (Node's default behavior for unhandled 'error' events) — that would
     // break "the server starts even if a dependency is down at boot".
     this.client.on("error", (error) => {
-      this.logger.warn(`Redis connection error: ${error.message}`);
+      this.logger.warn(`Redis connection error: ${describeError(error)}`);
     });
   }
 

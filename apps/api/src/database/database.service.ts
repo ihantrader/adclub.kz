@@ -9,6 +9,7 @@ import type { DependencyCheck } from "@adclub/contracts";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { APP_CONFIG, type AppConfig } from "../config";
+import { describeError } from "../common/health/describe-error";
 import { measureCheck } from "../common/health/measure-check";
 
 @Injectable()
@@ -30,7 +31,7 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
     // a listener, an error on an idle connection (e.g. the database going
     // away) would crash the process instead of just failing readiness.
     this.pool.on("error", (error) => {
-      this.logger.warn(`PostgreSQL pool error: ${error.message}`);
+      this.logger.warn(`PostgreSQL pool error: ${describeError(error)}`);
     });
   }
 
@@ -41,9 +42,7 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
     try {
       await this.pool.query("SELECT 1");
     } catch (error) {
-      this.logger.warn(
-        `PostgreSQL not reachable at startup: ${error instanceof Error ? error.message : error}`,
-      );
+      this.logger.warn(`PostgreSQL not reachable at startup: ${describeError(error)}`);
     }
   }
 

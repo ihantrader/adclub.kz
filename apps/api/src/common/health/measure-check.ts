@@ -1,4 +1,5 @@
 import type { DependencyCheck } from "@adclub/contracts";
+import { describeError } from "./describe-error";
 import { withTimeout } from "./with-timeout";
 
 const DEFAULT_TIMEOUT_MS = 2000;
@@ -19,6 +20,6 @@ export async function measureCheck(
     await withTimeout(probe(), timeoutMs);
     return { status: "ok", latencyMs: Date.now() - start };
   } catch (error) {
-    return { status: "error", error: error instanceof Error ? error.message : String(error) };
+    return { status: "error", error: describeError(error) };
   }
 }

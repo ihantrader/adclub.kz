@@ -9,6 +9,8 @@ export const healthCheckResponseSchema = z.object({
   status: z.literal("ok"),
   service: z.enum(["api", "worker"]),
   timestamp: z.string(),
+  // Demo additive field (TASK-003 AC-5), not for merge.
+  uptimeSeconds: z.number().optional(),
 });
 
 export type HealthCheckResponse = z.infer<typeof healthCheckResponseSchema>;

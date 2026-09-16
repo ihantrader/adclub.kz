@@ -254,6 +254,9 @@
           },
           "timestamp": {
             "type": "string"
+          },
+          "uptimeSeconds": {
+            "type": "number"
           }
         },
         "required": [

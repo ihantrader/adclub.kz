@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The contract compatibility check reads openapi.json at the base
+          # revision and commit trailers since it.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -40,8 +44,22 @@ jobs:
       - name: Integration test
         run: pnpm test:integration
 
+      # Also exports the mobile JS bundle for iOS and Android (apps/mobile build).
       - name: Build
         run: pnpm build
+
+      - name: OpenAPI document is up to date with contracts and served routes
+        run: pnpm --filter @adclub/api openapi:check
+
+      - name: API contract is backward compatible
+        env:
+          # PR: the target branch. Push to main: the previous main commit.
+          BASE_REV: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if [ -z "$BASE_REV" ] || [ "$BASE_REV" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REV="HEAD~1"
+          fi
+          pnpm --filter @adclub/api openapi:compat --base "$BASE_REV"
 
       - name: Verify worker shuts down gracefully on SIGTERM (Linux)
         run: pnpm --filter api run verify:graceful-shutdown

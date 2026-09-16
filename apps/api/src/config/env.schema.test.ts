@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigValidationError, loadConfig } from "./env.schema";
+import { ConfigValidationError, defaultClientUpdateMessages, loadConfig } from "./env.schema";
 
 const VALID_ENV = {
   NODE_ENV: "development",
@@ -28,6 +28,15 @@ describe("loadConfig", () => {
         secretKey: VALID_ENV.S3_SECRET_KEY,
         bucket: VALID_ENV.S3_BUCKET,
         region: "us-east-1",
+      },
+      clientPolicy: {
+        minSupportedVersions: {
+          ios: "0.0.0",
+          android: "0.0.0",
+          "supplier-web": "0.0.0",
+          "admin-web": "0.0.0",
+        },
+        updateMessage: defaultClientUpdateMessages,
       },
     });
   });
@@ -73,5 +82,39 @@ describe("loadConfig", () => {
 
   it("rejects an empty required secret", () => {
     expect(() => loadConfig({ ...VALID_ENV, S3_SECRET_KEY: "" })).toThrow(ConfigValidationError);
+  });
+
+  it("reads per-platform minimum client versions and update messages", () => {
+    const config = loadConfig({
+      ...VALID_ENV,
+      CLIENT_MIN_VERSION_IOS: "1.4.0",
+      CLIENT_MIN_VERSION_ANDROID: "1.3.2",
+      CLIENT_MIN_VERSION_ADMIN_WEB: "0.2.0",
+      CLIENT_UPDATE_MESSAGE_KK: "Жаңартыңыз",
+    });
+
+    expect(config.clientPolicy.minSupportedVersions).toEqual({
+      ios: "1.4.0",
+      android: "1.3.2",
+      "supplier-web": "0.0.0",
+      "admin-web": "0.2.0",
+    });
+    expect(config.clientPolicy.updateMessage.kk).toBe("Жаңартыңыз");
+    expect(config.clientPolicy.updateMessage.ru).toBe(defaultClientUpdateMessages.ru);
+  });
+
+  it.each(["1.4", "latest", "v1.4.0", " "])(
+    "rejects a malformed minimum client version %j",
+    (value) => {
+      expect(() => loadConfig({ ...VALID_ENV, CLIENT_MIN_VERSION_ANDROID: value })).toThrow(
+        /CLIENT_MIN_VERSION_ANDROID/,
+      );
+    },
+  );
+
+  it("rejects a blank update message", () => {
+    expect(() => loadConfig({ ...VALID_ENV, CLIENT_UPDATE_MESSAGE_RU: "   " })).toThrow(
+      /CLIENT_UPDATE_MESSAGE_RU/,
+    );
   });
 });

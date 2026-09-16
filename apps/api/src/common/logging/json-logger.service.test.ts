@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppConfig } from "../../config";
+import { loadConfig, type AppConfig } from "../../config";
 import { JsonLoggerService } from "./json-logger.service";
 import { requestContext } from "./request-context";
 
 function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
-    nodeEnv: "test",
-    port: 3000,
-    logLevel: "log",
-    database: { url: "postgres://x" },
-    redis: { url: "redis://x" },
-    storage: { endpoint: "http://x", accessKey: "a", secretKey: "s", bucket: "b", region: "r" },
+    ...loadConfig({
+      NODE_ENV: "test",
+      DATABASE_URL: "postgres://x",
+      REDIS_URL: "redis://x",
+      S3_ENDPOINT: "http://x",
+      S3_ACCESS_KEY: "a",
+      S3_SECRET_KEY: "s",
+      S3_BUCKET: "b",
+    }),
     ...overrides,
   };
 }

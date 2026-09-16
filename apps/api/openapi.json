@@ -1,0 +1,363 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "adclub.kz API",
+    "version": "0.1.0",
+    "description": "Generated from @adclub/contracts — do not edit by hand. Changes must be additive (ARCHITECTURE 7.4)."
+  },
+  "tags": [
+    {
+      "name": "meta",
+      "description": "Service state and client policy"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Liveness: answers while the API process is up",
+        "tags": [
+          "meta"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The process is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheckResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/meta/client-policy": {
+      "get": {
+        "operationId": "getClientPolicy",
+        "summary": "Minimum supported client version per platform and the update message",
+        "tags": [
+          "meta"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current client policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPolicyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Readiness: state of PostgreSQL, Redis and S3",
+        "tags": [
+          "meta"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every dependency is reachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "503": {
+            "description": "At least one dependency is down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {},
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ]
+      },
+      "ClientPlatform": {
+        "type": "string",
+        "enum": [
+          "ios",
+          "android",
+          "supplier-web",
+          "admin-web"
+        ]
+      },
+      "ClientPolicyResponse": {
+        "type": "object",
+        "properties": {
+          "platforms": {
+            "type": "object",
+            "properties": {
+              "ios": {
+                "$ref": "#/components/schemas/PlatformPolicy"
+              },
+              "android": {
+                "$ref": "#/components/schemas/PlatformPolicy"
+              },
+              "supplier-web": {
+                "$ref": "#/components/schemas/PlatformPolicy"
+              },
+              "admin-web": {
+                "$ref": "#/components/schemas/PlatformPolicy"
+              }
+            },
+            "required": [
+              "ios",
+              "android",
+              "supplier-web",
+              "admin-web"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "platforms",
+          "message"
+        ]
+      },
+      "ClientUpdateRequiredDetails": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/ClientPlatform"
+          },
+          "clientVersion": {
+            "type": "string"
+          },
+          "minSupportedVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "clientVersion",
+          "minSupportedVersion"
+        ]
+      },
+      "DependencyCheck": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ]
+          },
+          "latencyMs": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "VALIDATION_ERROR",
+          "NOT_FOUND",
+          "CONFLICT",
+          "INTERNAL_ERROR",
+          "CLIENT_UPDATE_REQUIRED"
+        ]
+      },
+      "HealthCheckResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "service": {
+            "type": "string",
+            "enum": [
+              "api",
+              "worker"
+            ]
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "timestamp"
+        ]
+      },
+      "PlatformPolicy": {
+        "type": "object",
+        "properties": {
+          "minSupportedVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "minSupportedVersion"
+        ]
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "postgres": {
+                "$ref": "#/components/schemas/DependencyCheck"
+              },
+              "redis": {
+                "$ref": "#/components/schemas/DependencyCheck"
+              },
+              "s3": {
+                "$ref": "#/components/schemas/DependencyCheck"
+              }
+            },
+            "required": [
+              "postgres",
+              "redis",
+              "s3"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "checks"
+        ]
+      }
+    },
+    "parameters": {
+      "ClientHeader": {
+        "name": "X-Client",
+        "in": "header",
+        "required": false,
+        "description": "Client platform and version: `mobile/<version> (ios|android)`, `supplier-web/<version>` or `admin-web/<version>`. Missing or malformed values are accepted and treated as an unknown client.",
+        "schema": {
+          "type": "string",
+          "examples": [
+            "mobile/1.4.2 (ios)",
+            "admin-web/0.1.0"
+          ]
+        }
+      },
+      "AcceptLanguage": {
+        "name": "Accept-Language",
+        "in": "header",
+        "required": false,
+        "description": "Preferred language for server-provided texts: kk, ru or en (default ru).",
+        "schema": {
+          "type": "string",
+          "examples": [
+            "kk-KZ",
+            "ru"
+          ]
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Any failure, in the unified error format",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        }
+      },
+      "ClientUpdateRequired": {
+        "description": "The client's version is below the supported minimum: code `CLIENT_UPDATE_REQUIRED`, `details` is `ClientUpdateRequiredDetails`",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,10 @@ import type { ApiErrorResponse, ErrorCode } from "@adclub/contracts";
 import type { Response } from "express";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
+import {
+  CLIENT_UPDATE_REQUIRED_STATUS,
+  ClientUpdateRequiredException,
+} from "./client-update-required.exception";
 
 function codeForHttpStatus(status: number): ErrorCode {
   switch (status) {
@@ -19,6 +23,8 @@ function codeForHttpStatus(status: number): ErrorCode {
       return "CONFLICT";
     case HttpStatus.BAD_REQUEST:
       return "VALIDATION_ERROR";
+    case CLIENT_UPDATE_REQUIRED_STATUS:
+      return "CLIENT_UPDATE_REQUIRED";
     default:
       return status >= 500 ? "INTERNAL_ERROR" : "VALIDATION_ERROR";
   }
@@ -66,6 +72,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
             path: issue.path.join("."),
             message: issue.message,
           })),
+          retryable: false,
+        },
+      };
+    }
+
+    if (exception instanceof ClientUpdateRequiredException) {
+      return {
+        status: CLIENT_UPDATE_REQUIRED_STATUS,
+        body: {
+          code: "CLIENT_UPDATE_REQUIRED",
+          message: exception.message,
+          details: exception.details,
           retryable: false,
         },
       };

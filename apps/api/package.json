@@ -17,10 +17,15 @@
     "migrate:down": "node-pg-migrate down -m ../../infra/migrations --envPath ../../.env",
     "migrate:status": "tsx scripts/migrate-status.ts",
     "migrate:create": "node-pg-migrate create -j sql -m ../../infra/migrations --envPath ../../.env",
-    "verify:graceful-shutdown": "tsx scripts/verify-graceful-shutdown.ts"
+    "verify:graceful-shutdown": "tsx scripts/verify-graceful-shutdown.ts",
+    "openapi:generate": "tsx scripts/openapi.ts generate",
+    "openapi:check": "tsx scripts/openapi.ts check",
+    "openapi:compat": "tsx scripts/check-openapi-compat.ts"
   },
   "dependencies": {
     "@adclub/contracts": "workspace:*",
+    "@adclub/domain": "workspace:*",
+    "@adclub/i18n": "workspace:*",
     "@aws-sdk/client-s3": "^3.1133.0",
     "@nestjs/common": "^12.0.3",
     "@nestjs/core": "^12.0.3",

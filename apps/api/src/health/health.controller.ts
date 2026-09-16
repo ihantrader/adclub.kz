@@ -1,9 +1,10 @@
-import { Controller, Get } from "@nestjs/common";
-import { healthCheckResponseSchema, type HealthCheckResponse } from "@adclub/contracts";
+import { Controller } from "@nestjs/common";
+import { apiRoutes, healthCheckResponseSchema, type HealthCheckResponse } from "@adclub/contracts";
+import { ApiRoute } from "../common/contract";
 
-@Controller("health")
+@Controller()
 export class HealthController {
-  @Get()
+  @ApiRoute(apiRoutes.getHealth)
   getHealth(): HealthCheckResponse {
     const body: HealthCheckResponse = {
       status: "ok",

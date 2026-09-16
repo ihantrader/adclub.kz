@@ -5,6 +5,7 @@ import type { ApiErrorResponse } from "@adclub/contracts";
 import { z } from "zod";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
+import { ClientUpdateRequiredException } from "./client-update-required.exception";
 import { HttpExceptionFilter } from "./http-exception.filter";
 
 function fakeHost() {
@@ -70,6 +71,26 @@ describe("HttpExceptionFilter", () => {
     expect(status).toHaveBeenCalledWith(409);
     const body = json.mock.calls[0]?.[0] as ApiErrorResponse;
     expect(body.code).toBe("CONFLICT");
+  });
+
+  it("formats a ClientUpdateRequiredException as CLIENT_UPDATE_REQUIRED (426) with its details", () => {
+    const filter = new HttpExceptionFilter(fakeLogger());
+    const { host, status, json } = fakeHost();
+    const details = {
+      platform: "ios" as const,
+      clientVersion: "1.0.0",
+      minSupportedVersion: "2.0.0",
+    };
+
+    filter.catch(new ClientUpdateRequiredException("Обновите приложение", details), host);
+
+    expect(status).toHaveBeenCalledWith(426);
+    expect(json.mock.calls[0]?.[0]).toEqual({
+      code: "CLIENT_UPDATE_REQUIRED",
+      message: "Обновите приложение",
+      details,
+      retryable: false,
+    });
   });
 
   it("formats an unexpected error as INTERNAL_ERROR (500) without leaking its message or stack", () => {

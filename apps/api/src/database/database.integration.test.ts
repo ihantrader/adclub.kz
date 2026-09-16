@@ -4,6 +4,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import migratePkg from "node-pg-migrate/package.json";
+import { loadConfig } from "../config";
 import { DatabaseService } from "./database.service";
 
 const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "..", "..", "infra", "migrations");
@@ -100,20 +101,17 @@ describe("PostgreSQL: migrations and readiness", () => {
   });
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {
-    const databaseService = new DatabaseService({
-      nodeEnv: "test",
-      port: 3000,
-      logLevel: "log",
-      database: { url: container.getConnectionUri() },
-      redis: { url: "redis://unused" },
-      storage: {
-        endpoint: "http://unused",
-        accessKey: "x",
-        secretKey: "x",
-        bucket: "x",
-        region: "x",
-      },
-    });
+    const databaseService = new DatabaseService(
+      loadConfig({
+        NODE_ENV: "test",
+        DATABASE_URL: container.getConnectionUri(),
+        REDIS_URL: "redis://unused",
+        S3_ENDPOINT: "http://unused",
+        S3_ACCESS_KEY: "x",
+        S3_SECRET_KEY: "x",
+        S3_BUCKET: "x",
+      }),
+    );
 
     expect((await databaseService.checkHealth()).status).toBe("ok");
 

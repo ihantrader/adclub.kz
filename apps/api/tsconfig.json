@@ -1,0 +1,4 @@
+{
+  "extends": "../../packages/config/typescript/nest-app.json",
+  "include": ["src"]
+}

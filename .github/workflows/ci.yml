@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
 
 concurrency:
@@ -42,3 +42,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Verify worker shuts down gracefully on SIGTERM (Linux)
+        run: pnpm --filter api run verify:graceful-shutdown

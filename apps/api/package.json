@@ -16,7 +16,8 @@
     "migrate": "node-pg-migrate up -m ../../infra/migrations --envPath ../../.env",
     "migrate:down": "node-pg-migrate down -m ../../infra/migrations --envPath ../../.env",
     "migrate:status": "tsx scripts/migrate-status.ts",
-    "migrate:create": "node-pg-migrate create -j sql -m ../../infra/migrations --envPath ../../.env"
+    "migrate:create": "node-pg-migrate create -j sql -m ../../infra/migrations --envPath ../../.env",
+    "verify:graceful-shutdown": "tsx scripts/verify-graceful-shutdown.ts"
   },
   "dependencies": {
     "@adclub/contracts": "workspace:*",

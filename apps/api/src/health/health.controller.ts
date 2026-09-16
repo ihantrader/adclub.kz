@@ -9,6 +9,7 @@ export class HealthController {
     const body: HealthCheckResponse = {
       status: "ok",
       service: "api",
+      timestamp: new Date().toISOString(),
     };
     return healthCheckResponseSchema.parse(body);
   }

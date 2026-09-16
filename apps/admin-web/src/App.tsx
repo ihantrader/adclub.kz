@@ -83,7 +83,7 @@ export function App() {
         {health.status === "loading" && <p>{translate("ru", "connection.checking")}</p>}
         {health.status === "success" && (
           <p style={{ color: colors.primary }}>
-            {health.data.service}: {health.data.status}
+            {health.data.service}: {health.data.status} at {health.data.timestamp}
           </p>
         )}
         {health.status === "error" && <p style={{ color: colors.danger }}>{health.message}</p>}

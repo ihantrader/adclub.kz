@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@adclub/api-client": "workspace:*",
     "@adclub/i18n": "workspace:*",
     "@adclub/ui": "workspace:*",
     "react": "^19.3.0",

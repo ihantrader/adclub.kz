@@ -5,7 +5,7 @@ COMPLETED
 
 ## Result
 Интеграционные тесты и цикл миграций TASK-002 проходят в CI на GitHub Actions — подтверждено фактическим зелёным прогоном:
-https://github.com/ihantrader/adclub.kz/actions/runs/35140766394 (commit `be1ac01`, `conclusion: success`, получено через `gh run view --json`).
+https://github.com/ihantrader/adclub.kz/actions/runs/35141135754 (commit `e76580f`, текущий `HEAD` ветки `main` на момент отчёта, `conclusion: success`, получено через `gh run view --json`). Первый прогон после самого исправления (до добавления отчёта) — https://github.com/ihantrader/adclub.kz/actions/runs/35140766394 (commit `be1ac01`) — тоже `success`; оба включают шаг `Integration test` (8/8) и новый шаг проверки грациозного завершения.
 
 Причина падения — не флейки и не отличие окружений «вообще», а конкретный факт поведения Node на Linux (описан ниже), исправленный в самом коде, а не ослаблением проверки.
 
@@ -54,7 +54,7 @@ https://github.com/ihantrader/adclub.kz/actions/runs/35140766394 (commit `be1ac0
 
 ## Acceptance Criteria
 - `AC-1 — PASS` — фактическая причина (AggregateError, пустой `.message`, Happy Eyeballs) приведена с фрагментом реального лога CI (см. Verification), без секретов.
-- `AC-2 — PASS` — последний прогон CI: `success`, https://github.com/ihantrader/adclub.kz/actions/runs/35140766394, статус получен через `gh run view --json` (API/CLI), не предположением.
+- `AC-2 — PASS` — последний прогон CI (текущий `HEAD` `main`, commit `e76580f`): `success`, https://github.com/ihantrader/adclub.kz/actions/runs/35141135754, статус получен через `gh run view --json` (API/CLI), не предположением.
 - `AC-3 — PASS` — в этом успешном прогоне выполнены `Integration test` (8/8, включая полный цикл миграций up→down→up) и новый шаг проверки грациозного завершения.
 - `AC-4 — PASS` — ни один тест не удалён, не пропущен, не ослаблен; добавлены новые (`describe-error.test.ts`); шаг `Integration test` в CI остался.
 - `AC-5 — PASS` — `push.branches: ["main"]`; `pull_request` без изменений; отмена устаревших прогонов подтверждена реальным вторым push (см. Verification); кэш pnpm уже существовал.

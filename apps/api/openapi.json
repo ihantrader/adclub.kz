@@ -251,15 +251,11 @@
               "api",
               "worker"
             ]
-          },
-          "timestamp": {
-            "type": "string"
           }
         },
         "required": [
           "status",
-          "service",
-          "timestamp"
+          "service"
         ]
       },
       "PlatformPolicy": {

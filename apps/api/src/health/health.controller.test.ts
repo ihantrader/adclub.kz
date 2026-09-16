@@ -6,6 +6,5 @@ describe("HealthController", () => {
     const response = new HealthController().getHealth();
     expect(response.status).toBe("ok");
     expect(response.service).toBe("api");
-    expect(() => new Date(response.timestamp).toISOString()).not.toThrow();
   });
 });

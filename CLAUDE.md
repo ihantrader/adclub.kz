@@ -10,17 +10,17 @@
 
 ## 0. Проект
 
-> Блок заполняется после утверждения `ARCHITECTURE.md`. До этого момента считай его неизвестным и не домысливай.
+> Заполнено по утверждённой `ARCHITECTURE.md` 0.3 (PRODUCT.md 1.2). Команды, помеченные «уточнить после TASK-001», — планируемые: кода ещё нет, они появятся при инициализации монорепозитория и должны быть сверены с фактическими скриптами.
 
-- **Название:**
-- **Что это:**
-- **Стек:**
-- **Структура репозитория:**
-- **Запуск dev:**
-- **Тесты:**
-- **Lint / typecheck / build:**
-- **Миграции:**
-- **Внешние сервисы:**
+- **Название:** adclub.kz
+- **Что это:** закрытая клубная платформа: участники сообщества (первая аудитория — автоклуб Geely в Казахстане) получают клубные цены у отобранных поставщиков. Каталог, заявки с кодом/QR, рейтинг, ИИ-помощник; оплата товаров и доставка — вне платформы; монетизация — подписки пользователей (через сторы) и поставщиков (карточные рекурренты). Подробности — `PRODUCT.md`, решения — `ARCHITECTURE.md`.
+- **Стек:** TypeScript везде. Мобильное приложение пользователя — React Native + Expo; веб-кабинет поставщика — PWA на React + Vite; панель администратора — React + Vite SPA; сервер — Node.js + NestJS (модульный монолит, API-процесс и worker-процесс из одного кода); PostgreSQL 16 (источник истины, Drizzle ORM, SQL-миграции); Meilisearch (поисковый индекс); Redis (кэш, лимиты частоты, чёрный список сессий); S3-совместимое объектное хранилище; pg-boss (очередь и cron на PostgreSQL); контракт API — zod-схемы в `packages/contracts` → OpenAPI 3.1 и типизированный клиент. Только стандартные компоненты, без фирменных сервисов хостинг-провайдера (переносимость — ARCHITECTURE 15.1).
+- **Структура репозитория:** монорепозиторий pnpm workspaces + Turborepo (план, ARCHITECTURE 4): `apps/api` (NestJS: HTTP и worker), `apps/mobile` (Expo), `apps/supplier-web` (PWA), `apps/admin-web`; `packages/contracts` (zod, OpenAPI, клиент), `packages/domain` (чистая доменная логика: нормализация артикула, автоматы заявок, расчёт дат, предикаты видимости), `packages/i18n`, `packages/ui` (веб), `packages/dynamic-forms`, `packages/config`; `infra/` (docker compose, миграции, регламент переезда); `docs/` и `tasks/` — документы и отчёты. До TASK-001 в репозитории только документы.
+- **Запуск dev:** `docker compose -f infra/docker/compose.dev.yml up -d` (PostgreSQL, Meilisearch, Redis, MinIO, моки внешних сервисов), затем `pnpm install` и `pnpm dev` (Turborepo запускает `apps/api` и веб-приложения); мобильное — `pnpm --filter mobile start` (Expo dev-client против локального или staging API). Уточнить после TASK-001.
+- **Тесты:** `pnpm test` — unit (Vitest) для `packages/domain` и модулей сервера; `pnpm test:integration` — интеграционные с PostgreSQL в Testcontainers (автоматы заявок, политики DTO, импорт прайса, свиперы, биллинг, гостевые счётчики); `pnpm test:contract` — сверка сгенерированного OpenAPI с закоммиченным и снимками схем поддерживаемых версий приложения; E2E — Playwright (веб-кабинеты) и Maestro (мобильное); набор качества ИИ — скрипт с отчётом точности. Уточнить после TASK-001.
+- **Lint / typecheck / build:** `pnpm lint` (ESLint, включая правила границ модулей и запрет прямых вызовов SDK мониторинга вне модуля `observability`), `pnpm typecheck` (tsc по workspace), `pnpm build` (Turborepo; сервер — Docker-образ, веб — статические сборки, мобильное — EAS Build). Уточнить после TASK-001.
+- **Миграции:** SQL-миграции Drizzle в `apps/api` (каталог `infra/migrations` по плану), обратимые, запускаются до деплоя кода: `pnpm --filter api migrate` (применить), `pnpm --filter api migrate:generate` (создать из схемы). Проверяются на копии prod-снимка на staging. Уточнить после TASK-001.
+- **Внешние сервисы:** Meta WhatsApp Cloud API (коды входа, уведомления поставщикам с кнопками, резерв для пользователей); SMS-агрегатор РК (Mobizon или SMSC.kz — резерв кодов); FCM/APNs (push); App Store и Google Play (подписки пользователей, серверные уведомления сторов; RevenueCat допустим как агрегатор); Freedom Pay или CloudPayments KZ (рекурренты поставщиков, выбор по условиям); Anthropic Claude (`claude-opus-5` — сопоставление прайсов, совместимость, помощник; `claude-sonnet-5` — распознавание колонок, техпаспорт, приборная панель, фото деталей, перевод; `claude-haiku-4-5` — классификация); распознавание речи — Gemini Transcribe или ElevenLabs Scribe (казахский, смешанная речь); SerpAPI (поиск фото деталей с источником); хостинг — Servercore, ЦОД Алматы (PostgreSQL, S3, VM); мониторинг — зарубежные SaaS (Sentry и метрики) только с маскированием персональных данных в приложении. Все провайдеры — за внутренними интерфейсами (`AiGateway`, `SpeechProvider`, `PaymentProvider`, `SubscriptionProvider`, `ImageSearchProvider`, `SmsProvider`). Секреты — только в `.env` (в git не попадает) и `.env.example`.
 
 ---
 

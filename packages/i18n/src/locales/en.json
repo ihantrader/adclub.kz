@@ -1,3 +1,10 @@
 {
-  "common.appWorking": "Working"
+  "common.appWorking": "Working",
+  "common.retry": "Retry",
+  "connection.checking": "Checking the connection to the server…",
+  "connection.ok": "Connected to the server",
+  "connection.failed": "No connection to the server",
+  "update.title": "Update required",
+  "update.checkAgain": "Check again",
+  "update.reloadPage": "Reload page"
 }

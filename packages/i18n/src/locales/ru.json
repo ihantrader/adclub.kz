@@ -1,3 +1,10 @@
 {
-  "common.appWorking": "Работает"
+  "common.appWorking": "Работает",
+  "common.retry": "Повторить",
+  "connection.checking": "Проверяем связь с сервером…",
+  "connection.ok": "Связь с сервером есть",
+  "connection.failed": "Нет связи с сервером",
+  "update.title": "Нужно обновление",
+  "update.checkAgain": "Проверить снова",
+  "update.reloadPage": "Обновить страницу"
 }

@@ -1,3 +1,10 @@
 {
-  "common.appWorking": "Жұмыс істеп тұр"
+  "common.appWorking": "Жұмыс істеп тұр",
+  "common.retry": "Қайталау",
+  "connection.checking": "Сервермен байланыс тексерілуде…",
+  "connection.ok": "Сервермен байланыс бар",
+  "connection.failed": "Сервермен байланыс жоқ",
+  "update.title": "Жаңарту қажет",
+  "update.checkAgain": "Қайта тексеру",
+  "update.reloadPage": "Бетті жаңарту"
 }

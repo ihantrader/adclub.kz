@@ -1,0 +1,177 @@
+import { z } from "zod";
+import { CLIENT_HEADER, clientPlatformSchema } from "./client";
+import { clientPolicyResponseSchema, platformPolicySchema } from "./client-policy";
+import {
+  apiErrorResponseSchema,
+  clientUpdateRequiredDetailsSchema,
+  errorCodeSchema,
+} from "./error";
+import { healthCheckResponseSchema } from "./health";
+import { dependencyCheckSchema, readinessResponseSchema } from "./readiness";
+import type { ApiRouteDefinition } from "./routes";
+
+/**
+ * Every schema that appears in the API, under the name it gets in
+ * `components.schemas`. A route response whose schema isn't listed here
+ * fails generation, so the document never silently inlines an anonymous
+ * type.
+ */
+const componentSchemas: Record<string, z.ZodType> = {
+  ApiErrorResponse: apiErrorResponseSchema,
+  ErrorCode: errorCodeSchema,
+  ClientPlatform: clientPlatformSchema,
+  ClientUpdateRequiredDetails: clientUpdateRequiredDetailsSchema,
+  ClientPolicyResponse: clientPolicyResponseSchema,
+  PlatformPolicy: platformPolicySchema,
+  HealthCheckResponse: healthCheckResponseSchema,
+  ReadinessResponse: readinessResponseSchema,
+  DependencyCheck: dependencyCheckSchema,
+};
+
+type JsonObject = Record<string, unknown>;
+
+export interface OpenApiDocument extends JsonObject {
+  openapi: string;
+  paths: Record<string, Record<string, JsonObject>>;
+}
+
+export const OPENAPI_INFO = {
+  title: "adclub.kz API",
+  version: "0.1.0",
+} as const;
+
+function schemaRef(id: string): JsonObject {
+  return { $ref: `#/components/schemas/${id}` };
+}
+
+function buildComponentSchemas(): {
+  schemas: Record<string, JsonObject>;
+  ids: Map<z.ZodType, string>;
+} {
+  const registry = z.registry<{ id: string }>();
+  const ids = new Map<z.ZodType, string>();
+  for (const [id, schema] of Object.entries(componentSchemas)) {
+    registry.add(schema, { id });
+    ids.set(schema, id);
+  }
+
+  const generated = z.toJSONSchema(registry, {
+    target: "draft-2020-12",
+    uri: (id) => `#/components/schemas/${id}`,
+    // zod closes every object (`additionalProperties: false`) in output
+    // mode. That contradicts additive evolution (ARCHITECTURE 7.4): a
+    // response may gain fields, and a client must ignore the ones it
+    // doesn't know. Only objects declared strict keep the restriction.
+    override: ({ zodSchema, jsonSchema }) => {
+      const def = zodSchema._zod.def as {
+        type: string;
+        catchall?: { _zod: { def: { type: string } } };
+      };
+      const isStrictObject = def.type === "object" && def.catchall?._zod.def.type === "never";
+      if (jsonSchema.additionalProperties === false && !isStrictObject) {
+        delete jsonSchema.additionalProperties;
+      }
+    },
+  }) as { schemas: Record<string, JsonObject> };
+
+  const schemas: Record<string, JsonObject> = {};
+  for (const id of Object.keys(componentSchemas).sort()) {
+    // Each entry is emitted as a standalone JSON Schema document; inside
+    // an OpenAPI 3.1 document the dialect and id come from the document.
+    const { $schema: _dialect, id: _id, $id: _documentId, ...schema } = generated.schemas[id] ?? {};
+    schemas[id] = schema;
+  }
+  return { schemas, ids };
+}
+
+function jsonContent(schema: JsonObject): JsonObject {
+  return { "application/json": { schema } };
+}
+
+/**
+ * Builds the OpenAPI 3.1 document for the given routes (ARCHITECTURE 7.2).
+ * Pure and deterministic: same routes and schemas → byte-identical JSON,
+ * so the committed copy can be diffed and compared in CI.
+ */
+export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): OpenApiDocument {
+  const { schemas, ids } = buildComponentSchemas();
+  const paths: OpenApiDocument["paths"] = {};
+
+  const sortedRoutes = [...routes].sort(
+    (a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method),
+  );
+
+  for (const route of sortedRoutes) {
+    const responses: JsonObject = {};
+    for (const [status, response] of Object.entries(route.responses)) {
+      const id = ids.get(response.schema);
+      if (!id) {
+        throw new Error(
+          `Response ${status} of ${route.operationId} uses a schema missing from componentSchemas (contracts/openapi.ts)`,
+        );
+      }
+      responses[status] = {
+        description: response.description,
+        content: jsonContent(schemaRef(id)),
+      };
+    }
+    if (route.clientVersionCheck === "enforced") {
+      responses["426"] = { $ref: "#/components/responses/ClientUpdateRequired" };
+    }
+    responses.default = { $ref: "#/components/responses/Error" };
+
+    const pathItem = (paths[route.path] ??= {});
+    pathItem[route.method.toLowerCase()] = {
+      operationId: route.operationId,
+      summary: route.summary,
+      tags: [route.tag],
+      parameters: [
+        { $ref: "#/components/parameters/ClientHeader" },
+        { $ref: "#/components/parameters/AcceptLanguage" },
+      ],
+      responses,
+    };
+  }
+
+  return {
+    openapi: "3.1.0",
+    info: {
+      ...OPENAPI_INFO,
+      description:
+        "Generated from @adclub/contracts — do not edit by hand. Changes must be additive (ARCHITECTURE 7.4).",
+    },
+    tags: [{ name: "meta", description: "Service state and client policy" }],
+    paths,
+    components: {
+      schemas,
+      parameters: {
+        ClientHeader: {
+          name: CLIENT_HEADER,
+          in: "header",
+          required: false,
+          description:
+            "Client platform and version: `mobile/<version> (ios|android)`, `supplier-web/<version>` or `admin-web/<version>`. Missing or malformed values are accepted and treated as an unknown client.",
+          schema: { type: "string", examples: ["mobile/1.4.2 (ios)", "admin-web/0.1.0"] },
+        },
+        AcceptLanguage: {
+          name: "Accept-Language",
+          in: "header",
+          required: false,
+          description: "Preferred language for server-provided texts: kk, ru or en (default ru).",
+          schema: { type: "string", examples: ["kk-KZ", "ru"] },
+        },
+      },
+      responses: {
+        Error: {
+          description: "Any failure, in the unified error format",
+          content: jsonContent(schemaRef("ApiErrorResponse")),
+        },
+        ClientUpdateRequired: {
+          description:
+            "The client's version is below the supported minimum: code `CLIENT_UPDATE_REQUIRED`, `details` is `ClientUpdateRequiredDetails`",
+          content: jsonContent(schemaRef("ApiErrorResponse")),
+        },
+      },
+    },
+  };
+}

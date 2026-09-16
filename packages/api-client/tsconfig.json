@@ -1,0 +1,9 @@
+{
+  "extends": "../config/typescript/node-lib.json",
+  "compilerOptions": {
+    // `fetch`, `Headers`, `AbortController`: the client runs in browsers
+    // and React Native, not only Node.
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src"]
+}

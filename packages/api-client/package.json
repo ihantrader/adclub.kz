@@ -1,5 +1,5 @@
 {
-  "name": "@adclub/domain",
+  "name": "@adclub/api-client",
   "private": true,
   "version": "0.1.0",
   "type": "commonjs",
@@ -18,6 +18,9 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@adclub/contracts": "workspace:*"
   },
   "devDependencies": {
     "@adclub/config": "workspace:*",

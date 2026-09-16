@@ -1,16 +1,19 @@
 import { z } from "zod";
+import { clientPlatformSchema } from "./client";
 
 /**
  * Machine-readable error codes shared by every endpoint (ARCHITECTURE 7.1).
  * Extended as real endpoints need more specific codes (e.g.
- * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks); the
- * four below cover what the server skeleton itself can produce.
+ * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
+ * are only ever added: clients must treat a code they don't know as a
+ * generic error (ARCHITECTURE 7.4), which `@adclub/api-client` does.
  */
 export const errorCodeSchema = z.enum([
   "VALIDATION_ERROR",
   "NOT_FOUND",
   "CONFLICT",
   "INTERNAL_ERROR",
+  "CLIENT_UPDATE_REQUIRED",
 ]);
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
@@ -29,3 +32,15 @@ export const apiErrorResponseSchema = z.object({
 });
 
 export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;
+
+/**
+ * `details` of a `CLIENT_UPDATE_REQUIRED` error (HTTP 426). `message` of
+ * that error is the localized update text from the client policy.
+ */
+export const clientUpdateRequiredDetailsSchema = z.object({
+  platform: clientPlatformSchema,
+  clientVersion: z.string(),
+  minSupportedVersion: z.string(),
+});
+
+export type ClientUpdateRequiredDetails = z.infer<typeof clientUpdateRequiredDetailsSchema>;

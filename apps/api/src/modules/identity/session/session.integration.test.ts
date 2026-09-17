@@ -453,7 +453,13 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect((await http().get("/health")).status).toBe(200);
       expect((await http().get("/meta/client-policy")).status).toBe(200);
       // S3 is deliberately unreachable in this suite: 503, but not a sign-in error.
-      expect((await http().get("/ready")).status).toBe(503);
+      const ready = await http().get("/ready");
+      expect(ready.status).toBe(503);
+      // The response never carries the driver's error text or the unreachable
+      // endpoint's address (TASK-005.A) — only the reason is logged.
+      expect(ready.body.checks.s3).toEqual({ status: "error" });
+      expect(JSON.stringify(ready.body)).not.toContain("127.0.0.1:3");
+      expect(logs.join("")).toContain("Dependency check failed: s3");
       expect((await http().post("/auth/login-code").send({ phone: PHONE })).status).toBe(200);
     });
 

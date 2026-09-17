@@ -43,9 +43,27 @@ describe("ReadinessService", () => {
     const result = await service.check();
 
     expect(result.status).toBe("degraded");
-    expect(result.checks.redis).toEqual(redisDown);
+    expect(result.checks.redis.status).toBe("error");
     expect(result.checks.postgres.status).toBe("ok");
     expect(result.checks.s3.status).toBe("ok");
+  });
+
+  it("never exposes the driver's error text, addresses or credentials in the response", async () => {
+    const down: DependencyCheck = {
+      status: "error",
+      error: 'password authentication failed for user "adclub" at 10.0.0.5:5432',
+    };
+    const service = new ReadinessService(
+      fakeDependency(down),
+      fakeDependency(OK),
+      fakeDependency(OK),
+    );
+
+    const result = await service.check();
+
+    expect(result.checks.postgres).toEqual({ status: "error" });
+    expect(JSON.stringify(result)).not.toContain("10.0.0.5");
+    expect(JSON.stringify(result)).not.toContain("adclub");
   });
 
   it("reports degraded when every dependency is down", async () => {

@@ -9,6 +9,8 @@ import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
+import { JobsModule, type JobsTuning } from "./jobs";
+import { backgroundJobCatalog } from "./background-jobs";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
 import { OriginPolicyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
@@ -23,7 +25,10 @@ export class AppModule implements NestModule {
    */
   static forRoot(
     config: AppConfig,
-    options: { settingsCache?: Partial<SettingsCacheOptions> } = {},
+    options: {
+      settingsCache?: Partial<SettingsCacheOptions>;
+      jobs?: Partial<JobsTuning>;
+    } = {},
   ) {
     return {
       module: AppModule,
@@ -33,6 +38,12 @@ export class AppModule implements NestModule {
         RedisModule,
         StorageModule,
         SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
+        // The API puts jobs on the queue; the worker runs them.
+        JobsModule.forRoot({
+          role: "producer",
+          catalog: backgroundJobCatalog(config),
+          tuning: options.jobs,
+        }),
         HealthModule,
         ClientPolicyModule,
         // API docs for development only (TASK-003); production serves the

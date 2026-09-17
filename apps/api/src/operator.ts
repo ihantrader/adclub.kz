@@ -19,6 +19,8 @@ import {
   OperatorService,
 } from "./modules/identity";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
+import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
+import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
 /**
  * The server operator command (ARCHITECTURE 4.8; D-045, D-047). Runs on
@@ -39,10 +41,19 @@ import { SettingsChangeService, SettingsModule } from "./modules/settings";
  * that isn't JSON is taken as a string (`1.4.0`). A change applies to the
  * running API and worker within 30 seconds.
  *
+ * Background jobs (ARCHITECTURE 4.12) — never shows a job's data:
+ *   jobs:status                  every declared job: waiting, retrying, running,
+ *                                failed, dead; schedule and last runs of periodic jobs
+ *   jobs:dead [--job <name>]     jobs in the dead letter queues
+ *   jobs:retry <deadJobId>       put a dead job back on its queue (fresh retries)
+ *   jobs:delete <deadJobId>      drop a dead job
+ *   jobs:run <name>              start a periodic job now (e.g. identity.cleanup-sessions)
+ *
  * Development and tests only (the real flows arrive with TASK-016/017):
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
  *   dev:member:remove <memberId>
+ *   dev:jobs:fail [--note <text>]   put a job that always fails on the queue
  *
  * `pnpm --filter api operator <command> …` (dev) or
  * `node dist/operator.js <command> …` (built). Prints the result as JSON;
@@ -58,6 +69,11 @@ class OperatorModule {
         ConfigModule.forRoot(config),
         DatabaseModule,
         SettingsModule.forRoot({ http: false }),
+        JobsModule.forRoot({
+          role: "producer",
+          catalog: backgroundJobCatalog(config),
+          startOnBoot: false,
+        }),
       ],
       providers: [JsonLoggerService, ...identityOperatorProviders],
     };
@@ -73,9 +89,15 @@ const USAGE = `Usage: operator <command> [arguments]
   settings:set <key> <value> --reason <text> [--expected-version <n>]
   settings:reset <key> --reason <text> [--expected-version <n>]
   settings:history <key>
+  jobs:status
+  jobs:dead [--job <name>]
+  jobs:retry <deadJobId>
+  jobs:delete <deadJobId>
+  jobs:run <name>
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
-  dev:member:remove <memberId>`;
+  dev:member:remove <memberId>
+  dev:jobs:fail [--note <text>]`;
 
 function required(value: string | undefined, what: string): string {
   if (!value) {
@@ -105,9 +127,16 @@ function expectedVersion(text: string | undefined): number | undefined {
 
 const OPERATOR = { kind: "operator" } as const;
 
+interface Services {
+  operator: OperatorService;
+  settings: SettingsChangeService;
+  jobs: JobAdmin;
+  queue: JobQueue;
+  devJobs: boolean;
+}
+
 async function run(
-  operator: OperatorService,
-  settings: SettingsChangeService,
+  { operator, settings, jobs, queue, devJobs }: Services,
   argv: string[],
 ): Promise<unknown> {
   const { positionals, values } = parseArgs({
@@ -118,6 +147,8 @@ async function run(
       city: { type: "string" },
       reason: { type: "string" },
       "expected-version": { type: "string" },
+      job: { type: "string" },
+      note: { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -153,6 +184,25 @@ async function run(
       });
     case "settings:history":
       return settings.history(required(first, "<key>"));
+    case "jobs:status":
+      return jobs.status();
+    case "jobs:dead":
+      return jobs.deadJobs(values.job);
+    case "jobs:retry":
+      return jobs.retryDead(required(first, "<deadJobId>"));
+    case "jobs:delete":
+      return jobs.deleteDead(required(first, "<deadJobId>"));
+    case "jobs:run":
+      return jobs.runNow(required(first, "<name>"));
+    case "dev:jobs:fail": {
+      if (!devJobs) {
+        throw new OperatorCommandError("dev:jobs:fail is available in development and tests only");
+      }
+      const jobId = await queue.enqueue(devAlwaysFailingJob, {
+        note: values.note ?? "operator dev:jobs:fail",
+      });
+      return { job: devAlwaysFailingJob.name, jobId };
+    }
     case "admin:grant":
       return operator.grantAdmin(required(first, "<phone>"));
     case "admin:revoke":
@@ -187,8 +237,13 @@ async function main(): Promise<void> {
   app.flushLogs();
   try {
     const result = await run(
-      app.get(OperatorService),
-      app.get(SettingsChangeService),
+      {
+        operator: app.get(OperatorService),
+        settings: app.get(SettingsChangeService),
+        jobs: app.get(JobAdmin),
+        queue: app.get(JobQueue),
+        devJobs: hasDevJobs(config),
+      },
       process.argv.slice(2),
     );
     process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -198,7 +253,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  if (error instanceof ConfigValidationError || error instanceof OperatorCommandError) {
+  if (
+    error instanceof ConfigValidationError ||
+    error instanceof OperatorCommandError ||
+    error instanceof JobAdminError
+  ) {
     console.error(error.message);
   } else if (error instanceof ApiException) {
     // A refused change: the same code and details the API would answer.

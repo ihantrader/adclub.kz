@@ -3,6 +3,7 @@ import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
 import { DatabaseService } from "./database.service";
+import { installedJobQueueSchemaVersion } from "../jobs/job-queue-migrations";
 import { runMigrate } from "./migrate-cli";
 
 async function tableExists(client: Client, table: string): Promise<boolean> {
@@ -72,10 +73,37 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789639354506_create-roles",
       "1789644232969_bind-sign-in-step-to-client",
       "1789656263507_create-app-setting",
+      "1789660668561_create-job-queue",
+      "1789660680048_create-periodic-job-state",
     ]);
   });
 
-  it("rolls back the latest migration only (settings), keeping everything else", async () => {
+  it("rolls back the latest migration only (the periodic job state)", async () => {
+    await client.query(
+      "INSERT INTO periodic_job_state (name, last_succeeded_at) VALUES ('identity.cleanup-sessions', now())",
+    );
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await tableExists(client, "periodic_job_state")).toBe(false);
+  });
+
+  it("rolls back the next one (the job queue schema), keeping the application tables", async () => {
+    const schemaExists = async () =>
+      (
+        await client.query("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'pgboss'")
+      ).rowCount === 1;
+    expect(await schemaExists()).toBe(true);
+    const { rows: version } = await client.query<{ version: number }>(
+      "SELECT version FROM pgboss.version",
+    );
+    expect(version[0]?.version).toBe(installedJobQueueSchemaVersion());
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await schemaExists()).toBe(false);
+    expect(await tableExists(client, "app_setting")).toBe(true);
+  });
+
+  it("rolls back the next one (settings), keeping everything else", async () => {
     expect(await tableExists(client, "app_setting")).toBe(true);
     await client.query(
       "INSERT INTO app_setting (key, value, version, updated_by_kind) VALUES ('rating_min_reviews', '7', 1, 'operator')",

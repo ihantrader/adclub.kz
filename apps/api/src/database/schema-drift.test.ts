@@ -105,6 +105,7 @@ describe("ormTables", () => {
         "sign_in_step",
         "app_setting",
         "app_setting_change",
+        "periodic_job_state",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

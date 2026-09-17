@@ -20,7 +20,7 @@ async function bootstrap() {
 
   // Keeps the event loop alive until a shutdown signal arrives (signal
   // listeners alone don't do this on every platform, see TASK-001-REPORT
-  // I5). Replaced by real pg-boss job polling once background jobs exist.
+  // I5) — also while the job queue waits for an unreachable database.
   const heartbeat = setInterval(() => {}, 1 << 30);
 
   installGracefulShutdown({

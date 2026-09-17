@@ -21,6 +21,14 @@ import {
 } from "./login-code";
 import { readinessResponseSchema } from "./readiness";
 import {
+  changeSettingBodySchema,
+  resetSettingBodySchema,
+  settingChangedResponseSchema,
+  settingHistoryResponseSchema,
+  settingKeyPathSchema,
+  settingListResponseSchema,
+} from "./settings";
+import {
   currentAccountResponseSchema,
   refreshSessionBodySchema,
   sessionIdPathSchema,
@@ -72,9 +80,12 @@ export interface ApiRouteDefinition {
    * `exempt`: served to every client whatever its version (health and the
    * client policy itself, so an outdated client can still learn it must
    * update). `enforced`: a known client below the minimum version gets
-   * `CLIENT_UPDATE_REQUIRED` (426) instead.
+   * `CLIENT_UPDATE_REQUIRED` (426) instead. `enforced_except_admin_web`:
+   * like `enforced`, but an outdated admin panel is still served — the
+   * routes an administrator needs to sign in and fix the client policy
+   * (ARCHITECTURE 4.11), so no policy change can lock them out.
    */
-  clientVersionCheck: "enforced" | "exempt";
+  clientVersionCheck: "enforced" | "exempt" | "enforced_except_admin_web";
   /**
    * `session`: only for a caller with a valid access token of an active
    * session (`Authorization: Bearer …`); anything else gets 401
@@ -148,7 +159,7 @@ export const apiRoutes = {
     path: "/auth/login-code",
     summary: "Send a one-time login code to a Kazakhstan mobile number (WhatsApp, SMS as fallback)",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     requestBody: {
       description: "Phone number and optional channel",
       schema: requestLoginCodeBodySchema,
@@ -163,7 +174,7 @@ export const apiRoutes = {
     path: "/auth/login-code/verify",
     summary: "Check a login code; a correct code confirms the phone number and is spent",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     requestBody: { description: "Phone number and the code", schema: verifyLoginCodeBodySchema },
     responses: {
       200: {
@@ -198,7 +209,7 @@ export const apiRoutes = {
     path: "/auth/sign-in/totp/setup",
     summary: "Get the authenticator app data (QR content and secret) during the setup step",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     requestBody: {
       description:
         "The sign-in step from TOTP_SETUP_REQUIRED; the step cookie of that response is required",
@@ -215,7 +226,7 @@ export const apiRoutes = {
     summary:
       "Confirm the authenticator app with its current code; returns the admin session and the backup codes (once)",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     requestBody: {
       description:
         "The sign-in step and the current code from the app; the step cookie is required",
@@ -234,7 +245,7 @@ export const apiRoutes = {
     path: "/auth/sign-in/totp",
     summary: "Finish an admin panel sign-in with the authenticator code or an unused backup code",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     requestBody: {
       description:
         "The sign-in step and exactly one of the two codes; the step cookie of the TOTP_REQUIRED response is required",
@@ -254,7 +265,7 @@ export const apiRoutes = {
     summary:
       "Exchange a refresh token (body for the mobile app, HttpOnly cookie for web clients) for a new token pair",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     requestBody: {
       description: "The refresh token (mobile), or an empty object (web, cookie)",
       schema: refreshSessionBodySchema,
@@ -269,7 +280,7 @@ export const apiRoutes = {
     path: "/auth/me",
     summary: "The signed-in account and the current session",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     auth: "session",
     contexts: anyContext,
     responses: {
@@ -336,7 +347,7 @@ export const apiRoutes = {
     path: "/auth/logout",
     summary: "End the current session",
     tag: "auth",
-    clientVersionCheck: "enforced",
+    clientVersionCheck: "enforced_except_admin_web",
     auth: "session",
     contexts: anyContext,
     responses: {
@@ -444,6 +455,71 @@ export const apiRoutes = {
     },
     responses: {
       200: { description: "The new backup codes (shown once)", schema: backupCodesResponseSchema },
+    },
+  }),
+  listSettings: defineRoute({
+    operationId: "listSettings",
+    method: "GET",
+    path: "/admin/settings",
+    summary:
+      "Every setting by group: description, type, unit, limits, default, current value, version, who changed it last and whether the API may change it",
+    tag: "admin",
+    clientVersionCheck: "enforced_except_admin_web",
+    auth: "session",
+    contexts: ["admin"],
+    responses: {
+      200: { description: "Settings by group", schema: settingListResponseSchema },
+    },
+  }),
+  changeSetting: defineRoute({
+    operationId: "changeSetting",
+    method: "PUT",
+    path: "/admin/settings/{key}",
+    summary:
+      "Change one setting with a reason, from the version it was read at; takes effect in every process within 30 seconds",
+    tag: "admin",
+    clientVersionCheck: "enforced_except_admin_web",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: settingKeyPathSchema,
+    requestBody: {
+      description: "The new value, the version it replaces and the reason",
+      schema: changeSettingBodySchema,
+    },
+    responses: {
+      200: { description: "The setting now and the change", schema: settingChangedResponseSchema },
+    },
+  }),
+  resetSetting: defineRoute({
+    operationId: "resetSetting",
+    method: "POST",
+    path: "/admin/settings/{key}/reset",
+    summary: "Return one setting to its default, with a reason",
+    tag: "admin",
+    clientVersionCheck: "enforced_except_admin_web",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: settingKeyPathSchema,
+    requestBody: {
+      description: "The version it replaces and the reason",
+      schema: resetSettingBodySchema,
+    },
+    responses: {
+      200: { description: "The setting now and the change", schema: settingChangedResponseSchema },
+    },
+  }),
+  getSettingHistory: defineRoute({
+    operationId: "getSettingHistory",
+    method: "GET",
+    path: "/admin/settings/{key}/history",
+    summary: "Changes of one setting, newest first: who, when, was, now, why",
+    tag: "admin",
+    clientVersionCheck: "enforced_except_admin_web",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: settingKeyPathSchema,
+    responses: {
+      200: { description: "The history", schema: settingHistoryResponseSchema },
     },
   }),
 } as const;

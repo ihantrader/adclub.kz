@@ -16,6 +16,10 @@ describe("buildOpenApiDocument", () => {
     expect(Object.keys(document.paths).sort()).toEqual([
       "/admin/administrators",
       "/admin/administrators/{adminId}/totp-reset",
+      "/admin/settings",
+      "/admin/settings/{key}",
+      "/admin/settings/{key}/history",
+      "/admin/settings/{key}/reset",
       "/admin/totp/backup-codes",
       "/auth/login-code",
       "/auth/login-code/verify",
@@ -55,6 +59,9 @@ describe("buildOpenApiDocument", () => {
 
   it("documents 426 only on routes that enforce the client version", () => {
     expect(document.paths["/ready"].get.responses["426"]).toBeDefined();
+    // An outdated admin panel is still served there, other clients are not.
+    expect(document.paths["/admin/settings"].get.responses["426"]).toBeDefined();
+    expect(document.paths["/auth/login-code"].post.responses["426"]).toBeDefined();
     expect(document.paths["/health"].get.responses["426"]).toBeUndefined();
     expect(document.paths["/meta/client-policy"].get.responses["426"]).toBeUndefined();
   });

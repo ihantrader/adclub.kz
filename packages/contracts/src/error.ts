@@ -49,6 +49,11 @@ import { clientPlatformSchema } from "./client";
  *   session calling an admin route); signing in again won't change that.
  * - `TOTP_SELF_RESET_FORBIDDEN` (403): an administrator can't reset their
  *   own second factor — another administrator has to.
+ * - `SETTING_VERSION_CONFLICT` (409): the setting was changed by someone
+ *   else since the version the change was made from; nothing was written.
+ *   `details` is `SettingVersionConflictDetails` — reload and decide again.
+ * - `SETTING_OPERATOR_ONLY` (403): a sign-in security setting; only the
+ *   server operator command changes it (D-053).
  *
  * Extended as real endpoints need more specific codes (e.g.
  * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
@@ -84,6 +89,9 @@ export const errorCodeSchema = z.enum([
   "SUPPLIER_ACCESS_CLOSED",
   "FORBIDDEN",
   "TOTP_SELF_RESET_FORBIDDEN",
+  // Settings (TASK-007, ARCHITECTURE 14).
+  "SETTING_VERSION_CONFLICT",
+  "SETTING_OPERATOR_ONLY",
 ]);
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

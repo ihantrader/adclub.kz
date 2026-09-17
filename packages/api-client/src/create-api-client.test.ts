@@ -323,6 +323,26 @@ describe("createApiClient", () => {
       expect(init.body).toBeUndefined();
     });
 
+    it("sends a settings change with its key, body and the access token", async () => {
+      const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(200, {}));
+      const client = clientWith(fetchImpl, { getAccessToken: () => "admin-access" });
+
+      await client.changeSetting(
+        { key: "rating_min_reviews" },
+        { value: 7, expectedVersion: 2, reason: "Больше оценок" },
+      );
+
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe("http://api.test/admin/settings/rating_min_reviews");
+      expect(init.method).toBe("PUT");
+      expect(JSON.parse(String(init.body))).toEqual({
+        value: 7,
+        expectedVersion: 2,
+        reason: "Больше оценок",
+      });
+      expect(init.headers).toMatchObject({ Authorization: "Bearer admin-access" });
+    });
+
     it("refuses to call a route without its path parameters", async () => {
       const fetchImpl = vi.fn<FetchLike>();
       const client = clientWith(fetchImpl);

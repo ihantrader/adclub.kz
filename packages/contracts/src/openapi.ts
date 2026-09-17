@@ -54,6 +54,22 @@ import {
   totpVerifyBodySchema,
 } from "./sign-in";
 import type { ApiRouteDefinition } from "./routes";
+import {
+  changeSettingBodySchema,
+  resetSettingBodySchema,
+  settingActorSchema,
+  settingChangedResponseSchema,
+  settingChangeSchema,
+  settingConstraintsSchema,
+  settingEditableBySchema,
+  settingGroupSchema,
+  settingHistoryResponseSchema,
+  settingListResponseSchema,
+  settingSchema,
+  settingTypeSchema,
+  settingUnitSchema,
+  settingVersionConflictDetailsSchema,
+} from "./settings";
 
 /**
  * Every schema that appears in the API, under the name it gets in
@@ -108,6 +124,20 @@ const componentSchemas: Record<string, z.ZodType> = {
   TotpResetResponse: totpResetResponseSchema,
   RegenerateBackupCodesBody: regenerateBackupCodesBodySchema,
   BackupCodesResponse: backupCodesResponseSchema,
+  SettingType: settingTypeSchema,
+  SettingUnit: settingUnitSchema,
+  SettingEditableBy: settingEditableBySchema,
+  SettingConstraints: settingConstraintsSchema,
+  SettingActor: settingActorSchema,
+  Setting: settingSchema,
+  SettingGroup: settingGroupSchema,
+  SettingListResponse: settingListResponseSchema,
+  SettingChange: settingChangeSchema,
+  ChangeSettingBody: changeSettingBodySchema,
+  ResetSettingBody: resetSettingBodySchema,
+  SettingChangedResponse: settingChangedResponseSchema,
+  SettingHistoryResponse: settingHistoryResponseSchema,
+  SettingVersionConflictDetails: settingVersionConflictDetailsSchema,
 };
 
 type JsonObject = Record<string, unknown>;
@@ -225,7 +255,7 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
         content: jsonContent(schemaRef(id)),
       };
     }
-    if (route.clientVersionCheck === "enforced") {
+    if (route.clientVersionCheck !== "exempt") {
       responses["426"] = { $ref: "#/components/responses/ClientUpdateRequired" };
     }
     responses.default = { $ref: "#/components/responses/Error" };

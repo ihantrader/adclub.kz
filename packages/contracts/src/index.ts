@@ -123,6 +123,42 @@ export type {
   TotpVerifyBody,
 } from "./sign-in";
 
+export {
+  changeSettingBodySchema,
+  resetSettingBodySchema,
+  settingActorSchema,
+  settingChangedResponseSchema,
+  settingChangeSchema,
+  settingConstraintsSchema,
+  settingEditableBySchema,
+  settingGroupSchema,
+  settingHistoryResponseSchema,
+  settingKeyPathSchema,
+  settingKeySchema,
+  settingListResponseSchema,
+  settingSchema,
+  settingTypeSchema,
+  settingUnitSchema,
+  settingVersionConflictDetailsSchema,
+} from "./settings";
+export type {
+  ChangeSettingBody,
+  ResetSettingBody,
+  Setting,
+  SettingActor,
+  SettingChange,
+  SettingChangedResponse,
+  SettingConstraints,
+  SettingEditableBy,
+  SettingGroup,
+  SettingHistoryResponse,
+  SettingKeyPath,
+  SettingListResponse,
+  SettingType,
+  SettingUnit,
+  SettingVersionConflictDetails,
+} from "./settings";
+
 export { apiRoutes, buildRoutePath } from "./routes";
 export type {
   ApiRequestBodyDefinition,

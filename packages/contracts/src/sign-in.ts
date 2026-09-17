@@ -6,6 +6,10 @@ import { sessionTokensSchema } from "./session";
  * An unfinished sign-in (choosing a company, the admin second factor).
  * The token proves the login code was entered: send it with the next step.
  * It works once and only until `expiresAt`; after that, sign in again.
+ * It works only together with the HttpOnly step cookie the same response
+ * set: send the next step from the same browser, with credentials
+ * (`credentials: "include"`). Anyone else holding the token gets
+ * `SIGN_IN_STEP_INVALID`.
  */
 export const signInStepSchema = z.object({
   token: z.string(),

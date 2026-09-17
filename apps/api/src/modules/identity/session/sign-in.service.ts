@@ -25,6 +25,7 @@ import {
 import { notAdminException, notSupplierMemberException } from "./session-errors";
 import { SessionService, type IssuedSession } from "./session.service";
 import { SignInSettingsSource } from "./sign-in-settings.source";
+import type { SignInStepBinding } from "./sign-in-step-cookie";
 import { SignInStepsService } from "./sign-in-steps.service";
 
 export interface SignInInput {
@@ -39,6 +40,8 @@ export interface SignInInput {
 
 export interface SelectSupplierInput {
   signInStep: string;
+  /** The value of the step cookie this client sent. */
+  stepBinding: string | undefined;
   supplierId: string;
   deviceName: string | null;
   ip: string | null;
@@ -75,6 +78,14 @@ function supplierAccess(membership: ActiveMembership): SessionAccess {
   };
 }
 
+/**
+ * The end of a code check: a session, or a step still due — its error
+ * is thrown by the caller after binding the step to the client (cookie).
+ */
+export type SignInResult<Response> =
+  | ({ kind: "signed_in" } & CompletedSignIn<Response>)
+  | { kind: "step_required"; error: ApiException; binding: SignInStepBinding };
+
 /** What happened in the transaction that spent the login code. */
 type CodeOutcome =
   | {
@@ -84,7 +95,7 @@ type CodeOutcome =
       access: SessionAccess;
     }
   | { kind: "refused"; error: () => ApiException; log: string }
-  | { kind: "step"; error: ApiException; log: string };
+  | { kind: "step"; error: ApiException; binding: SignInStepBinding; log: string };
 
 /**
  * Sign-in by one-time code (ARCHITECTURE 8.1, 8.2; D-025, D-046). The code
@@ -113,7 +124,7 @@ export class SignInService {
     @Inject(SignInSettingsSource) private readonly settingsSource: SignInSettingsSource,
   ) {}
 
-  async signIn(input: SignInInput): Promise<CompletedSignIn<LoginCodeVerifiedResponse>> {
+  async signIn(input: SignInInput): Promise<SignInResult<LoginCodeVerifiedResponse>> {
     const kind = sessionKindForClient(input.client);
     const client = input.client.kind === "known" ? input.client.client : null;
     const settings = await this.settingsSource.getSettings();
@@ -136,7 +147,7 @@ export class SignInService {
           }
           case "supplier_web": {
             const account = await this.accounts.findByPhone(confirmed.phone, tx);
-            const memberships = account ? await this.memberships.listActive(account.id, tx) : [];
+            const memberships = account ? await this.memberships.lockActive(account.id, tx) : [];
             if (!account || memberships.length === 0) {
               return {
                 kind: "refused",
@@ -152,7 +163,7 @@ export class SignInService {
               const issued = await this.issueSupplierSession(account, chosen, base, tx);
               return { kind: "signed_in", account, issued, access: supplierAccess(chosen) };
             }
-            const { id, step } = await this.steps.create(
+            const { id, step, binding } = await this.steps.create(
               {
                 ...base,
                 kind: "supplier_selection",
@@ -168,6 +179,7 @@ export class SignInService {
             };
             return {
               kind: "step",
+              binding,
               error: new ApiException(
                 403,
                 "SUPPLIER_SELECTION_REQUIRED",
@@ -190,7 +202,7 @@ export class SignInService {
               };
             }
             const setup = !admin.totpConfigured;
-            const { id, step } = await this.steps.create(
+            const { id, step, binding } = await this.steps.create(
               {
                 ...base,
                 kind: setup ? "admin_totp_setup" : "admin_totp",
@@ -202,6 +214,7 @@ export class SignInService {
             );
             return {
               kind: "step",
+              binding,
               error: totpStepRequired(setup, step),
               log: `Admin sign-in: second factor ${setup ? "setup" : "check"} required admin=${admin.id} account=${account.id} step=${id} phone=${masked}`,
             };
@@ -217,7 +230,7 @@ export class SignInService {
         throw completed.error();
       case "step":
         this.logger.log(completed.log);
-        throw completed.error;
+        return { kind: "step_required", error: completed.error, binding: completed.binding };
       case "signed_in":
         if (completed.account.created) {
           this.logger.log(`Account created account=${completed.account.id}`);
@@ -228,6 +241,7 @@ export class SignInService {
           );
         }
         return {
+          kind: "signed_in",
           response: {
             status: "verified",
             phone: verified.phone,
@@ -247,8 +261,14 @@ export class SignInService {
     const now = new Date();
     return this.steps
       .transaction(async (tx) => {
-        const step = await this.steps.open(input.signInStep, ["supplier_selection"], now, tx);
-        const memberships = await this.memberships.listActive(step.accountId, tx);
+        const step = await this.steps.open(
+          input.signInStep,
+          input.stepBinding,
+          ["supplier_selection"],
+          now,
+          tx,
+        );
+        const memberships = await this.memberships.lockActive(step.accountId, tx);
         if (memberships.length === 0) {
           // Every membership was removed meanwhile: nothing left to choose.
           await this.steps.consume(step.id, now, tx);

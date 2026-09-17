@@ -158,6 +158,8 @@ export const signInStep = pgTable("sign_in_step", {
     .references(() => account.id),
   adminUserId: uuid("admin_user_id").references(() => adminUser.id),
   tokenHash: text("token_hash").notNull(),
+  // Keyed hash of the value in the step cookie of the client that passed the code.
+  clientBindingHash: text("client_binding_hash"),
   totpSecret: text("totp_secret"),
   loginChallengeId: uuid("login_challenge_id"),
   clientPlatform: text("client_platform"),

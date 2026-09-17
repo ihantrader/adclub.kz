@@ -212,6 +212,25 @@ export class SessionStore {
   }
 
   /**
+   * Ends every unended session bound to a membership (the employee was
+   * removed), in the caller's transaction. Cabinet sessions only ever
+   * carry a membership; their other sessions are not touched.
+   */
+  async revokeMemberSessions(
+    memberId: string,
+    reason: SessionRevokedReason,
+    now: Date,
+    tx: DbExecutor,
+  ): Promise<string[]> {
+    const rows = await tx
+      .update(session)
+      .set({ revokedAt: now, revokedReason: reason, updatedAt: now })
+      .where(and(eq(session.supplierMemberId, memberId), isNull(session.revokedAt)))
+      .returning({ id: session.id });
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Moves an active cabinet session of `accountId` to another membership
    * of the same account; `false` if the session is no longer active.
    */

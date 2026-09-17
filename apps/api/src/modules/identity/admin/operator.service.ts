@@ -3,6 +3,7 @@ import { maskPhone, normalizeKzMobilePhone } from "@adclub/domain";
 import { APP_CONFIG, type AppConfig } from "../../../config";
 import { DatabaseService } from "../../../database";
 import { AccountStore } from "../account/account.store";
+import { SessionStore } from "../session/session.store";
 import { SupplierMembershipStore } from "../supplier/supplier-membership.store";
 import { AdminAccessRevoker } from "./admin-access-revoker";
 import { AdminUserStore } from "./admin-user.store";
@@ -42,6 +43,7 @@ export class OperatorService {
     @Inject(AdminUserStore) private readonly admins: AdminUserStore,
     @Inject(AdminAccessRevoker) private readonly revoker: AdminAccessRevoker,
     @Inject(SupplierMembershipStore) private readonly memberships: SupplierMembershipStore,
+    @Inject(SessionStore) private readonly sessions: SessionStore,
   ) {}
 
   /** Appoints the number (its account is created if it has none, D-046). */
@@ -140,15 +142,33 @@ export class OperatorService {
   }
 
   /**
-   * Removes an employee. Their cabinet sessions for this company stop on
-   * their next request (the access rule reads the membership).
+   * Removes an employee. Every cabinet session of this membership ends in
+   * the same transaction, so restoring the membership later brings none
+   * of them back; the person's other sessions go on.
    */
-  async removeMember(memberId: string): Promise<void> {
+  async removeMember(memberId: string): Promise<{ sessionsEnded: number }> {
     this.assertLocal();
-    if (!(await this.memberships.removeMember(memberId))) {
+    const now = new Date();
+    const result = await this.database.db.transaction(async (tx) => {
+      const removed = await this.memberships.markRemoved(memberId, now, tx);
+      if (!removed) {
+        return undefined;
+      }
+      const ended = await this.sessions.revokeMemberSessions(memberId, "access_closed", now, tx);
+      return { ...removed, ended };
+    });
+    if (!result) {
       throw new OperatorCommandError("No such active employee");
     }
-    this.logger.log(`Operator: employee removed member=${memberId}`);
+    for (const sessionId of result.ended) {
+      this.logger.log(
+        `Session ended session=${sessionId} account=${result.accountId} reason=access_closed`,
+      );
+    }
+    this.logger.log(
+      `Operator: employee removed supplier=${result.supplierId} member=${memberId} account=${result.accountId} sessionsEnded=${result.ended.length}`,
+    );
+    return { sessionsEnded: result.ended.length };
   }
 
   private async activeAdmin(phone: string, tx: Parameters<AdminUserStore["lock"]>[1]) {

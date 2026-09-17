@@ -53,13 +53,29 @@ export class SupplierMembershipStore {
       .orderBy(asc(supplier.name), asc(supplier.id));
   }
 
-  /** The account's active membership in one company, if there is one. */
-  async findActive(
+  /**
+   * `listActive` for a transaction that is about to bind a session to one
+   * of the memberships: the rows are share-locked until it commits, so a
+   * concurrent removal waits and then ends that session too (or goes
+   * first, and the membership is no longer listed).
+   */
+  async lockActive(accountId: string, tx: DbExecutor): Promise<ActiveMembership[]> {
+    return tx
+      .select(membershipColumns)
+      .from(supplierMember)
+      .innerJoin(supplier, eq(supplier.id, supplierMember.supplierId))
+      .where(and(eq(supplierMember.accountId, accountId), eq(supplierMember.status, "active")))
+      .orderBy(asc(supplier.name), asc(supplier.id))
+      .for("share", { of: supplierMember });
+  }
+
+  /** The account's active membership in one company, share-locked as in `lockActive`. */
+  async lockActiveIn(
     accountId: string,
     supplierId: string,
-    executor: DbExecutor = this.database.db,
+    tx: DbExecutor,
   ): Promise<ActiveMembership | undefined> {
-    const [row] = await executor
+    const [row] = await tx
       .select(membershipColumns)
       .from(supplierMember)
       .innerJoin(supplier, eq(supplier.id, supplierMember.supplierId))
@@ -69,7 +85,8 @@ export class SupplierMembershipStore {
           eq(supplierMember.supplierId, supplierId),
           eq(supplierMember.status, "active"),
         ),
-      );
+      )
+      .for("share", { of: supplierMember });
     return row;
   }
 
@@ -122,14 +139,20 @@ export class SupplierMembershipStore {
     return row!;
   }
 
-  /** Marks a membership removed; `false` if it wasn't active. */
-  async removeMember(memberId: string): Promise<boolean> {
-    const now = new Date();
-    const rows = await this.database.db
+  /**
+   * Marks a membership removed, in the caller's transaction (which must
+   * also end the membership's sessions); `undefined` if it wasn't active.
+   */
+  async markRemoved(
+    memberId: string,
+    now: Date,
+    tx: DbExecutor,
+  ): Promise<{ accountId: string; supplierId: string } | undefined> {
+    const [row] = await tx
       .update(supplierMember)
       .set({ status: "removed", removedAt: now, updatedAt: now })
       .where(and(eq(supplierMember.id, memberId), eq(supplierMember.status, "active")))
-      .returning({ id: supplierMember.id });
-    return rows.length > 0;
+      .returning({ accountId: supplierMember.accountId, supplierId: supplierMember.supplierId });
+    return row;
   }
 }

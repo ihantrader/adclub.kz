@@ -94,10 +94,16 @@ export class AdminAuthService {
    * The authenticator app data of a setup step. The secret is created
    * once per step (kept encrypted in the step) and repeated on a retry.
    */
-  async startSetup(token: string): Promise<TotpSetupResponse> {
+  async startSetup(token: string, stepBinding: string | undefined): Promise<TotpSetupResponse> {
     const now = new Date();
     return this.inTransaction(async (tx) => {
-      const { step, admin } = await this.openAdminStep(token, "admin_totp_setup", now, tx);
+      const { step, admin } = await this.openAdminStep(
+        token,
+        stepBinding,
+        "admin_totp_setup",
+        now,
+        tx,
+      );
       let secret: string;
       if (step.totpSecret) {
         secret = openSecret(this.keys.encryption, step.id, step.totpSecret);
@@ -128,6 +134,7 @@ export class AdminAuthService {
   /** Confirms the app with its current code: the admin session and the backup codes. */
   async confirmSetup(input: {
     token: string;
+    stepBinding: string | undefined;
     totpCode: string;
     deviceName: string | null;
     ip: string | null;
@@ -141,7 +148,13 @@ export class AdminAuthService {
     );
     const now = new Date();
     return this.inTransaction(async (tx) => {
-      const { step, admin } = await this.openAdminStep(input.token, "admin_totp_setup", now, tx);
+      const { step, admin } = await this.openAdminStep(
+        input.token,
+        input.stepBinding,
+        "admin_totp_setup",
+        now,
+        tx,
+      );
       if (!step.totpSecret) {
         throw new ApiException(409, "CONFLICT", "Start the authenticator setup first");
       }
@@ -193,6 +206,7 @@ export class AdminAuthService {
   /** Every later sign-in: the app's code or an unused backup code. */
   async verify(input: {
     token: string;
+    stepBinding: string | undefined;
     factor: SecondFactor;
     deviceName: string | null;
     ip: string | null;
@@ -206,7 +220,13 @@ export class AdminAuthService {
     );
     const now = new Date();
     return this.inTransaction(async (tx) => {
-      const { step, admin } = await this.openAdminStep(input.token, "admin_totp", now, tx);
+      const { step, admin } = await this.openAdminStep(
+        input.token,
+        input.stepBinding,
+        "admin_totp",
+        now,
+        tx,
+      );
       await this.limit(
         rateLimitKeys.perAdmin(admin.id),
         settings.totpVerifyPerAdmin,
@@ -374,11 +394,12 @@ export class AdminAuthService {
    */
   private async openAdminStep(
     token: string,
+    stepBinding: string | undefined,
     kind: "admin_totp_setup" | "admin_totp",
     now: Date,
     tx: DbExecutor,
   ): Promise<{ step: SignInStepRow; admin: LockedAdmin }> {
-    const step = await this.steps.open(token, [kind], now, tx);
+    const step = await this.steps.open(token, stepBinding, [kind], now, tx);
     const admin = step.adminUserId ? await this.admins.lock(step.adminUserId, tx) : undefined;
     if (!admin || admin.status !== "active") {
       await this.steps.consume(step.id, now, tx);

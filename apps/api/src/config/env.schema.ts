@@ -50,6 +50,22 @@ const positiveInt = (defaultValue: number) =>
  * may raise it past 12 hours.
  */
 const ADMIN_WEB_MAX_TTL_SECONDS = 12 * 60 * 60;
+/**
+ * The longest an unfinished sign-in may stay open (ARCHITECTURE 4.9):
+ * enough to install an authenticator app, short enough that a leaked
+ * step is worthless soon.
+ */
+const SIGN_IN_STEP_MAX_TTL_SECONDS = 30 * 60;
+
+const signInStepTtl = (defaultValue: number) =>
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(SIGN_IN_STEP_MAX_TTL_SECONDS, {
+      message: `Must be at most ${SIGN_IN_STEP_MAX_TTL_SECONDS} (30 minutes) — an unfinished sign-in never stays open longer`,
+    })
+    .default(defaultValue);
 
 /**
  * Where login codes are sent from. Only `test` exists today (in-process
@@ -209,8 +225,8 @@ export const envSchema = z.object({
   SESSION_REFRESH_PER_IP: positiveInt(600),
   SESSION_REFRESH_PER_IP_WINDOW_SECONDS: positiveInt(3600),
   // Roles, cabinet and admin sign-in (ARCHITECTURE 8.1, 8.3, 14; TASK-006).
-  SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS: positiveInt(600),
-  SIGN_IN_ADMIN_TOTP_TTL_SECONDS: positiveInt(600),
+  SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS: signInStepTtl(600),
+  SIGN_IN_ADMIN_TOTP_TTL_SECONDS: signInStepTtl(600),
   ADMIN_TOTP_ENCRYPTION_KEY: z.string().min(32).optional(),
   ADMIN_TOTP_ALLOWED_DRIFT_STEPS: z.coerce.number().int().min(0).max(5).default(1),
   ADMIN_BACKUP_CODE_COUNT: z.coerce.number().int().min(1).max(50).default(10),

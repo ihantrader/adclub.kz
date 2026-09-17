@@ -88,8 +88,7 @@ async function run(operator: OperatorService, argv: string[]): Promise<unknown> 
         displayName: required(values.name, "--name"),
       });
     case "dev:member:remove":
-      await operator.removeMember(required(first, "<memberId>"));
-      return { removed: true };
+      return { removed: true, ...(await operator.removeMember(required(first, "<memberId>"))) };
     default:
       throw new OperatorCommandError(USAGE);
   }

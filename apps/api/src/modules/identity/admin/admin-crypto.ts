@@ -25,14 +25,17 @@ export function deriveAdminKeys(keyMaterial: string): AdminKeys {
 }
 
 const SECRET_BOX_PREFIX = "v1";
+const IV_BYTES = 12;
+/** The full GCM tag: a shorter one is never accepted (it would be easier to forge). */
+const AUTH_TAG_BYTES = 16;
 
 /**
  * Encrypts a secret bound to `context` (the id of the row that holds it),
  * so a ciphertext copied to another row doesn't decrypt.
  */
 export function sealSecret(key: Buffer, context: string, secret: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: AUTH_TAG_BYTES });
   cipher.setAAD(Buffer.from(context));
   const ciphertext = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
   return [
@@ -48,9 +51,16 @@ export function openSecret(key: Buffer, context: string, sealed: string): string
   if (prefix !== SECRET_BOX_PREFIX || !iv || !tag || ciphertext === undefined) {
     throw new Error("Unsupported sealed secret format");
   }
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
+  const ivBytes = Buffer.from(iv, "base64url");
+  const tagBytes = Buffer.from(tag, "base64url");
+  if (ivBytes.length !== IV_BYTES || tagBytes.length !== AUTH_TAG_BYTES) {
+    throw new Error("Malformed sealed secret");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, ivBytes, {
+    authTagLength: AUTH_TAG_BYTES,
+  });
   decipher.setAAD(Buffer.from(context));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  decipher.setAuthTag(tagBytes);
   return Buffer.concat([
     decipher.update(Buffer.from(ciphertext, "base64url")),
     decipher.final(),

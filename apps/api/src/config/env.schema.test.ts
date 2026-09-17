@@ -296,6 +296,25 @@ describe("loadConfig", () => {
       );
     });
 
+    it("refuses to start with a sign-in step that stays open longer than 30 minutes", () => {
+      for (const name of [
+        "SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS",
+        "SIGN_IN_ADMIN_TOTP_TTL_SECONDS",
+      ]) {
+        expect(() => loadConfig({ ...VALID_ENV, [name]: String(30 * 60 + 1) })).toThrow(
+          new RegExp(`${name}.*at most 1800`, "s"),
+        );
+        expect(() => loadConfig({ ...VALID_ENV, [name]: "0" })).toThrow(new RegExp(name));
+      }
+      expect(
+        loadConfig({
+          ...VALID_ENV,
+          SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS: "1800",
+          SIGN_IN_ADMIN_TOTP_TTL_SECONDS: "1800",
+        }).signIn.settings,
+      ).toMatchObject({ supplierSelectionTtlSeconds: 1800, adminTotpTtlSeconds: 1800 });
+    });
+
     it("requires a session token secret outside development and tests, without printing it", () => {
       expect(() => loadConfig(STAGING_ENV)).toThrow(
         /SESSION_TOKEN_SECRET: required when NODE_ENV=staging/,

@@ -93,6 +93,11 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
   let ipCounter = 0;
   /** The last time step accepted per TOTP secret (codes are never accepted twice). */
   const lastSteps = new Map<string, number>();
+  /**
+   * `name=value` of the step cookie each step was bound to, by step id —
+   * the browser that passed the code. Step calls send it unless told not to.
+   */
+  const stepCookies = new Map<string, string>();
 
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
@@ -154,6 +159,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     config.nodeEnv = "test";
     channels.sent.length = 0;
     lastSteps.clear();
+    stepCookies.clear();
     await db.query(TRUNCATE_ALL);
     await redis.flushall();
     output = captureOutput();
@@ -177,6 +183,24 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     )) {
       rememberSecret(match[2]);
     }
+  }
+
+  function setCookies(response: Response): string[] {
+    const header = response.headers["set-cookie"] as string[] | string | undefined;
+    return header === undefined ? [] : Array.isArray(header) ? header : [header];
+  }
+
+  function stepIdOf(token: string): string | undefined {
+    return /^st1\.([0-9a-f-]{36})\./.exec(token)?.[1];
+  }
+
+  /** The step cookie of the browser that got this step (`name=value`). */
+  function stepCookie(token: string): string {
+    const cookie = stepCookies.get(stepIdOf(token) ?? "");
+    if (!cookie) {
+      throw new Error("no step cookie for this token");
+    }
+    return cookie;
   }
 
   async function sendCode(phone: string): Promise<string> {
@@ -205,15 +229,39 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     }
     const response = await call.send({ phone, code, ...extra });
     remember(response.body);
+    for (const cookie of setCookies(response)) {
+      const match = /^adclub_sign_in_([0-9a-f-]{36})=([^;]*)/.exec(cookie);
+      if (match) {
+        rememberSecret(match[2]);
+        stepCookies.set(match[1]!, `adclub_sign_in_${match[1]}=${match[2]}`);
+      }
+    }
     return response;
   }
 
-  async function post(path: string, body: object, client: string): Promise<Response> {
-    const response = await http()
-      .post(path)
-      .set("X-Client", client)
-      .set("X-Forwarded-For", nextIp())
-      .send(body);
+  /**
+   * A call from the browser that passed the code: a step route gets the
+   * step cookie of the step in the body. `cookie` overrides it (`null` —
+   * another browser, which has none).
+   */
+  async function post(
+    path: string,
+    body: object,
+    client: string,
+    options: { cookie?: string | null } = {},
+  ): Promise<Response> {
+    const call = http().post(path).set("X-Client", client).set("X-Forwarded-For", nextIp());
+    const token = (body as { signInStep?: unknown }).signInStep;
+    const cookie =
+      options.cookie !== undefined
+        ? options.cookie
+        : typeof token === "string"
+          ? (stepCookies.get(stepIdOf(token) ?? "") ?? null)
+          : null;
+    if (cookie !== null) {
+      call.set("Cookie", cookie);
+    }
+    const response = await call.send(body);
     remember(response.body);
     return response;
   }
@@ -241,9 +289,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
   }
 
   function refreshCookie(response: Response, name: string): string {
-    const header = response.headers["set-cookie"] as string[] | string | undefined;
-    const cookies = header === undefined ? [] : Array.isArray(header) ? header : [header];
-    const cookie = cookies.find((value) => value.startsWith(`${name}=`));
+    const cookie = setCookies(response).find((value) => value.startsWith(`${name}=`));
     if (!cookie) {
       throw new Error(`no ${name} cookie`);
     }
@@ -258,6 +304,39 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       .set("Origin", origin)
       .set("Cookie", cookie)
       .send({});
+  }
+
+  /** Resolves once a statement matching `pattern` waits for a row lock. */
+  async function waitForLockWait(pattern: string): Promise<void> {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const { rows } = await db.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE $1",
+        [pattern],
+      );
+      if (rows[0]!.n > 0) {
+        return;
+      }
+      await sleep(20);
+    }
+    throw new Error(`nothing waited for a lock: ${pattern}`);
+  }
+
+  /** A second connection that holds row locks until `release`. */
+  async function lockRows(
+    sql: string,
+    params: unknown[],
+  ): Promise<{ release: () => Promise<void> }> {
+    const locker = new Client({ connectionString: postgres.getConnectionUri() });
+    await locker.connect();
+    await locker.query("BEGIN");
+    await locker.query(sql, params);
+    return {
+      release: async () => {
+        await locker.query("COMMIT");
+        await locker.end();
+      },
+    };
   }
 
   async function tableCount(table: string): Promise<number> {
@@ -669,6 +748,109 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       expect(log).toContain("reason=expired");
     });
 
+    it("lets only the browser that passed the code finish the company choice", async () => {
+      const a = await company("Альфа");
+      const b = await company("Бета");
+      await employ(a, PHONE);
+      await employ(b, PHONE);
+
+      const response = await verify(PHONE, SUPPLIER_WEB);
+      expectError(response, 403, "SUPPLIER_SELECTION_REQUIRED");
+      const token = supplierSelectionRequiredDetailsSchema.parse(response.body.details).signInStep
+        .token;
+      const stepId = stepIdOf(token)!;
+      const setCookie = setCookies(response).find((cookie) =>
+        cookie.startsWith(`adclub_sign_in_${stepId}=`),
+      );
+      expect(setCookie).toBeDefined();
+      expect(setCookie).toMatch(/; HttpOnly/i);
+      expect(setCookie).toMatch(/; Secure/i);
+      expect(setCookie).toMatch(/; SameSite=Strict/i);
+      expect(setCookie).toMatch(/; Path=\/auth\/sign-in(;|$)/);
+      expect(setCookie).not.toMatch(/Domain=/i);
+      expect(Number(/Max-Age=(\d+)/.exec(setCookie!)?.[1])).toBeGreaterThan(590);
+      const binding = stepCookie(token).split("=")[1]!;
+      expect(JSON.stringify(response.body)).not.toContain(binding);
+
+      // Another browser holds the token (from a log, a screenshot, an error
+      // report) — but not this browser's cookie.
+      const otherToken = supplierSelectionRequiredDetailsSchema.parse(
+        (await verify(PHONE, SUPPLIER_WEB)).body.details,
+      ).signInStep.token;
+      const otherBinding = stepCookie(otherToken).split("=")[1]!;
+      const name = `adclub_sign_in_${stepId}`;
+      for (const cookie of [
+        null,
+        stepCookie(otherToken),
+        `${name}=${otherBinding}`,
+        `${name}=${"A".repeat(43)}`,
+        `${name}=${token.split(".")[2]}`,
+        `${name}=`,
+        `${name}=${binding}; ${name}=${binding}`,
+      ]) {
+        for (const supplierId of [a, randomUUID()]) {
+          // Refused before anything else: not even whether the company fits.
+          expectError(
+            await post("/auth/sign-in/supplier", { signInStep: token, supplierId }, SUPPLIER_WEB, {
+              cookie,
+            }),
+            401,
+            "SIGN_IN_STEP_INVALID",
+          );
+        }
+      }
+      expect(await tableCount("session")).toBe(0);
+      const { rows: steps } = await db.query<{ consumed_at: Date | null }>(
+        "SELECT consumed_at FROM sign_in_step WHERE id = $1",
+        [stepId],
+      );
+      expect(steps[0]!.consumed_at).toBeNull();
+
+      // The browser that passed the code still finishes; its cookie is dropped.
+      const chosen = await post(
+        "/auth/sign-in/supplier",
+        { signInStep: token, supplierId: a },
+        SUPPLIER_WEB,
+      );
+      expect(chosen.status, JSON.stringify(chosen.body)).toBe(200);
+      refreshCookie(chosen, "adclub_supplier_refresh");
+      const cleared = setCookies(chosen).find((cookie) => cookie.startsWith(`${name}=`));
+      expect(cleared).toMatch(new RegExp(`^${name}=;`));
+      expect(cleared).toMatch(/Path=\/auth\/sign-in/);
+      expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+
+      // Two sign-ins in two tabs of one browser: the browser sends both
+      // cookies, and each step finishes.
+      const thirdToken = supplierSelectionRequiredDetailsSchema.parse(
+        (await verify(PHONE, SUPPLIER_WEB)).body.details,
+      ).signInStep.token;
+      const bothCookies = `${stepCookie(otherToken)}; ${stepCookie(thirdToken)}`;
+      for (const [tab, supplierId] of [
+        [thirdToken, b],
+        [otherToken, a],
+      ] as const) {
+        const finished = await post(
+          "/auth/sign-in/supplier",
+          { signInStep: tab, supplierId },
+          SUPPLIER_WEB,
+          { cookie: bothCookies },
+        );
+        expect(finished.status, JSON.stringify(finished.body)).toBe(200);
+        refreshCookie(finished, "adclub_supplier_refresh");
+      }
+      expect(await tableCount("session")).toBe(3);
+
+      // The mobile app never gets a step, so no step cookie either.
+      const mobile = await verify(PHONE, IOS);
+      expect(mobile.status).toBe(200);
+      expect(setCookies(mobile)).toEqual([]);
+
+      expect(output.text()).toContain(`Sign-in step refused step=${stepId} reason=other_client`);
+      for (const value of [binding, otherBinding]) {
+        expect(output.text()).not.toContain(value);
+      }
+    });
+
     it("follows memberships removed while the choice is open", async () => {
       const a = await company("Альфа");
       const b = await company("Бета");
@@ -792,6 +974,85 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       expect(log).toContain("Supplier context switch refused: no active membership");
     });
 
+    it("never leaves a session in a membership removed while switching to it: switch first", async () => {
+      const a = await company("Альфа");
+      const b = await company("Бета");
+      await employ(a, PHONE);
+      const memberB = await employ(b, PHONE);
+      const session = await supplierSession(PHONE, { supplierId: a });
+
+      // The switch has read the membership and waits to move the session;
+      // the removal starts right then.
+      const held = await lockRows("SELECT 1 FROM session WHERE id = $1 FOR UPDATE", [
+        session.sessionId,
+      ]);
+      const switching = bearer(
+        "post",
+        "/auth/supplier-context",
+        session.accessToken,
+        SUPPLIER_WEB,
+        {
+          supplierId: b,
+        },
+      ).then((response) => response);
+      await waitForLockWait('update "session" set "supplier_id"%');
+      const removal = operator.removeMember(memberB);
+      // The removal waits for the switch (the membership is share-locked by it).
+      await waitForLockWait('update "supplier_member" set "status"%');
+      await held.release();
+      const [switched, removed] = await Promise.all([switching, removal]);
+
+      expect(switched.status).toBe(200);
+      expect(removed).toEqual({ sessionsEnded: 1 });
+      const { rows } = await db.query<{ supplier_member_id: string; revoked_reason: string }>(
+        "SELECT supplier_member_id, revoked_reason FROM session WHERE id = $1",
+        [session.sessionId],
+      );
+      expect(rows[0]).toEqual({ supplier_member_id: memberB, revoked_reason: "access_closed" });
+      expectError(
+        await bearer("get", "/supplier/company", session.accessToken, SUPPLIER_WEB),
+        401,
+        "SUPPLIER_ACCESS_CLOSED",
+      );
+    });
+
+    it("never leaves a session in a membership removed while switching to it: removal first", async () => {
+      const a = await company("Альфа");
+      const b = await company("Бета");
+      await employ(a, PHONE);
+      const memberB = await employ(b, PHONE);
+      const session = await supplierSession(PHONE, { supplierId: a });
+      const inB = await supplierSession(PHONE, { supplierId: b });
+
+      // The removal has marked the membership and waits to end its sessions;
+      // the switch starts right then.
+      const held = await lockRows("SELECT 1 FROM session WHERE id = $1 FOR UPDATE", [
+        inB.sessionId,
+      ]);
+      const removal = operator.removeMember(memberB);
+      await waitForLockWait('update "session" set "revoked_at"%');
+      const switching = bearer(
+        "post",
+        "/auth/supplier-context",
+        session.accessToken,
+        SUPPLIER_WEB,
+        {
+          supplierId: b,
+        },
+      ).then((response) => response);
+      // The switch waits for the removal to commit, then sees no membership.
+      await waitForLockWait('%"supplier_member"%for share%');
+      await held.release();
+      const [removed, switched] = await Promise.all([removal, switching]);
+
+      expect(removed).toEqual({ sessionsEnded: 1 });
+      expectError(switched, 404, "NOT_FOUND");
+      expect(await sessionRow(session.sessionId)).toEqual({ revoked_reason: null, supplier_id: a });
+      expect(
+        (await bearer("get", "/supplier/company", session.accessToken, SUPPLIER_WEB)).body,
+      ).toMatchObject({ supplier: { id: a } });
+    });
+
     it("is not available to other contexts", async () => {
       const a = await company("Альфа");
       await employ(a, PHONE);
@@ -805,22 +1066,35 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
   });
 
   describe("losing rights", () => {
-    it("ends the cabinet session of a removed employee at once, refresh included; the person's other sessions go on", async () => {
+    it("ends the cabinet sessions of a removed employee in the removal itself; the person's other sessions go on", async () => {
       const a = await company("Альфа");
       const b = await company("Бета");
       const memberA = await employ(a, PHONE);
       await employ(b, PHONE);
       const inA = await supplierSession(PHONE, { supplierId: a });
+      // Another browser, never used again: a forgotten or stolen laptop.
       const inA2 = await supplierSession(PHONE, { supplierId: a });
       const inB = await supplierSession(PHONE, { supplierId: b });
       const mobile = await mobileSession(PHONE);
+      await employ(a, OTHER_PHONE, "Ерлан");
+      const otherEmployee = await supplierSession(OTHER_PHONE);
 
-      await operator.removeMember(memberA);
+      expect(await operator.removeMember(memberA)).toEqual({ sessionsEnded: 2 });
+
+      // Ended in the database before any request of theirs.
+      expect(await sessionRow(inA.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
+      expect(await sessionRow(inA2.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
+      expect(await sessionRow(inB.sessionId)).toMatchObject({ revoked_reason: null });
+      expect(await sessionRow(otherEmployee.sessionId)).toMatchObject({ revoked_reason: null });
+      const { rows: active } = await db.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM session WHERE supplier_member_id = $1 AND revoked_at IS NULL",
+        [memberA],
+      );
+      expect(active[0]!.n).toBe(0);
 
       const closed = await bearer("get", "/supplier/company", inA.accessToken, SUPPLIER_WEB);
       expectError(closed, 401, "SUPPLIER_ACCESS_CLOSED");
       expect(closed.headers["www-authenticate"]).toContain("Bearer");
-      expect(await sessionRow(inA.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
       // Keeps saying so, on every route and on refresh (and drops the cookie).
       expectError(
         await bearer("get", "/auth/me", inA.accessToken, SUPPLIER_WEB),
@@ -831,25 +1105,67 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       expectError(refused, 401, "SUPPLIER_ACCESS_CLOSED");
       expect(String(refused.headers["set-cookie"])).toMatch(/^adclub_supplier_refresh=;/);
 
-      // A session never used since the removal is refused at its first refresh.
-      const refusedFirst = await cookieRefresh(SUPPLIER_ORIGIN, inA2.cookie);
-      expectError(refusedFirst, 401, "SUPPLIER_ACCESS_CLOSED");
-      expect(await sessionRow(inA2.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
-
       expect((await bearer("get", "/supplier/company", inB.accessToken, SUPPLIER_WEB)).status).toBe(
         200,
       );
+      expect(
+        (await bearer("get", "/supplier/company", otherEmployee.accessToken, SUPPLIER_WEB)).status,
+      ).toBe(200);
       expect((await bearer("get", "/auth/me", mobile, IOS)).status).toBe(200);
 
-      // Restoring the membership doesn't bring the ended session back.
-      await employ(a, PHONE);
+      // Restoring the membership (same row, same id) brings no ended session
+      // back — not even one that never called the server in between.
+      expect(await employ(a, PHONE)).toBe(memberA);
+      expectError(
+        await bearer("get", "/supplier/company", inA2.accessToken, SUPPLIER_WEB),
+        401,
+        "SUPPLIER_ACCESS_CLOSED",
+      );
+      expectError(await cookieRefresh(SUPPLIER_ORIGIN, inA2.cookie), 401, "SUPPLIER_ACCESS_CLOSED");
       expectError(
         await bearer("get", "/supplier/company", inA.accessToken, SUPPLIER_WEB),
         401,
         "SUPPLIER_ACCESS_CLOSED",
       );
-      expect((await supplierSession(PHONE, { supplierId: a })).supplierId).toBe(a);
+      expect(await sessionRow(inA2.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
+      // A new sign-in works.
+      const again = await supplierSession(PHONE, { supplierId: a });
+      expect(again.supplierId).toBe(a);
+      expect(
+        (await bearer("get", "/supplier/company", again.accessToken, SUPPLIER_WEB)).status,
+      ).toBe(200);
 
+      expect(output.text()).toContain(
+        `Operator: employee removed supplier=${a} member=${memberA} account=${inA.accountId} sessionsEnded=2`,
+      );
+      expect(output.text()).toContain(
+        `Session ended session=${inA2.sessionId} account=${inA.accountId} reason=access_closed`,
+      );
+      expect(output.text()).toContain(
+        `Operator: employee restored supplier=${a} member=${memberA}`,
+      );
+      await expect(operator.removeMember(randomUUID())).rejects.toThrow(OperatorCommandError);
+    });
+
+    it("still ends a session whose membership was removed behind its back, on its next request", async () => {
+      const a = await company("Альфа");
+      const memberA = await employ(a, PHONE);
+      const inA = await supplierSession(PHONE);
+      const inA2 = await supplierSession(PHONE);
+      // Not through the removal (a future path that forgets to end sessions).
+      await db.query(
+        "UPDATE supplier_member SET status = 'removed', removed_at = now() WHERE id = $1",
+        [memberA],
+      );
+
+      expectError(
+        await bearer("get", "/supplier/company", inA.accessToken, SUPPLIER_WEB),
+        401,
+        "SUPPLIER_ACCESS_CLOSED",
+      );
+      expect(await sessionRow(inA.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
+      expectError(await cookieRefresh(SUPPLIER_ORIGIN, inA2.cookie), 401, "SUPPLIER_ACCESS_CLOSED");
+      expect(await sessionRow(inA2.sessionId)).toMatchObject({ revoked_reason: "access_closed" });
       expect(output.text()).toContain(
         `Access refused, context lost, session ended session=${inA.sessionId} account=${inA.accountId} kind=supplier_web reason=membership_removed supplier=${a} member=${memberA}`,
       );
@@ -1046,6 +1362,102 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       expect(log).toContain(`Admin TOTP set up admin=${adminId} backupCodes=10`);
     });
 
+    it("lets only the browser that passed the code set up or pass the second factor", async () => {
+      await operator.grantAdmin(PHONE);
+      const setupToken = await adminStep(PHONE, "TOTP_SETUP_REQUIRED");
+      const setupStepId = stepIdOf(setupToken)!;
+
+      // Another browser gets neither the authenticator secret nor a session.
+      const stolen = await post("/auth/sign-in/totp/setup", { signInStep: setupToken }, ADMIN_WEB, {
+        cookie: null,
+      });
+      expectError(stolen, 401, "SIGN_IN_STEP_INVALID");
+      expect(stolen.body).not.toHaveProperty("secret");
+      expect(stolen.body).not.toHaveProperty("otpauthUri");
+      const { rows: before } = await db.query<{ totp_secret: string | null }>(
+        "SELECT totp_secret FROM sign_in_step WHERE id = $1",
+        [setupStepId],
+      );
+      expect(before[0]!.totp_secret).toBeNull();
+
+      const setup = totpSetupResponseSchema.parse(
+        (await post("/auth/sign-in/totp/setup", { signInStep: setupToken }, ADMIN_WEB)).body,
+      );
+      expectError(
+        await post(
+          "/auth/sign-in/totp/setup/confirm",
+          { signInStep: setupToken, totpCode: nextTotp(setup.secret) },
+          ADMIN_WEB,
+          { cookie: null },
+        ),
+        401,
+        "SIGN_IN_STEP_INVALID",
+      );
+      const confirmed = await post(
+        "/auth/sign-in/totp/setup/confirm",
+        { signInStep: setupToken, totpCode: nextTotp(setup.secret) },
+        ADMIN_WEB,
+      );
+      expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200);
+      refreshCookie(confirmed, "adclub_admin_refresh");
+      const { backupCodes } = totpSetupCompletedResponseSchema.parse(confirmed.body);
+      for (const code of backupCodes) {
+        rememberCode(code, code.replace("-", ""));
+      }
+      expect(
+        setCookies(confirmed).find((cookie) => cookie.startsWith(`adclub_sign_in_${setupStepId}=`)),
+      ).toMatch(new RegExp(`^adclub_sign_in_${setupStepId}=;`));
+
+      // Every later sign-in. Refusals of another browser don't count
+      // against the administrator's attempt limit and spend nothing.
+      // (The setup confirmation above already counted once.)
+      await redis.flushall();
+      settings().totpVerifyPerAdmin = { max: 1, windowSeconds: 900 };
+      const token = await adminStep(PHONE, "TOTP_REQUIRED");
+      const stepId = stepIdOf(token)!;
+      const otherTab = await adminStep(PHONE, "TOTP_REQUIRED");
+      const code = nextTotp(setup.secret);
+      for (const cookie of [
+        null,
+        stepCookie(otherTab),
+        `adclub_sign_in_${stepId}=${stepCookie(otherTab).split("=")[1]}`,
+      ]) {
+        expectError(
+          await post("/auth/sign-in/totp", { signInStep: token, totpCode: code }, ADMIN_WEB, {
+            cookie,
+          }),
+          401,
+          "SIGN_IN_STEP_INVALID",
+        );
+        expectError(
+          await post(
+            "/auth/sign-in/totp",
+            { signInStep: token, backupCode: backupCodes[0] },
+            ADMIN_WEB,
+            { cookie },
+          ),
+          401,
+          "SIGN_IN_STEP_INVALID",
+        );
+      }
+      const { rows: used } = await db.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM admin_backup_code WHERE used_at IS NOT NULL",
+      );
+      expect(used[0]!.n).toBe(0);
+
+      const verified = await adminVerify(token, { totpCode: code });
+      expect(verified.status, JSON.stringify(verified.body)).toBe(200);
+      refreshCookie(verified, "adclub_admin_refresh");
+      const { rows: sessions } = await db.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM session WHERE kind = 'admin_web'",
+      );
+      expect(sessions[0]!.n).toBe(2);
+      expect(output.text()).toContain(
+        `Sign-in step refused step=${setupStepId} reason=other_client`,
+      );
+      expect(output.text()).toContain(`Sign-in step refused step=${stepId} reason=other_client`);
+    });
+
     it("never turns an unfinished second factor step into admin rights", async () => {
       const admin = await setUpAdmin(PHONE);
       const token = await adminStep(PHONE, "TOTP_REQUIRED");
@@ -1211,15 +1623,18 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         .post("/auth/sign-in/totp")
         .set("X-Client", ADMIN_WEB)
         .set("X-Forwarded-For", "203.0.113.99")
+        .set("Cookie", stepCookie(token))
         .send({ signInStep: token, totpCode: "000000" });
       expectError(perIp, 400, "TOTP_INVALID");
       await http()
         .post("/auth/sign-in/totp")
         .set("X-Forwarded-For", "203.0.113.99")
+        .set("Cookie", stepCookie(token))
         .send({ signInStep: token, totpCode: "000000" });
       const ipLimited = await http()
         .post("/auth/sign-in/totp")
         .set("X-Forwarded-For", "203.0.113.99")
+        .set("Cookie", stepCookie(token))
         .send({ signInStep: token, totpCode: "000000" });
       expectError(ipLimited, 429, "RATE_LIMITED");
       expect(ipLimited.body.details).toMatchObject({ limit: "admin_totp_per_ip" });

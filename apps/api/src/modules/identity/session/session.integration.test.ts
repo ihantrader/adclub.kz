@@ -25,7 +25,9 @@ import { TRUNCATE_ALL } from "../../../testing/database";
 import {
   appLogText,
   captureOutput,
+  rememberCode,
   rememberSecret,
+  rememberedCodes,
   rememberedSecrets,
 } from "../../../testing/output-capture";
 import { TcpProxy } from "../../../testing/tcp-proxy";
@@ -146,6 +148,9 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     output.stop();
     for (const token of issuedTokens) {
       rememberSecret(token);
+    }
+    for (const sent of channels.sent) {
+      rememberCode(sent.code);
     }
   });
 
@@ -1221,6 +1226,8 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       const output = appLogText();
       expect(output).toContain("Session created");
       expect(rememberedSecrets().size).toBeGreaterThan(100);
+      // Login codes too: the output capture looks for them after this file.
+      expect(rememberedCodes().size).toBeGreaterThan(50);
       expect(issuedTokens.size).toBeGreaterThan(100);
       for (const token of issuedTokens) {
         expect(output).not.toContain(token);

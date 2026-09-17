@@ -34,3 +34,30 @@ export function signInStepSecretMatches(
   const stored = Buffer.from(storedHash);
   return expected.length === stored.length && timingSafeEqual(expected, stored);
 }
+
+/**
+ * The client binding of a step: a second random value that never leaves
+ * the client's HttpOnly step cookie (`sign-in-step-cookie.ts`). The token
+ * from the response body alone doesn't finish the step.
+ */
+export function newSignInStepBinding(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashSignInStepBinding(key: Buffer, stepId: string, binding: string): string {
+  return createHmac("sha256", key).update(`binding:${stepId}:${binding}`).digest("base64url");
+}
+
+export function signInStepBindingMatches(
+  key: Buffer,
+  stepId: string,
+  binding: string | undefined,
+  storedHash: string | null,
+): boolean {
+  if (binding === undefined || storedHash === null) {
+    return false;
+  }
+  const expected = Buffer.from(hashSignInStepBinding(key, stepId, binding));
+  const stored = Buffer.from(storedHash);
+  return expected.length === stored.length && timingSafeEqual(expected, stored);
+}

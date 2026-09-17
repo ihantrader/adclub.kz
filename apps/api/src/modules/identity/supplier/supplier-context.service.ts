@@ -50,7 +50,9 @@ export class SupplierContextService {
   async switchTo(auth: AuthenticatedSession, supplierId: string): Promise<CurrentAccountResponse> {
     const previous = auth.supplierId;
     const switched = await this.database.db.transaction(async (tx) => {
-      const membership = await this.memberships.findActive(auth.accountId, supplierId, tx);
+      // Locked: a removal of this membership either goes first (and it's
+      // gone here) or waits and then ends this session with the others.
+      const membership = await this.memberships.lockActiveIn(auth.accountId, supplierId, tx);
       if (!membership) {
         return { kind: "no_membership" as const };
       }

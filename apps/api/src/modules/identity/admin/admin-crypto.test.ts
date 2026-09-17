@@ -1,9 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createDecipheriv, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  hashSignInStepBinding,
+  newSignInStepBinding,
   newSignInStepToken,
   parseSignInStepToken,
   hashSignInStepSecret,
+  signInStepBindingMatches,
   signInStepSecretMatches,
 } from "../session/sign-in-step-token";
 import {
@@ -117,6 +120,35 @@ describe("secret box", () => {
     expect(() => openSecret(keys.encryption, context, "v2.x.y.z")).toThrow();
   });
 
+  it("accepts only the full-length tag: a truncated one is refused, although GCM would take it", () => {
+    const context = randomUUID();
+    const sealed = sealSecret(keys.encryption, context, "JBSWY3DPEHPK3PXP");
+    const [prefix, iv, tag, data] = sealed.split(".") as [string, string, string, string];
+    const fullTag = Buffer.from(tag, "base64url");
+    expect(fullTag).toHaveLength(16);
+    for (const length of [4, 8, 12, 13, 15]) {
+      // A truncated GCM tag is a prefix of the full one — a lax decryption accepts it.
+      const truncated = fullTag.subarray(0, length).toString("base64url");
+      const lax = createDecipheriv("aes-256-gcm", keys.encryption, Buffer.from(iv, "base64url"), {
+        authTagLength: length,
+      });
+      lax.setAAD(Buffer.from(context));
+      lax.setAuthTag(Buffer.from(truncated, "base64url"));
+      expect(
+        Buffer.concat([lax.update(Buffer.from(data, "base64url")), lax.final()]).toString("utf8"),
+      ).toBe("JBSWY3DPEHPK3PXP");
+      expect(() =>
+        openSecret(keys.encryption, context, [prefix, iv, truncated, data].join(".")),
+      ).toThrow("Malformed sealed secret");
+    }
+    expect(() =>
+      openSecret(keys.encryption, context, [prefix, iv, `${tag}AA`, data].join(".")),
+    ).toThrow("Malformed sealed secret");
+    expect(() =>
+      openSecret(keys.encryption, context, [prefix, iv.slice(0, 8), tag, data].join(".")),
+    ).toThrow("Malformed sealed secret");
+  });
+
   it("derives different keys for different purposes", () => {
     expect(keys.encryption.equals(keys.backupCodes)).toBe(false);
     expect(keys.encryption).toHaveLength(32);
@@ -167,6 +199,27 @@ describe("sign-in step tokens", () => {
     expect(signInStepSecretMatches(Buffer.alloc(32, 8), stepId, secret, hash)).toBe(false);
     const other = newSignInStepToken(stepId);
     expect(signInStepSecretMatches(key, stepId, other.secret, hash)).toBe(false);
+  });
+
+  it("binds a step to one client value, never matched by the token secret or a missing value", () => {
+    const key = Buffer.alloc(32, 7);
+    const stepId = randomUUID();
+    const { secret } = newSignInStepToken(stepId);
+    const binding = newSignInStepBinding();
+    expect(binding).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(newSignInStepBinding()).not.toBe(binding);
+    const hash = hashSignInStepBinding(key, stepId, binding);
+    expect(hash).not.toContain(binding);
+    expect(signInStepBindingMatches(key, stepId, binding, hash)).toBe(true);
+    expect(signInStepBindingMatches(key, randomUUID(), binding, hash)).toBe(false);
+    expect(signInStepBindingMatches(key, stepId, newSignInStepBinding(), hash)).toBe(false);
+    expect(signInStepBindingMatches(key, stepId, undefined, hash)).toBe(false);
+    expect(signInStepBindingMatches(key, stepId, "", hash)).toBe(false);
+    expect(signInStepBindingMatches(key, stepId, binding, null)).toBe(false);
+    // Domain-separated from the token hash: the token secret is no binding.
+    expect(
+      signInStepBindingMatches(key, stepId, secret, hashSignInStepSecret(key, stepId, secret)),
+    ).toBe(false);
   });
 
   it.each([

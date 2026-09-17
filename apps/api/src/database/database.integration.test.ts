@@ -70,10 +70,38 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789620211794_create-login-code",
       "1789627880146_create-session",
       "1789639354506_create-roles",
+      "1789644232969_bind-sign-in-step-to-client",
     ]);
   });
 
-  it("rolls back the latest migration only (roles), keeping the sessions and their data", async () => {
+  it("rolls back the latest migration only (step client binding), keeping the steps", async () => {
+    const hasBinding = async () =>
+      (
+        await client.query(
+          "SELECT 1 FROM information_schema.columns WHERE table_name = 'sign_in_step' AND column_name = 'client_binding_hash'",
+        )
+      ).rowCount === 1;
+    expect(await hasBinding()).toBe(true);
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77010000002') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    await client.query(
+      "INSERT INTO sign_in_step (kind, account_id, token_hash, client_binding_hash, expires_at) VALUES ('supplier_selection', $1, 'hash', 'binding', now() + interval '10 minutes')",
+      [accountId],
+    );
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await hasBinding()).toBe(false);
+    const { rows } = await client.query("SELECT kind FROM sign_in_step WHERE account_id = $1", [
+      accountId,
+    ]);
+    expect(rows).toEqual([{ kind: "supplier_selection" }]);
+    await client.query("DELETE FROM sign_in_step WHERE account_id = $1", [accountId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
+  it("rolls back the next one (roles), keeping the sessions and their data", async () => {
     const account = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77010000001') RETURNING id",
     );

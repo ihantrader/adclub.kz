@@ -181,7 +181,8 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     requestBody: {
-      description: "The sign-in step from SUPPLIER_SELECTION_REQUIRED and the chosen company",
+      description:
+        "The sign-in step from SUPPLIER_SELECTION_REQUIRED and the chosen company; the step cookie of that response is required",
       schema: selectSupplierBodySchema,
     },
     responses: {
@@ -199,7 +200,8 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     requestBody: {
-      description: "The sign-in step from TOTP_SETUP_REQUIRED",
+      description:
+        "The sign-in step from TOTP_SETUP_REQUIRED; the step cookie of that response is required",
       schema: totpSetupBodySchema,
     },
     responses: {
@@ -215,7 +217,8 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     requestBody: {
-      description: "The sign-in step and the current code from the app",
+      description:
+        "The sign-in step and the current code from the app; the step cookie is required",
       schema: totpSetupConfirmBodySchema,
     },
     responses: {
@@ -233,7 +236,8 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     requestBody: {
-      description: "The sign-in step and exactly one of the two codes",
+      description:
+        "The sign-in step and exactly one of the two codes; the step cookie of the TOTP_REQUIRED response is required",
       schema: totpVerifyBodySchema,
     },
     responses: {

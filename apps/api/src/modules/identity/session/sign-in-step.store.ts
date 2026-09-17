@@ -9,6 +9,7 @@ export interface NewSignInStep {
   accountId: string;
   adminUserId: string | null;
   tokenHash: string;
+  clientBindingHash: string;
   loginChallengeId: string | null;
   clientPlatform: string | null;
   clientVersion: string | null;
@@ -24,6 +25,7 @@ export interface SignInStepRow {
   accountId: string;
   adminUserId: string | null;
   tokenHash: string;
+  clientBindingHash: string | null;
   totpSecret: string | null;
   loginChallengeId: string | null;
   clientPlatform: string | null;
@@ -39,6 +41,7 @@ const columns = {
   accountId: signInStep.accountId,
   adminUserId: signInStep.adminUserId,
   tokenHash: signInStep.tokenHash,
+  clientBindingHash: signInStep.clientBindingHash,
   totpSecret: signInStep.totpSecret,
   loginChallengeId: signInStep.loginChallengeId,
   clientPlatform: signInStep.clientPlatform,
@@ -61,6 +64,7 @@ export class SignInStepStore {
       accountId: step.accountId,
       adminUserId: step.adminUserId,
       tokenHash: step.tokenHash,
+      clientBindingHash: step.clientBindingHash,
       loginChallengeId: step.loginChallengeId,
       clientPlatform: step.clientPlatform,
       clientVersion: step.clientVersion,

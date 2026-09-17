@@ -1,0 +1,16 @@
+# Text files are stored and checked out with LF on every OS (TASK-075).
+# Design sources (SVG, scripts) are included: a Windows checkout with CRLF
+# once rewrote them (DES-4).
+* text=auto eol=lf
+
+# Binary assets: never normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary

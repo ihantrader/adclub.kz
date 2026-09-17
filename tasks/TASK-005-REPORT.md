@@ -67,7 +67,7 @@ COMPLETED
 - `pnpm --filter @adclub/api openapi:check` — PASS.
 - `openapi:compat --base HEAD` локально — PASS, «Contract is backward compatible». В CI — PASS относительно `cce16c3`, без трейлера.
 - `pnpm --filter api migrate` на dev-базе — PASS; `migrate:status` показывает 3 применённые миграции.
-- CI на `main`: run **35194274386** (коммит `d49e838`) — **success**, все шаги, получено через `gh run view`. Коммит с этим отчётом запускает новый прогон — см. ответ агента.
+- CI на `main`: run **35194274386** (коммит `d49e838`, код и документы задачи) — **success**, все шаги; run **35194994470** (коммит `fe6e3a7`, отчёт) — **success**. Статусы получены через `gh run view`. Прогон для коммитов `8a27b40` и этого обновления отчёта — см. ответ агента.
 
 ## UAT / E2E
 Проверено на локальном `pnpm dev` (Windows, Docker dev compose) скриптами на `fetch`, которые выводили только результаты, без токенов.
@@ -146,8 +146,9 @@ COMPLETED
   - `d49e838` — `ARCHITECTURE.md`, `CLAUDE.md`;
   - отдельный коммит с этим отчётом — `tasks/TASK-005-REPORT.md`.
 
-  Правок Product Owner в рабочем дереве не было (`git status` по `PRODUCT.md`, `PROJECT_PLAN.md`, `PROJECT_STATE.md`, `tasks/` — пусто), отдельного коммита для них не потребовалось.
-- **AC-14 — PASS.** Run 35194274386 для `d49e838` — `completed/success`, все шаги (format, lint, typecheck, test, integration, build, openapi check, compat, graceful shutdown). Результат для коммита с отчётом — см. ответ агента.
+  Правки Product Owner: в начале работы их не было (`git status` по `PRODUCT.md`, `PROJECT_PLAN.md`, `PROJECT_STATE.md`, `tasks/` — пусто). После коммитов задачи в рабочем дереве появились правки по итогам DES-1. Они закоммичены отдельно, как найдены, без смешения с кодом задачи:
+  - `8a27b40` «Add SCREENS.md 1.0 and update product docs after DES-1 (Product Owner edits)» — `SCREENS.md` (новый), `PRODUCT.md`, `PROJECT_PLAN.md`, `PROJECT_STATE.md`, `CLAUDE.md` (строки `SCREENS.md` и `DESIGN.md` в таблице документов).
+- **AC-14 — PASS.** Run 35194274386 для `d49e838` — `completed/success`, все шаги (format, lint, typecheck, test, integration, build, openapi check, compat, graceful shutdown). Run 35194994470 для `fe6e3a7` — `completed/success`.
 - **AC-15 — PASS.** ARCHITECTURE.md обновлён: версия 0.9 и история; раздел 4.6; уточнения 1, 4.1 I6, 5.1, 8.2, 8.3, 14. В CLAUDE.md, блок 0, есть шаги получения сессии и вызова `/auth/me` в dev, а также переменные `SESSION_*` и `*_WEB_ORIGINS`.
 
 ## Errors & Fixes

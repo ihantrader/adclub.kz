@@ -1,0 +1,1929 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Asia Drive Club — макеты мобильного приложения (DES-4)</title>
+    <link rel="icon" href="../brand/favicon.svg" />
+    <link rel="stylesheet" href="ds.css" />
+  </head>
+  <body class="gallery">
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="pilot-idle" viewBox="0 0 64 64">
+        <rect class="pilot-head" x="14" y="20" width="36" height="34" rx="11" />
+        <path
+          class="pilot-head"
+          d="M14 24C14 14 22 9 32 9C42 9 50 14 50 21L58 23.5Q59 27 55 27.5L14 27.5Z"
+        />
+        <rect class="pilot-face" x="14" y="26.5" width="36" height="2.6" />
+        <circle class="pilot-face" cx="32" cy="16" r="2.4" />
+        <circle class="pilot-face" cx="25" cy="38" r="4.6" />
+        <circle class="pilot-face" cx="39" cy="38" r="4.6" />
+        <circle class="pilot-head" cx="25.8" cy="38.4" r="2" />
+        <circle class="pilot-head" cx="39.8" cy="38.4" r="2" />
+        <path
+          d="M27 46q5 3.5 10 0"
+          fill="none"
+          stroke="var(--primary)"
+          stroke-width="2.4"
+          stroke-linecap="round"
+        />
+      </symbol>
+    </svg>
+
+    <header class="gallery-head">
+      <h1>DES-4 · Мобильное приложение</h1>
+      <span style="color: #b9b5ad; font-size: 14px">Тема:</span>
+      <button type="button" data-theme-btn="dark" aria-pressed="true">Тёмная (по умолчанию)</button>
+      <button type="button" data-theme-btn="light" aria-pressed="false">Светлая</button>
+      <span style="color: #b9b5ad; font-size: 13px"
+        >Экран 390 × 844 (iPhone 15). Тексты — SCREENS.md 1.0; токены и компоненты — DESIGN.md
+        7.</span
+      >
+    </header>
+
+    <!-- ================= 1. Update required ================= -->
+    <section class="gallery-group">
+      <h2>1. Требуется обновление — M-START-03</h2>
+      <p>
+        Полноэкранный, без вкладок. «Показать активные заявки» — только если пользователь вошёл и
+        есть сохранённые активные заявки; ведёт в список заявок в режиме «только просмотр».
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div
+                class="scroll"
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  padding: 0 24px;
+                "
+              >
+                <div
+                  style="
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    background: var(--fill);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: var(--accent);
+                  "
+                >
+                  <i class="ti ti-download" style="font-size: 36px"></i>
+                </div>
+                <div class="t-title-l mt24">Нужно обновить приложение</div>
+                <div class="t-body muted mt12">
+                  Эта версия больше не поддерживается. Откройте App Store и обновите приложение
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary">
+                  <i class="ti ti-brand-apple"></i>Откройте App Store
+                </div>
+                <div class="btn btn-l btn-secondary">
+                  <i class="ti ti-qrcode"></i>Показать активные заявки
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-START-03</b> · вошёл, есть активные заявки</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Мои заявки</span>
+              </div>
+              <div class="banner warn">
+                <i class="ti ti-alert-triangle"></i
+                ><span>Приложение нужно обновить. Сейчас доступны только коды заявок</span>
+              </div>
+              <div class="scroll mt16">
+                <div class="list">
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <span class="badge ok"><i class="ti ti-package"></i>Можно забирать</span>
+                      <div class="t-strong mt8 clamp2">
+                        Масло моторное Shell Helix Ultra 5W-30, 4 л
+                      </div>
+                      <div class="t-s muted mt4">АвтоМир Астана · до 18:00</div>
+                    </div>
+                    <div style="text-align: right">
+                      <i class="ti ti-qrcode" style="font-size: 28px; color: var(--accent)"></i>
+                      <div class="t-price-s mt4">482 915</div>
+                    </div>
+                  </div>
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <span class="badge accent"><i class="ti ti-circle-check"></i>Принята</span>
+                      <div class="t-strong mt8 clamp2">Фильтр салонный угольный Geely Monjaro</div>
+                      <div class="t-s muted mt4">Запчасти-Плюс · под заказ до 20 марта</div>
+                    </div>
+                    <div style="text-align: right">
+                      <i class="ti ti-qrcode" style="font-size: 28px; color: var(--accent)"></i>
+                      <div class="t-price-s mt4">107 364</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="t-cap muted mt12">Обновлено в 14:05. Статус мог измениться</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-ORD-02 · только просмотр</b> · после «Показать активные заявки», без вкладок
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 2. Sign in ================= -->
+    <section class="gallery-group">
+      <h2>2. Вход — M-AUTH-00…03</h2>
+      <p>
+        Шторка появляется поверх экрана, откуда пришёл гость. Один поток «вход или регистрация».
+        Кнопка «Получить код» неактивна, пока номер не полный. Код отправляется сам после шестой
+        цифры.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title"></span
+                ><span class="icon-btn"><i class="ti ti-share-2"></i></span>
+              </div>
+              <div class="scroll">
+                <div class="thumb photo" style="width: 100%; height: 240px; font-size: 96px">
+                  <i class="ti ti-droplet"></i>
+                </div>
+                <div class="t-heading mt16">Масло моторное Shell Helix Ultra 5W-30, 4 л</div>
+                <div class="t-s muted mt4">Shell · 550046375</div>
+                <div class="t-price mt24">12 500 ₸</div>
+              </div>
+              <div class="scrim"></div>
+              <div class="sheet">
+                <div class="grabber"></div>
+                <div class="t-title">Войдите, чтобы оформить заявку и получить код</div>
+                <div class="t-body muted mt8">
+                  По номеру телефона, без пароля. Ваши автомобили сохранятся
+                </div>
+                <div class="btn btn-l btn-primary btn-block mt24">Войти</div>
+                <div class="btn btn-text btn-block mt8">Не сейчас</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-AUTH-00</b> · гость нажал «Оформить»</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-x"></i></span>
+              </div>
+              <div class="scroll">
+                <div class="t-title-l">Вход или регистрация</div>
+                <div class="field-label mt24">Номер телефона</div>
+                <div class="field focus">
+                  <span>+7 701 123 45 67</span><span class="spacer"></span
+                  ><i class="ti ti-x muted"></i>
+                </div>
+                <div class="field-help">
+                  <i class="ti ti-brand-whatsapp"></i>Код придёт в WhatsApp
+                </div>
+                <div class="btn btn-text mt16" style="justify-content: flex-start; padding: 0">
+                  У меня нет WhatsApp
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary">Получить код</div>
+                <div class="t-cap muted" style="text-align: center">
+                  Продолжая, вы принимаете <span class="link">Политику конфиденциальности</span>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-AUTH-01</b> · номер введён</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-x"></i></span>
+              </div>
+              <div class="scroll">
+                <div class="t-title-l">Вход или регистрация</div>
+                <div class="field-label mt24">Номер телефона</div>
+                <div class="field error"><span>+7 727 123 45</span></div>
+                <div class="field-help field-error">
+                  <i class="ti ti-alert-circle"></i>Введите мобильный номер Казахстана
+                </div>
+                <div class="btn btn-text mt16" style="justify-content: flex-start; padding: 0">
+                  У меня нет WhatsApp
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l disabled">Получить код</div>
+                <div class="t-cap muted" style="text-align: center">
+                  Продолжая, вы принимаете <span class="link">Политику конфиденциальности</span>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-AUTH-01</b> · номер не мобильный — ошибка, кнопка неактивна
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span>
+              </div>
+              <div class="scroll">
+                <div class="t-title-l">Введите код из WhatsApp</div>
+                <div class="row-flex mt8 t-body">
+                  <span class="muted num">+7 701 123 45 67</span
+                  ><span class="link t-s">Изменить номер</span>
+                </div>
+                <div class="code-cells mt24">
+                  <div class="code-cell">4</div>
+                  <div class="code-cell">8</div>
+                  <div class="code-cell">2</div>
+                  <div class="code-cell">9</div>
+                  <div class="code-cell focus"></div>
+                  <div class="code-cell"></div>
+                </div>
+                <div class="t-s muted mt24 num">Отправить ещё раз через 0:42</div>
+                <div class="btn btn-text mt8" style="justify-content: flex-start; padding: 0">
+                  <i class="ti ti-message"></i>Отправить по SMS
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-AUTH-02</b> · ввод кода, идёт отсчёт</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span>
+              </div>
+              <div class="banner neutral">
+                <i class="ti ti-message"></i><span>WhatsApp недоступен — отправили SMS</span>
+              </div>
+              <div class="scroll mt16">
+                <div class="t-title-l">Введите код из SMS</div>
+                <div class="row-flex mt8 t-body">
+                  <span class="muted num">+7 701 123 45 67</span
+                  ><span class="link t-s">Изменить номер</span>
+                </div>
+                <div class="code-cells mt24">
+                  <div class="code-cell error focus"></div>
+                  <div class="code-cell error"></div>
+                  <div class="code-cell error"></div>
+                  <div class="code-cell error"></div>
+                  <div class="code-cell error"></div>
+                  <div class="code-cell error"></div>
+                </div>
+                <div class="field-help field-error mt12">
+                  <i class="ti ti-alert-circle"></i>Неверный код. Осталось попыток: 2
+                </div>
+                <div class="btn btn-text mt16" style="justify-content: flex-start; padding: 0">
+                  Отправить ещё раз
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-AUTH-02</b> · сервер перешёл на SMS; неверный код, поле очищено
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar"></div>
+              <div class="scroll">
+                <div class="t-title-l">Как вас зовут?</div>
+                <div class="field-label mt24">Имя</div>
+                <div class="field"><span>Айгерим</span></div>
+                <div class="field-help">Имя увидит поставщик, когда примет заявку</div>
+                <div class="check mt16">
+                  <span class="check-box"></span>
+                  <span class="t-s"
+                    >Согласен на передачу моего номера телефона поставщику, когда он примет мою
+                    заявку</span
+                  >
+                </div>
+                <div class="check">
+                  <span class="check-box on"
+                    ><i class="ti ti-check" style="font-size: 18px"></i
+                  ></span>
+                  <span class="t-s"
+                    >Принимаю <span class="link">Условия использования</span> и
+                    <span class="link">Политику конфиденциальности</span></span
+                  >
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l disabled">Готово</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-AUTH-03</b> · обязательное согласие не отмечено — «Готово» неактивна
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 3. Car ================= -->
+    <section class="gallery-group">
+      <h2>3. Выбор автомобиля — M-START-05, M-GAR-03</h2>
+      <p>
+        Первый запуск без регистрации. Пошаговый выбор: выбранные значения — чипы сверху (нажатие
+        возвращает к шагу), прогресс по шагам, варианты — список с переключателем; «Сохранить так» —
+        с шага «Год».
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar"></div>
+              <div class="scroll">
+                <div
+                  style="
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    background: var(--fill);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: var(--accent);
+                  "
+                >
+                  <i class="ti ti-car" style="font-size: 40px"></i>
+                </div>
+                <div class="t-title-l mt24">Какой у вас автомобиль?</div>
+                <div class="t-body muted mt8">
+                  Покажем только то, что подходит. Регистрация не нужна
+                </div>
+                <div class="list mt32">
+                  <div class="list-item">
+                    <i class="ti ti-list-search"></i><span class="t-strong">Выбрать из списка</span
+                    ><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                  <div class="list-item">
+                    <i class="ti ti-camera"></i
+                    ><span class="t-strong">Сфотографировать техпаспорт</span
+                    ><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                  <div class="list-item">
+                    <i class="ti ti-microphone"></i><span class="t-strong">Сказать голосом</span
+                    ><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                </div>
+                <div class="t-cap muted mt8">
+                  Фото и голос — этап D; до этого в списке только «Выбрать из списка»
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-text">Пропустить</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-START-05</b> · первый запуск, после выбора города</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Добавить автомобиль</span>
+              </div>
+              <div style="padding: 0 16px">
+                <div style="display: flex; gap: 4px">
+                  <i style="flex: 1; height: 4px; border-radius: 2px; background: var(--accent)"></i
+                  ><i
+                    style="flex: 1; height: 4px; border-radius: 2px; background: var(--accent)"
+                  ></i
+                  ><i
+                    style="flex: 1; height: 4px; border-radius: 2px; background: var(--accent)"
+                  ></i
+                  ><i
+                    style="flex: 1; height: 4px; border-radius: 2px; background: var(--accent)"
+                  ></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i>
+                </div>
+                <div class="chips mt16">
+                  <span class="chip solid">Geely</span><span class="chip solid">Monjaro</span
+                  ><span class="chip solid">2023</span><span class="chip solid">Кроссовер</span>
+                </div>
+              </div>
+              <div class="scroll">
+                <div class="t-title mt24">Двигатель</div>
+                <div class="list mt12">
+                  <div class="list-item">
+                    <div>
+                      <div class="t-strong">2.0T, бензин, 238 л. с.</div>
+                      <div class="t-s muted">Drive-E VEP4</div>
+                    </div>
+                    <span class="radio on"></span>
+                  </div>
+                  <div class="list-item">
+                    <div>
+                      <div class="t-strong">2.0T, бензин, 200 л. с.</div>
+                      <div class="t-s muted">Drive-E VEP4, заниженная мощность</div>
+                    </div>
+                    <span class="radio"></span>
+                  </div>
+                  <div class="list-item">
+                    <div>
+                      <div class="t-strong">2.0T, подключаемый гибрид, 317 л. с.</div>
+                      <div class="t-s muted">Hi·P</div>
+                    </div>
+                    <span class="radio"></span>
+                  </div>
+                </div>
+                <div class="t-s muted mt16">
+                  Нет в списке? Выберите ближайший вариант или сохраните без этого параметра
+                </div>
+              </div>
+              <div class="bottom-actions" style="flex-direction: row">
+                <div class="btn btn-l btn-secondary" style="flex: 1">Сохранить так</div>
+                <div class="btn btn-l btn-primary" style="flex: 1">Далее</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-GAR-03</b> · шаг «Двигатель»; поколение и кузов выбраны автоматически (один
+            вариант)
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Добавить автомобиль</span>
+              </div>
+              <div style="padding: 0 16px">
+                <div style="display: flex; gap: 4px">
+                  <i style="flex: 1; height: 4px; border-radius: 2px; background: var(--accent)"></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i
+                  ><i style="flex: 1; height: 4px; border-radius: 2px; background: var(--fill)"></i>
+                </div>
+                <div class="chips mt16"><span class="chip solid">Geely</span></div>
+              </div>
+              <div class="scroll">
+                <div class="t-title mt24">Модель</div>
+                <div class="search mt12">
+                  <i class="ti ti-search"></i><span style="color: var(--text)">mo</span
+                  ><span class="spacer"></span
+                  ><span class="icon-btn" style="font-size: 20px"><i class="ti ti-x"></i></span>
+                </div>
+                <div class="list mt12">
+                  <div class="list-item">
+                    <span class="t-strong">Monjaro</span><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                </div>
+                <div class="t-cap muted mt16">Популярные</div>
+                <div class="list mt8">
+                  <div class="list-item">
+                    <span class="t-strong">Atlas Pro</span><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                  <div class="list-item">
+                    <span class="t-strong">Coolray</span><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                  <div class="list-item">
+                    <span class="t-strong">Tugella</span><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-GAR-03</b> · шаг «Модель» с поиском; выбор сразу ведёт к следующему шагу
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 4. Catalog ================= -->
+    <section class="gallery-group">
+      <h2>4. Каталог — M-CAT-01, M-CAT-02</h2>
+      <p>
+        Шапка: переключатели автомобиля и города. Одна карточка-подсказка. Категории — плитка 3
+        колонки, подпись до двух строк. Список — строки (фото 72 слева). Вкладки: итоговый вид с AI
+        Pilot в центре; на этапах B–C — четыре вкладки без центральной.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div style="display: flex; gap: 8px; padding: 4px 16px 0">
+                <span
+                  class="chip solid"
+                  style="flex: 1; min-height: 44px; justify-content: flex-start; overflow: hidden"
+                  ><i class="ti ti-car"></i
+                  ><span style="overflow: hidden; text-overflow: ellipsis">Geely Monjaro 2023</span
+                  ><i class="ti ti-chevron-down" style="margin-left: auto"></i
+                ></span>
+                <span class="chip solid" style="min-height: 44px"
+                  ><i class="ti ti-map-pin"></i>Астана<i class="ti ti-chevron-down"></i
+                ></span>
+              </div>
+              <div class="scroll">
+                <div class="t-title-l mt16">Каталог</div>
+                <div class="search mt12">
+                  <i class="ti ti-search"></i><span>Артикул или название</span
+                  ><span class="spacer"></span
+                  ><span class="icon-btn" style="font-size: 22px; color: var(--text)"
+                    ><i class="ti ti-microphone"></i></span
+                  ><span class="icon-btn" style="font-size: 22px; color: var(--text)"
+                    ><i class="ti ti-camera"></i
+                  ></span>
+                </div>
+                <div class="card mt16" style="display: flex; gap: 12px; align-items: flex-start">
+                  <i class="ti ti-engine" style="font-size: 28px; color: var(--accent)"></i>
+                  <div style="flex: 1">
+                    <div class="t-strong">Уточните двигатель — подбор станет точнее</div>
+                    <div
+                      class="btn btn-text"
+                      style="justify-content: flex-start; padding: 0; min-height: 36px"
+                    >
+                      Уточнить
+                    </div>
+                  </div>
+                  <i class="ti ti-x muted"></i>
+                </div>
+                <div class="section-title">Товары</div>
+                <div class="tiles">
+                  <div class="tile"><i class="ti ti-droplet"></i>Масла и жидкости</div>
+                  <div class="tile"><i class="ti ti-filter"></i>Фильтры</div>
+                  <div class="tile"><i class="ti ti-disc"></i>Тормозная система</div>
+                  <div class="tile"><i class="ti ti-engine"></i>Двигатель</div>
+                  <div class="tile"><i class="ti ti-bolt"></i>Электрика</div>
+                  <div class="tile"><i class="ti ti-bulb"></i>Кузов и оптика</div>
+                  <div class="tile"><i class="ti ti-steering-wheel"></i>Подвеска и рулевое</div>
+                  <div class="tile"><i class="ti ti-tir"></i>Шины и диски</div>
+                  <div class="tile"><i class="ti ti-armchair"></i>Аксессуары</div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <div class="tab on"><i class="ti ti-category"></i>Каталог</div>
+                <div class="tab"><i class="ti ti-receipt"></i>Заявки</div>
+                <div class="tab pilot">
+                  <div class="pilot-btn">
+                    <svg><use href="#pilot-idle" /></svg>
+                  </div>
+                  AI Pilot
+                </div>
+                <div class="tab"><i class="ti ti-car"></i>Гараж</div>
+                <div class="tab"><i class="ti ti-user"></i>Профиль</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-CAT-01</b> · главная; услуги (этап C) — блок «Услуги в Астане» под товарами
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Моторные масла</span
+                ><span class="icon-btn"><i class="ti ti-search"></i></span>
+              </div>
+              <div style="padding: 0 16px 12px; display: flex; gap: 8px; overflow: hidden">
+                <span class="chip solid"
+                  ><i class="ti ti-car"></i>Monjaro 2023<i class="ti ti-chevron-down"></i
+                ></span>
+                <span class="chip on"><i class="ti ti-adjustments-horizontal"></i>Фильтры (2)</span>
+                <span class="chip"><i class="ti ti-arrows-sort"></i>Рекомендуемые</span>
+              </div>
+              <div style="flex: 1; overflow: hidden; border-top: 1px solid var(--border)">
+                <div class="prow">
+                  <div class="thumb photo"><i class="ti ti-droplet"></i></div>
+                  <div class="info">
+                    <div class="name clamp3">
+                      Масло моторное Shell Helix Ultra 5W-30, синтетическое, 4 л
+                    </div>
+                    <div class="t-s muted">Shell · 550046375</div>
+                    <div class="t-cap">5W-30 · 4 л · ACEA C3</div>
+                    <div class="compat ok"><i class="ti ti-circle-check"></i>Подходит</div>
+                    <div>
+                      <span class="t-price-s">от 12 500 ₸</span>
+                      <span class="t-s muted">· 3 предложения</span>
+                    </div>
+                    <div class="meta"><i class="ti ti-clock"></i>Завтра</div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb photo"><i class="ti ti-droplet"></i></div>
+                  <div class="info">
+                    <div class="name clamp3">Масло моторное Geely Genuine 0W-20, 4 л</div>
+                    <div class="t-s muted">Geely · 2080000200</div>
+                    <div class="t-cap">0W-20 · 4 л</div>
+                    <div class="compat warn">
+                      <i class="ti ti-alert-triangle"></i>Уточните двигатель — от него зависит,
+                      подойдёт ли масло
+                    </div>
+                    <div>
+                      <span class="t-price-s">от 15 900 ₸</span>
+                      <span class="t-s muted">· 1 предложение</span>
+                    </div>
+                    <div class="meta"><i class="ti ti-map-pin"></i>Есть в Астане</div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb"><i class="ti ti-droplet"></i></div>
+                  <div class="info">
+                    <div class="name clamp3">
+                      Масло моторное Mobil 1 ESP 5W-30, синтетическое, 4 л
+                    </div>
+                    <div class="t-s muted">Mobil · 154283</div>
+                    <div class="t-cap">5W-30 · 4 л · ACEA C3</div>
+                    <div class="compat ok"><i class="ti ti-circle-check"></i>Подходит</div>
+                    <div>
+                      <span class="t-price-s">от 14 200 ₸</span>
+                      <span class="t-s muted">· 2 предложения</span>
+                    </div>
+                    <div class="meta"><i class="ti ti-truck"></i>Под заказ, 5 дней</div>
+                  </div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <div class="tab on"><i class="ti ti-category"></i>Каталог</div>
+                <div class="tab"><i class="ti ti-receipt"></i>Заявки</div>
+                <div class="tab pilot">
+                  <div class="pilot-btn">
+                    <svg><use href="#pilot-idle" /></svg>
+                  </div>
+                  AI Pilot
+                </div>
+                <div class="tab"><i class="ti ti-car"></i>Гараж</div>
+                <div class="tab"><i class="ti ti-user"></i>Профиль</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-CAT-02</b> · список; третья позиция без фото — заглушка</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Моторные масла</span
+                ><span class="icon-btn"><i class="ti ti-search"></i></span>
+              </div>
+              <div style="padding: 0 16px 12px; display: flex; gap: 8px; overflow: hidden">
+                <span class="chip solid"
+                  ><i class="ti ti-car"></i>Monjaro 2023<i class="ti ti-chevron-down"></i
+                ></span>
+                <span class="chip"><i class="ti ti-adjustments-horizontal"></i>Фильтры</span>
+                <span class="chip"><i class="ti ti-arrows-sort"></i>Рекомендуемые</span>
+              </div>
+              <div style="flex: 1; overflow: hidden; border-top: 1px solid var(--border)">
+                <div class="prow">
+                  <div class="thumb sk"></div>
+                  <div class="info">
+                    <div class="sk" style="height: 16px; width: 90%"></div>
+                    <div class="sk" style="height: 16px; width: 60%"></div>
+                    <div class="sk" style="height: 12px; width: 40%; margin-top: 6px"></div>
+                    <div class="sk" style="height: 16px; width: 50%; margin-top: 6px"></div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb sk"></div>
+                  <div class="info">
+                    <div class="sk" style="height: 16px; width: 80%"></div>
+                    <div class="sk" style="height: 16px; width: 45%"></div>
+                    <div class="sk" style="height: 12px; width: 35%; margin-top: 6px"></div>
+                    <div class="sk" style="height: 16px; width: 55%; margin-top: 6px"></div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb sk"></div>
+                  <div class="info">
+                    <div class="sk" style="height: 16px; width: 85%"></div>
+                    <div class="sk" style="height: 16px; width: 50%"></div>
+                    <div class="sk" style="height: 12px; width: 30%; margin-top: 6px"></div>
+                    <div class="sk" style="height: 16px; width: 45%; margin-top: 6px"></div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb sk"></div>
+                  <div class="info">
+                    <div class="sk" style="height: 16px; width: 75%"></div>
+                    <div class="sk" style="height: 16px; width: 40%"></div>
+                    <div class="sk" style="height: 12px; width: 40%; margin-top: 6px"></div>
+                    <div class="sk" style="height: 16px; width: 50%; margin-top: 6px"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <div class="tab on"><i class="ti ti-category"></i>Каталог</div>
+                <div class="tab"><i class="ti ti-receipt"></i>Заявки</div>
+                <div class="tab pilot">
+                  <div class="pilot-btn">
+                    <svg><use href="#pilot-idle" /></svg>
+                  </div>
+                  AI Pilot
+                </div>
+                <div class="tab"><i class="ti ti-car"></i>Гараж</div>
+                <div class="tab"><i class="ti ti-user"></i>Профиль</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-CAT-02</b> · первая загрузка — каркас</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Тормозные колодки</span
+                ><span class="icon-btn"><i class="ti ti-search"></i></span>
+              </div>
+              <div style="padding: 0 16px 12px; display: flex; gap: 8px; overflow: hidden">
+                <span class="chip solid"
+                  ><i class="ti ti-car"></i>Monjaro 2023<i class="ti ti-chevron-down"></i
+                ></span>
+                <span class="chip"><i class="ti ti-adjustments-horizontal"></i>Фильтры</span>
+              </div>
+              <div
+                class="scroll"
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  align-items: center;
+                  text-align: center;
+                  padding: 0 32px;
+                "
+              >
+                <i class="ti ti-car-off" style="font-size: 48px; color: var(--text-muted)"></i>
+                <div class="t-heading mt16">Для Geely Monjaro 2023 здесь пока ничего нет</div>
+                <div class="t-s muted mt8">
+                  Поставщики ещё не добавили подходящие позиции. Можно посмотреть все или проверить
+                  параметры автомобиля
+                </div>
+                <div class="btn btn-m btn-primary mt24" style="min-width: 200px">Показать всё</div>
+                <div class="btn btn-text mt8">Проверить параметры автомобиля</div>
+              </div>
+              <div class="tabbar">
+                <div class="tab on"><i class="ti ti-category"></i>Каталог</div>
+                <div class="tab"><i class="ti ti-receipt"></i>Заявки</div>
+                <div class="tab pilot">
+                  <div class="pilot-btn">
+                    <svg><use href="#pilot-idle" /></svg>
+                  </div>
+                  AI Pilot
+                </div>
+                <div class="tab"><i class="ti ti-car"></i>Гараж</div>
+                <div class="tab"><i class="ti ti-user"></i>Профиль</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-CAT-02</b> · пусто под автомобиль</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 5. Item card ================= -->
+    <section class="gallery-group">
+      <h2>5. Карточка позиции — M-CAT-07</h2>
+      <p>
+        Длинный экран показан целиком. Фото 4:3 во всю ширину; название полностью; совместимость;
+        характеристики; «Клубные цены» — карточки предложений; кнопка «Оформить» — второстепенная в
+        каждой карточке (основной на экране нет, предложений много). Рыночных и зачёркнутых цен нет.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone long">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title"></span
+                ><span class="icon-btn"><i class="ti ti-share-2"></i></span>
+              </div>
+              <div style="padding: 0 16px 24px">
+                <div class="thumb photo" style="width: 100%; height: 268px; font-size: 110px">
+                  <i class="ti ti-droplet"></i>
+                </div>
+                <div class="dots mt8">
+                  <i class="on" style="background: var(--text)"></i
+                  ><i style="background: var(--border-field)"></i
+                  ><i style="background: var(--border-field)"></i>
+                </div>
+                <div class="t-heading mt16">
+                  Масло моторное Shell Helix Ultra 5W-30, синтетическое, 4 л
+                </div>
+                <div class="t-s muted mt4">
+                  Shell · Артикул <span style="color: var(--text)">550046375</span>
+                  <i class="ti ti-copy"></i>
+                </div>
+
+                <div class="card mt16" style="padding: 12px 16px">
+                  <div class="compat ok" style="font-size: 14px; line-height: 20px">
+                    <i class="ti ti-circle-check" style="font-size: 20px"></i>Подходит для Geely
+                    Monjaro 2023
+                  </div>
+                  <div class="row-flex mt8 t-s muted">
+                    Подходит для: Monjaro, Atlas Pro, Tugella<i
+                      class="ti ti-chevron-down"
+                      style="margin-left: auto"
+                    ></i>
+                  </div>
+                </div>
+
+                <div class="section-title">Характеристики</div>
+                <div class="list">
+                  <div class="list-item" style="min-height: 44px">
+                    <span class="t-s muted" style="width: 45%">Вязкость</span
+                    ><span class="t-s">5W-30</span>
+                  </div>
+                  <div class="list-item" style="min-height: 44px">
+                    <span class="t-s muted" style="width: 45%">Объём</span
+                    ><span class="t-s">4 л</span>
+                  </div>
+                  <div class="list-item" style="min-height: 44px">
+                    <span class="t-s muted" style="width: 45%">Допуски</span
+                    ><span class="t-s">ACEA C3, API SP</span>
+                  </div>
+                  <div class="list-item" style="min-height: 44px">
+                    <span class="t-s muted" style="width: 45%">Тип</span
+                    ><span class="t-s">Синтетическое</span>
+                  </div>
+                </div>
+
+                <div class="row-flex" style="margin: 24px 0 12px">
+                  <span class="t-heading">Клубные цены</span><span class="spacer"></span
+                  ><span class="chip"><i class="ti ti-arrows-sort"></i>Рекомендуемые</span>
+                </div>
+
+                <div class="card">
+                  <div class="t-cap accent">Клубная цена</div>
+                  <div class="row-flex">
+                    <span class="t-price">12 500 ₸</span><span class="spacer"></span
+                    ><span class="badge ok"><i class="ti ti-check"></i>В наличии</span>
+                  </div>
+                  <div
+                    class="meta mt12"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i
+                      class="ti ti-building-store"
+                      style="font-size: 18px; color: var(--text-muted)"
+                    ></i
+                    >Самовывоз: завтра, 14 марта
+                  </div>
+                  <div
+                    class="meta mt4"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i class="ti ti-truck" style="font-size: 18px; color: var(--text-muted)"></i
+                    >Доставка: до 16 марта
+                  </div>
+                  <div class="divider mt12"></div>
+                  <div class="row-flex mt12">
+                    <span class="t-strong">АвтоМир Астана</span
+                    ><i class="ti ti-chevron-right muted" style="margin-left: auto"></i>
+                  </div>
+                  <div class="row-flex mt4 t-s" style="flex-wrap: wrap; gap: 4px 12px">
+                    <span class="accent"
+                      ><i class="ti ti-shield-check"></i> Проверенный партнёр</span
+                    >
+                    <span
+                      ><i class="ti ti-star accent"></i> 4,8 <span class="muted">(23)</span></span
+                    >
+                  </div>
+                  <div class="t-s muted mt4">Сарыарка район · В вашем городе · Гарантия 6 мес.</div>
+                  <div class="btn btn-m btn-secondary btn-block mt16">Оформить</div>
+                </div>
+
+                <div class="card mt8">
+                  <div class="t-cap accent">Клубная цена</div>
+                  <div class="row-flex">
+                    <span class="t-price">11 900 ₸</span><span class="spacer"></span
+                    ><span class="badge muted"><i class="ti ti-clock"></i>Под заказ</span>
+                  </div>
+                  <div
+                    class="meta mt12"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i
+                      class="ti ti-building-store"
+                      style="font-size: 18px; color: var(--text-muted)"
+                    ></i
+                    >Самовывоз: до 20 марта
+                  </div>
+                  <div class="divider mt12"></div>
+                  <div class="row-flex mt12">
+                    <span class="t-strong">Запчасти-Плюс</span
+                    ><i class="ti ti-chevron-right muted" style="margin-left: auto"></i>
+                  </div>
+                  <div class="row-flex mt4 t-s"><span class="muted">Новый поставщик</span></div>
+                  <div class="t-s muted mt4">Алматинский район · В вашем городе</div>
+                  <div class="btn btn-m btn-secondary btn-block mt16">Оформить</div>
+                </div>
+              </div>
+              <div style="height: 34px"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-CAT-07</b> · подписчик, автомобиль выбран, подходит</div>
+        </div>
+
+        <div>
+          <div class="phone long">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title"></span
+                ><span class="icon-btn"><i class="ti ti-share-2"></i></span>
+              </div>
+              <div style="padding: 0 16px 24px">
+                <div
+                  class="thumb"
+                  style="width: 100%; height: 268px; flex-direction: column; gap: 8px"
+                >
+                  <i class="ti ti-disc" style="font-size: 56px"></i
+                  ><span class="t-s">Фото скоро появится</span>
+                </div>
+                <div class="t-heading mt16">
+                  Колодки тормозные передние, керамические, с датчиком износа
+                </div>
+                <div class="t-s muted mt4">
+                  Brembo · Артикул <span style="color: var(--text)">P 59 084</span>
+                  <i class="ti ti-copy"></i>
+                </div>
+
+                <div class="banner err rounded mt16">
+                  <i class="ti ti-circle-x"></i
+                  ><span
+                    ><b>Не подходит для вашего автомобиля Geely Monjaro 2023</b><br /><span
+                      class="muted"
+                      >Предложения показаны, но деталь не встанет на этот автомобиль</span
+                    ></span
+                  >
+                </div>
+
+                <div class="section-title">Характеристики</div>
+                <div class="list">
+                  <div class="list-item" style="min-height: 44px">
+                    <span class="t-s muted" style="width: 45%">Ось</span
+                    ><span class="t-s">Передняя</span>
+                  </div>
+                  <div class="list-item" style="min-height: 44px">
+                    <span class="t-s muted" style="width: 45%">Материал</span
+                    ><span class="t-s">Керамика</span>
+                  </div>
+                </div>
+
+                <div class="row-flex" style="margin: 24px 0 12px">
+                  <span class="t-heading">Клубные цены</span>
+                </div>
+                <div class="card">
+                  <div class="t-cap accent">Клубная цена</div>
+                  <div class="row-flex">
+                    <span class="t-price">24 800 ₸</span><span class="spacer"></span
+                    ><span class="badge ok"><i class="ti ti-check"></i>В наличии</span>
+                  </div>
+                  <div
+                    class="meta mt12"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i
+                      class="ti ti-building-store"
+                      style="font-size: 18px; color: var(--text-muted)"
+                    ></i
+                    >Самовывоз: сегодня
+                  </div>
+                  <div class="divider mt12"></div>
+                  <div class="row-flex mt12">
+                    <i class="ti ti-lock muted"></i><span class="t-strong">Поставщик клуба</span
+                    ><i class="ti ti-chevron-right muted" style="margin-left: auto"></i>
+                  </div>
+                  <div class="row-flex mt4 t-s" style="gap: 12px">
+                    <span class="accent"
+                      ><i class="ti ti-shield-check"></i> Проверенный партнёр</span
+                    ><span
+                      ><i class="ti ti-star accent"></i> 4,6 <span class="muted">(11)</span></span
+                    >
+                  </div>
+                  <div class="t-s muted mt4">Астана · В вашем городе</div>
+                  <div class="btn btn-m btn-secondary btn-block mt16">Оформить</div>
+                </div>
+
+                <div class="section-title">Аналоги для вашего автомобиля</div>
+                <div class="list">
+                  <div class="prow" style="background: none">
+                    <div class="thumb photo" style="width: 56px; height: 56px">
+                      <i class="ti ti-disc"></i>
+                    </div>
+                    <div class="info">
+                      <div class="name clamp2" style="font-size: 14px; line-height: 20px">
+                        Колодки тормозные передние Geely Monjaro
+                      </div>
+                      <div class="compat ok"><i class="ti ti-circle-check"></i>Подходит</div>
+                      <div class="t-price-s">от 19 500 ₸</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="height: 34px"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-CAT-07</b> · без подписки («Поставщик клуба»), не подходит, нет фото
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 6. Order ================= -->
+    <section class="gallery-group">
+      <h2>6. Заявка с QR и кодом — M-ORD-03, M-ORD-04, без сети</h2>
+      <p>
+        Код — группами по три цифры, QR — всегда чёрный на белом. До принятия код и QR приглушены.
+        Без сети — сохранённая копия, «Обновлено в…», действия неактивны с «Нужна сеть».
+        Полноэкранный QR — всегда белый, яркость на максимум.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone long">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Заявка № 10482</span>
+              </div>
+              <div style="padding: 0 16px 24px">
+                <span class="badge ok"><i class="ti ti-package"></i>Можно забирать</span>
+                <div class="t-title mt8">Можно забирать</div>
+                <div class="t-s muted mt4">Резерв до 18:00, 14 марта</div>
+
+                <div
+                  class="card mt16"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    text-align: center;
+                  "
+                >
+                  <div class="qr-box"><div class="qr" data-size="184"></div></div>
+                  <div class="t-code mt16">482 915</div>
+                  <div class="t-s muted mt4">Покажите QR или назовите код сотруднику</div>
+                  <div class="btn btn-text mt4"><i class="ti ti-maximize"></i>На весь экран</div>
+                </div>
+
+                <div class="card mt16">
+                  <div class="t-strong">АвтоМир Астана</div>
+                  <div
+                    class="meta mt8"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i class="ti ti-map-pin" style="font-size: 18px; color: var(--text-muted)"></i
+                    >пр. Туран, 24, Астана
+                  </div>
+                  <div
+                    class="meta mt4"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i class="ti ti-clock" style="font-size: 18px; color: var(--text-muted)"></i
+                    >Сегодня до 20:00
+                  </div>
+                  <div style="display: flex; gap: 8px" class="mt16">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-route"></i>Маршрут
+                    </div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-phone"></i>Позвонить
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card mt16" style="display: flex; gap: 12px">
+                  <div class="thumb photo" style="width: 56px; height: 56px">
+                    <i class="ti ti-droplet"></i>
+                  </div>
+                  <div style="min-width: 0">
+                    <div class="t-strong">Масло моторное Shell Helix Ultra 5W-30, 4 л</div>
+                    <div class="t-s muted mt4">550046375 · 1 шт. · самовывоз</div>
+                    <div class="t-s mt4">Цена по заявке <b class="num">12 500 ₸</b></div>
+                  </div>
+                </div>
+
+                <div class="section-title">Ход заявки</div>
+                <div class="timeline">
+                  <div class="step">
+                    <div class="t-s">Готова к выдаче</div>
+                    <div class="t-cap muted">13 марта, 16:40</div>
+                  </div>
+                  <div class="step">
+                    <div class="t-s">Поставщик принял заявку</div>
+                    <div class="t-cap muted">13 марта, 12:05</div>
+                  </div>
+                  <div class="step">
+                    <div class="t-s">Заявка создана</div>
+                    <div class="t-cap muted">13 марта, 11:52</div>
+                  </div>
+                </div>
+
+                <div class="btn btn-l btn-secondary btn-block btn-danger-text mt16">
+                  Отменить заявку
+                </div>
+              </div>
+              <div style="height: 34px"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-ORD-03</b> · «Можно забирать», QR крупнее (208 с полями)</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Заявка № 10491</span>
+              </div>
+              <div class="scroll">
+                <span class="badge muted"><i class="ti ti-clock"></i>Ждём ответа</span>
+                <div class="t-title mt8">Ждём ответа поставщика</div>
+                <div class="t-s muted mt4 clamp3">
+                  Ответит до 15:30. Если не ответит — заявка отменится автоматически
+                </div>
+
+                <div class="card mt16" style="display: flex; gap: 16px; align-items: center">
+                  <div class="qr-box dim" style="padding: 8px">
+                    <div class="qr" data-size="112"></div>
+                  </div>
+                  <div>
+                    <div class="t-code dim">••• •••</div>
+                    <div class="t-s muted mt8">Код понадобится после принятия заявки</div>
+                  </div>
+                </div>
+
+                <div class="card mt16">
+                  <div class="t-strong">Запчасти-Плюс</div>
+                  <div
+                    class="meta mt8"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i class="ti ti-map-pin" style="font-size: 18px; color: var(--text-muted)"></i
+                    >Алматинский район, Астана
+                  </div>
+                </div>
+
+                <div class="card mt16" style="display: flex; gap: 12px">
+                  <div class="thumb" style="width: 56px; height: 56px">
+                    <i class="ti ti-filter"></i>
+                  </div>
+                  <div style="min-width: 0">
+                    <div class="t-strong clamp2">Фильтр салонный угольный Geely Monjaro</div>
+                    <div class="t-s muted mt4">2 шт. · самовывоз</div>
+                    <div class="t-s mt4">
+                      Цена по заявке <b class="num">2 × 6 500 = 13 000 ₸</b>
+                    </div>
+                  </div>
+                </div>
+                <div class="btn btn-l btn-secondary btn-block btn-danger-text mt24">
+                  Отменить заявку
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-ORD-03</b> · создана, ждём ответа — код и QR приглушены, место — только район
+          </div>
+        </div>
+
+        <div>
+          <div class="phone long">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi-off"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Заявка № 10482</span>
+              </div>
+              <div class="banner neutral">
+                <i class="ti ti-wifi-off"></i><span>Обновлено в 14:05. Статус мог измениться</span>
+              </div>
+              <div class="scroll mt16">
+                <span class="badge ok"><i class="ti ti-package"></i>Можно забирать</span>
+                <div class="t-title mt8">Можно забирать</div>
+                <div class="t-s muted mt4">Резерв до 18:00, 14 марта</div>
+                <div
+                  class="card mt16"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    text-align: center;
+                  "
+                >
+                  <div class="qr-box"><div class="qr" data-size="184"></div></div>
+                  <div class="t-code mt16">482 915</div>
+                  <div class="t-s muted mt4">Покажите QR или назовите код сотруднику</div>
+                  <div class="btn btn-text mt4"><i class="ti ti-maximize"></i>На весь экран</div>
+                </div>
+                <div class="card mt16">
+                  <div class="t-strong">АвтоМир Астана</div>
+                  <div
+                    class="meta mt8"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i class="ti ti-map-pin" style="font-size: 18px; color: var(--text-muted)"></i
+                    >пр. Туран, 24 · до 20:00
+                  </div>
+                  <div style="display: flex; gap: 8px" class="mt16">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-route"></i>Маршрут
+                    </div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-phone"></i>Позвонить
+                    </div>
+                  </div>
+                </div>
+                <div class="btn btn-l disabled btn-block mt16">Отменить заявку</div>
+                <div class="t-cap muted mt4" style="text-align: center">Нужна сеть</div>
+                <div style="height: 40px"></div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-ORD-03 без сети</b> · сохранённая копия; «Маршрут» и «Позвонить» работают
+            (открывают карты и телефон), «Отменить заявку» неактивна
+          </div>
+        </div>
+
+        <div>
+          <div class="phone qr-screen">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi-off"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn" style="color: #16171a"><i class="ti ti-x"></i></span>
+                <span class="spacer"></span>
+                <span class="t-s" style="color: #67625a; padding-right: 16px">1 из 2</span>
+              </div>
+              <div
+                style="
+                  flex: 1;
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  padding: 16px 24px 0;
+                  text-align: center;
+                "
+              >
+                <div class="qr" data-size="342" data-quiet="1"></div>
+                <div class="t-code-xl mt24" style="color: #000">482 915</div>
+                <div class="t-body mt16" style="color: #16171a">
+                  Масло моторное Shell Helix Ultra 5W-30, 4 л
+                </div>
+                <div class="t-body" style="color: #16171a">× 1 · АвтоМир Астана</div>
+                <div class="t-cap mt12" style="color: #67625a">Обновлено в 14:05</div>
+                <span class="spacer"></span>
+                <div class="dots" style="margin-bottom: 48px"><i class="on"></i><i></i></div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-ORD-04</b> · весь экран белый в любой теме; без сети — «Обновлено в»; две заявки у
+            поставщика листаются
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi-off"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div style="padding: 4px 16px 0" class="t-title-l">Заявки</div>
+              <div class="banner neutral mt12">
+                <i class="ti ti-wifi-off"></i
+                ><span>Нет сети. Показаны активные заявки, сохранённые на телефоне</span>
+              </div>
+              <div class="scroll mt16">
+                <div class="list">
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <span class="badge ok"><i class="ti ti-package"></i>Можно забирать</span>
+                      <div class="t-strong mt8 clamp2">
+                        Масло моторное Shell Helix Ultra 5W-30, 4 л
+                      </div>
+                      <div class="t-s muted mt4">АвтоМир Астана · резерв до 18:00</div>
+                    </div>
+                    <div style="text-align: right">
+                      <i class="ti ti-qrcode" style="font-size: 28px; color: var(--accent)"></i>
+                      <div class="t-price-s mt4">482 915</div>
+                    </div>
+                  </div>
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <span class="badge accent"
+                        ><i class="ti ti-circle-check"></i>Срок подтверждён</span
+                      >
+                      <div class="t-strong mt8 clamp2">Фильтр салонный угольный Geely Monjaro</div>
+                      <div class="t-s muted mt4">Запчасти-Плюс · до 20 марта</div>
+                    </div>
+                    <div style="text-align: right">
+                      <i class="ti ti-qrcode" style="font-size: 28px; color: var(--accent)"></i>
+                      <div class="t-price-s mt4">107 364</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="t-cap muted mt12">Обновлено в 14:05. Статус мог измениться</div>
+              </div>
+              <div class="tabbar">
+                <div class="tab"><i class="ti ti-category"></i>Каталог</div>
+                <div class="tab on"><i class="ti ti-receipt"></i>Заявки</div>
+                <div class="tab pilot">
+                  <div class="pilot-btn">
+                    <svg><use href="#pilot-idle" /></svg>
+                  </div>
+                  AI Pilot
+                </div>
+                <div class="tab"><i class="ti ti-car"></i>Гараж</div>
+                <div class="tab"><i class="ti ti-user"></i>Профиль</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-ORD-02 без сети</b> · запуск без сети открывает этот экран
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 7. Subscription ================= -->
+    <section class="gallery-group">
+      <h2>7. Подписка — M-SUB-01</h2>
+      <p>
+        Требования сторов: цена и период из стора, условия автопродления, ссылки на условия и
+        политику, «Восстановить покупки», без внешней оплаты. Один месячный тариф, без пробного
+        периода.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-x"></i></span>
+              </div>
+              <div class="scroll">
+                <img
+                  class="only-dark"
+                  src="../brand/logo-champagne.svg"
+                  alt="Asia Drive Club"
+                  style="width: 112px"
+                />
+                <img
+                  class="only-light"
+                  src="../brand/logo-graphite.svg"
+                  alt="Asia Drive Club"
+                  style="width: 112px"
+                />
+                <div class="t-title-l mt24">Подписка клуба</div>
+                <div class="mt24" style="display: flex; flex-direction: column; gap: 16px">
+                  <div class="row-flex" style="align-items: flex-start; gap: 12px">
+                    <i class="ti ti-building-store accent" style="font-size: 24px"></i>
+                    <div>
+                      <div class="t-strong">Названия поставщиков</div>
+                      <div class="t-s muted">и адреса, где забрать товар</div>
+                    </div>
+                  </div>
+                  <div class="row-flex" style="align-items: flex-start; gap: 12px">
+                    <i class="ti ti-receipt accent" style="font-size: 24px"></i>
+                    <div>
+                      <div class="t-strong">Заявки по клубной цене</div>
+                      <div class="t-s muted">у проверенных партнёров клуба</div>
+                    </div>
+                  </div>
+                  <div class="row-flex" style="align-items: flex-start; gap: 12px">
+                    <i class="ti ti-qrcode accent" style="font-size: 24px"></i>
+                    <div>
+                      <div class="t-strong">Код для получения</div>
+                      <div class="t-s muted">клубная цена подтверждается кодом</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="card mt24" style="text-align: center">
+                  <div class="t-price" style="font-size: 28px; line-height: 34px">490 ₸</div>
+                  <div class="t-s muted">в месяц</div>
+                </div>
+              </div>
+              <div class="bottom-actions" style="padding-bottom: 38px">
+                <div class="btn btn-l btn-primary">Оформить за 490 ₸ в месяц</div>
+                <div class="t-cap muted">
+                  Подписка продлевается автоматически каждый месяц, пока вы её не отмените. Отменить
+                  можно в настройках App Store не позднее чем за 24 часа до продления. Цена может
+                  вырасти — стор заранее сообщит о повышении
+                </div>
+                <div
+                  class="t-cap"
+                  style="display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px"
+                >
+                  <span class="link">Условия использования</span
+                  ><span class="link">Политика конфиденциальности</span
+                  ><span class="link">Восстановить покупки</span>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-SUB-01</b> · цена загружена</div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-x"></i></span>
+              </div>
+              <div class="scroll">
+                <img
+                  class="only-dark"
+                  src="../brand/logo-champagne.svg"
+                  alt="Asia Drive Club"
+                  style="width: 112px"
+                />
+                <img
+                  class="only-light"
+                  src="../brand/logo-graphite.svg"
+                  alt="Asia Drive Club"
+                  style="width: 112px"
+                />
+                <div class="t-title-l mt24">Подписка клуба</div>
+                <div class="mt24" style="display: flex; flex-direction: column; gap: 16px">
+                  <div class="row-flex" style="align-items: flex-start; gap: 12px">
+                    <i class="ti ti-building-store accent" style="font-size: 24px"></i>
+                    <div>
+                      <div class="t-strong">Названия поставщиков</div>
+                      <div class="t-s muted">и адреса, где забрать товар</div>
+                    </div>
+                  </div>
+                  <div class="row-flex" style="align-items: flex-start; gap: 12px">
+                    <i class="ti ti-receipt accent" style="font-size: 24px"></i>
+                    <div>
+                      <div class="t-strong">Заявки по клубной цене</div>
+                      <div class="t-s muted">у проверенных партнёров клуба</div>
+                    </div>
+                  </div>
+                  <div class="row-flex" style="align-items: flex-start; gap: 12px">
+                    <i class="ti ti-qrcode accent" style="font-size: 24px"></i>
+                    <div>
+                      <div class="t-strong">Код для получения</div>
+                      <div class="t-s muted">клубная цена подтверждается кодом</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="card mt24" style="display: flex; gap: 12px; align-items: center">
+                  <i class="ti ti-loader-2" style="font-size: 24px; color: var(--accent)"></i>
+                  <div>
+                    <div class="t-strong">Подтверждаем подписку…</div>
+                    <div class="t-s muted">
+                      Оплата прошла. Подписка активируется в течение нескольких минут
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="bottom-actions" style="padding-bottom: 38px">
+                <div class="btn btn-l btn-primary"><i class="ti ti-loader-2"></i></div>
+                <div class="t-cap muted">Можно закрыть экран — доступ откроется автоматически</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-SUB-01</b> · оплата прошла, сервер подтверждает дольше обычного
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 8. Kazakh ================= -->
+    <section class="gallery-group" lang="kk">
+      <h2>8. Проверка длины — казахский</h2>
+      <p>
+        Черновой перевод только для проверки раскладки (не утверждённый текст). Названия
+        переносятся, кнопки и чипы не обрезаются.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Мотор майлары</span
+                ><span class="icon-btn"><i class="ti ti-search"></i></span>
+              </div>
+              <div style="padding: 0 16px 12px; display: flex; gap: 8px; flex-wrap: wrap">
+                <span class="chip solid"
+                  ><i class="ti ti-car"></i>Monjaro 2023<i class="ti ti-chevron-down"></i
+                ></span>
+                <span class="chip on"
+                  ><i class="ti ti-adjustments-horizontal"></i>Сүзгілер (2)</span
+                >
+                <span class="chip"><i class="ti ti-arrows-sort"></i>Ұсынылатындар</span>
+              </div>
+              <div style="flex: 1; overflow: hidden; border-top: 1px solid var(--border)">
+                <div class="prow">
+                  <div class="thumb photo"><i class="ti ti-droplet"></i></div>
+                  <div class="info">
+                    <div class="name clamp3">
+                      Shell Helix Ultra 5W-30 қозғалтқыш майы, толық синтетикалық, 4 литр
+                    </div>
+                    <div class="t-s muted">Shell · 550046375</div>
+                    <div class="compat ok"><i class="ti ti-circle-check"></i>Сәйкес келеді</div>
+                    <div>
+                      <span class="t-price-s">12 500 ₸-ден</span>
+                      <span class="t-s muted">· 3 ұсыныс</span>
+                    </div>
+                    <div class="meta"><i class="ti ti-clock"></i>Ертең</div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb photo"><i class="ti ti-droplet"></i></div>
+                  <div class="info">
+                    <div class="name clamp3">
+                      Geely Genuine 0W-20 түпнұсқа қозғалтқыш майы, 4 литр
+                    </div>
+                    <div class="t-s muted">Geely · 2080000200</div>
+                    <div class="compat warn">
+                      <i class="ti ti-alert-triangle"></i>Қозғалтқышты нақтылаңыз — майдың
+                      сәйкестігі соған байланысты
+                    </div>
+                    <div>
+                      <span class="t-price-s">15 900 ₸-ден</span>
+                      <span class="t-s muted">· 1 ұсыныс</span>
+                    </div>
+                    <div class="meta"><i class="ti ti-map-pin"></i>Астанада бар</div>
+                  </div>
+                </div>
+                <div class="prow">
+                  <div class="thumb"><i class="ti ti-droplet"></i></div>
+                  <div class="info">
+                    <div class="name clamp3">
+                      Mobil 1 ESP 5W-30 қозғалтқыш майы, толық синтетикалық, ACEA C3 рұқсаты бар, 4
+                      литр
+                    </div>
+                    <div class="t-s muted">Mobil · 154283</div>
+                    <div class="compat none">
+                      <i class="ti ti-help-circle"></i>Сәйкестік көрсетілмеген
+                    </div>
+                    <div>
+                      <span class="t-price-s">14 200 ₸-ден</span>
+                      <span class="t-s muted">· 2 ұсыныс</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <div class="tab on"><i class="ti ti-category"></i>Каталог</div>
+                <div class="tab"><i class="ti ti-receipt"></i>Өтінімдер</div>
+                <div class="tab pilot">
+                  <div class="pilot-btn">
+                    <svg><use href="#pilot-idle" /></svg>
+                  </div>
+                  AI Pilot
+                </div>
+                <div class="tab"><i class="ti ti-car"></i>Гараж</div>
+                <div class="tab"><i class="ti ti-user"></i>Профиль</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>M-CAT-02 · kk</b> · третье название обрезано на третьей строке — полностью в карточке
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div class="statusbar">
+              <span>9:41</span
+              ><span
+                ><i class="ti ti-antenna-bars-5"></i><i class="ti ti-wifi"></i
+                ><i class="ti ti-battery-3"></i
+              ></span>
+            </div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Өтінім № 10482</span>
+              </div>
+              <div class="scroll">
+                <span class="badge ok"><i class="ti ti-package"></i>Алып кетуге болады</span>
+                <div class="t-title mt8 clamp2">Алып кетуге болады</div>
+                <div class="t-s muted mt4">Резерв 14 наурыз, 18:00-ге дейін</div>
+                <div
+                  class="card mt16"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    text-align: center;
+                  "
+                >
+                  <div class="qr-box"><div class="qr" data-size="160"></div></div>
+                  <div class="t-code mt16">482 915</div>
+                  <div class="t-s muted mt4">
+                    QR-кодты көрсетіңіз немесе кодты қызметкерге айтыңыз
+                  </div>
+                  <div class="btn btn-text mt4">
+                    <i class="ti ti-maximize"></i>Толық экранда ашу
+                  </div>
+                </div>
+                <div class="card mt16">
+                  <div class="t-strong">АвтоМир Астана</div>
+                  <div
+                    class="meta mt8"
+                    style="font-size: 14px; line-height: 20px; color: var(--text)"
+                  >
+                    <i class="ti ti-clock" style="font-size: 18px; color: var(--text-muted)"></i
+                    >Бүгін 20:00-ге дейін
+                  </div>
+                  <div style="display: flex; gap: 8px" class="mt16">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-route"></i>Бағыт
+                    </div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-phone"></i>Қоңырау шалу
+                    </div>
+                  </div>
+                </div>
+                <div class="btn btn-l btn-secondary btn-block btn-danger-text mt16">
+                  Өтінімнен бас тарту
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>M-ORD-03 · kk</b> · кнопки и поясняющие строки переносятся</div>
+        </div>
+      </div>
+    </section>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <script>
+      // Demo payload only; the real QR content is defined by the order code contract.
+      var qr = qrcode(0, "M");
+      qr.addData("ADC-ORDER-10482-482915");
+      qr.make();
+      document.querySelectorAll(".qr").forEach(function (el) {
+        var size = Number(el.dataset.size);
+        var quiet = el.dataset.quiet ? 4 : 0;
+        var count = qr.getModuleCount() + quiet * 2;
+        var cell = size / count;
+        var rects = "";
+        for (var r = 0; r < qr.getModuleCount(); r++) {
+          for (var c = 0; c < qr.getModuleCount(); c++) {
+            if (qr.isDark(r, c)) rects += "M" + (c + quiet) + " " + (r + quiet) + "h1v1h-1z";
+          }
+        }
+        el.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="' +
+          size +
+          '" height="' +
+          size +
+          '" viewBox="0 0 ' +
+          count +
+          " " +
+          count +
+          '" shape-rendering="crispEdges"><rect width="' +
+          count +
+          '" height="' +
+          count +
+          '" fill="#fff"/><path d="' +
+          rects +
+          '" fill="#000"/></svg>';
+      });
+      document.querySelectorAll("[data-theme-btn]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          document.documentElement.dataset.theme = btn.dataset.themeBtn;
+          document.querySelectorAll("[data-theme-btn]").forEach(function (b) {
+            b.setAttribute("aria-pressed", String(b === btn));
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

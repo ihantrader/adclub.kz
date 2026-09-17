@@ -51,7 +51,7 @@ COMPLETED
 - `pnpm --filter @adclub/api openapi:check` — PASS
 - `pnpm --filter @adclub/api openapi:compat --base 6dc8518` (последний коммит main до этой задачи) — PASS, «No changes detected», без трейлера
 - `pnpm --filter api run verify:graceful-shutdown` локально (Windows) — BLOCKED: `Stop-Process`/`child.kill("SIGTERM")` на Windows не доставляет POSIX-сигнал (тот же документированный технический факт, что и в TASK-002/TASK-002.A) — worker/API не получают SIGTERM, скрипт таймаутится на ожидании выхода. Достоверно проверено только в CI (Linux)
-- CI на `main`, коммит `9da6ebc` — **run 35205570193 — success** (`gh run watch`), включая новый шаг «Verify API and worker shut down gracefully on SIGTERM (Linux)» для обоих процессов
+- CI на `main`: коммит `9da6ebc` — run 35205570193 — success; коммит с отчётом `0501a78` — **run 35205888828 — success** (`gh run watch`), оба включают шаг «Verify API and worker shut down gracefully on SIGTERM (Linux)» для обоих процессов
 
 ## UAT / E2E
 
@@ -65,12 +65,12 @@ COMPLETED
 - **AC-2** — PASS — `readiness.service.test.ts` (новый тест: реалистичная строка ошибки Postgres с адресом/логином не попадает в ответ), интеграционные тесты Redis/S3-outage через реальный HTTP `GET /ready` (тело без деталей, причина в логе); `openapi:check` и `openapi:compat --base 6dc8518` — PASS.
 - **AC-3** — PASS — ARCHITECTURE.md 4.7 I61.
 - **AC-4** — PASS — см. UAT/E2E: чистая копия репозитория, API/worker/миграции подняты по инструкции CLAUDE.md, команды и результат приведены выше.
-- **AC-5** — PASS — CI run 35205570193, шаг «Verify API and worker shut down gracefully on SIGTERM (Linux)» зелёный для обоих процессов; ограничение по времени и повторный сигнал — `graceful-shutdown.test.ts` (4 теста: успешный выход, игнор второго сигнала, принудительный выход по таймауту, выход с кодом 1 при ошибке `close()`).
+- **AC-5** — PASS — CI run 35205888828, шаг «Verify API and worker shut down gracefully on SIGTERM (Linux)» зелёный для обоих процессов; ограничение по времени и повторный сигнал — `graceful-shutdown.test.ts` (4 теста: успешный выход, игнор второго сигнала, принудительный выход по таймауту, выход с кодом 1 при ошибке `close()`).
 - **AC-6** — PASS — `env.schema.test.ts`, тест «never lets an admin session live longer than 12 hours, whatever the setting».
 - **AC-7** — PASS — `infra/docker/compose.dev.yml`, тег проверен на существование запросом к `quay.io`.
 - **AC-8** — PASS — `no-relative-package-import.test.js` (4 теста) и новый `no-module-internals-import.test.js` (5 тестов, ранее тестов не было).
 - **AC-9** — PASS — `login-code.integration.test.ts`, тест «does not spend a phone's SMS limit when the IP limit is what refused the request».
-- **AC-10** — PASS — все существующие тесты проходят без ослабления (см. Verification); CI на `main`, коммит `9da6ebc` — run **35205570193 — success**.
+- **AC-10** — PASS — все существующие тесты проходят без ослабления (см. Verification); CI на `main`, коммит `9da6ebc` — run **35205888828 — success** (report commit `0501a78`).
 - **AC-11** — PASS — ARCHITECTURE.md версия 0.10 и история изменений обновлены; CLAUDE.md блок 0 дополнен шагом `.env`.
 
 ## Errors & Fixes

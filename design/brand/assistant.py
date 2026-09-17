@@ -60,5 +60,5 @@ for state, draw in STATES.items():
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img">'
             f"<title>AI Pilot</title>{head(h, f)}{draw(h, f)}</svg>\n"
         )
-        (OUT / f"ai-pilot-{state}-{name}.svg").write_text(svg, encoding="utf-8")
+        (OUT / f"ai-pilot-{state}-{name}.svg").write_text(svg, encoding="utf-8", newline="\n")
         print("wrote", f"ai-pilot-{state}-{name}.svg")

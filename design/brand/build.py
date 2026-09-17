@@ -114,7 +114,7 @@ def placed(path, w, h, color, canvas, fraction):
 
 
 def write(name, content):
-    (OUT / name).write_text(content, encoding="utf-8")
+    (OUT / name).write_text(content, encoding="utf-8", newline="\n")
     print("wrote", name)
 
 

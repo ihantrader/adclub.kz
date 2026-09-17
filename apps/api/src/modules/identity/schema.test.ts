@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getTableColumns, getTableName } from "drizzle-orm";
-import { account, identityTables, otpChallenge, phoneVerification } from "./schema";
+import { account, identityTables, otpChallenge, phoneVerification, session } from "./schema";
 
 describe("identity schema: account", () => {
   it("maps to the account table created by the first migration", () => {
@@ -41,6 +41,16 @@ describe("identity schema: login codes", () => {
       "account",
       "otp_challenge",
       "phone_verification",
+      "session",
     ]);
+  });
+});
+
+describe("identity schema: sessions", () => {
+  it("keeps no token, only what a token is derived from", () => {
+    expect(getTableName(session)).toBe("session");
+    const columns = Object.keys(getTableColumns(session));
+    expect(columns).toContain("refreshSeed");
+    expect(columns.filter((column) => /token|hash/i.test(column))).toEqual([]);
   });
 });

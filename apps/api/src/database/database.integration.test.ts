@@ -68,10 +68,19 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([
       "1789583044021_create-account",
       "1789620211794_create-login-code",
+      "1789627880146_create-session",
     ]);
   });
 
-  it("rolls back the latest migration only (login codes)", async () => {
+  it("rolls back the latest migration only (sessions)", async () => {
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await tableExists(client, "session")).toBe(false);
+    expect(await tableExists(client, "otp_challenge")).toBe(true);
+    expect(await tableExists(client, "account")).toBe(true);
+  });
+
+  it("rolls back the next one (login codes)", async () => {
     const output = runMigrate("down", container.getConnectionUri());
     expect(output).toContain("Migrations complete");
     expect(await tableExists(client, "otp_challenge")).toBe(false);
@@ -92,6 +101,7 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(output).toContain("Migrations complete");
     expect(await tableExists(client, "account")).toBe(true);
     expect(await tableExists(client, "otp_challenge")).toBe(true);
+    expect(await tableExists(client, "session")).toBe(true);
   });
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {

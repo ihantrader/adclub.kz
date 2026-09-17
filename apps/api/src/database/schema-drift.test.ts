@@ -93,7 +93,7 @@ describe("ormTables", () => {
   it("describes every application table with a canonical type", () => {
     const described = describeOrmTables(ormTables);
     expect(new Set(described.map((column) => column.table))).toEqual(
-      new Set(["account", "otp_challenge", "phone_verification"]),
+      new Set(["account", "otp_challenge", "phone_verification", "session"]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(
       "timestamp with time zone",

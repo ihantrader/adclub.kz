@@ -1,4 +1,4 @@
-import type { ClientPlatform, LoginCodeChannel } from "@adclub/contracts";
+import type { ClientPlatform, LoginCodeChannel, SessionKind } from "@adclub/contracts";
 import { isValidAppVersion } from "@adclub/domain";
 import type { Lang } from "@adclub/i18n";
 import { z } from "zod";
@@ -70,6 +70,52 @@ const loginCodeChannelList = z
 const DEV_LOGIN_CODE_HASH_SECRET = "adclub-dev-only-login-code-hash-secret";
 
 /**
+ * Signs access tokens and derives refresh tokens. Development and tests
+ * only, like the login code secret above.
+ */
+const DEV_SESSION_TOKEN_SECRET = "adclub-dev-only-session-token-secret-value";
+
+/** Web client origins the Vite dev servers run on (apps/*-web/vite.config.ts). */
+const DEV_SUPPLIER_WEB_ORIGINS = "http://localhost:5175,http://127.0.0.1:5175";
+const DEV_ADMIN_WEB_ORIGINS = "http://localhost:5174,http://127.0.0.1:5174";
+
+/**
+ * A comma-separated list of browser origins (`https://cabinet.example.kz`,
+ * scheme + host + optional port, nothing else). Unset: `undefined`, so the
+ * per-environment default applies.
+ */
+const originList = z
+  .string()
+  .optional()
+  .transform((value) =>
+    value === undefined
+      ? undefined
+      : value
+          .split(",")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0),
+  )
+  .pipe(
+    z
+      .array(
+        z.string().refine(
+          (value) => {
+            try {
+              const url = new URL(value);
+              return (
+                (url.protocol === "http:" || url.protocol === "https:") && url.origin === value
+              );
+            } catch {
+              return false;
+            }
+          },
+          { message: "Must be an origin like https://cabinet.example.kz (no path, no trailing /)" },
+        ),
+      )
+      .optional(),
+  );
+
+/**
  * Raw environment schema, keyed by the actual `.env` variable names.
  * Kept separate from `AppConfig` so validation errors report the variable
  * name a developer actually needs to set.
@@ -127,6 +173,20 @@ export const envSchema = z.object({
   LOGIN_CODE_VERIFICATIONS_PER_PHONE_WINDOW_SECONDS: positiveInt(3600),
   LOGIN_CODE_SMS_PER_PHONE_DAILY: positiveInt(5),
   LOGIN_CODE_SMS_PER_IP_DAILY: positiveInt(10),
+  // Browser origins of the web clients (CORS, cookie session checks; TASK-005).
+  SUPPLIER_WEB_ORIGINS: originList,
+  ADMIN_WEB_ORIGINS: originList,
+  // Sessions (ARCHITECTURE 8.2, 14; TASK-005).
+  SESSION_TOKEN_SECRET: z.string().min(32).optional(),
+  SESSION_ACCESS_TOKEN_TTL_SECONDS: positiveInt(900),
+  SESSION_MOBILE_TTL_SECONDS: positiveInt(90 * 24 * 60 * 60),
+  SESSION_SUPPLIER_WEB_TTL_SECONDS: positiveInt(180 * 24 * 60 * 60),
+  SESSION_ADMIN_WEB_TTL_SECONDS: positiveInt(12 * 60 * 60),
+  SESSION_REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().min(0).default(60),
+  SESSION_REFRESH_PER_SESSION: positiveInt(30),
+  SESSION_REFRESH_PER_SESSION_WINDOW_SECONDS: positiveInt(3600),
+  SESSION_REFRESH_PER_IP: positiveInt(600),
+  SESSION_REFRESH_PER_IP_WINDOW_SECONDS: positiveInt(3600),
 });
 
 const DAY_SECONDS = 24 * 60 * 60;
@@ -159,6 +219,29 @@ export interface LoginCodeSettings {
   smsPerIpDaily: RateLimitSettings;
 }
 
+/**
+ * Session lifetimes and refresh thresholds (ARCHITECTURE 8.2, 14), read
+ * through `SessionSettingsSource` — the replacement point for the settings
+ * table (TASK-007).
+ */
+export interface SessionSettings {
+  accessTokenTtlSeconds: number;
+  /**
+   * Session lifetime per kind. `mobile` and `supplier_web` slide: every
+   * refresh moves the end to now + lifetime. `admin_web` never moves past
+   * sign-in + lifetime.
+   */
+  ttlSeconds: Record<SessionKind, number>;
+  /**
+   * How long after a refresh the token it replaced still returns the same
+   * new pair (a retried or concurrent refresh by the same client) instead
+   * of counting as reuse.
+   */
+  refreshReuseGraceSeconds: number;
+  refreshPerSession: RateLimitSettings;
+  refreshPerIp: RateLimitSettings;
+}
+
 export type AppConfig = {
   nodeEnv: NodeEnv;
   port: number;
@@ -182,6 +265,11 @@ export type AppConfig = {
   };
   http: {
     trustProxy: boolean | number | string;
+    /** Browser origins allowed to call the API (CORS) and to use cookie sessions. */
+    webOrigins: {
+      supplierWeb: string[];
+      adminWeb: string[];
+    };
   };
   loginCode: {
     channels: LoginCodeChannelProvider;
@@ -191,6 +279,11 @@ export type AppConfig = {
     devOutbox: boolean;
     hashSecret: string;
     settings: LoginCodeSettings;
+  };
+  session: {
+    /** HMAC key of access tokens and refresh tokens. */
+    tokenSecret: string;
+    settings: SessionSettings;
   };
 };
 
@@ -238,6 +331,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!isLocal && !parsed.LOGIN_CODE_HASH_SECRET) {
     environmentIssues.push(`LOGIN_CODE_HASH_SECRET: required when NODE_ENV=${parsed.NODE_ENV}`);
   }
+  if (!isLocal && !parsed.SESSION_TOKEN_SECRET) {
+    environmentIssues.push(`SESSION_TOKEN_SECRET: required when NODE_ENV=${parsed.NODE_ENV}`);
+  }
   if (environmentIssues.length > 0) {
     throw new ConfigValidationError(environmentIssues);
   }
@@ -274,6 +370,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     http: {
       trustProxy: parsed.TRUST_PROXY,
+      // No browser origin is trusted outside development unless configured.
+      webOrigins: {
+        supplierWeb:
+          parsed.SUPPLIER_WEB_ORIGINS ?? (isLocal ? DEV_SUPPLIER_WEB_ORIGINS.split(",") : []),
+        adminWeb: parsed.ADMIN_WEB_ORIGINS ?? (isLocal ? DEV_ADMIN_WEB_ORIGINS.split(",") : []),
+      },
     },
     loginCode: {
       channels: parsed.LOGIN_CODE_CHANNELS,
@@ -304,6 +406,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           windowSeconds: DAY_SECONDS,
         },
         smsPerIpDaily: { max: parsed.LOGIN_CODE_SMS_PER_IP_DAILY, windowSeconds: DAY_SECONDS },
+      },
+    },
+    session: {
+      tokenSecret: parsed.SESSION_TOKEN_SECRET ?? DEV_SESSION_TOKEN_SECRET,
+      settings: {
+        accessTokenTtlSeconds: parsed.SESSION_ACCESS_TOKEN_TTL_SECONDS,
+        ttlSeconds: {
+          mobile: parsed.SESSION_MOBILE_TTL_SECONDS,
+          supplier_web: parsed.SESSION_SUPPLIER_WEB_TTL_SECONDS,
+          admin_web: parsed.SESSION_ADMIN_WEB_TTL_SECONDS,
+        },
+        refreshReuseGraceSeconds: parsed.SESSION_REFRESH_REUSE_GRACE_SECONDS,
+        refreshPerSession: {
+          max: parsed.SESSION_REFRESH_PER_SESSION,
+          windowSeconds: parsed.SESSION_REFRESH_PER_SESSION_WINDOW_SECONDS,
+        },
+        refreshPerIp: {
+          max: parsed.SESSION_REFRESH_PER_IP,
+          windowSeconds: parsed.SESSION_REFRESH_PER_IP_WINDOW_SECONDS,
+        },
       },
     },
   };

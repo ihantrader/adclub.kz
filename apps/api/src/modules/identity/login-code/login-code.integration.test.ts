@@ -1,4 +1,3 @@
-import { createServer, connect, type Server, type Socket } from "node:net";
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -18,6 +17,7 @@ import { JsonLoggerService } from "../../../common/logging";
 import { loadConfig, type AppConfig, type LoginCodeSettings } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
+import { TcpProxy } from "../../../testing/tcp-proxy";
 import { LoginCodeChannels } from "./channels/login-code-channels";
 import { TestLoginCodeChannels } from "./channels/test-login-code-channels";
 import { LoginCodeStore } from "./login-code.store";
@@ -27,49 +27,6 @@ import { LoginCodeStore } from "./login-code.store";
  * and a real Redis. Redis sits behind a TCP proxy the tests can stop and
  * start, to simulate an outage without changing its address.
  */
-
-class TcpProxy {
-  private server: Server | undefined;
-  private readonly sockets = new Set<Socket>();
-  port = 0;
-
-  constructor(
-    private readonly targetHost: string,
-    private readonly targetPort: number,
-  ) {}
-
-  async start(): Promise<void> {
-    const server = createServer((client) => {
-      const upstream = connect(this.targetPort, this.targetHost);
-      for (const socket of [client, upstream]) {
-        this.sockets.add(socket);
-        socket.on("close", () => this.sockets.delete(socket));
-        socket.on("error", () => {
-          client.destroy();
-          upstream.destroy();
-        });
-      }
-      client.pipe(upstream).pipe(client);
-    });
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(this.port, "127.0.0.1", () => resolve());
-    });
-    const address = server.address();
-    this.port = typeof address === "object" && address ? address.port : 0;
-    this.server = server;
-  }
-
-  async stop(): Promise<void> {
-    for (const socket of this.sockets) {
-      socket.destroy();
-    }
-    await new Promise<void>((resolve) =>
-      this.server ? this.server.close(() => resolve()) : resolve(),
-    );
-    this.server = undefined;
-  }
-}
 
 const PHONE = "+77011234567";
 const MASKED = "+7***4567";
@@ -143,7 +100,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     config.clientPolicy.minSupportedVersions.ios = "0.0.0";
     channels.failing.clear();
     channels.sent.length = 0;
-    await db.query("TRUNCATE otp_challenge, phone_verification, account");
+    await db.query("TRUNCATE session, otp_challenge, phone_verification, account");
     await redis.flushall();
     logs = [];
     const capture = (chunk: unknown) => {
@@ -243,7 +200,9 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
 
       const verified = await verifyCode({ phone: "+7701 1234567", code: lastCode() });
       expect(verified.status).toBe(200);
-      expect(verified.body).toEqual({ status: "verified", phone: PHONE });
+      // The fields TASK-004 defined are unchanged; the session came with TASK-005.
+      expect(verified.body).toMatchObject({ status: "verified", phone: PHONE });
+      expect(verified.body.session.kind).toBe("mobile");
 
       const again = await verifyCode({ phone: PHONE, code: lastCode() });
       expect(again.status).toBe(400);

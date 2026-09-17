@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Ip } from "@nestjs/common";
+import { Body, Controller, Inject, Ip, Req, Res } from "@nestjs/common";
 import {
   apiRoutes,
   requestLoginCodeBodySchema,
@@ -8,14 +8,21 @@ import {
   type RequestLoginCodeBody,
   type VerifyLoginCodeBody,
 } from "@adclub/contracts";
+import type { Request, Response } from "express";
+import { getRequestClient } from "../../../common/client";
 import { ApiRoute } from "../../../common/contract";
 import { ZodValidationPipe } from "../../../common/validation";
+import { isWebSessionKind, setRefreshCookie } from "../session/session-cookie";
+import { SignInService } from "../session/sign-in.service";
 import { LoginCodeService } from "./login-code.service";
 
 @Controller()
 export class LoginCodeController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(@Inject(LoginCodeService) private readonly loginCodes: LoginCodeService) {}
+  constructor(
+    @Inject(LoginCodeService) private readonly loginCodes: LoginCodeService,
+    @Inject(SignInService) private readonly signIn: SignInService,
+  ) {}
 
   @ApiRoute(apiRoutes.requestLoginCode)
   requestLoginCode(
@@ -28,9 +35,31 @@ export class LoginCodeController {
   @ApiRoute(apiRoutes.verifyLoginCode)
   async verifyLoginCode(
     @Body(new ZodValidationPipe(verifyLoginCodeBodySchema)) body: VerifyLoginCodeBody,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Ip() ip: string | undefined,
   ): Promise<LoginCodeVerifiedResponse> {
-    const verified = await this.loginCodes.verifyCode({ phone: body.phone, code: body.code });
-    // No session yet: TASK-005 adds it to this response from `verified`.
-    return { status: "verified", phone: verified.phone };
+    const { response: verified, issued } = await this.signIn.signIn({
+      phone: body.phone,
+      code: body.code,
+      deviceName: body.deviceName ?? null,
+      client: getRequestClient(request),
+      ip: ip ?? null,
+    });
+    const kind = issued.tokens.kind;
+    if (!isWebSessionKind(kind)) {
+      return verified;
+    }
+    // Web sessions (issued once TASK-006 opens them): the refresh token
+    // goes to the HttpOnly cookie only.
+    setRefreshCookie(
+      response,
+      kind,
+      issued.tokens.refreshToken,
+      issued.sessionExpiresAt,
+      new Date(),
+    );
+    const { refreshToken: _inCookie, ...tokens } = verified.session;
+    return { ...verified, session: tokens };
   }
 }

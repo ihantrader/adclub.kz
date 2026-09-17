@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { LoginCodeChannel } from "@adclub/contracts";
 import { and, eq, sql } from "drizzle-orm";
-import { DatabaseService } from "../../../database";
+import { DatabaseService, type DbExecutor } from "../../../database";
 import { otpChallenge, phoneVerification } from "../schema";
 
 const PURPOSE = "login";
@@ -102,16 +102,19 @@ export class LoginCodeStore {
    * Locks the phone's active challenge (if any), lets `decide` look at it,
    * and applies the decision in the same transaction — two concurrent
    * entries of the right code can't both succeed. A consumed challenge
-   * also records the confirming channel in `phone_verification`.
+   * also records the confirming channel in `phone_verification`, then runs
+   * `onConsumed` in the same transaction (sign-in creates the account and
+   * the session there): if it fails, the code stays unspent.
    */
-  async attemptVerification<T>(
+  async attemptVerification<T, U = undefined>(
     phone: string,
     now: Date,
     decide: (challenge: ActiveChallenge | undefined) => {
       decision?: VerificationDecision;
       result: T;
     },
-  ): Promise<T> {
+    onConsumed?: (tx: DbExecutor) => Promise<U>,
+  ): Promise<{ result: T; consumed?: U }> {
     return this.database.db.transaction(async (tx) => {
       const [row] = await tx
         .select({
@@ -137,7 +140,7 @@ export class LoginCodeStore {
         row && row.channel ? ({ ...row, channel: row.channel } as ActiveChallenge) : undefined;
       const { decision, result } = decide(challenge);
       if (!challenge || !decision) {
-        return result;
+        return { result };
       }
 
       switch (decision.kind) {
@@ -153,6 +156,9 @@ export class LoginCodeStore {
               target: phoneVerification.phone,
               set: { channel: challenge.channel, verifiedAt: now, updatedAt: now },
             });
+          if (onConsumed) {
+            return { result, consumed: await onConsumed(tx) };
+          }
           break;
         case "expire":
           await tx
@@ -172,7 +178,7 @@ export class LoginCodeStore {
             .where(eq(otpChallenge.id, challenge.id));
           break;
       }
-      return result;
+      return { result };
     });
   }
 }

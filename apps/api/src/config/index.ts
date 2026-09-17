@@ -13,6 +13,7 @@ export type {
   LoginCodeSettings,
   NodeEnv,
   RateLimitSettings,
+  SessionSettings,
 } from "./env.schema";
 export { loadEnvFile } from "./load-env-file";
 export { ConfigModule, APP_CONFIG } from "./config.module";

@@ -1,5 +1,5 @@
 import type { ApiRouteDefinition } from "@adclub/contracts";
-import type { ServedRoute } from "../common/contract";
+import { toNestPath, type ServedRoute } from "../common/contract";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
 
@@ -8,11 +8,6 @@ const NON_CONTRACT_PATHS: readonly string[] = [...DEV_ONLY_PATHS, DEV_LOGIN_CODE
 
 function key(method: string, path: string): string {
   return `${method.toUpperCase()} ${path}`;
-}
-
-/** Contract paths use OpenAPI's `{param}`; Express reports `:param`. */
-function toExpressPath(path: string): string {
-  return path.replace(/\{([^}]+)\}/g, ":$1");
 }
 
 /**
@@ -38,9 +33,7 @@ export function checkServedRoutesMatchContract(
       .filter((route) => !NON_CONTRACT_PATHS.includes(route.path))
       .map((route) => key(route.method, route.path)),
   );
-  const contractKeys = new Set(
-    contract.map((route) => key(route.method, toExpressPath(route.path))),
-  );
+  const contractKeys = new Set(contract.map((route) => key(route.method, toNestPath(route.path))));
 
   const problems: string[] = [];
   for (const served of servedKeys) {

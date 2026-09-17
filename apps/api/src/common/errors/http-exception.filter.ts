@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import type { ApiErrorResponse, ErrorCode } from "@adclub/contracts";
 import type { Response } from "express";
+import { withoutQueryParameters } from "../../database/database-error";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
 import { ApiException } from "./api.exception";
@@ -55,8 +56,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // An `ApiException` is an expected, already-described outcome (e.g. a
     // dependency reported down); only unexpected failures are logged here.
     if (status >= 500 && !(exception instanceof ApiException)) {
+      // A failed query's message carries its bound values (personal data).
+      const logged = withoutQueryParameters(exception);
       this.logger.error(
-        exception instanceof Error ? exception : new Error(String(exception)),
+        logged instanceof Error ? logged : new Error(String(logged)),
         "ExceptionFilter",
       );
     }

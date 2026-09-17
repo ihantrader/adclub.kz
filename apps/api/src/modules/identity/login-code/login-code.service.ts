@@ -14,6 +14,7 @@ import {
   type LoginCodeSettings,
   type RateLimitSettings,
 } from "../../../config";
+import type { DbExecutor } from "../../../database";
 import {
   ApiException,
   rateLimitedException,
@@ -157,6 +158,18 @@ export class LoginCodeService {
   }
 
   async verifyCode(input: VerifyLoginCodeInput): Promise<VerifiedPhone> {
+    return (await this.verifyCodeAnd(input, () => Promise.resolve(undefined))).verified;
+  }
+
+  /**
+   * Checks the code and, if it's right, runs `complete` in the transaction
+   * that spends it: either both happen or neither (a failure in `complete`
+   * leaves the code usable).
+   */
+  async verifyCodeAnd<U>(
+    input: VerifyLoginCodeInput,
+    complete: (verified: VerifiedPhone, tx: DbExecutor) => Promise<U>,
+  ): Promise<{ verified: VerifiedPhone; completed: U }> {
     const phone = normalizeKzMobilePhone(input.phone);
     if (!phone) {
       throw phoneValidationError(input.phone);
@@ -174,59 +187,69 @@ export class LoginCodeService {
     );
 
     const now = new Date();
-    const outcome = await this.store.attemptVerification<VerifyOutcome>(phone, now, (challenge) => {
-      if (!challenge) {
-        return { result: { kind: "no_code" } };
-      }
-      if (challenge.expiresAt.getTime() <= now.getTime()) {
-        return { decision: { kind: "expire" }, result: { kind: "expired" } };
-      }
-      if (challenge.nextAttemptAt && challenge.nextAttemptAt.getTime() > now.getTime()) {
-        // Too early after a wrong entry: not counted as an attempt.
+    let confirmed: VerifiedPhone | undefined;
+    const attempt = await this.store.attemptVerification<VerifyOutcome, U>(
+      phone,
+      now,
+      (challenge) => {
+        if (!challenge) {
+          return { result: { kind: "no_code" } };
+        }
+        if (challenge.expiresAt.getTime() <= now.getTime()) {
+          return { decision: { kind: "expire" }, result: { kind: "expired" } };
+        }
+        if (challenge.nextAttemptAt && challenge.nextAttemptAt.getTime() > now.getTime()) {
+          // Too early after a wrong entry: not counted as an attempt.
+          return {
+            result: {
+              kind: "wait",
+              retryAfterSeconds: (challenge.nextAttemptAt.getTime() - now.getTime()) / 1000,
+            },
+          };
+        }
+        if (
+          loginCodeMatches(
+            this.config.loginCode.hashSecret,
+            challenge.id,
+            input.code,
+            challenge.codeHash,
+          )
+        ) {
+          confirmed = { phone, channel: challenge.channel, challengeId: challenge.id };
+          return {
+            decision: { kind: "consume" },
+            result: { kind: "verified", verified: confirmed },
+          };
+        }
+        const failures = challenge.attempts + 1;
+        const attemptsRemaining = Math.max(0, challenge.maxAttempts - failures);
+        const delay = verifyDelaySeconds(
+          failures,
+          settings.verifyFreeFailures,
+          settings.verifyDelayBaseSeconds,
+        );
         return {
-          result: {
-            kind: "wait",
-            retryAfterSeconds: (challenge.nextAttemptAt.getTime() - now.getTime()) / 1000,
+          decision: {
+            kind: "fail",
+            exhausted: attemptsRemaining === 0,
+            nextAttemptAt: delay > 0 ? new Date(now.getTime() + delay * 1000) : null,
           },
+          result: { kind: "invalid", attemptsRemaining },
         };
-      }
-      if (
-        loginCodeMatches(
-          this.config.loginCode.hashSecret,
-          challenge.id,
-          input.code,
-          challenge.codeHash,
-        )
-      ) {
-        return {
-          decision: { kind: "consume" },
-          result: {
-            kind: "verified",
-            verified: { phone, channel: challenge.channel, challengeId: challenge.id },
-          },
-        };
-      }
-      const failures = challenge.attempts + 1;
-      const attemptsRemaining = Math.max(0, challenge.maxAttempts - failures);
-      const delay = verifyDelaySeconds(
-        failures,
-        settings.verifyFreeFailures,
-        settings.verifyDelayBaseSeconds,
-      );
-      return {
-        decision: {
-          kind: "fail",
-          exhausted: attemptsRemaining === 0,
-          nextAttemptAt: delay > 0 ? new Date(now.getTime() + delay * 1000) : null,
-        },
-        result: { kind: "invalid", attemptsRemaining },
-      };
-    });
+      },
+      (tx) => {
+        if (!confirmed) {
+          throw new Error("A code was consumed without a verified phone");
+        }
+        return complete(confirmed, tx);
+      },
+    );
 
+    const outcome = attempt.result;
     switch (outcome.kind) {
       case "verified":
         this.log(`Login code verified phone=${masked} channel=${outcome.verified.channel}`);
-        return outcome.verified;
+        return { verified: outcome.verified, completed: attempt.consumed as U };
       case "no_code":
       case "expired":
         this.log(

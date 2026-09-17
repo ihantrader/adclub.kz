@@ -9,6 +9,7 @@ import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
+import { OriginPolicyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
 
 @Module({})
@@ -42,7 +43,8 @@ export class AppModule implements NestModule {
   }
 
   configure(consumer: MiddlewareConsumer): void {
-    // Order matters: the access log line needs the request id context.
-    consumer.apply(RequestIdMiddleware, AccessLogMiddleware).forRoutes("*");
+    // Order matters: the access log line needs the request id context, and
+    // a request refused for its origin should still be logged.
+    consumer.apply(RequestIdMiddleware, AccessLogMiddleware, OriginPolicyMiddleware).forRoutes("*");
   }
 }

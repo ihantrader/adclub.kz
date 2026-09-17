@@ -38,7 +38,13 @@ describe("loadConfig", () => {
         },
         updateMessage: defaultClientUpdateMessages,
       },
-      http: { trustProxy: false },
+      http: {
+        trustProxy: false,
+        webOrigins: {
+          supplierWeb: ["http://localhost:5175", "http://127.0.0.1:5175"],
+          adminWeb: ["http://localhost:5174", "http://127.0.0.1:5174"],
+        },
+      },
       loginCode: {
         channels: "test",
         testFailingChannels: [],
@@ -56,6 +62,16 @@ describe("loadConfig", () => {
           verificationsPerPhone: { max: 15, windowSeconds: 3600 },
           smsPerPhoneDaily: { max: 5, windowSeconds: 86400 },
           smsPerIpDaily: { max: 10, windowSeconds: 86400 },
+        },
+      },
+      session: {
+        tokenSecret: expect.any(String),
+        settings: {
+          accessTokenTtlSeconds: 900,
+          ttlSeconds: { mobile: 7_776_000, supplier_web: 15_552_000, admin_web: 43_200 },
+          refreshReuseGraceSeconds: 60,
+          refreshPerSession: { max: 30, windowSeconds: 3600 },
+          refreshPerIp: { max: 600, windowSeconds: 3600 },
         },
       },
     });
@@ -143,6 +159,7 @@ describe("loadConfig", () => {
       ...VALID_ENV,
       NODE_ENV: "production",
       LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
+      SESSION_TOKEN_SECRET: "a-production-session-secret-of-32-chars",
     };
 
     it("refuses to start production with the test channels", () => {
@@ -216,5 +233,94 @@ describe("loadConfig", () => {
     ["loopback", "loopback"],
   ])("reads TRUST_PROXY=%j", (value, expected) => {
     expect(loadConfig({ ...VALID_ENV, TRUST_PROXY: value }).http.trustProxy).toBe(expected);
+  });
+
+  describe("sessions and web origins", () => {
+    const STAGING_ENV = {
+      ...VALID_ENV,
+      NODE_ENV: "staging",
+      LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
+    };
+
+    it("requires a session token secret outside development and tests, without printing it", () => {
+      expect(() => loadConfig(STAGING_ENV)).toThrow(
+        /SESSION_TOKEN_SECRET: required when NODE_ENV=staging/,
+      );
+      try {
+        loadConfig({ ...STAGING_ENV, SESSION_TOKEN_SECRET: "too-short-session-secret" });
+        expect.unreachable("loadConfig should have thrown");
+      } catch (error) {
+        expect((error as Error).message).toContain("SESSION_TOKEN_SECRET");
+        expect((error as Error).message).not.toContain("too-short-session-secret");
+      }
+      const secret = "a-staging-session-secret-of-32-chars!!";
+      expect(loadConfig({ ...STAGING_ENV, SESSION_TOKEN_SECRET: secret }).session.tokenSecret).toBe(
+        secret,
+      );
+    });
+
+    it("trusts no browser origin outside development unless configured", () => {
+      const staging = loadConfig({
+        ...STAGING_ENV,
+        SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+      });
+      expect(staging.http.webOrigins).toEqual({ supplierWeb: [], adminWeb: [] });
+
+      const configured = loadConfig({
+        ...STAGING_ENV,
+        SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+        SUPPLIER_WEB_ORIGINS: " https://cabinet.adclub.kz , https://cabinet.staging.adclub.kz ",
+        ADMIN_WEB_ORIGINS: "https://admin.adclub.kz:8443",
+      });
+      expect(configured.http.webOrigins).toEqual({
+        supplierWeb: ["https://cabinet.adclub.kz", "https://cabinet.staging.adclub.kz"],
+        adminWeb: ["https://admin.adclub.kz:8443"],
+      });
+      expect(loadConfig({ ...VALID_ENV, ADMIN_WEB_ORIGINS: "" }).http.webOrigins.adminWeb).toEqual(
+        [],
+      );
+    });
+
+    it.each([
+      "https://cabinet.adclub.kz/",
+      "https://cabinet.adclub.kz/app",
+      "cabinet.adclub.kz",
+      "ftp://cabinet.adclub.kz",
+      "*",
+      "null",
+    ])("rejects the web origin %j", (origin) => {
+      expect(() => loadConfig({ ...VALID_ENV, SUPPLIER_WEB_ORIGINS: origin })).toThrow(
+        /SUPPLIER_WEB_ORIGINS/,
+      );
+    });
+
+    it("reads lifetimes and refresh thresholds from the environment", () => {
+      const config = loadConfig({
+        ...VALID_ENV,
+        SESSION_ACCESS_TOKEN_TTL_SECONDS: "60",
+        SESSION_MOBILE_TTL_SECONDS: "100",
+        SESSION_SUPPLIER_WEB_TTL_SECONDS: "200",
+        SESSION_ADMIN_WEB_TTL_SECONDS: "300",
+        SESSION_REFRESH_REUSE_GRACE_SECONDS: "0",
+        SESSION_REFRESH_PER_SESSION: "5",
+        SESSION_REFRESH_PER_IP_WINDOW_SECONDS: "10",
+      });
+      expect(config.session.settings).toEqual({
+        accessTokenTtlSeconds: 60,
+        ttlSeconds: { mobile: 100, supplier_web: 200, admin_web: 300 },
+        refreshReuseGraceSeconds: 0,
+        refreshPerSession: { max: 5, windowSeconds: 3600 },
+        refreshPerIp: { max: 600, windowSeconds: 10 },
+      });
+    });
+
+    it.each([
+      ["SESSION_ACCESS_TOKEN_TTL_SECONDS", "0"],
+      ["SESSION_MOBILE_TTL_SECONDS", "-1"],
+      ["SESSION_REFRESH_REUSE_GRACE_SECONDS", "-1"],
+      ["SESSION_REFRESH_PER_IP", "lots"],
+    ])("rejects %s=%j", (name, value) => {
+      expect(() => loadConfig({ ...VALID_ENV, [name]: value })).toThrow(new RegExp(name));
+    });
   });
 });

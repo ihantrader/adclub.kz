@@ -6,11 +6,19 @@ import {
   type OnModuleInit,
 } from "@nestjs/common";
 import type { DependencyCheck } from "@adclub/contracts";
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { drizzle, type NodePgDatabase, type NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgDatabase } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 import { APP_CONFIG, type AppConfig } from "../config";
 import { describeError } from "../common/health/describe-error";
 import { measureCheck } from "../common/health/measure-check";
+
+/**
+ * Anything queries can run on: the database itself or an open
+ * transaction — for store methods a caller may want inside its own
+ * transaction.
+ */
+export type DbExecutor = PgDatabase<NodePgQueryResultHKT, Record<string, never>>;
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnApplicationShutdown {

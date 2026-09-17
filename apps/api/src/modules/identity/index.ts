@@ -13,3 +13,15 @@ export {
   ConfigLoginCodeSettingsSource,
   LoginCodeSettingsSource,
 } from "./login-code/login-code-settings.source";
+export { SessionService } from "./session/session.service";
+export type {
+  AuthenticatedSession,
+  IssueSessionInput,
+  IssuedSession,
+} from "./session/session.service";
+export { CurrentSession, SessionGuard, SessionRoute } from "./session/session.guard";
+export {
+  ConfigSessionSettingsSource,
+  SessionSettingsSource,
+} from "./session/session-settings.source";
+export { REFRESH_COOKIE_NAMES, REFRESH_COOKIE_PATH } from "./session/session-cookie";

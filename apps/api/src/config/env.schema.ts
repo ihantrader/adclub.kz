@@ -44,6 +44,14 @@ const positiveInt = (defaultValue: number) =>
   z.coerce.number().int().positive().default(defaultValue);
 
 /**
+ * Admin sessions never move past sign-in + lifetime (unlike mobile and
+ * supplier-web, which slide on refresh) — a hard cap on how long a stolen
+ * admin token stays usable (business rule, TASK-005.A). No configuration
+ * may raise it past 12 hours.
+ */
+const ADMIN_WEB_MAX_TTL_SECONDS = 12 * 60 * 60;
+
+/**
  * Where login codes are sent from. Only `test` exists today (in-process
  * stand-ins for WhatsApp and SMS, TASK-004); the real providers arrive in
  * TASK-026. `test` is refused in production.
@@ -181,7 +189,14 @@ export const envSchema = z.object({
   SESSION_ACCESS_TOKEN_TTL_SECONDS: positiveInt(900),
   SESSION_MOBILE_TTL_SECONDS: positiveInt(90 * 24 * 60 * 60),
   SESSION_SUPPLIER_WEB_TTL_SECONDS: positiveInt(180 * 24 * 60 * 60),
-  SESSION_ADMIN_WEB_TTL_SECONDS: positiveInt(12 * 60 * 60),
+  SESSION_ADMIN_WEB_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(ADMIN_WEB_MAX_TTL_SECONDS, {
+      message: `Must be at most ${ADMIN_WEB_MAX_TTL_SECONDS} (12 hours) — admin sessions never live longer`,
+    })
+    .default(ADMIN_WEB_MAX_TTL_SECONDS),
   SESSION_REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().min(0).default(60),
   SESSION_REFRESH_PER_SESSION: positiveInt(30),
   SESSION_REFRESH_PER_SESSION_WINDOW_SECONDS: positiveInt(3600),

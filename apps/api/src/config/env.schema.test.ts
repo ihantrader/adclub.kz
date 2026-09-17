@@ -322,5 +322,16 @@ describe("loadConfig", () => {
     ])("rejects %s=%j", (name, value) => {
       expect(() => loadConfig({ ...VALID_ENV, [name]: value })).toThrow(new RegExp(name));
     });
+
+    it("never lets an admin session live longer than 12 hours, whatever the setting", () => {
+      expect(() =>
+        loadConfig({ ...VALID_ENV, SESSION_ADMIN_WEB_TTL_SECONDS: String(12 * 60 * 60 + 1) }),
+      ).toThrow(/SESSION_ADMIN_WEB_TTL_SECONDS/);
+
+      expect(
+        loadConfig({ ...VALID_ENV, SESSION_ADMIN_WEB_TTL_SECONDS: String(12 * 60 * 60) }).session
+          .settings.ttlSeconds.admin_web,
+      ).toBe(12 * 60 * 60);
+    });
   });
 });

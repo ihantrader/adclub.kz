@@ -83,6 +83,12 @@ const DEV_LOGIN_CODE_HASH_SECRET = "adclub-dev-only-login-code-hash-secret";
  */
 const DEV_SESSION_TOKEN_SECRET = "adclub-dev-only-session-token-secret-value";
 
+/**
+ * Encrypts administrators' TOTP secrets and keys the backup code hashes.
+ * Development and tests only, like the secrets above.
+ */
+const DEV_ADMIN_TOTP_ENCRYPTION_KEY = "adclub-dev-only-admin-totp-encryption-key";
+
 /** Web client origins the Vite dev servers run on (apps/*-web/vite.config.ts). */
 const DEV_SUPPLIER_WEB_ORIGINS = "http://localhost:5175,http://127.0.0.1:5175";
 const DEV_ADMIN_WEB_ORIGINS = "http://localhost:5174,http://127.0.0.1:5174";
@@ -202,6 +208,16 @@ export const envSchema = z.object({
   SESSION_REFRESH_PER_SESSION_WINDOW_SECONDS: positiveInt(3600),
   SESSION_REFRESH_PER_IP: positiveInt(600),
   SESSION_REFRESH_PER_IP_WINDOW_SECONDS: positiveInt(3600),
+  // Roles, cabinet and admin sign-in (ARCHITECTURE 8.1, 8.3, 14; TASK-006).
+  SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS: positiveInt(600),
+  SIGN_IN_ADMIN_TOTP_TTL_SECONDS: positiveInt(600),
+  ADMIN_TOTP_ENCRYPTION_KEY: z.string().min(32).optional(),
+  ADMIN_TOTP_ALLOWED_DRIFT_STEPS: z.coerce.number().int().min(0).max(5).default(1),
+  ADMIN_BACKUP_CODE_COUNT: z.coerce.number().int().min(1).max(50).default(10),
+  ADMIN_TOTP_VERIFY_PER_ADMIN: positiveInt(5),
+  ADMIN_TOTP_VERIFY_PER_ADMIN_WINDOW_SECONDS: positiveInt(900),
+  ADMIN_TOTP_VERIFY_PER_IP: positiveInt(20),
+  ADMIN_TOTP_VERIFY_PER_IP_WINDOW_SECONDS: positiveInt(900),
 });
 
 const DAY_SECONDS = 24 * 60 * 60;
@@ -257,6 +273,26 @@ export interface SessionSettings {
   refreshPerIp: RateLimitSettings;
 }
 
+/**
+ * Thresholds of the cabinet and admin sign-in steps (ARCHITECTURE 8.1,
+ * 14), read through `SignInSettingsSource` — the replacement point for
+ * the settings table (TASK-007).
+ */
+export interface SignInSettings {
+  /** How long a started company choice stays usable. */
+  supplierSelectionTtlSeconds: number;
+  /** How long an admin sign-in may wait for the second factor (setup included). */
+  adminTotpTtlSeconds: number;
+  /** Authenticator codes this many 30-second steps early or late are accepted. */
+  totpAllowedDriftSteps: number;
+  /** Backup codes in one set. */
+  backupCodeCount: number;
+  /** Second factor checks (right or wrong) per administrator. */
+  totpVerifyPerAdmin: RateLimitSettings;
+  /** Second factor checks per client address. */
+  totpVerifyPerIp: RateLimitSettings;
+}
+
 export type AppConfig = {
   nodeEnv: NodeEnv;
   port: number;
@@ -299,6 +335,11 @@ export type AppConfig = {
     /** HMAC key of access tokens and refresh tokens. */
     tokenSecret: string;
     settings: SessionSettings;
+  };
+  signIn: {
+    /** AES-256-GCM key material of TOTP secrets, also keys the backup code hashes. */
+    totpEncryptionKey: string;
+    settings: SignInSettings;
   };
 };
 
@@ -348,6 +389,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   if (!isLocal && !parsed.SESSION_TOKEN_SECRET) {
     environmentIssues.push(`SESSION_TOKEN_SECRET: required when NODE_ENV=${parsed.NODE_ENV}`);
+  }
+  if (!isLocal && !parsed.ADMIN_TOTP_ENCRYPTION_KEY) {
+    environmentIssues.push(`ADMIN_TOTP_ENCRYPTION_KEY: required when NODE_ENV=${parsed.NODE_ENV}`);
   }
   if (environmentIssues.length > 0) {
     throw new ConfigValidationError(environmentIssues);
@@ -440,6 +484,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         refreshPerIp: {
           max: parsed.SESSION_REFRESH_PER_IP,
           windowSeconds: parsed.SESSION_REFRESH_PER_IP_WINDOW_SECONDS,
+        },
+      },
+    },
+    signIn: {
+      totpEncryptionKey: parsed.ADMIN_TOTP_ENCRYPTION_KEY ?? DEV_ADMIN_TOTP_ENCRYPTION_KEY,
+      settings: {
+        supplierSelectionTtlSeconds: parsed.SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS,
+        adminTotpTtlSeconds: parsed.SIGN_IN_ADMIN_TOTP_TTL_SECONDS,
+        totpAllowedDriftSteps: parsed.ADMIN_TOTP_ALLOWED_DRIFT_STEPS,
+        backupCodeCount: parsed.ADMIN_BACKUP_CODE_COUNT,
+        totpVerifyPerAdmin: {
+          max: parsed.ADMIN_TOTP_VERIFY_PER_ADMIN,
+          windowSeconds: parsed.ADMIN_TOTP_VERIFY_PER_ADMIN_WINDOW_SECONDS,
+        },
+        totpVerifyPerIp: {
+          max: parsed.ADMIN_TOTP_VERIFY_PER_IP,
+          windowSeconds: parsed.ADMIN_TOTP_VERIFY_PER_IP_WINDOW_SECONDS,
         },
       },
     },

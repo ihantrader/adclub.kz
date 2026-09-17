@@ -1,4 +1,17 @@
 import { z } from "zod";
+import {
+  accessContextSchema,
+  administratorListResponseSchema,
+  administratorSummarySchema,
+  backupCodesResponseSchema,
+  regenerateBackupCodesBodySchema,
+  sessionAccessSchema,
+  supplierCompanyResponseSchema,
+  supplierMembershipListResponseSchema,
+  supplierSummarySchema,
+  switchSupplierBodySchema,
+  totpResetResponseSchema,
+} from "./access";
 import { CLIENT_HEADER, clientPlatformSchema } from "./client";
 import { clientPolicyResponseSchema, platformPolicySchema } from "./client-policy";
 import {
@@ -27,6 +40,19 @@ import {
   sessionSummarySchema,
   sessionTokensSchema,
 } from "./session";
+import {
+  selectSupplierBodySchema,
+  signInCompletedResponseSchema,
+  signInStepSchema,
+  supplierSelectionRequiredDetailsSchema,
+  totpSetupBodySchema,
+  totpSetupCompletedResponseSchema,
+  totpSetupConfirmBodySchema,
+  totpSetupResponseSchema,
+  totpStepRequiredDetailsSchema,
+  totpVerifiedResponseSchema,
+  totpVerifyBodySchema,
+} from "./sign-in";
 import type { ApiRouteDefinition } from "./routes";
 
 /**
@@ -60,6 +86,28 @@ const componentSchemas: Record<string, z.ZodType> = {
   SessionListResponse: sessionListResponseSchema,
   CurrentAccountResponse: currentAccountResponseSchema,
   SessionsEndedResponse: sessionsEndedResponseSchema,
+  AccessContext: accessContextSchema,
+  SupplierSummary: supplierSummarySchema,
+  SessionAccess: sessionAccessSchema,
+  SignInStep: signInStepSchema,
+  SupplierSelectionRequiredDetails: supplierSelectionRequiredDetailsSchema,
+  TotpStepRequiredDetails: totpStepRequiredDetailsSchema,
+  SelectSupplierBody: selectSupplierBodySchema,
+  SignInCompletedResponse: signInCompletedResponseSchema,
+  TotpSetupBody: totpSetupBodySchema,
+  TotpSetupResponse: totpSetupResponseSchema,
+  TotpSetupConfirmBody: totpSetupConfirmBodySchema,
+  TotpSetupCompletedResponse: totpSetupCompletedResponseSchema,
+  TotpVerifyBody: totpVerifyBodySchema,
+  TotpVerifiedResponse: totpVerifiedResponseSchema,
+  SwitchSupplierBody: switchSupplierBodySchema,
+  SupplierMembershipListResponse: supplierMembershipListResponseSchema,
+  SupplierCompanyResponse: supplierCompanyResponseSchema,
+  AdministratorSummary: administratorSummarySchema,
+  AdministratorListResponse: administratorListResponseSchema,
+  TotpResetResponse: totpResetResponseSchema,
+  RegenerateBackupCodesBody: regenerateBackupCodesBodySchema,
+  BackupCodesResponse: backupCodesResponseSchema,
 };
 
 type JsonObject = Record<string, unknown>;
@@ -166,6 +214,9 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
   };
 
   for (const route of sortedRoutes) {
+    if (route.auth === "session" && (route.contexts?.length ?? 0) === 0) {
+      throw new Error(`${route.operationId}: a session route must declare its contexts`);
+    }
     const responses: JsonObject = {};
     for (const [status, response] of Object.entries(route.responses)) {
       const id = componentId(response.schema, `Response ${status} of ${route.operationId}`);
@@ -189,7 +240,10 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
         { $ref: "#/components/parameters/ClientHeader" },
         { $ref: "#/components/parameters/AcceptLanguage" },
       ],
-      ...(route.auth === "session" && { security: [{ sessionAccessToken: [] }] }),
+      ...(route.auth === "session" && {
+        security: [{ sessionAccessToken: [] }],
+        "x-access-contexts": [...(route.contexts ?? [])],
+      }),
       ...(route.requestBody && {
         requestBody: {
           description: route.requestBody.description,
@@ -215,6 +269,8 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
     tags: [
       { name: "meta", description: "Service state and client policy" },
       { name: "auth", description: "Sign-in with a one-time code, sessions and devices" },
+      { name: "supplier", description: "Supplier cabinet (context `supplier`)" },
+      { name: "admin", description: "Admin panel (context `admin`)" },
     ],
     paths,
     components: {

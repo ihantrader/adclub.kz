@@ -40,7 +40,10 @@ function base64url(value: Buffer): string {
   return value.toString("base64url");
 }
 
-function deriveKey(secret: string, purpose: "access-token" | "refresh-token"): Buffer {
+function deriveKey(
+  secret: string,
+  purpose: "access-token" | "refresh-token" | "sign-in-step",
+): Buffer {
   return createHmac("sha256", secret).update(`adclub.kz session ${purpose} v1`).digest();
 }
 
@@ -61,6 +64,11 @@ function macMatches(presented: string, expected: Buffer): boolean {
 }
 
 /** `iss` of the tokens an API instance issues: tokens of another environment don't match. */
+/** Keys the stored hashes of sign-in step tokens (`sign-in-step-token.ts`). */
+export function signInStepKey(secret: string): Buffer {
+  return deriveKey(secret, "sign-in-step");
+}
+
 export function accessTokenIssuer(nodeEnv: string): string {
   return `adclub-api/${nodeEnv}`;
 }

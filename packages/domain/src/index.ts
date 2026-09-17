@@ -7,3 +7,11 @@ export {
 } from "./version/app-version";
 export type { AppVersion } from "./version/app-version";
 export { maskPhone, normalizeKzMobilePhone } from "./phone/kz-mobile-phone";
+export { decideAccess, resolveAccessContext } from "./access/access-predicate";
+export type {
+  AccessContext,
+  AccessDecision,
+  AccessPrincipal,
+  ContextLossReason,
+  SessionKind,
+} from "./access/access-predicate";

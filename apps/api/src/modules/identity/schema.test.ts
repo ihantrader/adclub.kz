@@ -39,9 +39,14 @@ describe("identity schema: login codes", () => {
   it("lists every identity table for the schema drift check", () => {
     expect(identityTables.map((table) => getTableName(table)).sort()).toEqual([
       "account",
+      "admin_backup_code",
+      "admin_user",
       "otp_challenge",
       "phone_verification",
       "session",
+      "sign_in_step",
+      "supplier",
+      "supplier_member",
     ]);
   });
 });

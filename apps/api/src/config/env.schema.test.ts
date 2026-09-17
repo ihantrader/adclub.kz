@@ -74,6 +74,17 @@ describe("loadConfig", () => {
           refreshPerIp: { max: 600, windowSeconds: 3600 },
         },
       },
+      signIn: {
+        totpEncryptionKey: expect.any(String),
+        settings: {
+          supplierSelectionTtlSeconds: 600,
+          adminTotpTtlSeconds: 600,
+          totpAllowedDriftSteps: 1,
+          backupCodeCount: 10,
+          totpVerifyPerAdmin: { max: 5, windowSeconds: 900 },
+          totpVerifyPerIp: { max: 20, windowSeconds: 900 },
+        },
+      },
     });
   });
 
@@ -160,6 +171,7 @@ describe("loadConfig", () => {
       NODE_ENV: "production",
       LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
       SESSION_TOKEN_SECRET: "a-production-session-secret-of-32-chars",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-production-totp-key-of-at-least-32-chars",
     };
 
     it("refuses to start production with the test channels", () => {
@@ -240,7 +252,49 @@ describe("loadConfig", () => {
       ...VALID_ENV,
       NODE_ENV: "staging",
       LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
     };
+
+    it("requires the TOTP encryption key outside development and tests, without printing it", () => {
+      const { ADMIN_TOTP_ENCRYPTION_KEY: _key, ...withoutKey } = STAGING_ENV;
+      const withSessionSecret = {
+        ...withoutKey,
+        SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+      };
+      expect(() => loadConfig(withSessionSecret)).toThrow(
+        /ADMIN_TOTP_ENCRYPTION_KEY: required when NODE_ENV=staging/,
+      );
+      expect(() =>
+        loadConfig({ ...withSessionSecret, NODE_ENV: "production", LOGIN_CODE_CHANNELS: "test" }),
+      ).toThrow(/ADMIN_TOTP_ENCRYPTION_KEY: required when NODE_ENV=production/);
+      try {
+        loadConfig({ ...withSessionSecret, ADMIN_TOTP_ENCRYPTION_KEY: "short-totp-key" });
+        expect.unreachable("loadConfig should have thrown");
+      } catch (error) {
+        expect((error as Error).message).toContain("ADMIN_TOTP_ENCRYPTION_KEY");
+        expect((error as Error).message).not.toContain("short-totp-key");
+      }
+      expect(loadConfig({ ...VALID_ENV }).signIn.totpEncryptionKey.length).toBeGreaterThanOrEqual(
+        32,
+      );
+    });
+
+    it("reads the sign-in step thresholds with their defaults", () => {
+      expect(loadConfig(VALID_ENV).signIn.settings).toEqual({
+        supplierSelectionTtlSeconds: 600,
+        adminTotpTtlSeconds: 600,
+        totpAllowedDriftSteps: 1,
+        backupCodeCount: 10,
+        totpVerifyPerAdmin: { max: 5, windowSeconds: 900 },
+        totpVerifyPerIp: { max: 20, windowSeconds: 900 },
+      });
+      expect(() => loadConfig({ ...VALID_ENV, ADMIN_TOTP_ALLOWED_DRIFT_STEPS: "6" })).toThrow(
+        /ADMIN_TOTP_ALLOWED_DRIFT_STEPS/,
+      );
+      expect(() => loadConfig({ ...VALID_ENV, ADMIN_BACKUP_CODE_COUNT: "0" })).toThrow(
+        /ADMIN_BACKUP_CODE_COUNT/,
+      );
+    });
 
     it("requires a session token secret outside development and tests, without printing it", () => {
       expect(() => loadConfig(STAGING_ENV)).toThrow(

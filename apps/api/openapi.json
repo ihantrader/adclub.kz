@@ -13,9 +13,167 @@
     {
       "name": "auth",
       "description": "Sign-in with a one-time code, sessions and devices"
+    },
+    {
+      "name": "supplier",
+      "description": "Supplier cabinet (context `supplier`)"
+    },
+    {
+      "name": "admin",
+      "description": "Admin panel (context `admin`)"
     }
   ],
   "paths": {
+    "/admin/administrators": {
+      "get": {
+        "operationId": "listAdministrators",
+        "summary": "Active administrators (phone numbers partly hidden)",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Administrators",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdministratorListResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/administrators/{adminId}/totp-reset": {
+      "post": {
+        "operationId": "resetAdministratorTotp",
+        "summary": "Reset another administrator's second factor: ends their admin sessions, setup is required at next sign-in",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "adminId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The second factor is reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpResetResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/totp/backup-codes": {
+      "post": {
+        "operationId": "regenerateBackupCodes",
+        "summary": "A new set of the administrator's own backup codes; the previous set stops working",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The current code from the authenticator app",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegenerateBackupCodesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new backup codes (shown once)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupCodesResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/auth/login-code": {
       "post": {
         "operationId": "requestLoginCode",
@@ -128,6 +286,11 @@
             "sessionAccessToken": []
           }
         ],
+        "x-access-contexts": [
+          "user",
+          "supplier",
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "The current session is ended",
@@ -167,6 +330,11 @@
           {
             "sessionAccessToken": []
           }
+        ],
+        "x-access-contexts": [
+          "user",
+          "supplier",
+          "admin"
         ],
         "responses": {
           "200": {
@@ -254,6 +422,11 @@
             "sessionAccessToken": []
           }
         ],
+        "x-access-contexts": [
+          "user",
+          "supplier",
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "Active sessions",
@@ -304,6 +477,11 @@
             "sessionAccessToken": []
           }
         ],
+        "x-access-contexts": [
+          "user",
+          "supplier",
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "The session is ended",
@@ -343,6 +521,11 @@
           {
             "sessionAccessToken": []
           }
+        ],
+        "x-access-contexts": [
+          "user",
+          "supplier",
+          "admin"
         ],
         "responses": {
           "200": {
@@ -384,6 +567,11 @@
             "sessionAccessToken": []
           }
         ],
+        "x-access-contexts": [
+          "user",
+          "supplier",
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "Other sessions are ended",
@@ -391,6 +579,287 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionsEndedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/sign-in/supplier": {
+      "post": {
+        "operationId": "selectSupplier",
+        "summary": "Finish a supplier cabinet sign-in by choosing one of the companies the number is an active employee of",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "requestBody": {
+          "description": "The sign-in step from SUPPLIER_SELECTION_REQUIRED and the chosen company",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectSupplierBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in; the refresh token is in the HttpOnly cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInCompletedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/sign-in/totp": {
+      "post": {
+        "operationId": "verifyTotp",
+        "summary": "Finish an admin panel sign-in with the authenticator code or an unused backup code",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "requestBody": {
+          "description": "The sign-in step and exactly one of the two codes",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpVerifyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in; the refresh token is in the HttpOnly cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpVerifiedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/sign-in/totp/setup": {
+      "post": {
+        "operationId": "startTotpSetup",
+        "summary": "Get the authenticator app data (QR content and secret) during the setup step",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "requestBody": {
+          "description": "The sign-in step from TOTP_SETUP_REQUIRED",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpSetupBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticator app data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpSetupResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/sign-in/totp/setup/confirm": {
+      "post": {
+        "operationId": "confirmTotpSetup",
+        "summary": "Confirm the authenticator app with its current code; returns the admin session and the backup codes (once)",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "requestBody": {
+          "description": "The sign-in step and the current code from the app",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpSetupConfirmBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in; the refresh token is in the HttpOnly cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpSetupCompletedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/supplier-context": {
+      "post": {
+        "operationId": "switchSupplier",
+        "summary": "Switch the current cabinet session to another company the employee is an active member of",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The company to work for",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchSupplierBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The session now works for that company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentAccountResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/suppliers": {
+      "get": {
+        "operationId": "listMySuppliers",
+        "summary": "Companies the signed-in employee is an active member of (to switch between them)",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "Active memberships",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierMembershipListResponse"
                 }
               }
             }
@@ -512,10 +981,159 @@
           }
         }
       }
+    },
+    "/supplier/companies/{supplierId}": {
+      "get": {
+        "operationId": "getSupplierCompanyById",
+        "summary": "A company by id — only the session's own; any other answers like a missing one (404)",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "supplierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierCompanyResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/company": {
+      "get": {
+        "operationId": "getSupplierCompany",
+        "summary": "The company the cabinet session works for",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The current company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierCompanyResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AccessContext": {
+        "type": "string",
+        "enum": [
+          "user",
+          "supplier",
+          "admin"
+        ]
+      },
+      "AdministratorListResponse": {
+        "type": "object",
+        "properties": {
+          "administrators": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdministratorSummary"
+            }
+          }
+        },
+        "required": [
+          "administrators"
+        ]
+      },
+      "AdministratorSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "phoneMasked": {
+            "type": "string"
+          },
+          "totpConfigured": {
+            "type": "boolean"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "phoneMasked",
+          "totpConfigured",
+          "current",
+          "createdAt"
+        ]
+      },
       "ApiErrorResponse": {
         "type": "object",
         "properties": {
@@ -534,6 +1152,20 @@
           "code",
           "message",
           "retryable"
+        ]
+      },
+      "BackupCodesResponse": {
+        "type": "object",
+        "properties": {
+          "backupCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "backupCodes"
         ]
       },
       "ClientPlatform": {
@@ -627,11 +1259,15 @@
           },
           "session": {
             "$ref": "#/components/schemas/SessionSummary"
+          },
+          "access": {
+            "$ref": "#/components/schemas/SessionAccess"
           }
         },
         "required": [
           "account",
-          "session"
+          "session",
+          "access"
         ]
       },
       "DependencyCheck": {
@@ -672,7 +1308,17 @@
           "AUTH_REQUIRED",
           "SESSION_ENDED",
           "SESSION_KIND_UNAVAILABLE",
-          "ORIGIN_NOT_ALLOWED"
+          "ORIGIN_NOT_ALLOWED",
+          "NOT_SUPPLIER_MEMBER",
+          "NOT_ADMIN",
+          "SUPPLIER_SELECTION_REQUIRED",
+          "TOTP_SETUP_REQUIRED",
+          "TOTP_REQUIRED",
+          "TOTP_INVALID",
+          "SIGN_IN_STEP_INVALID",
+          "SUPPLIER_ACCESS_CLOSED",
+          "FORBIDDEN",
+          "TOTP_SELF_RESET_FORBIDDEN"
         ]
       },
       "HealthCheckResponse": {
@@ -769,13 +1415,17 @@
           },
           "session": {
             "$ref": "#/components/schemas/SessionTokens"
+          },
+          "access": {
+            "$ref": "#/components/schemas/SessionAccess"
           }
         },
         "required": [
           "status",
           "phone",
           "accountId",
-          "session"
+          "session",
+          "access"
         ]
       },
       "PlatformPolicy": {
@@ -800,7 +1450,9 @@
           "login_code_verifications_per_phone",
           "login_code_verify_delay",
           "session_refresh_per_session",
-          "session_refresh_per_ip"
+          "session_refresh_per_ip",
+          "admin_totp_per_admin",
+          "admin_totp_per_ip"
         ]
       },
       "RateLimitedDetails": {
@@ -865,6 +1517,18 @@
           }
         }
       },
+      "RegenerateBackupCodesBody": {
+        "type": "object",
+        "properties": {
+          "totpCode": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        },
+        "required": [
+          "totpCode"
+        ]
+      },
       "RequestLoginCodeBody": {
         "type": "object",
         "properties": {
@@ -884,6 +1548,107 @@
         },
         "required": [
           "phone"
+        ]
+      },
+      "SelectSupplierBody": {
+        "type": "object",
+        "properties": {
+          "signInStep": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "deviceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^\\P{Cc}*$"
+          }
+        },
+        "required": [
+          "signInStep",
+          "supplierId"
+        ]
+      },
+      "SessionAccess": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "context": {
+                "type": "string",
+                "const": "user"
+              }
+            },
+            "required": [
+              "context"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {
+                "type": "string",
+                "const": "supplier"
+              },
+              "supplier": {
+                "$ref": "#/components/schemas/SupplierSummary"
+              },
+              "member": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "displayName"
+                ]
+              }
+            },
+            "required": [
+              "context",
+              "supplier",
+              "member"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "context": {
+                "type": "string",
+                "const": "admin"
+              },
+              "admin": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            },
+            "required": [
+              "context",
+              "admin"
+            ]
+          }
         ]
       },
       "SessionKind": {
@@ -964,6 +1729,16 @@
             "type": "string",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "supplier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -976,7 +1751,8 @@
           "ipHint",
           "createdAt",
           "lastUsedAt",
-          "expiresAt"
+          "expiresAt",
+          "supplier"
         ]
       },
       "SessionTokens": {
@@ -1032,6 +1808,365 @@
           "currentEnded"
         ]
       },
+      "SignInCompletedResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "signed_in"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionTokens"
+          },
+          "access": {
+            "$ref": "#/components/schemas/SessionAccess"
+          }
+        },
+        "required": [
+          "status",
+          "accountId",
+          "session",
+          "access"
+        ]
+      },
+      "SignInStep": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ]
+      },
+      "SupplierCompanyResponse": {
+        "type": "object",
+        "properties": {
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "city",
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "supplier"
+        ]
+      },
+      "SupplierMembershipListResponse": {
+        "type": "object",
+        "properties": {
+          "suppliers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "city": {
+                  "type": "string"
+                },
+                "current": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "city",
+                "current"
+              ]
+            }
+          }
+        },
+        "required": [
+          "suppliers"
+        ]
+      },
+      "SupplierSelectionRequiredDetails": {
+        "type": "object",
+        "properties": {
+          "signInStep": {
+            "$ref": "#/components/schemas/SignInStep"
+          },
+          "suppliers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierSummary"
+            }
+          }
+        },
+        "required": [
+          "signInStep",
+          "suppliers"
+        ]
+      },
+      "SupplierSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "city"
+        ]
+      },
+      "SwitchSupplierBody": {
+        "type": "object",
+        "properties": {
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "supplierId"
+        ]
+      },
+      "TotpResetResponse": {
+        "type": "object",
+        "properties": {
+          "sessionsEnded": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "sessionsEnded"
+        ]
+      },
+      "TotpSetupBody": {
+        "type": "object",
+        "properties": {
+          "signInStep": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "signInStep"
+        ]
+      },
+      "TotpSetupCompletedResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "signed_in"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionTokens"
+          },
+          "access": {
+            "$ref": "#/components/schemas/SessionAccess"
+          },
+          "backupCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "status",
+          "accountId",
+          "session",
+          "access",
+          "backupCodes"
+        ]
+      },
+      "TotpSetupConfirmBody": {
+        "type": "object",
+        "properties": {
+          "signInStep": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "totpCode": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          },
+          "deviceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^\\P{Cc}*$"
+          }
+        },
+        "required": [
+          "signInStep",
+          "totpCode"
+        ]
+      },
+      "TotpSetupResponse": {
+        "type": "object",
+        "properties": {
+          "otpauthUri": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "accountName": {
+            "type": "string"
+          },
+          "digits": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "periodSeconds": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "algorithm": {
+            "type": "string",
+            "const": "SHA1"
+          }
+        },
+        "required": [
+          "otpauthUri",
+          "secret",
+          "issuer",
+          "accountName",
+          "digits",
+          "periodSeconds",
+          "algorithm"
+        ]
+      },
+      "TotpStepRequiredDetails": {
+        "type": "object",
+        "properties": {
+          "signInStep": {
+            "$ref": "#/components/schemas/SignInStep"
+          }
+        },
+        "required": [
+          "signInStep"
+        ]
+      },
+      "TotpVerifiedResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "signed_in"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionTokens"
+          },
+          "access": {
+            "$ref": "#/components/schemas/SessionAccess"
+          },
+          "backupCodesRemaining": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "status",
+          "accountId",
+          "session",
+          "access",
+          "backupCodesRemaining"
+        ]
+      },
+      "TotpVerifyBody": {
+        "type": "object",
+        "properties": {
+          "signInStep": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "totpCode": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          },
+          "backupCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[A-Za-z0-9\\s-]+$"
+          },
+          "deviceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^\\P{Cc}*$"
+          }
+        },
+        "required": [
+          "signInStep"
+        ]
+      },
       "VerifyLoginCodeBody": {
         "type": "object",
         "properties": {
@@ -1056,6 +2191,11 @@
             "minLength": 1,
             "maxLength": 64,
             "pattern": "^\\P{Cc}*$"
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
           }
         },
         "required": [

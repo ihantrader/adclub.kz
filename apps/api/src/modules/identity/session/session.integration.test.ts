@@ -15,12 +15,19 @@ import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redi
 import { Redis } from "ioredis";
 import { Client } from "pg";
 import request, { type Response, type Test } from "supertest";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../../../app.module";
 import { JsonLoggerService } from "../../../common/logging";
 import { loadConfig, type AppConfig, type SessionSettings } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
+import { TRUNCATE_ALL } from "../../../testing/database";
+import {
+  appLogText,
+  captureOutput,
+  rememberSecret,
+  rememberedSecrets,
+} from "../../../testing/output-capture";
 import { TcpProxy } from "../../../testing/tcp-proxy";
 import { AccountStore } from "../account/account.store";
 import { LoginCodeChannels } from "../login-code/channels/login-code-channels";
@@ -68,10 +75,9 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
   let channels: TestLoginCodeChannels;
   let sessions: SessionService;
   let ipCounter = 0;
-  /** Everything the app logged, and every token it issued, during the whole suite. */
-  const allLogs: string[] = [];
+  /** Every token issued during the whole suite (also checked by the output capture). */
   const issuedTokens = new Set<string>();
-  let logs: string[] = [];
+  let output: ReturnType<typeof captureOutput>;
 
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
@@ -131,20 +137,16 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     Object.assign(config.session.settings, structuredClone(defaults));
     config.clientPolicy.minSupportedVersions.ios = "0.0.0";
     channels.sent.length = 0;
-    await db.query("TRUNCATE session, otp_challenge, phone_verification, account");
+    await db.query(TRUNCATE_ALL);
     await redis.flushall();
-    logs = [];
-    const capture = (chunk: unknown) => {
-      logs.push(String(chunk));
-      allLogs.push(String(chunk));
-      return true;
-    };
-    vi.spyOn(process.stdout, "write").mockImplementation(capture);
-    vi.spyOn(process.stderr, "write").mockImplementation(capture);
+    output = captureOutput();
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    output.stop();
+    for (const token of issuedTokens) {
+      rememberSecret(token);
+    }
   });
 
   const settings = () => config.session.settings;
@@ -270,12 +272,30 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       [phone],
     );
     const accountId = rows[0]!.id;
+    let context: { supplierId: string; supplierMemberId: string } | undefined;
+    if (kind === "supplier_web") {
+      // The session context must be a real membership (TASK-006).
+      const supplierId = randomUUID();
+      const supplierMemberId = randomUUID();
+      await db.query(
+        "INSERT INTO supplier (id, name, city) VALUES ($1, 'Test company', 'Almaty')",
+        [supplierId],
+      );
+      await db.query(
+        "INSERT INTO supplier_member (id, supplier_id, account_id, display_name, added_by) VALUES ($1, $2, $3, 'Test employee', 'operator')",
+        [supplierMemberId, supplierId, accountId],
+      );
+      context = { supplierId, supplierMemberId };
+    } else {
+      await db.query(
+        "INSERT INTO admin_user (account_id, totp_secret, totp_confirmed_at) VALUES ($1, 'v1.test.only', now()) ON CONFLICT (account_id) DO NOTHING",
+        [accountId],
+      );
+    }
     const issued = await sessions.issue({
       account: { id: accountId, phone },
       kind,
-      ...(kind === "supplier_web" && {
-        context: { supplierId: randomUUID(), supplierMemberId: randomUUID() },
-      }),
+      ...(context && { context }),
       client: {
         platform: kind === "supplier_web" ? "supplier-web" : "admin-web",
         version: "0.1.0",
@@ -328,7 +348,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect(second.sessionId).not.toBe(first.sessionId);
       const { rows } = await db.query("SELECT id, phone FROM account");
       expect(rows).toEqual([{ id: first.accountId, phone: PHONE }]);
-      expect(logs.join("")).toContain(`Account created account=${first.accountId}`);
+      expect(output.text()).toContain(`Account created account=${first.accountId}`);
 
       const other = await signIn(OTHER_PHONE);
       expect(other.accountId).not.toBe(first.accountId);
@@ -377,7 +397,14 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
         phone: PHONE,
         session: { kind: "mobile" },
       });
-      expect(Object.keys(body).sort()).toEqual(["accountId", "phone", "session", "status"]);
+      expect(Object.keys(body).sort()).toEqual([
+        "access",
+        "accountId",
+        "phone",
+        "session",
+        "status",
+      ]);
+      expect(body.access).toEqual({ context: "user" });
       expect(secondsUntil(body.session.accessTokenExpiresAt)).toBeGreaterThan(890);
       expect(secondsUntil(body.session.accessTokenExpiresAt)).toBeLessThanOrEqual(900);
       expect(secondsUntil(body.session.sessionExpiresAt)).toBeGreaterThan(90 * 86_400 - 10);
@@ -430,22 +457,31 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect(current.body.session).toMatchObject({ platform: null, clientVersion: null });
     });
 
+    // Changed by TASK-006 (D-046): the code is checked and spent first, the
+    // refusal comes after it, and nothing is created.
     it.each([
-      ["supplier-web/0.1.0", "supplier_web"],
-      ["admin-web/0.1.0", "admin_web"],
-    ])("refuses a %s sign-in without spending the code", async (client, kind) => {
-      const code = await sendCode(PHONE);
-      const refused = await verify(PHONE, code, { client });
-      expectError(refused, 403, "SESSION_KIND_UNAVAILABLE");
-      expect(setCookies(refused)).toEqual([]);
-      expect(logs.join("")).toContain(`Sign-in refused: session kind not available kind=${kind}`);
-      const { rows } = await db.query(
-        "SELECT (SELECT count(*) FROM session)::int AS sessions, (SELECT count(*) FROM account)::int AS accounts, (SELECT status FROM otp_challenge) AS code",
-      );
-      expect(rows).toEqual([{ sessions: 0, accounts: 0, code: "active" }]);
-      // The same code still signs in the mobile app.
-      expect((await verify(PHONE, code, { client: IOS })).status).toBe(200);
-    });
+      [
+        "supplier-web/0.1.0",
+        "NOT_SUPPLIER_MEMBER",
+        "Supplier sign-in refused: no active membership",
+      ],
+      ["admin-web/0.1.0", "NOT_ADMIN", "Admin sign-in refused: not an administrator"],
+    ] as const)(
+      "refuses a %s sign-in of a number without the role after spending the code",
+      async (client, code, event) => {
+        const loginCode = await sendCode(PHONE);
+        const refused = await verify(PHONE, loginCode, { client });
+        expectError(refused, 403, code);
+        expect(setCookies(refused)).toEqual([]);
+        expect(output.text()).toContain(`${event} phone=${MASKED}`);
+        const { rows } = await db.query(
+          "SELECT (SELECT count(*) FROM session)::int AS sessions, (SELECT count(*) FROM account)::int AS accounts, (SELECT status FROM otp_challenge) AS code",
+        );
+        expect(rows).toEqual([{ sessions: 0, accounts: 0, code: "consumed" }]);
+        // The spent code signs nobody in any more.
+        expectError(await verify(PHONE, loginCode, { client: IOS }), 400, "LOGIN_CODE_EXPIRED");
+      },
+    );
   });
 
   describe("access", () => {
@@ -459,7 +495,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       // endpoint's address (TASK-005.A) — only the reason is logged.
       expect(ready.body.checks.s3).toEqual({ status: "error" });
       expect(JSON.stringify(ready.body)).not.toContain("127.0.0.1:3");
-      expect(logs.join("")).toContain("Dependency check failed: s3");
+      expect(output.text()).toContain("Dependency check failed: s3");
       expect((await http().post("/auth/login-code").send({ phone: PHONE })).status).toBe(200);
     });
 
@@ -520,9 +556,9 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
         expect(response.headers["www-authenticate"]).toContain("Bearer");
         expectError(response, 401, "AUTH_REQUIRED");
       }
-      expect(logs.join("")).toContain("Access refused reason=bad_signature");
-      expect(logs.join("")).toContain("Access refused reason=wrong_issuer");
-      expect(logs.join("")).toContain(`reason=session_mismatch`);
+      expect(output.text()).toContain("Access refused reason=bad_signature");
+      expect(output.text()).toContain("Access refused reason=wrong_issuer");
+      expect(output.text()).toContain(`reason=session_mismatch`);
       // None of that affected the real session.
       expect((await me(accessToken)).status).toBe(200);
       expect(await sessionRow(sessionId)).toMatchObject({ revoked_at: null });
@@ -536,6 +572,8 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       const expired = await me(session.accessToken);
       expectError(expired, 401, "ACCESS_TOKEN_EXPIRED");
 
+      // A 1-second token may expire before the next request even reaches the server.
+      settings().accessTokenTtlSeconds = 900;
       const renewed = await refreshed(session.refreshToken);
       expect((await me(renewed.accessToken)).status).toBe(200);
 
@@ -585,7 +623,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       });
       expectError(await me(renewed.accessToken), 401, "SESSION_ENDED");
       expectError(await refresh(renewed.refreshToken), 401, "SESSION_ENDED");
-      expect(logs.join("")).toContain(
+      expect(output.text()).toContain(
         `Refresh token reuse detected, session revoked session=${session.sessionId}`,
       );
     });
@@ -598,7 +636,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect(repeated.sessionExpiresAt).toBe(first.sessionExpiresAt);
       expect((await me(repeated.accessToken)).status).toBe(200);
       expect((await sessionRow(session.sessionId))?.refresh_generation).toBe(1);
-      expect(logs.join("")).toContain("Session refresh repeated within grace");
+      expect(output.text()).toContain("Session refresh repeated within grace");
 
       const next = await refreshed(first.refreshToken);
       expect(next.refreshToken).not.toBe(first.refreshToken);
@@ -642,7 +680,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expectError(await refresh(owner.refreshToken), 401, "SESSION_ENDED");
       expectError(await refresh(thiefAgain.refreshToken, "192.0.2.66"), 401, "SESSION_ENDED");
       expectError(await me(thiefAgain.accessToken), 401, "SESSION_ENDED");
-      expect(logs.join("")).toContain("presentedGeneration=0 currentGeneration=2");
+      expect(output.text()).toContain("presentedGeneration=0 currentGeneration=2");
     });
 
     it("ignores forged and malformed refresh tokens without harming the session", async () => {
@@ -693,13 +731,13 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       await sleep(2000);
       expectError(await me(renewed.accessToken), 401, "ACCESS_TOKEN_EXPIRED");
       expectError(await refresh(renewed.refreshToken), 401, "SESSION_ENDED");
-      expect(logs.join("")).toContain(`session=${session.sessionId} reason=expired`);
+      expect(output.text()).toContain(`session=${session.sessionId} reason=expired`);
     });
 
     it("refuses a web session's token sent in the body", async () => {
       const web = await issueWebSession("supplier_web");
       expectError(await refresh(web.tokens.refreshToken), 401, "AUTH_REQUIRED");
-      expect(logs.join("")).toContain("reason=wrong_transport");
+      expect(output.text()).toContain("reason=wrong_transport");
     });
   });
 
@@ -760,7 +798,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect(await sessionRow(second.sessionId)).toMatchObject({
         revoked_reason: "ended_by_owner",
       });
-      expect(logs.join("")).toContain(
+      expect(output.text()).toContain(
         `Access refused: session ended session=${second.sessionId} account=${second.accountId} reason=ended_by_owner`,
       );
 
@@ -802,7 +840,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expectError(await me(c!.accessToken), 401, "SESSION_ENDED");
       expect((await me(a!.accessToken)).status).toBe(200);
       expect((await me(stranger.accessToken)).status).toBe(200);
-      expect(logs.join("")).toContain(`scope=all_except count=2 by=${a!.sessionId}`);
+      expect(output.text()).toContain(`scope=all_except count=2 by=${a!.sessionId}`);
     });
 
     it("ends all sessions, the current one included", async () => {
@@ -813,7 +851,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
         expectError(await me(session.accessToken), 401, "SESSION_ENDED");
         expectError(await refresh(session.refreshToken), 401, "SESSION_ENDED");
       }
-      expect(logs.join("")).toContain("scope=all count=2");
+      expect(output.text()).toContain("scope=all count=2");
     });
 
     it("logs out the current session only", async () => {
@@ -1009,7 +1047,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       const health = await http().get("/health").set("Origin", EVIL_ORIGIN);
       expectError(health, 403, "ORIGIN_NOT_ALLOWED");
       expect(health.headers["access-control-allow-origin"]).toBeUndefined();
-      expect(logs.join("")).toContain('origin not allowed origin=\\"https://evil.example\\"');
+      expect(output.text()).toContain('origin not allowed origin=\\"https://evil.example\\"');
       expectError(await http().get("/health").set("Origin", "null"), 403, "ORIGIN_NOT_ALLOWED");
     });
 
@@ -1127,7 +1165,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       await waitForDependencies();
       expectError(await me(ended.accessToken), 401, "SESSION_ENDED");
       expect((await me(active.accessToken)).status).toBe(200);
-      expect(logs.join("")).toContain("Session store unavailable");
+      expect(output.text()).toContain("Session store unavailable");
     }, 60_000);
   });
 
@@ -1146,7 +1184,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       const fourth = await signIn();
       await bearer("post", "/auth/logout", fourth.accessToken);
 
-      const output = logs.join("");
+      const logged = output.text();
       for (const event of [
         `Session created session=${first.sessionId} account=${first.accountId} kind=mobile phone=${MASKED}`,
         `Session refreshed session=${first.sessionId} account=${first.accountId} generation=1`,
@@ -1156,7 +1194,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
         `Sessions ended account=${first.accountId} scope=all count=1 by=${third.sessionId}`,
         `Session ended session=${fourth.sessionId} account=${first.accountId} reason=logout`,
       ]) {
-        expect(output).toContain(event);
+        expect(logged).toContain(event);
       }
     });
 
@@ -1180,16 +1218,9 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("never logged a token or a usable part of one, or a full phone number, during this whole suite", () => {
-      const output = allLogs
-        .join("")
-        .split("\n")
-        .filter((line) => line.startsWith("{"))
-        .map((line) => {
-          const entry = JSON.parse(line) as { message?: string; stack?: string };
-          return `${entry.message ?? ""} ${entry.stack ?? ""}`;
-        })
-        .join("\n");
+      const output = appLogText();
       expect(output).toContain("Session created");
+      expect(rememberedSecrets().size).toBeGreaterThan(100);
       expect(issuedTokens.size).toBeGreaterThan(100);
       for (const token of issuedTokens) {
         expect(output).not.toContain(token);

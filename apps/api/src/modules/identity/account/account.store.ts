@@ -17,6 +17,23 @@ export class AccountStore {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
+  async findById(id: string, executor: DbExecutor = this.database.db): Promise<AccountRecord> {
+    const [row] = await executor.select(columns).from(account).where(eq(account.id, id));
+    if (!row) {
+      throw new Error("Account not found");
+    }
+    return row;
+  }
+
+  /** The account of a phone number, if one exists (never creates it, D-046). */
+  async findByPhone(
+    phone: string,
+    executor: DbExecutor = this.database.db,
+  ): Promise<AccountRecord | undefined> {
+    const [row] = await executor.select(columns).from(account).where(eq(account.phone, phone));
+    return row;
+  }
+
   /**
    * The account of a confirmed phone number, created on first use. The
    * unique index on `phone` makes concurrent first sign-ins converge on
@@ -34,7 +51,7 @@ export class AccountStore {
     if (inserted) {
       return { ...inserted, created: true };
     }
-    const [existing] = await executor.select(columns).from(account).where(eq(account.phone, phone));
+    const existing = await this.findByPhone(phone, executor);
     if (!existing) {
       throw new Error("Account vanished between insert and select");
     }

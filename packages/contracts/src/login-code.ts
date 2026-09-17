@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionAccessSchema } from "./access";
 import { sessionTokensSchema } from "./session";
 
 /**
@@ -55,6 +56,11 @@ export type LoginCodeSentResponse = z.infer<typeof loginCodeSentResponseSchema>;
  * `POST /auth/login-code/verify` — check the code the user typed in. The
  * session kind follows the calling client (`X-Client`): the mobile app
  * (or a caller that doesn't identify itself) gets a `mobile` session.
+ * The supplier cabinet gets a session only for an active employee
+ * (several companies: `SUPPLIER_SELECTION_REQUIRED`), the admin panel only
+ * for an administrator and only after the second factor
+ * (`TOTP_SETUP_REQUIRED` / `TOTP_REQUIRED`); otherwise the code is spent
+ * and the answer is `NOT_SUPPLIER_MEMBER` / `NOT_ADMIN`.
  */
 export const verifyLoginCodeBodySchema = z.object({
   phone: phoneInputSchema,
@@ -67,6 +73,11 @@ export const verifyLoginCodeBodySchema = z.object({
     .max(64)
     .regex(/^\P{Cc}*$/u, "Must not contain control characters")
     .optional(),
+  /**
+   * Supplier cabinet: the company chosen last time. Used when the number
+   * is still an active employee there; otherwise the usual choice applies.
+   */
+  supplierId: z.uuid().optional(),
 });
 
 export type VerifyLoginCodeBody = z.infer<typeof verifyLoginCodeBodySchema>;
@@ -81,6 +92,8 @@ export const loginCodeVerifiedResponseSchema = z.object({
   phone: z.string(),
   accountId: z.uuid(),
   session: sessionTokensSchema,
+  /** What the new session acts as (`user` for the mobile app). */
+  access: sessionAccessSchema,
 });
 
 export type LoginCodeVerifiedResponse = z.infer<typeof loginCodeVerifiedResponseSchema>;
@@ -108,6 +121,9 @@ export const rateLimitNameSchema = z.enum([
   // Sessions (TASK-005).
   "session_refresh_per_session",
   "session_refresh_per_ip",
+  // Admin second factor (TASK-006).
+  "admin_totp_per_admin",
+  "admin_totp_per_ip",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

@@ -1,7 +1,16 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gt, inArray, isNull, lt, ne, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../../database";
-import { account, session, type SessionKindValue, type SessionRevokedReason } from "../schema";
+import {
+  account,
+  adminUser,
+  session,
+  supplier,
+  supplierMember,
+  type MembershipStatus,
+  type SessionKindValue,
+  type SessionRevokedReason,
+} from "../schema";
 
 export interface NewSession {
   id: string;
@@ -20,7 +29,12 @@ export interface NewSession {
   absoluteExpiresAt: Date | null;
 }
 
-/** What the access check needs, read by primary key on every request. */
+/**
+ * What the access check needs, read by primary key on every request —
+ * with the current state of what gives the session its rights: the
+ * membership of a cabinet session, the administrator record of an admin
+ * panel session (`null` when there is none).
+ */
 export interface SessionAccessRow {
   id: string;
   accountId: string;
@@ -31,6 +45,10 @@ export interface SessionAccessRow {
   expiresAt: Date;
   revokedAt: Date | null;
   revokedReason: SessionRevokedReason | null;
+  membershipStatus: MembershipStatus | null;
+  adminUserId: string | null;
+  adminStatus: MembershipStatus | null;
+  adminTotpConfigured: boolean | null;
 }
 
 export interface SessionRefreshRow extends SessionAccessRow {
@@ -43,6 +61,7 @@ export interface SessionRefreshRow extends SessionAccessRow {
 export interface SessionSummaryRow {
   id: string;
   kind: SessionKindValue;
+  supplier: { id: string; name: string; city: string } | null;
   deviceName: string | null;
   clientPlatform: string | null;
   clientVersion: string | null;
@@ -72,6 +91,12 @@ const accessColumns = {
   expiresAt: session.expiresAt,
   revokedAt: session.revokedAt,
   revokedReason: session.revokedReason,
+  membershipStatus: supplierMember.status,
+  adminUserId: adminUser.id,
+  adminStatus: adminUser.status,
+  adminTotpConfigured: sql<
+    boolean | null
+  >`CASE WHEN ${adminUser.id} IS NULL THEN NULL ELSE ${adminUser.totpSecret} IS NOT NULL END`,
 };
 
 const refreshColumns = {
@@ -85,6 +110,7 @@ const refreshColumns = {
 const summaryColumns = {
   id: session.id,
   kind: session.kind,
+  supplier: { id: supplier.id, name: supplier.name, city: supplier.city },
   deviceName: session.deviceName,
   clientPlatform: session.clientPlatform,
   clientVersion: session.clientVersion,
@@ -96,6 +122,11 @@ const summaryColumns = {
 
 function isActive(now: Date): SQL {
   return and(isNull(session.revokedAt), gt(session.expiresAt, now))!;
+}
+
+/** The administrator record behind an admin panel session (no row for other kinds). */
+function adminOfSession(): SQL {
+  return and(eq(adminUser.accountId, session.accountId), eq(session.kind, "admin_web"))!;
 }
 
 /** Persistence of `session` (ARCHITECTURE 5.1, 8.2). */
@@ -130,6 +161,8 @@ export class SessionStore {
     const [row] = await this.database.db
       .select(accessColumns)
       .from(session)
+      .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
+      .leftJoin(adminUser, adminOfSession())
       .where(eq(session.id, sessionId));
     return row;
   }
@@ -138,8 +171,68 @@ export class SessionStore {
     const [row] = await this.database.db
       .select(refreshColumns)
       .from(session)
+      .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
+      .leftJoin(adminUser, adminOfSession())
       .where(eq(session.id, sessionId));
     return row;
+  }
+
+  /**
+   * Ends one session because it lost its context (membership removed,
+   * administrator removed, second factor reset). No-op if already ended.
+   */
+  async revokeLost(sessionId: string, reason: SessionRevokedReason, now: Date): Promise<boolean> {
+    const rows = await this.database.db
+      .update(session)
+      .set({ revokedAt: now, revokedReason: reason, updatedAt: now })
+      .where(and(eq(session.id, sessionId), isNull(session.revokedAt)))
+      .returning({ id: session.id });
+    return rows.length > 0;
+  }
+
+  /** Ends every active admin panel session of an account, in the caller's transaction. */
+  async revokeAdminSessions(
+    accountId: string,
+    reason: SessionRevokedReason,
+    now: Date,
+    tx: DbExecutor,
+  ): Promise<string[]> {
+    const rows = await tx
+      .update(session)
+      .set({ revokedAt: now, revokedReason: reason, updatedAt: now })
+      .where(
+        and(
+          eq(session.accountId, accountId),
+          eq(session.kind, "admin_web"),
+          isNull(session.revokedAt),
+        ),
+      )
+      .returning({ id: session.id });
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * Moves an active cabinet session of `accountId` to another membership
+   * of the same account; `false` if the session is no longer active.
+   */
+  async switchSupplier(
+    input: { sessionId: string; accountId: string; supplierId: string; memberId: string },
+    now: Date,
+    tx: DbExecutor,
+  ): Promise<boolean> {
+    const rows = await tx
+      .update(session)
+      .set({ supplierId: input.supplierId, supplierMemberId: input.memberId, updatedAt: now })
+      .where(
+        and(
+          eq(session.id, input.sessionId),
+          eq(session.accountId, input.accountId),
+          eq(session.kind, "supplier_web"),
+          isActive(now),
+        ),
+      )
+      .returning({ id: session.id });
+    return rows.length > 0;
   }
 
   /**
@@ -178,8 +271,10 @@ export class SessionStore {
       const [row] = await tx
         .select(refreshColumns)
         .from(session)
+        .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
+        .leftJoin(adminUser, adminOfSession())
         .where(eq(session.id, sessionId))
-        .for("update");
+        .for("update", { of: session });
       const { decision, result } = decide(row);
       if (!row || !decision) {
         return result;
@@ -215,18 +310,23 @@ export class SessionStore {
     });
   }
 
-  async findSummary(
-    sessionId: string,
-  ): Promise<
-    (SessionSummaryRow & { account: { id: string; phone: string; createdAt: Date } }) | undefined
+  async findSummary(sessionId: string): Promise<
+    | (SessionSummaryRow & {
+        account: { id: string; phone: string; createdAt: Date };
+        memberName: string | null;
+      })
+    | undefined
   > {
     const [row] = await this.database.db
       .select({
         ...summaryColumns,
         account: { id: account.id, phone: account.phone, createdAt: account.createdAt },
+        memberName: supplierMember.displayName,
       })
       .from(session)
       .innerJoin(account, eq(account.id, session.accountId))
+      .leftJoin(supplier, eq(supplier.id, session.supplierId))
+      .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
       .where(eq(session.id, sessionId));
     return row;
   }
@@ -236,6 +336,7 @@ export class SessionStore {
     return this.database.db
       .select(summaryColumns)
       .from(session)
+      .leftJoin(supplier, eq(supplier.id, session.supplierId))
       .where(and(eq(session.accountId, accountId), isActive(now)))
       .orderBy(desc(session.lastUsedAt), desc(session.createdAt));
   }

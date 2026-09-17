@@ -2,16 +2,23 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   clientPlatformSchema,
+  type AccessContext,
   type ClientInfo,
   type CurrentAccountResponse,
   type RateLimitName,
+  type SessionAccess,
   type SessionKind,
   type SessionListResponse,
   type SessionsEndedResponse,
   type SessionSummary,
   type SessionTokens,
 } from "@adclub/contracts";
-import { maskPhone } from "@adclub/domain";
+import {
+  decideAccess,
+  maskPhone,
+  type AccessPrincipal,
+  type ContextLossReason,
+} from "@adclub/domain";
 import {
   ApiException,
   rateLimitedException,
@@ -27,7 +34,9 @@ import { ipHint } from "./ip-hint";
 import {
   accessTokenExpiredException,
   authRequiredException,
+  forbiddenException,
   sessionEndedException,
+  supplierAccessClosedException,
 } from "./session-errors";
 import { SessionSettingsSource } from "./session-settings.source";
 import {
@@ -41,6 +50,7 @@ import {
 } from "./session-tokens";
 import {
   SessionStore,
+  type SessionAccessRow,
   type SessionRefreshRow,
   type SessionSelection,
   type SessionSummaryRow,
@@ -51,9 +61,13 @@ export interface AuthenticatedSession {
   sessionId: string;
   accountId: string;
   kind: SessionKind;
-  /** Supplier cabinet context (TASK-006); `null` for other kinds. */
+  /** What the session acts as on this request (the access rule decided it). */
+  context: AccessContext;
+  /** Supplier cabinet context: the company and the active membership; `null` for other kinds. */
   supplierId: string | null;
   supplierMemberId: string | null;
+  /** Admin panel context: the active administrator; `null` for other kinds. */
+  adminUserId: string | null;
 }
 
 export interface IssueSessionInput {
@@ -94,8 +108,44 @@ type RefreshOutcome =
   | { kind: "rotated"; row: SessionRefreshRow; generation: number; expiresAt: Date }
   | { kind: "repeated"; row: SessionRefreshRow; generation: number; expiresAt: Date }
   | { kind: "reused"; row: SessionRefreshRow; currentGeneration: number }
-  | { kind: "ended"; reason: string }
+  | { kind: "ended"; reason: string; closed: boolean }
+  | { kind: "lost"; row: SessionRefreshRow; loss: ContextLossReason }
   | { kind: "invalid"; reason: string };
+
+/** How a session that lost its context is ended, and what its client is told. */
+const contextLoss: Record<
+  ContextLossReason,
+  { revokedReason: SessionRevokedReason; error: () => ApiException }
+> = {
+  membership_removed: { revokedReason: "access_closed", error: supplierAccessClosedException },
+  admin_removed: { revokedReason: "admin_removed", error: sessionEndedException },
+  totp_reset: { revokedReason: "totp_reset", error: sessionEndedException },
+};
+
+/** The current state behind a session, as the access rule sees it. */
+function principalOf(row: SessionAccessRow): AccessPrincipal {
+  switch (row.kind) {
+    case "mobile":
+      return { kind: "mobile" };
+    case "supplier_web":
+      return {
+        kind: "supplier_web",
+        membership: row.membershipStatus ? { status: row.membershipStatus } : null,
+      };
+    case "admin_web":
+      return {
+        kind: "admin_web",
+        admin: row.adminStatus
+          ? { status: row.adminStatus, totpConfigured: row.adminTotpConfigured === true }
+          : null,
+      };
+  }
+}
+
+/** An ended session: the removed employee keeps hearing "access closed". */
+function endedException(reason: SessionRevokedReason | null): ApiException {
+  return reason === "access_closed" ? supplierAccessClosedException() : sessionEndedException();
+}
 
 const rateLimitKeys = {
   refreshPerIp: (subject: string) => `session:refresh:ip:${subject}`,
@@ -115,6 +165,7 @@ function toSummary(row: SessionSummaryRow, currentSessionId: string): SessionSum
     createdAt: row.createdAt.toISOString(),
     lastUsedAt: row.lastUsedAt.toISOString(),
     expiresAt: row.expiresAt.toISOString(),
+    supplier: row.kind === "supplier_web" ? row.supplier : null,
   };
 }
 
@@ -249,10 +300,24 @@ export class SessionService {
           return { result: { kind: "invalid", reason: "unknown_session" } };
         }
         if (row.revokedAt) {
-          return { result: { kind: "ended", reason: `revoked_${row.revokedReason ?? "unknown"}` } };
+          return {
+            result: {
+              kind: "ended",
+              reason: `revoked_${row.revokedReason ?? "unknown"}`,
+              closed: row.revokedReason === "access_closed",
+            },
+          };
         }
         if (row.expiresAt.getTime() <= now.getTime()) {
-          return { result: { kind: "ended", reason: "expired" } };
+          return { result: { kind: "ended", reason: "expired", closed: false } };
+        }
+        // The rights behind the session are checked before it is extended.
+        const decision = decideAccess(["user", "supplier", "admin"], principalOf(row));
+        if (!decision.allowed && decision.reason !== "context_not_allowed") {
+          return {
+            decision: { kind: "revoke", reason: contextLoss[decision.reason].revokedReason },
+            result: { kind: "lost", row, loss: decision.reason },
+          };
         }
         if (parsed.generation === row.refreshGeneration) {
           const slid = new Date(now.getTime() + settings.ttlSeconds[row.kind] * 1000);
@@ -297,7 +362,12 @@ export class SessionService {
         throw authRequiredException();
       case "ended":
         this.logger.warn(`Session refresh refused session=${sessionId} reason=${outcome.reason}`);
-        throw sessionEndedException();
+        throw outcome.closed ? supplierAccessClosedException() : sessionEndedException();
+      case "lost":
+        this.logger.warn(
+          `Session refresh refused, context lost, session ended session=${sessionId} account=${outcome.row.accountId} kind=${outcome.row.kind} reason=${outcome.loss}${this.memberLabel(outcome.row)}`,
+        );
+        throw contextLoss[outcome.loss].error();
       case "reused":
         this.logger.warn(
           `Refresh token reuse detected, session revoked session=${sessionId} account=${outcome.row.accountId} presentedGeneration=${parsed.generation} currentGeneration=${outcome.currentGeneration}`,
@@ -334,6 +404,7 @@ export class SessionService {
   async authenticate(
     authorization: string | string[] | undefined,
     ip: string | null,
+    routeContexts: readonly AccessContext[],
   ): Promise<AuthenticatedSession> {
     if (authorization === undefined) {
       throw authRequiredException();
@@ -371,11 +442,30 @@ export class SessionService {
       this.logger.warn(
         `Access refused: session ended session=${sid} account=${sub} reason=${row.revokedReason ?? "unknown"}`,
       );
-      throw sessionEndedException();
+      throw endedException(row.revokedReason);
     }
     if (row.expiresAt.getTime() <= now.getTime()) {
       this.logger.warn(`Access refused: session expired session=${sid} account=${sub}`);
       throw sessionEndedException();
+    }
+
+    // The access rule, on the current membership / administrator record.
+    const decision = decideAccess(routeContexts, principalOf(row));
+    if (!decision.allowed) {
+      if (decision.reason === "context_not_allowed") {
+        this.logger.warn(
+          `Access refused: context not allowed session=${sid} account=${sub} context=${decision.context} route=${routeContexts.join(",")}`,
+        );
+        throw forbiddenException();
+      }
+      const loss = contextLoss[decision.reason];
+      // Ended for good: restoring the membership or the administrator
+      // later doesn't bring this session back — they sign in again.
+      await this.withDatabase(() => this.store.revokeLost(sid, loss.revokedReason, now));
+      this.logger.warn(
+        `Access refused, context lost, session ended session=${sid} account=${sub} kind=${row.kind} reason=${decision.reason}${this.memberLabel(row)}`,
+      );
+      throw loss.error();
     }
 
     if (now.getTime() - row.lastUsedAt.getTime() >= TOUCH_INTERVAL_MS) {
@@ -390,8 +480,10 @@ export class SessionService {
       sessionId: row.id,
       accountId: row.accountId,
       kind: row.kind,
+      context: decision.context,
       supplierId: row.supplierId,
       supplierMemberId: row.supplierMemberId,
+      adminUserId: row.kind === "admin_web" ? row.adminUserId : null,
     };
   }
 
@@ -407,7 +499,36 @@ export class SessionService {
         createdAt: row.account.createdAt.toISOString(),
       },
       session: toSummary(row, auth.sessionId),
+      access: this.accessOf(auth, row),
     };
+  }
+
+  private accessOf(
+    auth: AuthenticatedSession,
+    row: { supplier: { id: string; name: string; city: string } | null; memberName: string | null },
+  ): SessionAccess {
+    switch (auth.context) {
+      case "user":
+        return { context: "user" };
+      case "supplier":
+        if (!row.supplier || !auth.supplierMemberId || row.memberName === null) {
+          throw new Error("A supplier context without its company");
+        }
+        return {
+          context: "supplier",
+          supplier: row.supplier,
+          member: { id: auth.supplierMemberId, displayName: row.memberName },
+        };
+      case "admin":
+        if (!auth.adminUserId) {
+          throw new Error("An admin context without its administrator");
+        }
+        return { context: "admin", admin: { id: auth.adminUserId } };
+    }
+  }
+
+  private memberLabel(row: { supplierId: string | null; supplierMemberId: string | null }): string {
+    return row.supplierMemberId ? ` supplier=${row.supplierId} member=${row.supplierMemberId}` : "";
   }
 
   async list(auth: AuthenticatedSession): Promise<SessionListResponse> {

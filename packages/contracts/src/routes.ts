@@ -1,4 +1,16 @@
 import type { z } from "zod";
+import {
+  adminIdPathSchema,
+  administratorListResponseSchema,
+  backupCodesResponseSchema,
+  regenerateBackupCodesBodySchema,
+  supplierCompanyResponseSchema,
+  supplierIdPathSchema,
+  supplierMembershipListResponseSchema,
+  switchSupplierBodySchema,
+  totpResetResponseSchema,
+  type AccessContext,
+} from "./access";
 import { clientPolicyResponseSchema } from "./client-policy";
 import { healthCheckResponseSchema } from "./health";
 import {
@@ -16,6 +28,16 @@ import {
   sessionsEndedResponseSchema,
   sessionTokensSchema,
 } from "./session";
+import {
+  selectSupplierBodySchema,
+  signInCompletedResponseSchema,
+  totpSetupBodySchema,
+  totpSetupCompletedResponseSchema,
+  totpSetupConfirmBodySchema,
+  totpSetupResponseSchema,
+  totpVerifiedResponseSchema,
+  totpVerifyBodySchema,
+} from "./sign-in";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -61,6 +83,14 @@ export interface ApiRouteDefinition {
    */
   auth?: "session";
   /**
+   * Required with `auth: "session"`: the contexts the route serves
+   * (`AccessContext`). A session of any other context gets 403
+   * `FORBIDDEN`; a cabinet session whose employee was removed gets 401
+   * `SUPPLIER_ACCESS_CLOSED`. The server refuses to bind a session route
+   * without it.
+   */
+  contexts?: readonly AccessContext[];
+  /**
    * Path parameters: `{name}` placeholders in `path`, one string field of
    * this object schema per placeholder.
    */
@@ -73,6 +103,9 @@ export interface ApiRouteDefinition {
 function defineRoute<const Route extends ApiRouteDefinition>(route: Route): Route {
   return route;
 }
+
+/** Account-level routes every signed-in session may use, whatever its context. */
+const anyContext = ["user", "supplier", "admin"] as const satisfies readonly AccessContext[];
 
 export const apiRoutes = {
   getHealth: defineRoute({
@@ -139,6 +172,77 @@ export const apiRoutes = {
       },
     },
   }),
+  selectSupplier: defineRoute({
+    operationId: "selectSupplier",
+    method: "POST",
+    path: "/auth/sign-in/supplier",
+    summary:
+      "Finish a supplier cabinet sign-in by choosing one of the companies the number is an active employee of",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    requestBody: {
+      description: "The sign-in step from SUPPLIER_SELECTION_REQUIRED and the chosen company",
+      schema: selectSupplierBodySchema,
+    },
+    responses: {
+      200: {
+        description: "Signed in; the refresh token is in the HttpOnly cookie",
+        schema: signInCompletedResponseSchema,
+      },
+    },
+  }),
+  startTotpSetup: defineRoute({
+    operationId: "startTotpSetup",
+    method: "POST",
+    path: "/auth/sign-in/totp/setup",
+    summary: "Get the authenticator app data (QR content and secret) during the setup step",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    requestBody: {
+      description: "The sign-in step from TOTP_SETUP_REQUIRED",
+      schema: totpSetupBodySchema,
+    },
+    responses: {
+      200: { description: "Authenticator app data", schema: totpSetupResponseSchema },
+    },
+  }),
+  confirmTotpSetup: defineRoute({
+    operationId: "confirmTotpSetup",
+    method: "POST",
+    path: "/auth/sign-in/totp/setup/confirm",
+    summary:
+      "Confirm the authenticator app with its current code; returns the admin session and the backup codes (once)",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    requestBody: {
+      description: "The sign-in step and the current code from the app",
+      schema: totpSetupConfirmBodySchema,
+    },
+    responses: {
+      200: {
+        description: "Signed in; the refresh token is in the HttpOnly cookie",
+        schema: totpSetupCompletedResponseSchema,
+      },
+    },
+  }),
+  verifyTotp: defineRoute({
+    operationId: "verifyTotp",
+    method: "POST",
+    path: "/auth/sign-in/totp",
+    summary: "Finish an admin panel sign-in with the authenticator code or an unused backup code",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    requestBody: {
+      description: "The sign-in step and exactly one of the two codes",
+      schema: totpVerifyBodySchema,
+    },
+    responses: {
+      200: {
+        description: "Signed in; the refresh token is in the HttpOnly cookie",
+        schema: totpVerifiedResponseSchema,
+      },
+    },
+  }),
   refreshSession: defineRoute({
     operationId: "refreshSession",
     method: "POST",
@@ -163,6 +267,7 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     auth: "session",
+    contexts: anyContext,
     responses: {
       200: { description: "Account and session", schema: currentAccountResponseSchema },
     },
@@ -175,6 +280,7 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     auth: "session",
+    contexts: anyContext,
     responses: {
       200: { description: "Active sessions", schema: sessionListResponseSchema },
     },
@@ -188,6 +294,7 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     auth: "session",
+    contexts: anyContext,
     pathParams: sessionIdPathSchema,
     responses: {
       200: { description: "The session is ended", schema: sessionsEndedResponseSchema },
@@ -201,6 +308,7 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     auth: "session",
+    contexts: anyContext,
     responses: {
       200: { description: "Other sessions are ended", schema: sessionsEndedResponseSchema },
     },
@@ -213,6 +321,7 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     auth: "session",
+    contexts: anyContext,
     responses: {
       200: { description: "All sessions are ended", schema: sessionsEndedResponseSchema },
     },
@@ -225,8 +334,112 @@ export const apiRoutes = {
     tag: "auth",
     clientVersionCheck: "enforced",
     auth: "session",
+    contexts: anyContext,
     responses: {
       200: { description: "The current session is ended", schema: sessionsEndedResponseSchema },
+    },
+  }),
+  listMySuppliers: defineRoute({
+    operationId: "listMySuppliers",
+    method: "GET",
+    path: "/auth/suppliers",
+    summary: "Companies the signed-in employee is an active member of (to switch between them)",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    responses: {
+      200: { description: "Active memberships", schema: supplierMembershipListResponseSchema },
+    },
+  }),
+  switchSupplier: defineRoute({
+    operationId: "switchSupplier",
+    method: "POST",
+    path: "/auth/supplier-context",
+    summary:
+      "Switch the current cabinet session to another company the employee is an active member of",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "The company to work for", schema: switchSupplierBodySchema },
+    responses: {
+      200: {
+        description: "The session now works for that company",
+        schema: currentAccountResponseSchema,
+      },
+    },
+  }),
+  getSupplierCompany: defineRoute({
+    operationId: "getSupplierCompany",
+    method: "GET",
+    path: "/supplier/company",
+    summary: "The company the cabinet session works for",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    responses: {
+      200: { description: "The current company", schema: supplierCompanyResponseSchema },
+    },
+  }),
+  getSupplierCompanyById: defineRoute({
+    operationId: "getSupplierCompanyById",
+    method: "GET",
+    path: "/supplier/companies/{supplierId}",
+    summary: "A company by id — only the session's own; any other answers like a missing one (404)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: supplierIdPathSchema,
+    responses: {
+      200: { description: "The company", schema: supplierCompanyResponseSchema },
+    },
+  }),
+  listAdministrators: defineRoute({
+    operationId: "listAdministrators",
+    method: "GET",
+    path: "/admin/administrators",
+    summary: "Active administrators (phone numbers partly hidden)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    responses: {
+      200: { description: "Administrators", schema: administratorListResponseSchema },
+    },
+  }),
+  resetAdministratorTotp: defineRoute({
+    operationId: "resetAdministratorTotp",
+    method: "POST",
+    path: "/admin/administrators/{adminId}/totp-reset",
+    summary:
+      "Reset another administrator's second factor: ends their admin sessions, setup is required at next sign-in",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminIdPathSchema,
+    responses: {
+      200: { description: "The second factor is reset", schema: totpResetResponseSchema },
+    },
+  }),
+  regenerateBackupCodes: defineRoute({
+    operationId: "regenerateBackupCodes",
+    method: "POST",
+    path: "/admin/totp/backup-codes",
+    summary: "A new set of the administrator's own backup codes; the previous set stops working",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: {
+      description: "The current code from the authenticator app",
+      schema: regenerateBackupCodesBodySchema,
+    },
+    responses: {
+      200: { description: "The new backup codes (shown once)", schema: backupCodesResponseSchema },
     },
   }),
 } as const;

@@ -12,12 +12,30 @@ import type { ApiRouteDefinition } from "@adclub/contracts";
 
 export const API_ROUTE_METADATA = Symbol("API_ROUTE_METADATA");
 
+const SESSION_ACCESS_GUARD = Symbol("SESSION_ACCESS_GUARD");
+
+/**
+ * Marks the guard that enforces `auth: "session"` and the route's
+ * contexts (`SessionGuard` in the identity module). A session route is
+ * bound only together with a guard carrying this mark — any other guard
+ * would let the route be served without the access rule.
+ */
+export function SessionAccessGuard(): ClassDecorator {
+  return (target) => {
+    Reflect.defineMetadata(SESSION_ACCESS_GUARD, true, target);
+  };
+}
+
+function isSessionAccessGuard(guard: Type<CanActivate>): boolean {
+  return Reflect.getMetadata(SESSION_ACCESS_GUARD, guard) === true;
+}
+
 export interface ApiRouteOptions {
   /**
    * Guards run after the global ones (so an outdated client still gets
-   * 426 first). Required for a route the contract marks `auth: "session"`
-   * — the guard that enforces it (`SessionRoute` in the identity module
-   * passes it) — so a protected route can't be served unprotected.
+   * 426 first). A route the contract marks `auth: "session"` requires the
+   * guard marked `@SessionAccessGuard()` (`SessionRoute` in the identity
+   * module passes it), so a protected route can't be served unprotected.
    */
   guards?: Type<CanActivate>[];
 }
@@ -42,8 +60,15 @@ export function ApiRoute(
   options: ApiRouteOptions = {},
 ): MethodDecorator {
   const guards = options.guards ?? [];
-  if (route.auth === "session" && guards.length === 0) {
-    throw new Error(`${route.operationId} requires a session: bind it with a guard (SessionRoute)`);
+  if (route.auth === "session") {
+    if (!guards.some(isSessionAccessGuard)) {
+      throw new Error(
+        `${route.operationId} requires a session: bind it with the session access guard (SessionRoute)`,
+      );
+    }
+    if ((route.contexts?.length ?? 0) === 0) {
+      throw new Error(`${route.operationId} requires a session but declares no contexts`);
+    }
   }
   const successStatus = Object.keys(route.responses)
     .map(Number)

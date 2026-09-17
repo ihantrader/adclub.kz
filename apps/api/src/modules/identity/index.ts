@@ -1,4 +1,4 @@
-export { IdentityModule } from "./identity.module";
+export { IdentityModule, identityOperatorProviders } from "./identity.module";
 export { identityTables } from "./schema";
 export { LoginCodeService } from "./login-code/login-code.service";
 export type { VerifiedPhone } from "./login-code/login-code.service";
@@ -25,3 +25,8 @@ export {
   SessionSettingsSource,
 } from "./session/session-settings.source";
 export { REFRESH_COOKIE_NAMES, REFRESH_COOKIE_PATH } from "./session/session-cookie";
+export {
+  ConfigSignInSettingsSource,
+  SignInSettingsSource,
+} from "./session/sign-in-settings.source";
+export { OperatorCommandError, OperatorService } from "./admin/operator.service";

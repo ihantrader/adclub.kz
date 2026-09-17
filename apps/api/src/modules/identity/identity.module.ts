@@ -1,6 +1,11 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import type { AppConfig } from "../../config";
 import { AccountStore } from "./account/account.store";
+import { AdminAccessRevoker } from "./admin/admin-access-revoker";
+import { AdminAuthService } from "./admin/admin-auth.service";
+import { AdminUserStore } from "./admin/admin-user.store";
+import { AdminController } from "./admin/admin.controller";
+import { OperatorService } from "./admin/operator.service";
 import { DevLoginCodeOutbox } from "./login-code/channels/dev-login-code-outbox";
 import { LoginCodeChannels } from "./login-code/channels/login-code-channels";
 import { TestLoginCodeChannels } from "./login-code/channels/test-login-code-channels";
@@ -20,7 +25,17 @@ import { SessionController } from "./session/session.controller";
 import { SessionGuard } from "./session/session.guard";
 import { SessionService } from "./session/session.service";
 import { SessionStore } from "./session/session.store";
+import {
+  ConfigSignInSettingsSource,
+  SignInSettingsSource,
+} from "./session/sign-in-settings.source";
+import { SignInStepController } from "./session/sign-in-step.controller";
+import { SignInStepStore } from "./session/sign-in-step.store";
+import { SignInStepsService } from "./session/sign-in-steps.service";
 import { SignInService } from "./session/sign-in.service";
+import { SupplierContextController } from "./supplier/supplier-context.controller";
+import { SupplierContextService } from "./supplier/supplier-context.service";
+import { SupplierMembershipStore } from "./supplier/supplier-membership.store";
 
 function createLoginCodeChannels(
   config: AppConfig,
@@ -32,9 +47,26 @@ function createLoginCodeChannels(
   }
 }
 
+/** Providers the operator command needs without the HTTP layer (`cli/operator.ts`). */
+export const identityOperatorProviders = [
+  AccountStore,
+  AdminUserStore,
+  SupplierMembershipStore,
+  SessionStore,
+  AdminAccessRevoker,
+  OperatorService,
+];
+
 /**
  * Identity (ARCHITECTURE 5.1, 8): accounts, sign-in by one-time code
- * (TASK-004) and sessions (TASK-005). Roles (TASK-006) join this module.
+ * (TASK-004), sessions (TASK-005), roles and contexts — supplier
+ * employees, administrators with a second factor, the access rule
+ * (TASK-006).
+ *
+ * Global: any module can protect its routes with `SessionRoute` without
+ * importing this one again (a second `forRoot` would be a second
+ * instance with its own controllers — Nest tells dynamic modules apart
+ * by reference).
  */
 @Module({})
 export class IdentityModule {
@@ -42,9 +74,13 @@ export class IdentityModule {
     const devOutbox = config.loginCode.devOutbox;
     return {
       module: IdentityModule,
+      global: true,
       controllers: [
         LoginCodeController,
         SessionController,
+        SignInStepController,
+        SupplierContextController,
+        AdminController,
         ...(devOutbox ? [DevLoginCodeOutboxController] : []),
       ],
       providers: [
@@ -59,13 +95,17 @@ export class IdentityModule {
         },
         LoginCodeStore,
         LoginCodeService,
-        // Replacement point for the settings table (TASK-007).
+        // Replacement points for the settings table (TASK-007).
         { provide: SessionSettingsSource, useClass: ConfigSessionSettingsSource },
-        AccountStore,
-        SessionStore,
+        { provide: SignInSettingsSource, useClass: ConfigSignInSettingsSource },
+        ...identityOperatorProviders,
         SessionService,
         SessionGuard,
+        SignInStepStore,
+        SignInStepsService,
+        AdminAuthService,
         SignInService,
+        SupplierContextService,
       ],
       // Other modules protect their routes with `SessionRoute` (SessionGuard).
       exports: [LoginCodeService, SessionService, SessionGuard],

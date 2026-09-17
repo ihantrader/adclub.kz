@@ -22,6 +22,7 @@ export function routeListingConfig(nodeEnv: "production" | "development"): AppCo
     S3_BUCKET: "x",
     LOGIN_CODE_HASH_SECRET: "route-listing-only-not-a-real-secret",
     SESSION_TOKEN_SECRET: "route-listing-only-not-a-real-secret",
+    ADMIN_TOTP_ENCRYPTION_KEY: "route-listing-only-not-a-real-secret",
   });
   return { ...config, nodeEnv };
 }

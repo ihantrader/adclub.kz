@@ -1,7 +1,7 @@
 import { Injectable, type CanActivate } from "@nestjs/common";
 import { apiRoutes } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
-import { ApiRoute, toNestPath } from "./api-route.decorator";
+import { ApiRoute, SessionAccessGuard, toNestPath } from "./api-route.decorator";
 
 @Injectable()
 class AllowGuard implements CanActivate {
@@ -10,13 +10,38 @@ class AllowGuard implements CanActivate {
   }
 }
 
+@Injectable()
+@SessionAccessGuard()
+class MarkedGuard implements CanActivate {
+  canActivate(): boolean {
+    return true;
+  }
+}
+
 describe("ApiRoute", () => {
-  it("refuses to bind a session route without a guard", () => {
+  it("refuses to bind a session route without the session access guard", () => {
     expect(() => ApiRoute(apiRoutes.getCurrentAccount)).toThrow(
       /getCurrentAccount requires a session/,
     );
     expect(() => ApiRoute(apiRoutes.getCurrentAccount, { guards: [] })).toThrow();
-    expect(() => ApiRoute(apiRoutes.getCurrentAccount, { guards: [AllowGuard] })).not.toThrow();
+    // Some other guard is not enough: it wouldn't apply the access rule.
+    expect(() => ApiRoute(apiRoutes.getCurrentAccount, { guards: [AllowGuard] })).toThrow(
+      /session access guard/,
+    );
+    expect(() =>
+      ApiRoute(apiRoutes.getCurrentAccount, { guards: [AllowGuard, MarkedGuard] }),
+    ).not.toThrow();
+  });
+
+  it("refuses to bind a session route that declares no contexts", () => {
+    const { contexts: _contexts, ...withoutContexts } = apiRoutes.getCurrentAccount;
+    expect(() => ApiRoute(withoutContexts, { guards: [MarkedGuard] })).toThrow(
+      /getCurrentAccount requires a session but declares no contexts/,
+    );
+    expect(() =>
+      ApiRoute({ ...apiRoutes.getSupplierCompany, contexts: [] }, { guards: [MarkedGuard] }),
+    ).toThrow(/declares no contexts/);
+    expect(() => ApiRoute(apiRoutes.getSupplierCompany, { guards: [MarkedGuard] })).not.toThrow();
   });
 
   it("binds a public route without guards", () => {

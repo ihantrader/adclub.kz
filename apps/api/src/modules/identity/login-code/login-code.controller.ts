@@ -12,8 +12,8 @@ import type { Request, Response } from "express";
 import { getRequestClient } from "../../../common/client";
 import { ApiRoute } from "../../../common/contract";
 import { ZodValidationPipe } from "../../../common/validation";
-import { isWebSessionKind, setRefreshCookie } from "../session/session-cookie";
 import { SignInService } from "../session/sign-in.service";
+import { deliverSession } from "../session/web-sign-in";
 import { LoginCodeService } from "./login-code.service";
 
 @Controller()
@@ -39,27 +39,14 @@ export class LoginCodeController {
     @Res({ passthrough: true }) response: Response,
     @Ip() ip: string | undefined,
   ): Promise<LoginCodeVerifiedResponse> {
-    const { response: verified, issued } = await this.signIn.signIn({
+    const completed = await this.signIn.signIn({
       phone: body.phone,
       code: body.code,
       deviceName: body.deviceName ?? null,
+      supplierId: body.supplierId ?? null,
       client: getRequestClient(request),
       ip: ip ?? null,
     });
-    const kind = issued.tokens.kind;
-    if (!isWebSessionKind(kind)) {
-      return verified;
-    }
-    // Web sessions (issued once TASK-006 opens them): the refresh token
-    // goes to the HttpOnly cookie only.
-    setRefreshCookie(
-      response,
-      kind,
-      issued.tokens.refreshToken,
-      issued.sessionExpiresAt,
-      new Date(),
-    );
-    const { refreshToken: _inCookie, ...tokens } = verified.session;
-    return { ...verified, session: tokens };
+    return deliverSession(response, completed.issued, completed.response);
   }
 }

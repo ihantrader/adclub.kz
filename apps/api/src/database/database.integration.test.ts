@@ -69,10 +69,42 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789583044021_create-account",
       "1789620211794_create-login-code",
       "1789627880146_create-session",
+      "1789639354506_create-roles",
     ]);
   });
 
-  it("rolls back the latest migration only (sessions)", async () => {
+  it("rolls back the latest migration only (roles), keeping the sessions and their data", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77010000001') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    await client.query(
+      "INSERT INTO session (account_id, kind, refresh_seed, last_used_at, expires_at, revoked_at, revoked_reason) VALUES ($1, 'mobile', 'seed', now(), now() + interval '1 day', now(), 'totp_reset')",
+      [accountId],
+    );
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    for (const table of [
+      "supplier",
+      "supplier_member",
+      "admin_user",
+      "admin_backup_code",
+      "sign_in_step",
+    ]) {
+      expect(await tableExists(client, table)).toBe(false);
+    }
+    expect(await tableExists(client, "session")).toBe(true);
+    // A session ended for a reason only the newer schema knows survives the rollback.
+    const { rows } = await client.query<{ revoked_reason: string }>(
+      "SELECT revoked_reason FROM session WHERE account_id = $1",
+      [accountId],
+    );
+    expect(rows).toEqual([{ revoked_reason: "totp_reset" }]);
+    await client.query("DELETE FROM session WHERE account_id = $1", [accountId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
+  it("rolls back the next one (sessions)", async () => {
     const output = runMigrate("down", container.getConnectionUri());
     expect(output).toContain("Migrations complete");
     expect(await tableExists(client, "session")).toBe(false);
@@ -102,6 +134,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(await tableExists(client, "account")).toBe(true);
     expect(await tableExists(client, "otp_challenge")).toBe(true);
     expect(await tableExists(client, "session")).toBe(true);
+    expect(await tableExists(client, "supplier_member")).toBe(true);
+    expect(await tableExists(client, "admin_user")).toBe(true);
   });
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {

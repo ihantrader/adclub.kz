@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionAccessSchema, supplierSummarySchema } from "./access";
 import { clientPlatformSchema } from "./client";
 
 /**
@@ -74,6 +75,8 @@ export const sessionSummarySchema = z.object({
   createdAt: z.iso.datetime(),
   lastUsedAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),
+  /** Supplier cabinet sessions: the company the session works for; otherwise `null`. */
+  supplier: supplierSummarySchema.nullable(),
 });
 
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
@@ -94,6 +97,8 @@ export const currentAccountResponseSchema = z.object({
     createdAt: z.iso.datetime(),
   }),
   session: sessionSummarySchema,
+  /** What this session may act as — only its own context, never the account's other roles. */
+  access: sessionAccessSchema,
 });
 
 export type CurrentAccountResponse = z.infer<typeof currentAccountResponseSchema>;

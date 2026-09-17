@@ -17,6 +17,13 @@ import { JsonLoggerService } from "../../../common/logging";
 import { loadConfig, type AppConfig, type LoginCodeSettings } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
+import { TRUNCATE_ALL } from "../../../testing/database";
+import {
+  appLogText,
+  captureOutput,
+  rememberCode,
+  rememberSecret,
+} from "../../../testing/output-capture";
 import { TcpProxy } from "../../../testing/tcp-proxy";
 import { LoginCodeChannels } from "./channels/login-code-channels";
 import { TestLoginCodeChannels } from "./channels/test-login-code-channels";
@@ -44,10 +51,9 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
   let defaults: LoginCodeSettings;
   let app: INestApplication;
   let channels: TestLoginCodeChannels;
-  /** Everything the app logged, and every code it sent, during the whole suite. */
-  const allLogs: string[] = [];
+  /** Every code sent during the whole suite (also checked by the output capture). */
   const allCodes = new Set<string>();
-  let logs: string[] = [];
+  let output: ReturnType<typeof captureOutput>;
 
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
@@ -100,22 +106,17 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     config.clientPolicy.minSupportedVersions.ios = "0.0.0";
     channels.failing.clear();
     channels.sent.length = 0;
-    await db.query("TRUNCATE session, otp_challenge, phone_verification, account");
+    await db.query(TRUNCATE_ALL);
     await redis.flushall();
-    logs = [];
-    const capture = (chunk: unknown) => {
-      logs.push(String(chunk));
-      allLogs.push(String(chunk));
-      return true;
-    };
-    vi.spyOn(process.stdout, "write").mockImplementation(capture);
-    vi.spyOn(process.stderr, "write").mockImplementation(capture);
+    output = captureOutput();
   });
 
   afterEach(() => {
+    output.stop();
     vi.restoreAllMocks();
     for (const sent of channels.sent) {
       allCodes.add(sent.code);
+      rememberCode(sent.code);
     }
   });
 
@@ -128,10 +129,15 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       .send(body as object);
   }
 
-  function verifyCode(body: unknown): Promise<Response> {
-    return request(app.getHttpServer())
+  async function verifyCode(body: unknown): Promise<Response> {
+    const response = await request(app.getHttpServer())
       .post("/auth/login-code/verify")
       .send(body as object);
+    // Sign-ins issue tokens here too: the output capture looks for them.
+    const session = (response.body as { session?: { accessToken?: string; refreshToken?: string } })
+      .session;
+    rememberSecret(session?.accessToken, session?.refreshToken);
+    return response;
   }
 
   function lastCode(phone = PHONE): string {
@@ -451,13 +457,13 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       expect(response.body.channel).toBe("sms");
       expect(channels.sent.map((sent) => sent.channel)).toEqual(["sms"]);
 
-      const output = logs.join("");
-      expect(output).toContain(
+      const logged = output.text();
+      expect(logged).toContain(
         `Login code delivery failed phone=${MASKED} channel=whatsapp reason=test_channel_configured_to_fail`,
       );
-      expect(output).toContain(`Login code falling back to sms phone=${MASKED}`);
-      expect(output).toContain(`Login code delivered phone=${MASKED} channel=sms`);
-      expect(output).not.toContain(lastCode());
+      expect(logged).toContain(`Login code falling back to sms phone=${MASKED}`);
+      expect(logged).toContain(`Login code delivered phone=${MASKED} channel=sms`);
+      expect(logged).not.toContain(lastCode());
 
       expect((await verifyCode({ phone: PHONE, code: lastCode() })).status).toBe(200);
       const { rows } = await db.query("SELECT channel FROM phone_verification");
@@ -665,7 +671,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       await sleep(1100);
       await verifyCode({ phone: PHONE, code: lastCode() });
 
-      const output = logs.join("");
+      const logged = output.text();
       for (const event of [
         `Login code requested phone=${MASKED} channel=auto`,
         `Login code delivery failed phone=${MASKED} channel=whatsapp`,
@@ -675,22 +681,14 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
         `Login code rate limit hit limit=login_code_verify_delay phone=${MASKED}`,
         `Login code verified phone=${MASKED} channel=sms`,
       ]) {
-        expect(output).toContain(event);
+        expect(logged).toContain(event);
       }
     });
 
     it("never contained a code or a full phone number during this whole suite", () => {
       // Only what the app wrote (`message`, `stack`), not the random request
       // ids, which can contain any run of digits.
-      const output = allLogs
-        .join("")
-        .split("\n")
-        .filter((line) => line.startsWith("{"))
-        .map((line) => {
-          const entry = JSON.parse(line) as { message?: string; stack?: string };
-          return `${entry.message ?? ""} ${entry.stack ?? ""}`;
-        })
-        .join("\n");
+      const output = appLogText();
       expect(output).toContain("Login code requested");
       expect(allCodes.size).toBeGreaterThan(20);
       for (const code of allCodes) {

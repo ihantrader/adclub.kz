@@ -4,7 +4,7 @@ import { apiRoutes, buildOpenApiDocument } from "@adclub/contracts";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
-import { listServedRoutes } from "../common/contract";
+import { listServedRoutes, toNestPath } from "../common/contract";
 import { checkServedRoutesMatchContract } from "./check-served-routes";
 import { routeListingConfig } from "./route-listing-config";
 
@@ -77,19 +77,12 @@ describe("served routes vs contract (full AppModule)", () => {
 });
 
 describe("checkServedRoutesMatchContract", () => {
+  // Every contract route as Nest serves it, plus routes outside the contract.
   const served = [
-    { method: "GET", path: "/health" },
-    { method: "GET", path: "/ready" },
-    { method: "GET", path: "/meta/client-policy" },
-    { method: "POST", path: "/auth/login-code" },
-    { method: "POST", path: "/auth/login-code/verify" },
-    { method: "POST", path: "/auth/session/refresh" },
-    { method: "GET", path: "/auth/me" },
-    { method: "GET", path: "/auth/sessions" },
-    { method: "DELETE", path: "/auth/sessions/:sessionId" },
-    { method: "POST", path: "/auth/sessions/end-others" },
-    { method: "POST", path: "/auth/sessions/end-all" },
-    { method: "POST", path: "/auth/logout" },
+    ...Object.values(apiRoutes).map((route) => ({
+      method: route.method,
+      path: toNestPath(route.path),
+    })),
     { method: "GET", path: "/dev/login-codes" },
     { method: "GET", path: "/{*path}" },
     { method: "POST", path: "/{*path}" },

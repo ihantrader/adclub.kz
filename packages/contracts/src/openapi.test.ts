@@ -14,6 +14,9 @@ describe("buildOpenApiDocument", () => {
   it("produces an OpenAPI 3.1 document with every contract route", () => {
     expect(document.openapi).toBe("3.1.0");
     expect(Object.keys(document.paths).sort()).toEqual([
+      "/admin/administrators",
+      "/admin/administrators/{adminId}/totp-reset",
+      "/admin/totp/backup-codes",
       "/auth/login-code",
       "/auth/login-code/verify",
       "/auth/logout",
@@ -23,9 +26,17 @@ describe("buildOpenApiDocument", () => {
       "/auth/sessions/end-all",
       "/auth/sessions/end-others",
       "/auth/sessions/{sessionId}",
+      "/auth/sign-in/supplier",
+      "/auth/sign-in/totp",
+      "/auth/sign-in/totp/setup",
+      "/auth/sign-in/totp/setup/confirm",
+      "/auth/supplier-context",
+      "/auth/suppliers",
       "/health",
       "/meta/client-policy",
       "/ready",
+      "/supplier/companies/{supplierId}",
+      "/supplier/company",
     ]);
     expect(document.paths["/health"].get.operationId).toBe("getHealth");
     expect(document.paths["/ready"].get.responses["503"]).toBeDefined();
@@ -132,13 +143,67 @@ describe("buildOpenApiDocument", () => {
       const operation = document.paths[route.path][route.method.toLowerCase()];
       if (route.auth === "session") {
         expect(operation.security).toEqual([{ sessionAccessToken: [] }]);
+        expect(operation["x-access-contexts"]).toEqual(route.contexts);
       } else {
         expect(operation.security).toBeUndefined();
+        expect(operation["x-access-contexts"]).toBeUndefined();
       }
     }
     expect(document.paths["/auth/me"].get.security).toBeDefined();
     expect(document.paths["/auth/session/refresh"].post.security).toBeUndefined();
     expect(document.paths["/auth/login-code/verify"].post.security).toBeUndefined();
+  });
+
+  it("documents the contexts of every session route and refuses a session route without them", () => {
+    expect(document.paths["/auth/me"].get["x-access-contexts"]).toEqual([
+      "user",
+      "supplier",
+      "admin",
+    ]);
+    expect(document.paths["/supplier/company"].get["x-access-contexts"]).toEqual(["supplier"]);
+    expect(document.paths["/admin/administrators"].get["x-access-contexts"]).toEqual(["admin"]);
+    const { contexts: _contexts, ...withoutContexts } = apiRoutes.getCurrentAccount;
+    expect(() => buildOpenApiDocument([withoutContexts])).toThrow(
+      /getCurrentAccount: a session route must declare its contexts/,
+    );
+    expect(() => buildOpenApiDocument([{ ...apiRoutes.getCurrentAccount, contexts: [] }])).toThrow(
+      /must declare its contexts/,
+    );
+  });
+
+  it("documents the role and second factor error codes and their details", () => {
+    expect(document.components.schemas.ErrorCode.enum).toEqual(
+      expect.arrayContaining([
+        "NOT_SUPPLIER_MEMBER",
+        "NOT_ADMIN",
+        "SUPPLIER_SELECTION_REQUIRED",
+        "TOTP_SETUP_REQUIRED",
+        "TOTP_REQUIRED",
+        "TOTP_INVALID",
+        "SIGN_IN_STEP_INVALID",
+        "SUPPLIER_ACCESS_CLOSED",
+        "FORBIDDEN",
+        "TOTP_SELF_RESET_FORBIDDEN",
+      ]),
+    );
+    expect(document.components.schemas.SupplierSelectionRequiredDetails.required).toEqual([
+      "signInStep",
+      "suppliers",
+    ]);
+    expect(document.components.schemas.CurrentAccountResponse.required).toEqual([
+      "account",
+      "session",
+      "access",
+    ]);
+    expect(document.components.schemas.VerifyLoginCodeBody.required).toEqual(["phone", "code"]);
+  });
+
+  it("carries no second factor secrets or backup code examples", () => {
+    const text = JSON.stringify(document);
+    expect(text).not.toMatch(/otpauth:\/\//);
+    for (const name of ["TotpSetupResponse", "TotpSetupCompletedResponse", "BackupCodesResponse"]) {
+      expect(JSON.stringify(document.components.schemas[name])).not.toContain("examples");
+    }
   });
 
   it("documents path parameters from the route's pathParams", () => {
@@ -166,7 +231,7 @@ describe("buildOpenApiDocument", () => {
 
   it("adds the session fields to the verification response and documents the session codes", () => {
     const verified = document.components.schemas.LoginCodeVerifiedResponse;
-    expect(verified.required).toEqual(["status", "phone", "accountId", "session"]);
+    expect(verified.required).toEqual(["status", "phone", "accountId", "session", "access"]);
     expect(verified.properties.session).toEqual({ $ref: "#/components/schemas/SessionTokens" });
     const tokens = document.components.schemas.SessionTokens;
     expect(tokens.required).not.toContain("refreshToken");

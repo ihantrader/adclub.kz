@@ -22,11 +22,33 @@ import { clientPlatformSchema } from "./client";
  *   another device, refresh token reuse) or expired — sign in again and
  *   wipe local data of the account.
  * - `SESSION_KIND_UNAVAILABLE` (403): this client can't get a session this
- *   way (supplier cabinet and admin panel sign-in isn't open yet); the code
- *   was not spent.
+ *   way. Was returned to cabinet and admin panel sign-ins before TASK-006;
+ *   no longer returned, kept for compatibility.
  * - `ORIGIN_NOT_ALLOWED` (403): a browser request from a site that isn't
  *   one of the web clients, or a cookie-based request without a trusted
  *   `Origin`.
+ * - `NOT_SUPPLIER_MEMBER` (403): the number isn't an active employee of any
+ *   company — the code was checked and spent; show "this number is not
+ *   linked to a supplier cabinet" (SCREENS S-AUTH-01/02).
+ * - `NOT_ADMIN` (403): the number isn't an administrator — the code was
+ *   checked and spent.
+ * - `SUPPLIER_SELECTION_REQUIRED` (403): the number works for several
+ *   companies; `details` is `SupplierSelectionRequiredDetails`.
+ * - `TOTP_SETUP_REQUIRED` (403): the administrator must set up the
+ *   authenticator app first; `details` is `TotpStepRequiredDetails`.
+ * - `TOTP_REQUIRED` (403): enter the code from the authenticator app or a
+ *   backup code; `details` is `TotpStepRequiredDetails`.
+ * - `TOTP_INVALID` (400): wrong, already used or out-of-time code from the
+ *   authenticator app, or a backup code that isn't valid (any more).
+ * - `SIGN_IN_STEP_INVALID` (401): the unfinished sign-in is unknown,
+ *   expired or already used — start again with a new code.
+ * - `SUPPLIER_ACCESS_CLOSED` (401): the employee was removed from the
+ *   company of this cabinet session; the session is over — show "access to
+ *   the cabinet is closed" (SCREENS 6.0).
+ * - `FORBIDDEN` (403): this session can't use this route (e.g. a mobile app
+ *   session calling an admin route); signing in again won't change that.
+ * - `TOTP_SELF_RESET_FORBIDDEN` (403): an administrator can't reset their
+ *   own second factor — another administrator has to.
  *
  * Extended as real endpoints need more specific codes (e.g.
  * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
@@ -51,6 +73,17 @@ export const errorCodeSchema = z.enum([
   "SESSION_ENDED",
   "SESSION_KIND_UNAVAILABLE",
   "ORIGIN_NOT_ALLOWED",
+  // Roles and contexts (TASK-006, ARCHITECTURE 8.1, 8.3).
+  "NOT_SUPPLIER_MEMBER",
+  "NOT_ADMIN",
+  "SUPPLIER_SELECTION_REQUIRED",
+  "TOTP_SETUP_REQUIRED",
+  "TOTP_REQUIRED",
+  "TOTP_INVALID",
+  "SIGN_IN_STEP_INVALID",
+  "SUPPLIER_ACCESS_CLOSED",
+  "FORBIDDEN",
+  "TOTP_SELF_RESET_FORBIDDEN",
 ]);
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

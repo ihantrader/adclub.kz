@@ -73,7 +73,9 @@ export class SessionController {
     } catch (error) {
       if (
         error instanceof ApiException &&
-        (error.code === "AUTH_REQUIRED" || error.code === "SESSION_ENDED")
+        (error.code === "AUTH_REQUIRED" ||
+          error.code === "SESSION_ENDED" ||
+          error.code === "SUPPLIER_ACCESS_CLOSED")
       ) {
         // The cookie is useless now; don't keep sending it.
         clearRefreshCookie(response, cookie.kind);

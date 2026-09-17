@@ -99,4 +99,53 @@ describe("JsonLoggerService", () => {
     expect(entry).not.toHaveProperty("body");
     expect(entry).not.toHaveProperty("headers");
   });
+
+  it("keeps the context when Nest passes a stack trace as well (TASK-009)", () => {
+    const logger = new JsonLoggerService(baseConfig());
+    const stack = ["Error: boom", "    at handler (file.ts:1:1)"].join("\n");
+
+    logger.error("boom", stack, "ExceptionsHandler");
+
+    const entry = JSON.parse((stderrSpy.mock.calls[0]?.[0] as string).trim());
+    expect(entry.context).toBe("ExceptionsHandler");
+    expect(entry.stack).toContain("at handler");
+  });
+
+  it("writes an object as sanitized JSON, not as [object Object]", () => {
+    const logger = new JsonLoggerService(baseConfig());
+
+    logger.log("job finished", { job: "identity.cleanup-sessions", rows: 3 }, "Jobs");
+
+    const line = stdoutSpy.mock.calls[0]?.[0] as string;
+    expect(line).not.toContain("[object Object]");
+    const entry = JSON.parse(line.trim());
+    expect(entry.context).toBe("Jobs");
+    expect(entry.details).toEqual({ job: "identity.cleanup-sessions", rows: 3 });
+  });
+
+  it("masks a phone number and removes a token wherever they appear", () => {
+    const logger = new JsonLoggerService(baseConfig());
+
+    logger.log("code sent to +77011234567", { phone: "+77011234567", accessToken: "abcdef" });
+
+    const line = stdoutSpy.mock.calls[0]?.[0] as string;
+    expect(line).not.toContain("77011234567");
+    expect(line).not.toContain("abcdef");
+    const entry = JSON.parse(line.trim());
+    expect(entry.message).toBe("code sent to +7***4567");
+    expect(entry.details).toEqual({ phone: "+7***4567", accessToken: "[redacted]" });
+  });
+
+  it("masks a phone number inside an error message and its stack", () => {
+    const logger = new JsonLoggerService(baseConfig());
+    const error = new Error("no account for +77011234567");
+
+    logger.error(error, "Session");
+
+    const line = stderrSpy.mock.calls[0]?.[0] as string;
+    expect(line).not.toContain("77011234567");
+    const entry = JSON.parse(line.trim());
+    expect(entry.message).toBe("no account for +7***4567");
+    expect(entry.context).toBe("Session");
+  });
 });

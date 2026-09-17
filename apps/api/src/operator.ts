@@ -18,7 +18,9 @@ import {
   OperatorCommandError,
   OperatorService,
 } from "./modules/identity";
+import { AuditModule } from "./modules/audit";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
+import { ObservabilityModule } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -67,7 +69,9 @@ class OperatorModule {
       module: OperatorModule,
       imports: [
         ConfigModule.forRoot(config),
+        ObservabilityModule.forRoot(config, { http: false }),
         DatabaseModule,
+        AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false }),
         JobsModule.forRoot({
           role: "producer",

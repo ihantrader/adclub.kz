@@ -15,6 +15,8 @@ export interface JobsTuning {
   cronWorkerIntervalSeconds: number;
   /** How often schedules are recomputed from settings (worker). */
   scheduleSyncIntervalMs: number;
+  /** How often the worker sums up periodic runs that had nothing to do (TASK-009). */
+  quietSummaryIntervalMs: number;
   /** Pause before another attempt to start the queue (database unreachable). */
   startRetryMs: number;
   /** How long running jobs may finish when the process stops. */
@@ -29,6 +31,7 @@ export const defaultJobsTuning: JobsTuning = {
   cronMonitorIntervalSeconds: 30,
   cronWorkerIntervalSeconds: 5,
   scheduleSyncIntervalMs: 15_000,
+  quietSummaryIntervalMs: 60 * 60 * 1000,
   startRetryMs: 5_000,
   // The process gives its whole shutdown 10 s (common/shutdown).
   stopTimeoutMs: 7_000,

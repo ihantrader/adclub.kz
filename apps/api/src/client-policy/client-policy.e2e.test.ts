@@ -14,6 +14,8 @@ import { HttpExceptionFilter, NotFoundModule } from "../common/errors";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "../common/logging";
 import { ApiRoute } from "../common/contract";
 import { APP_CONFIG } from "../config";
+import { ErrorReporter } from "../observability/error-reporter.service";
+import { Metrics } from "../observability/metrics.service";
 import { HealthController } from "../health/health.controller";
 import { settingDefinitions } from "../modules/settings";
 import { ClientPolicyController } from "./client-policy.controller";
@@ -73,8 +75,18 @@ const source = new MutableClientPolicySource();
   imports: [NotFoundModule],
   controllers: [HealthController, ClientPolicyController, OrdinaryController],
   providers: [
-    { provide: APP_CONFIG, useValue: { logLevel: "log" } },
+    {
+      provide: APP_CONFIG,
+      useValue: {
+        logLevel: "log",
+        monitoring: { target: undefined, environment: "test" },
+        metrics: { enabled: false, token: undefined },
+      },
+    },
     JsonLoggerService,
+    // The access log counts requests, the filter reports failures.
+    Metrics,
+    ErrorReporter,
     { provide: ClientPolicySource, useValue: source },
     ClientPolicyService,
     { provide: APP_GUARD, useClass: ClientVersionGuard },

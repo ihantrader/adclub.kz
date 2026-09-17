@@ -6,6 +6,8 @@ import request from "supertest";
 import { APP_CONFIG } from "../../config";
 import { HttpExceptionFilter } from "../errors/http-exception.filter";
 import { NotFoundController } from "../errors/not-found.controller";
+import { ErrorReporter } from "../../observability/error-reporter.service";
+import { Metrics } from "../../observability/metrics.service";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationPipe } from "./zod-validation.pipe";
 
@@ -33,7 +35,17 @@ class FixtureController {
   controllers: [FixtureController, NotFoundController],
   providers: [
     JsonLoggerService,
-    { provide: APP_CONFIG, useValue: { logLevel: "log" } },
+    Metrics,
+    // The filter reports unexpected failures; without a receiver it is off.
+    ErrorReporter,
+    {
+      provide: APP_CONFIG,
+      useValue: {
+        logLevel: "log",
+        monitoring: { target: undefined, environment: "test" },
+        metrics: { enabled: false, token: undefined },
+      },
+    },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })

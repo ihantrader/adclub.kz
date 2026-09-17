@@ -1,8 +1,15 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  MethodNotAllowedException,
+  NotFoundException,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from "@nestjs/common";
 import type { ArgumentsHost } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { ApiErrorResponse } from "@adclub/contracts";
 import { z } from "zod";
+import type { ErrorReporter } from "../../observability";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
 import { ClientUpdateRequiredException } from "./client-update-required.exception";
@@ -31,9 +38,13 @@ function fakeLogger(): JsonLoggerService {
   } as unknown as JsonLoggerService;
 }
 
+function fakeReporter(): ErrorReporter {
+  return { captureException: vi.fn(), enabled: true } as unknown as ErrorReporter;
+}
+
 describe("HttpExceptionFilter", () => {
   it("formats a ZodValidationException as VALIDATION_ERROR (400)", () => {
-    const filter = new HttpExceptionFilter(fakeLogger());
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
     const schema = z.object({ phone: z.string() });
     const parseResult = schema.safeParse({});
     if (parseResult.success) {
@@ -52,7 +63,7 @@ describe("HttpExceptionFilter", () => {
   });
 
   it("formats a NotFoundException as NOT_FOUND (404)", () => {
-    const filter = new HttpExceptionFilter(fakeLogger());
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
     const { host, status, json } = fakeHost();
 
     filter.catch(new NotFoundException("Route not found"), host);
@@ -63,7 +74,7 @@ describe("HttpExceptionFilter", () => {
   });
 
   it("formats a ConflictException as CONFLICT (409)", () => {
-    const filter = new HttpExceptionFilter(fakeLogger());
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
     const { host, status, json } = fakeHost();
 
     filter.catch(new ConflictException("Already exists"), host);
@@ -74,7 +85,7 @@ describe("HttpExceptionFilter", () => {
   });
 
   it("formats a ClientUpdateRequiredException as CLIENT_UPDATE_REQUIRED (426) with its details", () => {
-    const filter = new HttpExceptionFilter(fakeLogger());
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
     const { host, status, json } = fakeHost();
     const details = {
       platform: "ios" as const,
@@ -94,7 +105,7 @@ describe("HttpExceptionFilter", () => {
   });
 
   it("formats an unexpected error as INTERNAL_ERROR (500) without leaking its message or stack", () => {
-    const filter = new HttpExceptionFilter(fakeLogger());
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
     const { host, status, json } = fakeHost();
 
     filter.catch(new Error("password=hunter2 leaked from a driver"), host);
@@ -112,7 +123,7 @@ describe("HttpExceptionFilter", () => {
 
   it("logs the full error server-side for 500s", () => {
     const logger = fakeLogger();
-    const filter = new HttpExceptionFilter(logger);
+    const filter = new HttpExceptionFilter(logger, fakeReporter());
     const { host } = fakeHost();
     const error = new Error("db exploded");
 
@@ -123,11 +134,40 @@ describe("HttpExceptionFilter", () => {
 
   it("does not log 4xx errors as server errors", () => {
     const logger = fakeLogger();
-    const filter = new HttpExceptionFilter(logger);
+    const filter = new HttpExceptionFilter(logger, fakeReporter());
     const { host } = fakeHost();
 
     filter.catch(new NotFoundException(), host);
 
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("reports an unexpected failure to error monitoring, and a 4xx never (TASK-009)", () => {
+    const reporter = fakeReporter();
+    const filter = new HttpExceptionFilter(fakeLogger(), reporter);
+    const { host } = fakeHost();
+
+    filter.catch(new NotFoundException(), host);
+    expect(reporter.captureException).not.toHaveBeenCalled();
+
+    filter.catch(new Error("db exploded"), host);
+    expect(reporter.captureException).toHaveBeenCalledTimes(1);
+    const [, context] = (reporter.captureException as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0]!;
+    expect(context).toMatchObject({ tags: { kind: "api", status: 500 } });
+  });
+
+  it.each([
+    [new MethodNotAllowedException(), 405, "NOT_FOUND"],
+    [new PayloadTooLargeException(), 413, "VALIDATION_ERROR"],
+    [new UnsupportedMediaTypeException(), 415, "VALIDATION_ERROR"],
+  ])("gives %#: a 4xx of its own a code that fits its meaning", (exception, code, expected) => {
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
+    const { host, status, json } = fakeHost();
+
+    filter.catch(exception, host);
+
+    expect(status).toHaveBeenCalledWith(code);
+    expect((json.mock.calls[0]?.[0] as ApiErrorResponse).code).toBe(expected);
   });
 });

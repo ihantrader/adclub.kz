@@ -8,12 +8,14 @@ import { HealthModule } from "./health/health.module";
 import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
+import { AuditModule } from "./modules/audit";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
 import { OriginPolicyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
+import { ObservabilityModule } from "./observability";
 
 @Module({})
 export class AppModule implements NestModule {
@@ -34,14 +36,19 @@ export class AppModule implements NestModule {
       module: AppModule,
       imports: [
         ConfigModule.forRoot(config),
+        // Before everything that measures, reports or logs through it.
+        ObservabilityModule.forRoot(config, { http: true }),
         DatabaseModule,
         RedisModule,
         StorageModule,
+        AuditModule.forRoot({ http: true }),
         SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
         // The API puts jobs on the queue; the worker runs them.
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
+          // The API serves GET /metrics, so it samples the queue for them.
+          metrics: config.metrics.enabled,
           tuning: options.jobs,
         }),
         HealthModule,

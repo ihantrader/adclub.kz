@@ -47,8 +47,43 @@ describe("loadConfig", () => {
       },
       session: { tokenSecret: expect.any(String) },
       signIn: { totpEncryptionKey: expect.any(String) },
+      monitoring: { target: undefined, environment: "development" },
+      metrics: { enabled: true, token: undefined },
       ignoredVariables: [],
     });
+  });
+
+  it("turns a Sentry-compatible DSN into the receiver's envelope endpoint (TASK-009)", () => {
+    const config = loadConfig({
+      ...VALID_ENV,
+      MONITORING_DSN: "https://publickey@monitoring.example.kz/42",
+      MONITORING_ENVIRONMENT: "staging",
+    });
+
+    expect(config.monitoring).toEqual({
+      environment: "staging",
+      target: {
+        endpoint: "https://monitoring.example.kz/api/42/envelope/",
+        publicKey: "publickey",
+        projectId: "42",
+        publicDsn: "https://monitoring.example.kz/42",
+      },
+    });
+  });
+
+  it("names MONITORING_DSN when it is not a DSN, without printing it", () => {
+    expect(() => loadConfig({ ...VALID_ENV, MONITORING_DSN: "not-a-dsn" })).toThrow(
+      /MONITORING_DSN/,
+    );
+    try {
+      loadConfig({ ...VALID_ENV, MONITORING_DSN: "https://secretkey@host/1 broken" });
+    } catch (error) {
+      expect((error as Error).message).not.toContain("secretkey");
+    }
+  });
+
+  it("sends nothing anywhere while no receiver is configured", () => {
+    expect(loadConfig(VALID_ENV).monitoring.target).toBeUndefined();
   });
 
   it("applies documented defaults when optional variables are absent", () => {

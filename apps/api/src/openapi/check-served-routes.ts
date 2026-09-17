@@ -1,10 +1,19 @@
 import type { ApiRouteDefinition } from "@adclub/contracts";
 import { toNestPath, type ServedRoute } from "../common/contract";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
+import { METRICS_PATH } from "../observability";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
 
-/** Development helpers that are deliberately not part of the contract. */
-const NON_CONTRACT_PATHS: readonly string[] = [...DEV_ONLY_PATHS, DEV_LOGIN_CODE_OUTBOX_PATH];
+/**
+ * Routes that are deliberately not part of the client contract:
+ * development helpers, and the metrics endpoint the collector scrapes
+ * (Prometheus text, not JSON — ARCHITECTURE 15.3).
+ */
+const NON_CONTRACT_PATHS: readonly string[] = [
+  ...DEV_ONLY_PATHS,
+  DEV_LOGIN_CODE_OUTBOX_PATH,
+  METRICS_PATH,
+];
 
 function key(method: string, path: string): string {
   return `${method.toUpperCase()} ${path}`;

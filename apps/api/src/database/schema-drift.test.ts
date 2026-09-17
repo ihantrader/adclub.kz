@@ -105,6 +105,7 @@ describe("ormTables", () => {
         "sign_in_step",
         "app_setting",
         "app_setting_change",
+        "audit_log",
         "periodic_job_state",
       ]),
     );

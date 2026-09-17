@@ -8,6 +8,7 @@ import {
 import type { JobResult, JobWithMetadata, PgBoss } from "pg-boss";
 import { describeError } from "../common/health";
 import { withoutQueryParameters } from "../database";
+import { ErrorReporter } from "../observability";
 import { ALMATY_TIME_ZONE, type JobDefinition, type PeriodicJobDefinition } from "./job-definition";
 import { PermanentJobError } from "./job-handler";
 import { JobQueue } from "./job-queue.service";
@@ -36,9 +37,13 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
   private syncTimer: NodeJS.Timeout | undefined;
   private syncing: Promise<void> | undefined;
   private stopped = false;
+  /** Runs of periodic jobs that had nothing to do, until the next summary. */
+  private readonly quietRuns = new Map<string, number>();
+  private summaryTimer: NodeJS.Timeout | undefined;
 
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
+    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
     @Inject(JobQueue) private readonly queue: JobQueue,
     @Inject(JobRegistry) private readonly registry: JobRegistry,
     @Inject(PeriodicJobStateStore) private readonly states: PeriodicJobStateStore,
@@ -56,6 +61,8 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
   beforeApplicationShutdown(): Promise<void> {
     this.stopped = true;
     clearTimeout(this.syncTimer);
+    clearTimeout(this.summaryTimer);
+    this.writeQuietSummary();
     return this.syncing ?? Promise.resolve();
   }
 
@@ -111,6 +118,35 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
     }
     await this.syncSchedules().catch(() => undefined);
     this.scheduleSync();
+    this.scheduleSummary();
+  }
+
+  /**
+   * A periodic job with nothing to do writes no line about its success
+   * (TASK-008 note: three sweepers every minute wrote ~8600 lines a day
+   * with no work at all). That it ran at all is still visible — once per
+   * interval, all quiet runs in one line, and in the metrics.
+   */
+  private scheduleSummary(): void {
+    if (this.stopped) {
+      return;
+    }
+    this.summaryTimer = setTimeout(() => {
+      this.writeQuietSummary();
+      this.scheduleSummary();
+    }, this.options.tuning.quietSummaryIntervalMs);
+  }
+
+  private writeQuietSummary(): void {
+    if (this.quietRuns.size === 0) {
+      return;
+    }
+    const counts = [...this.quietRuns.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([job, runs]) => `${job}=${String(runs)}`)
+      .join(" ");
+    this.quietRuns.clear();
+    this.logger.log(`Periodic jobs ran with nothing to do: ${counts}`);
   }
 
   private scheduleSync(): void {
@@ -183,13 +219,21 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
       }
     };
     item.signal.addEventListener("abort", onAbort, { once: true });
-    this.logger.log(`Job started ${about}`);
+    const periodic = definition.kind === "periodic";
+    if (!periodic) {
+      this.logger.log(`Job started ${about}`);
+    }
     await this.recordPeriodic(definition, (store) => store.started(definition.name, startedAt));
     try {
       const payload = this.payloadOf(definition, item.data);
-      await job.run(payload, { jobId: item.id, attempt, signal: item.signal });
+      const outcome = await job.run(payload, { jobId: item.id, attempt, signal: item.signal });
       settled = true;
-      this.logger.log(`Job completed ${about} durationMs=${Date.now() - startedAt.getTime()}`);
+      const worked = !periodic || outcome?.worked !== false;
+      if (worked) {
+        this.logger.log(`Job completed ${about} durationMs=${Date.now() - startedAt.getTime()}`);
+      } else {
+        this.quietRuns.set(definition.name, (this.quietRuns.get(definition.name) ?? 0) + 1);
+      }
       await this.recordPeriodic(definition, (store) =>
         store.succeeded(definition.name, new Date()),
       );
@@ -205,6 +249,13 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
           ? "Job failed permanently, moved to the dead letter queue"
           : "Job failed, no retries left (the next scheduled run tries again)";
       this.logger[final ? "error" : "warn"](`${outcome} ${about} error=${text}`);
+      if (final) {
+        // A job nobody will retry is an unexpected failure like any other.
+        this.reporter.captureException(error, {
+          transaction: definition.name,
+          tags: { kind: "job", job: definition.name, attempt },
+        });
+      }
       await this.recordPeriodic(definition, (store) =>
         store.failed(definition.name, new Date(), text),
       );

@@ -1,6 +1,7 @@
 export { IdentityModule, identityOperatorProviders } from "./identity.module";
 export { identityTables } from "./schema";
 export { AccountDirectory } from "./account/account-directory";
+export { ActionJournal } from "./action-journal";
 export { LoginCodeService } from "./login-code/login-code.service";
 export type { VerifiedPhone } from "./login-code/login-code.service";
 export {

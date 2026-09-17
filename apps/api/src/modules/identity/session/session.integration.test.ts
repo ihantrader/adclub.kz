@@ -498,7 +498,9 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       // endpoint's address (TASK-005.A) — only the reason is logged.
       expect(ready.body.checks.s3).toEqual({ status: "error" });
       expect(JSON.stringify(ready.body)).not.toContain("127.0.0.1:3");
-      expect(output.text()).toContain("Dependency check failed: s3");
+      // The state change is logged once, not on every poll (TASK-009); the
+      // state itself is in the metrics.
+      expect(output.text()).toContain("Dependency went down: s3");
       expect((await http().post("/auth/login-code").send({ phone: PHONE })).status).toBe(200);
     });
 

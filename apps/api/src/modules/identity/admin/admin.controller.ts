@@ -44,7 +44,10 @@ export class AdminController {
     @Param(new ZodValidationPipe(adminIdPathSchema)) params: AdminIdPath,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<TotpResetResponse> {
-    return this.adminAuth.resetByAdmin(adminOf(session), params.adminId);
+    return this.adminAuth.resetByAdmin(
+      { adminId: adminOf(session), accountId: session.accountId },
+      params.adminId,
+    );
   }
 
   @SessionRoute(apiRoutes.regenerateBackupCodes)

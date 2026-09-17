@@ -12,6 +12,7 @@ import { Pool } from "pg";
 import { APP_CONFIG, type AppConfig } from "../config";
 import { describeError } from "../common/health/describe-error";
 import { measureCheck } from "../common/health/measure-check";
+import { withAfterCommitScope } from "./after-commit";
 
 /**
  * Anything queries can run on: the database itself or an open
@@ -33,7 +34,10 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
       connectionTimeoutMillis: 5000,
       query_timeout: 2000,
     });
-    this.db = drizzle(this.pool);
+    // Every transaction of the application is opened on this handle, so
+    // work deferred with `afterCommit` runs exactly when one commits
+    // (ARCHITECTURE 4.13).
+    this.db = withAfterCommitScope(drizzle(this.pool));
 
     // pg.Pool re-emits errors from idle clients on the pool itself; without
     // a listener, an error on an idle connection (e.g. the database going

@@ -12,7 +12,9 @@ import { JsonLoggerService } from "../common/logging";
 import { ConfigModule, loadConfig, type AppConfig } from "../config";
 import { DatabaseModule, DatabaseService, type DbExecutor } from "../database";
 import { runMigrate } from "../database/migrate-cli";
+import { AuditModule } from "../modules/audit";
 import { SettingsModule } from "../modules/settings";
+import { ObservabilityModule } from "../observability";
 import { captureOutput, rememberSecret } from "../testing/output-capture";
 import { TestSettings } from "../testing/settings";
 import { TcpProxy } from "../testing/tcp-proxy";
@@ -283,7 +285,10 @@ class TestJobsHost {
       module: TestJobsHost,
       imports: [
         ConfigModule.forRoot(config),
+        ObservabilityModule.forRoot(config, { http: false }),
         DatabaseModule,
+        // Settings record their changes in the action journal (TASK-009).
+        AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false, cache: { maxAgeMs: 300 } }),
         JobsModule.forRoot({ role, catalog: CATALOG, tuning }),
       ],
@@ -312,6 +317,7 @@ const FAST: Partial<JobsTuning> = {
   cronMonitorIntervalSeconds: 1,
   cronWorkerIntervalSeconds: 1,
   scheduleSyncIntervalMs: 300,
+  quietSummaryIntervalMs: 1000,
   startRetryMs: 300,
   stopTimeoutMs: 3000,
 };
@@ -796,6 +802,41 @@ describe("background jobs (PostgreSQL)", () => {
         "SELECT processed_count, count(*)::int AS count FROM sweep_item GROUP BY processed_count",
       );
       expect(rows).toEqual([{ processed_count: 1, count: 60 }]);
+    });
+
+    it("says nothing about a periodic run that had nothing to do, and sums them up (TASK-009)", async () => {
+      await db.query("DELETE FROM sweep_item");
+      const output = captureOutput();
+      // Two runs with no due rows at all, then one with work to do.
+      for (let run = 0; run < 2; run += 1) {
+        const { jobId } = await first.get(JobAdmin).runNow(sweepJob.name);
+        await waitFor(async () => (await jobState(jobId!)) === "completed", "an idle sweep");
+      }
+      const quiet = output.text();
+      expect(quiet).not.toContain(`Job completed job=${sweepJob.name}`);
+      expect(quiet).not.toContain(`Job started job=${sweepJob.name}`);
+
+      await db.query("INSERT INTO sweep_item (due_at) VALUES (now() - interval '1 second')");
+      const { jobId } = await first.get(JobAdmin).runNow(sweepJob.name);
+      await waitFor(async () => (await jobState(jobId!)) === "completed", "a working sweep");
+      await waitFor(
+        () => output.text().includes(`Job completed job=${sweepJob.name}`),
+        "the line about the run that worked",
+      );
+
+      // The quiet runs are still visible, summed up rather than one by one
+      // (a summary may cover one run or both, depending on when it fell).
+      await waitFor(
+        () =>
+          [
+            ...output
+              .text()
+              .matchAll(new RegExp(`${sweepJob.name.replace(".", "\\.")}=(\\d+)`, "g")),
+          ].reduce((total, match) => total + Number(match[1]), 0) === 2,
+        "the quiet runs to be summed up",
+      );
+      expect(output.text()).toContain("Periodic jobs ran with nothing to do:");
+      output.stop();
     });
 
     it("runs a sweeper as a periodic job and records the run", async () => {

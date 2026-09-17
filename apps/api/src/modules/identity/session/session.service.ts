@@ -26,7 +26,8 @@ import {
 } from "../../../common/errors";
 import { describeError } from "../../../common/health";
 import { APP_CONFIG, type AppConfig, type RateLimitSettings } from "../../../config";
-import { withoutQueryParameters, type DbExecutor } from "../../../database";
+import { afterCommit, withoutQueryParameters, type DbExecutor } from "../../../database";
+import { Metrics } from "../../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
 import type { SessionRevokedReason } from "../schema";
 import { rateLimitSubject } from "../login-code/rate-limit-subject";
@@ -186,6 +187,7 @@ export class SessionService {
     @Inject(SessionSettingsSource) private readonly settingsSource: SessionSettingsSource,
     @Inject(SessionStore) private readonly store: SessionStore,
     @Inject(RateLimiterService) private readonly rateLimiter: RateLimiterService,
+    @Inject(Metrics) private readonly metrics: Metrics,
   ) {
     this.issuer = accessTokenIssuer(config.nodeEnv);
   }
@@ -227,8 +229,13 @@ export class SessionService {
       },
       executor,
     );
-    this.logger.log(
-      `Session created session=${id} account=${input.account.id} kind=${input.kind} phone=${maskPhone(input.account.phone)}`,
+    // The session is created in the caller's transaction (the sign-in
+    // spends the login code in the same one): the line is written when
+    // that transaction commits, never before (TASK-005 note, TASK-009).
+    afterCommit(() =>
+      this.logger.log(
+        `Session created session=${id} account=${input.account.id} kind=${input.kind} phone=${maskPhone(input.account.phone)}`,
+      ),
     );
     return {
       tokens: this.tokens(
@@ -627,6 +634,7 @@ export class SessionService {
   ): Promise<void> {
     const hit = await this.rateLimiter.hit(key, limit);
     if (!hit.allowed) {
+      this.metrics.countRateLimitHit(name);
       this.logger.warn(`Session rate limit hit limit=${name} session=${session}`);
       throw rateLimitedException(name, hit.retryAfterSeconds);
     }

@@ -4,7 +4,8 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { loadEnvFile, loadConfig, ConfigValidationError, warnIgnoredVariables } from "./config";
 import { AppModule } from "./app.module";
 import { JsonLoggerService } from "./common/logging";
-import { installGracefulShutdown } from "./common/shutdown";
+import { installGracefulShutdown, reportUnhandledFailures } from "./common/shutdown";
+import { ErrorReporter } from "./observability";
 import { configureHttpApp } from "./http-app";
 
 loadEnvFile();
@@ -18,6 +19,11 @@ async function bootstrap() {
   const logger = app.get(JsonLoggerService);
   app.useLogger(logger);
   warnIgnoredVariables(config, logger);
+  reportUnhandledFailures({
+    logger,
+    reporter: app.get(ErrorReporter),
+    context: "Bootstrap",
+  });
   configureHttpApp(app, config);
 
   await app.listen(config.port);

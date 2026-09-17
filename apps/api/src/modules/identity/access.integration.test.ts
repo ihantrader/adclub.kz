@@ -1813,6 +1813,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       );
       expect(operations.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
         "GET /admin/administrators",
+        "GET /admin/audit-log",
         "GET /admin/settings",
         "GET /admin/settings/{key}/history",
         "POST /admin/administrators/{adminId}/totp-reset",

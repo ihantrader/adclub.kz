@@ -16,6 +16,7 @@ import {
   serviceUnavailableException,
 } from "../../../common/errors";
 import { ZodValidationException } from "../../../common/validation";
+import { Metrics } from "../../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
 import { LoginCodeChannels, LoginCodeDeliveryError } from "./channels/login-code-channels";
 import type { LoginCodeSettings } from "./login-code-settings.source";
@@ -98,6 +99,7 @@ export class LoginCodeService {
     @Inject(LoginCodeChannels) private readonly channels: LoginCodeChannels,
     @Inject(LoginCodeStore) private readonly store: LoginCodeStore,
     @Inject(RateLimiterService) private readonly rateLimiter: RateLimiterService,
+    @Inject(Metrics) private readonly metrics: Metrics,
   ) {}
 
   async requestCode(input: RequestLoginCodeInput): Promise<LoginCodeSentResponse> {
@@ -355,9 +357,11 @@ export class LoginCodeService {
   ): Promise<T> {
     try {
       const result = await send();
+      this.metrics.countLoginCodeDelivery(channel, "sent");
       this.log(`Login code delivered phone=${masked} channel=${channel}`);
       return result;
     } catch (error) {
+      this.metrics.countLoginCodeDelivery(channel, "failed");
       // Provider errors may echo the message: log only a safe reason.
       const reason = error instanceof LoginCodeDeliveryError ? error.reason : "unexpected_error";
       this.logger.warn(
@@ -419,7 +423,9 @@ export class LoginCodeService {
     this.logger.log(message);
   }
 
+  /** Every refused limit passes here: one line, and one count for the metrics. */
   private logLimit(name: RateLimitName, masked: string): void {
+    this.metrics.countRateLimitHit(name);
     this.logger.warn(`Login code rate limit hit limit=${name} phone=${masked}`);
   }
 }

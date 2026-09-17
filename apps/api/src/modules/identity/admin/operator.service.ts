@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { auditActions, auditEntities } from "@adclub/contracts";
 import { maskPhone, normalizeKzMobilePhone } from "@adclub/domain";
 import { APP_CONFIG, type AppConfig } from "../../../config";
 import { DatabaseService } from "../../../database";
+import { ActionJournal } from "../action-journal";
 import { AccountStore } from "../account/account.store";
 import { SessionStore } from "../session/session.store";
 import { SupplierMembershipStore } from "../supplier/supplier-membership.store";
@@ -28,8 +30,10 @@ function normalizedPhone(input: string): string {
  * administrators, reset a second factor (the only way for the only
  * administrator, D-047) — and, in development and tests only, create
  * companies and employees (`cli/operator.ts`). There is no API for any
- * of it. Every action is written to the application log (the action
- * journal `audit_log` arrives with TASK-009), phone numbers masked.
+ * of it. Every action is recorded in the action journal (`audit_log`,
+ * ARCHITECTURE 4.13) in the transaction that performs it, with the actor
+ * `operator` — the command has no account behind it — and written to the
+ * application log with the phone number masked.
  */
 @Injectable()
 export class OperatorService {
@@ -44,6 +48,7 @@ export class OperatorService {
     @Inject(AdminAccessRevoker) private readonly revoker: AdminAccessRevoker,
     @Inject(SupplierMembershipStore) private readonly memberships: SupplierMembershipStore,
     @Inject(SessionStore) private readonly sessions: SessionStore,
+    @Inject(ActionJournal) private readonly audit: ActionJournal,
   ) {}
 
   /** Appoints the number (its account is created if it has none, D-046). */
@@ -51,7 +56,23 @@ export class OperatorService {
     const phone = normalizedPhone(phoneInput);
     const result = await this.database.db.transaction(async (tx) => {
       const account = await this.accounts.findOrCreateByPhone(phone, tx);
-      return { account, ...(await this.admins.grant(account.id, tx)) };
+      const granted = await this.admins.grant(account.id, tx);
+      await this.audit.record(
+        {
+          action: auditActions.adminGranted,
+          actor: { role: "operator" },
+          entityType: auditEntities.admin,
+          entityId: granted.id,
+          after: {
+            accountId: account.id,
+            phoneMasked: maskPhone(phone),
+            outcome: granted.outcome,
+            accountCreated: account.created,
+          },
+        },
+        tx,
+      );
+      return { account, ...granted };
     });
     if (result.account.created) {
       this.logger.log(`Account created account=${result.account.id} by=operator`);
@@ -68,7 +89,21 @@ export class OperatorService {
     const now = new Date();
     const result = await this.database.db.transaction(async (tx) => {
       const admin = await this.activeAdmin(phone, tx);
-      return { admin, sessionsEnded: await this.revoker.remove(admin, now, tx) };
+      const sessionsEnded = await this.revoker.remove(admin, now, tx);
+      // One entry for the whole action, however many sessions it ended
+      // (mass actions, TASK-009): the count is part of the outcome.
+      await this.audit.record(
+        {
+          action: auditActions.adminRemoved,
+          actor: { role: "operator" },
+          entityType: auditEntities.admin,
+          entityId: admin.id,
+          before: { accountId: admin.accountId, phoneMasked: maskPhone(phone), status: "active" },
+          after: { status: "removed", sessionsEnded },
+        },
+        tx,
+      );
+      return { admin, sessionsEnded };
     });
     this.logger.log(
       `Operator: administrator removed admin=${result.admin.id} account=${result.admin.accountId} phone=${maskPhone(phone)} sessionsEnded=${result.sessionsEnded}`,
@@ -86,6 +121,17 @@ export class OperatorService {
       const admin = await this.activeAdmin(phone, tx);
       const sessionsEnded = await this.revoker.resetTotp(admin, now, tx);
       const onlyAdministrator = (await this.admins.countActive(tx)) === 1;
+      await this.audit.record(
+        {
+          action: auditActions.adminTotpReset,
+          actor: { role: "operator" },
+          entityType: auditEntities.admin,
+          entityId: admin.id,
+          before: { accountId: admin.accountId, totpConfigured: true },
+          after: { totpConfigured: false, sessionsEnded, onlyAdministrator },
+        },
+        tx,
+      );
       return { admin, sessionsEnded, onlyAdministrator };
     });
     this.logger.log(
@@ -107,7 +153,20 @@ export class OperatorService {
     if (!name || !city) {
       throw new OperatorCommandError("A company needs a name and a city");
     }
-    const created = await this.memberships.createSupplier({ name, city });
+    const created = await this.database.db.transaction(async (tx) => {
+      const company = await this.memberships.createSupplier({ name, city }, tx);
+      await this.audit.record(
+        {
+          action: auditActions.supplierCreated,
+          actor: { role: "operator" },
+          entityType: auditEntities.supplier,
+          entityId: company.id,
+          after: { companyName: company.name, city: company.city },
+        },
+        tx,
+      );
+      return company;
+    });
     this.logger.log(`Operator: company created supplier=${created.id}`);
     return { supplierId: created.id };
   }
@@ -126,15 +185,32 @@ export class OperatorService {
     if (!(await this.memberships.findSupplier(input.supplierId))) {
       throw new OperatorCommandError("No such company");
     }
-    const account = await this.accounts.findOrCreateByPhone(phone);
+    const { account, member } = await this.database.db.transaction(async (tx) => {
+      const found = await this.accounts.findOrCreateByPhone(phone, tx);
+      const added = await this.memberships.addMember(
+        { supplierId: input.supplierId, accountId: found.id, displayName },
+        tx,
+      );
+      await this.audit.record(
+        {
+          action: auditActions.supplierMemberAdded,
+          actor: { role: "operator" },
+          entityType: auditEntities.supplierMember,
+          entityId: added.memberId,
+          after: {
+            supplierId: input.supplierId,
+            accountId: found.id,
+            phoneMasked: maskPhone(phone),
+            restored: !added.created,
+          },
+        },
+        tx,
+      );
+      return { account: found, member: added };
+    });
     if (account.created) {
       this.logger.log(`Account created account=${account.id} by=operator`);
     }
-    const member = await this.memberships.addMember({
-      supplierId: input.supplierId,
-      accountId: account.id,
-      displayName,
-    });
     this.logger.log(
       `Operator: employee ${member.created ? "added" : "restored"} supplier=${input.supplierId} member=${member.memberId} account=${account.id} phone=${maskPhone(phone)}`,
     );
@@ -155,6 +231,21 @@ export class OperatorService {
         return undefined;
       }
       const ended = await this.sessions.revokeMemberSessions(memberId, "access_closed", now, tx);
+      await this.audit.record(
+        {
+          action: auditActions.supplierMemberRemoved,
+          actor: { role: "operator" },
+          entityType: auditEntities.supplierMember,
+          entityId: memberId,
+          before: {
+            supplierId: removed.supplierId,
+            accountId: removed.accountId,
+            status: "active",
+          },
+          after: { status: "removed", sessionsEnded: ended.length },
+        },
+        tx,
+      );
       return { ...removed, ended };
     });
     if (!result) {

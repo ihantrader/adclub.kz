@@ -4,8 +4,10 @@ import { DatabaseModule } from "./database";
 import { RedisModule } from "./redis";
 import { StorageModule } from "./storage";
 import { JsonLoggerService } from "./common/logging";
+import { ObservabilityModule } from "./observability";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { IdentityJobsModule } from "./modules/identity";
+import { AuditModule } from "./modules/audit";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -30,9 +32,11 @@ export class WorkerModule {
       module: WorkerModule,
       imports: [
         ConfigModule.forRoot(config),
+        ObservabilityModule.forRoot(config, { http: false }),
         DatabaseModule,
         RedisModule,
         StorageModule,
+        AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false, cache: options.settingsCache }),
         JobsModule.forRoot({
           role: "worker",

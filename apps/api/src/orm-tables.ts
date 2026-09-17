@@ -1,5 +1,6 @@
 import type { PgTable } from "drizzle-orm/pg-core";
 import { jobsTables } from "./jobs";
+import { auditTables } from "./modules/audit";
 import { identityTables } from "./modules/identity";
 import { settingsTables } from "./modules/settings";
 
@@ -9,4 +10,9 @@ import { settingsTables } from "./modules/settings";
  * with the database the migrations produce, so a module that adds tables
  * must add them here.
  */
-export const ormTables: readonly PgTable[] = [...identityTables, ...settingsTables, ...jobsTables];
+export const ormTables: readonly PgTable[] = [
+  ...identityTables,
+  ...settingsTables,
+  ...auditTables,
+  ...jobsTables,
+];

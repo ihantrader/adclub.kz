@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { z } from "zod";
+import { auditActions, auditEntities } from "@adclub/contracts";
 import type {
   Setting,
   SettingActor,
@@ -11,6 +12,7 @@ import type {
 } from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
 import { DatabaseService } from "../../database";
+import { AuditLog, type AuditActorRecord } from "../audit";
 import { AccountDirectory } from "../identity";
 import { AppSettings, checkStoredSetting } from "./app-settings";
 import {
@@ -68,6 +70,13 @@ function validationError(issues: { path: string; message: string }[]): ApiExcept
   });
 }
 
+/** The same actor, as the action journal records it (ARCHITECTURE 4.13). */
+function auditActorOf(actor: SettingChangeActor): AuditActorRecord {
+  return actor.kind === "admin"
+    ? { role: "admin", accountId: actor.accountId, adminId: actor.adminId }
+    : { role: "operator" };
+}
+
 const reasonSchema = z.string().trim().min(3).max(500);
 
 /** The contract checks the reason of an API request; the operator command's is checked here. */
@@ -109,6 +118,7 @@ export class SettingsChangeService {
     @Inject(SettingsStore) private readonly store: SettingsStore,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(AccountDirectory) private readonly accounts: AccountDirectory,
+    @Inject(AuditLog) private readonly audit: AuditLog,
   ) {}
 
   async list(): Promise<SettingListResponse> {
@@ -207,6 +217,23 @@ export class SettingsChangeService {
           newIsDefault: action === "reset",
           reason,
           actor,
+        },
+        tx,
+      );
+      // In the same transaction as the change itself: no change without an
+      // entry in the action journal and no entry without a change
+      // (ARCHITECTURE 4.13). The history `app_setting_change` stays as it
+      // is — it carries the version a change was made from, which is what
+      // the admin panel edits against.
+      await this.audit.record(
+        {
+          action: action === "set" ? auditActions.settingChanged : auditActions.settingReset,
+          actor: auditActorOf(actor),
+          entityType: auditEntities.setting,
+          entityId: key,
+          before: { value: change.previousValue, isDefault: change.previousIsDefault },
+          after: { value: change.newValue, isDefault: change.newIsDefault, version },
+          reason,
         },
         tx,
       );

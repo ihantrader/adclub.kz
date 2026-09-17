@@ -1,5 +1,6 @@
 import { Global, Module, type DynamicModule } from "@nestjs/common";
 import { JobAdmin } from "./job-admin.service";
+import { JobMetrics } from "./job-metrics";
 import type { JobDefinition } from "./job-definition";
 import { JobQueue } from "./job-queue.service";
 import { JobRegistry } from "./job-registry";
@@ -27,6 +28,8 @@ export class JobsModule {
     role: JobsModuleOptions["role"];
     catalog: readonly JobDefinition[];
     startOnBoot?: boolean;
+    /** Sample the queue for metrics (the process that serves them). */
+    metrics?: boolean;
     /** Tests shorten the timings. */
     tuning?: Partial<JobsTuning>;
   }): DynamicModule {
@@ -45,6 +48,7 @@ export class JobsModule {
         JobRegistry,
         SweepRunner,
         PeriodicJobStateStore,
+        ...(options.metrics ? [JobMetrics] : []),
         ...(options.role === "worker" ? [JobRunner] : []),
       ],
       exports: [

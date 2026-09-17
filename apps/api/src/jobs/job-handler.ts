@@ -12,9 +12,19 @@ export interface JobHandler<Payload> {
   run(payload: Payload, context: JobRunContext): Promise<void>;
 }
 
+/**
+ * What a run did. A periodic run that found nothing to do says so, and the
+ * worker keeps quiet about it (TASK-009: a job that runs every minute
+ * must not write two lines a minute when there is no work).
+ */
+export interface JobRunOutcome {
+  /** False when the run found nothing to do and changed nothing. */
+  worked: boolean;
+}
+
 /** Implementation of a periodic job. Idempotent. */
 export interface PeriodicJobHandler {
-  run(context: JobRunContext): Promise<void>;
+  run(context: JobRunContext): Promise<void | JobRunOutcome>;
 }
 
 /**

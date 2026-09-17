@@ -76,10 +76,24 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789660668561_create-job-queue",
       "1789660680048_create-periodic-job-state",
       "1789660681238_add-sign-in-data-cleanup-indexes",
+      "1789677720444_create-audit-log",
     ]);
   });
 
-  it("rolls back the latest migration only (the cleanup indexes), keeping the tables", async () => {
+  it("rolls back the latest migration only (the action journal), keeping the tables", async () => {
+    await client.query(
+      `INSERT INTO audit_log (action, actor_role, entity_type, entity_id)
+       VALUES ('setting.changed', 'operator', 'setting', 'supplier_response_hours')`,
+    );
+    // The journal takes no change and no deletion, whoever asks.
+    await expect(client.query("DELETE FROM audit_log")).rejects.toThrow(/append-only/);
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await tableExists(client, "audit_log")).toBe(false);
+    expect(await tableExists(client, "session")).toBe(true);
+  });
+
+  it("rolls back the next one (the cleanup indexes), keeping the tables", async () => {
     const indexExists = async (name: string) =>
       (await client.query("SELECT 1 FROM pg_class WHERE relkind = 'i' AND relname = $1", [name]))
         .rowCount === 1;

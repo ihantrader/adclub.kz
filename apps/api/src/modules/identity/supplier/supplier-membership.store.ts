@@ -100,8 +100,11 @@ export class SupplierMembershipStore {
 
   // Operator command (development and tests only, see `cli/operator.ts`).
 
-  async createSupplier(input: { name: string; city: string }): Promise<SupplierRecord> {
-    const [row] = await this.database.db
+  async createSupplier(
+    input: { name: string; city: string },
+    executor: DbExecutor = this.database.db,
+  ): Promise<SupplierRecord> {
+    const [row] = await executor
       .insert(supplier)
       .values({ name: input.name, city: input.city })
       .returning(supplierColumns);
@@ -112,13 +115,16 @@ export class SupplierMembershipStore {
    * Adds the owner of `accountId` to a company, or makes a removed
    * membership active again.
    */
-  async addMember(input: {
-    supplierId: string;
-    accountId: string;
-    displayName: string;
-  }): Promise<{ memberId: string; created: boolean }> {
+  async addMember(
+    input: {
+      supplierId: string;
+      accountId: string;
+      displayName: string;
+    },
+    executor: DbExecutor = this.database.db,
+  ): Promise<{ memberId: string; created: boolean }> {
     const now = new Date();
-    const [row] = await this.database.db
+    const [row] = await executor
       .insert(supplierMember)
       .values({
         supplierId: input.supplierId,

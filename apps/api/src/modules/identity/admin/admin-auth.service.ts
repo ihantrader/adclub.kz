@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { auditActions, auditEntities } from "@adclub/contracts";
 import type {
   AdministratorListResponse,
   BackupCodesResponse,
@@ -16,7 +17,9 @@ import {
 } from "../../../common/errors";
 import { APP_CONFIG, type AppConfig, type RateLimitSettings } from "../../../config";
 import type { DbExecutor } from "../../../database";
+import { Metrics } from "../../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
+import { ActionJournal } from "../action-journal";
 import { AccountStore } from "../account/account.store";
 import { rateLimitSubject } from "../login-code/rate-limit-subject";
 import {
@@ -86,6 +89,8 @@ export class AdminAuthService {
     @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(AdminAccessRevoker) private readonly revoker: AdminAccessRevoker,
     @Inject(RateLimiterService) private readonly rateLimiter: RateLimiterService,
+    @Inject(ActionJournal) private readonly audit: ActionJournal,
+    @Inject(Metrics) private readonly metrics: Metrics,
   ) {
     this.keys = deriveAdminKeys(config.signIn.totpEncryptionKey);
   }
@@ -294,6 +299,16 @@ export class AdminAuthService {
         "purpose=backup_codes",
       );
       const backupCodes = await this.newBackupCodes(admin.id, settings.backupCodeCount, now, tx);
+      await this.audit.record(
+        {
+          action: auditActions.adminBackupCodesRegenerated,
+          actor: { role: "admin", accountId: admin.accountId, adminId: admin.id },
+          entityType: auditEntities.admin,
+          entityId: admin.id,
+          after: { backupCodes: backupCodes.length },
+        },
+        tx,
+      );
       this.logger.log(
         `Admin backup codes regenerated admin=${admin.id} count=${backupCodes.length}`,
       );
@@ -320,7 +335,11 @@ export class AdminAuthService {
    * sign-in. Resetting oneself is refused. Any id that isn't an active
    * administrator is `NOT_FOUND`.
    */
-  async resetByAdmin(actorAdminId: string, targetAdminId: string): Promise<TotpResetResponse> {
+  async resetByAdmin(
+    actor: { adminId: string; accountId: string },
+    targetAdminId: string,
+  ): Promise<TotpResetResponse> {
+    const actorAdminId = actor.adminId;
     if (actorAdminId === targetAdminId) {
       this.logger.warn(`Admin TOTP reset refused: own second factor admin=${actorAdminId}`);
       throw new ApiException(
@@ -337,7 +356,20 @@ export class AdminAuthService {
         );
         throw new ApiException(404, "NOT_FOUND", "Administrator not found");
       }
-      return this.revoker.resetTotp(target, new Date(), tx);
+      const ended = await this.revoker.resetTotp(target, new Date(), tx);
+      // One entry for the action, with the number of sessions it ended.
+      await this.audit.record(
+        {
+          action: auditActions.adminTotpReset,
+          actor: { role: "admin", accountId: actor.accountId, adminId: actorAdminId },
+          entityType: auditEntities.admin,
+          entityId: targetAdminId,
+          before: { accountId: target.accountId, totpConfigured: true },
+          after: { totpConfigured: false, sessionsEnded: ended },
+        },
+        tx,
+      );
+      return ended;
     });
     this.logger.log(
       `Admin TOTP reset admin=${targetAdminId} by=admin:${actorAdminId} sessionsEnded=${sessionsEnded}`,
@@ -503,6 +535,7 @@ export class AdminAuthService {
       throw error;
     }
     if (!hit.allowed) {
+      this.metrics.countRateLimitHit(name);
       this.logger.warn(`Admin second factor rate limit hit limit=${name} admin=${subject}`);
       throw rateLimitedException(name, hit.retryAfterSeconds);
     }

@@ -17,12 +17,13 @@ export type {
   SettingReader,
 } from "./job-definition";
 export { PermanentJobError } from "./job-handler";
-export type { JobHandler, JobRunContext, PeriodicJobHandler } from "./job-handler";
+export type { JobHandler, JobRunContext, JobRunOutcome, PeriodicJobHandler } from "./job-handler";
 export { JobQueue } from "./job-queue.service";
 export type { EnqueueOptions } from "./job-queue.service";
 export { JobRegistry } from "./job-registry";
 export { JobRunner } from "./job-runner.service";
 export { JobAdmin, JobAdminError } from "./job-admin.service";
+export { JobMetrics } from "./job-metrics";
 export type { DeadJob, JobStatus } from "./job-admin.service";
 export { JobSettingsReader } from "./job-settings";
 export { SweepRunner } from "./sweeper";

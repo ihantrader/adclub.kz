@@ -1,6 +1,11 @@
 import type { LoginCodeChannel } from "@adclub/contracts";
 import { isValidAppVersion } from "@adclub/domain";
 import { z } from "zod";
+import {
+  MonitoringDsnError,
+  parseMonitoringDsn,
+  type MonitoringTarget,
+} from "../observability/monitoring-dsn";
 
 const urlWithProtocol = (protocols: string[]) =>
   z
@@ -173,6 +178,16 @@ export const envSchema = z.object({
   SESSION_TOKEN_SECRET: z.string().min(32).optional(),
   // Roles, cabinet and admin sign-in (ARCHITECTURE 8.1, 8.3, 14; TASK-006).
   ADMIN_TOTP_ENCRYPTION_KEY: z.string().min(32).optional(),
+  // Observability (ARCHITECTURE 15.3, 4.13; TASK-009). Where error events
+  // go (a Sentry-compatible receiver, self-hosted or SaaS); unset — nothing
+  // is sent and the application behaves as before. Real accounts: TASK-055.
+  MONITORING_DSN: z.string().trim().optional(),
+  // Which deployment an event came from; default: NODE_ENV.
+  MONITORING_ENVIRONMENT: z.string().trim().min(1).optional(),
+  // Publish GET /metrics (Prometheus text format).
+  METRICS_ENABLED: z.stringbool().optional(),
+  // When set, the collector must present it: `Authorization: Bearer <token>`.
+  METRICS_TOKEN: z.string().min(16).optional(),
 });
 
 export interface RateLimitSettings {
@@ -224,6 +239,18 @@ export type AppConfig = {
   signIn: {
     /** AES-256-GCM key material of TOTP secrets, also keys the backup code hashes. */
     totpEncryptionKey: string;
+  };
+  monitoring: {
+    /** Where error events go; `undefined` — reporting is off. */
+    target: MonitoringTarget | undefined;
+    /** The deployment an event is tagged with. */
+    environment: string;
+  };
+  metrics: {
+    /** Serve `GET /metrics`. */
+    enabled: boolean;
+    /** Bearer token the collector must present; `undefined` — no token needed. */
+    token: string | undefined;
   };
   /**
    * Variables present in the environment that used to hold what are
@@ -284,6 +311,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       environmentIssues.push(`${name}: required when NODE_ENV=${parsed.NODE_ENV}`);
     }
   }
+  let monitoringTarget: MonitoringTarget | undefined;
+  if (parsed.MONITORING_DSN) {
+    try {
+      monitoringTarget = parseMonitoringDsn(parsed.MONITORING_DSN);
+    } catch (error) {
+      environmentIssues.push(
+        `MONITORING_DSN: ${error instanceof MonitoringDsnError ? error.message : "invalid"}`,
+      );
+    }
+  }
   if (environmentIssues.length > 0) {
     throw new ConfigValidationError(environmentIssues);
   }
@@ -328,6 +365,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     signIn: {
       totpEncryptionKey: parsed.ADMIN_TOTP_ENCRYPTION_KEY ?? DEV_ADMIN_TOTP_ENCRYPTION_KEY,
+    },
+    monitoring: {
+      target: monitoringTarget,
+      environment: parsed.MONITORING_ENVIRONMENT ?? parsed.NODE_ENV,
+    },
+    metrics: {
+      enabled: parsed.METRICS_ENABLED ?? true,
+      token: parsed.METRICS_TOKEN,
     },
     ignoredVariables: Object.keys(env)
       .filter((name) => SETTINGS_FORMERLY_IN_ENVIRONMENT.some((pattern) => pattern.test(name)))

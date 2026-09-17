@@ -7,8 +7,9 @@ import {
   type ExceptionFilter,
 } from "@nestjs/common";
 import type { ApiErrorResponse, ErrorCode } from "@adclub/contracts";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { withoutQueryParameters } from "../../database/database-error";
+import { ErrorReporter } from "../../observability/error-reporter.service";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
 import { ApiException } from "./api.exception";
@@ -17,19 +18,49 @@ import {
   ClientUpdateRequiredException,
 } from "./client-update-required.exception";
 
+/**
+ * The contract code that matches the meaning of a status Nest produced on
+ * its own. Before TASK-009 every other 4xx (405, 413, 415 …) was reported
+ * as `VALIDATION_ERROR`, which told a client the request data was wrong
+ * when it was not.
+ */
 function codeForHttpStatus(status: number): ErrorCode {
   switch (status) {
     case HttpStatus.NOT_FOUND:
+    case HttpStatus.METHOD_NOT_ALLOWED:
+      // No handler for this path and method: the same answer as a missing
+      // resource, so nothing tells apart a route that exists from one that
+      // doesn't.
       return "NOT_FOUND";
     case HttpStatus.CONFLICT:
       return "CONFLICT";
+    case HttpStatus.UNAUTHORIZED:
+      return "AUTH_REQUIRED";
+    case HttpStatus.FORBIDDEN:
+      return "FORBIDDEN";
+    case HttpStatus.TOO_MANY_REQUESTS:
+      return "RATE_LIMITED";
     case HttpStatus.BAD_REQUEST:
+    case HttpStatus.PAYLOAD_TOO_LARGE:
+    case HttpStatus.UNSUPPORTED_MEDIA_TYPE:
+    case HttpStatus.UNPROCESSABLE_ENTITY:
+      // The request itself is at fault: too big, in a format the route
+      // doesn't take, or malformed.
       return "VALIDATION_ERROR";
     case CLIENT_UPDATE_REQUIRED_STATUS:
       return "CLIENT_UPDATE_REQUIRED";
+    case HttpStatus.SERVICE_UNAVAILABLE:
+    case HttpStatus.GATEWAY_TIMEOUT:
+      return "SERVICE_UNAVAILABLE";
     default:
       return status >= 500 ? "INTERNAL_ERROR" : "VALIDATION_ERROR";
   }
+}
+
+/** The route as the contract declares it (never the caller's own values). */
+function routeTemplate(request: Request): string {
+  const route = (request as { route?: { path?: unknown } }).route;
+  return typeof route?.path === "string" ? route.path : "unmatched";
 }
 
 /**
@@ -47,10 +78,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
   // constructor parameter type, which silently breaks Nest's
   // metadata-based auto-injection (`design:paramtypes`) — reproduced by
   // running `pnpm dev` (undefined `this.logger`) vs the tsc build (fine).
-  constructor(@Inject(JsonLoggerService) private readonly logger: JsonLoggerService) {}
+  constructor(
+    @Inject(JsonLoggerService) private readonly logger: JsonLoggerService,
+    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
+    const http = host.switchToHttp();
+    const response = http.getResponse<Response>();
+    const request = http.getRequest<Request>();
     const { status, body } = this.toResponse(exception);
 
     // An `ApiException` is an expected, already-described outcome (e.g. a
@@ -58,10 +94,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (status >= 500 && !(exception instanceof ApiException)) {
       // A failed query's message carries its bound values (personal data).
       const logged = withoutQueryParameters(exception);
-      this.logger.error(
-        logged instanceof Error ? logged : new Error(String(logged)),
-        "ExceptionFilter",
-      );
+      const error = logged instanceof Error ? logged : new Error(String(logged));
+      this.logger.error(error, "ExceptionFilter");
+      // Unexpected failures go to error monitoring, cleaned; an expected
+      // 4xx of business logic never does (ARCHITECTURE 15.3).
+      this.reporter.captureException(error, {
+        transaction: `${request.method} ${routeTemplate(request)}`,
+        tags: { kind: "api", status },
+      });
     }
 
     if (exception instanceof ApiException) {

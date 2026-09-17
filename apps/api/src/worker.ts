@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { loadEnvFile, loadConfig, ConfigValidationError } from "./config";
 import { WorkerModule } from "./worker.module";
 import { JsonLoggerService } from "./common/logging";
+import { installGracefulShutdown } from "./common/shutdown";
 
 loadEnvFile();
 
@@ -21,14 +22,14 @@ async function bootstrap() {
   // I5). Replaced by real pg-boss job polling once background jobs exist.
   const heartbeat = setInterval(() => {}, 1 << 30);
 
-  const shutdown = (signal: string) => {
-    logger.log(`Received ${signal}, shutting down`, "Worker");
-    clearInterval(heartbeat);
-    void app.close().then(() => process.exit(0));
-  };
-
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  installGracefulShutdown({
+    logger,
+    context: "Worker",
+    close: async () => {
+      clearInterval(heartbeat);
+      await app.close();
+    },
+  });
 }
 
 void bootstrap().catch((error: unknown) => {

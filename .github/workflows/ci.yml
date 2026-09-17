@@ -61,5 +61,5 @@ jobs:
           fi
           pnpm --filter @adclub/api openapi:compat --base "$BASE_REV"
 
-      - name: Verify worker shuts down gracefully on SIGTERM (Linux)
+      - name: Verify API and worker shut down gracefully on SIGTERM (Linux)
         run: pnpm --filter api run verify:graceful-shutdown

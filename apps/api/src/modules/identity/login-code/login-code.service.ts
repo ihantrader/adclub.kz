@@ -377,16 +377,18 @@ export class LoginCodeService {
     ipSubject: string,
     settings: LoginCodeSettings,
   ): Promise<void> {
-    await this.enforce(
-      keys.smsPerPhone(phone),
-      settings.smsPerPhoneDaily,
-      "login_code_sms_per_phone_daily",
-      masked,
-    );
+    // IP checked (and counted) first: a refusal on the IP limit must not
+    // touch the phone number's counter (TASK-005.A, AC-9).
     await this.enforce(
       keys.smsPerIp(ipSubject),
       settings.smsPerIpDaily,
       "login_code_sms_per_ip_daily",
+      masked,
+    );
+    await this.enforce(
+      keys.smsPerPhone(phone),
+      settings.smsPerPhoneDaily,
+      "login_code_sms_per_phone_daily",
       masked,
     );
   }

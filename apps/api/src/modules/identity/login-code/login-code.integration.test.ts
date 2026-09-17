@@ -581,6 +581,23 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       );
     });
 
+    it("does not spend a phone's SMS limit when the IP limit is what refused the request", async () => {
+      settings().smsPerIpDaily = { max: 1, windowSeconds: 86_400 };
+      settings().smsPerPhoneDaily = { max: 1, windowSeconds: 86_400 };
+      expect(
+        (await requestCode({ phone: OTHER_PHONE, channel: "sms" }, "203.0.113.20")).status,
+      ).toBe(200);
+      expectRateLimited(
+        await requestCode({ phone: PHONE, channel: "sms" }, "203.0.113.20"),
+        "login_code_sms_per_ip_daily",
+      );
+      // If the refusal above had spent PHONE's own SMS counter, this request
+      // (a fresh IP, so the IP limit doesn't apply) would be rate-limited too.
+      expect((await requestCode({ phone: PHONE, channel: "sms" }, "203.0.113.21")).status).toBe(
+        200,
+      );
+    });
+
     it("limits code checks per number, so new codes don't allow endless guessing", async () => {
       settings().verificationsPerPhone = { max: 3, windowSeconds: 3600 };
       await requestCode({ phone: PHONE });
@@ -622,7 +639,10 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
         expect((await request(app.getHttpServer()).get("/health")).status).toBe(200);
         const ready = await request(app.getHttpServer()).get("/ready");
         expect(ready.status).toBe(503);
-        expect(ready.body.checks.redis.status).toBe("error");
+        // No driver error text, address or port in the response (TASK-005.A);
+        // the reason is logged instead.
+        expect(ready.body.checks.redis).toEqual({ status: "error" });
+        expect(JSON.stringify(ready.body)).not.toContain("ECONNREFUSED");
       } finally {
         await redisProxy.start();
       }

@@ -1,10 +1,11 @@
 import { isApiError } from "@adclub/api-client";
 import { translate, type Lang } from "@adclub/i18n";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { apiUrl, clientInfo } from "../config/environment";
+import { Badge, Button, Text, useTheme } from "../design-system";
 import { apiClient } from "../services/api";
-import { colors } from "../theme";
 
 type Connection = "checking" | "ok" | "failed";
 
@@ -12,7 +13,8 @@ type Connection = "checking" | "ok" | "failed";
  * Placeholder home screen (TASK-003): proves the app talks to the API
  * through the shared client. Real screens arrive in stage B.
  */
-export function HomeScreen({ lang }: { lang: Lang }) {
+export function HomeScreen({ lang, onOpenShowcase }: { lang: Lang; onOpenShowcase?: () => void }) {
+  const { theme } = useTheme();
   const [connection, setConnection] = useState<Connection>("checking");
   const [attempt, setAttempt] = useState(0);
 
@@ -38,49 +40,55 @@ export function HomeScreen({ lang }: { lang: Lang }) {
     setAttempt((value) => value + 1);
   }, []);
 
+  const statusText = translate(lang, `connection.${connection}`);
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>adclub.kz</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
+      <View style={styles.content}>
+        <Text variant="titleL">Asia Drive Club</Text>
 
-      <View style={styles.status}>
-        {connection === "checking" && <ActivityIndicator color={colors.primary} />}
-        <Text style={[styles.statusText, connection === "failed" && styles.failed]}>
-          {translate(lang, `connection.${connection}`)}
+        <View style={styles.status} accessibilityLiveRegion="polite">
+          {connection === "checking" && (
+            <>
+              <ActivityIndicator color={theme.colors.accent} />
+              <Text color="textMuted">{statusText}</Text>
+            </>
+          )}
+          {connection === "ok" && (
+            <Badge tone="success" icon="circleCheck">
+              {statusText}
+            </Badge>
+          )}
+          {connection === "failed" && (
+            <Badge tone="danger" icon="wifiOff">
+              {statusText}
+            </Badge>
+          )}
+        </View>
+
+        {connection === "failed" && (
+          <Button variant="secondary" size="m" icon="refresh" onPress={retry}>
+            {translate(lang, "common.retry")}
+          </Button>
+        )}
+
+        <Text variant="caption" color="textMuted" style={styles.meta}>
+          {clientInfo.platform} {clientInfo.version} · {apiUrl}
         </Text>
+
+        {onOpenShowcase && (
+          <Button variant="text" size="m" icon="category" onPress={onOpenShowcase}>
+            Витрина компонентов (dev)
+          </Button>
+        )}
       </View>
-
-      {connection === "failed" && (
-        <Pressable accessibilityRole="button" onPress={retry} style={styles.button}>
-          <Text style={styles.buttonText}>{translate(lang, "common.retry")}</Text>
-        </Pressable>
-      )}
-
-      <Text style={styles.meta}>
-        {clientInfo.platform} {clientInfo.version} · {apiUrl}
-      </Text>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  title: { fontSize: 28, fontWeight: "700", marginBottom: 16, color: colors.text },
-  status: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
-  statusText: { fontSize: 16, color: colors.primary },
-  failed: { color: colors.danger },
-  button: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-    marginBottom: 16,
-  },
-  buttonText: { color: colors.primaryText, fontSize: 16 },
-  meta: { fontSize: 12, color: colors.mutedText },
+  container: { flex: 1 },
+  content: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 16 },
+  status: { flexDirection: "row", alignItems: "center", gap: 8 },
+  meta: { textAlign: "center" },
 });

@@ -1,0 +1,38 @@
+/* Onest 400/500/700 (Google Fonts, SIL OFL 1.1 — ../fonts/OFL.txt), served by
+   the app itself: no request to Google Fonts. One file per weight with the
+   full character set, including Kazakh Cyrillic, № and ₸ (DESIGN.md 5). */
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/onest-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/onest-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/onest-700.woff2") format("woff2");
+}
+
+/* While Onest loads (or if it fails): a local font scaled to Onest's metrics,
+   so text does not jump when the web font arrives. Arial carries the Kazakh
+   letters, № and ₸. */
+@font-face {
+  font-family: "Onest Fallback";
+  src: local("Arial"), local("ArialMT"), local("Roboto"), local("Helvetica Neue");
+  size-adjust: 103.83%;
+  ascent-override: 93.42%;
+  descent-override: 29.37%;
+  line-gap-override: 0%;
+}

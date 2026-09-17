@@ -1,0 +1,217 @@
+/* Generated from @adclub/ui-core tokens (DESIGN.md 7) by src/theme/theme-css.ts — do not edit.
+   Regenerate: pnpm --filter @adclub/ui test -u */
+
+:root {
+  --ac-font-family: Onest, "Onest Fallback", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ac-space-1: 4px;
+  --ac-space-2: 8px;
+  --ac-space-3: 12px;
+  --ac-space-4: 16px;
+  --ac-space-5: 20px;
+  --ac-space-6: 24px;
+  --ac-space-8: 32px;
+  --ac-space-10: 40px;
+  --ac-space-12: 48px;
+  --ac-radius-xs: 2px;
+  --ac-radius-s: 4px;
+  --ac-radius-m: 6px;
+  --ac-radius-l: 12px;
+  --ac-radius-full: 9999px;
+  --ac-line: 1px;
+  --ac-focus-width: 2px;
+  --ac-focus-offset: 2px;
+  --ac-touch-target: 48px;
+  --ac-button-l: 52px;
+  --ac-button-m: 44px;
+  --ac-button-s: 36px;
+  --ac-field: 48px;
+  --ac-chip: 36px;
+  --ac-segments: 40px;
+  --ac-switch-width: 52px;
+  --ac-switch-height: 32px;
+  --ac-checkbox: 24px;
+  --ac-radio: 24px;
+  --ac-quantity-button: 44px;
+  --ac-code-cell-width: 48px;
+  --ac-code-cell-height: 64px;
+  --ac-keypad-key: 64px;
+  --ac-tab-bar: 64px;
+  --ac-top-bar: 56px;
+  --ac-center-tab: 60px;
+  --ac-center-tab-lift: 20px;
+  --ac-center-tab-ring: 4px;
+  --ac-dialog-max-width: 320px;
+  --ac-empty-icon: 48px;
+  --ac-table-row: 48px;
+  --ac-sidebar: 240px;
+  --ac-content-max-width: 1200px;
+  --ac-icon-s: 16px;
+  --ac-icon-m: 20px;
+  --ac-icon-l: 24px;
+  --ac-motion-fast: 150ms;
+  --ac-motion-slow: 250ms;
+  --ac-motion-easing: cubic-bezier(0, 0, 0.2, 1);
+  --ac-motion-skeleton: 1200ms;
+  --ac-pressed-darken: 0.88;
+  --ac-breakpoint-two-columns: 600px;
+  --ac-breakpoint-sidebar: 1024px;
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ac-color-bg: #f6f3ec;
+  --ac-color-bar: #fbfaf6;
+  --ac-color-surface: #ffffff;
+  --ac-color-surface-raised: #f1ede4;
+  --ac-color-fill: #ece7dc;
+  --ac-color-border: #e4dfd4;
+  --ac-color-border-field: #8a8376;
+  --ac-color-text: #16171a;
+  --ac-color-text-muted: #67625a;
+  --ac-color-text-disabled: #a39c8f;
+  --ac-color-accent: #85662f;
+  --ac-color-accent-tint: #f1e8d6;
+  --ac-color-accent-on-tint: #6e5222;
+  --ac-color-primary: #16171a;
+  --ac-color-on-primary: #d4b483;
+  --ac-color-success: #1a6e3f;
+  --ac-color-success-tint: #e1f2e7;
+  --ac-color-warning: #8a5a00;
+  --ac-color-warning-tint: #fbefd2;
+  --ac-color-danger: #b3261e;
+  --ac-color-danger-tint: #fbe4e1;
+  --ac-color-on-danger: #ffffff;
+  --ac-color-ai: #1b6573;
+  --ac-color-ai-tint: #dceff2;
+  --ac-color-ai-border: #3f8995;
+  --ac-color-scrim: rgba(15, 16, 18, 0.4);
+  --ac-color-qr-fg: #000000;
+  --ac-color-qr-bg: #ffffff;
+  --ac-color-toast: #16171a;
+  --ac-color-on-toast: #f2efe8;
+  --ac-float-shadow: 0 8px 24px rgba(15, 16, 18, 0.12);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ac-color-bg: #0f1012;
+  --ac-color-bar: #141518;
+  --ac-color-surface: #1a1b1f;
+  --ac-color-surface-raised: #202126;
+  --ac-color-fill: #26272c;
+  --ac-color-border: #2a2b30;
+  --ac-color-border-field: #706e67;
+  --ac-color-text: #f2efe8;
+  --ac-color-text-muted: #9a968d;
+  --ac-color-text-disabled: #5e5c57;
+  --ac-color-accent: #d4b483;
+  --ac-color-accent-tint: #2e2718;
+  --ac-color-accent-on-tint: #d4b483;
+  --ac-color-primary: #d4b483;
+  --ac-color-on-primary: #1a1409;
+  --ac-color-success: #6fcf97;
+  --ac-color-success-tint: #12301f;
+  --ac-color-warning: #f2c94c;
+  --ac-color-warning-tint: #33290c;
+  --ac-color-danger: #f08a7e;
+  --ac-color-danger-tint: #3a1714;
+  --ac-color-on-danger: #1a0806;
+  --ac-color-ai: #7fd1e0;
+  --ac-color-ai-tint: #12303a;
+  --ac-color-ai-border: #4a98a6;
+  --ac-color-scrim: rgba(0, 0, 0, 0.6);
+  --ac-color-qr-fg: #000000;
+  --ac-color-qr-bg: #ffffff;
+  --ac-color-toast: #26272c;
+  --ac-color-on-toast: #f2efe8;
+  --ac-float-shadow: none;
+}
+
+.ac-text-title-l {
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 700;
+}
+
+.ac-text-title {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 700;
+}
+
+.ac-text-heading {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.ac-text-body {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 400;
+}
+
+.ac-text-body-strong {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.ac-text-body-s {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+.ac-text-caption {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+}
+
+.ac-text-caption-strong {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.ac-text-label {
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.ac-text-tab {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+}
+
+.ac-text-price {
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-text-price-s {
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-text-code {
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-text-code-x-l {
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

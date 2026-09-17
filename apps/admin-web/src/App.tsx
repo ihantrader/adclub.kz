@@ -1,7 +1,7 @@
 import { isApiError } from "@adclub/api-client";
 import type { HealthCheckResponse, ReadinessResponse } from "@adclub/contracts";
 import { translate } from "@adclub/i18n";
-import { Button, colors } from "@adclub/ui";
+import { Badge, Banner, Button, Logo, Spinner } from "@adclub/ui";
 import { useCallback, useEffect, useState } from "react";
 import { API_URL, APP_VERSION, apiClient, useUpdateRequiredMessage } from "./api";
 
@@ -44,23 +44,22 @@ function useLoad<T>(load: () => Promise<T>): [Loadable<T>, () => void] {
 
 function UpdateRequiredNotice({ message }: { message: string }) {
   return (
-    <section
-      role="alert"
-      style={{
-        border: `2px solid ${colors.danger}`,
-        borderRadius: "8px",
-        padding: "16px",
-        marginBottom: "16px",
-      }}
-    >
-      <h2 style={{ fontSize: "18px", marginTop: 0, color: colors.danger }}>
-        {translate("ru", "update.title")}
-      </h2>
-      <p>{message}</p>
-      <Button onClick={() => window.location.reload()}>
+    <section role="alert" className="service-page__stack">
+      <h2 className="ac-text-title">{translate("ru", "update.title")}</h2>
+      <Banner tone="warning">{message}</Banner>
+      <Button size="l" icon="refresh" onClick={() => window.location.reload()}>
         {translate("ru", "update.reloadPage")}
       </Button>
     </section>
+  );
+}
+
+function Checking() {
+  return (
+    <div className="service-page__status">
+      <Spinner />
+      <span>{translate("ru", "connection.checking")}</span>
+    </div>
   );
 }
 
@@ -70,47 +69,58 @@ export function App() {
   const [readiness, reloadReadiness] = useLoad<ReadinessResponse>(apiClient.getReadiness);
 
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "24px", maxWidth: "560px" }}>
-      <h1>adclub.kz — {translate("ru", "common.appWorking")}</h1>
-      <p>
+    <main className="service-page">
+      <Logo height={48} />
+      <h1 className="ac-text-title-l">{translate("ru", "common.appWorking")}</h1>
+      <p className="ac-text-body-s ac-muted">
         Admin panel scaffold, version {APP_VERSION}. API: {API_URL}
       </p>
 
       {updateRequiredMessage !== null && <UpdateRequiredNotice message={updateRequiredMessage} />}
 
-      <section style={{ marginTop: "16px" }}>
-        <h2 style={{ fontSize: "16px" }}>API health</h2>
-        {health.status === "loading" && <p>{translate("ru", "connection.checking")}</p>}
+      <section className="service-page__stack">
+        <h2 className="ac-text-heading">API health</h2>
+        {health.status === "loading" && <Checking />}
         {health.status === "success" && (
-          <p style={{ color: colors.primary }}>
+          <Badge tone="success" icon="circleCheck">
             {health.data.service}: {health.data.status} at {health.data.timestamp}
-          </p>
+          </Badge>
         )}
-        {health.status === "error" && <p style={{ color: colors.danger }}>{health.message}</p>}
+        {health.status === "error" && (
+          <Badge tone="danger" icon="alertTriangle">
+            {health.message}
+          </Badge>
+        )}
       </section>
 
-      <section style={{ marginTop: "16px" }}>
-        <h2 style={{ fontSize: "16px" }}>Dependencies</h2>
-        {readiness.status === "loading" && <p>{translate("ru", "connection.checking")}</p>}
+      <section className="service-page__stack">
+        <h2 className="ac-text-heading">Dependencies</h2>
+        {readiness.status === "loading" && <Checking />}
         {readiness.status === "success" && (
-          <ul>
+          <ul className="service-page__list">
             {Object.entries(readiness.data.checks).map(([name, check]) => (
-              <li
-                key={name}
-                style={{ color: check.status === "ok" ? colors.primary : colors.danger }}
-              >
-                {name}: {check.status}
-                {check.error ? ` (${check.error})` : ""}
+              <li key={name}>
+                <Badge
+                  tone={check.status === "ok" ? "success" : "danger"}
+                  icon={check.status === "ok" ? "circleCheck" : "alertTriangle"}
+                >
+                  {name}: {check.status}
+                  {check.error ? ` (${check.error})` : ""}
+                </Badge>
               </li>
             ))}
           </ul>
         )}
         {readiness.status === "error" && (
-          <p style={{ color: colors.danger }}>{readiness.message}</p>
+          <Badge tone="danger" icon="alertTriangle">
+            {readiness.message}
+          </Badge>
         )}
       </section>
 
       <Button
+        variant="secondary"
+        icon="refresh"
         onClick={() => {
           reloadHealth();
           reloadReadiness();

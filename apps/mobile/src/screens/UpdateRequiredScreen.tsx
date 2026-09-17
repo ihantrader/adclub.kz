@@ -1,7 +1,7 @@
 import { translate, type Lang } from "@adclub/i18n";
-import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors } from "../theme";
+import { StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Button, Icon, Text, useTheme } from "../design-system";
 
 interface UpdateRequiredScreenProps {
   lang: Lang;
@@ -11,51 +11,35 @@ interface UpdateRequiredScreenProps {
 }
 
 export function UpdateRequiredScreen({ lang, message, onCheckAgain }: UpdateRequiredScreenProps) {
-  const [checking, setChecking] = useState(false);
-
-  const checkAgain = () => {
-    setChecking(true);
-    void onCheckAgain().finally(() => setChecking(false));
-  };
-
+  const { theme } = useTheme();
   return (
-    <View style={styles.container} accessibilityRole="alert">
-      <Text style={styles.title}>{translate(lang, "update.title")}</Text>
-      <Text style={styles.message}>{message}</Text>
-      <Pressable
-        accessibilityRole="button"
-        disabled={checking}
-        onPress={checkAgain}
-        style={({ pressed }) => [styles.button, (pressed || checking) && styles.buttonPressed]}
-      >
-        {checking ? (
-          <ActivityIndicator color={colors.primaryText} />
-        ) : (
-          <Text style={styles.buttonText}>{translate(lang, "update.checkAgain")}</Text>
-        )}
-      </Pressable>
-    </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
+      <View style={styles.content} accessibilityRole="alert">
+        <Icon name="refresh" size={48} color="accent" />
+        <Text variant="titleL" accessibilityRole="header" style={styles.center}>
+          {translate(lang, "update.title")}
+        </Text>
+        <Text color="textMuted" style={styles.center}>
+          {message}
+        </Text>
+      </View>
+      {/* The button shows loading and ignores repeated presses until the check settles. */}
+      <View style={styles.actions}>
+        <Button onPress={onCheckAgain}>{translate(lang, "update.checkAgain")}</Button>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1 },
+  content: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
-    backgroundColor: colors.background,
+    paddingHorizontal: 24,
+    gap: 12,
   },
-  title: { fontSize: 22, fontWeight: "600", marginBottom: 12, color: colors.text },
-  message: { fontSize: 16, textAlign: "center", marginBottom: 24, color: colors.text },
-  button: {
-    minWidth: 180,
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-  },
-  buttonPressed: { opacity: 0.7 },
-  buttonText: { color: colors.primaryText, fontSize: 16 },
+  center: { textAlign: "center" },
+  actions: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
 });

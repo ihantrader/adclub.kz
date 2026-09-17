@@ -1,6 +1,6 @@
 import { isApiError } from "@adclub/api-client";
 import { languages, translate, type Lang } from "@adclub/i18n";
-import { Button, colors } from "@adclub/ui";
+import { Badge, Banner, Button, Logo, Segments, Spinner } from "@adclub/ui";
 import { useEffect, useState } from "react";
 import { APP_VERSION, apiClient, setApiLanguage, useUpdateRequiredMessage } from "./api";
 
@@ -14,6 +14,7 @@ export function App() {
 
   useEffect(() => {
     setApiLanguage(lang);
+    document.documentElement.lang = lang;
   }, [lang]);
 
   useEffect(() => {
@@ -41,31 +42,43 @@ export function App() {
   }[connection];
 
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "24px", maxWidth: "480px" }}>
-      <h1>adclub.kz — {translate(lang, "common.appWorking")}</h1>
-      <p>Supplier cabinet scaffold, version {APP_VERSION}.</p>
+    <main className="service-page">
+      <Logo height={48} />
+      <h1 className="ac-text-title-l">{translate(lang, "common.appWorking")}</h1>
+      <p className="ac-text-body-s ac-muted">Supplier cabinet scaffold, version {APP_VERSION}.</p>
 
       {updateRequiredMessage !== null && (
-        <section
-          role="alert"
-          style={{ border: `2px solid ${colors.danger}`, borderRadius: "8px", padding: "16px" }}
-        >
-          <h2 style={{ fontSize: "18px", marginTop: 0, color: colors.danger }}>
-            {translate(lang, "update.title")}
-          </h2>
-          <p>{updateRequiredMessage}</p>
-          <Button onClick={() => window.location.reload()}>
+        <section role="alert" className="service-page__stack">
+          <h2 className="ac-text-title">{translate(lang, "update.title")}</h2>
+          <Banner tone="warning">{updateRequiredMessage}</Banner>
+          <Button size="l" icon="refresh" onClick={() => window.location.reload()}>
             {translate(lang, "update.reloadPage")}
           </Button>
         </section>
       )}
 
-      <p style={{ color: connection === "failed" ? colors.danger : colors.primary }}>
-        {connectionText}
-      </p>
+      <div className="service-page__status" aria-live="polite">
+        {connection === "checking" && (
+          <>
+            <Spinner />
+            <span>{connectionText}</span>
+          </>
+        )}
+        {connection === "ok" && (
+          <Badge tone="success" icon="circleCheck">
+            {connectionText}
+          </Badge>
+        )}
+        {connection === "failed" && (
+          <Badge tone="danger" icon="wifiOff">
+            {connectionText}
+          </Badge>
+        )}
+      </div>
       {connection === "failed" && (
         <Button
-          variant="neutral"
+          variant="secondary"
+          icon="refresh"
           onClick={() => {
             setConnection("checking");
             setRefreshToken((token) => token + 1);
@@ -75,17 +88,15 @@ export function App() {
         </Button>
       )}
 
-      <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
-        {languages.map((candidate) => (
-          <Button
-            key={candidate}
-            variant={candidate === lang ? "primary" : "neutral"}
-            onClick={() => setLang(candidate)}
-          >
-            {candidate.toUpperCase()}
-          </Button>
-        ))}
-      </div>
+      <Segments<Lang>
+        label="Language"
+        value={lang}
+        onChange={setLang}
+        options={languages.map((candidate) => ({
+          value: candidate,
+          label: candidate.toUpperCase(),
+        }))}
+      />
     </main>
   );
 }

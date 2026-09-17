@@ -13,11 +13,13 @@
     "@adclub/contracts": "workspace:*",
     "@adclub/i18n": "workspace:*",
     "@adclub/ui": "workspace:*",
+    "@adclub/ui-core": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@adclub/config": "workspace:*",
+    "@adclub/ui-showcase": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",

@@ -1,0 +1,43 @@
+/* Service screen layout; colors, type and components come from @adclub/ui. */
+.service-page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-4);
+  max-width: 560px;
+  padding: var(--ac-space-6) var(--ac-space-4);
+}
+
+.service-page h1,
+.service-page h2,
+.service-page p {
+  margin: 0;
+}
+
+.service-page__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-3);
+  width: 100%;
+}
+
+.service-page__status {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: 24px;
+}
+
+.service-page .ac-segments {
+  min-width: 240px;
+}
+
+.service-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

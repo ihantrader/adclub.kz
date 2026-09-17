@@ -1,0 +1,32 @@
+{
+  "name": "@adclub/ui-core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "adclub-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  },
+  "devDependencies": {
+    "@adclub/config": "workspace:*",
+    "@types/node": "^22.20.3",
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

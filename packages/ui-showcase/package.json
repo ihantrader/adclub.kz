@@ -1,0 +1,29 @@
+{
+  "name": "@adclub/ui-showcase",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@adclub/ui": "workspace:*",
+    "@adclub/ui-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@adclub/config": "workspace:*",
+    "@types/react": "^19.3.0",
+    "eslint": "^10.10.0",
+    "react": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -67,7 +67,7 @@ COMPLETED
 - `pnpm --filter @adclub/api openapi:check` — PASS.
 - `openapi:compat --base HEAD` локально — PASS, «Contract is backward compatible». В CI — PASS относительно `cce16c3`, без трейлера.
 - `pnpm --filter api migrate` на dev-базе — PASS; `migrate:status` показывает 3 применённые миграции.
-- CI на `main`: run **35194274386** (коммит `d49e838`, код и документы задачи) — **success**, все шаги; run **35194994470** (коммит `fe6e3a7`, отчёт) — **success**. Статусы получены через `gh run view`. Прогон для коммитов `8a27b40` и этого обновления отчёта — см. ответ агента.
+- CI на `main`: run **35194274386** (коммит `d49e838`, код и документы задачи) — **success**, все шаги; run **35194994470** (коммит `fe6e3a7`, отчёт) — **success**. Статусы получены через `gh run view`. Run **35195240696** (коммит `7a812fb`, после коммита правок Product Owner) — **failure** на `format:check`, причина и исправление — в Errors & Fixes. Run **35195327429** (коммит `91e5ca3`) — **success**. Прогон для последнего обновления отчёта — см. ответ агента.
 
 ## UAT / E2E
 Проверено на локальном `pnpm dev` (Windows, Docker dev compose) скриптами на `fetch`, которые выводили только результаты, без токенов.
@@ -148,7 +148,9 @@ COMPLETED
 
   Правки Product Owner: в начале работы их не было (`git status` по `PRODUCT.md`, `PROJECT_PLAN.md`, `PROJECT_STATE.md`, `tasks/` — пусто). После коммитов задачи в рабочем дереве появились правки по итогам DES-1. Они закоммичены отдельно, как найдены, без смешения с кодом задачи:
   - `8a27b40` «Add SCREENS.md 1.0 and update product docs after DES-1 (Product Owner edits)» — `SCREENS.md` (новый), `PRODUCT.md`, `PROJECT_PLAN.md`, `PROJECT_STATE.md`, `CLAUDE.md` (строки `SCREENS.md` и `DESIGN.md` в таблице документов).
-- **AC-14 — PASS.** Run 35194274386 для `d49e838` — `completed/success`, все шаги (format, lint, typecheck, test, integration, build, openapi check, compat, graceful shutdown). Run 35194994470 для `fe6e3a7` — `completed/success`.
+
+  Прочие коммиты: `7a812fb` и последующее обновление — `tasks/TASK-005-REPORT.md`; `91e5ca3` — `.prettierignore`.
+- **AC-14 — PASS.** Run 35194274386 для `d49e838` — `completed/success`, все шаги (format, lint, typecheck, test, integration, build, openapi check, compat, graceful shutdown). Run 35194994470 для `fe6e3a7` — `completed/success`. Run 35195240696 (`7a812fb`) упал на форматировании `SCREENS.md` и исправлен; run 35195327429 (`91e5ca3`) — `completed/success`.
 - **AC-15 — PASS.** ARCHITECTURE.md обновлён: версия 0.9 и история; раздел 4.6; уточнения 1, 4.1 I6, 5.1, 8.2, 8.3, 14. В CLAUDE.md, блок 0, есть шаги получения сессии и вызова `/auth/me` в dev, а также переменные `SESSION_*` и `*_WEB_ORIGINS`.
 
 ## Errors & Fixes
@@ -158,6 +160,7 @@ COMPLETED
 - **Лимит в dev-скрипте проверки.** Отклонённые запросы кода тоже считаются в лимит 5 в час на номер (TASK-004), и скрипт упёрся в него. Проверку Redis провёл на других номерах.
 - **Переводы строк.** Правки через Python на Windows записали CRLF. Перед коммитом все файлы нормализованы к LF, итоговый diff содержательный.
 - **ESLint `prefer-const` в тесте клиента** — исправлено.
+- **CI упал после коммита правок Product Owner** (run 35195240696, шаг `Format check`). Новый `SCREENS.md` не проходил Prettier, а остальные документы проекта (`PRODUCT.md`, `PROJECT_*`, `CLAUDE.md`, `tasks/`) исключены через `.prettierignore`. Исправлено коммитом `91e5ca3`: в `.prettierignore` добавлены `SCREENS.md` и будущий `DESIGN.md`. Содержимое документа Product Owner не менялось. Run 35195327429 — success.
 
 ## Deviations
 - **Чёрного списка в Redis нет** (ARCHITECTURE 8.2, 8.3 и строка CLAUDE.md о Redis). Мгновенный отзыв реализован проверкой PostgreSQL на каждом запросе. Причина — I51. Документы уточнены.

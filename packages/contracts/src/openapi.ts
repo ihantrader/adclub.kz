@@ -7,14 +7,24 @@ import {
   errorCodeSchema,
 } from "./error";
 import { healthCheckResponseSchema } from "./health";
+import {
+  loginCodeChannelSchema,
+  loginCodeInvalidDetailsSchema,
+  loginCodeSentResponseSchema,
+  loginCodeVerifiedResponseSchema,
+  rateLimitedDetailsSchema,
+  rateLimitNameSchema,
+  requestLoginCodeBodySchema,
+  verifyLoginCodeBodySchema,
+} from "./login-code";
 import { dependencyCheckSchema, readinessResponseSchema } from "./readiness";
 import type { ApiRouteDefinition } from "./routes";
 
 /**
  * Every schema that appears in the API, under the name it gets in
- * `components.schemas`. A route response whose schema isn't listed here
- * fails generation, so the document never silently inlines an anonymous
- * type.
+ * `components.schemas`. A route request or response whose schema isn't
+ * listed here fails generation, so the document never silently inlines an
+ * anonymous type.
  */
 const componentSchemas: Record<string, z.ZodType> = {
   ApiErrorResponse: apiErrorResponseSchema,
@@ -26,6 +36,14 @@ const componentSchemas: Record<string, z.ZodType> = {
   HealthCheckResponse: healthCheckResponseSchema,
   ReadinessResponse: readinessResponseSchema,
   DependencyCheck: dependencyCheckSchema,
+  LoginCodeChannel: loginCodeChannelSchema,
+  RequestLoginCodeBody: requestLoginCodeBodySchema,
+  LoginCodeSentResponse: loginCodeSentResponseSchema,
+  VerifyLoginCodeBody: verifyLoginCodeBodySchema,
+  LoginCodeVerifiedResponse: loginCodeVerifiedResponseSchema,
+  LoginCodeInvalidDetails: loginCodeInvalidDetailsSchema,
+  RateLimitName: rateLimitNameSchema,
+  RateLimitedDetails: rateLimitedDetailsSchema,
 };
 
 type JsonObject = Record<string, unknown>;
@@ -101,15 +119,20 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
     (a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method),
   );
 
+  const componentId = (schema: z.ZodType, usage: string): string => {
+    const id = ids.get(schema);
+    if (!id) {
+      throw new Error(
+        `${usage} uses a schema missing from componentSchemas (contracts/openapi.ts)`,
+      );
+    }
+    return id;
+  };
+
   for (const route of sortedRoutes) {
     const responses: JsonObject = {};
     for (const [status, response] of Object.entries(route.responses)) {
-      const id = ids.get(response.schema);
-      if (!id) {
-        throw new Error(
-          `Response ${status} of ${route.operationId} uses a schema missing from componentSchemas (contracts/openapi.ts)`,
-        );
-      }
+      const id = componentId(response.schema, `Response ${status} of ${route.operationId}`);
       responses[status] = {
         description: response.description,
         content: jsonContent(schemaRef(id)),
@@ -129,6 +152,17 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
         { $ref: "#/components/parameters/ClientHeader" },
         { $ref: "#/components/parameters/AcceptLanguage" },
       ],
+      ...(route.requestBody && {
+        requestBody: {
+          description: route.requestBody.description,
+          required: true,
+          content: jsonContent(
+            schemaRef(
+              componentId(route.requestBody.schema, `Request body of ${route.operationId}`),
+            ),
+          ),
+        },
+      }),
       responses,
     };
   }
@@ -140,7 +174,10 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       description:
         "Generated from @adclub/contracts — do not edit by hand. Changes must be additive (ARCHITECTURE 7.4).",
     },
-    tags: [{ name: "meta", description: "Service state and client policy" }],
+    tags: [
+      { name: "meta", description: "Service state and client policy" },
+      { name: "auth", description: "Sign-in with a one-time code" },
+    ],
     paths,
     components: {
       schemas,
@@ -163,7 +200,8 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       },
       responses: {
         Error: {
-          description: "Any failure, in the unified error format",
+          description:
+            "Any failure, in the unified error format. `RATE_LIMITED` (429) also sets `Retry-After`; `details` is `RateLimitedDetails`",
           content: jsonContent(schemaRef("ApiErrorResponse")),
         },
         ClientUpdateRequired: {

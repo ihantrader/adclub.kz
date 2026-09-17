@@ -4,6 +4,7 @@ import {
   formatClientHeader,
   type ApiRouteDefinition,
   type ApiRouteName,
+  type ApiRouteRequestBody,
   type ApiRouteResponse,
   type ApiRoutes,
   type ClientInfo,
@@ -30,14 +31,28 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * `client.getHealth(options?)` for a route without a body,
+ * `client.requestLoginCode(body, options?)` for one with a body.
+ */
+export type ApiOperation<Route extends ApiRouteDefinition> = [ApiRouteRequestBody<Route>] extends [
+  never,
+]
+  ? (options?: RequestOptions) => Promise<ApiRouteResponse<Route>>
+  : (
+      body: ApiRouteRequestBody<Route>,
+      options?: RequestOptions,
+    ) => Promise<ApiRouteResponse<Route>>;
+
 export type ApiOperations = {
-  [Name in ApiRouteName]: (options?: RequestOptions) => Promise<ApiRouteResponse<ApiRoutes[Name]>>;
+  [Name in ApiRouteName]: ApiOperation<ApiRoutes[Name]>;
 };
 
 export interface ApiClient extends ApiOperations {
+  /** Calls any route; `body` is required exactly when the route declares one. */
   request<Route extends ApiRouteDefinition>(
     route: Route,
-    options?: RequestOptions,
+    options?: RequestOptions & { body?: ApiRouteRequestBody<Route> },
   ): Promise<ApiRouteResponse<Route>>;
 }
 
@@ -78,12 +93,20 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
   async function request<Route extends ApiRouteDefinition>(
     route: Route,
-    requestOptions: RequestOptions = {},
+    requestOptions: RequestOptions & { body?: unknown } = {},
   ): Promise<ApiRouteResponse<Route>> {
     const headers: Record<string, string> = {
       Accept: "application/json",
       [CLIENT_HEADER]: clientHeader,
     };
+    let body: string | undefined;
+    if (route.requestBody) {
+      if (requestOptions.body === undefined) {
+        throw new TypeError(`${route.operationId} requires a request body`);
+      }
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(requestOptions.body);
+    }
     const language = options.getLanguage?.();
     if (language) {
       headers["Accept-Language"] = language;
@@ -108,6 +131,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         response = await fetchImpl(`${baseUrl}${route.path}`, {
           method: route.method,
           headers,
+          body,
           signal: controller.signal,
         });
       } catch (cause) {
@@ -128,10 +152,10 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         );
       }
 
-      const body = await readJson(response);
+      const responseBody = await readJson(response);
 
       if (Object.hasOwn(route.responses, response.status)) {
-        if (!body.ok) {
+        if (!responseBody.ok) {
           return fail(
             new ApiError({
               code: "INVALID_RESPONSE",
@@ -141,10 +165,12 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
             }),
           );
         }
-        return body.value as ApiRouteResponse<Route>;
+        return responseBody.value as ApiRouteResponse<Route>;
       }
 
-      return fail(apiErrorFromResponse(response.status, body.ok ? body.value : undefined));
+      return fail(
+        apiErrorFromResponse(response.status, responseBody.ok ? responseBody.value : undefined),
+      );
     } finally {
       clearTimeout(timer);
       callerSignal?.removeEventListener("abort", abortFromCaller);
@@ -152,11 +178,14 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   }
 
   const operations = Object.fromEntries(
-    Object.entries(apiRoutes).map(([name, route]) => [
+    Object.entries(apiRoutes).map(([name, route]: [string, ApiRouteDefinition]) => [
       name,
-      (requestOptions?: RequestOptions) => request(route, requestOptions),
+      route.requestBody
+        ? (body: unknown, requestOptions?: RequestOptions) =>
+            request(route, { ...requestOptions, body })
+        : (requestOptions?: RequestOptions) => request(route, requestOptions),
     ]),
-  ) as ApiOperations;
+  ) as unknown as ApiOperations;
 
   return { ...operations, request };
 }

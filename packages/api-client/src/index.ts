@@ -2,6 +2,7 @@ export { createApiClient } from "./create-api-client";
 export type {
   ApiClient,
   ApiClientOptions,
+  ApiOperation,
   ApiOperations,
   FetchLike,
   RequestOptions,

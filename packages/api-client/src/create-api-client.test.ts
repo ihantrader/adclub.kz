@@ -204,6 +204,61 @@ describe("createApiClient", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("sends a route's JSON body and resolves its documented response", async () => {
+    const sent = {
+      phone: "+77011234567",
+      channel: "whatsapp",
+      codeLength: 6,
+      expiresAt: "2026-09-17T00:05:00.000Z",
+      resendAvailableAt: "2026-09-17T00:01:00.000Z",
+    };
+    const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(200, sent));
+    const client = clientWith(fetchImpl);
+
+    await expect(client.requestLoginCode({ phone: "8 701 123 45 67" })).resolves.toEqual(sent);
+
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("http://api.test/auth/login-code");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(JSON.parse(init.body as string)).toEqual({ phone: "8 701 123 45 67" });
+  });
+
+  it("does not send a body or Content-Type on a route without one", async () => {
+    const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(200, {}));
+    await clientWith(fetchImpl).getHealth();
+    expect(fetchImpl.mock.calls[0]![1].body).toBeUndefined();
+    expect(fetchImpl.mock.calls[0]![1].headers).not.toHaveProperty("Content-Type");
+  });
+
+  it("exposes rate limit details of a login code error", async () => {
+    const body = {
+      code: "RATE_LIMITED",
+      message: "Too many requests",
+      details: { limit: "login_code_resend_interval", retryAfterSeconds: 42 },
+      retryable: true,
+    };
+    const client = clientWith(vi.fn<FetchLike>().mockResolvedValue(jsonResponse(429, body)));
+    const error = await captureError(
+      client.verifyLoginCode({ phone: "+77011234567", code: "123456" }),
+    );
+    expect(error).toMatchObject({
+      code: "RATE_LIMITED",
+      status: 429,
+      retryable: true,
+      details: body.details,
+    });
+  });
+
+  it("refuses to call a route that needs a body without one", async () => {
+    const fetchImpl = vi.fn<FetchLike>();
+    const client = clientWith(fetchImpl);
+    await expect(client.request(apiRoutes.requestLoginCode)).rejects.toThrow(
+      /requires a request body/,
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("formats the X-Client header for web platforms", async () => {
     const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(200, {}));
     const client = createApiClient({

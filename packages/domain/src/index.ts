@@ -6,3 +6,4 @@ export {
   parseAppVersion,
 } from "./version/app-version";
 export type { AppVersion } from "./version/app-version";
+export { maskPhone, normalizeKzMobilePhone } from "./phone/kz-mobile-phone";

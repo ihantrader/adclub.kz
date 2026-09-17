@@ -3,6 +3,18 @@ import { clientPlatformSchema } from "./client";
 
 /**
  * Machine-readable error codes shared by every endpoint (ARCHITECTURE 7.1).
+ *
+ * - `LOGIN_CODE_INVALID` (400): wrong code; `details` is
+ *   `LoginCodeInvalidDetails`.
+ * - `LOGIN_CODE_EXPIRED` (400): no code is accepted for this number any
+ *   more (expired, already used, attempts exhausted, replaced by a newer
+ *   one, or never sent) — request a new one.
+ * - `LOGIN_CODE_DELIVERY_FAILED` (503, retryable): no channel delivered
+ *   the code.
+ * - `RATE_LIMITED` (429, retryable): `details` is `RateLimitedDetails`.
+ * - `SERVICE_UNAVAILABLE` (503, retryable): a dependency the request
+ *   needs is down; try again later.
+ *
  * Extended as real endpoints need more specific codes (e.g.
  * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
  * are only ever added: clients must treat a code they don't know as a
@@ -14,6 +26,12 @@ export const errorCodeSchema = z.enum([
   "CONFLICT",
   "INTERNAL_ERROR",
   "CLIENT_UPDATE_REQUIRED",
+  // Login codes (TASK-004, ARCHITECTURE 8.1).
+  "LOGIN_CODE_INVALID",
+  "LOGIN_CODE_EXPIRED",
+  "LOGIN_CODE_DELIVERY_FAILED",
+  "RATE_LIMITED",
+  "SERVICE_UNAVAILABLE",
 ]);
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

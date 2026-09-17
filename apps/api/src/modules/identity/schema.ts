@@ -48,7 +48,6 @@ export const otpChallenge = pgTable("otp_challenge", {
 export const phoneVerification = pgTable("phone_verification", {
   phone: text("phone").primaryKey(),
   channel: text("channel").$type<"whatsapp" | "sms">().notNull(),
-  note: text("note"),
   verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

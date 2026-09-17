@@ -32,6 +32,8 @@
 | `ARCHITECTURE.md` | Принятые технические решения | **Ты** |
 | `PROJECT_PLAN.md` | EPIC → TASK со статусами | Product Owner |
 | `PROJECT_STATE.md` | Что фактически реализовано, DECISIONS, BACKLOG | Product Owner |
+| `SCREENS.md` | Экраны, потоки, состояния и критичные тексты приложения, кабинета и админки; экранные TASK ссылаются на идентификаторы экранов | Product Owner |
+| `DESIGN.md` | Бренд и дизайн-система (появится по итогам DES-2, DES-3) | Product Owner |
 | `tasks/TASK-XXX.md` | Текущая и прошлые задачи | Product Owner |
 | `tasks/TASK-XXX-REPORT.md` | Отчёты по задачам | **Ты** |
 

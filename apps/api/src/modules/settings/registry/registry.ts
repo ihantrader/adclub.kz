@@ -517,6 +517,38 @@ const clients = group({
   },
 });
 
+const cleanup = group({
+  id: "cleanup",
+  title: "Очистка",
+  editableBy: "admin",
+  settings: {
+    cleanup_login_code_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 7,
+      description:
+        "Через сколько дней после окончания действия удаляются коды входа (использованные, заменённые, истёкшие).",
+    }),
+    cleanup_sign_in_step_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 30,
+      default: 1,
+      description:
+        "Через сколько дней после завершения или истечения удаляются шаги входа (выбор компании, второй фактор).",
+    }),
+    cleanup_session_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Через сколько дней после выхода или истечения удаляются сессии (нужны, чтобы разобраться в сообщении о чужом входе).",
+    }),
+  },
+});
+
 const loginCode = group({
   id: "login_code",
   title: "Коды входа",
@@ -773,6 +805,7 @@ export const settingGroups = [
   photos,
   billing,
   clients,
+  cleanup,
   loginCode,
   session,
   signIn,
@@ -788,6 +821,7 @@ export const settingDefinitions = {
   ...photos.settings,
   ...billing.settings,
   ...clients.settings,
+  ...cleanup.settings,
   ...loginCode.settings,
   ...session.settings,
   ...signIn.settings,

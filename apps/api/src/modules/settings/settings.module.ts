@@ -3,8 +3,10 @@ import {
   AccountDirectory,
   LoginCodeSettingsSource,
   SessionSettingsSource,
+  SignInDataRetentionSource,
   SignInSettingsSource,
 } from "../identity";
+import { JobSettingsReader } from "../../jobs";
 import {
   AppSettings,
   defaultSettingsCacheOptions,
@@ -14,6 +16,7 @@ import {
 import {
   SettingsLoginCodeSource,
   SettingsSessionSource,
+  SettingsSignInDataRetentionSource,
   SettingsSignInSource,
 } from "./identity-settings.sources";
 import { SettingsChangeService } from "./settings-change.service";
@@ -30,7 +33,8 @@ export interface SettingsModuleOptions {
 /**
  * Settings in data (ARCHITECTURE 14, 4.11): the registry, the cached
  * values every process reads (`AppSettings`), changes with history, the
- * admin routes, and the threshold sources of the identity module.
+ * admin routes, the threshold sources of the identity module, and the
+ * settings reader of the job schedules.
  * Global: any module reads `AppSettings` without importing this one.
  */
 @Global()
@@ -52,6 +56,9 @@ export class SettingsModule {
         { provide: LoginCodeSettingsSource, useClass: SettingsLoginCodeSource },
         { provide: SessionSettingsSource, useClass: SettingsSessionSource },
         { provide: SignInSettingsSource, useClass: SettingsSignInSource },
+        { provide: SignInDataRetentionSource, useClass: SettingsSignInDataRetentionSource },
+        // Schedules of background jobs (jobs/job-settings.ts).
+        { provide: JobSettingsReader, useExisting: AppSettings },
       ],
       exports: [
         AppSettings,
@@ -59,6 +66,8 @@ export class SettingsModule {
         LoginCodeSettingsSource,
         SessionSettingsSource,
         SignInSettingsSource,
+        SignInDataRetentionSource,
+        JobSettingsReader,
       ],
     };
   }

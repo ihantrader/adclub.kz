@@ -5,6 +5,7 @@ import { RedisModule } from "./redis";
 import { StorageModule } from "./storage";
 import { JsonLoggerService } from "./common/logging";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
+import { IdentityJobsModule } from "./modules/identity";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -38,6 +39,7 @@ export class WorkerModule {
           catalog: backgroundJobCatalog(config),
           tuning: options.jobs,
         }),
+        IdentityJobsModule,
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

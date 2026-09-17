@@ -75,10 +75,23 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789656263507_create-app-setting",
       "1789660668561_create-job-queue",
       "1789660680048_create-periodic-job-state",
+      "1789660681238_add-sign-in-data-cleanup-indexes",
     ]);
   });
 
-  it("rolls back the latest migration only (the periodic job state)", async () => {
+  it("rolls back the latest migration only (the cleanup indexes), keeping the tables", async () => {
+    const indexExists = async (name: string) =>
+      (await client.query("SELECT 1 FROM pg_class WHERE relkind = 'i' AND relname = $1", [name]))
+        .rowCount === 1;
+    expect(await indexExists("session_ended_at_idx")).toBe(true);
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await indexExists("session_ended_at_idx")).toBe(false);
+    expect(await indexExists("otp_challenge_ended_at_idx")).toBe(false);
+    expect(await tableExists(client, "session")).toBe(true);
+  });
+
+  it("rolls back the next one (the periodic job state)", async () => {
     await client.query(
       "INSERT INTO periodic_job_state (name, last_succeeded_at) VALUES ('identity.cleanup-sessions', now())",
     );
@@ -89,9 +102,8 @@ describe("PostgreSQL: migrations and readiness", () => {
 
   it("rolls back the next one (the job queue schema), keeping the application tables", async () => {
     const schemaExists = async () =>
-      (
-        await client.query("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'pgboss'")
-      ).rowCount === 1;
+      (await client.query("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'pgboss'"))
+        .rowCount === 1;
     expect(await schemaExists()).toBe(true);
     const { rows: version } = await client.query<{ version: number }>(
       "SELECT version FROM pgboss.version",

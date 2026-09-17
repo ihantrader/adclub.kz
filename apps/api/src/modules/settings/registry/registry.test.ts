@@ -54,6 +54,7 @@ describe("settings registry", () => {
       "photos",
       "billing",
       "clients",
+      "cleanup",
       "login_code",
       "session",
       "sign_in",
@@ -76,6 +77,9 @@ describe("settings registry", () => {
       "client_min_version_supplier_web",
       "client_min_version_admin_web",
       "client_update_message",
+      "cleanup_login_code_retention_days",
+      "cleanup_sign_in_step_retention_days",
+      "cleanup_session_retention_days",
     ]) {
       expect(isSettingKey(key), key).toBe(true);
     }
@@ -132,6 +136,26 @@ describe("settings registry", () => {
     expect(
       checkSettingValue(settingDefinitions.admin_totp_allowed_drift_steps, 6, context).ok,
     ).toBe(false);
+  });
+
+  it("keeps the retention of stale sign-in data the Product Owner approved (D-054)", () => {
+    expect(settingDefinitions.cleanup_login_code_retention_days).toMatchObject({
+      group: "cleanup",
+      unit: "days",
+      default: 7,
+      editableBy: "admin",
+    });
+    expect(settingDefinitions.cleanup_sign_in_step_retention_days.default).toBe(1);
+    expect(settingDefinitions.cleanup_session_retention_days.default).toBe(30);
+    // A retention below a day would delete data still covered by the
+    // sign-in flows that use it.
+    for (const key of [
+      "cleanup_login_code_retention_days",
+      "cleanup_sign_in_step_retention_days",
+      "cleanup_session_retention_days",
+    ] as const) {
+      expect(checkSettingValue(settingDefinitions[key], 0, context).ok, key).toBe(false);
+    }
   });
 
   it("gives a fresh copy of the defaults each time", () => {

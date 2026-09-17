@@ -2,9 +2,11 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   LoginCodeSettingsSource,
   SessionSettingsSource,
+  SignInDataRetentionSource,
   SignInSettingsSource,
   type LoginCodeSettings,
   type SessionSettings,
+  type SignInDataRetention,
   type SignInSettings,
 } from "../identity";
 import { AppSettings } from "./app-settings";
@@ -101,6 +103,24 @@ export class SettingsSignInSource extends SignInSettingsSource {
         max: v.admin_totp_verify_per_ip,
         windowSeconds: v.admin_totp_verify_per_ip_window_seconds,
       },
+    };
+  }
+}
+
+/** Retention of stale sign-in data from the `cleanup_*` settings (D-054). */
+@Injectable()
+export class SettingsSignInDataRetentionSource extends SignInDataRetentionSource {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(AppSettings) private readonly settings: AppSettings) {
+    super();
+  }
+
+  async getRetention(): Promise<SignInDataRetention> {
+    const v = await this.settings.values();
+    return {
+      loginCodeDays: v.cleanup_login_code_retention_days,
+      signInStepDays: v.cleanup_sign_in_step_retention_days,
+      sessionDays: v.cleanup_session_retention_days,
     };
   }
 }

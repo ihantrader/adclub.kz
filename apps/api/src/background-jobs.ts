@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config";
 import { devJobCatalog, type JobDefinition } from "./jobs";
+import { identityJobCatalog } from "./modules/identity";
 
 /**
  * Every background job the application declares (ARCHITECTURE 13.2, 4.12).
@@ -9,7 +10,7 @@ import { devJobCatalog, type JobDefinition } from "./jobs";
  * them here.
  */
 export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDefinition[] {
-  return [...(hasDevJobs(config) ? devJobCatalog : [])];
+  return [...identityJobCatalog, ...(hasDevJobs(config) ? devJobCatalog : [])];
 }
 
 /** The always-failing job of `operator dev:jobs:fail` exists in development and tests only. */

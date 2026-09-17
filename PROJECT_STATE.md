@@ -60,7 +60,8 @@
 | TASK-004 | DONE | PASS WITH NOTES | Коды входа на тестовых каналах, лимиты, T-5 закрыт; долг T-7; git-инцидент агента (коммит чужих правок во временную ветку) → D-024 |
 | TASK-005 | DONE | PASS WITH NOTES | Сессии и токены, учётная запись по номеру, мгновенный отзыв через PostgreSQL, T-1 закрыт, D-024 в CLAUDE.md; окно повтора refresh 60 с → D-044 |
 | TASK-005.A | DONE | PASS WITH NOTES | Доводка по сквозной проверке TASK-001…TASK-005; ARCHITECTURE 0.10 |
-| TASK-006 | IN PROGRESS | — | Роли, контексты, предикат прав, выдача сессий кабинета и админки, TOTP; решения D-045…D-047 |
+| TASK-006 | FIX | FAIL (2 дефекта безопасности) | Роли, контексты, предикат прав, вход в кабинет и админку, TOTP реализованы, CI зелёный (runs 35211964468, 35212329301); исправления — TASK-006.A |
+| TASK-006.A | IN PROGRESS | — | Привязка шага входа к клиенту; удаление сотрудника завершает сессии; мелкие исправления |
 | DES-1 | DONE | Утверждено Product Owner | SCREENS.md 1.0, PRODUCT.md 1.3, решения D-026…D-043 |
 | DES-2 | DONE | Утверждено Product Owner | DESIGN.md 0.1, `design/brand`, решения D-048, D-049 |
 | DES-3 | DONE | Утверждено Product Owner | DESIGN.md разделы 6–7, `design/brand/assistant`, SCREENS.md 1.1, решения D-050, D-051 |

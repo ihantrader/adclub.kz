@@ -594,11 +594,14 @@ export class SessionService {
     accessTokenTtlSeconds: number,
   ): IssuedSession["tokens"] {
     const nowSeconds = Math.floor(now.getTime() / 1000);
-    // Never outlives the session.
-    const exp = Math.max(
-      nowSeconds + 1,
-      Math.min(nowSeconds + accessTokenTtlSeconds, Math.floor(sessionExpiresAt.getTime() / 1000)),
+    // Never outlives the session, even by the rounding of `exp` to whole
+    // seconds (TASK-007): a session ending within this second gets a token
+    // that is already expired, dated a second back so that `exp > iat`.
+    const exp = Math.min(
+      nowSeconds + accessTokenTtlSeconds,
+      Math.floor(sessionExpiresAt.getTime() / 1000),
     );
+    const iat = Math.min(nowSeconds, exp - 1);
     const secret = this.config.session.tokenSecret;
     return {
       sessionId: session.id,
@@ -607,7 +610,7 @@ export class SessionService {
         sub: session.accountId,
         sid: session.id,
         knd: session.kind,
-        iat: nowSeconds,
+        iat,
         exp,
       }),
       accessTokenExpiresAt: new Date(exp * 1000).toISOString(),

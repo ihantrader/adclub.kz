@@ -9,9 +9,105 @@
     {
       "name": "meta",
       "description": "Service state and client policy"
+    },
+    {
+      "name": "auth",
+      "description": "Sign-in with a one-time code"
     }
   ],
   "paths": {
+    "/auth/login-code": {
+      "post": {
+        "operationId": "requestLoginCode",
+        "summary": "Send a one-time login code to a Kazakhstan mobile number (WhatsApp, SMS as fallback)",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "requestBody": {
+          "description": "Phone number and optional channel",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestLoginCodeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The code was sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginCodeSentResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/login-code/verify": {
+      "post": {
+        "operationId": "verifyLoginCode",
+        "summary": "Check a login code; a correct code confirms the phone number and is spent",
+        "tags": [
+          "auth"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "requestBody": {
+          "description": "Phone number and the code",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyLoginCodeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The phone number is confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginCodeVerifiedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -235,7 +331,12 @@
           "NOT_FOUND",
           "CONFLICT",
           "INTERNAL_ERROR",
-          "CLIENT_UPDATE_REQUIRED"
+          "CLIENT_UPDATE_REQUIRED",
+          "LOGIN_CODE_INVALID",
+          "LOGIN_CODE_EXPIRED",
+          "LOGIN_CODE_DELIVERY_FAILED",
+          "RATE_LIMITED",
+          "SERVICE_UNAVAILABLE"
         ]
       },
       "HealthCheckResponse": {
@@ -262,6 +363,75 @@
           "timestamp"
         ]
       },
+      "LoginCodeChannel": {
+        "type": "string",
+        "enum": [
+          "whatsapp",
+          "sms"
+        ]
+      },
+      "LoginCodeInvalidDetails": {
+        "type": "object",
+        "properties": {
+          "attemptsRemaining": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "attemptsRemaining"
+        ]
+      },
+      "LoginCodeSentResponse": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/LoginCodeChannel"
+          },
+          "codeLength": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "resendAvailableAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "phone",
+          "channel",
+          "codeLength",
+          "expiresAt",
+          "resendAvailableAt"
+        ]
+      },
+      "LoginCodeVerifiedResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "verified"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "phone"
+        ]
+      },
       "PlatformPolicy": {
         "type": "object",
         "properties": {
@@ -271,6 +441,35 @@
         },
         "required": [
           "minSupportedVersion"
+        ]
+      },
+      "RateLimitName": {
+        "type": "string",
+        "enum": [
+          "login_code_resend_interval",
+          "login_code_requests_per_phone",
+          "login_code_requests_per_ip",
+          "login_code_sms_per_phone_daily",
+          "login_code_sms_per_ip_daily",
+          "login_code_verifications_per_phone",
+          "login_code_verify_delay"
+        ]
+      },
+      "RateLimitedDetails": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "$ref": "#/components/schemas/RateLimitName"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "limit",
+          "retryAfterSeconds"
         ]
       },
       "ReadinessResponse": {
@@ -307,6 +506,52 @@
           "status",
           "checks"
         ]
+      },
+      "RequestLoginCodeBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[+\\d\\s().-]+$",
+            "examples": [
+              "+7 701 123 45 67",
+              "8 701 1234567"
+            ]
+          },
+          "channel": {
+            "$ref": "#/components/schemas/LoginCodeChannel"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "VerifyLoginCodeBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[+\\d\\s().-]+$",
+            "examples": [
+              "+7 701 123 45 67",
+              "8 701 1234567"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16,
+            "pattern": "^\\d+$"
+          }
+        },
+        "required": [
+          "phone",
+          "code"
+        ]
       }
     },
     "parameters": {
@@ -339,7 +584,7 @@
     },
     "responses": {
       "Error": {
-        "description": "Any failure, in the unified error format",
+        "description": "Any failure, in the unified error format. `RATE_LIMITED` (429) also sets `Retry-After`; `details` is `RateLimitedDetails`",
         "content": {
           "application/json": {
             "schema": {

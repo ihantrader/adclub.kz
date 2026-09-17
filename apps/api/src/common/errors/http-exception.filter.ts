@@ -10,6 +10,7 @@ import type { ApiErrorResponse, ErrorCode } from "@adclub/contracts";
 import type { Response } from "express";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
+import { ApiException } from "./api.exception";
 import {
   CLIENT_UPDATE_REQUIRED_STATUS,
   ClientUpdateRequiredException,
@@ -51,17 +52,35 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = host.switchToHttp().getResponse<Response>();
     const { status, body } = this.toResponse(exception);
 
-    if (status >= 500) {
+    // An `ApiException` is an expected, already-described outcome (e.g. a
+    // dependency reported down); only unexpected failures are logged here.
+    if (status >= 500 && !(exception instanceof ApiException)) {
       this.logger.error(
         exception instanceof Error ? exception : new Error(String(exception)),
         "ExceptionFilter",
       );
     }
 
+    if (exception instanceof ApiException) {
+      for (const [name, value] of Object.entries(exception.options.headers ?? {})) {
+        response.setHeader(name, value);
+      }
+    }
     response.status(status).json(body);
   }
 
   private toResponse(exception: unknown): { status: number; body: ApiErrorResponse } {
+    if (exception instanceof ApiException) {
+      return {
+        status: exception.status,
+        body: {
+          code: exception.code,
+          message: exception.message,
+          ...(exception.options.details !== undefined && { details: exception.options.details }),
+          retryable: exception.options.retryable ?? false,
+        },
+      };
+    }
     if (exception instanceof ZodValidationException) {
       return {
         status: HttpStatus.BAD_REQUEST,

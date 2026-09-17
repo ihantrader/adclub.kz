@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getTableColumns, getTableName } from "drizzle-orm";
-import { account } from "./schema";
+import { account, identityTables, otpChallenge, phoneVerification } from "./schema";
 
 describe("identity schema: account", () => {
   it("maps to the account table created by the first migration", () => {
@@ -21,5 +21,26 @@ describe("identity schema: account", () => {
         "updatedAt",
       ].sort(),
     );
+  });
+});
+
+describe("identity schema: login codes", () => {
+  it("maps to the tables created by the login code migration", () => {
+    expect(getTableName(otpChallenge)).toBe("otp_challenge");
+    expect(getTableName(phoneVerification)).toBe("phone_verification");
+  });
+
+  it("stores a code hash, never a code", () => {
+    const columns = Object.keys(getTableColumns(otpChallenge));
+    expect(columns).toContain("codeHash");
+    expect(columns).not.toContain("code");
+  });
+
+  it("lists every identity table for the schema drift check", () => {
+    expect(identityTables.map((table) => getTableName(table)).sort()).toEqual([
+      "account",
+      "otp_challenge",
+      "phone_verification",
+    ]);
   });
 });

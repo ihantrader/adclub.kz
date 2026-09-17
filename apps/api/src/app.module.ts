@@ -32,7 +32,7 @@ export class AppModule implements NestModule {
         // API docs for development only (TASK-003); production serves the
         // contract routes alone.
         ...(config.nodeEnv === "production" ? [] : [OpenApiModule]),
-        IdentityModule,
+        IdentityModule.forRoot(config),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

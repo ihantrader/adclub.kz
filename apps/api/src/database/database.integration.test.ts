@@ -1,24 +1,9 @@
-import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import migratePkg from "node-pg-migrate/package.json";
 import { loadConfig } from "../config";
 import { DatabaseService } from "./database.service";
-
-const MIGRATIONS_DIR = resolve(__dirname, "..", "..", "..", "..", "infra", "migrations");
-// Resolved via package.json rather than `require.resolve("node-pg-migrate/bin/...")`
-// directly: Vitest's module resolution mishandles that subpath.
-const migratePkgDir = dirname(require.resolve("node-pg-migrate/package.json"));
-const MIGRATE_BIN = resolve(migratePkgDir, migratePkg.bin["node-pg-migrate"]);
-
-function runMigrate(command: "up" | "down", databaseUrl: string): string {
-  return execFileSync(process.execPath, [MIGRATE_BIN, command, "-m", MIGRATIONS_DIR], {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-    encoding: "utf-8",
-  });
-}
+import { runMigrate } from "./migrate-cli";
 
 async function tableExists(client: Client, table: string): Promise<boolean> {
   const { rows } = await client.query<{ exists: boolean }>(
@@ -78,26 +63,35 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(selected.rowCount).toBe(1);
   });
 
-  it("records the applied migration in the tracking table (status)", async () => {
+  it("records the applied migrations in the tracking table (status)", async () => {
     const { rows } = await client.query<{ name: string }>('SELECT name FROM "pgmigrations"');
-    expect(rows.map((row) => row.name)).toContain("1789583044021_create-account");
+    expect(rows.map((row) => row.name)).toEqual([
+      "1789583044021_create-account",
+      "1789620211794_create-login-code",
+    ]);
   });
 
-  it("rolls back: the table (and its data) is gone", () => {
+  it("rolls back the latest migration only (login codes)", async () => {
     const output = runMigrate("down", container.getConnectionUri());
     expect(output).toContain("Migrations complete");
+    expect(await tableExists(client, "otp_challenge")).toBe(false);
+    expect(await tableExists(client, "phone_verification")).toBe(false);
+    expect(await tableExists(client, "account")).toBe(true);
   });
 
-  it("confirms the table no longer exists after rollback", async () => {
+  it("rolls back the rest: the account table (and its data) is gone", async () => {
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
     expect(await tableExists(client, "account")).toBe(false);
     const { rows } = await client.query('SELECT name FROM "pgmigrations"');
     expect(rows).toHaveLength(0);
   });
 
-  it("re-applies cleanly and the table is usable again", async () => {
+  it("re-applies cleanly and the tables are usable again", async () => {
     const output = runMigrate("up", container.getConnectionUri());
     expect(output).toContain("Migrations complete");
     expect(await tableExists(client, "account")).toBe(true);
+    expect(await tableExists(client, "otp_challenge")).toBe(true);
   });
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {

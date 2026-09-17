@@ -38,6 +38,26 @@ describe("loadConfig", () => {
         },
         updateMessage: defaultClientUpdateMessages,
       },
+      http: { trustProxy: false },
+      loginCode: {
+        channels: "test",
+        testFailingChannels: [],
+        devOutbox: true,
+        hashSecret: expect.any(String),
+        settings: {
+          codeLength: 6,
+          ttlSeconds: 300,
+          maxAttempts: 5,
+          resendIntervalSeconds: 60,
+          verifyFreeFailures: 2,
+          verifyDelayBaseSeconds: 2,
+          requestsPerPhone: { max: 5, windowSeconds: 3600 },
+          requestsPerIp: { max: 30, windowSeconds: 3600 },
+          verificationsPerPhone: { max: 15, windowSeconds: 3600 },
+          smsPerPhoneDaily: { max: 5, windowSeconds: 86400 },
+          smsPerIpDaily: { max: 10, windowSeconds: 86400 },
+        },
+      },
     });
   });
 
@@ -116,5 +136,85 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...VALID_ENV, CLIENT_UPDATE_MESSAGE_RU: "   " })).toThrow(
       /CLIENT_UPDATE_MESSAGE_RU/,
     );
+  });
+
+  describe("login codes", () => {
+    const PRODUCTION_ENV = {
+      ...VALID_ENV,
+      NODE_ENV: "production",
+      LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
+    };
+
+    it("refuses to start production with the test channels", () => {
+      expect(() => loadConfig(PRODUCTION_ENV)).toThrow(
+        /LOGIN_CODE_CHANNELS: test channels are not allowed when NODE_ENV=production/,
+      );
+    });
+
+    it("refuses to start production with the dev code outbox", () => {
+      expect(() => loadConfig({ ...PRODUCTION_ENV, LOGIN_CODE_DEV_OUTBOX: "true" })).toThrow(
+        /LOGIN_CODE_DEV_OUTBOX/,
+      );
+    });
+
+    it("never enables the dev code outbox by default outside development and tests", () => {
+      const staging = loadConfig({ ...PRODUCTION_ENV, NODE_ENV: "staging" });
+      expect(staging.loginCode.devOutbox).toBe(false);
+      expect(loadConfig({ ...VALID_ENV, NODE_ENV: "test" }).loginCode.devOutbox).toBe(true);
+      expect(loadConfig({ ...VALID_ENV, LOGIN_CODE_DEV_OUTBOX: "false" }).loginCode.devOutbox).toBe(
+        false,
+      );
+    });
+
+    it("requires a hash secret outside development and tests, without printing it", () => {
+      expect(() => loadConfig({ ...VALID_ENV, NODE_ENV: "staging" })).toThrow(
+        /LOGIN_CODE_HASH_SECRET: required when NODE_ENV=staging/,
+      );
+      try {
+        loadConfig({ ...PRODUCTION_ENV, LOGIN_CODE_HASH_SECRET: "short-secret-value" });
+        expect.unreachable("loadConfig should have thrown");
+      } catch (error) {
+        expect((error as Error).message).toContain("LOGIN_CODE_HASH_SECRET");
+        expect((error as Error).message).not.toContain("short-secret-value");
+      }
+    });
+
+    it("reads thresholds and failing test channels from the environment", () => {
+      const config = loadConfig({
+        ...VALID_ENV,
+        LOGIN_CODE_LENGTH: "4",
+        LOGIN_CODE_TTL_SECONDS: "120",
+        LOGIN_CODE_SMS_PER_IP_DAILY: "3",
+        LOGIN_CODE_TEST_FAILING_CHANNELS: " whatsapp , sms ",
+      });
+      expect(config.loginCode.settings).toMatchObject({
+        codeLength: 4,
+        ttlSeconds: 120,
+        smsPerIpDaily: { max: 3, windowSeconds: 86400 },
+      });
+      expect(config.loginCode.testFailingChannels).toEqual(["whatsapp", "sms"]);
+    });
+
+    it.each([
+      ["LOGIN_CODE_LENGTH", "3"],
+      ["LOGIN_CODE_LENGTH", "9"],
+      ["LOGIN_CODE_TTL_SECONDS", "0"],
+      ["LOGIN_CODE_REQUESTS_PER_IP", "many"],
+      ["LOGIN_CODE_TEST_FAILING_CHANNELS", "telegram"],
+      ["LOGIN_CODE_CHANNELS", "meta"],
+      ["LOGIN_CODE_DEV_OUTBOX", "maybe"],
+    ])("rejects %s=%j", (name, value) => {
+      expect(() => loadConfig({ ...VALID_ENV, [name]: value })).toThrow(new RegExp(name));
+    });
+  });
+
+  it.each([
+    [undefined, false],
+    ["false", false],
+    ["true", true],
+    ["1", 1],
+    ["loopback", "loopback"],
+  ])("reads TRUST_PROXY=%j", (value, expected) => {
+    expect(loadConfig({ ...VALID_ENV, TRUST_PROXY: value }).http.trustProxy).toBe(expected);
   });
 });

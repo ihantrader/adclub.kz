@@ -1,13 +1,16 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+
+/**
+ * Drizzle mirrors of the tables in `infra/migrations` — the migrations are
+ * the source of truth. Kept in sync by hand; the integration test
+ * `database/schema-drift.integration.test.ts` fails CI when they differ
+ * (ARCHITECTURE 4.5).
+ */
 
 /**
  * `account` (ARCHITECTURE 5.1): the single identity a phone number owns,
  * whatever role it plays (user, supplier employee, admin — those role
- * tables arrive with the tasks that own them, EPIC-02). No business logic
- * lives here yet (TASK-002 scope); this only mirrors the table created by
- * `infra/migrations/1789583044021_create-account.sql`, which is the
- * source of truth — keep the two in sync by hand until the schema is rich
- * enough to justify `drizzle-kit generate` (see ARCHITECTURE.md).
+ * tables arrive with the tasks that own them, EPIC-02).
  */
 export const account = pgTable("account", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -19,3 +22,36 @@ export const account = pgTable("account", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export type OtpChallengeStatus =
+  "pending" | "active" | "consumed" | "superseded" | "expired" | "exhausted" | "failed";
+
+/** `otp_challenge` (ARCHITECTURE 5.1, 8.1): one login code, stored as an HMAC. */
+export const otpChallenge = pgTable("otp_challenge", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  phone: text("phone").notNull(),
+  purpose: text("purpose").$type<"login" | "phone_change">().notNull().default("login"),
+  status: text("status").$type<OtpChallengeStatus>().notNull().default("pending"),
+  channel: text("channel").$type<"whatsapp" | "sms">(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** `phone_verification`: the channel a phone number was last confirmed through. */
+export const phoneVerification = pgTable("phone_verification", {
+  phone: text("phone").primaryKey(),
+  channel: text("channel").$type<"whatsapp" | "sms">().notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Every table this module owns — checked against the migrated database. */
+export const identityTables = [account, otpChallenge, phoneVerification];

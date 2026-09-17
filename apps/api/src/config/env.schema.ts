@@ -1,4 +1,4 @@
-import type { ClientPlatform } from "@adclub/contracts";
+import type { ClientPlatform, LoginCodeChannel } from "@adclub/contracts";
 import { isValidAppVersion } from "@adclub/domain";
 import type { Lang } from "@adclub/i18n";
 import { z } from "zod";
@@ -40,6 +40,35 @@ export const defaultClientUpdateMessages: Record<Lang, string> = {
   en: "This version of the app is no longer supported. Please update the app to continue.",
 };
 
+const positiveInt = (defaultValue: number) =>
+  z.coerce.number().int().positive().default(defaultValue);
+
+/**
+ * Where login codes are sent from. Only `test` exists today (in-process
+ * stand-ins for WhatsApp and SMS, TASK-004); the real providers arrive in
+ * TASK-026. `test` is refused in production.
+ */
+export const loginCodeChannelProviders = ["test"] as const;
+export type LoginCodeChannelProvider = (typeof loginCodeChannelProviders)[number];
+
+const loginCodeChannelList = z
+  .string()
+  .default("")
+  .transform((value) =>
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0),
+  )
+  .pipe(z.array(z.enum(["whatsapp", "sms"])));
+
+/**
+ * Used only when no secret is configured in development and tests, so a
+ * fresh checkout runs without extra setup. Every other environment must
+ * set `LOGIN_CODE_HASH_SECRET`.
+ */
+const DEV_LOGIN_CODE_HASH_SECRET = "adclub-dev-only-login-code-hash-secret";
+
 /**
  * Raw environment schema, keyed by the actual `.env` variable names.
  * Kept separate from `AppConfig` so validation errors report the variable
@@ -67,7 +96,68 @@ export const envSchema = z.object({
   CLIENT_UPDATE_MESSAGE_RU: z.string().trim().min(1).default(defaultClientUpdateMessages.ru),
   CLIENT_UPDATE_MESSAGE_KK: z.string().trim().min(1).default(defaultClientUpdateMessages.kk),
   CLIENT_UPDATE_MESSAGE_EN: z.string().trim().min(1).default(defaultClientUpdateMessages.en),
+  // Express `trust proxy`: how many reverse proxies (or which addresses) to
+  // trust for the client IP in X-Forwarded-For. Rate limits by IP depend on
+  // it behind a proxy. `false` (default): the socket address is the client.
+  TRUST_PROXY: z
+    .string()
+    .trim()
+    .default("false")
+    .transform((value): boolean | number | string => {
+      if (value === "false" || value === "") return false;
+      if (value === "true") return true;
+      return /^\d+$/.test(value) ? Number(value) : value;
+    }),
+  // Login codes (ARCHITECTURE 8.1, 14; TASK-004).
+  LOGIN_CODE_CHANNELS: z.enum(loginCodeChannelProviders).default("test"),
+  LOGIN_CODE_TEST_FAILING_CHANNELS: loginCodeChannelList,
+  LOGIN_CODE_DEV_OUTBOX: z.stringbool().optional(),
+  LOGIN_CODE_HASH_SECRET: z.string().min(32).optional(),
+  LOGIN_CODE_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
+  LOGIN_CODE_TTL_SECONDS: positiveInt(300),
+  LOGIN_CODE_MAX_ATTEMPTS: positiveInt(5),
+  LOGIN_CODE_RESEND_INTERVAL_SECONDS: positiveInt(60),
+  LOGIN_CODE_VERIFY_FREE_FAILURES: z.coerce.number().int().min(0).default(2),
+  LOGIN_CODE_VERIFY_DELAY_BASE_SECONDS: positiveInt(2),
+  LOGIN_CODE_REQUESTS_PER_PHONE: positiveInt(5),
+  LOGIN_CODE_REQUESTS_PER_PHONE_WINDOW_SECONDS: positiveInt(3600),
+  LOGIN_CODE_REQUESTS_PER_IP: positiveInt(30),
+  LOGIN_CODE_REQUESTS_PER_IP_WINDOW_SECONDS: positiveInt(3600),
+  LOGIN_CODE_VERIFICATIONS_PER_PHONE: positiveInt(15),
+  LOGIN_CODE_VERIFICATIONS_PER_PHONE_WINDOW_SECONDS: positiveInt(3600),
+  LOGIN_CODE_SMS_PER_PHONE_DAILY: positiveInt(5),
+  LOGIN_CODE_SMS_PER_IP_DAILY: positiveInt(10),
 });
+
+const DAY_SECONDS = 24 * 60 * 60;
+
+export interface RateLimitSettings {
+  max: number;
+  windowSeconds: number;
+}
+
+/**
+ * Login code thresholds (ARCHITECTURE 8.1, 14), read through
+ * `LoginCodeSettingsSource` — the replacement point for the settings
+ * table (TASK-007).
+ */
+export interface LoginCodeSettings {
+  codeLength: number;
+  ttlSeconds: number;
+  /** Wrong entries a single code survives; the last one invalidates it. */
+  maxAttempts: number;
+  /** Minimum time between two codes for one number, whatever the channel. */
+  resendIntervalSeconds: number;
+  /** Wrong entries allowed without any delay before the next try. */
+  verifyFreeFailures: number;
+  /** Delay after the first delayed failure; doubles with each next one. */
+  verifyDelayBaseSeconds: number;
+  requestsPerPhone: RateLimitSettings;
+  requestsPerIp: RateLimitSettings;
+  verificationsPerPhone: RateLimitSettings;
+  smsPerPhoneDaily: RateLimitSettings;
+  smsPerIpDaily: RateLimitSettings;
+}
 
 export type AppConfig = {
   nodeEnv: NodeEnv;
@@ -89,6 +179,18 @@ export type AppConfig = {
   clientPolicy: {
     minSupportedVersions: Record<ClientPlatform, string>;
     updateMessage: Record<Lang, string>;
+  };
+  http: {
+    trustProxy: boolean | number | string;
+  };
+  loginCode: {
+    channels: LoginCodeChannelProvider;
+    /** `test` channels only: channels that report a delivery failure. */
+    testFailingChannels: LoginCodeChannel[];
+    /** Serve sent codes at `GET /dev/login-codes` (never in production). */
+    devOutbox: boolean;
+    hashSecret: string;
+    settings: LoginCodeSettings;
   };
 };
 
@@ -118,6 +220,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const parsed = result.data;
 
+  const isLocal = parsed.NODE_ENV === "development" || parsed.NODE_ENV === "test";
+  const devOutbox = parsed.LOGIN_CODE_DEV_OUTBOX ?? isLocal;
+  // Production must never run with stand-in channels (nobody would get a
+  // code) or with a way to read codes without owning the phone.
+  const environmentIssues: string[] = [];
+  if (parsed.NODE_ENV === "production" && parsed.LOGIN_CODE_CHANNELS === "test") {
+    environmentIssues.push(
+      "LOGIN_CODE_CHANNELS: test channels are not allowed when NODE_ENV=production",
+    );
+  }
+  if (parsed.NODE_ENV === "production" && devOutbox) {
+    environmentIssues.push(
+      "LOGIN_CODE_DEV_OUTBOX: the dev code outbox is not allowed when NODE_ENV=production",
+    );
+  }
+  if (!isLocal && !parsed.LOGIN_CODE_HASH_SECRET) {
+    environmentIssues.push(`LOGIN_CODE_HASH_SECRET: required when NODE_ENV=${parsed.NODE_ENV}`);
+  }
+  if (environmentIssues.length > 0) {
+    throw new ConfigValidationError(environmentIssues);
+  }
+
   return {
     nodeEnv: parsed.NODE_ENV,
     port: parsed.PORT,
@@ -146,6 +270,40 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         ru: parsed.CLIENT_UPDATE_MESSAGE_RU,
         kk: parsed.CLIENT_UPDATE_MESSAGE_KK,
         en: parsed.CLIENT_UPDATE_MESSAGE_EN,
+      },
+    },
+    http: {
+      trustProxy: parsed.TRUST_PROXY,
+    },
+    loginCode: {
+      channels: parsed.LOGIN_CODE_CHANNELS,
+      testFailingChannels: parsed.LOGIN_CODE_TEST_FAILING_CHANNELS,
+      devOutbox,
+      hashSecret: parsed.LOGIN_CODE_HASH_SECRET ?? DEV_LOGIN_CODE_HASH_SECRET,
+      settings: {
+        codeLength: parsed.LOGIN_CODE_LENGTH,
+        ttlSeconds: parsed.LOGIN_CODE_TTL_SECONDS,
+        maxAttempts: parsed.LOGIN_CODE_MAX_ATTEMPTS,
+        resendIntervalSeconds: parsed.LOGIN_CODE_RESEND_INTERVAL_SECONDS,
+        verifyFreeFailures: parsed.LOGIN_CODE_VERIFY_FREE_FAILURES,
+        verifyDelayBaseSeconds: parsed.LOGIN_CODE_VERIFY_DELAY_BASE_SECONDS,
+        requestsPerPhone: {
+          max: parsed.LOGIN_CODE_REQUESTS_PER_PHONE,
+          windowSeconds: parsed.LOGIN_CODE_REQUESTS_PER_PHONE_WINDOW_SECONDS,
+        },
+        requestsPerIp: {
+          max: parsed.LOGIN_CODE_REQUESTS_PER_IP,
+          windowSeconds: parsed.LOGIN_CODE_REQUESTS_PER_IP_WINDOW_SECONDS,
+        },
+        verificationsPerPhone: {
+          max: parsed.LOGIN_CODE_VERIFICATIONS_PER_PHONE,
+          windowSeconds: parsed.LOGIN_CODE_VERIFICATIONS_PER_PHONE_WINDOW_SECONDS,
+        },
+        smsPerPhoneDaily: {
+          max: parsed.LOGIN_CODE_SMS_PER_PHONE_DAILY,
+          windowSeconds: DAY_SECONDS,
+        },
+        smsPerIpDaily: { max: parsed.LOGIN_CODE_SMS_PER_IP_DAILY, windowSeconds: DAY_SECONDS },
       },
     },
   };

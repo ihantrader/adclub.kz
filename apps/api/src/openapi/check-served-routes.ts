@@ -1,6 +1,10 @@
 import type { ApiRouteDefinition } from "@adclub/contracts";
 import type { ServedRoute } from "../common/contract";
+import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
+
+/** Development helpers that are deliberately not part of the contract. */
+const NON_CONTRACT_PATHS: readonly string[] = [...DEV_ONLY_PATHS, DEV_LOGIN_CODE_OUTBOX_PATH];
 
 function key(method: string, path: string): string {
   return `${method.toUpperCase()} ${path}`;
@@ -31,7 +35,7 @@ export function checkServedRoutesMatchContract(
   const servedKeys = new Set(
     served
       .filter((route) => !isCatchAll(route))
-      .filter((route) => !(DEV_ONLY_PATHS as readonly string[]).includes(route.path))
+      .filter((route) => !NON_CONTRACT_PATHS.includes(route.path))
       .map((route) => key(route.method, route.path)),
   );
   const contractKeys = new Set(

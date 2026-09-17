@@ -5,8 +5,7 @@ import { NestFactory } from "@nestjs/core";
 import { apiRoutes, buildOpenApiDocument } from "@adclub/contracts";
 import { AppModule } from "../src/app.module";
 import { listServedRoutes } from "../src/common/contract";
-import { loadConfig } from "../src/config";
-import { checkServedRoutesMatchContract } from "../src/openapi";
+import { checkServedRoutesMatchContract, routeListingConfig } from "../src/openapi";
 
 /**
  * `generate`: writes `apps/api/openapi.json` from `@adclub/contracts`.
@@ -23,16 +22,9 @@ const SPEC_PATH = resolve(__dirname, "..", "openapi.json");
 const GENERATE_COMMAND = "pnpm --filter @adclub/api openapi:generate";
 
 async function listProductionRoutes() {
-  const config = loadConfig({
-    NODE_ENV: "production",
-    DATABASE_URL: "postgres://x:x@127.0.0.1:1/x",
-    REDIS_URL: "redis://127.0.0.1:2",
-    S3_ENDPOINT: "http://127.0.0.1:3",
-    S3_ACCESS_KEY: "x",
-    S3_SECRET_KEY: "x",
-    S3_BUCKET: "x",
+  const app = await NestFactory.create(AppModule.forRoot(routeListingConfig("production")), {
+    logger: false,
   });
-  const app = await NestFactory.create(AppModule.forRoot(config), { logger: false });
   try {
     await app.init();
     return listServedRoutes(app);

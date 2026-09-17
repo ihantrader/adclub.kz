@@ -5,25 +5,15 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { listServedRoutes } from "../common/contract";
-import { loadConfig, type NodeEnv } from "../config";
 import { checkServedRoutesMatchContract } from "./check-served-routes";
+import { routeListingConfig } from "./route-listing-config";
 
-function configFor(nodeEnv: NodeEnv) {
-  // Dependencies point at closed local ports: the app boots without them
-  // (TASK-002), and none of these tests reach a handler that needs them.
-  return loadConfig({
-    NODE_ENV: nodeEnv,
-    DATABASE_URL: "postgres://x:x@127.0.0.1:1/x",
-    REDIS_URL: "redis://127.0.0.1:2",
-    S3_ENDPOINT: "http://127.0.0.1:3",
-    S3_ACCESS_KEY: "x",
-    S3_SECRET_KEY: "x",
-    S3_BUCKET: "x",
+// Dependencies point at closed local ports: the app boots without them
+// (TASK-002), and none of these tests reach a handler that needs them.
+async function boot(nodeEnv: "production" | "development"): Promise<INestApplication> {
+  const app = await NestFactory.create(AppModule.forRoot(routeListingConfig(nodeEnv)), {
+    logger: false,
   });
-}
-
-async function boot(nodeEnv: NodeEnv): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule.forRoot(configFor(nodeEnv)), { logger: false });
   await app.init();
   return app;
 }
@@ -46,10 +36,13 @@ describe("served routes vs contract (full AppModule)", () => {
     expect(checkServedRoutesMatchContract(listServedRoutes(production), contract)).toEqual([]);
     const paths = listServedRoutes(production).map((route) => route.path);
     expect(paths).not.toContain("/openapi.json");
+    expect(paths).not.toContain("/dev/login-codes");
   });
 
-  it("serves the contract routes plus the docs in development", () => {
+  it("serves the contract routes plus the docs and the dev code outbox in development", () => {
     expect(checkServedRoutesMatchContract(listServedRoutes(development), contract)).toEqual([]);
+    const paths = listServedRoutes(development).map((route) => route.path);
+    expect(paths).toEqual(expect.arrayContaining(["/openapi.json", "/docs", "/dev/login-codes"]));
   });
 
   it("serves the generated OpenAPI document and the docs page in development", async () => {
@@ -63,10 +56,12 @@ describe("served routes vs contract (full AppModule)", () => {
     expect(docs.text).toContain("/openapi.json");
   });
 
-  it("does not serve the docs in production", async () => {
-    const response = await request(production.getHttpServer()).get("/openapi.json");
-    expect(response.status).toBe(404);
-    expect(response.body.code).toBe("NOT_FOUND");
+  it("does not serve the docs or the dev code outbox in production", async () => {
+    for (const path of ["/openapi.json", "/dev/login-codes"]) {
+      const response = await request(production.getHttpServer()).get(path);
+      expect(response.status).toBe(404);
+      expect(response.body.code).toBe("NOT_FOUND");
+    }
   });
 
   it("serves health and the client policy through the real module wiring", async () => {
@@ -86,6 +81,9 @@ describe("checkServedRoutesMatchContract", () => {
     { method: "GET", path: "/health" },
     { method: "GET", path: "/ready" },
     { method: "GET", path: "/meta/client-policy" },
+    { method: "POST", path: "/auth/login-code" },
+    { method: "POST", path: "/auth/login-code/verify" },
+    { method: "GET", path: "/dev/login-codes" },
     { method: "GET", path: "/{*path}" },
     { method: "POST", path: "/{*path}" },
   ];

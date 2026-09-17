@@ -159,13 +159,35 @@ export type {
   SettingVersionConflictDetails,
 } from "./settings";
 
-export { apiRoutes, buildRoutePath } from "./routes";
+export {
+  AUDIT_LOG_DEFAULT_PAGE_SIZE,
+  AUDIT_LOG_MAX_PAGE_SIZE,
+  auditActions,
+  auditEntities,
+  auditActorRoleSchema,
+  auditActorSchema,
+  auditLogEntrySchema,
+  auditLogPageSchema,
+  auditLogQuerySchema,
+} from "./audit";
+export type {
+  AuditAction,
+  AuditActor,
+  AuditActorRole,
+  AuditEntityType,
+  AuditLogEntry,
+  AuditLogPage,
+  AuditLogQuery,
+} from "./audit";
+
+export { apiRoutes, buildRoutePath, buildRouteQuery } from "./routes";
 export type {
   ApiRequestBodyDefinition,
   ApiResponseDefinition,
   ApiRouteDefinition,
   ApiRouteName,
   ApiRoutePathParams,
+  ApiRouteQuery,
   ApiRouteRequestBody,
   ApiRouteResponse,
   ApiRoutes,

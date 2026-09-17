@@ -16,6 +16,7 @@ describe("buildOpenApiDocument", () => {
     expect(Object.keys(document.paths).sort()).toEqual([
       "/admin/administrators",
       "/admin/administrators/{adminId}/totp-reset",
+      "/admin/audit-log",
       "/admin/settings",
       "/admin/settings/{key}",
       "/admin/settings/{key}/history",

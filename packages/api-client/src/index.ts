@@ -4,6 +4,7 @@ export type {
   ApiClientOptions,
   ApiOperation,
   ApiOperations,
+  CallOptions,
   FetchLike,
   RequestOptions,
 } from "./create-api-client";

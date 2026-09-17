@@ -12,6 +12,12 @@ import {
   switchSupplierBodySchema,
   totpResetResponseSchema,
 } from "./access";
+import {
+  auditActorSchema,
+  auditActorRoleSchema,
+  auditLogEntrySchema,
+  auditLogPageSchema,
+} from "./audit";
 import { CLIENT_HEADER, clientPlatformSchema } from "./client";
 import { clientPolicyResponseSchema, platformPolicySchema } from "./client-policy";
 import {
@@ -138,6 +144,10 @@ const componentSchemas: Record<string, z.ZodType> = {
   SettingChangedResponse: settingChangedResponseSchema,
   SettingHistoryResponse: settingHistoryResponseSchema,
   SettingVersionConflictDetails: settingVersionConflictDetailsSchema,
+  AuditActorRole: auditActorRoleSchema,
+  AuditActor: auditActorSchema,
+  AuditLogEntry: auditLogEntrySchema,
+  AuditLogPage: auditLogPageSchema,
 };
 
 type JsonObject = Record<string, unknown>;
@@ -221,6 +231,27 @@ function pathParameters(route: ApiRouteDefinition): JsonObject[] {
 }
 
 /**
+ * One `in: query` parameter per field of the route's query schema, schemas
+ * inlined. A parameter is required only when its field is (in practice
+ * none are: a caller may always leave the query out).
+ */
+function queryParameters(route: ApiRouteDefinition): JsonObject[] {
+  const shape: Record<string, z.ZodType> = route.query?.shape ?? {};
+  return Object.entries(shape).map(([name, field]) => {
+    const { $schema: _dialect, ...schema } = z.toJSONSchema(field, {
+      target: "draft-2020-12",
+      io: "input",
+    }) as JsonObject;
+    return {
+      name,
+      in: "query",
+      required: !field.safeParse(undefined).success,
+      schema,
+    };
+  });
+}
+
+/**
  * Builds the OpenAPI 3.1 document for the given routes (ARCHITECTURE 7.2).
  * Pure and deterministic: same routes and schemas → byte-identical JSON,
  * so the committed copy can be diffed and compared in CI.
@@ -267,6 +298,7 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       tags: [route.tag],
       parameters: [
         ...pathParameters(route),
+        ...queryParameters(route),
         { $ref: "#/components/parameters/ClientHeader" },
         { $ref: "#/components/parameters/AcceptLanguage" },
       ],

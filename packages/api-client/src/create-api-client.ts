@@ -1,11 +1,13 @@
 import {
   apiRoutes,
   buildRoutePath,
+  buildRouteQuery,
   CLIENT_HEADER,
   formatClientHeader,
   type ApiRouteDefinition,
   type ApiRouteName,
   type ApiRoutePathParams,
+  type ApiRouteQuery,
   type ApiRouteRequestBody,
   type ApiRouteResponse,
   type ApiRoutes,
@@ -43,6 +45,15 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * Options of one call: the filters and paging of a route that declares
+ * query parameters (`client.listAuditLog({ query: { limit: 20 } })`) are
+ * part of them — every query field is optional, so the argument itself
+ * always is.
+ */
+export type CallOptions<Route extends ApiRouteDefinition> = RequestOptions &
+  ([ApiRouteQuery<Route>] extends [never] ? unknown : { query?: ApiRouteQuery<Route> });
+
 type Result<Route extends ApiRouteDefinition> = Promise<ApiRouteResponse<Route>>;
 
 /**
@@ -55,14 +66,14 @@ export type ApiOperation<Route extends ApiRouteDefinition> = [ApiRoutePathParams
   never,
 ]
   ? [ApiRouteRequestBody<Route>] extends [never]
-    ? (options?: RequestOptions) => Result<Route>
-    : (body: ApiRouteRequestBody<Route>, options?: RequestOptions) => Result<Route>
+    ? (options?: CallOptions<Route>) => Result<Route>
+    : (body: ApiRouteRequestBody<Route>, options?: CallOptions<Route>) => Result<Route>
   : [ApiRouteRequestBody<Route>] extends [never]
-    ? (params: ApiRoutePathParams<Route>, options?: RequestOptions) => Result<Route>
+    ? (params: ApiRoutePathParams<Route>, options?: CallOptions<Route>) => Result<Route>
     : (
         params: ApiRoutePathParams<Route>,
         body: ApiRouteRequestBody<Route>,
-        options?: RequestOptions,
+        options?: CallOptions<Route>,
       ) => Result<Route>;
 
 export type ApiOperations = {
@@ -76,7 +87,7 @@ export interface ApiClient extends ApiOperations {
    */
   request<Route extends ApiRouteDefinition>(
     route: Route,
-    options?: RequestOptions & {
+    options?: CallOptions<Route> & {
       body?: ApiRouteRequestBody<Route>;
       params?: ApiRoutePathParams<Route>;
     },
@@ -120,12 +131,11 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
   async function request<Route extends ApiRouteDefinition>(
     route: Route,
-    requestOptions: RequestOptions & { body?: unknown; params?: unknown } = {},
+    requestOptions: RequestOptions & { body?: unknown; params?: unknown; query?: unknown } = {},
   ): Promise<ApiRouteResponse<Route>> {
-    const path = buildRoutePath(
-      route,
-      (requestOptions.params ?? {}) as Readonly<Record<string, string>>,
-    );
+    const path =
+      buildRoutePath(route, (requestOptions.params ?? {}) as Readonly<Record<string, string>>) +
+      buildRouteQuery(route, (requestOptions.query ?? {}) as Readonly<Record<string, unknown>>);
     const headers: Record<string, string> = {
       Accept: "application/json",
       [CLIENT_HEADER]: clientHeader,

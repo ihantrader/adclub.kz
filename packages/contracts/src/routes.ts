@@ -11,6 +11,7 @@ import {
   totpResetResponseSchema,
   type AccessContext,
 } from "./access";
+import { auditLogPageSchema, auditLogQuerySchema } from "./audit";
 import { clientPolicyResponseSchema } from "./client-policy";
 import { healthCheckResponseSchema } from "./health";
 import {
@@ -67,8 +68,6 @@ export interface ApiRequestBodyDefinition {
  * unified `ApiErrorResponse`) are implied for every route and not listed
  * in `responses`, which only holds the documented non-error bodies.
  *
- * Query parameters are added to this shape together with the first
- * endpoint that needs them.
  */
 export interface ApiRouteDefinition {
   operationId: string;
@@ -106,6 +105,14 @@ export interface ApiRouteDefinition {
    * this object schema per placeholder.
    */
   pathParams?: z.ZodObject<Record<string, z.ZodType<string>>>;
+  /**
+   * Query parameters, one field of this object schema per parameter. Every
+   * field is optional or has a default — a caller may always leave the
+   * query out entirely. Values arrive as strings, so a field of another
+   * type coerces (`z.coerce.number()`); the server validates with this same
+   * schema.
+   */
+  query?: z.ZodObject;
   /** Required JSON body; the lowest listed 2xx status is the success status. */
   requestBody?: ApiRequestBodyDefinition;
   responses: Readonly<Record<number, ApiResponseDefinition>>;
@@ -508,6 +515,21 @@ export const apiRoutes = {
       200: { description: "The setting now and the change", schema: settingChangedResponseSchema },
     },
   }),
+  listAuditLog: defineRoute({
+    operationId: "listAuditLog",
+    method: "GET",
+    path: "/admin/audit-log",
+    summary:
+      "The action journal, newest first: who did what, over what, what changed and why; filters by period, actor, action and entity",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: auditLogQuerySchema,
+    responses: {
+      200: { description: "One page of the journal", schema: auditLogPageSchema },
+    },
+  }),
   getSettingHistory: defineRoute({
     operationId: "getSettingHistory",
     method: "GET",
@@ -545,6 +567,13 @@ export type ApiRoutePathParams<Route extends ApiRouteDefinition> = Route extends
   ? z.input<Schema>
   : never;
 
+/** Query parameters a caller may pass to a route (`never` for routes without them). */
+export type ApiRouteQuery<Route extends ApiRouteDefinition> = Route extends {
+  query: infer Schema extends z.ZodType;
+}
+  ? z.input<Schema>
+  : never;
+
 /** Union of every documented (non-error) response body of a route. */
 export type ApiRouteResponse<Route extends ApiRouteDefinition> = ResponseBody<
   Route["responses"][keyof Route["responses"]]
@@ -565,4 +594,28 @@ export function buildRoutePath(
     }
     return encodeURIComponent(value);
   });
+}
+
+/**
+ * The query string of a request (`?a=1&b=2`, or `""` without parameters).
+ * Only parameters the route declares are sent, so a stray field can't end
+ * up in a URL; `undefined` and `null` are left out.
+ */
+export function buildRouteQuery(
+  route: ApiRouteDefinition,
+  query: Readonly<Record<string, unknown>> = {},
+): string {
+  const declared = route.query?.shape;
+  if (!declared) {
+    return "";
+  }
+  const parts: string[] = [];
+  for (const name of Object.keys(declared)) {
+    const value = query[name];
+    if (value === undefined || value === null) {
+      continue;
+    }
+    parts.push(`${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`);
+  }
+  return parts.length > 0 ? `?${parts.join("&")}` : "";
 }

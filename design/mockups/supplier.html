@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Asia Drive Club — макеты кабинета поставщика (DES-5)</title>
+    <link rel="icon" href="../brand/favicon.svg" />
+    <link rel="stylesheet" href="ds.css" />
+  </head>
+  <body class="gallery">
+    <header class="gallery-head">
+      <h1>DES-5 · Кабинет поставщика</h1>
+      <span style="color: #b9b5ad; font-size: 14px">Тема:</span>
+      <button type="button" data-theme-btn="light" aria-pressed="true">
+        Светлая (по умолчанию)
+      </button>
+      <button type="button" data-theme-btn="dark" aria-pressed="false">Тёмная</button>
+      <span style="color: #b9b5ad; font-size: 13px"
+        >PWA: телефон 390 × 844, компьютер 1280 × 800. Тексты — SCREENS.md 1.0 раздел 6; токены и
+        компоненты — DESIGN.md 7.</span
+      >
+    </header>
+
+    <!-- ================= 1. Orders ================= -->
+    <section class="gallery-group">
+      <h2>1. Входящие заявки — S-ORD-01…03</h2>
+      <p>
+        Шапка всегда с названием компании. Вкладки: Заявки · Предложения · <b>Сканер</b> (в центре,
+        приподнятая кнопка — как AI Pilot у пользователя) · Прайс · Ещё. Новая заявка появляется без
+        перезагрузки и выделена рамкой; меньше 15 минут на ответ — таймер жёлтый. Телефон клиента —
+        только после принятия; код поставщик не видит никогда.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div style="padding: 4px 16px 0">
+                <span class="company"
+                  ><i class="ti ti-building-store"></i>АвтоМир Астана<i
+                    class="ti ti-chevron-down"
+                  ></i
+                ></span>
+                <div class="t-title-l mt4">Заявки</div>
+                <div class="seg mt12">
+                  <span class="on">Новые <span class="count">3</span></span
+                  ><span>В работе</span><span>Завершённые</span>
+                </div>
+              </div>
+              <div class="scroll mt12" style="display: flex; flex-direction: column; gap: 8px">
+                <div class="order-card fresh">
+                  <div class="row-flex">
+                    <span class="timer urgent"
+                      ><i class="ti ti-clock-exclamation"></i>Ответить за 12 мин</span
+                    ><span class="spacer"></span><span class="badge accent">Новая</span>
+                  </div>
+                  <div class="t-strong mt8 clamp2">
+                    Масло моторное Shell Helix Ultra 5W-30, 4 л × 2
+                  </div>
+                  <div class="row-flex mt4 t-s">
+                    <b class="num">25 000 ₸</b><span class="muted">· В наличии · Самовывоз</span>
+                  </div>
+                  <div class="t-s muted mt4">№ 4821 · Айгерим · 13:40</div>
+                  <div style="display: flex; gap: 8px" class="mt12">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">Отказать</div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-check"></i>Принять
+                    </div>
+                  </div>
+                </div>
+                <div class="order-card">
+                  <div class="row-flex">
+                    <span class="timer"><i class="ti ti-clock"></i>Ответить за 38 мин</span>
+                  </div>
+                  <div class="t-strong mt8 clamp2">Фильтр салонный угольный Geely Monjaro × 1</div>
+                  <div class="row-flex mt4 t-s">
+                    <b class="num">6 500 ₸</b
+                    ><span class="muted">· Под заказ до 20 марта · Доставка</span>
+                  </div>
+                  <div class="t-s muted mt4">№ 4822 · Данияр · 13:52</div>
+                  <div style="display: flex; gap: 8px" class="mt12">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">Отказать</div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1.4">
+                      <i class="ti ti-check"></i>Подтвердить срок
+                    </div>
+                  </div>
+                </div>
+                <div class="order-card">
+                  <div class="row-flex">
+                    <span class="timer"><i class="ti ti-clock"></i>Ответить за 1 ч 05 мин</span>
+                  </div>
+                  <div class="t-strong mt8">Замена масла в двигателе</div>
+                  <div class="row-flex mt4 t-s">
+                    <b class="num">9 000 ₸</b
+                    ><span class="muted">· Услуга · Monjaro, 15 марта 10:00</span>
+                  </div>
+                </div>
+              </div>
+              <div data-tabbar="orders" data-count="3"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-ORD-01 · Новые</b> · первая заявка только что пришла; у «под заказ» — «Подтвердить
+            срок»
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div style="padding: 4px 16px 0">
+                <span class="company"
+                  ><i class="ti ti-building-store"></i>АвтоМир Астана<i
+                    class="ti ti-chevron-down"
+                  ></i
+                ></span>
+                <div class="t-title-l mt4">Заявки</div>
+                <div class="seg mt12">
+                  <span>Новые <span class="count">3</span></span
+                  ><span class="on">В работе</span><span>Завершённые</span>
+                </div>
+              </div>
+              <div class="scroll mt8">
+                <div class="section-title" style="margin-top: 12px">Ждут выдачи · 2</div>
+                <div class="list">
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <div class="t-strong clamp2">
+                        Колодки тормозные передние Geely Monjaro × 1
+                      </div>
+                      <div class="t-s muted mt4">№ 4810 · Ерболат · 19 500 ₸</div>
+                    </div>
+                    <span class="badge warn"><i class="ti ti-clock"></i>Резерв до 16:00</span>
+                  </div>
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <div class="t-strong clamp2">Масло Mobil 1 ESP 5W-30, 4 л × 1</div>
+                      <div class="t-s muted mt4">№ 4807 · Сауле · 14 200 ₸</div>
+                    </div>
+                    <span class="badge muted"><i class="ti ti-clock"></i>до 18:00, 14 марта</span>
+                  </div>
+                </div>
+                <div class="section-title">Готовятся · 1</div>
+                <div class="list">
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <div class="t-strong clamp2">Свечи зажигания NGK, комплект × 1</div>
+                      <div class="t-s muted mt4">№ 4815 · Марат · под заказ до 18 марта</div>
+                    </div>
+                    <i class="ti ti-chevron-right muted"></i>
+                  </div>
+                </div>
+                <div class="section-title">Ждут ответа клиента · 1</div>
+                <div class="list">
+                  <div class="list-item" style="align-items: flex-start; padding: 12px 16px">
+                    <div style="flex: 1; min-width: 0">
+                      <div class="t-strong clamp2">Амортизатор задний × 2</div>
+                      <div class="t-s muted mt4">№ 4799 · предложили 25 марта · ответ до 18:00</div>
+                    </div>
+                    <i class="ti ti-chevron-right muted"></i>
+                  </div>
+                </div>
+              </div>
+              <div data-tabbar="orders" data-count="3"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-ORD-01 · В работе</b> · группы; «Записи на услуги» — ниже, по дате
+          </div>
+        </div>
+
+        <div>
+          <div class="phone long">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">№ 4821</span
+                ><span class="company" style="padding-right: 12px">АвтоМир Астана</span>
+              </div>
+              <div style="padding: 0 16px 24px">
+                <div class="row-flex">
+                  <span class="badge accent">Новая</span
+                  ><span class="timer urgent"
+                    ><i class="ti ti-clock-exclamation"></i>Ответить за 12 мин</span
+                  >
+                </div>
+                <div class="section-title">Клиент</div>
+                <div class="card">
+                  <div class="t-strong">Айгерим</div>
+                  <div class="meta mt4" style="font-size: 14px; line-height: 20px">
+                    <i class="ti ti-lock" style="font-size: 18px"></i>Телефон откроется после
+                    принятия заявки
+                  </div>
+                </div>
+                <div class="section-title">Позиция</div>
+                <div class="card">
+                  <div class="t-strong">
+                    Масло моторное Shell Helix Ultra 5W-30, синтетическое, 4 л
+                  </div>
+                  <div class="t-s muted mt4">Shell · 550046375</div>
+                  <div class="kv mt16">
+                    <span>Количество</span><span>2 шт.</span> <span>Цена по заявке</span
+                    ><span><b class="num">2 × 12 500 = 25 000 ₸</b></span> <span>Получение</span
+                    ><span>Самовывоз, завтра 14 марта</span>
+                  </div>
+                  <div class="banner neutral rounded mt12" style="padding: 8px 12px">
+                    <i class="ti ti-info-circle"></i
+                    ><span
+                      >Цена зафиксирована на момент оформления. Сейчас в предложении — 13 000
+                      ₸</span
+                    >
+                  </div>
+                </div>
+                <div class="section-title">Ход заявки</div>
+                <div class="timeline">
+                  <div class="step">
+                    <div class="t-s">Создана</div>
+                    <div class="t-cap muted">13 марта, 13:40</div>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="bottom-actions"
+                style="border-top: 1px solid var(--border); background: var(--bar)"
+              >
+                <div class="btn btn-l btn-primary">Принять</div>
+                <div class="btn btn-l btn-secondary btn-danger-text">Отказать</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-ORD-02 · новая</b> · действия закреплены внизу экрана; цена менялась после
+            оформления
+          </div>
+        </div>
+
+        <div>
+          <div class="phone long">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">№ 4810</span
+                ><span class="company" style="padding-right: 12px">АвтоМир Астана</span>
+              </div>
+              <div style="padding: 0 16px 24px">
+                <div class="banner neutral rounded">
+                  <i class="ti ti-users"></i
+                  ><span>Заявку уже принял Ерлан в 14:02. Экран обновлён</span>
+                </div>
+                <div class="row-flex mt12">
+                  <span class="badge accent"><i class="ti ti-circle-check"></i>Принята</span
+                  ><span class="t-s muted">Готово к выдаче — до 18:00</span>
+                </div>
+                <div class="section-title">Клиент</div>
+                <div class="card">
+                  <div class="t-strong">Ерболат</div>
+                  <div class="t-s mt4 num">+7 701 555 12 34</div>
+                  <div style="display: flex; gap: 8px" class="mt12">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-phone"></i>Позвонить
+                    </div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-brand-whatsapp"></i>WhatsApp
+                    </div>
+                  </div>
+                </div>
+                <div class="section-title">Позиция</div>
+                <div class="card">
+                  <div class="t-strong">Колодки тормозные передние Geely Monjaro</div>
+                  <div class="t-s muted mt4">Geely · 4050054400 · 1 шт.</div>
+                  <div class="t-s mt8">
+                    Цена по заявке <b class="num">19 500 ₸</b> · Самовывоз, сегодня
+                  </div>
+                </div>
+                <div class="section-title">Ход заявки</div>
+                <div class="timeline">
+                  <div class="step">
+                    <div class="t-s">Принял Ерлан</div>
+                    <div class="t-cap muted">14:02 · через WhatsApp</div>
+                  </div>
+                  <div class="step">
+                    <div class="t-s">Создана</div>
+                    <div class="t-cap muted">13:40</div>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="bottom-actions"
+                style="border-top: 1px solid var(--border); background: var(--bar)"
+              >
+                <div class="btn btn-l btn-primary">
+                  <i class="ti ti-package"></i>Готово к выдаче
+                </div>
+                <div style="display: flex; gap: 8px">
+                  <div class="btn btn-l btn-secondary" style="flex: 1.5">
+                    <i class="ti ti-scan"></i>Выдать по QR / коду
+                  </div>
+                  <div class="btn btn-l btn-secondary btn-danger-text" style="flex: 1">
+                    Отказать
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-ORD-02 · принята</b> · коллега обработал раньше — баннер вместо ошибки
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">№ 4821</span>
+              </div>
+              <div class="scroll">
+                <div class="t-strong">Масло моторное Shell Helix Ultra 5W-30, 4 л × 2</div>
+                <div class="t-s muted">Айгерим · 25 000 ₸</div>
+              </div>
+              <div class="scrim"></div>
+              <div class="sheet">
+                <div class="grabber"></div>
+                <div class="t-title">Отказать клиенту?</div>
+                <div class="t-s muted mt4">
+                  Причина по желанию. Клиент её не увидит — видит только администратор клуба
+                </div>
+                <div class="list mt16">
+                  <div class="list-item">
+                    <span class="t-body">Нет в наличии</span><span class="radio on"></span>
+                  </div>
+                  <div class="list-item">
+                    <span class="t-body">Не можем в этот срок</span><span class="radio"></span>
+                  </div>
+                  <div class="list-item">
+                    <span class="t-body">Другое</span><span class="radio"></span>
+                  </div>
+                </div>
+                <div class="check">
+                  <span class="check-box on"
+                    ><i class="ti ti-check" style="font-size: 18px"></i></span
+                  ><span class="t-s">Снять это предложение с продажи</span>
+                </div>
+                <div class="btn btn-l btn-secondary btn-danger-text btn-block mt8">Отказать</div>
+                <div class="btn btn-text btn-block mt8">Не отказывать</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-ORD-03</b> · при «Нет в наличии» появляется «Снять с продажи»
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 2. Handover ================= -->
+    <section class="gallery-group">
+      <h2>2. Выдача по QR и коду — S-SCAN-01…04</h2>
+      <p>
+        Сканер открывается сразу на весь экран (камера — всегда тёмная, в любой теме). Ручной ввод —
+        своя клавиатура с клавишами 64. Результат — цветной верх во всю ширину и одно главное
+        действие.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone" style="background: #17181b; color: #f2efe8">
+            <div data-status></div>
+            <div class="camera">
+              <div class="camera-shade"><i></i><i></i><i></i><i></i></div>
+              <div
+                style="
+                  position: absolute;
+                  top: 8px;
+                  left: 16px;
+                  right: 16px;
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                "
+              >
+                <span class="round-btn"><i class="ti ti-x"></i></span>
+                <div style="flex: 1; text-align: center">
+                  <div class="t-cap" style="color: #b9b5ad">Выдача</div>
+                  <div class="t-strong">АвтоМир Астана</div>
+                </div>
+                <span class="round-btn"><i class="ti ti-bolt"></i></span>
+              </div>
+              <div
+                style="
+                  position: absolute;
+                  top: calc(44% + 152px);
+                  left: 0;
+                  right: 0;
+                  text-align: center;
+                "
+                class="t-body"
+              >
+                Наведите камеру на QR клиента
+              </div>
+              <div style="position: absolute; left: 16px; right: 16px; bottom: 42px">
+                <div
+                  class="btn btn-l"
+                  style="background: rgba(242, 239, 232, 0.14); color: #f2efe8"
+                >
+                  <i class="ti ti-keyboard"></i>Ввести код вручную
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator" style="background: #f2efe8"></div>
+          </div>
+          <div class="frame-cap"><b>S-SCAN-01</b> · рамка 272 (70 % ширины), фонарик справа</div>
+        </div>
+
+        <div>
+          <div class="phone" style="background: #17181b; color: #f2efe8">
+            <div data-status></div>
+            <div class="camera">
+              <div class="camera-shade"><i></i><i></i><i></i><i></i></div>
+              <div
+                style="
+                  position: absolute;
+                  top: 8px;
+                  left: 16px;
+                  right: 16px;
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                "
+              >
+                <span class="round-btn"><i class="ti ti-x"></i></span>
+                <div style="flex: 1; text-align: center">
+                  <div class="t-cap" style="color: #b9b5ad">Выдача</div>
+                  <div class="t-strong">АвтоМир Астана</div>
+                </div>
+                <span class="round-btn"><i class="ti ti-bolt"></i></span>
+              </div>
+              <div
+                style="
+                  position: absolute;
+                  left: 16px;
+                  right: 16px;
+                  bottom: 42px;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 8px;
+                "
+              >
+                <div
+                  style="
+                    background: #3a1714;
+                    color: #f2efe8;
+                    border-radius: 4px;
+                    padding: 12px 16px;
+                    display: flex;
+                    gap: 8px;
+                    font-size: 14px;
+                  "
+                >
+                  <i class="ti ti-alert-circle" style="color: #f08a7e; font-size: 20px"></i>Это не
+                  QR заявки клуба
+                </div>
+                <div
+                  class="btn btn-l"
+                  style="background: rgba(242, 239, 232, 0.14); color: #f2efe8"
+                >
+                  <i class="ti ti-keyboard"></i>Ввести код вручную
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator" style="background: #f2efe8"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-SCAN-01</b> · чужой QR — сообщение, сканер продолжает работать
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Код клиента</span
+                ><span class="company" style="padding-right: 12px">АвтоМир Астана</span>
+              </div>
+              <div class="scroll" style="display: flex; flex-direction: column">
+                <div class="t-s muted">Попросите клиента назвать код из приложения</div>
+                <div class="code-cells mt16" style="justify-content: space-between">
+                  <div class="code-cell" style="height: 64px; font-size: 40px">4</div>
+                  <div class="code-cell" style="height: 64px; font-size: 40px">8</div>
+                  <div class="code-cell" style="height: 64px; font-size: 40px; margin-right: 12px">
+                    2
+                  </div>
+                  <div class="code-cell" style="height: 64px; font-size: 40px">9</div>
+                  <div class="code-cell focus" style="height: 64px; font-size: 40px"></div>
+                  <div class="code-cell" style="height: 64px; font-size: 40px"></div>
+                </div>
+                <span class="spacer"></span>
+                <div class="keypad">
+                  <div class="key">1</div>
+                  <div class="key">2</div>
+                  <div class="key">3</div>
+                  <div class="key">4</div>
+                  <div class="key">5</div>
+                  <div class="key">6</div>
+                  <div class="key">7</div>
+                  <div class="key">8</div>
+                  <div class="key">9</div>
+                  <div class="key ghost"></div>
+                  <div class="key">0</div>
+                  <div class="key"><i class="ti ti-backspace" style="font-size: 28px"></i></div>
+                </div>
+              </div>
+              <div class="bottom-actions"><div class="btn btn-l disabled">Найти</div></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-SCAN-02</b> · цифры группами 3 + 3, «Найти» активна после шестой цифры
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-x"></i></span
+                ><span class="t-title">Заявка найдена</span
+                ><span class="company" style="padding-right: 12px">АвтоМир Астана</span>
+              </div>
+              <div class="scroll">
+                <span class="badge ok"><i class="ti ti-package"></i>Готова к выдаче</span>
+                <div class="t-title mt12">Масло моторное Shell Helix Ultra 5W-30, 4 л</div>
+                <div class="t-code mt16">× 2</div>
+                <div class="card mt16">
+                  <div class="kv">
+                    <span>Клиент</span><span class="t-strong">Айгерим</span>
+                    <span>Сумма по заявке</span><span><b class="num">25 000 ₸</b></span>
+                    <span>Заявка</span><span>№ 4821 · самовывоз</span>
+                  </div>
+                </div>
+                <div class="t-s muted mt16">Проверьте товар и количество перед выдачей</div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary"><i class="ti ti-check"></i>Выдать</div>
+                <div class="btn btn-text">Отмена</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-SCAN-03</b> · количество крупно — чтобы не ошибиться на складе
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-x"></i></span
+                ><span class="t-title">Заявка найдена</span>
+              </div>
+              <div class="scroll">
+                <span class="badge muted"><i class="ti ti-clock-off"></i>Срок истёк</span>
+                <div class="t-title mt12">Колодки тормозные передние Geely Monjaro</div>
+                <div class="t-code mt16">× 1</div>
+                <div class="banner warn rounded mt16">
+                  <i class="ti ti-alert-triangle"></i
+                  ><span
+                    >Срок заявки истёк сегодня в 16:00. Если клиент был у вас вовремя, заявку можно
+                    закрыть</span
+                  >
+                </div>
+                <div class="card mt16">
+                  <div class="kv">
+                    <span>Клиент</span><span class="t-strong">Ерболат</span>
+                    <span>Сумма по заявке</span><span><b class="num">19 500 ₸</b></span>
+                  </div>
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary">Закрыть заявку</div>
+                <div class="btn btn-text">Отмена</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-SCAN-03</b> · истекла после принятия, окно позднего закрытия открыто
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="result-head ok">
+                <i class="ti ti-circle-check"></i>
+                <div class="t-title-l">Выдано</div>
+                <div class="t-body">Масло моторное Shell Helix Ultra 5W-30, 4 л × 2 · Айгерим</div>
+              </div>
+              <div class="scroll mt16">
+                <div class="t-s muted">
+                  Заявка № 4821 закрыта в 14:31. Клиенту придёт уведомление
+                </div>
+              </div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary">
+                  <i class="ti ti-scan"></i>Сканировать следующую
+                </div>
+                <div class="btn btn-l btn-secondary">К заявкам</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>S-SCAN-04 · успех</b></div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="result-head err">
+                <i class="ti ti-circle-x"></i>
+                <div class="t-title-l">Код не найден</div>
+                <div class="t-body">Проверьте цифры: <b class="num">482 916</b></div>
+              </div>
+              <div class="scroll"></div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary">
+                  <i class="ti ti-keyboard"></i>Ввести ещё раз
+                </div>
+                <div class="btn btn-l btn-secondary"><i class="ti ti-scan"></i>Сканировать QR</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-SCAN-04 · не найден</b> · остальные отказы (другая компания, уже выдана, отменена,
+            истекла) — так же, свой текст
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status="offline"></div>
+            <div class="screen">
+              <div class="result-head warn">
+                <i class="ti ti-wifi-off"></i>
+                <div class="t-title-l">Нет связи</div>
+                <div class="t-body">
+                  Запишите код клиента и закройте заявку, когда связь появится
+                </div>
+              </div>
+              <div
+                class="scroll"
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  justify-content: center;
+                  text-align: center;
+                "
+              >
+                <div class="t-s muted">Код клиента</div>
+                <div class="num" style="font-size: 56px; line-height: 64px; font-weight: 700">
+                  482 915
+                </div>
+                <div class="t-s muted mt8">
+                  Сфотографируйте или запишите — на экране он не сохранится
+                </div>
+              </div>
+              <div class="bottom-actions"><div class="btn btn-l btn-secondary">К заявкам</div></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-SCAN-04 · нет сети</b> · код, введённый вручную, показан крупно
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 3. Offers ================= -->
+    <section class="gallery-group">
+      <h2>3. Предложения — S-OFF-01, S-OFF-03</h2>
+      <p>
+        На телефоне — карточки с правкой прямо в строке (цена, наличие, срок); поле сохраняется
+        сразу, внизу «Сохранено · Отменить». На компьютере — таблица. Баннер паузы — на всех
+        страницах, заявки и выдача при этом работают.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="banner warn">
+                <i class="ti ti-alert-triangle"></i
+                ><span
+                  >Предложения сняты с витрины: подписка не оплачена. Текущие заявки нужно выполнить
+                  <span class="link">Оплатить</span></span
+                >
+              </div>
+              <div style="padding: 12px 16px 0">
+                <span class="company"
+                  ><i class="ti ti-building-store"></i>АвтоМир Астана<i
+                    class="ti ti-chevron-down"
+                  ></i
+                ></span>
+                <div class="row-flex mt4">
+                  <span class="t-title-l">Предложения</span><span class="spacer"></span
+                  ><span class="icon-btn"><i class="ti ti-plus"></i></span>
+                </div>
+                <div class="seg mt8">
+                  <span class="on">В продаже · 248</span><span>Снятые · 12</span>
+                </div>
+                <div class="search mt12">
+                  <i class="ti ti-search"></i><span>Название или артикул</span>
+                </div>
+                <div class="chips mt8">
+                  <span class="chip">В наличии</span><span class="chip">Под заказ</span
+                  ><span class="chip on"><i class="ti ti-check"></i>Без фото · 9</span>
+                </div>
+              </div>
+              <div class="scroll mt12" style="display: flex; flex-direction: column; gap: 8px">
+                <div class="order-card">
+                  <div class="t-strong clamp2">Масло моторное Shell Helix Ultra 5W-30, 4 л</div>
+                  <div class="t-s muted">
+                    550046375 · <span class="accent">Активные заявки: 2</span>
+                  </div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap" class="mt12">
+                    <span class="inline-field" style="border: 2px solid var(--accent); width: 116px"
+                      >13 000<span class="spacer"></span>₸</span
+                    >
+                    <span class="inline-field">В наличии<i class="ti ti-chevron-down"></i></span>
+                    <span class="inline-field muted"
+                      ><i class="ti ti-building-store"></i><i class="ti ti-truck"></i
+                    ></span>
+                  </div>
+                  <div class="t-cap muted mt8">Новая цена — для новых заявок</div>
+                </div>
+                <div class="order-card">
+                  <div class="row-flex" style="align-items: flex-start">
+                    <div class="t-strong clamp2" style="flex: 1">
+                      Фильтр салонный угольный Geely Monjaro
+                    </div>
+                    <span class="badge muted"><i class="ti ti-photo-off"></i>Без фото</span>
+                  </div>
+                  <div class="t-s muted">8022046800</div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap" class="mt12">
+                    <span class="inline-field" style="width: 116px"
+                      >6 500<span class="spacer"></span>₸</span
+                    >
+                    <span class="inline-field">Под заказ<i class="ti ti-chevron-down"></i></span>
+                    <span class="inline-field">5<span class="muted">дн.</span></span>
+                  </div>
+                </div>
+              </div>
+              <div class="toast">
+                <i class="ti ti-check"></i>Сохранено<span class="spacer"></span
+                ><b style="color: #d4b483">Отменить</b>
+              </div>
+              <div data-tabbar="offers" data-count="3"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-OFF-01</b> · пауза; цена только что изменена; отбор «Без фото»
+          </div>
+        </div>
+
+        <div>
+          <div class="phone long">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Предложение</span
+                ><span class="company" style="padding-right: 12px">АвтоМир Астана</span>
+              </div>
+              <div style="padding: 0 16px 24px">
+                <div class="card" style="display: flex; gap: 12px">
+                  <div class="thumb" style="width: 56px; height: 56px">
+                    <i class="ti ti-filter"></i>
+                  </div>
+                  <div>
+                    <div class="t-strong">Фильтр салонный угольный Geely Monjaro</div>
+                    <div class="t-s muted">Geely · 8022046800 · Фильтры</div>
+                  </div>
+                </div>
+                <div class="field-label mt24">Цена</div>
+                <div class="field">
+                  <span class="num">6 500</span><span class="spacer"></span
+                  ><span class="muted">₸</span>
+                </div>
+                <div class="field-label mt16">Наличие</div>
+                <div class="seg"><span>В наличии</span><span class="on">Под заказ</span></div>
+                <div class="field-label mt16">Срок, дней с подтверждения</div>
+                <div class="field" style="width: 140px"><span class="num">5</span></div>
+                <div class="field-label mt16">Получение</div>
+                <div class="check" style="padding: 4px 0">
+                  <span class="check-box on"
+                    ><i class="ti ti-check" style="font-size: 18px"></i></span
+                  ><span>Самовывоз</span>
+                </div>
+                <div class="check" style="padding: 4px 0">
+                  <span class="check-box on"
+                    ><i class="ti ti-check" style="font-size: 18px"></i></span
+                  ><span>Доставка</span>
+                </div>
+                <div class="field-label mt16">Гарантия, месяцев — по желанию</div>
+                <div class="field" style="width: 140px"><span class="placeholder">—</span></div>
+
+                <div
+                  class="card mt24"
+                  style="background: var(--surface-raised); border-color: transparent"
+                >
+                  <div class="t-cap muted">Клиент увидит</div>
+                  <div class="t-price mt4">6 500 ₸</div>
+                  <div class="t-s mt4">
+                    Под заказ · Самовывоз — до 20 марта · Доставка — до 21 марта
+                  </div>
+                </div>
+
+                <div class="list mt16">
+                  <div class="list-item">
+                    <i class="ti ti-camera"></i
+                    ><span class="t-s">У позиции нет фото — сфотографируйте деталь</span
+                    ><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                  <div class="list-item">
+                    <i class="ti ti-car"></i
+                    ><span class="t-s">Предложить данные о совместимости</span
+                    ><i class="ti ti-chevron-right chev"></i>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="bottom-actions"
+                style="border-top: 1px solid var(--border); background: var(--bar)"
+              >
+                <div class="btn btn-l btn-primary">Сохранить</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-OFF-03</b> · предпросмотр пересчитывается по рабочим дням компании
+          </div>
+        </div>
+
+        <div>
+          <div class="desktop">
+            <div class="browser-bar">
+              <b></b><b></b><b></b><span>adclub.kz/supplier/offers</span>
+            </div>
+            <div class="app">
+              <div data-sidebar="offers"></div>
+              <div class="main">
+                <div class="banner warn" style="padding: 10px 32px">
+                  <i class="ti ti-alert-triangle"></i
+                  ><span
+                    >Предложения сняты с витрины: подписка не оплачена. Текущие заявки нужно
+                    выполнить</span
+                  ><span class="spacer"></span><span class="btn btn-s btn-primary">Оплатить</span>
+                </div>
+                <div class="main-head">
+                  <div>
+                    <div class="t-title-l">Предложения</div>
+                    <div class="tabs-line mt12">
+                      <span class="on">В продаже <span class="n">248</span></span
+                      ><span>Снятые <span class="n">12</span></span>
+                    </div>
+                  </div>
+                  <span class="spacer"></span>
+                  <div class="search" style="width: 320px">
+                    <i class="ti ti-search"></i><span>Название или артикул</span>
+                  </div>
+                  <span class="btn btn-m btn-secondary"
+                    ><i class="ti ti-upload"></i>Загрузить прайс</span
+                  >
+                  <span class="btn btn-m btn-primary"
+                    ><i class="ti ti-plus"></i>Добавить позицию</span
+                  >
+                </div>
+                <div class="main-body">
+                  <div class="chips" style="margin-bottom: 12px">
+                    <span class="chip">В наличии</span><span class="chip">Под заказ</span
+                    ><span class="chip">Без фото · 9</span>
+                  </div>
+                  <div class="table-wrap">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th style="width: 38%">Позиция</th>
+                          <th>Цена, ₸</th>
+                          <th>Наличие</th>
+                          <th>Срок, дн.</th>
+                          <th>Получение</th>
+                          <th>Активные заявки</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>
+                            <div style="font-weight: 500">
+                              Масло моторное Shell Helix Ultra 5W-30, 4 л
+                            </div>
+                            <div class="t-cap muted">Shell · 550046375</div>
+                          </td>
+                          <td>
+                            <span
+                              class="inline-field"
+                              style="width: 110px; border: 2px solid var(--accent)"
+                              >13 000</span
+                            >
+                          </td>
+                          <td>
+                            <span class="inline-field"
+                              >В наличии<i class="ti ti-chevron-down"></i
+                            ></span>
+                          </td>
+                          <td class="muted">—</td>
+                          <td class="muted">
+                            <i class="ti ti-building-store"></i> <i class="ti ti-truck"></i>
+                          </td>
+                          <td class="accent">2</td>
+                          <td><i class="ti ti-dots muted"></i></td>
+                        </tr>
+                        <tr>
+                          <td>
+                            <div style="font-weight: 500">
+                              Фильтр салонный угольный Geely Monjaro
+                              <span class="badge muted"
+                                ><i class="ti ti-photo-off"></i>Без фото</span
+                              >
+                            </div>
+                            <div class="t-cap muted">Geely · 8022046800</div>
+                          </td>
+                          <td><span class="inline-field" style="width: 110px">6 500</span></td>
+                          <td>
+                            <span class="inline-field"
+                              >Под заказ<i class="ti ti-chevron-down"></i
+                            ></span>
+                          </td>
+                          <td><span class="inline-field" style="width: 56px">5</span></td>
+                          <td class="muted">
+                            <i class="ti ti-building-store"></i> <i class="ti ti-truck"></i>
+                          </td>
+                          <td class="muted">0</td>
+                          <td><i class="ti ti-dots muted"></i></td>
+                        </tr>
+                        <tr>
+                          <td>
+                            <div style="font-weight: 500">
+                              Колодки тормозные передние Geely Monjaro
+                            </div>
+                            <div class="t-cap muted">Geely · 4050054400</div>
+                          </td>
+                          <td><span class="inline-field" style="width: 110px">19 500</span></td>
+                          <td>
+                            <span class="inline-field"
+                              >В наличии<i class="ti ti-chevron-down"></i
+                            ></span>
+                          </td>
+                          <td class="muted">—</td>
+                          <td class="muted"><i class="ti ti-building-store"></i></td>
+                          <td class="accent">1</td>
+                          <td><i class="ti ti-dots muted"></i></td>
+                        </tr>
+                        <tr>
+                          <td>
+                            <div style="font-weight: 500">
+                              Свечи зажигания NGK Laser Iridium, комплект 4 шт.
+                            </div>
+                            <div class="t-cap muted">NGK · 97506</div>
+                          </td>
+                          <td><span class="inline-field" style="width: 110px">24 000</span></td>
+                          <td>
+                            <span class="inline-field"
+                              >Под заказ<i class="ti ti-chevron-down"></i
+                            ></span>
+                          </td>
+                          <td><span class="inline-field" style="width: 56px">7</span></td>
+                          <td class="muted">
+                            <i class="ti ti-building-store"></i> <i class="ti ti-truck"></i>
+                          </td>
+                          <td class="muted">0</td>
+                          <td><i class="ti ti-dots muted"></i></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="t-cap muted mt8">
+                    Новая цена действует для новых заявок. Цены в созданных заявках не меняются
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap" style="max-width: 1280px">
+            <b>S-OFF-01 · компьютер</b> · боковое меню 240, таблица, правка в ячейке
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 4. Price ================= -->
+    <section class="gallery-group">
+      <h2>4. Сверка прайса — S-PRICE-02, S-PRICE-03</h2>
+      <p>
+        Рассчитано на компьютер; на телефоне — те же шаги карточками. Бирюзовым помечено только то,
+        что определил или предложил ИИ и что человек ещё не подтвердил. Кнопка «Применить»
+        неактивна, пока не выбрано действие для пропавших позиций.
+      </p>
+      <div class="frames">
+        <div>
+          <div class="desktop">
+            <div class="browser-bar">
+              <b></b><b></b><b></b><span>adclub.kz/supplier/price/1284/columns</span>
+            </div>
+            <div class="app">
+              <div data-sidebar="price"></div>
+              <div class="main">
+                <div class="main-head">
+                  <div>
+                    <div class="t-cap muted">Прайс · price_march.xlsx · 486 строк</div>
+                    <div class="t-title-l mt4">Какие данные в колонках?</div>
+                    <div class="t-s muted mt4">
+                      Обязательно: цена и артикул или название. Проверьте колонки, определённые
+                      автоматически
+                    </div>
+                  </div>
+                </div>
+                <div class="main-body">
+                  <div class="table-wrap">
+                    <table class="table" style="table-layout: fixed">
+                      <thead>
+                        <tr>
+                          <th>
+                            <div class="role-select ai">
+                              Артикул<i class="ti ti-chevron-down"></i>
+                            </div>
+                            <div class="ai-mark mt4">
+                              <i class="ti ti-sparkles"></i>определено автоматически
+                            </div>
+                          </th>
+                          <th>
+                            <div class="role-select ai">
+                              Название<i class="ti ti-chevron-down"></i>
+                            </div>
+                            <div class="ai-mark mt4">
+                              <i class="ti ti-sparkles"></i>определено автоматически
+                            </div>
+                          </th>
+                          <th>
+                            <div class="role-select ai">
+                              Бренд<i class="ti ti-chevron-down"></i>
+                            </div>
+                            <div class="ai-mark mt4">
+                              <i class="ti ti-sparkles"></i>определено автоматически
+                            </div>
+                          </th>
+                          <th>
+                            <div class="role-select">Цена<i class="ti ti-chevron-down"></i></div>
+                            <div class="t-cap muted mt4">выбрано вами</div>
+                          </th>
+                          <th>
+                            <div class="role-select ai">
+                              Наличие<i class="ti ti-chevron-down"></i>
+                            </div>
+                            <div class="ai-mark mt4">
+                              <i class="ti ti-sparkles"></i>определено автоматически
+                            </div>
+                          </th>
+                          <th>
+                            <div class="role-select" style="color: var(--text-muted)">
+                              Не использовать<i class="ti ti-chevron-down"></i>
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr class="muted">
+                          <td>Код</td>
+                          <td>Наименование</td>
+                          <td>Производитель</td>
+                          <td>Цена розн.</td>
+                          <td>Остаток</td>
+                          <td>Цена опт</td>
+                        </tr>
+                        <tr>
+                          <td>550046375</td>
+                          <td>Масло Шелл Хеликс Ультра 5w30 4л</td>
+                          <td>SHELL</td>
+                          <td>13 000</td>
+                          <td>12</td>
+                          <td>11 800</td>
+                        </tr>
+                        <tr>
+                          <td>8022046800</td>
+                          <td>Фильтр салона уголь Монжаро</td>
+                          <td>GEELY</td>
+                          <td>6 500</td>
+                          <td>0</td>
+                          <td>5 900</td>
+                        </tr>
+                        <tr>
+                          <td>4050054400</td>
+                          <td>Колодки пер. Monjaro</td>
+                          <td>GEELY</td>
+                          <td>19 500</td>
+                          <td>4</td>
+                          <td>17 200</td>
+                        </tr>
+                        <tr>
+                          <td>97506</td>
+                          <td>Свечи NGK иридий к-т</td>
+                          <td>NGK</td>
+                          <td>24 000</td>
+                          <td>под заказ</td>
+                          <td>21 000</td>
+                        </tr>
+                        <tr>
+                          <td>OC 1172</td>
+                          <td>Фильтр масл. Knecht</td>
+                          <td>MAHLE</td>
+                          <td>4 200</td>
+                          <td>7</td>
+                          <td>3 700</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="check mt8">
+                    <span class="check-box on"
+                      ><i class="ti ti-check" style="font-size: 18px"></i></span
+                    ><span class="t-s"
+                      >Запомнить для следующих загрузок — этот шаг будет пропущен</span
+                    >
+                  </div>
+                </div>
+                <div class="apply-bar">
+                  <span class="t-s muted">Первые 5 строк из 486</span><span class="spacer"></span>
+                  <span class="btn btn-m btn-secondary">Назад</span
+                  ><span class="btn btn-m btn-primary">Продолжить</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap" style="max-width: 1280px">
+            <b>S-PRICE-02</b> · роль над каждой колонкой; автоматически определённые — бирюзовые до
+            подтверждения
+          </div>
+        </div>
+
+        <div>
+          <div class="desktop">
+            <div class="browser-bar">
+              <b></b><b></b><b></b><span>adclub.kz/supplier/price/1284/review</span>
+            </div>
+            <div class="app">
+              <div data-sidebar="price"></div>
+              <div class="main">
+                <div
+                  class="main-head"
+                  style="flex-direction: column; align-items: stretch; gap: 12px"
+                >
+                  <div>
+                    <div class="t-cap muted">Прайс · price_march.xlsx</div>
+                    <div class="t-title-l mt4">Сверка</div>
+                    <div class="t-s mt4">
+                      486 строк: уверенно — <b>412</b>; нужно проверить — <b>23</b>; не найдено —
+                      <b>17</b>; ошибки в строках — <b>3</b>. Пропали из файла — <b>5</b>
+                      <span class="muted">(по 1 есть активные заявки)</span>
+                    </div>
+                  </div>
+                  <div class="tabs-line">
+                    <span>Уверенно <span class="n">412</span></span
+                    ><span class="on">Нужно проверить <span class="n">23</span></span
+                    ><span>Не найдено <span class="n">17</span></span
+                    ><span>Ошибки в строках <span class="n">3</span></span
+                    ><span
+                      >Пропали из файла <span class="n">5</span
+                      ><i class="ti ti-alert-triangle" style="color: var(--warning)"></i
+                    ></span>
+                  </div>
+                </div>
+                <div class="main-body">
+                  <div class="row-flex" style="margin-bottom: 12px">
+                    <span class="t-s muted">Проверено 2 из 23</span><span class="spacer"></span
+                    ><span class="btn btn-s btn-text">Пропустить все оставшиеся</span>
+                  </div>
+                  <div class="table-wrap">
+                    <table class="table" style="table-layout: fixed">
+                      <thead>
+                        <tr>
+                          <th style="width: 24%">Строка в файле</th>
+                          <th style="width: 30%">Позиция справочника</th>
+                          <th style="width: 170px">Цена, ₸</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>
+                            Масло Шелл Хеликс Ультра 5w30 4л
+                            <div class="t-cap muted">строка 14 · SHELL</div>
+                          </td>
+                          <td class="cell-ai">
+                            <div class="ai-mark"><i class="ti ti-sparkles"></i>предложено ИИ</div>
+                            <div style="font-weight: 500">
+                              Масло моторное Shell Helix Ultra 5W-30, 4 л
+                            </div>
+                            <div class="t-cap muted">Shell · 550046375</div>
+                          </td>
+                          <td class="num">12 500 → <b>13 000</b></td>
+                          <td>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                              <span class="btn btn-s btn-secondary"
+                                ><i class="ti ti-check"></i>Верно</span
+                              ><span class="btn btn-s btn-secondary">Другая позиция</span
+                              ><span class="btn btn-s btn-text">Пропустить</span>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>
+                            Фильтр салона уголь Монжаро
+                            <div class="t-cap muted">строка 27 · GEELY</div>
+                          </td>
+                          <td class="cell-ai">
+                            <div class="ai-mark"><i class="ti ti-sparkles"></i>предложено ИИ</div>
+                            <div style="font-weight: 500">
+                              Фильтр салонный угольный Geely Monjaro
+                            </div>
+                            <div class="t-cap muted">Geely · 8022046800</div>
+                          </td>
+                          <td class="num">6 500</td>
+                          <td>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                              <span class="btn btn-s btn-secondary"
+                                ><i class="ti ti-check"></i>Верно</span
+                              ><span class="btn btn-s btn-secondary">Другая позиция</span
+                              ><span class="btn btn-s btn-text">Пропустить</span>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>
+                            Колодки пер. Monjaro
+                            <div class="t-cap muted">строка 31 · GEELY</div>
+                          </td>
+                          <td>
+                            <div class="compat ok">
+                              <i class="ti ti-circle-check"></i>подтверждено вами
+                            </div>
+                            <div style="font-weight: 500">
+                              Колодки тормозные передние Geely Monjaro
+                            </div>
+                            <div class="t-cap muted">Geely · 4050054400</div>
+                          </td>
+                          <td class="num cell-warn">
+                            19 500 → <b>9 500</b>
+                            <div class="t-cap" style="color: var(--warning); font-weight: 500">
+                              <i class="ti ti-alert-triangle"></i> цена ниже на 51 %
+                            </div>
+                          </td>
+                          <td>
+                            <div class="check" style="padding: 0; gap: 8px">
+                              <span class="check-box"></span
+                              ><span class="t-s">Цена верная, применить</span>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>
+                            Свечи NGK иридий к-т
+                            <div class="t-cap muted">строка 40 · NGK</div>
+                          </td>
+                          <td>
+                            <div class="t-cap muted">пропущено</div>
+                            <div class="muted">—</div>
+                          </td>
+                          <td class="num muted">24 000</td>
+                          <td><span class="btn btn-s btn-text">Вернуть</span></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="apply-bar">
+                  <div>
+                    <div class="t-s" style="color: var(--warning); font-weight: 500">
+                      <i class="ti ti-alert-triangle"></i> Выберите, что сделать с пропавшими из
+                      файла позициями
+                    </div>
+                    <div class="t-cap muted">
+                      21 строка не проверена и не будет применена. Сверку можно закончить позже —
+                      прогресс сохранён
+                    </div>
+                  </div>
+                  <span class="spacer"></span>
+                  <span class="btn btn-l disabled"
+                    >Применить: обновить 413 · снять 0 · отправить на добавление 17</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="frame-cap" style="max-width: 1280px">
+            <b>S-PRICE-03 · «Нужно проверить»</b> · предложения ИИ — бирюзовые; после «Верно»
+            пометка уходит; резкое изменение цены — жёлтое и требует отдельного подтверждения
+          </div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="topbar">
+                <span class="icon-btn"><i class="ti ti-arrow-left"></i></span
+                ><span class="t-title">Сверка</span>
+              </div>
+              <div style="padding: 0 16px; overflow: hidden">
+                <div class="tabs-line">
+                  <span>Уверенно <span class="n">412</span></span
+                  ><span>Проверить <span class="n">23</span></span
+                  ><span class="on">Пропали <span class="n">5</span></span>
+                </div>
+              </div>
+              <div class="scroll mt16">
+                <div class="t-heading">5 позиций нет в новом файле</div>
+                <div class="banner warn rounded mt12">
+                  <i class="ti ti-alert-triangle"></i
+                  ><span>По 1 позиции есть активные заявки — их нужно выполнить</span>
+                </div>
+                <div class="t-s mt16" style="font-weight: 500">
+                  Что сделать с ними? <span style="color: var(--danger)">*</span>
+                </div>
+                <div class="list mt8">
+                  <div class="list-item">
+                    <div>
+                      <div class="t-strong">Снять с продажи</div>
+                      <div class="t-s muted">Клиенты перестанут их видеть</div>
+                    </div>
+                    <span class="radio"></span>
+                  </div>
+                  <div class="list-item">
+                    <div>
+                      <div class="t-strong">Оставить как есть</div>
+                      <div class="t-s muted">Цены и наличие не изменятся</div>
+                    </div>
+                    <span class="radio"></span>
+                  </div>
+                </div>
+                <div class="section-title">Позиции</div>
+                <div class="list">
+                  <div class="list-item">
+                    <div>
+                      <div class="t-s">Масло Mobil 1 ESP 5W-30, 4 л</div>
+                      <div class="t-cap" style="color: var(--accent)">Активные заявки: 1</div>
+                    </div>
+                  </div>
+                  <div class="list-item">
+                    <div class="t-s">Щётки стеклоочистителя Bosch Aerotwin</div>
+                  </div>
+                  <div class="list-item">
+                    <div class="t-s">Антифриз Felix Carbox G12+, 5 кг</div>
+                  </div>
+                </div>
+              </div>
+              <div
+                class="bottom-actions"
+                style="border-top: 1px solid var(--border); background: var(--bar)"
+              >
+                <div class="btn btn-l disabled">Применить</div>
+                <div class="t-cap muted" style="text-align: center">
+                  Выберите действие для пропавших позиций
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap">
+            <b>S-PRICE-03 · телефон, «Пропали из файла»</b> · выбор обязателен, по умолчанию ничего
+            не выбрано
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 5. Kazakh ================= -->
+    <section class="gallery-group" lang="kk">
+      <h2>5. Проверка длины — казахский</h2>
+      <p>Черновой перевод только для проверки раскладки (не утверждённый текст).</p>
+      <div class="frames">
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div style="padding: 4px 16px 0">
+                <span class="company"
+                  ><i class="ti ti-building-store"></i>АвтоМир Астана<i
+                    class="ti ti-chevron-down"
+                  ></i
+                ></span>
+                <div class="t-title-l mt4">Өтінімдер</div>
+                <div class="seg mt12">
+                  <span class="on">Жаңа <span class="count">3</span></span
+                  ><span>Жұмыста</span><span>Аяқталған</span>
+                </div>
+              </div>
+              <div class="scroll mt12" style="display: flex; flex-direction: column; gap: 8px">
+                <div class="order-card fresh">
+                  <div class="row-flex">
+                    <span class="timer urgent"
+                      ><i class="ti ti-clock-exclamation"></i>12 минут ішінде жауап беріңіз</span
+                    >
+                  </div>
+                  <div class="t-strong mt8 clamp2">
+                    Shell Helix Ultra 5W-30 қозғалтқыш майы, 4 литр × 2
+                  </div>
+                  <div class="row-flex mt4 t-s" style="flex-wrap: wrap; gap: 0 6px">
+                    <b class="num">25 000 ₸</b
+                    ><span class="muted">· Қоймада бар · Өзі алып кету</span>
+                  </div>
+                  <div style="display: flex; gap: 8px" class="mt12">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">Бас тарту</div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1">
+                      <i class="ti ti-check"></i>Қабылдау
+                    </div>
+                  </div>
+                </div>
+                <div class="order-card">
+                  <div class="row-flex">
+                    <span class="timer"
+                      ><i class="ti ti-clock"></i>38 минут ішінде жауап беріңіз</span
+                    >
+                  </div>
+                  <div class="t-strong mt8 clamp2">Geely Monjaro көмірлі салон сүзгісі × 1</div>
+                  <div style="display: flex; gap: 8px" class="mt12">
+                    <div class="btn btn-m btn-secondary" style="flex: 1">Бас тарту</div>
+                    <div class="btn btn-m btn-secondary" style="flex: 1.4">
+                      <i class="ti ti-check"></i>Мерзімді растау
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div data-tabbar="orders" data-count="3" data-lang="kk"></div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>S-ORD-01 · kk</b></div>
+        </div>
+
+        <div>
+          <div class="phone">
+            <div data-status></div>
+            <div class="screen">
+              <div class="result-head ok">
+                <i class="ti ti-circle-check"></i>
+                <div class="t-title-l">Берілді</div>
+                <div class="t-body">
+                  Shell Helix Ultra 5W-30 қозғалтқыш майы, 4 литр × 2 · Айгерім
+                </div>
+              </div>
+              <div class="scroll"></div>
+              <div class="bottom-actions">
+                <div class="btn btn-l btn-primary">
+                  <i class="ti ti-scan"></i>Келесісін сканерлеу
+                </div>
+                <div class="btn btn-l btn-secondary">Өтінімдерге</div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
+          <div class="frame-cap"><b>S-SCAN-04 · kk</b></div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      var STATUS =
+        '<div class="statusbar"><span>9:41</span><span><i class="ti ti-antenna-bars-5"></i><i class="ti ti-WIFI"></i><i class="ti ti-battery-3"></i></span></div>';
+      document.querySelectorAll("[data-status]").forEach(function (el) {
+        el.outerHTML = STATUS.replace(
+          "WIFI",
+          el.dataset.status === "offline" ? "wifi-off" : "wifi",
+        );
+      });
+
+      var TABS = {
+        ru: {
+          orders: "Заявки",
+          offers: "Предложения",
+          scan: "Сканер",
+          price: "Прайс",
+          more: "Ещё",
+        },
+        kk: {
+          orders: "Өтінімдер",
+          offers: "Ұсыныстар",
+          scan: "Сканер",
+          price: "Прайс",
+          more: "Тағы",
+        },
+      };
+      document.querySelectorAll("[data-tabbar]").forEach(function (el) {
+        var t = TABS[el.dataset.lang || "ru"];
+        var on = el.dataset.tabbar;
+        var count = el.dataset.count ? '<span class="count">' + el.dataset.count + "</span>" : "";
+        function tab(key, icon, extra) {
+          return (
+            '<div class="tab' +
+            (on === key ? " on" : "") +
+            '"><i class="ti ti-' +
+            icon +
+            '"></i>' +
+            (extra || "") +
+            t[key] +
+            "</div>"
+          );
+        }
+        el.outerHTML =
+          '<div class="tabbar">' +
+          tab("orders", "receipt", count) +
+          tab("offers", "tags") +
+          '<div class="tab pilot"><div class="pilot-btn"><i class="ti ti-scan" style="font-size: 28px; color: var(--on-primary)"></i></div>' +
+          t.scan +
+          "</div>" +
+          tab("price", "file-spreadsheet") +
+          tab("more", "dots") +
+          "</div>";
+      });
+
+      var NAV = [
+        ["orders", "receipt", "Заявки", '<span class="count">3</span>'],
+        ["scan", "scan", "Сканер"],
+        ["offers", "tags", "Предложения"],
+        ["price", "file-spreadsheet", "Прайс"],
+        ["mod", "checklist", "Модерация"],
+        ["team", "users", "Сотрудники"],
+        ["company", "building-store", "Компания"],
+        ["bill", "credit-card", "Подписка"],
+        ["me", "settings", "Мои настройки"],
+      ];
+      document.querySelectorAll("[data-sidebar]").forEach(function (el) {
+        var html =
+          '<div class="sidebar">' +
+          '<div style="padding: 4px 12px 16px"><img class="only-light" src="../brand/logo-graphite.svg" alt="Asia Drive Club" style="height: 40px" />' +
+          '<img class="only-dark" src="../brand/logo-champagne.svg" alt="Asia Drive Club" style="height: 40px" /></div>' +
+          '<div class="card" style="padding: 8px 12px; margin-bottom: 12px"><div class="t-cap muted">Компания</div><div class="row-flex t-s" style="font-weight: 500">АвтоМир Астана<i class="ti ti-selector muted" style="margin-left: auto"></i></div></div>';
+        NAV.forEach(function (n) {
+          html +=
+            '<div class="nav-item' +
+            (n[0] === el.dataset.sidebar ? " on" : "") +
+            '"><i class="ti ti-' +
+            n[1] +
+            '"></i>' +
+            n[2] +
+            (n[3] || "") +
+            "</div>";
+        });
+        html +=
+          '<span class="spacer"></span><div class="nav-item"><i class="ti ti-user"></i>Айжан</div></div>';
+        el.outerHTML = html;
+      });
+
+      document.querySelectorAll("[data-theme-btn]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          document.documentElement.dataset.theme = btn.dataset.themeBtn;
+          document.querySelectorAll("[data-theme-btn]").forEach(function (b) {
+            b.setAttribute("aria-pressed", String(b === btn));
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

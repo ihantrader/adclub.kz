@@ -13,7 +13,20 @@ import { clientPlatformSchema } from "./client";
  *   the code.
  * - `RATE_LIMITED` (429, retryable): `details` is `RateLimitedDetails`.
  * - `SERVICE_UNAVAILABLE` (503, retryable): a dependency the request
- *   needs is down; try again later.
+ *   needs is down; try again later. Never a reason to sign the user out.
+ * - `ACCESS_TOKEN_EXPIRED` (401): the access token is past its lifetime —
+ *   exchange the refresh token (`POST /auth/session/refresh`) and repeat.
+ * - `AUTH_REQUIRED` (401): no usable credentials (no token, or a
+ *   malformed, forged or foreign one) — sign in.
+ * - `SESSION_ENDED` (401): the session was ended (logout, ended from
+ *   another device, refresh token reuse) or expired — sign in again and
+ *   wipe local data of the account.
+ * - `SESSION_KIND_UNAVAILABLE` (403): this client can't get a session this
+ *   way (supplier cabinet and admin panel sign-in isn't open yet); the code
+ *   was not spent.
+ * - `ORIGIN_NOT_ALLOWED` (403): a browser request from a site that isn't
+ *   one of the web clients, or a cookie-based request without a trusted
+ *   `Origin`.
  *
  * Extended as real endpoints need more specific codes (e.g.
  * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
@@ -32,6 +45,12 @@ export const errorCodeSchema = z.enum([
   "LOGIN_CODE_DELIVERY_FAILED",
   "RATE_LIMITED",
   "SERVICE_UNAVAILABLE",
+  // Sessions (TASK-005, ARCHITECTURE 8.2).
+  "ACCESS_TOKEN_EXPIRED",
+  "AUTH_REQUIRED",
+  "SESSION_ENDED",
+  "SESSION_KIND_UNAVAILABLE",
+  "ORIGIN_NOT_ALLOWED",
 ]);
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

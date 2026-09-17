@@ -18,6 +18,15 @@ import {
   verifyLoginCodeBodySchema,
 } from "./login-code";
 import { dependencyCheckSchema, readinessResponseSchema } from "./readiness";
+import {
+  currentAccountResponseSchema,
+  refreshSessionBodySchema,
+  sessionKindSchema,
+  sessionListResponseSchema,
+  sessionsEndedResponseSchema,
+  sessionSummarySchema,
+  sessionTokensSchema,
+} from "./session";
 import type { ApiRouteDefinition } from "./routes";
 
 /**
@@ -44,6 +53,13 @@ const componentSchemas: Record<string, z.ZodType> = {
   LoginCodeInvalidDetails: loginCodeInvalidDetailsSchema,
   RateLimitName: rateLimitNameSchema,
   RateLimitedDetails: rateLimitedDetailsSchema,
+  SessionKind: sessionKindSchema,
+  SessionTokens: sessionTokensSchema,
+  RefreshSessionBody: refreshSessionBodySchema,
+  SessionSummary: sessionSummarySchema,
+  SessionListResponse: sessionListResponseSchema,
+  CurrentAccountResponse: currentAccountResponseSchema,
+  SessionsEndedResponse: sessionsEndedResponseSchema,
 };
 
 type JsonObject = Record<string, unknown>;
@@ -106,6 +122,26 @@ function jsonContent(schema: JsonObject): JsonObject {
   return { "application/json": { schema } };
 }
 
+const PATH_PLACEHOLDER = /\{([^}]+)\}/g;
+
+/** One `in: path` parameter per `{name}` in the route path, schemas inlined. */
+function pathParameters(route: ApiRouteDefinition): JsonObject[] {
+  const names = [...route.path.matchAll(PATH_PLACEHOLDER)].map((match) => match[1]!);
+  const shape: Record<string, z.ZodType> = route.pathParams?.shape ?? {};
+  const declared = Object.keys(shape);
+  if (names.length !== declared.length || names.some((name) => !declared.includes(name))) {
+    throw new Error(
+      `${route.operationId}: path placeholders (${names.join(", ") || "none"}) must match pathParams (${declared.join(", ") || "none"})`,
+    );
+  }
+  return names.map((name) => {
+    const { $schema: _dialect, ...schema } = z.toJSONSchema(shape[name]!, {
+      target: "draft-2020-12",
+    }) as JsonObject;
+    return { name, in: "path", required: true, schema };
+  });
+}
+
 /**
  * Builds the OpenAPI 3.1 document for the given routes (ARCHITECTURE 7.2).
  * Pure and deterministic: same routes and schemas → byte-identical JSON,
@@ -149,9 +185,11 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       summary: route.summary,
       tags: [route.tag],
       parameters: [
+        ...pathParameters(route),
         { $ref: "#/components/parameters/ClientHeader" },
         { $ref: "#/components/parameters/AcceptLanguage" },
       ],
+      ...(route.auth === "session" && { security: [{ sessionAccessToken: [] }] }),
       ...(route.requestBody && {
         requestBody: {
           description: route.requestBody.description,
@@ -176,11 +214,20 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
     },
     tags: [
       { name: "meta", description: "Service state and client policy" },
-      { name: "auth", description: "Sign-in with a one-time code" },
+      { name: "auth", description: "Sign-in with a one-time code, sessions and devices" },
     ],
     paths,
     components: {
       schemas,
+      securitySchemes: {
+        sessionAccessToken: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description:
+            "Access token of an active session (`SessionTokens.accessToken`). Expired: `ACCESS_TOKEN_EXPIRED` — refresh and repeat; `AUTH_REQUIRED` or `SESSION_ENDED` — sign in again.",
+        },
+      },
       parameters: {
         ClientHeader: {
           name: CLIENT_HEADER,

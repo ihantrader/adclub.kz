@@ -272,4 +272,84 @@ describe("createApiClient", () => {
     expect(fetchImpl.mock.calls[0]![0]).toBe("http://api.test/health");
     expect(fetchImpl.mock.calls[0]![1].headers).toMatchObject({ "X-Client": "admin-web/0.1.0" });
   });
+
+  describe("sessions", () => {
+    const SESSION_ID = "0b9b3f0e-7c1a-4b8e-9d42-1f0c2a3b4c5d";
+
+    it("sends the access token only to routes that require a session", async () => {
+      const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, {}));
+      const client = clientWith(fetchImpl, { getAccessToken: () => "access-1" });
+
+      await client.getCurrentAccount();
+      await client.getHealth();
+      await client.verifyLoginCode({ phone: "+77011234567", code: "123456" });
+      await client.refreshSession({ refreshToken: "refresh-1" });
+
+      const authorization = fetchImpl.mock.calls.map(
+        ([, init]) => (init.headers as Record<string, string>).Authorization,
+      );
+      expect(authorization).toEqual(["Bearer access-1", undefined, undefined, undefined]);
+    });
+
+    it("reads the access token on every request and omits it when there is none", async () => {
+      const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, { sessions: [] }));
+      const current: { token?: string } = {};
+      const client = clientWith(fetchImpl, { getAccessToken: () => current.token });
+
+      await client.listSessions();
+      current.token = "access-2";
+      await client.listSessions();
+
+      expect(fetchImpl.mock.calls[0]![1].headers).not.toHaveProperty("Authorization");
+      expect(fetchImpl.mock.calls[1]![1].headers).toMatchObject({
+        Authorization: "Bearer access-2",
+      });
+    });
+
+    it("fills path parameters", async () => {
+      const fetchImpl = vi
+        .fn<FetchLike>()
+        .mockResolvedValue(jsonResponse(200, { ended: 1, currentEnded: false }));
+      const client = clientWith(fetchImpl);
+
+      await expect(client.endSession({ sessionId: SESSION_ID })).resolves.toEqual({
+        ended: 1,
+        currentEnded: false,
+      });
+
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe(`http://api.test/auth/sessions/${SESSION_ID}`);
+      expect(init.method).toBe("DELETE");
+      expect(init.body).toBeUndefined();
+    });
+
+    it("refuses to call a route without its path parameters", async () => {
+      const fetchImpl = vi.fn<FetchLike>();
+      const client = clientWith(fetchImpl);
+      await expect(client.request(apiRoutes.endSession)).rejects.toThrow(/sessionId/);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("passes the credentials mode for cookie-based web sessions", async () => {
+      const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, {}));
+      await clientWith(fetchImpl, { credentials: "include" }).refreshSession({});
+      expect(fetchImpl.mock.calls[0]![1].credentials).toBe("include");
+
+      await clientWith(fetchImpl).refreshSession({});
+      expect(fetchImpl.mock.calls[1]![1]).not.toHaveProperty("credentials");
+    });
+
+    it("tells an expired access token from an ended session", async () => {
+      const respond = (code: string) =>
+        vi
+          .fn<FetchLike>()
+          .mockResolvedValue(jsonResponse(401, { code, message: "no", retryable: false }));
+      const expired = await captureError(
+        clientWith(respond("ACCESS_TOKEN_EXPIRED")).getCurrentAccount(),
+      );
+      const ended = await captureError(clientWith(respond("SESSION_ENDED")).getCurrentAccount());
+      expect(expired).toMatchObject({ code: "ACCESS_TOKEN_EXPIRED", status: 401 });
+      expect(ended).toMatchObject({ code: "SESSION_ENDED", status: 401 });
+    });
+  });
 });

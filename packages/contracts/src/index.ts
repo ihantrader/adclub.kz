@@ -44,12 +44,34 @@ export type {
   VerifyLoginCodeBody,
 } from "./login-code";
 
-export { apiRoutes } from "./routes";
+export {
+  currentAccountResponseSchema,
+  refreshSessionBodySchema,
+  sessionIdPathSchema,
+  sessionKindSchema,
+  sessionListResponseSchema,
+  sessionsEndedResponseSchema,
+  sessionSummarySchema,
+  sessionTokensSchema,
+} from "./session";
+export type {
+  CurrentAccountResponse,
+  RefreshSessionBody,
+  SessionIdPath,
+  SessionKind,
+  SessionListResponse,
+  SessionsEndedResponse,
+  SessionSummary,
+  SessionTokens,
+} from "./session";
+
+export { apiRoutes, buildRoutePath } from "./routes";
 export type {
   ApiRequestBodyDefinition,
   ApiResponseDefinition,
   ApiRouteDefinition,
   ApiRouteName,
+  ApiRoutePathParams,
   ApiRouteRequestBody,
   ApiRouteResponse,
   ApiRoutes,

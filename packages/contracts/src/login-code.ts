@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionTokensSchema } from "./session";
 
 /**
  * Channels a login code travels through (ARCHITECTURE 8.1): WhatsApp is
@@ -50,22 +51,36 @@ export const loginCodeSentResponseSchema = z.object({
 
 export type LoginCodeSentResponse = z.infer<typeof loginCodeSentResponseSchema>;
 
-/** `POST /auth/login-code/verify` — check the code the user typed in. */
+/**
+ * `POST /auth/login-code/verify` — check the code the user typed in. The
+ * session kind follows the calling client (`X-Client`): the mobile app
+ * (or a caller that doesn't identify itself) gets a `mobile` session.
+ */
 export const verifyLoginCodeBodySchema = z.object({
   phone: phoneInputSchema,
   code: z.string().min(1).max(16).regex(/^\d+$/, "Must contain only digits"),
+  /** Shown in the list of sessions, e.g. "iPhone 15" or "Chrome on Windows". */
+  deviceName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^\P{Cc}*$/u, "Must not contain control characters")
+    .optional(),
 });
 
 export type VerifyLoginCodeBody = z.infer<typeof verifyLoginCodeBodySchema>;
 
 /**
- * The phone number is confirmed and the code is spent. This grants no
- * access by itself yet: sessions are added to this response additively
- * (TASK-005).
+ * The phone number is confirmed and the code is spent. The account for
+ * the number is created on the first confirmation; the session is
+ * created in the same request (TASK-005).
  */
 export const loginCodeVerifiedResponseSchema = z.object({
   status: z.literal("verified"),
   phone: z.string(),
+  accountId: z.uuid(),
+  session: sessionTokensSchema,
 });
 
 export type LoginCodeVerifiedResponse = z.infer<typeof loginCodeVerifiedResponseSchema>;
@@ -90,6 +105,9 @@ export const rateLimitNameSchema = z.enum([
   "login_code_sms_per_ip_daily",
   "login_code_verifications_per_phone",
   "login_code_verify_delay",
+  // Sessions (TASK-005).
+  "session_refresh_per_session",
+  "session_refresh_per_ip",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

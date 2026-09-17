@@ -8,6 +8,14 @@ import {
   verifyLoginCodeBodySchema,
 } from "./login-code";
 import { readinessResponseSchema } from "./readiness";
+import {
+  currentAccountResponseSchema,
+  refreshSessionBodySchema,
+  sessionIdPathSchema,
+  sessionListResponseSchema,
+  sessionsEndedResponseSchema,
+  sessionTokensSchema,
+} from "./session";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -29,7 +37,7 @@ export interface ApiRequestBodyDefinition {
  * unified `ApiErrorResponse`) are implied for every route and not listed
  * in `responses`, which only holds the documented non-error bodies.
  *
- * Query/path parameters are added to this shape together with the first
+ * Query parameters are added to this shape together with the first
  * endpoint that needs them.
  */
 export interface ApiRouteDefinition {
@@ -45,6 +53,18 @@ export interface ApiRouteDefinition {
    * `CLIENT_UPDATE_REQUIRED` (426) instead.
    */
   clientVersionCheck: "enforced" | "exempt";
+  /**
+   * `session`: only for a caller with a valid access token of an active
+   * session (`Authorization: Bearer …`); anything else gets 401
+   * (`AUTH_REQUIRED`, `ACCESS_TOKEN_EXPIRED`, `SESSION_ENDED`). Omitted:
+   * public route.
+   */
+  auth?: "session";
+  /**
+   * Path parameters: `{name}` placeholders in `path`, one string field of
+   * this object schema per placeholder.
+   */
+  pathParams?: z.ZodObject<Record<string, z.ZodType<string>>>;
   /** Required JSON body; the lowest listed 2xx status is the success status. */
   requestBody?: ApiRequestBodyDefinition;
   responses: Readonly<Record<number, ApiResponseDefinition>>;
@@ -119,6 +139,96 @@ export const apiRoutes = {
       },
     },
   }),
+  refreshSession: defineRoute({
+    operationId: "refreshSession",
+    method: "POST",
+    path: "/auth/session/refresh",
+    summary:
+      "Exchange a refresh token (body for the mobile app, HttpOnly cookie for web clients) for a new token pair",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    requestBody: {
+      description: "The refresh token (mobile), or an empty object (web, cookie)",
+      schema: refreshSessionBodySchema,
+    },
+    responses: {
+      200: { description: "A new token pair", schema: sessionTokensSchema },
+    },
+  }),
+  getCurrentAccount: defineRoute({
+    operationId: "getCurrentAccount",
+    method: "GET",
+    path: "/auth/me",
+    summary: "The signed-in account and the current session",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    responses: {
+      200: { description: "Account and session", schema: currentAccountResponseSchema },
+    },
+  }),
+  listSessions: defineRoute({
+    operationId: "listSessions",
+    method: "GET",
+    path: "/auth/sessions",
+    summary: "Active sessions (devices) of the signed-in account",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    responses: {
+      200: { description: "Active sessions", schema: sessionListResponseSchema },
+    },
+  }),
+  endSession: defineRoute({
+    operationId: "endSession",
+    method: "DELETE",
+    path: "/auth/sessions/{sessionId}",
+    summary:
+      "End one of the account's own sessions; someone else's session answers like a missing one (404)",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    pathParams: sessionIdPathSchema,
+    responses: {
+      200: { description: "The session is ended", schema: sessionsEndedResponseSchema },
+    },
+  }),
+  endOtherSessions: defineRoute({
+    operationId: "endOtherSessions",
+    method: "POST",
+    path: "/auth/sessions/end-others",
+    summary: "End every session of the account except the current one",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    responses: {
+      200: { description: "Other sessions are ended", schema: sessionsEndedResponseSchema },
+    },
+  }),
+  endAllSessions: defineRoute({
+    operationId: "endAllSessions",
+    method: "POST",
+    path: "/auth/sessions/end-all",
+    summary: "End every session of the account, the current one included",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    responses: {
+      200: { description: "All sessions are ended", schema: sessionsEndedResponseSchema },
+    },
+  }),
+  logout: defineRoute({
+    operationId: "logout",
+    method: "POST",
+    path: "/auth/logout",
+    summary: "End the current session",
+    tag: "auth",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    responses: {
+      200: { description: "The current session is ended", schema: sessionsEndedResponseSchema },
+    },
+  }),
 } as const;
 
 export type ApiRoutes = typeof apiRoutes;
@@ -135,7 +245,31 @@ export type ApiRouteRequestBody<Route extends ApiRouteDefinition> = Route extend
   ? z.input<Schema>
   : never;
 
+/** Path parameters a caller passes to a route (`never` for routes without them). */
+export type ApiRoutePathParams<Route extends ApiRouteDefinition> = Route extends {
+  pathParams: infer Schema extends z.ZodType;
+}
+  ? z.input<Schema>
+  : never;
+
 /** Union of every documented (non-error) response body of a route. */
 export type ApiRouteResponse<Route extends ApiRouteDefinition> = ResponseBody<
   Route["responses"][keyof Route["responses"]]
 >;
+
+/**
+ * The concrete path of a route: every `{name}` placeholder replaced by the
+ * URL-encoded value of `params[name]`. Throws if a value is missing.
+ */
+export function buildRoutePath(
+  route: ApiRouteDefinition,
+  params: Readonly<Record<string, string>> = {},
+): string {
+  return route.path.replace(/\{([^}]+)\}/g, (_placeholder, name: string) => {
+    const value = params[name];
+    if (typeof value !== "string" || value.length === 0) {
+      throw new TypeError(`${route.operationId} requires the path parameter "${name}"`);
+    }
+    return encodeURIComponent(value);
+  });
+}

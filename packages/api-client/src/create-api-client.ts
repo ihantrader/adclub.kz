@@ -1,9 +1,11 @@
 import {
   apiRoutes,
+  buildRoutePath,
   CLIENT_HEADER,
   formatClientHeader,
   type ApiRouteDefinition,
   type ApiRouteName,
+  type ApiRoutePathParams,
   type ApiRouteRequestBody,
   type ApiRouteResponse,
   type ApiRoutes,
@@ -24,6 +26,16 @@ export interface ApiClientOptions {
   timeoutMs?: number;
   /** Called with every `ApiError` before it's thrown — the hook for app-wide reactions such as `CLIENT_UPDATE_REQUIRED`. */
   onError?: (error: ApiError) => void;
+  /**
+   * Current access token, sent as `Authorization: Bearer …` on routes that
+   * require a session (and only there); read on every request.
+   */
+  getAccessToken?: () => string | undefined;
+  /**
+   * `fetch` credentials mode. Web clients pass `"include"` so the browser
+   * sends and stores the HttpOnly refresh cookie of the API origin.
+   */
+  credentials?: RequestCredentials;
   fetch?: FetchLike;
 }
 
@@ -31,28 +43,43 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+type Result<Route extends ApiRouteDefinition> = Promise<ApiRouteResponse<Route>>;
+
 /**
- * `client.getHealth(options?)` for a route without a body,
- * `client.requestLoginCode(body, options?)` for one with a body.
+ * `client.getHealth(options?)` for a route without a body or path
+ * parameters, `client.requestLoginCode(body, options?)` with a body,
+ * `client.endSession(params, options?)` with path parameters, and
+ * `(params, body, options?)` with both.
  */
-export type ApiOperation<Route extends ApiRouteDefinition> = [ApiRouteRequestBody<Route>] extends [
+export type ApiOperation<Route extends ApiRouteDefinition> = [ApiRoutePathParams<Route>] extends [
   never,
 ]
-  ? (options?: RequestOptions) => Promise<ApiRouteResponse<Route>>
-  : (
-      body: ApiRouteRequestBody<Route>,
-      options?: RequestOptions,
-    ) => Promise<ApiRouteResponse<Route>>;
+  ? [ApiRouteRequestBody<Route>] extends [never]
+    ? (options?: RequestOptions) => Result<Route>
+    : (body: ApiRouteRequestBody<Route>, options?: RequestOptions) => Result<Route>
+  : [ApiRouteRequestBody<Route>] extends [never]
+    ? (params: ApiRoutePathParams<Route>, options?: RequestOptions) => Result<Route>
+    : (
+        params: ApiRoutePathParams<Route>,
+        body: ApiRouteRequestBody<Route>,
+        options?: RequestOptions,
+      ) => Result<Route>;
 
 export type ApiOperations = {
   [Name in ApiRouteName]: ApiOperation<ApiRoutes[Name]>;
 };
 
 export interface ApiClient extends ApiOperations {
-  /** Calls any route; `body` is required exactly when the route declares one. */
+  /**
+   * Calls any route; `body` is required exactly when the route declares
+   * one, `params` when its path has placeholders.
+   */
   request<Route extends ApiRouteDefinition>(
     route: Route,
-    options?: RequestOptions & { body?: ApiRouteRequestBody<Route> },
+    options?: RequestOptions & {
+      body?: ApiRouteRequestBody<Route>;
+      params?: ApiRoutePathParams<Route>;
+    },
   ): Promise<ApiRouteResponse<Route>>;
 }
 
@@ -93,12 +120,22 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
   async function request<Route extends ApiRouteDefinition>(
     route: Route,
-    requestOptions: RequestOptions & { body?: unknown } = {},
+    requestOptions: RequestOptions & { body?: unknown; params?: unknown } = {},
   ): Promise<ApiRouteResponse<Route>> {
+    const path = buildRoutePath(
+      route,
+      (requestOptions.params ?? {}) as Readonly<Record<string, string>>,
+    );
     const headers: Record<string, string> = {
       Accept: "application/json",
       [CLIENT_HEADER]: clientHeader,
     };
+    if (route.auth === "session") {
+      const accessToken = options.getAccessToken?.();
+      if (accessToken) {
+        headers.Authorization = `Bearer ${accessToken}`;
+      }
+    }
     let body: string | undefined;
     if (route.requestBody) {
       if (requestOptions.body === undefined) {
@@ -128,11 +165,12 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     try {
       let response: Response;
       try {
-        response = await fetchImpl(`${baseUrl}${route.path}`, {
+        response = await fetchImpl(`${baseUrl}${path}`, {
           method: route.method,
           headers,
           body,
           signal: controller.signal,
+          ...(options.credentials && { credentials: options.credentials }),
         });
       } catch (cause) {
         if (callerSignal?.aborted && !timedOut) {
@@ -177,13 +215,26 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     }
   }
 
+  const operation = (route: ApiRouteDefinition) => {
+    if (route.pathParams && route.requestBody) {
+      return (params: unknown, body: unknown, requestOptions?: RequestOptions) =>
+        request(route, { ...requestOptions, params, body });
+    }
+    if (route.pathParams) {
+      return (params: unknown, requestOptions?: RequestOptions) =>
+        request(route, { ...requestOptions, params });
+    }
+    if (route.requestBody) {
+      return (body: unknown, requestOptions?: RequestOptions) =>
+        request(route, { ...requestOptions, body });
+    }
+    return (requestOptions?: RequestOptions) => request(route, requestOptions);
+  };
+
   const operations = Object.fromEntries(
     Object.entries(apiRoutes).map(([name, route]: [string, ApiRouteDefinition]) => [
       name,
-      route.requestBody
-        ? (body: unknown, requestOptions?: RequestOptions) =>
-            request(route, { ...requestOptions, body })
-        : (requestOptions?: RequestOptions) => request(route, requestOptions),
+      operation(route),
     ]),
   ) as unknown as ApiOperations;
 

@@ -49,7 +49,9 @@ services:
       retries: 10
 
   minio:
-    image: quay.io/minio/minio:latest
+    # Pinned, not `latest` (D-016: tool/image versions are reproducible, not
+    # floating) — RELEASE tags are how MinIO versions its images.
+    image: quay.io/minio/minio:RELEASE.2025-04-08T15-41-24Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

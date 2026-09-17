@@ -71,10 +71,31 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789627880146_create-session",
       "1789639354506_create-roles",
       "1789644232969_bind-sign-in-step-to-client",
+      "1789656263507_create-app-setting",
     ]);
   });
 
-  it("rolls back the latest migration only (step client binding), keeping the steps", async () => {
+  it("rolls back the latest migration only (settings), keeping everything else", async () => {
+    expect(await tableExists(client, "app_setting")).toBe(true);
+    await client.query(
+      "INSERT INTO app_setting (key, value, version, updated_by_kind) VALUES ('rating_min_reviews', '7', 1, 'operator')",
+    );
+    await client.query(
+      "INSERT INTO app_setting_change (key, version, action, previous_value, previous_is_default, new_value, new_is_default, reason, actor_kind) VALUES ('rating_min_reviews', 1, 'set', '5', true, '7', false, 'test', 'operator')",
+    );
+    await expect(client.query("DELETE FROM app_setting_change")).rejects.toThrow(/append-only/);
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await tableExists(client, "app_setting")).toBe(false);
+    expect(await tableExists(client, "app_setting_change")).toBe(false);
+    const { rows } = await client.query(
+      "SELECT 1 FROM pg_proc WHERE proname = 'app_setting_change_immutable'",
+    );
+    expect(rows).toHaveLength(0);
+    expect(await tableExists(client, "sign_in_step")).toBe(true);
+  });
+
+  it("rolls back the next one (step client binding), keeping the steps", async () => {
     const hasBinding = async () =>
       (
         await client.query(
@@ -164,6 +185,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(await tableExists(client, "session")).toBe(true);
     expect(await tableExists(client, "supplier_member")).toBe(true);
     expect(await tableExists(client, "admin_user")).toBe(true);
+    expect(await tableExists(client, "app_setting")).toBe(true);
+    expect(await tableExists(client, "app_setting_change")).toBe(true);
   });
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {

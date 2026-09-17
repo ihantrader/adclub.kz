@@ -64,15 +64,18 @@ describe("served routes vs contract (full AppModule)", () => {
     }
   });
 
-  it("serves health and the client policy through the real module wiring", async () => {
+  it("serves health through the real module wiring, and no guessed client policy without a database", async () => {
     const health = await request(production.getHttpServer()).get("/health");
     expect(health.status).toBe(200);
 
+    // The policy is a setting: never read (no database here), it is not
+    // replaced by defaults — the request fails like any other that needs
+    // the database (TASK-007). With a database: settings.integration.test.ts.
     const policy = await request(production.getHttpServer())
       .get("/meta/client-policy")
       .set("Accept-Language", "en");
-    expect(policy.status).toBe(200);
-    expect(policy.body.platforms.ios.minSupportedVersion).toBe("0.0.0");
+    expect(policy.status).toBe(503);
+    expect(policy.body).toMatchObject({ code: "SERVICE_UNAVAILABLE", retryable: true });
   });
 });
 

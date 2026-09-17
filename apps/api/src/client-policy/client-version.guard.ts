@@ -14,6 +14,9 @@ import { ClientPolicyService } from "./client-policy.service";
  * without contract metadata — including the unmatched-route 404 — are
  * enforced: an outdated client should learn it must update, whatever it
  * called. Clients without a valid `X-Client` are never rejected here.
+ * Routes marked `enforced_except_admin_web` still serve an outdated admin
+ * panel: sign-in and the settings routes, so an administrator with an old
+ * tab can always fix the client policy (ARCHITECTURE 4.11).
  */
 @Injectable()
 export class ClientVersionGuard implements CanActivate {
@@ -39,6 +42,12 @@ export class ClientVersionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const requestClient = getRequestClient(request);
     if (requestClient.kind !== "known") {
+      return true;
+    }
+    if (
+      route?.clientVersionCheck === "enforced_except_admin_web" &&
+      requestClient.client.platform === "admin-web"
+    ) {
       return true;
     }
 

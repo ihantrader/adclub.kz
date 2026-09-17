@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ClientPlatform } from "@adclub/contracts";
 import type { Lang } from "@adclub/i18n";
-import { APP_CONFIG, type AppConfig } from "../config";
+import { AppSettings } from "../modules/settings";
 
 export interface ClientPolicySettings {
   minSupportedVersions: Record<ClientPlatform, string>;
@@ -9,29 +9,35 @@ export interface ClientPolicySettings {
 }
 
 /**
- * Where the client policy values come from. **Replacement point**: today
- * `ConfigClientPolicySource` reads them from the environment (changing
- * them means restarting the API); TASK-007 swaps in an implementation
- * backed by the settings table, editable by an administrator, by
- * changing the provider in `ClientPolicyModule` only.
- *
- * Read on every request that needs it, so an implementation must be cheap
- * (cache inside the implementation if the source is remote).
+ * Where the client policy values come from. Read on every request that
+ * needs it, so an implementation must be cheap (cache inside it).
  */
 export abstract class ClientPolicySource {
   abstract getSettings(): Promise<ClientPolicySettings>;
 }
 
+/**
+ * The client policy from the settings (`client_min_version_*`,
+ * `client_update_message`; ARCHITECTURE 7.4, 4.11): a change applies
+ * within the settings cache lifetime, without a restart.
+ */
 @Injectable()
-export class ConfigClientPolicySource extends ClientPolicySource {
-  private readonly settings: ClientPolicySettings;
-
-  constructor(@Inject(APP_CONFIG) config: AppConfig) {
+export class SettingsClientPolicySource extends ClientPolicySource {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(AppSettings) private readonly settings: AppSettings) {
     super();
-    this.settings = config.clientPolicy;
   }
 
-  getSettings(): Promise<ClientPolicySettings> {
-    return Promise.resolve(this.settings);
+  async getSettings(): Promise<ClientPolicySettings> {
+    const v = await this.settings.values();
+    return {
+      minSupportedVersions: {
+        ios: v.client_min_version_ios,
+        android: v.client_min_version_android,
+        "supplier-web": v.client_min_version_supplier_web,
+        "admin-web": v.client_min_version_admin_web,
+      },
+      updateMessage: v.client_update_message,
+    };
   }
 }

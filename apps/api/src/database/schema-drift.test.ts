@@ -103,6 +103,8 @@ describe("ormTables", () => {
         "admin_user",
         "admin_backup_code",
         "sign_in_step",
+        "app_setting",
+        "app_setting_change",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

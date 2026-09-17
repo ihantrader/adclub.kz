@@ -23,6 +23,7 @@ export function routeListingConfig(nodeEnv: "production" | "development"): AppCo
     LOGIN_CODE_HASH_SECRET: "route-listing-only-not-a-real-secret",
     SESSION_TOKEN_SECRET: "route-listing-only-not-a-real-secret",
     ADMIN_TOTP_ENCRYPTION_KEY: "route-listing-only-not-a-real-secret",
+    ADMIN_WEB_RELEASE_VERSION: "0.0.0",
   });
   return { ...config, nodeEnv };
 }

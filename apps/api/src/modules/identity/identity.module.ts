@@ -10,25 +10,13 @@ import { DevLoginCodeOutbox } from "./login-code/channels/dev-login-code-outbox"
 import { LoginCodeChannels } from "./login-code/channels/login-code-channels";
 import { TestLoginCodeChannels } from "./login-code/channels/test-login-code-channels";
 import { DevLoginCodeOutboxController } from "./login-code/dev-login-code-outbox.controller";
-import {
-  ConfigLoginCodeSettingsSource,
-  LoginCodeSettingsSource,
-} from "./login-code/login-code-settings.source";
 import { LoginCodeController } from "./login-code/login-code.controller";
 import { LoginCodeService } from "./login-code/login-code.service";
 import { LoginCodeStore } from "./login-code/login-code.store";
-import {
-  ConfigSessionSettingsSource,
-  SessionSettingsSource,
-} from "./session/session-settings.source";
 import { SessionController } from "./session/session.controller";
 import { SessionGuard } from "./session/session.guard";
 import { SessionService } from "./session/session.service";
 import { SessionStore } from "./session/session.store";
-import {
-  ConfigSignInSettingsSource,
-  SignInSettingsSource,
-} from "./session/sign-in-settings.source";
 import { SignInStepController } from "./session/sign-in-step.controller";
 import { SignInStepStore } from "./session/sign-in-step.store";
 import { SignInStepsService } from "./session/sign-in-steps.service";
@@ -47,7 +35,7 @@ function createLoginCodeChannels(
   }
 }
 
-/** Providers the operator command needs without the HTTP layer (`cli/operator.ts`). */
+/** Providers the operator command needs without the HTTP layer (`operator.ts`). */
 export const identityOperatorProviders = [
   AccountStore,
   AdminUserStore,
@@ -61,7 +49,9 @@ export const identityOperatorProviders = [
  * Identity (ARCHITECTURE 5.1, 8): accounts, sign-in by one-time code
  * (TASK-004), sessions (TASK-005), roles and contexts — supplier
  * employees, administrators with a second factor, the access rule
- * (TASK-006).
+ * (TASK-006). Thresholds (`LoginCodeSettingsSource`,
+ * `SessionSettingsSource`, `SignInSettingsSource`) are provided by the
+ * global settings module (TASK-007).
  *
  * Global: any module can protect its routes with `SessionRoute` without
  * importing this one again (a second `forRoot` would be a second
@@ -84,8 +74,6 @@ export class IdentityModule {
         ...(devOutbox ? [DevLoginCodeOutboxController] : []),
       ],
       providers: [
-        // Replacement point for the settings table (TASK-007).
-        { provide: LoginCodeSettingsSource, useClass: ConfigLoginCodeSettingsSource },
         ...(devOutbox ? [{ provide: DevLoginCodeOutbox, useValue: new DevLoginCodeOutbox() }] : []),
         // Replacement point for the real WhatsApp and SMS providers (TASK-026).
         {
@@ -95,9 +83,6 @@ export class IdentityModule {
         },
         LoginCodeStore,
         LoginCodeService,
-        // Replacement points for the settings table (TASK-007).
-        { provide: SessionSettingsSource, useClass: ConfigSessionSettingsSource },
-        { provide: SignInSettingsSource, useClass: ConfigSignInSettingsSource },
         ...identityOperatorProviders,
         SessionService,
         SessionGuard,

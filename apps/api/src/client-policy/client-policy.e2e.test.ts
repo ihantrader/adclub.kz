@@ -12,12 +12,16 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpExceptionFilter, NotFoundModule } from "../common/errors";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "../common/logging";
-import { APP_CONFIG, defaultClientUpdateMessages } from "../config";
+import { ApiRoute } from "../common/contract";
+import { APP_CONFIG } from "../config";
 import { HealthController } from "../health/health.controller";
+import { settingDefinitions } from "../modules/settings";
 import { ClientPolicyController } from "./client-policy.controller";
 import { ClientPolicyService } from "./client-policy.service";
 import { ClientPolicySource, type ClientPolicySettings } from "./client-policy.source";
 import { ClientVersionGuard } from "./client-version.guard";
+
+const defaultClientUpdateMessages = settingDefinitions.client_update_message.default;
 
 /** Lets a test raise the minimum while the server is running. */
 class MutableClientPolicySource extends ClientPolicySource {
@@ -45,6 +49,20 @@ function initialSettings(): ClientPolicySettings {
 class OrdinaryController {
   @Get("ordinary")
   get() {
+    return { ok: true };
+  }
+
+  // A route an outdated admin panel still reaches (sign-in, settings).
+  @ApiRoute({
+    operationId: "recoveryFixture",
+    method: "GET",
+    path: "/recovery",
+    summary: "fixture",
+    tag: "meta",
+    clientVersionCheck: "enforced_except_admin_web",
+    responses: {},
+  })
+  recovery() {
     return { ok: true };
   }
 }
@@ -195,6 +213,15 @@ describe("client policy and version guard over HTTP", () => {
       const response = await get("/ordinary").set("X-Client", "admin-web/0.5.0");
       expect(response.status).toBe(426);
       expect(response.body.details.minSupportedVersion).toBe("0.6.0");
+    });
+
+    it("still serves an outdated admin panel on the routes that let it fix the policy", async () => {
+      expect((await get("/ordinary").set("X-Client", "admin-web/0.4.0")).status).toBe(426);
+      expect((await get("/recovery").set("X-Client", "admin-web/0.4.0")).status).toBe(200);
+      // Only the admin panel: other outdated clients get 426 there too.
+      const mobile = await get("/recovery").set("X-Client", "mobile/1.0.0 (ios)");
+      expect(mobile.status).toBe(426);
+      expect(mobile.body.code).toBe("CLIENT_UPDATE_REQUIRED");
     });
 
     it("writes the rejected request to the access log with its client", async () => {

@@ -24,7 +24,7 @@ import request, { type Response, type Test } from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../../app.module";
 import { JsonLoggerService } from "../../common/logging";
-import { loadConfig, type AppConfig, type SignInSettings } from "../../config";
+import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { TRUNCATE_ALL } from "../../testing/database";
@@ -37,6 +37,7 @@ import {
   rememberedSecrets,
   rememberSecret,
 } from "../../testing/output-capture";
+import { TestSettings } from "../../testing/settings";
 import { TcpProxy } from "../../testing/tcp-proxy";
 import { OperatorCommandError, OperatorService } from "./admin/operator.service";
 import { totpCode, totpStep } from "./admin/totp";
@@ -85,7 +86,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
   let redis: Redis;
   let db: Client;
   let config: AppConfig;
-  let defaults: SignInSettings;
+  let settings: TestSettings;
   let app: INestApplication;
   let channels: TestLoginCodeChannels;
   let operator: OperatorService;
@@ -121,11 +122,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       S3_SECRET_KEY: "x",
       S3_BUCKET: "x",
       TRUST_PROXY: "true",
-      LOGIN_CODE_REQUESTS_PER_PHONE: "10000",
-      LOGIN_CODE_REQUESTS_PER_IP: "10000",
-      LOGIN_CODE_VERIFICATIONS_PER_PHONE: "10000",
     });
-    defaults = structuredClone(config.signIn.settings);
 
     const nestApp = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(config), {
       bufferLogs: true,
@@ -137,6 +134,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     app = nestApp;
     channels = app.get(LoginCodeChannels) as TestLoginCodeChannels;
     operator = app.get(OperatorService);
+    settings = new TestSettings(app);
     await waitForRedis();
   });
 
@@ -149,18 +147,23 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
   });
 
   beforeEach(async () => {
-    Object.assign(config.signIn.settings, structuredClone(defaults), {
-      // Several sign-ins of one administrator per test: later codes are
-      // taken from later time steps (a code is never accepted twice).
-      totpAllowedDriftSteps: 10,
-      totpVerifyPerAdmin: { max: 1000, windowSeconds: 900 },
-      totpVerifyPerIp: { max: 1000, windowSeconds: 900 },
-    });
     config.nodeEnv = "test";
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
+    // Every setting back to its default, as the tables are emptied.
     await db.query(TRUNCATE_ALL);
+    await settings.reload();
+    await settings.set({
+      login_code_requests_per_phone: 10_000,
+      login_code_requests_per_ip: 10_000,
+      login_code_verifications_per_phone: 10_000,
+      // Several sign-ins of one administrator per test: later codes are
+      // taken from later time steps (a code is never accepted twice).
+      admin_totp_allowed_drift_steps: 5,
+      admin_totp_verify_per_admin: 1000,
+      admin_totp_verify_per_ip: 1000,
+    });
     await redis.flushall();
     output = captureOutput();
   });
@@ -172,7 +175,6 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     }
   });
 
-  const settings = () => config.signIn.settings;
   const http = () => request(app.getHttpServer());
   const nextIp = () => `198.51.100.${(ipCounter++ % 250) + 1}`;
 
@@ -727,7 +729,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       expect(await tableCount("session")).toBe(1);
 
       // Briefly.
-      settings().supplierSelectionTtlSeconds = 1;
+      await settings.set({ sign_in_supplier_selection_ttl_seconds: 1 });
       const late = supplierSelectionRequiredDetailsSchema.parse(
         (await verify(PHONE, SUPPLIER_WEB)).body.details,
       );
@@ -1412,7 +1414,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       // against the administrator's attempt limit and spend nothing.
       // (The setup confirmation above already counted once.)
       await redis.flushall();
-      settings().totpVerifyPerAdmin = { max: 1, windowSeconds: 900 };
+      await settings.set({ admin_totp_verify_per_admin: 1 });
       const token = await adminStep(PHONE, "TOTP_REQUIRED");
       const stepId = stepIdOf(token)!;
       const otherTab = await adminStep(PHONE, "TOTP_REQUIRED");
@@ -1473,7 +1475,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       );
       expect(rows[0]!.n).toBe(1); // only the one from the setup
       // Briefly usable only.
-      settings().adminTotpTtlSeconds = 1;
+      await settings.set({ sign_in_admin_totp_ttl_seconds: 1 });
       const late = await adminStep(PHONE, "TOTP_REQUIRED");
       await sleep(1100);
       expectError(
@@ -1484,7 +1486,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("takes the app's code once, with a step of clock drift, and an unused backup code once", async () => {
-      settings().totpAllowedDriftSteps = 1;
+      await settings.set({ admin_totp_allowed_drift_steps: 1 });
       const admin = await setUpAdmin(PHONE);
       const setupStep = lastSteps.get(admin.secret)!;
 
@@ -1600,7 +1602,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
 
     it("limits second factor attempts, and refuses rather than skips the limit while Redis is down", async () => {
       const admin = await setUpAdmin(PHONE);
-      settings().totpVerifyPerAdmin = { max: 3, windowSeconds: 900 };
+      await settings.set({ admin_totp_verify_per_admin: 3 });
       const token = await adminStep(PHONE, "TOTP_REQUIRED");
       // The setup confirmation was the first counted check.
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -1617,8 +1619,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "RATE_LIMITED",
       );
 
-      settings().totpVerifyPerAdmin = { max: 1000, windowSeconds: 900 };
-      settings().totpVerifyPerIp = { max: 2, windowSeconds: 900 };
+      await settings.set({ admin_totp_verify_per_admin: 1000, admin_totp_verify_per_ip: 2 });
       const perIp = await http()
         .post("/auth/sign-in/totp")
         .set("X-Client", ADMIN_WEB)
@@ -1638,7 +1639,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         .send({ signInStep: token, totpCode: "000000" });
       expectError(ipLimited, 429, "RATE_LIMITED");
       expect(ipLimited.body.details).toMatchObject({ limit: "admin_totp_per_ip" });
-      settings().totpVerifyPerIp = { max: 1000, windowSeconds: 900 };
+      await settings.set({ admin_totp_verify_per_ip: 1000 });
 
       await redis.flushall();
       await redisProxy.stop();
@@ -1812,8 +1813,12 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       );
       expect(operations.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
         "GET /admin/administrators",
+        "GET /admin/settings",
+        "GET /admin/settings/{key}/history",
         "POST /admin/administrators/{adminId}/totp-reset",
+        "POST /admin/settings/{key}/reset",
         "POST /admin/totp/backup-codes",
+        "PUT /admin/settings/{key}",
       ]);
       for (const path of ["/admin/administrators", `/admin/administrators/${admin.adminId}`]) {
         const response = await bearer("post", path, admin.accessToken, ADMIN_WEB, {

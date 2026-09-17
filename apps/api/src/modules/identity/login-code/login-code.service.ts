@@ -8,12 +8,7 @@ import type {
 } from "@adclub/contracts";
 import { maskPhone, normalizeKzMobilePhone } from "@adclub/domain";
 import { z } from "zod";
-import {
-  APP_CONFIG,
-  type AppConfig,
-  type LoginCodeSettings,
-  type RateLimitSettings,
-} from "../../../config";
+import { APP_CONFIG, type AppConfig, type RateLimitSettings } from "../../../config";
 import type { DbExecutor } from "../../../database";
 import {
   ApiException,
@@ -23,6 +18,7 @@ import {
 import { ZodValidationException } from "../../../common/validation";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
 import { LoginCodeChannels, LoginCodeDeliveryError } from "./channels/login-code-channels";
+import type { LoginCodeSettings } from "./login-code-settings.source";
 import { rateLimitSubject } from "./rate-limit-subject";
 import {
   generateLoginCode,

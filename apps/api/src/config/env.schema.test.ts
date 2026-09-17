@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigValidationError, defaultClientUpdateMessages, loadConfig } from "./env.schema";
+import { ConfigValidationError, DEV_ADMIN_WEB_RELEASE_VERSION, loadConfig } from "./env.schema";
 
 const VALID_ENV = {
   NODE_ENV: "development",
@@ -29,15 +31,7 @@ describe("loadConfig", () => {
         bucket: VALID_ENV.S3_BUCKET,
         region: "us-east-1",
       },
-      clientPolicy: {
-        minSupportedVersions: {
-          ios: "0.0.0",
-          android: "0.0.0",
-          "supplier-web": "0.0.0",
-          "admin-web": "0.0.0",
-        },
-        updateMessage: defaultClientUpdateMessages,
-      },
+      adminWeb: { releaseVersion: DEV_ADMIN_WEB_RELEASE_VERSION },
       http: {
         trustProxy: false,
         webOrigins: {
@@ -50,41 +44,10 @@ describe("loadConfig", () => {
         testFailingChannels: [],
         devOutbox: true,
         hashSecret: expect.any(String),
-        settings: {
-          codeLength: 6,
-          ttlSeconds: 300,
-          maxAttempts: 5,
-          resendIntervalSeconds: 60,
-          verifyFreeFailures: 2,
-          verifyDelayBaseSeconds: 2,
-          requestsPerPhone: { max: 5, windowSeconds: 3600 },
-          requestsPerIp: { max: 30, windowSeconds: 3600 },
-          verificationsPerPhone: { max: 15, windowSeconds: 3600 },
-          smsPerPhoneDaily: { max: 5, windowSeconds: 86400 },
-          smsPerIpDaily: { max: 10, windowSeconds: 86400 },
-        },
       },
-      session: {
-        tokenSecret: expect.any(String),
-        settings: {
-          accessTokenTtlSeconds: 900,
-          ttlSeconds: { mobile: 7_776_000, supplier_web: 15_552_000, admin_web: 43_200 },
-          refreshReuseGraceSeconds: 60,
-          refreshPerSession: { max: 30, windowSeconds: 3600 },
-          refreshPerIp: { max: 600, windowSeconds: 3600 },
-        },
-      },
-      signIn: {
-        totpEncryptionKey: expect.any(String),
-        settings: {
-          supplierSelectionTtlSeconds: 600,
-          adminTotpTtlSeconds: 600,
-          totpAllowedDriftSteps: 1,
-          backupCodeCount: 10,
-          totpVerifyPerAdmin: { max: 5, windowSeconds: 900 },
-          totpVerifyPerIp: { max: 20, windowSeconds: 900 },
-        },
-      },
+      session: { tokenSecret: expect.any(String) },
+      signIn: { totpEncryptionKey: expect.any(String) },
+      ignoredVariables: [],
     });
   });
 
@@ -131,38 +94,69 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...VALID_ENV, S3_SECRET_KEY: "" })).toThrow(ConfigValidationError);
   });
 
-  it("reads per-platform minimum client versions and update messages", () => {
+  it("ignores and reports former variables whose values are settings now", () => {
     const config = loadConfig({
       ...VALID_ENV,
       CLIENT_MIN_VERSION_IOS: "1.4.0",
-      CLIENT_MIN_VERSION_ANDROID: "1.3.2",
-      CLIENT_MIN_VERSION_ADMIN_WEB: "0.2.0",
       CLIENT_UPDATE_MESSAGE_KK: "Жаңартыңыз",
+      LOGIN_CODE_LENGTH: "3",
+      LOGIN_CODE_REQUESTS_PER_IP: "many",
+      SESSION_ADMIN_WEB_TTL_SECONDS: String(24 * 60 * 60),
+      SIGN_IN_ADMIN_TOTP_TTL_SECONDS: "7200",
+      ADMIN_TOTP_VERIFY_PER_IP: "1",
+      ADMIN_BACKUP_CODE_COUNT: "0",
     });
-
-    expect(config.clientPolicy.minSupportedVersions).toEqual({
-      ios: "1.4.0",
-      android: "1.3.2",
-      "supplier-web": "0.0.0",
-      "admin-web": "0.2.0",
-    });
-    expect(config.clientPolicy.updateMessage.kk).toBe("Жаңартыңыз");
-    expect(config.clientPolicy.updateMessage.ru).toBe(defaultClientUpdateMessages.ru);
+    expect(config.ignoredVariables).toEqual([
+      "ADMIN_BACKUP_CODE_COUNT",
+      "ADMIN_TOTP_VERIFY_PER_IP",
+      "CLIENT_MIN_VERSION_IOS",
+      "CLIENT_UPDATE_MESSAGE_KK",
+      "LOGIN_CODE_LENGTH",
+      "LOGIN_CODE_REQUESTS_PER_IP",
+      "SESSION_ADMIN_WEB_TTL_SECONDS",
+      "SIGN_IN_ADMIN_TOTP_TTL_SECONDS",
+    ]);
+    // Secrets and switches keep their names and aren't reported.
+    expect(
+      loadConfig({
+        ...VALID_ENV,
+        LOGIN_CODE_CHANNELS: "test",
+        LOGIN_CODE_HASH_SECRET: "a-development-secret-of-32-characters",
+        SESSION_TOKEN_SECRET: "a-development-session-secret-of-32-chars",
+        ADMIN_TOTP_ENCRYPTION_KEY: "a-development-totp-key-of-32-characters",
+      }).ignoredVariables,
+    ).toEqual([]);
   });
 
-  it.each(["1.4", "latest", "v1.4.0", " "])(
-    "rejects a malformed minimum client version %j",
-    (value) => {
-      expect(() => loadConfig({ ...VALID_ENV, CLIENT_MIN_VERSION_ANDROID: value })).toThrow(
-        /CLIENT_MIN_VERSION_ANDROID/,
-      );
-    },
-  );
+  describe("admin panel release version", () => {
+    it("defaults to the version of apps/admin-web in development and tests", () => {
+      const adminWebPackage = JSON.parse(
+        readFileSync(join(__dirname, "../../../admin-web/package.json"), "utf8"),
+      ) as { version: string };
+      expect(DEV_ADMIN_WEB_RELEASE_VERSION).toBe(adminWebPackage.version);
+      expect(loadConfig(VALID_ENV).adminWeb.releaseVersion).toBe(DEV_ADMIN_WEB_RELEASE_VERSION);
+      expect(
+        loadConfig({ ...VALID_ENV, ADMIN_WEB_RELEASE_VERSION: "2.3.4" }).adminWeb.releaseVersion,
+      ).toBe("2.3.4");
+    });
 
-  it("rejects a blank update message", () => {
-    expect(() => loadConfig({ ...VALID_ENV, CLIENT_UPDATE_MESSAGE_RU: "   " })).toThrow(
-      /CLIENT_UPDATE_MESSAGE_RU/,
-    );
+    it.each(["1.4", "latest", "v1.4.0", " "])("rejects a malformed version %j", (value) => {
+      expect(() => loadConfig({ ...VALID_ENV, ADMIN_WEB_RELEASE_VERSION: value })).toThrow(
+        /ADMIN_WEB_RELEASE_VERSION/,
+      );
+    });
+
+    it("is required outside development and tests", () => {
+      expect(() =>
+        loadConfig({
+          ...VALID_ENV,
+          NODE_ENV: "staging",
+          LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
+          SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+          ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+        }),
+      ).toThrow(/ADMIN_WEB_RELEASE_VERSION: required when NODE_ENV=staging/);
+    });
   });
 
   describe("login codes", () => {
@@ -172,6 +166,7 @@ describe("loadConfig", () => {
       LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
       SESSION_TOKEN_SECRET: "a-production-session-secret-of-32-chars",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-production-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
 
     it("refuses to start production with the test channels", () => {
@@ -208,27 +203,15 @@ describe("loadConfig", () => {
       }
     });
 
-    it("reads thresholds and failing test channels from the environment", () => {
+    it("reads the failing test channels from the environment", () => {
       const config = loadConfig({
         ...VALID_ENV,
-        LOGIN_CODE_LENGTH: "4",
-        LOGIN_CODE_TTL_SECONDS: "120",
-        LOGIN_CODE_SMS_PER_IP_DAILY: "3",
         LOGIN_CODE_TEST_FAILING_CHANNELS: " whatsapp , sms ",
-      });
-      expect(config.loginCode.settings).toMatchObject({
-        codeLength: 4,
-        ttlSeconds: 120,
-        smsPerIpDaily: { max: 3, windowSeconds: 86400 },
       });
       expect(config.loginCode.testFailingChannels).toEqual(["whatsapp", "sms"]);
     });
 
     it.each([
-      ["LOGIN_CODE_LENGTH", "3"],
-      ["LOGIN_CODE_LENGTH", "9"],
-      ["LOGIN_CODE_TTL_SECONDS", "0"],
-      ["LOGIN_CODE_REQUESTS_PER_IP", "many"],
       ["LOGIN_CODE_TEST_FAILING_CHANNELS", "telegram"],
       ["LOGIN_CODE_CHANNELS", "meta"],
       ["LOGIN_CODE_DEV_OUTBOX", "maybe"],
@@ -253,6 +236,7 @@ describe("loadConfig", () => {
       NODE_ENV: "staging",
       LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
 
     it("requires the TOTP encryption key outside development and tests, without printing it", () => {
@@ -277,42 +261,6 @@ describe("loadConfig", () => {
       expect(loadConfig({ ...VALID_ENV }).signIn.totpEncryptionKey.length).toBeGreaterThanOrEqual(
         32,
       );
-    });
-
-    it("reads the sign-in step thresholds with their defaults", () => {
-      expect(loadConfig(VALID_ENV).signIn.settings).toEqual({
-        supplierSelectionTtlSeconds: 600,
-        adminTotpTtlSeconds: 600,
-        totpAllowedDriftSteps: 1,
-        backupCodeCount: 10,
-        totpVerifyPerAdmin: { max: 5, windowSeconds: 900 },
-        totpVerifyPerIp: { max: 20, windowSeconds: 900 },
-      });
-      expect(() => loadConfig({ ...VALID_ENV, ADMIN_TOTP_ALLOWED_DRIFT_STEPS: "6" })).toThrow(
-        /ADMIN_TOTP_ALLOWED_DRIFT_STEPS/,
-      );
-      expect(() => loadConfig({ ...VALID_ENV, ADMIN_BACKUP_CODE_COUNT: "0" })).toThrow(
-        /ADMIN_BACKUP_CODE_COUNT/,
-      );
-    });
-
-    it("refuses to start with a sign-in step that stays open longer than 30 minutes", () => {
-      for (const name of [
-        "SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS",
-        "SIGN_IN_ADMIN_TOTP_TTL_SECONDS",
-      ]) {
-        expect(() => loadConfig({ ...VALID_ENV, [name]: String(30 * 60 + 1) })).toThrow(
-          new RegExp(`${name}.*at most 1800`, "s"),
-        );
-        expect(() => loadConfig({ ...VALID_ENV, [name]: "0" })).toThrow(new RegExp(name));
-      }
-      expect(
-        loadConfig({
-          ...VALID_ENV,
-          SIGN_IN_SUPPLIER_SELECTION_TTL_SECONDS: "1800",
-          SIGN_IN_ADMIN_TOTP_TTL_SECONDS: "1800",
-        }).signIn.settings,
-      ).toMatchObject({ supplierSelectionTtlSeconds: 1800, adminTotpTtlSeconds: 1800 });
     });
 
     it("requires a session token secret outside development and tests, without printing it", () => {
@@ -365,46 +313,6 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...VALID_ENV, SUPPLIER_WEB_ORIGINS: origin })).toThrow(
         /SUPPLIER_WEB_ORIGINS/,
       );
-    });
-
-    it("reads lifetimes and refresh thresholds from the environment", () => {
-      const config = loadConfig({
-        ...VALID_ENV,
-        SESSION_ACCESS_TOKEN_TTL_SECONDS: "60",
-        SESSION_MOBILE_TTL_SECONDS: "100",
-        SESSION_SUPPLIER_WEB_TTL_SECONDS: "200",
-        SESSION_ADMIN_WEB_TTL_SECONDS: "300",
-        SESSION_REFRESH_REUSE_GRACE_SECONDS: "0",
-        SESSION_REFRESH_PER_SESSION: "5",
-        SESSION_REFRESH_PER_IP_WINDOW_SECONDS: "10",
-      });
-      expect(config.session.settings).toEqual({
-        accessTokenTtlSeconds: 60,
-        ttlSeconds: { mobile: 100, supplier_web: 200, admin_web: 300 },
-        refreshReuseGraceSeconds: 0,
-        refreshPerSession: { max: 5, windowSeconds: 3600 },
-        refreshPerIp: { max: 600, windowSeconds: 10 },
-      });
-    });
-
-    it.each([
-      ["SESSION_ACCESS_TOKEN_TTL_SECONDS", "0"],
-      ["SESSION_MOBILE_TTL_SECONDS", "-1"],
-      ["SESSION_REFRESH_REUSE_GRACE_SECONDS", "-1"],
-      ["SESSION_REFRESH_PER_IP", "lots"],
-    ])("rejects %s=%j", (name, value) => {
-      expect(() => loadConfig({ ...VALID_ENV, [name]: value })).toThrow(new RegExp(name));
-    });
-
-    it("never lets an admin session live longer than 12 hours, whatever the setting", () => {
-      expect(() =>
-        loadConfig({ ...VALID_ENV, SESSION_ADMIN_WEB_TTL_SECONDS: String(12 * 60 * 60 + 1) }),
-      ).toThrow(/SESSION_ADMIN_WEB_TTL_SECONDS/);
-
-      expect(
-        loadConfig({ ...VALID_ENV, SESSION_ADMIN_WEB_TTL_SECONDS: String(12 * 60 * 60) }).session
-          .settings.ttlSeconds.admin_web,
-      ).toBe(12 * 60 * 60);
     });
   });
 });

@@ -1,28 +1,30 @@
-import { Inject, Injectable } from "@nestjs/common";
-import { APP_CONFIG, type AppConfig, type LoginCodeSettings } from "../../../config";
+import type { RateLimitSettings } from "../../../config";
+
+/** Login code thresholds (ARCHITECTURE 8.1, 14): the `login_code_*` settings. */
+export interface LoginCodeSettings {
+  codeLength: number;
+  ttlSeconds: number;
+  /** Wrong entries a single code survives; the last one invalidates it. */
+  maxAttempts: number;
+  /** Minimum time between two codes for one number, whatever the channel. */
+  resendIntervalSeconds: number;
+  /** Wrong entries allowed without any delay before the next try. */
+  verifyFreeFailures: number;
+  /** Delay after the first delayed failure; doubles with each next one. */
+  verifyDelayBaseSeconds: number;
+  requestsPerPhone: RateLimitSettings;
+  requestsPerIp: RateLimitSettings;
+  verificationsPerPhone: RateLimitSettings;
+  smsPerPhoneDaily: RateLimitSettings;
+  smsPerIpDaily: RateLimitSettings;
+}
 
 /**
- * Where login code thresholds come from (ARCHITECTURE 8.1, 14).
- * **Replacement point**: today `ConfigLoginCodeSettingsSource` reads them
- * from the environment (`LOGIN_CODE_*`, changing them means restarting
- * the API); TASK-007 swaps in an implementation backed by the settings
- * table by changing the provider in `IdentityModule` only — the same
- * pattern as `ClientPolicySource`.
- *
- * Read on every request, so an implementation must be cheap (cache inside
- * it if the source is remote).
+ * Where login code thresholds come from. Provided by the settings module
+ * (`SettingsLoginCodeSource`, values from `app_setting`, ARCHITECTURE
+ * 4.11), so a change takes effect without a restart. Read on every
+ * request; implementations cache.
  */
 export abstract class LoginCodeSettingsSource {
   abstract getSettings(): Promise<LoginCodeSettings>;
-}
-
-@Injectable()
-export class ConfigLoginCodeSettingsSource extends LoginCodeSettingsSource {
-  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
-    super();
-  }
-
-  getSettings(): Promise<LoginCodeSettings> {
-    return Promise.resolve(this.config.loginCode.settings);
-  }
 }

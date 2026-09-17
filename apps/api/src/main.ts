@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { loadEnvFile, loadConfig, ConfigValidationError } from "./config";
+import { loadEnvFile, loadConfig, ConfigValidationError, warnIgnoredVariables } from "./config";
 import { AppModule } from "./app.module";
 import { JsonLoggerService } from "./common/logging";
 import { installGracefulShutdown } from "./common/shutdown";
@@ -17,6 +17,7 @@ async function bootstrap() {
   });
   const logger = app.get(JsonLoggerService);
   app.useLogger(logger);
+  warnIgnoredVariables(config, logger);
   configureHttpApp(app, config);
 
   await app.listen(config.port);

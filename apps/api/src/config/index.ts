@@ -3,18 +3,16 @@ export {
   envSchema,
   logLevels,
   ConfigValidationError,
-  defaultClientUpdateMessages,
+  DEV_ADMIN_WEB_RELEASE_VERSION,
   loginCodeChannelProviders,
 } from "./env.schema";
 export type {
   AppConfig,
   LogLevel,
   LoginCodeChannelProvider,
-  LoginCodeSettings,
   NodeEnv,
   RateLimitSettings,
-  SessionSettings,
-  SignInSettings,
 } from "./env.schema";
 export { loadEnvFile } from "./load-env-file";
 export { ConfigModule, APP_CONFIG } from "./config.module";
+export { warnIgnoredVariables } from "./ignored-variables";

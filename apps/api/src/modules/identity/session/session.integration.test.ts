@@ -18,7 +18,7 @@ import request, { type Response, type Test } from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../../../app.module";
 import { JsonLoggerService } from "../../../common/logging";
-import { loadConfig, type AppConfig, type SessionSettings } from "../../../config";
+import { loadConfig, type AppConfig } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
 import { TRUNCATE_ALL } from "../../../testing/database";
@@ -30,6 +30,7 @@ import {
   rememberedCodes,
   rememberedSecrets,
 } from "../../../testing/output-capture";
+import { TestSettings } from "../../../testing/settings";
 import { TcpProxy } from "../../../testing/tcp-proxy";
 import { AccountStore } from "../account/account.store";
 import { LoginCodeChannels } from "../login-code/channels/login-code-channels";
@@ -72,7 +73,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
   let redis: Redis;
   let db: Client;
   let config: AppConfig;
-  let defaults: SessionSettings;
+  let settings: TestSettings;
   let app: INestApplication;
   let channels: TestLoginCodeChannels;
   let sessions: SessionService;
@@ -107,12 +108,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       S3_SECRET_KEY: "x",
       S3_BUCKET: "x",
       TRUST_PROXY: "true",
-      // Many sign-ins per number and address in this suite.
-      LOGIN_CODE_REQUESTS_PER_PHONE: "10000",
-      LOGIN_CODE_REQUESTS_PER_IP: "10000",
-      LOGIN_CODE_VERIFICATIONS_PER_PHONE: "10000",
     });
-    defaults = structuredClone(config.session.settings);
 
     const nestApp = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(config), {
       bufferLogs: true,
@@ -124,6 +120,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     app = nestApp;
     channels = app.get(LoginCodeChannels) as TestLoginCodeChannels;
     sessions = app.get(SessionService);
+    settings = new TestSettings(app);
     await waitForDependencies();
   });
 
@@ -136,10 +133,16 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
   });
 
   beforeEach(async () => {
-    Object.assign(config.session.settings, structuredClone(defaults));
-    config.clientPolicy.minSupportedVersions.ios = "0.0.0";
     channels.sent.length = 0;
+    // Every setting back to its default, as the tables are emptied.
     await db.query(TRUNCATE_ALL);
+    await settings.reload();
+    // Many sign-ins per number and address in this suite.
+    await settings.set({
+      login_code_requests_per_phone: 10_000,
+      login_code_requests_per_ip: 10_000,
+      login_code_verifications_per_phone: 10_000,
+    });
     await redis.flushall();
     output = captureOutput();
   });
@@ -154,7 +157,6 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     }
   });
 
-  const settings = () => config.session.settings;
   const http = () => request(app.getHttpServer());
   const nextIp = () => `198.51.100.${(ipCounter++ % 250) + 1}`;
 
@@ -440,14 +442,10 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect((await verify(PHONE, code, { client: IOS })).status).toBe(200);
       expectError(await verify(PHONE, code, { client: IOS }), 400, "LOGIN_CODE_EXPIRED");
 
-      config.loginCode.settings.ttlSeconds = 1;
-      try {
-        const late = await sendCode(OTHER_PHONE);
-        await sleep(1200);
-        expectError(await verify(OTHER_PHONE, late, { client: IOS }), 400, "LOGIN_CODE_EXPIRED");
-      } finally {
-        config.loginCode.settings.ttlSeconds = 300;
-      }
+      await settings.set({ login_code_ttl_seconds: 1 });
+      const late = await sendCode(OTHER_PHONE);
+      await sleep(1200);
+      expectError(await verify(OTHER_PHONE, late, { client: IOS }), 400, "LOGIN_CODE_EXPIRED");
       const { rows } = await db.query("SELECT count(*)::int AS n FROM session");
       expect(rows).toEqual([{ n: 1 }]);
     });
@@ -571,14 +569,14 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("tells an expired access token (refresh) from an ended session (sign in)", async () => {
-      settings().accessTokenTtlSeconds = 1;
+      await settings.set({ session_access_token_ttl_seconds: 1 });
       const session = await signIn();
       await sleep(2100);
       const expired = await me(session.accessToken);
       expectError(expired, 401, "ACCESS_TOKEN_EXPIRED");
 
       // A 1-second token may expire before the next request even reaches the server.
-      settings().accessTokenTtlSeconds = 900;
+      await settings.set({ session_access_token_ttl_seconds: 900 });
       const renewed = await refreshed(session.refreshToken);
       expect((await me(renewed.accessToken)).status).toBe(200);
 
@@ -588,7 +586,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("answers an outdated client with 426 before looking at the token", async () => {
-      config.clientPolicy.minSupportedVersions.ios = "2.0.0";
+      await settings.set({ client_min_version_ios: "2.0.0" });
       const response = await me(undefined);
       expect(response.status).toBe(426);
       expect(response.body.code).toBe("CLIENT_UPDATE_REQUIRED");
@@ -613,7 +611,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
 
   describe("refresh", () => {
     it("rotates the pair; the replaced token ends the session once the grace period is over", async () => {
-      settings().refreshReuseGraceSeconds = 0;
+      await settings.set({ session_refresh_reuse_grace_seconds: 0 });
       const session = await signIn();
       const renewed = await refreshed(session.refreshToken);
       expect(renewed.sessionId).toBe(session.sessionId);
@@ -664,7 +662,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("ends the session when a stolen token is used after the owner refreshed", async () => {
-      settings().refreshReuseGraceSeconds = 1;
+      await settings.set({ session_refresh_reuse_grace_seconds: 1 });
       const owner = await signIn();
       const stolen = owner.refreshToken;
       const ownerRenewed = await refreshed(owner.refreshToken);
@@ -676,7 +674,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("ends the session when the owner comes back after a thief refreshed", async () => {
-      settings().refreshReuseGraceSeconds = 1;
+      await settings.set({ session_refresh_reuse_grace_seconds: 1 });
       const owner = await signIn();
       const thief = await refreshed(owner.refreshToken);
       const thiefAgain = await refreshed(thief.refreshToken);
@@ -721,7 +719,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("slides the mobile session forward on refresh until it is not refreshed in time", async () => {
-      settings().ttlSeconds.mobile = 3;
+      await settings.set({ session_mobile_ttl_seconds: 3 });
       const session = await signIn();
       expect(
         secondsUntil((await sessionRow(session.sessionId))!.expires_at.toISOString()),
@@ -916,9 +914,12 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("stays signed in until an explicit logout, which clears the cookie", async () => {
-      settings().accessTokenTtlSeconds = 1;
+      await settings.set({ session_access_token_ttl_seconds: 1 });
       const web = await issueWebSession("supplier_web");
       await sleep(2100);
+      // The first access token has expired; the renewed one must outlive the
+      // logout below however slow the machine is (was a 1-second token too).
+      await settings.set({ session_access_token_ttl_seconds: 900 });
       const renewed = await cookieRefresh(
         SUPPLIER_ORIGIN,
         `adclub_supplier_refresh=${web.tokens.refreshToken}`,
@@ -994,7 +995,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       const row = await sessionRow(standard.tokens.sessionId);
       expect(row?.absolute_expires_at).toEqual(row?.expires_at);
 
-      settings().ttlSeconds.admin_web = 3;
+      await settings.set({ session_admin_web_ttl_seconds: 4 });
       const admin = await issueWebSession("admin_web");
       const endsAt = admin.tokens.sessionExpiresAt;
       let token = admin.tokens.refreshToken;
@@ -1085,7 +1086,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
 
   describe("rate limits", () => {
     it("limits refreshes per session", async () => {
-      settings().refreshPerSession = { max: 3, windowSeconds: 3600 };
+      await settings.set({ session_refresh_per_session: 3 });
       const session = await signIn();
       const other = await signIn(OTHER_PHONE);
       let token = session.refreshToken;
@@ -1102,7 +1103,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("limits refreshes per address, garbage included", async () => {
-      settings().refreshPerIp = { max: 2, windowSeconds: 3600 };
+      await settings.set({ session_refresh_per_ip: 2 });
       const session = await signIn();
       expectError(await refresh("garbage", "192.0.2.99"), 401, "AUTH_REQUIRED");
       expect((await refresh(session.refreshToken, "192.0.2.99")).status).toBe(200);
@@ -1112,7 +1113,17 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("does not get in the way of ordinary use with the default limits", async () => {
-      expect(settings()).toEqual(defaults);
+      expect(await settings.values()).toMatchObject({
+        session_access_token_ttl_seconds: 900,
+        session_refresh_reuse_grace_seconds: 60,
+        session_refresh_per_session: 30,
+        session_refresh_per_session_window_seconds: 3600,
+        session_refresh_per_ip: 600,
+        session_refresh_per_ip_window_seconds: 3600,
+      });
+      expect(
+        (await db.query("SELECT key FROM app_setting WHERE key LIKE 'session_%'")).rows,
+      ).toEqual([]);
       const session = await signIn();
       let token = session.refreshToken;
       for (let round = 0; round < 4; round += 1) {
@@ -1176,7 +1187,7 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
 
   describe("logs and storage", () => {
     it("record every session event with ids and a masked number", async () => {
-      settings().refreshReuseGraceSeconds = 0;
+      await settings.set({ session_refresh_reuse_grace_seconds: 0 });
       const first = await signIn();
       const second = await signIn();
       const renewed = await refreshed(first.refreshToken);

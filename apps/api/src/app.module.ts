@@ -8,6 +8,7 @@ import { HealthModule } from "./health/health.module";
 import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
+import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
 import { OriginPolicyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
@@ -20,7 +21,10 @@ export class AppModule implements NestModule {
    * so config validation happens once, before Nest's DI container exists,
    * and fails with a plain readable message instead of a DI error.
    */
-  static forRoot(config: AppConfig) {
+  static forRoot(
+    config: AppConfig,
+    options: { settingsCache?: Partial<SettingsCacheOptions> } = {},
+  ) {
     return {
       module: AppModule,
       imports: [
@@ -28,6 +32,7 @@ export class AppModule implements NestModule {
         DatabaseModule,
         RedisModule,
         StorageModule,
+        SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
         HealthModule,
         ClientPolicyModule,
         // API docs for development only (TASK-003); production serves the

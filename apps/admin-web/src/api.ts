@@ -23,7 +23,7 @@ export const apiClient = createApiClient({
 
 /**
  * The server's "update required" text once any request was refused with
- * `CLIENT_UPDATE_REQUIRED` (this build is below `CLIENT_MIN_VERSION_ADMIN_WEB`),
+ * `CLIENT_UPDATE_REQUIRED` (this build is below the `client_min_version_admin_web` setting),
  * `null` otherwise.
  */
 export function useUpdateRequiredMessage(): string | null {

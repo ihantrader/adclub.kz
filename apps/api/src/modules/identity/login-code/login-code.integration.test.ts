@@ -14,7 +14,7 @@ import request, { type Response } from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../../app.module";
 import { JsonLoggerService } from "../../../common/logging";
-import { loadConfig, type AppConfig, type LoginCodeSettings } from "../../../config";
+import { loadConfig, type AppConfig } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
 import { TRUNCATE_ALL } from "../../../testing/database";
@@ -24,6 +24,7 @@ import {
   rememberCode,
   rememberSecret,
 } from "../../../testing/output-capture";
+import { TestSettings } from "../../../testing/settings";
 import { TcpProxy } from "../../../testing/tcp-proxy";
 import { LoginCodeChannels } from "./channels/login-code-channels";
 import { TestLoginCodeChannels } from "./channels/test-login-code-channels";
@@ -48,7 +49,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
   let redis: Redis;
   let db: Client;
   let config: AppConfig;
-  let defaults: LoginCodeSettings;
+  let settings: TestSettings;
   let app: INestApplication;
   let channels: TestLoginCodeChannels;
   /** Every code sent during the whole suite (also checked by the output capture). */
@@ -78,7 +79,6 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       S3_BUCKET: "x",
       TRUST_PROXY: "true",
     });
-    defaults = structuredClone(config.loginCode.settings);
 
     const nestApp = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(config), {
       bufferLogs: true,
@@ -90,6 +90,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     await nestApp.init();
     app = nestApp;
     channels = app.get(LoginCodeChannels) as TestLoginCodeChannels;
+    settings = new TestSettings(app);
     await waitForRedis();
   });
 
@@ -102,11 +103,11 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
   });
 
   beforeEach(async () => {
-    Object.assign(config.loginCode.settings, structuredClone(defaults));
-    config.clientPolicy.minSupportedVersions.ios = "0.0.0";
     channels.failing.clear();
     channels.sent.length = 0;
+    // Every setting back to its default, as the tables are emptied.
     await db.query(TRUNCATE_ALL);
+    await settings.reload();
     await redis.flushall();
     output = captureOutput();
   });
@@ -119,8 +120,6 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       rememberCode(sent.code);
     }
   });
-
-  const settings = () => config.loginCode.settings;
 
   function requestCode(body: unknown, ip = "198.51.100.10"): Promise<Response> {
     return request(app.getHttpServer())
@@ -217,7 +216,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("remembers the channel the confirmed code came through", async () => {
-      settings().resendIntervalSeconds = 1;
+      await settings.set({ login_code_resend_interval_seconds: 1 });
       await requestCode({ phone: PHONE, channel: "sms" });
       await verifyCode({ phone: PHONE, code: lastCode() });
       const { rows } = await db.query("SELECT phone, channel FROM phone_verification");
@@ -249,7 +248,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("lets a person through who mistypes twice and asks for a resend", async () => {
-      settings().resendIntervalSeconds = 1;
+      await settings.set({ login_code_resend_interval_seconds: 1 });
       await requestCode({ phone: PHONE });
       for (const attemptsRemaining of [4, 3]) {
         const wrong = await verifyCode({ phone: PHONE, code: wrongCode() });
@@ -305,7 +304,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("rejects an outdated client like any ordinary route", async () => {
-      config.clientPolicy.minSupportedVersions.ios = "2.0.0";
+      await settings.set({ client_min_version_ios: "2.0.0" });
       const response = await request(app.getHttpServer())
         .post("/auth/login-code")
         .set("X-Client", "mobile/1.0.0 (ios)")
@@ -338,7 +337,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("accepts only the latest code once a new one is sent", async () => {
-      settings().resendIntervalSeconds = 1;
+      await settings.set({ login_code_resend_interval_seconds: 1 });
       await requestCode({ phone: PHONE });
       const first = lastCode();
       await sleep(1100);
@@ -354,7 +353,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("does not accept an expired code, even the right one", async () => {
-      settings().ttlSeconds = 1;
+      await settings.set({ login_code_ttl_seconds: 1 });
       await requestCode({ phone: PHONE });
       await sleep(1200);
       const response = await verifyCode({ phone: PHONE, code: lastCode() });
@@ -364,8 +363,8 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("invalidates a code after the last allowed wrong entry; a new code works", async () => {
-      settings().verifyFreeFailures = 10;
-      settings().resendIntervalSeconds = 1;
+      await settings.set({ login_code_verify_free_failures: 10 });
+      await settings.set({ login_code_resend_interval_seconds: 1 });
       await requestCode({ phone: PHONE });
       const remaining: number[] = [];
       for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -386,7 +385,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("slows down entries after repeated mistakes without spending attempts", async () => {
-      settings().verifyDelayBaseSeconds = 1;
+      await settings.set({ login_code_verify_delay_base_seconds: 1 });
       await requestCode({ phone: PHONE });
       for (let attempt = 0; attempt < 3; attempt += 1) {
         expect((await verifyCode({ phone: PHONE, code: wrongCode() })).status).toBe(400);
@@ -477,7 +476,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("refuses an SMS resend before the interval and allows it after", async () => {
-      settings().resendIntervalSeconds = 2;
+      await settings.set({ login_code_resend_interval_seconds: 2 });
       const first = await requestCode({ phone: PHONE });
       expect(Date.parse(first.body.resendAvailableAt) - Date.now()).toBeGreaterThan(1000);
 
@@ -515,9 +514,11 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
 
   describe("rate limits", () => {
     it("limits code requests per number, until the window passes", async () => {
-      Object.assign(settings(), {
-        resendIntervalSeconds: 1,
-        requestsPerPhone: { max: 2, windowSeconds: 3 },
+      await settings.set({
+        login_code_resend_interval_seconds: 1,
+        login_code_requests_per_phone: 2,
+        // Long enough for three requests a second apart on a loaded machine.
+        login_code_requests_per_phone_window_seconds: 6,
       });
       expect((await requestCode({ phone: PHONE })).status).toBe(200);
       await sleep(1100);
@@ -532,7 +533,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("limits code requests per IP address", async () => {
-      settings().requestsPerIp = { max: 2, windowSeconds: 3600 };
+      await settings.set({ login_code_requests_per_ip: 2 });
       expect((await requestCode({ phone: "+77010000001" }, "203.0.113.5")).status).toBe(200);
       expect((await requestCode({ phone: "+77010000002" }, "203.0.113.5")).status).toBe(200);
       expectRateLimited(
@@ -543,7 +544,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("treats one IPv6 /64 network as one address", async () => {
-      settings().requestsPerIp = { max: 1, windowSeconds: 3600 };
+      await settings.set({ login_code_requests_per_ip: 1 });
       expect((await requestCode({ phone: "+77010000001" }, "2001:db8:1:2::10")).status).toBe(200);
       expectRateLimited(
         await requestCode({ phone: "+77010000002" }, "2001:db8:1:2::11"),
@@ -552,9 +553,9 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("limits SMS per number per day, but not WhatsApp", async () => {
-      Object.assign(settings(), {
-        resendIntervalSeconds: 1,
-        smsPerPhoneDaily: { max: 1, windowSeconds: 86_400 },
+      await settings.set({
+        login_code_resend_interval_seconds: 1,
+        login_code_sms_per_phone_daily: 1,
       });
       expect((await requestCode({ phone: PHONE, channel: "sms" })).status).toBe(200);
       await sleep(1100);
@@ -569,8 +570,8 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("applies the daily SMS limit to the WhatsApp fallback too", async () => {
-      settings().smsPerPhoneDaily = { max: 1, windowSeconds: 86_400 };
-      settings().resendIntervalSeconds = 1;
+      await settings.set({ login_code_sms_per_phone_daily: 1 });
+      await settings.set({ login_code_resend_interval_seconds: 1 });
       channels.failing.add("whatsapp");
       expect((await requestCode({ phone: PHONE })).body.channel).toBe("sms");
       await sleep(1100);
@@ -579,7 +580,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("limits SMS per IP address per day", async () => {
-      settings().smsPerIpDaily = { max: 1, windowSeconds: 86_400 };
+      await settings.set({ login_code_sms_per_ip_daily: 1 });
       expect((await requestCode({ phone: PHONE, channel: "sms" }, "203.0.113.9")).status).toBe(200);
       expectRateLimited(
         await requestCode({ phone: OTHER_PHONE, channel: "sms" }, "203.0.113.9"),
@@ -588,8 +589,8 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("does not spend a phone's SMS limit when the IP limit is what refused the request", async () => {
-      settings().smsPerIpDaily = { max: 1, windowSeconds: 86_400 };
-      settings().smsPerPhoneDaily = { max: 1, windowSeconds: 86_400 };
+      await settings.set({ login_code_sms_per_ip_daily: 1 });
+      await settings.set({ login_code_sms_per_phone_daily: 1 });
       expect(
         (await requestCode({ phone: OTHER_PHONE, channel: "sms" }, "203.0.113.20")).status,
       ).toBe(200);
@@ -605,7 +606,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("limits code checks per number, so new codes don't allow endless guessing", async () => {
-      settings().verificationsPerPhone = { max: 3, windowSeconds: 3600 };
+      await settings.set({ login_code_verifications_per_phone: 3 });
       await requestCode({ phone: PHONE });
       for (let attempt = 0; attempt < 2; attempt += 1) {
         expect((await verifyCode({ phone: PHONE, code: wrongCode() })).status).toBe(400);
@@ -618,7 +619,15 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     });
 
     it("does not block the usual flow with the default limits", async () => {
-      expect(settings()).toEqual(defaults);
+      // Nothing stored: every threshold is its registry default.
+      expect((await db.query("SELECT key FROM app_setting")).rows).toEqual([]);
+      expect(await settings.values()).toMatchObject({
+        login_code_requests_per_phone: 5,
+        login_code_requests_per_ip: 30,
+        login_code_verifications_per_phone: 15,
+        login_code_verify_free_failures: 2,
+        login_code_max_attempts: 5,
+      });
       expect((await requestCode({ phone: PHONE })).status).toBe(200);
       expect((await verifyCode({ phone: PHONE, code: wrongCode() })).status).toBe(400);
       expect((await verifyCode({ phone: PHONE, code: wrongCode() })).status).toBe(400);
@@ -659,8 +668,8 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
 
   describe("logs", () => {
     it("record every step with a masked number and never the code", async () => {
-      settings().verifyFreeFailures = 0;
-      settings().verifyDelayBaseSeconds = 1;
+      await settings.set({ login_code_verify_free_failures: 0 });
+      await settings.set({ login_code_verify_delay_base_seconds: 1 });
       channels.failing.add("whatsapp");
       await requestCode({ phone: "8 701 123 45 67" });
       await verifyCode({ phone: PHONE, code: wrongCode() });

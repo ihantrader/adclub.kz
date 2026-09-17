@@ -29,7 +29,7 @@ export const apiClient = createApiClient({
 /**
  * The server's "update required" text once any request was refused with
  * `CLIENT_UPDATE_REQUIRED` (this build is below
- * `CLIENT_MIN_VERSION_SUPPLIER_WEB`), `null` otherwise.
+ * the `client_min_version_supplier_web` setting), `null` otherwise.
  */
 export function useUpdateRequiredMessage(): string | null {
   return useSyncExternalStore(

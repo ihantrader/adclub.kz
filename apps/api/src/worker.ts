@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
-import { loadEnvFile, loadConfig, ConfigValidationError } from "./config";
+import { loadEnvFile, loadConfig, ConfigValidationError, warnIgnoredVariables } from "./config";
 import { WorkerModule } from "./worker.module";
 import { JsonLoggerService } from "./common/logging";
 import { installGracefulShutdown } from "./common/shutdown";
@@ -15,6 +15,7 @@ async function bootstrap() {
   });
   const logger = app.get(JsonLoggerService);
   app.useLogger(logger);
+  warnIgnoredVariables(config, logger);
   logger.log("Worker process started", "Worker");
 
   // Keeps the event loop alive until a shutdown signal arrives (signal

@@ -1,28 +1,30 @@
-import { Inject, Injectable } from "@nestjs/common";
-import { APP_CONFIG, type AppConfig, type SignInSettings } from "../../../config";
+import type { RateLimitSettings } from "../../../config";
 
 /**
- * Where the thresholds of the cabinet and admin sign-in steps come from
- * (ARCHITECTURE 8.1, 14): step lifetimes, the size of a backup code set,
- * the tolerated clock drift and the second factor rate limits.
- * **Replacement point**: today `ConfigSignInSettingsSource` reads the
- * environment (`SIGN_IN_*`, `ADMIN_TOTP_*`, `ADMIN_BACKUP_CODE_COUNT`);
- * TASK-007 swaps in an implementation backed by the settings table by
- * changing the provider in `IdentityModule` only — as for
- * `LoginCodeSettingsSource` and `SessionSettingsSource`. Read on every
+ * Thresholds of the cabinet and admin sign-in steps (ARCHITECTURE 8.1,
+ * 14): the `sign_in_*`, `admin_totp_*` and `admin_backup_code_count`
+ * settings.
+ */
+export interface SignInSettings {
+  /** How long a started company choice stays usable. */
+  supplierSelectionTtlSeconds: number;
+  /** How long an admin sign-in may wait for the second factor (setup included). */
+  adminTotpTtlSeconds: number;
+  /** Authenticator codes this many 30-second steps early or late are accepted. */
+  totpAllowedDriftSteps: number;
+  /** Backup codes in one set. */
+  backupCodeCount: number;
+  /** Second factor checks (right or wrong) per administrator. */
+  totpVerifyPerAdmin: RateLimitSettings;
+  /** Second factor checks per client address. */
+  totpVerifyPerIp: RateLimitSettings;
+}
+
+/**
+ * Where the sign-in step thresholds come from. Provided by the settings
+ * module (`SettingsSignInSource`, ARCHITECTURE 4.11). Read on every
  * sign-in step. The TOTP encryption key is not a setting.
  */
 export abstract class SignInSettingsSource {
   abstract getSettings(): Promise<SignInSettings>;
-}
-
-@Injectable()
-export class ConfigSignInSettingsSource extends SignInSettingsSource {
-  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
-    super();
-  }
-
-  getSettings(): Promise<SignInSettings> {
-    return Promise.resolve(this.config.signIn.settings);
-  }
 }

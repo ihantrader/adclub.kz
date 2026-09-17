@@ -1,5 +1,6 @@
 import type { PgTable } from "drizzle-orm/pg-core";
 import { identityTables } from "./modules/identity";
+import { settingsTables } from "./modules/settings";
 
 /**
  * Every table the application describes in Drizzle. The schema drift
@@ -7,4 +8,4 @@ import { identityTables } from "./modules/identity";
  * with the database the migrations produce, so a module that adds tables
  * must add them here.
  */
-export const ormTables: readonly PgTable[] = [...identityTables];
+export const ormTables: readonly PgTable[] = [...identityTables, ...settingsTables];

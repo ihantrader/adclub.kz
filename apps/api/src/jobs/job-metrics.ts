@@ -18,7 +18,7 @@ export class JobMetrics implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.metrics.collect(() => this.sample());
+    this.metrics.collectJobs(() => this.sample());
   }
 
   private async sample(): Promise<void> {

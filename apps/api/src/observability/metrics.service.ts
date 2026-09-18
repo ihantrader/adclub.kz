@@ -35,11 +35,11 @@ export class Metrics {
     "Jobs on a queue by state (created, retry, active)",
   );
   private readonly jobFailures = this.registry.gauge(
-    "adclub_job_failed_total",
+    "adclub_job_failed",
     "Jobs that ended in failure, by job (from the queue's own bookkeeping)",
   );
   private readonly jobDead = this.registry.gauge(
-    "adclub_job_dead_total",
+    "adclub_job_dead",
     "Jobs waiting in a dead letter queue, by job",
   );
   private readonly periodicJobState = this.registry.gauge(
@@ -56,7 +56,7 @@ export class Metrics {
   );
   private readonly dependencyUp = this.registry.gauge(
     "adclub_dependency_up",
-    "1 when a dependency behind /ready answered, 0 when it did not",
+    "1 when a dependency answered the last /ready check, 0 when it did not",
   );
   private readonly monitoringEvents = this.registry.counter(
     "adclub_monitoring_events_total",
@@ -109,9 +109,18 @@ export class Metrics {
     this.sanitizerFailures.increment();
   }
 
-  /** A value only worth sampling when metrics are scraped. */
-  collect(collector: MetricCollector): void {
-    this.registry.collect(collector);
+  /**
+   * The queue metrics, sampled when metrics are scraped (from the
+   * database: the worker runs the jobs, the API serves the scrape). If the
+   * sample fails, they are absent from that scrape.
+   */
+  collectJobs(collector: MetricCollector): void {
+    this.registry.collect("jobs", collector, [
+      this.jobQueueDepth,
+      this.jobFailures,
+      this.jobDead,
+      this.periodicJobState,
+    ]);
   }
 
   render(): Promise<string> {

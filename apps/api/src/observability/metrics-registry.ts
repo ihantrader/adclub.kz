@@ -1,13 +1,21 @@
+import { sanitizeText } from "./sanitizer";
+
 /**
  * A small metrics registry in the Prometheus text format (ARCHITECTURE
  * 15.3): counters, gauges and histograms with labels, rendered for a
  * scrape. Written here rather than taken from a library because the whole
- * need is a few dozen series, and because every label value goes through
- * the same check — metrics carry no personal data (only route templates,
- * job names, channels and outcomes).
+ * need is a few dozen series, and because every label goes through the
+ * same check: a label name must be a valid Prometheus name (a wrong one is
+ * a programming error and throws), a label value goes through the
+ * sanitizer and is cut to `MAX_LABEL_VALUE` — metrics carry no personal
+ * data (only route templates, job names, channels and outcomes), and a
+ * value that would carry some anyway leaves only masked.
  *
- * Sampled values that only make sense at scrape time (queue depth,
- * dependency state) are registered as collectors and asked for then.
+ * Sampled values that only make sense at scrape time (queue depth) are
+ * registered as collectors together with the metrics they fill: those are
+ * emptied before each collection, so a collector that fails leaves them
+ * absent from the scrape — never the values of an earlier one presented as
+ * current — and `adclub_metrics_collector_up{collector}` says 0.
  */
 
 export type Labels = Readonly<Record<string, string | number>>;
@@ -18,6 +26,22 @@ type MetricType = "counter" | "gauge" | "histogram";
 const MAX_SERIES_PER_METRIC = 200;
 
 const NAME = /^[a-zA-Z_:][a-zA-Z0-9_:]*$/;
+const LABEL_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+/** Longest label value kept. */
+const MAX_LABEL_VALUE = 120;
+
+/** Labels as they are stored: names checked, values cleaned and bounded. */
+function checkedLabels(labels: Labels): Labels {
+  const result: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(labels)) {
+    if (!LABEL_NAME.test(name) || name.startsWith("__") || name === "le") {
+      throw new Error(`Invalid metric label name "${name}"`);
+    }
+    result[name] =
+      typeof value === "number" ? value : sanitizeText(value).slice(0, MAX_LABEL_VALUE);
+  }
+  return result;
+}
 
 function escapeLabelValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/"/g, '\\"');
@@ -63,7 +87,8 @@ export class Metric {
     }
   }
 
-  private of(labels: Labels): Series | undefined {
+  private of(given: Labels): Series | undefined {
+    const labels = checkedLabels(given);
     const key = seriesKey(labels);
     let series = this.series.get(key);
     if (!series) {
@@ -108,7 +133,7 @@ export class Metric {
     }
   }
 
-  /** Forgets every series (tests; a process never needs it). */
+  /** Forgets every series (before a collector fills it again; tests). */
   clear(): void {
     this.series.clear();
   }
@@ -142,9 +167,19 @@ export class Metric {
 /** Asked for its values when metrics are scraped (queue depth, dependencies). */
 export type MetricCollector = () => Promise<void> | void;
 
+interface RegisteredCollector {
+  name: string;
+  collector: MetricCollector;
+  owned: readonly Metric[];
+}
+
 export class MetricsRegistry {
   private readonly metrics = new Map<string, Metric>();
-  private readonly collectors: MetricCollector[] = [];
+  private readonly collectors: RegisteredCollector[] = [];
+  private readonly collectorUp = this.gauge(
+    "adclub_metrics_collector_up",
+    "1 when a sampled group of metrics was collected for this scrape, 0 when it failed",
+  );
 
   counter(name: string, help: string): Metric {
     return this.register(new Metric(name, "counter", help));
@@ -158,18 +193,30 @@ export class MetricsRegistry {
     return this.register(new Metric(name, "histogram", help, bounds));
   }
 
-  /** Runs before every render; a collector that fails doesn't stop the scrape. */
-  collect(collector: MetricCollector): void {
-    this.collectors.push(collector);
+  /**
+   * Runs `collector` before every render to fill `owned`, which are
+   * emptied first. A collector that fails doesn't stop the scrape: its
+   * metrics are absent from it.
+   */
+  collect(name: string, collector: MetricCollector, owned: readonly Metric[]): void {
+    this.collectors.push({ name, collector, owned });
   }
 
   async render(): Promise<string> {
     await Promise.all(
-      this.collectors.map(async (collector) => {
+      this.collectors.map(async ({ name, collector, owned }) => {
+        for (const metric of owned) {
+          metric.clear();
+        }
         try {
           await collector();
+          this.collectorUp.set({ collector: name }, 1);
         } catch {
-          // A metric nobody could sample is simply absent from the scrape.
+          // Whatever it managed to set before failing is not a full sample.
+          for (const metric of owned) {
+            metric.clear();
+          }
+          this.collectorUp.set({ collector: name }, 0);
         }
       }),
     );

@@ -184,7 +184,9 @@ export const envSchema = z.object({
   MONITORING_DSN: z.string().trim().optional(),
   // Which deployment an event came from; default: NODE_ENV.
   MONITORING_ENVIRONMENT: z.string().trim().min(1).optional(),
-  // Publish GET /metrics (Prometheus text format).
+  // Publish GET /metrics (Prometheus text format). Default: on in
+  // development and test; elsewhere on only with METRICS_TOKEN — and
+  // METRICS_ENABLED=true without a token there refuses to start.
   METRICS_ENABLED: z.stringbool().optional(),
   // When set, the collector must present it: `Authorization: Bearer <token>`.
   METRICS_TOKEN: z.string().min(16).optional(),
@@ -321,6 +323,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       );
     }
   }
+  // System data is never served anonymously outside a developer's machine
+  // (TASK-009.A): without a token there, metrics are off unless asked for,
+  // and asking for them without a token is a configuration error.
+  const metricsEnabled = parsed.METRICS_ENABLED ?? (isLocal || parsed.METRICS_TOKEN !== undefined);
+  if (!isLocal && metricsEnabled && !parsed.METRICS_TOKEN) {
+    environmentIssues.push(
+      `METRICS_TOKEN: required when METRICS_ENABLED=true and NODE_ENV=${parsed.NODE_ENV}`,
+    );
+  }
   if (environmentIssues.length > 0) {
     throw new ConfigValidationError(environmentIssues);
   }
@@ -371,7 +382,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       environment: parsed.MONITORING_ENVIRONMENT ?? parsed.NODE_ENV,
     },
     metrics: {
-      enabled: parsed.METRICS_ENABLED ?? true,
+      enabled: metricsEnabled,
       token: parsed.METRICS_TOKEN,
     },
     ignoredVariables: Object.keys(env)

@@ -86,6 +86,41 @@ describe("loadConfig", () => {
     expect(loadConfig(VALID_ENV).monitoring.target).toBeUndefined();
   });
 
+  describe("metrics outside development and test (TASK-009.A)", () => {
+    const STAGING_ENV = {
+      ...VALID_ENV,
+      NODE_ENV: "staging",
+      LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
+      SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+    };
+    const TOKEN = "metrics-collector-token-1234567890";
+
+    it("are off without a token", () => {
+      expect(loadConfig(STAGING_ENV).metrics).toEqual({ enabled: false, token: undefined });
+    });
+
+    it("are on with a token, which is then required", () => {
+      expect(loadConfig({ ...STAGING_ENV, METRICS_TOKEN: TOKEN }).metrics).toEqual({
+        enabled: true,
+        token: TOKEN,
+      });
+    });
+
+    it("refuse to start when asked for without a token", () => {
+      expect(() => loadConfig({ ...STAGING_ENV, METRICS_ENABLED: "true" })).toThrow(
+        /METRICS_TOKEN: required when METRICS_ENABLED=true and NODE_ENV=staging/,
+      );
+    });
+
+    it("stay open without a token on a developer's machine", () => {
+      expect(loadConfig(VALID_ENV).metrics).toEqual({ enabled: true, token: undefined });
+      expect(loadConfig({ ...VALID_ENV, NODE_ENV: "test" }).metrics.enabled).toBe(true);
+      expect(loadConfig({ ...VALID_ENV, METRICS_ENABLED: "false" }).metrics.enabled).toBe(false);
+    });
+  });
+
   it("applies documented defaults when optional variables are absent", () => {
     const config = loadConfig(VALID_ENV);
     expect(config.nodeEnv).toBe("development");

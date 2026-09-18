@@ -98,7 +98,9 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
     nest.useLogger(nest.get(JsonLoggerService));
     nest.flushLogs();
     configureHttpApp(nest, config);
-    await nest.init();
+    // A real port: concurrent requests (the simultaneous edit test) share one
+    // listening server instead of supertest opening one per request.
+    await nest.listen(0, "127.0.0.1");
     app = nest;
     channels = app.get(LoginCodeChannels) as TestLoginCodeChannels;
   }, 180_000);
@@ -1269,11 +1271,10 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       expect(codes).not.toContain("brake_pads");
       expect(codes).toContain("brake_discs");
 
-      const answers = await Promise.all(
-        [interior, mats, pads, randomUUID(), "not-a-uuid"].map((id) =>
-          asGuest(`/catalog/categories/${id}/attributes`),
-        ),
-      );
+      const answers: Response[] = [];
+      for (const id of [interior, mats, pads, randomUUID(), "not-a-uuid"]) {
+        answers.push(await asGuest(`/catalog/categories/${id}/attributes`));
+      }
       for (const answer of answers) {
         expectError(answer, 404, "NOT_FOUND");
         expect(answer.body).toEqual(answers[0]!.body);

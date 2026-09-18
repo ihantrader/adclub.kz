@@ -565,8 +565,14 @@ describe("background jobs (PostgreSQL)", () => {
       singletonMaxActive = 0;
       const accepted: string[] = [];
       let refused = 0;
+      const workersSeen = () => new Set(runsOf(singletonJob.name).map((run) => run.worker));
+      // Which worker's poll lands first once the queue frees is a race, so
+      // the run goes on until both have taken a job (bounded): the point of
+      // the test is that a singleton is never run twice at a time, whoever
+      // takes it — not which of them happens to be quicker.
       const until = Date.now() + 3000;
-      while (Date.now() < until) {
+      const deadline = Date.now() + 40_000;
+      while (Date.now() < until || (workersSeen().size < 2 && Date.now() < deadline)) {
         const value = marker("singleton");
         const id = await enqueue(singletonJob, { marker: value });
         if (id) {

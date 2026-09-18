@@ -676,6 +676,9 @@ describe("background jobs (PostgreSQL)", () => {
       const value = marker("flaky");
       const id = await enqueue(flakyJob, { marker: value, failures: 2 });
       await waitFor(() => runsOf(flakyJob.name, value).some((run) => run.finishedAt), "success");
+      // The handler has returned; pg-boss marks the job completed (and the
+      // runner logs it) only after that — wait for it rather than race it.
+      await waitFor(async () => (await jobState(id!)) === "completed", "the completed state");
       output.stop();
       const attempts = runsOf(flakyJob.name, value);
       expect(attempts.map((run) => run.attempt)).toEqual([1, 2, 3]);

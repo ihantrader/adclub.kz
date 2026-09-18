@@ -49,7 +49,9 @@ COMPLETED
 5. `8c372e0` Close /metrics outside development without a token and keep samples honest — `.env.example`, `apps/api/src/config/env.schema.ts`, `config/env.schema.test.ts`, `observability/metrics-registry.ts`, `observability/metrics.controller.ts`, `observability/metrics.service.ts`, `observability/metrics.test.ts`, `jobs/job-metrics.ts`.
 6. `a66bf34` Answer 4xx refusals with codes that fit, and test what leaves the process — `apps/api/src/`: `common/errors/http-exception.filter.ts`, `common/errors/http-exception.filter.test.ts`, `common/errors/body-parser-error.ts`, `common/errors/index.ts`, `common/errors/not-found.controller.ts`, `common/http/json-body.middleware.ts`, `common/http/index.ts`, `app.module.ts`, `http-app.ts`, `modules/identity/access.integration.test.ts`, `modules/settings/settings.integration.test.ts`, `modules/identity/login-code/login-code.integration.test.ts`, `observability/observability.integration.test.ts`.
 7. `f0d712d` Document TASK-009.A decisions in ARCHITECTURE 4.14 and correct the TASK-009 report on 4xx codes — `ARCHITECTURE.md`, `CLAUDE.md`, `tasks/TASK-009-REPORT.md`.
-8. Коммит с этим отчётом — `tasks/TASK-009.A-REPORT.md` (хэш — в ответе сессии; в самом файле его быть не может).
+8. `65582d7` Add TASK-009.A report — `tasks/TASK-009.A-REPORT.md`.
+9. `a135f18` Wait for the completed state in the job retry test instead of racing pg-boss — `apps/api/src/jobs/jobs.integration.test.ts`.
+10. Коммит с обновлённым отчётом — `tasks/TASK-009.A-REPORT.md` (хэш — в ответе сессии; в самом файле его быть не может).
 
 ## Technical Decisions
 
@@ -100,16 +102,18 @@ COMPLETED
 - **AC-9 — PASS** — `unhandled-failures.test.ts`: `uncaughtException` → очищенная строка, событие с `kind: uncaughtException`, ожидание `flush`, затем `exit(1)`; повторное исключение — выход сразу; `unhandledRejection` — событие и строка, выхода нет. Интеграционно — отдельный процесс: событие дошло до приёмника очищенным, строка «Uncaught exception: the process is exiting», ненулевой код выхода (в Linux — ровно 1, подтверждено CI run 35313177600; на Windows libuv может завершить процесс аварийно вместо кода 1 — известная проблема Node этой платформы, код всё равно ненулевой; см. Known Issues).
 - **AC-10 — PASS** — `audit-log.integration.test.ts` «fails the action when its entry can't be written: nothing of it stays»: запись журнала отказывает → `SettingsChangeService.change` падает, в `audit_log`, `app_setting`, `app_setting_change` ничего, строки «Action recorded» нет.
 - **AC-11 — PASS** — перехват вывода (`output-capture.ts`) подключён ко всем интеграционным файлам и в полном локальном прогоне не нашёл ни одного зарегистрированного токена, секрета или кода (ни один файл не упал на проверке `afterAll`); существующие тесты не ослаблены — изменены только три ожидания поведения, которое TASK-009.A меняет по требованию (см. Deviations). Два теста лимитов падают локально из-за часов Docker VM (не из-за изменений); в CI на Linux полный набор — 204/204 PASS (run 35313177600).
-- **AC-12 — PASS** — коммиты по D-024 (только явно перечисленные файлы, состав выше, перед каждым — `git diff --cached --stat`); CI на `main` зелёный: run 35313177600 (`f0d712d`) — success; прогон коммита с отчётом — в ответе сессии.
+- **AC-12 — PASS** — коммиты по D-024 (только явно перечисленные файлы, состав выше, перед каждым — `git diff --cached --stat`); CI на `main`: run 35313177600 (`f0d712d`) — success; run 35313508881 (`65582d7`) — failure из-за гонки в тесте задач, исправлено в `a135f18`; прогон последнего коммита — в ответе сессии.
 - **AC-13 — PASS** — `ARCHITECTURE.md` 0.17 (история, раздел 4.14 I131–I140, уточнения I126, I129, 15.3); в `tasks/TASK-009-REPORT.md` добавлено исправление утверждения о кодах 4xx в «Result» и в AC-9.
 
 ## CI
 
 - Run **35313177600** (коммит `f0d712d`, последний кодовый коммит задачи) — **success**, 3 мин 58 с: format, lint, typecheck, build, `pnpm test` (`@adclub/api` 31 файл / 363 теста, остальные пакеты зелёные), **интеграционные 10 файлов / 204 теста — все PASS на Linux** (включая оба теста лимитов, падавшие локально из-за часов Docker VM, и выход процесса с кодом ровно 1 после `uncaughtException`), «API contract is backward compatible» против `b2eab62` без трейлера.
-- Прогон коммита с этим отчётом — номер и статус в ответе сессии (в файле, который он проверяет, их быть не может).
+- Run **35313508881** (коммит `65582d7`, только `.md`) — **failure**: `jobs.integration.test.ts` «retries a failing job by its rules until it succeeds» — `expected 'active' to be 'completed'` (203/204). Код тот же, что в зелёном run 35313177600: это гонка в тесте TASK-008 — обработчик уже отметил завершение, а pg-boss ещё не перевёл задачу в `completed` (и строка «Job completed» пишется после). Исправлено в `a135f18`: тест ждёт состояния `completed`, как соседние тесты задач; локально весь файл `jobs.integration.test.ts` — 21/21 PASS.
+- Прогон последнего коммита (с этим отчётом) — номер и статус в ответе сессии (в файле, который он проверяет, их быть не может).
 
 ## Errors & Fixes
 
+- **CI run 35313508881 упал на гонке в тесте TASK-008** («retries a failing job…»: состояние `active` вместо `completed` сразу после того, как обработчик отметил завершение). Не связан с изменениями задачи (тот же код прошёл в run 35313177600); тест теперь ждёт `completed` (`a135f18`).
 - **Правка файла через Python исказила регулярные выражения** (`\b` стал символом backspace, ` ` — литеральным NUL). Найдено по тому, что правило учётных данных URL не срабатывало; исправлено, все изменённые файлы проверены на управляющие символы; маркер удержания теперь строится в коде (`String.fromCharCode(0)`).
 - **`${HEX4}?` в шаблоне IPv6** превращал `{1,4}` в ленивый квантификатор вместо «необязательной группы» — `::1` не маскировался. Исправлено `(?:${HEX4})?`; IPv6 теперь ищется до IPv4 (`::ffff:192.0.2.1`).
 - **SQLSTATE `23505` вырезался как «код входа».** Правило ключа `code` не различало их; оставлено для ошибок с `severity` (PostgreSQL) и кодов Node вида `E…`.

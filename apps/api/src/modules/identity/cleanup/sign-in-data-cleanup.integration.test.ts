@@ -149,11 +149,25 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
     return session;
   }
 
-  /** Runs a cleanup job now and waits for it to finish. */
+  /**
+   * Runs a cleanup job now and waits for it to finish. The job is a
+   * singleton that also runs every minute: when a scheduled run is already
+   * waiting, `runNow` puts none and says so (`jobId: null`) — then it asks
+   * again once that one has been taken, so the run waited for is one of its
+   * own, started after the data of the test was in place (TASK-010.A: the
+   * test used to look up the job `null` and report it "gone").
+   */
   async function runCleanup(name: string): Promise<void> {
     const admin = worker.get(JobAdmin);
-    const { jobId } = await admin.runNow(name);
     const deadline = Date.now() + 30_000;
+    let { jobId } = await admin.runNow(name);
+    while (jobId === null) {
+      if (Date.now() > deadline) {
+        throw new Error(`Cleanup ${name} could not be started: a run stayed waiting`);
+      }
+      await sleep(100);
+      ({ jobId } = await admin.runNow(name));
+    }
     for (;;) {
       const { rows } = await db.query<{ state: string }>(
         "SELECT state::text AS state FROM pgboss.job WHERE id = $1",

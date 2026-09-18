@@ -151,6 +151,8 @@ interface Run {
   attempt: number;
   startedAt: number;
   finishedAt?: number;
+  /** The pg-boss job the run was for (periodic runs). */
+  jobId?: string;
 }
 
 /** Everything the test handlers did, across all workers of this process. */
@@ -271,7 +273,9 @@ function register(registry: JobRegistry, worker: string): void {
   });
   registry.handlePeriodic(minutelyJob, {
     run: (context) => {
-      record(minutelyJob.name, "", context.attempt).finishedAt = Date.now();
+      const run = record(minutelyJob.name, "", context.attempt);
+      run.jobId = context.jobId;
+      run.finishedAt = Date.now();
       return Promise.resolve();
     },
   });
@@ -885,24 +889,54 @@ describe("background jobs (PostgreSQL)", () => {
     });
 
     it("runs each scheduled occurrence once with two workers", async () => {
-      const firstBoundary = nextMinute(twoWorkersSince);
-      // At least one whole minute with both workers up.
+      // Occurrences are told apart by the clock that decides them: pg-boss
+      // files an occurrence under PostgreSQL's now(), and the job it creates
+      // carries that time. Minutes of this process's clock can't tell them
+      // apart — it may be seconds away from the container's (Docker VM), a
+      // run starts a moment after its occurrence, and the run made up in the
+      // first test starts together with the current minute's (TASK-010.A).
+      const databaseNow = async () =>
+        (await db.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]!.now.getTime();
+      // Two whole minutes of the database from the next one on, both workers
+      // up all along; the made-up run of the first test is behind them.
+      const from = nextMinute((await databaseNow()) + 1);
+      const until = from + 2 * 60_000;
+      // A pass every second, the job forwarded within a couple more: 15 s is plenty.
       await waitFor(
-        () => Date.now() > firstBoundary + 60_000 + 10_000,
-        "a whole minute with two workers",
-        150_000,
+        async () => (await databaseNow()) > until + 15_000,
+        "two whole minutes with two workers",
+        210_000,
       );
-      const steady = runsOf(minutelyJob.name).filter((run) => run.startedAt >= firstBoundary);
-      const perMinute = new Map<number, number>();
-      for (const run of steady) {
-        const minute = Math.floor(run.startedAt / 60_000);
-        perMinute.set(minute, (perMinute.get(minute) ?? 0) + 1);
+      const { rows } = await db.query<{ id: string; created_on: Date; state: string }>(
+        `SELECT id, created_on, state::text AS state FROM pgboss.job
+          WHERE name = $1 AND created_on >= $2 AND created_on < $3 ORDER BY created_on`,
+        [minutelyJob.name, new Date(from), new Date(until)],
+      );
+      const report = JSON.stringify({
+        from: new Date(from),
+        jobs: rows,
+        runs: runsOf(minutelyJob.name).map((run) => ({
+          ...run,
+          startedAt: new Date(run.startedAt),
+        })),
+      });
+      // Exactly one job for each of the two minutes: none missed, none twice.
+      expect(
+        rows.map((row) => Math.floor(row.created_on.getTime() / 60_000) - from / 60_000),
+        report,
+      ).toEqual([0, 1]);
+      // Each ran exactly once, by one of the two workers, and completed.
+      for (const row of rows) {
+        expect(
+          runsOf(minutelyJob.name).filter((run) => run.jobId === row.id),
+          report,
+        ).toHaveLength(1);
+        expect(row.state, report).toBe("completed");
       }
-      const minutes = Math.floor((Date.now() - 10_000 - firstBoundary) / 60_000);
-      expect(minutes).toBeGreaterThanOrEqual(1);
-      expect(steady.length).toBeGreaterThanOrEqual(minutes);
-      expect([...perMinute.values()].every((count) => count === 1)).toBe(true);
-    }, 180_000);
+      // And no job at all ran twice.
+      const ran = runsOf(minutelyJob.name).map((run) => run.jobId);
+      expect(new Set(ran).size, report).toBe(ran.length);
+    }, 240_000);
   });
 
   describe("one worker at a time", () => {

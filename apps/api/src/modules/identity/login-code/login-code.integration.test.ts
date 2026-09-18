@@ -170,6 +170,26 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     expect(response.headers["retry-after"]).toBe(String(response.body.details.retryAfterSeconds));
   }
 
+  /**
+   * Waits until a limit's window has passed by the clock that keeps it —
+   * Redis's: its key, set with a time to live, is gone. The container's
+   * clock may run at another rate than this process's (a Docker VM here ran
+   * ~9 % slow and was set right in jumps), so sleeping the interval by this
+   * process's clock proves nothing (TASK-010.A). `atMostMs` still bounds it.
+   */
+  async function windowPassed(key: string, atMostMs: number): Promise<void> {
+    const started = Date.now();
+    while ((await redis.pttl(`rl:${key}`)) !== -2) {
+      if (Date.now() - started > atMostMs) {
+        throw new Error(`The window of ${key} did not pass within ${atMostMs} ms`);
+      }
+      await sleep(25);
+    }
+  }
+
+  /** The resend interval of a number (1 s in these tests) has passed. */
+  const resendAllowed = (phone = PHONE) => windowPassed(`login-code:resend:${phone}`, 3_000);
+
   async function waitForRedis(): Promise<void> {
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
@@ -223,7 +243,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       expect(rows).toEqual([{ phone: PHONE, channel: "sms" }]);
 
       // A later confirmation through WhatsApp replaces it.
-      await sleep(1100);
+      await resendAllowed();
       expect((await requestCode({ phone: PHONE })).body.channel).toBe("whatsapp");
       await verifyCode({ phone: PHONE, code: lastCode() });
       const after = await db.query("SELECT channel FROM phone_verification WHERE phone = $1", [
@@ -258,7 +278,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
           details: { attemptsRemaining },
         });
       }
-      await sleep(1100);
+      await resendAllowed();
       expect((await requestCode({ phone: PHONE, channel: "sms" })).status).toBe(200);
       const verified = await verifyCode({ phone: PHONE, code: lastCode() });
       expect(verified.status).toBe(200);
@@ -341,7 +361,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       await settings.set({ login_code_resend_interval_seconds: 1 });
       await requestCode({ phone: PHONE });
       const first = lastCode();
-      await sleep(1100);
+      await resendAllowed();
       await requestCode({ phone: PHONE, channel: "sms" });
       const second = lastCode();
       expect(await challengeStatuses()).toEqual(["superseded", "active"]);
@@ -380,7 +400,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       expect(right.body.code).toBe("LOGIN_CODE_EXPIRED");
       expect(await challengeStatuses()).toEqual(["exhausted"]);
 
-      await sleep(1100);
+      await resendAllowed();
       expect((await requestCode({ phone: PHONE })).status).toBe(200);
       expect((await verifyCode({ phone: PHONE, code: lastCode() })).status).toBe(200);
     });
@@ -487,7 +507,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       expect(channels.sent).toHaveLength(1);
       expect(await challengeStatuses()).toEqual(["active"]);
 
-      await sleep(2100);
+      await windowPassed(`login-code:resend:${PHONE}`, 4_000);
       const late = await requestCode({ phone: PHONE, channel: "sms" });
       expect(late.status).toBe(200);
       expect(late.body.channel).toBe("sms");
@@ -522,14 +542,17 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
         login_code_requests_per_phone_window_seconds: 6,
       });
       expect((await requestCode({ phone: PHONE })).status).toBe(200);
-      await sleep(1100);
+      await resendAllowed();
       expect((await requestCode({ phone: PHONE }, "198.51.100.20")).status).toBe(200);
-      await sleep(1100);
+      await resendAllowed();
       const limited = await requestCode({ phone: PHONE }, "198.51.100.21");
       expectRateLimited(limited, "login_code_requests_per_phone");
       expect(channels.sent).toHaveLength(2);
 
-      await sleep(limited.body.details.retryAfterSeconds * 1000 + 100);
+      await windowPassed(
+        `login-code:requests:phone:${PHONE}`,
+        limited.body.details.retryAfterSeconds * 2000 + 1000,
+      );
       expect((await requestCode({ phone: PHONE }, "198.51.100.22")).status).toBe(200);
     });
 
@@ -559,7 +582,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
         login_code_sms_per_phone_daily: 1,
       });
       expect((await requestCode({ phone: PHONE, channel: "sms" })).status).toBe(200);
-      await sleep(1100);
+      await resendAllowed();
       const limited = await requestCode({ phone: PHONE, channel: "sms" });
       expectRateLimited(limited, "login_code_sms_per_phone_daily");
       expect(limited.body.details.retryAfterSeconds).toBeGreaterThan(86_000);
@@ -575,7 +598,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
       await settings.set({ login_code_resend_interval_seconds: 1 });
       channels.failing.add("whatsapp");
       expect((await requestCode({ phone: PHONE })).body.channel).toBe("sms");
-      await sleep(1100);
+      await resendAllowed();
       expectRateLimited(await requestCode({ phone: PHONE }), "login_code_sms_per_phone_daily");
       expect(await challengeStatuses()).toEqual(["active", "failed"]);
     });

@@ -1,4 +1,5 @@
 export { readCookie } from "./cookies";
+export { JsonBodyMiddleware } from "./json-body.middleware";
 export { OriginPolicyMiddleware } from "./origin-policy.middleware";
 export {
   corsOptions,

@@ -1821,12 +1821,21 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "POST /admin/totp/backup-codes",
         "PUT /admin/settings/{key}",
       ]);
-      for (const path of ["/admin/administrators", `/admin/administrators/${admin.adminId}`]) {
-        const response = await bearer("post", path, admin.accessToken, ADMIN_WEB, {
-          phone: THIRD_PHONE,
-        });
-        expectError(response, 404, "NOT_FOUND");
-      }
+      // The list only reads (405 names what it takes, TASK-009.A); an
+      // administrator by id has no route at all.
+      const appoint = await bearer("post", "/admin/administrators", admin.accessToken, ADMIN_WEB, {
+        phone: THIRD_PHONE,
+      });
+      expectError(appoint, 405, "METHOD_NOT_ALLOWED");
+      expect(appoint.headers.allow).toBe("GET, HEAD");
+      const byId = await bearer(
+        "post",
+        `/admin/administrators/${admin.adminId}`,
+        admin.accessToken,
+        ADMIN_WEB,
+        { phone: THIRD_PHONE },
+      );
+      expectError(byId, 404, "NOT_FOUND");
       expect(await tableCount("admin_user")).toBe(1);
 
       // The command: a number without an account gets one; twice is harmless.

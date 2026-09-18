@@ -13,47 +13,55 @@ import { ErrorReporter } from "../../observability/error-reporter.service";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
 import { ApiException } from "./api.exception";
+import { bodyParserException } from "./body-parser-error";
 import {
   CLIENT_UPDATE_REQUIRED_STATUS,
   ClientUpdateRequiredException,
 } from "./client-update-required.exception";
 
 /**
- * The contract code that matches the meaning of a status Nest produced on
- * its own. Before TASK-009 every other 4xx (405, 413, 415 …) was reported
- * as `VALIDATION_ERROR`, which told a client the request data was wrong
- * when it was not.
+ * The contract code that matches the meaning of a status (ARCHITECTURE 7.1,
+ * TASK-009.A). `VALIDATION_ERROR` is only for request data that fails its
+ * schema (400, 422); a request refused for what it is — its method, size,
+ * content type, length of the address — gets a code of its own, and any
+ * other 4xx `REQUEST_REJECTED`, never `VALIDATION_ERROR`.
  */
-function codeForHttpStatus(status: number): ErrorCode {
+export function codeForHttpStatus(status: number): ErrorCode {
   switch (status) {
-    case HttpStatus.NOT_FOUND:
-    case HttpStatus.METHOD_NOT_ALLOWED:
-      // No handler for this path and method: the same answer as a missing
-      // resource, so nothing tells apart a route that exists from one that
-      // doesn't.
-      return "NOT_FOUND";
-    case HttpStatus.CONFLICT:
-      return "CONFLICT";
+    case HttpStatus.BAD_REQUEST:
+    case HttpStatus.UNPROCESSABLE_ENTITY:
+      return "VALIDATION_ERROR";
     case HttpStatus.UNAUTHORIZED:
       return "AUTH_REQUIRED";
     case HttpStatus.FORBIDDEN:
       return "FORBIDDEN";
+    case HttpStatus.NOT_FOUND:
+      return "NOT_FOUND";
+    case HttpStatus.METHOD_NOT_ALLOWED:
+      return "METHOD_NOT_ALLOWED";
+    case HttpStatus.NOT_ACCEPTABLE:
+      return "NOT_ACCEPTABLE";
+    case HttpStatus.REQUEST_TIMEOUT:
+      return "REQUEST_TIMEOUT";
+    case HttpStatus.CONFLICT:
+      return "CONFLICT";
+    case HttpStatus.GONE:
+      return "GONE";
+    case HttpStatus.PAYLOAD_TOO_LARGE:
+      return "PAYLOAD_TOO_LARGE";
+    case HttpStatus.URI_TOO_LONG:
+      return "URI_TOO_LONG";
+    case HttpStatus.UNSUPPORTED_MEDIA_TYPE:
+      return "UNSUPPORTED_MEDIA_TYPE";
     case HttpStatus.TOO_MANY_REQUESTS:
       return "RATE_LIMITED";
-    case HttpStatus.BAD_REQUEST:
-    case HttpStatus.PAYLOAD_TOO_LARGE:
-    case HttpStatus.UNSUPPORTED_MEDIA_TYPE:
-    case HttpStatus.UNPROCESSABLE_ENTITY:
-      // The request itself is at fault: too big, in a format the route
-      // doesn't take, or malformed.
-      return "VALIDATION_ERROR";
     case CLIENT_UPDATE_REQUIRED_STATUS:
       return "CLIENT_UPDATE_REQUIRED";
     case HttpStatus.SERVICE_UNAVAILABLE:
     case HttpStatus.GATEWAY_TIMEOUT:
       return "SERVICE_UNAVAILABLE";
     default:
-      return status >= 500 ? "INTERNAL_ERROR" : "VALIDATION_ERROR";
+      return status >= 500 ? "INTERNAL_ERROR" : "REQUEST_REJECTED";
   }
 }
 
@@ -83,7 +91,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
   ) {}
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  catch(thrown: unknown, host: ArgumentsHost): void {
+    // A body the parser refused, if `configureHttpApp` didn't convert it already.
+    const exception = bodyParserException(thrown) ?? thrown;
     const http = host.switchToHttp();
     const response = http.getResponse<Response>();
     const request = http.getRequest<Request>();
@@ -164,7 +174,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         body: {
           code: codeForHttpStatus(status),
           message: Array.isArray(message) ? message.join("; ") : message,
-          retryable: status >= 500,
+          retryable: status >= 500 || status === HttpStatus.REQUEST_TIMEOUT,
         },
       };
     }

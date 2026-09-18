@@ -300,7 +300,8 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
         .set("Content-Type", "application/json")
         .send('{"phone": ');
       expect(response.status).toBe(400);
-      expect(response.body.code).toBe("VALIDATION_ERROR");
+      // A body that can't be read at all, not data failing the schema (TASK-009.A).
+      expect(response.body.code).toBe("MALFORMED_REQUEST");
     });
 
     it("rejects an outdated client like any ordinary route", async () => {

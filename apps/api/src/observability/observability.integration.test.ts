@@ -1,6 +1,10 @@
+import { execFile } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { INestApplication } from "@nestjs/common";
+import { dirname, resolve } from "node:path";
+import { promisify } from "node:util";
+import type { INestApplication, INestApplicationContext } from "@nestjs/common";
+import { sql } from "drizzle-orm";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { apiErrorResponseSchema, loginCodeVerifiedResponseSchema } from "@adclub/contracts";
@@ -8,15 +12,40 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
 import request from "supertest";
+import tsxPackage from "tsx/package.json";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../app.module";
 import { JsonLoggerService } from "../common/logging";
 import { loadConfig, type AppConfig } from "../config";
+import { DatabaseService } from "../database";
 import { runMigrate } from "../database/migrate-cli";
 import { configureHttpApp } from "../http-app";
+import { devAlwaysFailingJob, JobQueue, type JobsTuning } from "../jobs";
 import { LoginCodeChannels, SessionService, type TestLoginCodeChannels } from "../modules/identity";
 import { captureOutput, rememberCode, rememberSecret } from "../testing/output-capture";
+import { WorkerModule } from "../worker.module";
 import { ErrorReporter } from "./error-reporter.service";
+
+const execFileAsync = promisify(execFile);
+const TSX_CLI = resolve(dirname(require.resolve("tsx/package.json")), tsxPackage.bin);
+const UNHANDLED_FIXTURE = resolve(__dirname, "..", "testing", "unhandled-failure.fixture.ts");
+
+/** Personal data a failing statement is bound to (TASK-009.A): a name, a number, an address. */
+const PERSONAL_NOTE = "Айгерим Касымова, позвонить +77011234567. Алматы, ул. Абая 10";
+
+/** Queue timings short enough for a test (as in `jobs.integration.test.ts`). */
+const FAST_JOBS: Partial<JobsTuning> = {
+  pollingIntervalSeconds: 0.5,
+  monitorIntervalSeconds: 1,
+  superviseIntervalSeconds: 1,
+  queueCacheIntervalSeconds: 1,
+  cronMonitorIntervalSeconds: 1,
+  cronWorkerIntervalSeconds: 1,
+  scheduleSyncIntervalMs: 300,
+  quietSummaryIntervalMs: 1000,
+  startRetryMs: 300,
+  stopTimeoutMs: 3000,
+};
 
 /**
  * TASK-009 end to end: what leaves the process. Real scenarios of the real
@@ -101,7 +130,7 @@ describe("observability: what leaves the process (PostgreSQL + Redis)", () => {
   let output: ReturnType<typeof captureOutput>;
   let ipCounter = 0;
 
-  async function boot(monitoring: boolean): Promise<INestApplication> {
+  function environment(monitoring: boolean): Record<string, string> {
     const env: Record<string, string> = {
       NODE_ENV: "test",
       LOG_LEVEL: "log",
@@ -118,7 +147,17 @@ describe("observability: what leaves the process (PostgreSQL + Redis)", () => {
       env.MONITORING_DSN = `http://publickey@127.0.0.1:${receiver.port}/7`;
       env.MONITORING_ENVIRONMENT = "integration";
     }
-    const config: AppConfig = loadConfig(env);
+    return env;
+  }
+
+  async function boot(
+    monitoring: boolean,
+    overrides: Record<string, string | undefined> = {},
+  ): Promise<INestApplication> {
+    const env = { ...environment(monitoring), ...overrides };
+    const config: AppConfig = loadConfig(
+      Object.fromEntries(Object.entries(env).filter(([, value]) => value !== undefined)),
+    );
     const nest = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(config), {
       bufferLogs: true,
     });
@@ -407,6 +446,208 @@ describe("observability: what leaves the process (PostgreSQL + Redis)", () => {
     expect(text).not.toContain("77011234567");
     expect(text).not.toContain("phone=");
     expect(text).not.toContain("secret=abc");
+  });
+
+  describe("TASK-009.A: a failed query never leaves with its data", () => {
+    /** Lets the next `GET /auth/me` fail on a real statement bound to personal data. */
+    function failOnRealQuery(target: INestApplication): () => void {
+      const sessions = target.get(SessionService);
+      const original = sessions.getCurrent.bind(sessions);
+      const { db } = target.get(DatabaseService);
+      sessions.getCurrent = async () => {
+        // A unique violation: PostgreSQL names the key and quotes the value.
+        await db.execute(
+          sql`INSERT INTO zz_person (display_name, phone, note) VALUES (${"Айгерим Касымова"}, ${PHONE}, ${PERSONAL_NOTE})`,
+        );
+        throw new Error("unreachable: the row already exists");
+      };
+      return () => {
+        sessions.getCurrent = original;
+      };
+    }
+
+    function expectNothingOfTheQuery(text: string): void {
+      for (const value of ["Айгерим", "Касымова", "Абая", "7011234567"]) {
+        expect(text).not.toContain(value);
+      }
+    }
+
+    beforeAll(async () => {
+      const { db } = app.get(DatabaseService);
+      await db.execute(
+        sql.raw(
+          "CREATE TABLE IF NOT EXISTS zz_person (display_name text UNIQUE, phone text UNIQUE, note text)",
+        ),
+      );
+      await db.execute(
+        sql`INSERT INTO zz_person VALUES (${"Айгерим Касымова"}, ${PHONE}, ${PERSONAL_NOTE}) ON CONFLICT DO NOTHING`,
+      );
+    });
+
+    it("an HTTP request: nothing of the statement in the event or in the log", async () => {
+      const accessToken = await signIn();
+      const restore = failOnRealQuery(app);
+      const failed = await http()
+        .get("/auth/me")
+        .set("X-Client", MOBILE)
+        .set("Authorization", `Bearer ${accessToken}`);
+      restore();
+
+      expect(failed.status).toBe(500);
+      await waitFor(() => receiver.bodies.length > 0, "the event to reach the receiver");
+      const received = receiver.text();
+      expectNothingOfTheQuery(received);
+      expect(received).toContain("zz_person");
+      expect(received).toContain("duplicate key value violates unique constraint");
+      expectNothingOfTheQuery(output.text());
+    });
+
+    it("a job that fails on a query: nothing of it in the event, the log or the dead letter", async () => {
+      const config = loadConfig(environment(true));
+      const worker: INestApplicationContext = await NestFactory.createApplicationContext(
+        WorkerModule.forRoot(config, { jobs: FAST_JOBS }),
+        { bufferLogs: true },
+      );
+      worker.useLogger(worker.get(JsonLoggerService));
+      worker.flushLogs();
+      try {
+        const jobId = await app
+          .get(JobQueue)
+          .enqueue(devAlwaysFailingJob, { note: PERSONAL_NOTE, failOnQuery: true });
+        // Three attempts a second apart, then the event of the final failure.
+        await waitFor(
+          () => receiver.text().includes('"transaction":"dev.always-fails"'),
+          "the event of the failed job",
+          30_000,
+        );
+        const received = receiver.text();
+        expectNothingOfTheQuery(received);
+        expect(received).toContain('"kind":"job"');
+        expect(received).toContain("invalid input syntax for type uuid");
+        const logged = output.text();
+        expect(logged).toContain(`job=dev.always-fails id=${jobId}`);
+        expectNothingOfTheQuery(logged);
+        const { rows } = await app
+          .get(DatabaseService)
+          .db.execute<{ output: unknown }>(sql`SELECT output FROM pgboss.job WHERE id = ${jobId}`);
+        expect(JSON.stringify(rows)).toContain("[redacted]");
+        expectNothingOfTheQuery(JSON.stringify(rows));
+      } finally {
+        await worker.close();
+      }
+    });
+
+    it("an unhandled rejection and an uncaught exception: reported cleaned; the second ends the process", async () => {
+      const result = await execFileAsync(process.execPath, [TSX_CLI, UNHANDLED_FIXTURE], {
+        env: {
+          ...process.env,
+          DATABASE_URL: postgres.getConnectionUri(),
+          MONITORING_DSN: `http://publickey@127.0.0.1:${receiver.port}/7`,
+          FIXTURE_NOTE: PERSONAL_NOTE,
+        },
+        timeout: 30_000,
+      }).then(
+        (done) => ({ code: 0, stdout: done.stdout, stderr: done.stderr }),
+        (error: { code?: number; stdout?: string; stderr?: string }) => ({
+          code: error.code ?? -1,
+          stdout: error.stdout ?? "",
+          stderr: error.stderr ?? "",
+        }),
+      );
+
+      // The uncaught exception ended the process, with a nonzero code: 1 —
+      // on Windows libuv may abort instead while the process exits
+      // (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`, a Node
+      // issue of that platform), which is nonzero all the same.
+      if (process.platform === "win32") {
+        expect(result.code, result.stderr.slice(-1500)).not.toBe(0);
+      } else {
+        expect(result.code, result.stderr.slice(-1500)).toBe(1);
+      }
+      const logged = `${result.stdout}\n${result.stderr}`;
+      // The rejection didn't: the process went on to handle a request.
+      expect(logged).toContain("Fixture still running after the unhandled rejection");
+      expect(logged).toContain("Uncaught exception: the process is exiting");
+      expectNothingOfTheQuery(logged);
+
+      await waitFor(() => receiver.bodies.length >= 2, "both events");
+      const received = receiver.text();
+      expect(received).toContain('"kind":"unhandledRejection"');
+      expect(received).toContain('"kind":"uncaughtException"');
+      expect(received).toContain("Failed query: SELECT $1::uuid AS id, $2 AS note");
+      expectNothingOfTheQuery(received);
+    });
+  });
+
+  it("answers a request refused for what it is with a code of its own, and reports none (TASK-009.A)", async () => {
+    const wrongMethod = await http().delete("/health").set("X-Client", MOBILE);
+    expect(wrongMethod.status).toBe(405);
+    expect(apiErrorResponseSchema.parse(wrongMethod.body).code).toBe("METHOD_NOT_ALLOWED");
+    expect(wrongMethod.headers.allow).toBe("GET, HEAD");
+
+    const tooLarge = await http()
+      .post("/auth/login-code")
+      .set("X-Client", MOBILE)
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ phone: PHONE, padding: "a".repeat(200_000) }));
+    expect(tooLarge.status).toBe(413);
+    expect(apiErrorResponseSchema.parse(tooLarge.body).code).toBe("PAYLOAD_TOO_LARGE");
+
+    const notJson = await http()
+      .post("/auth/login-code")
+      .set("X-Client", MOBILE)
+      .set("Content-Type", "application/xml")
+      .send(`<phone>${PHONE}</phone>`);
+    expect(notJson.status).toBe(415);
+    expect(apiErrorResponseSchema.parse(notJson.body).code).toBe("UNSUPPORTED_MEDIA_TYPE");
+
+    const broken = await http()
+      .post("/auth/login-code")
+      .set("X-Client", MOBILE)
+      .set("Content-Type", "application/json")
+      .send(`{"phone": "${PHONE}"`);
+    expect(broken.status).toBe(400);
+    expect(apiErrorResponseSchema.parse(broken.body).code).toBe("MALFORMED_REQUEST");
+    expect(JSON.stringify(broken.body)).not.toContain("7011234567");
+
+    const invalid = await http()
+      .post("/auth/login-code")
+      .set("X-Client", MOBILE)
+      .set("X-Forwarded-For", nextIp())
+      .send({ phone: "not a phone" });
+    expect(invalid.status).toBe(400);
+    expect(apiErrorResponseSchema.parse(invalid.body).code).toBe("VALIDATION_ERROR");
+
+    const missing = await http().delete("/nothing-here").set("X-Client", MOBILE);
+    expect(missing.status).toBe(404);
+    expect(apiErrorResponseSchema.parse(missing.body).code).toBe("NOT_FOUND");
+
+    await sleep(300);
+    expect(receiver.bodies).toHaveLength(0);
+    expect(output.text()).not.toContain("7011234567");
+  });
+
+  it("refuses the metrics to a wrong token, and keeps them closed outside development without one (TASK-009.A)", async () => {
+    const wrong = await http()
+      .get("/metrics")
+      .set("Authorization", "Bearer not-the-token-0000000000");
+    expect(wrong.status).toBe(401);
+
+    const staging = await boot(false, {
+      NODE_ENV: "staging",
+      METRICS_TOKEN: undefined,
+      LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
+      SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+    });
+    try {
+      const anonymous = await http(staging).get("/metrics");
+      expect(anonymous.status).toBe(404);
+      expect(anonymous.text).not.toContain("adclub_");
+    } finally {
+      await staging.close();
+    }
   });
 
   async function scrape(): Promise<string> {

@@ -641,7 +641,9 @@ describe("settings (PostgreSQL + Redis)", () => {
           admin.accessToken,
           {},
         );
-        expectError(response, 404, "NOT_FOUND");
+        // The history is read-only: the method is refused (TASK-009.A).
+        expectError(response, 405, "METHOD_NOT_ALLOWED");
+        expect(response.headers.allow).toBe("GET, HEAD");
       }
       expect(await historyCount("rating_min_reviews")).toBe(1);
     });

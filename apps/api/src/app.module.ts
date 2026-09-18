@@ -13,7 +13,7 @@ import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
-import { OriginPolicyMiddleware } from "./common/http";
+import { JsonBodyMiddleware, OriginPolicyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
 import { ObservabilityModule } from "./observability";
 
@@ -67,7 +67,9 @@ export class AppModule implements NestModule {
 
   configure(consumer: MiddlewareConsumer): void {
     // Order matters: the access log line needs the request id context, and
-    // a request refused for its origin should still be logged.
-    consumer.apply(RequestIdMiddleware, AccessLogMiddleware, OriginPolicyMiddleware).forRoutes("*");
+    // a request refused for its origin or its body type should still be logged.
+    consumer
+      .apply(RequestIdMiddleware, AccessLogMiddleware, OriginPolicyMiddleware, JsonBodyMiddleware)
+      .forRoutes("*");
   }
 }

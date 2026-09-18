@@ -1,8 +1,13 @@
 import {
   ConflictException,
+  GoneException,
+  HttpException,
   MethodNotAllowedException,
+  NotAcceptableException,
   NotFoundException,
   PayloadTooLargeException,
+  RequestTimeoutException,
+  UnprocessableEntityException,
   UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import type { ArgumentsHost } from "@nestjs/common";
@@ -13,7 +18,7 @@ import type { ErrorReporter } from "../../observability";
 import { JsonLoggerService } from "../logging/json-logger.service";
 import { ZodValidationException } from "../validation/zod-validation.exception";
 import { ClientUpdateRequiredException } from "./client-update-required.exception";
-import { HttpExceptionFilter } from "./http-exception.filter";
+import { codeForHttpStatus, HttpExceptionFilter } from "./http-exception.filter";
 
 function fakeHost() {
   const json = vi.fn();
@@ -158,16 +163,84 @@ describe("HttpExceptionFilter", () => {
   });
 
   it.each([
-    [new MethodNotAllowedException(), 405, "NOT_FOUND"],
-    [new PayloadTooLargeException(), 413, "VALIDATION_ERROR"],
-    [new UnsupportedMediaTypeException(), 415, "VALIDATION_ERROR"],
-  ])("gives %#: a 4xx of its own a code that fits its meaning", (exception, code, expected) => {
-    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
-    const { host, status, json } = fakeHost();
+    [new MethodNotAllowedException(), 405, "METHOD_NOT_ALLOWED"],
+    [new NotAcceptableException(), 406, "NOT_ACCEPTABLE"],
+    [new RequestTimeoutException(), 408, "REQUEST_TIMEOUT"],
+    [new GoneException(), 410, "GONE"],
+    [new PayloadTooLargeException(), 413, "PAYLOAD_TOO_LARGE"],
+    [new HttpException("URI Too Long", 414), 414, "URI_TOO_LONG"],
+    [new UnsupportedMediaTypeException(), 415, "UNSUPPORTED_MEDIA_TYPE"],
+    [new HttpException("Expectation Failed", 417), 417, "REQUEST_REJECTED"],
+    [new HttpException("Request Header Fields Too Large", 431), 431, "REQUEST_REJECTED"],
+    [new UnprocessableEntityException(), 422, "VALIDATION_ERROR"],
+  ])(
+    "gives %#: a 4xx of its own a code that fits its meaning, not VALIDATION_ERROR (TASK-009.A)",
+    (exception, code, expected) => {
+      const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
+      const { host, status, json } = fakeHost();
 
-    filter.catch(exception, host);
+      filter.catch(exception, host);
 
-    expect(status).toHaveBeenCalledWith(code);
-    expect((json.mock.calls[0]?.[0] as ApiErrorResponse).code).toBe(expected);
+      expect(status).toHaveBeenCalledWith(code);
+      expect((json.mock.calls[0]?.[0] as ApiErrorResponse).code).toBe(expected);
+    },
+  );
+
+  it("answers any 4xx status without a code of its own with REQUEST_REJECTED, never VALIDATION_ERROR", () => {
+    for (let status = 400; status < 500; status += 1) {
+      const code = codeForHttpStatus(status);
+      if (status === 400 || status === 422) {
+        expect(code, String(status)).toBe("VALIDATION_ERROR");
+      } else {
+        expect(code, String(status)).not.toBe("VALIDATION_ERROR");
+        expect(code, String(status)).not.toBe("INTERNAL_ERROR");
+      }
+    }
   });
+
+  /** An error as `body-parser` (through `http-errors`) raises it. */
+  function parserError(status: number, type: string, message: string): Error {
+    return Object.assign(new SyntaxError(message), {
+      status,
+      statusCode: status,
+      type,
+      expose: true,
+    });
+  }
+
+  it.each([
+    [
+      parserError(
+        400,
+        "entity.parse.failed",
+        `Unexpected token 'b', "{bad +77011234567" is not valid JSON`,
+      ),
+      400,
+      "MALFORMED_REQUEST",
+    ],
+    [parserError(413, "entity.too.large", "request entity too large"), 413, "PAYLOAD_TOO_LARGE"],
+    [
+      parserError(415, "charset.unsupported", 'unsupported charset "KOI8-R"'),
+      415,
+      "UNSUPPORTED_MEDIA_TYPE",
+    ],
+    [parserError(400, "request.aborted", "request aborted"), 400, "MALFORMED_REQUEST"],
+  ])(
+    "turns a body the parser refused (%#) into its code, not a 500, and never echoes it",
+    (error, code, expected) => {
+      const logger = fakeLogger();
+      const reporter = fakeReporter();
+      const filter = new HttpExceptionFilter(logger, reporter);
+      const { host, status, json } = fakeHost();
+
+      filter.catch(error, host);
+
+      expect(status).toHaveBeenCalledWith(code);
+      const body = json.mock.calls[0]?.[0] as ApiErrorResponse;
+      expect(body.code).toBe(expected);
+      expect(body.message).not.toContain("77011234567");
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(reporter.captureException).not.toHaveBeenCalled();
+    },
+  );
 });

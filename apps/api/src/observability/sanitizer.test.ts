@@ -265,3 +265,88 @@ describe("a failure inside the sanitizer", () => {
     expect(sanitizeForLog(`code sent to ${PHONE}`)).toBe(`code sent to ${MASK}`);
   });
 });
+
+describe("TASK-009.A: a number in any position, and what is not a number", () => {
+  it.each([
+    ["at the end of a sentence", "Позвонить +77011234567.", "Позвонить +7***4567."],
+    ["before a comma", "звонил +77011234567, не ответил", "звонил +7***4567, не ответил"],
+    ["in brackets", "клиент (+77011234567)", "клиент (+7***4567)"],
+    ["before a dash", "номер 87011234567- уточнить", "номер +7***4567- уточнить"],
+    ["after a dash", "тел.-77011234567", "тел.-+7***4567"],
+    ["at the very end", "номер 77011234567", "номер +7***4567"],
+    ["glued to a word", "user_77011234567", "user_+7***4567"],
+    ["glued to letters", "id77011234567abc", "id+7***4567abc"],
+    ["with separators, before a dot", "+7 (701) 123-45-67.", "+7***4567."],
+  ])("masks a number %s", (_where, input, expected) => {
+    expect(sanitizeText(input)).toBe(expected);
+  });
+
+  it("leaves identifiers next to a number intact", () => {
+    const uuid = "7701123a-4567-4e29-a716-770112345670";
+    const text = sanitizeText(
+      `row ${uuid} phone +77011234567 id=123456789012345678 ts=1758163200 ms=1758163200000`,
+    );
+    expect(text).toBe(
+      `row ${uuid} phone +7***4567 id=123456789012345678 ts=1758163200 ms=1758163200000`,
+    );
+  });
+
+  it.each([
+    "2026-09-18 03:14:33",
+    "2026-09-18T03:14:33.123456Z",
+    "2026-09-18 03:14:33.123456+05",
+    "18.09.2026 03:14",
+    "03:14:33.250",
+  ])("takes a date or a time (%s) for neither a number nor an address", (value) => {
+    expect(sanitizeText(`at ${value} done`)).toBe(`at ${value} done`);
+  });
+
+  it.each([
+    "2a02:2168:8a1f::1",
+    "fe80::1%eth0",
+    "::1",
+    "::ffff:192.0.2.1",
+    "2001:db8::",
+    "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+  ])("masks a compressed or full IPv6 address (%s)", (address) => {
+    expect(sanitizeText(`client ${address} connected`)).toBe(`client ${REDACTED_IP} connected`);
+  });
+
+  it("removes the values of secret headers and addresses of a request", () => {
+    const result = sanitizeValue({
+      "set-cookie": ["adclub_admin_refresh=abc; HttpOnly"],
+      "x-api-key": "k-123",
+      "proxy-authorization": "Basic dXNlcjpwYXNz",
+      "x-forwarded-for": "203.0.113.42",
+      "x-real-ip": "203.0.113.42",
+      "x-request-id": "req-1",
+      "content-type": "application/json",
+    });
+    expect(result).toEqual({
+      "set-cookie": REDACTED,
+      "x-api-key": REDACTED,
+      "proxy-authorization": REDACTED,
+      "x-forwarded-for": REDACTED,
+      "x-real-ip": REDACTED,
+      "x-request-id": "req-1",
+      "content-type": "application/json",
+    });
+  });
+
+  it("removes the whole of a name or an address given by its key in text", () => {
+    expect(sanitizeText("member added name=Айгерим Касымова; role=owner")).toBe(
+      `member added name=${REDACTED}; role=owner`,
+    );
+  });
+
+  it("removes the user and password of a connection string", () => {
+    expect(sanitizeText("connect postgres://adclub:s3cr3t@db.local:5432/adclub failed")).toBe(
+      `connect postgres://${REDACTED}@db.local:5432/adclub failed`,
+    );
+  });
+
+  it("never leaves half a number when a long text is cut", () => {
+    const text = sanitizeText(`${"a".repeat(1995)}+77011234567`);
+    expect(text).not.toMatch(/7011/);
+  });
+});

@@ -20,7 +20,7 @@ import {
 } from "./modules/identity";
 import { AuditModule } from "./modules/audit";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
-import { ObservabilityModule } from "./observability";
+import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -55,7 +55,10 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
  *   dev:member:remove <memberId>
- *   dev:jobs:fail [--note <text>]   put a job that always fails on the queue
+ *   dev:jobs:fail [--note <text>] [--on-query]
+ *                                put a job that always fails on the queue;
+ *                                with --on-query it fails on a real SQL query
+ *                                bound to the note (TASK-009.A)
  *
  * `pnpm --filter api operator <command> …` (dev) or
  * `node dist/operator.js <command> …` (built). Prints the result as JSON;
@@ -101,7 +104,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
-  dev:jobs:fail [--note <text>]`;
+  dev:jobs:fail [--note <text>] [--on-query]`;
 
 function required(value: string | undefined, what: string): string {
   if (!value) {
@@ -153,6 +156,7 @@ async function run(
       "expected-version": { type: "string" },
       job: { type: "string" },
       note: { type: "string" },
+      "on-query": { type: "boolean" },
     },
   });
   const [command, first, second] = positionals;
@@ -204,6 +208,7 @@ async function run(
       }
       const jobId = await queue.enqueue(devAlwaysFailingJob, {
         note: values.note ?? "operator dev:jobs:fail",
+        ...(values["on-query"] && { failOnQuery: true }),
       });
       return { job: devAlwaysFailingJob.name, jobId };
     }
@@ -270,7 +275,9 @@ main().catch((error: unknown) => {
     );
   } else {
     // Query errors carry bound values (phone numbers): never print those.
-    console.error(`Operator command failed: ${describeError(withoutQueryParameters(error))}`);
+    console.error(
+      sanitizeForLog(`Operator command failed: ${describeError(withoutQueryParameters(error))}`),
+    );
   }
   process.exitCode = 1;
 });

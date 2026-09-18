@@ -54,11 +54,15 @@ const SENSITIVE_KEY = [
   /secret/i,
   /token/i,
   /credential/i,
-  /^authorization$|^auth$|^cookie$|^cookies$/i,
+  // `authorization`, `proxy-authorization`, `x-sentry-auth`, `www-authenticate`.
+  /authori[sz]ation$|(^|[_-])auth$|authenticate$/i,
+  // `cookie`, `cookies`, `set-cookie`.
+  /cookies?$/i,
   /^otp|otp$/i,
   /(^|_)code(s)?$|Code(s)?$/i,
   /(^|_)pin$/i,
-  /(api|secret|private|public|encryption|signing|hash|access)_?key/i,
+  // `apiKey`, `api_key`, `x-api-key`, `signing-key`, …
+  /(api|secret|private|public|encryption|signing|hash|access)[_-]?key/i,
   /hash/i,
   /seed/i,
   /signature/i,
@@ -66,9 +70,14 @@ const SENSITIVE_KEY = [
   /address|street|apartment|postcode|zip/i,
   /birth|iin|passport|licen[cs]e/i,
   /^body$|^payload$|^params$|^parameters$|^arguments$/i,
+  // What PostgreSQL reports about the data of a failed statement:
+  // `Key (phone)=(…) already exists`, `Failing row contains (…)`, the
+  // value of a bound parameter (`unnamed portal parameter $1 = '…'`).
+  /^detail$|^where$|^internal_?query$/i,
   /^query$|^search$|^q$/i,
   /^message$|^text$|^comment$|^note$|^prompt$|^transcript$/i,
-  /^ip$|ip_?address|^remote_?addr$/i,
+  // `ip`, `ip_address`, `remote_addr`, `x-forwarded-for`, `forwarded`, `x-real-ip`.
+  /^ip$|ip[_-]?address|^remote[_-]?addr$|forwarded|(^|[_-])(real|client)[_-]?ip$/i,
   /user_?agent/i,
 ];
 
@@ -89,25 +98,88 @@ const TOKEN_LIKE = [
 
 /** `code=123456`, `token: abc…`, `password="…"` inside a message. */
 const SENSITIVE_PAIR =
-  /\b(pass(?:word)?|secret|token|credential|authorization|cookie|otp|code|pin|api[_-]?key|seed|signature|email|e-mail|name|address|params|parameters)\b\s*[=:]\s*("[^"]*"|'[^']*'|[^\s,;)]+)/gi;
+  /\b(pass(?:word)?|secret|token|credential|authorization|cookie|otp|code|pin|api[_-]?key|seed|signature|email|e-mail)\b\s*[=:]\s*("[^"]*"|'[^']*'|[^\s,;)]+)/gi;
 
-/** What a failed statement was bound to (`params: [ … ]` of a driver error). */
-const QUERY_PARAMS = /\bparams:\s*\[[^\]]*\]/gi;
+/**
+ * `name=Айгерим Касымова`, `address: Алматы, ул. Абая 10`: a value with
+ * spaces in it, so it runs to the end of the line or the next `;` / `)`,
+ * not to the next space.
+ */
+const SENSITIVE_PHRASE =
+  /\b(name|address|params|parameters)\b\s*[=:]\s*("[^"]*"|'[^']*'|[^;)\n]+)/gi;
+
+/**
+ * What a failed statement was bound to. Drizzle ends its message with the
+ * values as they are — `Failed query: <sql>\nparams: a,b,c`
+ * (`DrizzleQueryError`), no brackets, values with commas, spaces and even
+ * line breaks in them — so everything after `params:` goes, up to the
+ * first stack frame or the end of the text. A driver's `params: [ … ]` is
+ * the same case.
+ */
+const QUERY_PARAMS = /\bparams:(?:\s*\[[^\]]*\]|[\s\S]*?(?=\n\s+at\s|$))/gi;
+
+/**
+ * What PostgreSQL puts into a message or a detail about the data itself:
+ * the key of a violated unique constraint, the row a check refused, the
+ * input a type could not take, a bound parameter. Column and constraint
+ * names stay; the values go.
+ */
+const DATABASE_VALUES: readonly [RegExp, string][] = [
+  [/\bKey \(([^)\n]*)\)=\((?:[^()\n]|\([^()\n]*\))*\)/g, `Key ($1)=(${REDACTED})`],
+  [/\bFailing row contains \([^\n]*\)/g, `Failing row contains (${REDACTED})`],
+  [/(\binvalid input (?:syntax|value) for (?:type|enum) [^:\n]+): "[^\n]*"/g, `$1: "${REDACTED}"`],
+  [/(\bparameter \$\d+ = )'[^\n]*'/g, `$1'${REDACTED}'`],
+];
 
 const EMAIL = /\b[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/g;
 
-/**
- * A phone number: `+7 701 123 45 67`, `+77011234567`, `8 (701) 123-45-67`,
- * `77011234567`. Never a part of a longer word, a UUID group or a decimal
- * number — hence the boundaries on both sides.
- */
-const PHONE = /(?<![\w+.-])\+?\d[\d\s().-]{8,18}\d(?![\w.-])/g;
+/** The user and password of a URL: `postgres://user:secret@host/db` keeps only the host. */
+const URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
 
 /** The query string of a URL: it carries whatever the caller put there. */
 const URL_QUERY = /(\bhttps?:\/\/\S*?|\s\/[^\s?]*)\?[^\s"']*/gi;
 
+/**
+ * What only looks like a phone number or an address: a UUID, a long hex
+ * identifier, a date, a time. Held out of the text while numbers and
+ * addresses are looked for, then put back untouched.
+ */
+const NOT_PERSONAL = new RegExp(
+  [
+    // UUID.
+    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.source,
+    // A date with an optional time: `2026-09-18`, `2026-09-18 03:14:33.123456+05`.
+    /(?<!\d)\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?(?!\d)/
+      .source,
+    // A date written the local way: `18.09.2026`.
+    /(?<!\d)\d{2}\.\d{2}\.\d{4}(?!\d)/.source,
+    // A time on its own: `03:14`, `03:14:33.123`.
+    /(?<![\d:])\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?![\d:])/.source,
+    // A long hex identifier (an event, a trace, a hash) with at least one letter.
+    /(?<![0-9A-Za-z])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{16,}(?![0-9A-Za-z])/.source,
+  ].join("|"),
+  "g",
+);
+
+/**
+ * A candidate phone number in any position: `+7 701 123 45 67`,
+ * `8 (701) 123-45-67`, `77011234567` — at the end of a sentence, in
+ * brackets, after a dash, glued to a word (`user_77011234567`). Only digits
+ * bound it; whether it is a number is then decided by `maskIfPhone`.
+ */
+const PHONE = /(?<!\d)\+?\d(?:[ ()-]{0,2}\d){9,14}(?!\d)/g;
+
 const IPV4 = /(?<![\w.])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\w.])/g;
-const IPV6 = /(?<![\w:])(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}(?![\w:])/g;
+const HEX4 = "[0-9a-fA-F]{1,4}";
+/**
+ * IPv6: the full form (eight groups) and every compressed one with `::`
+ * (`2a02:2168:8a1f::1`, `fe80::1%eth0`, `::1`, `::ffff:192.0.2.1`). Fewer
+ * than eight groups without `::` is not an address — `03:14:33` is a time.
+ */
+const IPV6 = new RegExp(
+  `(?<![\\w:.])(?:(?:${HEX4}:){7}${HEX4}|(?:${HEX4}:){0,7}(?:${HEX4})?::(?:${HEX4}(?::${HEX4}){0,6})?(?:\\.\\d{1,3}){0,3})(?:%[\\w.]+)?(?![\\w:])`,
+  "g",
+);
 
 /** The last four digits are the only part of a number that may be shown. */
 function maskPhoneText(text: string): string {
@@ -119,22 +191,78 @@ function maskPhoneText(text: string): string {
 }
 
 /**
+ * A run of digits is a phone number when it is written like one: with `+`
+ * or with separators between groups (10–15 digits), or bare in the
+ * Kazakhstan shape (`7XXXXXXXXXX`, `8XXXXXXXXXX`, `7XXXXXXXXX`). Any other
+ * bare run — a numeric id, a timestamp — stays as it is.
+ */
+function maskIfPhone(text: string): string {
+  const digits = text.replace(/\D/g, "");
+  const shaped = text.startsWith("+") || /[ ()-]/.test(text);
+  const kazakh =
+    (digits.length === 11 && /^[78]/.test(digits)) || (digits.length === 10 && digits[0] === "7");
+  return shaped || kazakh ? maskPhoneText(text) : text;
+}
+
+/** Marks a held piece of text (NUL); NULs of the input itself are replaced first. */
+const HOLD = String.fromCharCode(0);
+const HOLD_ANY = new RegExp(HOLD, "g");
+const HELD = new RegExp(`${HOLD}([a-z]+)${HOLD}`, "g");
+
+/** Held pieces are numbered in letters, so they never add digits to a number next to them. */
+function holdLabel(index: number): string {
+  return index.toString(26).replace(/[0-9]/g, (digit) => String.fromCharCode(113 + Number(digit)));
+}
+
+function holdIndex(label: string): number {
+  return parseInt(
+    label.replace(/[q-z]/g, (char) => String(char.charCodeAt(0) - 113)),
+    26,
+  );
+}
+
+/** Phone numbers and IP addresses masked; dates, times and identifiers intact. */
+function maskNumbersAndAddresses(value: string): string {
+  const held: string[] = [];
+  let text = value.replace(HOLD_ANY, String.fromCharCode(0xfffd)).replace(NOT_PERSONAL, (match) => {
+    held.push(match);
+    return `${HOLD}${holdLabel(held.length - 1)}${HOLD}`;
+  });
+  // IPv6 first: `::ffff:192.0.2.1` is one address, not a prefix and an IPv4.
+  text = text.replace(IPV6, REDACTED_IP);
+  text = text.replace(IPV4, REDACTED_IP);
+  text = text.replace(PHONE, (match) => maskIfPhone(match));
+  return text.replace(HELD, (_match, label: string) => held[holdIndex(label)]!);
+}
+
+/**
  * One string with everything personal taken out. Safe to call on anything:
  * a log message, an error message, a stack frame, a tag value.
  */
 export function sanitizeText(value: string): string {
-  let text = value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}…[cut]` : value;
+  // Cut after cleaning, so a cut never leaves half a number unmasked; the
+  // work itself is bounded by a much larger first cut.
+  const cleaned = cleanText(
+    value.length > MAX_STRING * 10 ? value.slice(0, MAX_STRING * 10) : value,
+  );
+  return cleaned.length > MAX_STRING ? `${cleaned.slice(0, MAX_STRING)}…[cut]` : cleaned;
+}
+
+function cleanText(value: string): string {
+  let text = value;
   for (const pattern of TOKEN_LIKE) {
     text = text.replace(pattern, REDACTED);
   }
   text = text.replace(QUERY_PARAMS, `params: ${REDACTED}`);
+  for (const [pattern, replacement] of DATABASE_VALUES) {
+    text = text.replace(pattern, replacement);
+  }
   text = text.replace(SENSITIVE_PAIR, (_match, key: string) => `${key}=${REDACTED}`);
+  text = text.replace(SENSITIVE_PHRASE, (_match, key: string) => `${key}=${REDACTED}`);
+  text = text.replace(URL_CREDENTIALS, `$1${REDACTED}@`);
   text = text.replace(URL_QUERY, (match) => `${match.slice(0, match.indexOf("?"))}?${REDACTED}`);
   text = text.replace(EMAIL, (_match, domain: string) => `***@${domain}`);
-  text = text.replace(PHONE, (match) => maskPhoneText(match));
-  text = text.replace(IPV4, REDACTED_IP);
-  text = text.replace(IPV6, REDACTED_IP);
-  return text;
+  return maskNumbersAndAddresses(text);
 }
 
 function isIdentifierKey(key: string): boolean {
@@ -154,14 +282,55 @@ function keyVerdict(key: string): "keep" | "phone" | "drop" {
   return SENSITIVE_KEY.some((pattern) => pattern.test(key)) ? "drop" : "keep";
 }
 
-function sanitizeErrorLike(error: Error, depth: number, seen: WeakSet<object>): unknown {
-  const result: Record<string, unknown> = {
-    name: sanitizeText(error.name),
-    message: sanitizeText(error.message),
-  };
-  if (typeof error.stack === "string") {
-    result.stack = sanitizeText(error.stack);
+/**
+ * The stack of an error with its message cleaned the same way as the
+ * message itself. The stack starts with the message as it was when the
+ * error was made — whatever it holds (Drizzle's bound values span lines)
+ * — so that exact text is cut out and replaced rather than matched by a
+ * pattern.
+ */
+function sanitizeStack(stack: string, message: string, cleanMessage: string): string {
+  const at = message.length > 0 ? stack.indexOf(message) : -1;
+  if (at < 0) {
+    return sanitizeText(stack);
   }
+  const head = sanitizeText(stack.slice(0, at));
+  const frames = sanitizeText(stack.slice(at + message.length));
+  return `${head}${cleanMessage}${frames}`;
+}
+
+/** Name, message and stack of an error, cleaned (the logger writes these). */
+export function sanitizeErrorText(error: Error): { name: string; message: string; stack?: string } {
+  const message = sanitizeText(error.message);
+  return {
+    name: sanitizeText(error.name),
+    message,
+    ...(typeof error.stack === "string" && {
+      stack: sanitizeStack(error.stack, error.message, message),
+    }),
+  };
+}
+
+/**
+ * `code` of an error is what an investigation starts from, and it is not a
+ * login code: the SQLSTATE of a PostgreSQL error (`23505`, on an error
+ * that also has `severity`) or a Node system error (`ECONNREFUSED`).
+ */
+function isErrorCode(error: Error, key: string): boolean {
+  if (key !== "code") {
+    return false;
+  }
+  const { code, severity } = error as Error & { code?: unknown; severity?: unknown };
+  if (typeof code !== "string") {
+    return false;
+  }
+  return (
+    (typeof severity === "string" && /^[0-9A-Z]{5}$/.test(code)) || /^E[A-Z0-9_]{2,}$/.test(code)
+  );
+}
+
+function sanitizeErrorLike(error: Error, depth: number, seen: WeakSet<object>): unknown {
+  const result: Record<string, unknown> = { ...sanitizeErrorText(error) };
   if (error.cause !== undefined && error.cause !== null) {
     result.cause = walk(error.cause, depth + 1, seen);
   }
@@ -171,7 +340,7 @@ function sanitizeErrorLike(error: Error, depth: number, seen: WeakSet<object>): 
     if (key === "name" || key === "message" || key === "stack" || key === "cause") {
       continue;
     }
-    const verdict = keyVerdict(key);
+    const verdict = isErrorCode(error, key) ? "keep" : keyVerdict(key);
     result[key] =
       verdict === "drop"
         ? REDACTED

@@ -12,6 +12,7 @@ export {
   REDACTED,
   REDACTED_IP,
   SANITIZER_FAILED,
+  sanitizeErrorText,
   sanitizeForLog,
   sanitizeForTransport,
   sanitizeText,

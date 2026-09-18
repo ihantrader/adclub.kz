@@ -1,9 +1,13 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
-import { loadEnvFile, loadConfig, ConfigValidationError, warnIgnoredVariables } from "./config";
+import { loadEnvFile, loadConfig, warnIgnoredVariables } from "./config";
 import { WorkerModule } from "./worker.module";
 import { JsonLoggerService } from "./common/logging";
-import { installGracefulShutdown, reportUnhandledFailures } from "./common/shutdown";
+import {
+  installGracefulShutdown,
+  logStartupFailure,
+  reportUnhandledFailures,
+} from "./common/shutdown";
 import { ErrorReporter } from "./observability";
 
 loadEnvFile();
@@ -36,10 +40,6 @@ async function bootstrap() {
 }
 
 void bootstrap().catch((error: unknown) => {
-  if (error instanceof ConfigValidationError) {
-    console.error(error.message);
-  } else {
-    console.error("Failed to start worker process:", error);
-  }
+  logStartupFailure("worker process", "Worker", error);
   process.exit(1);
 });

@@ -1,6 +1,11 @@
 import { Inject, Injectable, type LoggerService } from "@nestjs/common";
 import { APP_CONFIG, type AppConfig, type LogLevel, logLevels } from "../../config";
-import { sanitizeForLog, sanitizeForTransport } from "../../observability/sanitizer";
+import {
+  SANITIZER_FAILED,
+  sanitizeErrorText,
+  sanitizeForLog,
+  sanitizeForTransport,
+} from "../../observability/sanitizer";
 import { getRequestId } from "./request-context";
 
 interface LogEntry {
@@ -73,13 +78,14 @@ export class JsonLoggerService implements LoggerService {
       (param) => typeof param !== "string" && param !== undefined,
     );
 
+    const { text, stack } = this.messageOf(message, passedStack);
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
-      message: sanitizeForLog(message instanceof Error ? message.message : String(message)),
+      message: text,
       context: context === undefined ? undefined : sanitizeForLog(context),
       requestId: getRequestId(),
-      stack: this.stackOf(message, passedStack),
+      stack,
       details: this.detailsOf(details),
     };
 
@@ -87,9 +93,31 @@ export class JsonLoggerService implements LoggerService {
     stream.write(`${JSON.stringify(entry)}\n`);
   }
 
-  private stackOf(message: unknown, passedStack: string | undefined): string | undefined {
-    const stack = message instanceof Error ? message.stack : passedStack;
-    return stack === undefined ? undefined : sanitizeForLog(stack);
+  /**
+   * The message and the stack, cleaned. An error is cleaned as a whole
+   * (its stack begins with its message, which may span lines — Drizzle's
+   * bound values do); an object is written as sanitized JSON, as Nest's own
+   * logger would print it; anything else as text. Nothing here throws: a
+   * value whose conversion fails leaves a marker instead of the line.
+   */
+  private messageOf(
+    message: unknown,
+    passedStack: string | undefined,
+  ): { text: string; stack?: string } {
+    try {
+      if (message instanceof Error) {
+        const cleaned = sanitizeErrorText(message);
+        return { text: cleaned.message, stack: cleaned.stack };
+      }
+      const stack = passedStack === undefined ? undefined : sanitizeForLog(passedStack);
+      if (typeof message === "object" && message !== null) {
+        const cleaned = sanitizeForTransport(message);
+        return { text: cleaned.ok ? JSON.stringify(cleaned.value) : SANITIZER_FAILED, stack };
+      }
+      return { text: sanitizeForLog(String(message)), stack };
+    } catch {
+      return { text: SANITIZER_FAILED };
+    }
   }
 
   private detailsOf(details: unknown[]): unknown {
@@ -98,6 +126,6 @@ export class JsonLoggerService implements LoggerService {
     }
     const cleaned = sanitizeForTransport(details.length === 1 ? details[0] : details);
     // A value that can't be cleaned is never written as it was.
-    return cleaned.ok ? cleaned.value : "[sanitizer failed]";
+    return cleaned.ok ? cleaned.value : SANITIZER_FAILED;
   }
 }

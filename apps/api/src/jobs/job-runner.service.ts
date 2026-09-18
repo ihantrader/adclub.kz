@@ -8,7 +8,7 @@ import {
 import type { JobResult, JobWithMetadata, PgBoss } from "pg-boss";
 import { describeError } from "../common/health";
 import { withoutQueryParameters } from "../database";
-import { ErrorReporter } from "../observability";
+import { ErrorReporter, sanitizeForLog } from "../observability";
 import { ALMATY_TIME_ZONE, type JobDefinition, type PeriodicJobDefinition } from "./job-definition";
 import { PermanentJobError } from "./job-handler";
 import { JobQueue } from "./job-queue.service";
@@ -17,11 +17,15 @@ import { JobSettingsReader } from "./job-settings";
 import { JOBS_OPTIONS, type JobsModuleOptions } from "./jobs.options";
 import { PeriodicJobStateStore } from "./periodic-job-state.store";
 
-/** What a failure leaves on the job and in `periodic_job_state`: never the job's data. */
+/**
+ * What a failure leaves on the job and in `periodic_job_state` (and what
+ * `jobs:dead` shows the operator): never the job's data — neither the
+ * bound values of a query nor what PostgreSQL says about them.
+ */
 function failureText(error: unknown): string {
   const safe = withoutQueryParameters(error);
   const name = safe instanceof Error ? safe.name : "Error";
-  return `${name}: ${describeError(safe)}`.slice(0, 500);
+  return sanitizeForLog(`${name}: ${describeError(safe)}`).slice(0, 500);
 }
 
 /**

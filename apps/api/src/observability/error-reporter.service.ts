@@ -24,6 +24,39 @@ const SEND_TIMEOUT_MS = 3000;
 const MAX_IN_FLIGHT = 20;
 const SDK_NAME = "adclub-observability";
 
+/** An error as the sanitizer returns it (`sanitizeValue`): plain, cleaned fields. */
+interface CleanedError {
+  name?: unknown;
+  message?: unknown;
+  stack?: unknown;
+  cause?: unknown;
+}
+
+/** How many causes of an error are sent along with it. */
+const MAX_CAUSES = 5;
+
+/**
+ * The error and its causes (already cleaned), innermost first as the
+ * receiver expects — the cause is often what explains the failure (the
+ * PostgreSQL error under a failed Drizzle query, TASK-009.A).
+ */
+function exceptionValues(
+  described: CleanedError | undefined,
+): MonitoringEvent["exception"]["values"] {
+  const values: MonitoringEvent["exception"]["values"] = [];
+  let current: CleanedError | undefined = described;
+  while (current && typeof current === "object" && values.length <= MAX_CAUSES) {
+    values.unshift({
+      type: typeof current.name === "string" ? current.name : "Error",
+      value: typeof current.message === "string" ? current.message : "Unknown error",
+      ...(values.length === 0 &&
+        typeof current.stack === "string" && { stacktrace_raw: current.stack }),
+    });
+    current = current.cause as CleanedError | undefined;
+  }
+  return values.length > 0 ? values : [{ type: "Error", value: "Unknown error" }];
+}
+
 interface MonitoringEvent {
   event_id: string;
   timestamp: number;
@@ -56,6 +89,7 @@ export class ErrorReporter {
   private readonly target: MonitoringTarget | undefined;
   private readonly environment: string;
   private inFlight = 0;
+  private readonly sending = new Set<Promise<void>>();
 
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
@@ -93,9 +127,29 @@ export class ErrorReporter {
       return;
     }
     this.inFlight += 1;
-    void this.send(this.target, event).finally(() => {
+    const sending = this.send(this.target, event).finally(() => {
       this.inFlight -= 1;
+      this.sending.delete(sending);
     });
+    this.sending.add(sending);
+  }
+
+  /**
+   * Waits until the events already offered have left (or failed), at most
+   * `timeoutMs` — before a process exits on an uncaught exception.
+   */
+  async flush(timeoutMs: number): Promise<void> {
+    if (this.sending.size === 0) {
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      Promise.allSettled([...this.sending]),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+    clearTimeout(timer);
   }
 
   /** The event as it will be sent, or nothing if it could not be cleaned. */
@@ -117,7 +171,7 @@ export class ErrorReporter {
       tags: Record<string, unknown>;
       extra: Record<string, unknown>;
     };
-    const described = value.error as { name?: unknown; message?: unknown; stack?: unknown };
+    const described = value.error as CleanedError;
     const tags: Record<string, string> = {};
     for (const [key, item] of Object.entries(value.tags)) {
       if (typeof item === "string" || typeof item === "number") {
@@ -138,15 +192,7 @@ export class ErrorReporter {
       ...(context.transaction && { transaction: sanitizeText(context.transaction) }),
       tags,
       extra: value.extra,
-      exception: {
-        values: [
-          {
-            type: typeof described?.name === "string" ? described.name : "Error",
-            value: typeof described?.message === "string" ? described.message : "Unknown error",
-            ...(typeof described?.stack === "string" && { stacktrace_raw: described.stack }),
-          },
-        ],
-      },
+      exception: { values: exceptionValues(described) },
     };
   }
 

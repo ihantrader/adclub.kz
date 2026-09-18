@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig, type AppConfig } from "../../config";
+import { DrizzleQueryError } from "drizzle-orm";
 import { JsonLoggerService } from "./json-logger.service";
 import { requestContext } from "./request-context";
 
@@ -147,5 +148,56 @@ describe("JsonLoggerService", () => {
     const entry = JSON.parse(line.trim());
     expect(entry.message).toBe("no account for +7***4567");
     expect(entry.context).toBe("Session");
+  });
+
+  it("writes an object given as the message as sanitized JSON (TASK-009.A)", () => {
+    const logger = new JsonLoggerService(baseConfig());
+
+    logger.log({ event: "sweep", phone: "+77011234567", rows: 3 }, "Jobs");
+
+    const entry = JSON.parse((stdoutSpy.mock.calls[0]?.[0] as string).trim());
+    expect(entry.message).toBe('{"event":"sweep","phone":"+7***4567","rows":3}');
+    expect(entry.context).toBe("Jobs");
+  });
+
+  it("still writes the line when the message can't be turned into text", () => {
+    const logger = new JsonLoggerService(baseConfig());
+    const hostile = {
+      toString(): string {
+        throw new Error("no");
+      },
+      get boom(): string {
+        throw new Error("no");
+      },
+    };
+
+    expect(() => logger.warn(hostile as unknown as string, "Test")).not.toThrow();
+    expect(() => logger.warn(Symbol("x") as unknown as string, "Test")).not.toThrow();
+
+    expect(stderrSpy).toHaveBeenCalledTimes(2);
+    const [hostileEntry, symbolEntry] = stderrSpy.mock.calls.map((call: unknown[]) =>
+      JSON.parse(String(call[0]).trim()),
+    );
+    expect(hostileEntry.context).toBe("Test");
+    expect(hostileEntry.message).toBe("[sanitizer failed]");
+    expect(symbolEntry.message).toBe("Symbol(x)");
+  });
+
+  it("writes a failed query without its bound values, in the message and the stack", () => {
+    const logger = new JsonLoggerService(baseConfig());
+    const error = new DrizzleQueryError(
+      'insert into "supplier_member" ("display_name", "phone") values ($1, $2)',
+      ["Айгерим Касымова", "позвонить +77011234567."],
+      new Error('duplicate key value violates unique constraint "supplier_member_phone_key"'),
+    );
+
+    logger.error(error, "Jobs");
+
+    const line = stderrSpy.mock.calls[0]?.[0] as string;
+    expect(line).not.toContain("Айгерим");
+    expect(line).not.toContain("7011234567");
+    const entry = JSON.parse(line.trim());
+    expect(entry.message).toContain('insert into "supplier_member"');
+    expect(entry.stack).toMatch(/\n\s+at /);
   });
 });

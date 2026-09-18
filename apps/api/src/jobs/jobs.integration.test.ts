@@ -790,7 +790,19 @@ describe("background jobs (PostgreSQL)", () => {
         { signal },
         { batchSize: 10, maxRunSeconds: 20 },
       );
-      expect(partial.processed + rest.processed).toBe(30);
+      expect(rest.complete).toBe(true);
+      // The workers of this block run `test.sweep` every minute too: a
+      // scheduled run may take some of the rows meanwhile (SKIP LOCKED).
+      // Together every row is swept, and exactly once.
+      const { rows: swept } = await db.query<{ slow: number; others: number; twice: number }>(
+        `SELECT count(*) FILTER (WHERE processed_by = ARRAY['slow'])::int AS slow,
+                count(*) FILTER (WHERE done AND NOT 'slow' = ANY(processed_by))::int AS others,
+                count(*) FILTER (WHERE NOT done OR processed_count <> 1)::int AS twice
+         FROM sweep_item`,
+      );
+      expect(swept[0]!.twice).toBe(0);
+      expect(swept[0]!.slow).toBe(partial.processed + rest.processed);
+      expect(partial.processed + rest.processed + swept[0]!.others).toBe(30);
       output.stop();
     });
 

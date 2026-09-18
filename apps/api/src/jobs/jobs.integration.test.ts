@@ -153,7 +153,17 @@ interface Run {
   finishedAt?: number;
   /** The pg-boss job the run was for (periodic runs). */
   jobId?: string;
+  /** When it started by PostgreSQL's clock (runs whose delays pg-boss measures). */
+  databaseStartedAt?: number;
 }
+
+/**
+ * PostgreSQL's clock, the one pg-boss decides retry delays and schedules
+ * by. The container's clock may be seconds away from this process's and
+ * is set right in jumps (Docker VM), so durations pg-boss enforces are
+ * measured by it, never by `Date.now()` (TASK-010.A). Set in `beforeAll`.
+ */
+let databaseNow: () => Promise<number> = () => Promise.reject(new Error("no database yet"));
 
 /** Everything the test handlers did, across all workers of this process. */
 const runs: Run[] = [];
@@ -229,13 +239,13 @@ function register(registry: JobRegistry, worker: string): void {
     },
   });
   registry.handle(flakyJob, {
-    run: (payload, context) => {
+    run: async (payload, context) => {
       const run = record(flakyJob.name, payload.marker, context.attempt);
+      run.databaseStartedAt = await databaseNow();
       if (context.attempt <= payload.failures) {
-        return Promise.reject(new Error(`planned failure ${context.attempt}`));
+        throw new Error(`planned failure ${context.attempt}`);
       }
       run.finishedAt = Date.now();
-      return Promise.resolve();
     },
   });
   registry.handle(failingJob, {
@@ -419,6 +429,8 @@ describe("background jobs (PostgreSQL)", () => {
     db = new Client({ connectionString: postgres.getConnectionUri() });
     db.on("error", () => undefined);
     await db.connect();
+    databaseNow = async () =>
+      (await db.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]!.now.getTime();
     await db.query(
       `CREATE TABLE sweep_item (
          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -693,10 +705,14 @@ describe("background jobs (PostgreSQL)", () => {
       output.stop();
       const attempts = runsOf(flakyJob.name, value);
       expect(attempts.map((run) => run.attempt)).toEqual([1, 2, 3]);
-      // retry.delaySeconds = 2 between attempts (the container's clock may
-      // differ from this process's by a fraction of a second).
-      expect(attempts[1]!.startedAt - attempts[0]!.startedAt).toBeGreaterThanOrEqual(1500);
-      expect(attempts[2]!.startedAt - attempts[1]!.startedAt).toBeGreaterThanOrEqual(1500);
+      // retry.delaySeconds = 2 between attempts, by the clock pg-boss keeps
+      // it with: a retry is due at the failure's now() + 2 s, and each attempt
+      // read the database clock before it failed — so at least 2000 ms apart,
+      // exactly (was ≥ 1500 ms by this process's clock, which failed at
+      // 1492 ms when the container's clock was set right mid-delay).
+      const at = attempts.map((run) => run.databaseStartedAt!);
+      expect(at[1]! - at[0]!).toBeGreaterThanOrEqual(2000);
+      expect(at[2]! - at[1]!).toBeGreaterThanOrEqual(2000);
       expect(await jobState(id!)).toBe("completed");
       const text = output.text();
       expect(text).toContain(`Job failed, will retry job=test.flaky id=${id} attempt=1/4`);
@@ -895,8 +911,6 @@ describe("background jobs (PostgreSQL)", () => {
       // apart — it may be seconds away from the container's (Docker VM), a
       // run starts a moment after its occurrence, and the run made up in the
       // first test starts together with the current minute's (TASK-010.A).
-      const databaseNow = async () =>
-        (await db.query<{ now: Date }>("SELECT clock_timestamp() AS now")).rows[0]!.now.getTime();
       // Two whole minutes of the database from the next one on, both workers
       // up all along; the made-up run of the first test is behind them.
       const from = nextMinute((await databaseNow()) + 1);

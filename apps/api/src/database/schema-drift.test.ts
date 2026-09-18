@@ -107,6 +107,10 @@ describe("ormTables", () => {
         "app_setting_change",
         "audit_log",
         "periodic_job_state",
+        "category",
+        "attribute",
+        "attribute_option",
+        "translation",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

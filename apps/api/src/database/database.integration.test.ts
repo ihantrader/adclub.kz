@@ -77,10 +77,28 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789660680048_create-periodic-job-state",
       "1789660681238_add-sign-in-data-cleanup-indexes",
       "1789677720444_create-audit-log",
+      "1789740000000_create-catalog-structure",
     ]);
   });
 
-  it("rolls back the latest migration only (the action journal), keeping the tables", async () => {
+  it("rolls back the latest migration only (the catalog structure), keeping the journal", async () => {
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('brakes', 'goods', 1) RETURNING id",
+    );
+    await client.query(
+      `INSERT INTO translation (entity_type, entity_id, field, lang, text, origin, is_manually_edited)
+       VALUES ('category', $1, 'name', 'ru', 'Тормоза', 'source', true)`,
+      [node.rows[0]!.id],
+    );
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    for (const table of ["category", "attribute", "attribute_option", "translation"]) {
+      expect(await tableExists(client, table), table).toBe(false);
+    }
+    expect(await tableExists(client, "audit_log")).toBe(true);
+  });
+
+  it("rolls back the next one (the action journal), keeping the tables", async () => {
     await client.query(
       `INSERT INTO audit_log (action, actor_role, entity_type, entity_id)
        VALUES ('setting.changed', 'operator', 'setting', 'supplier_response_hours')`,

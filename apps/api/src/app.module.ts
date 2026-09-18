@@ -9,6 +9,7 @@ import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
 import { AuditModule } from "./modules/audit";
+import { CatalogModule } from "./modules/catalog";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -57,6 +58,7 @@ export class AppModule implements NestModule {
         // contract routes alone.
         ...(config.nodeEnv === "production" ? [] : [OpenApiModule]),
         IdentityModule.forRoot(config),
+        CatalogModule.forRoot({ http: true }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

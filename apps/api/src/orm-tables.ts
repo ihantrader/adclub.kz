@@ -1,6 +1,7 @@
 import type { PgTable } from "drizzle-orm/pg-core";
 import { jobsTables } from "./jobs";
 import { auditTables } from "./modules/audit";
+import { catalogTables } from "./modules/catalog";
 import { identityTables } from "./modules/identity";
 import { settingsTables } from "./modules/settings";
 
@@ -14,5 +15,6 @@ export const ormTables: readonly PgTable[] = [
   ...identityTables,
   ...settingsTables,
   ...auditTables,
+  ...catalogTables,
   ...jobsTables,
 ];

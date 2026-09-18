@@ -19,6 +19,7 @@ import {
   OperatorService,
 } from "./modules/identity";
 import { AuditModule } from "./modules/audit";
+import { CatalogModule, DevCatalogSeed, DevCatalogSeedError } from "./modules/catalog";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
 import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
@@ -55,6 +56,8 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
  *   dev:member:remove <memberId>
+ *   dev:catalog:seed             fill the catalog with the example tree (TASK-010);
+ *                                a second run creates nothing
  *   dev:jobs:fail [--note <text>] [--on-query]
  *                                put a job that always fails on the queue;
  *                                with --on-query it fails on a real SQL query
@@ -76,6 +79,7 @@ class OperatorModule {
         DatabaseModule,
         AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false }),
+        CatalogModule.forRoot({ http: false }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -104,6 +108,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
+  dev:catalog:seed
   dev:jobs:fail [--note <text>] [--on-query]`;
 
 function required(value: string | undefined, what: string): string {
@@ -140,10 +145,11 @@ interface Services {
   jobs: JobAdmin;
   queue: JobQueue;
   devJobs: boolean;
+  catalogSeed: DevCatalogSeed;
 }
 
 async function run(
-  { operator, settings, jobs, queue, devJobs }: Services,
+  { operator, settings, jobs, queue, devJobs, catalogSeed }: Services,
   argv: string[],
 ): Promise<unknown> {
   const { positionals, values } = parseArgs({
@@ -229,6 +235,8 @@ async function run(
         phone: required(second, "<phone>"),
         displayName: required(values.name, "--name"),
       });
+    case "dev:catalog:seed":
+      return catalogSeed.run();
     case "dev:member:remove":
       return { removed: true, ...(await operator.removeMember(required(first, "<memberId>"))) };
     default:
@@ -252,6 +260,7 @@ async function main(): Promise<void> {
         jobs: app.get(JobAdmin),
         queue: app.get(JobQueue),
         devJobs: hasDevJobs(config),
+        catalogSeed: app.get(DevCatalogSeed),
       },
       process.argv.slice(2),
     );
@@ -265,6 +274,7 @@ main().catch((error: unknown) => {
   if (
     error instanceof ConfigValidationError ||
     error instanceof OperatorCommandError ||
+    error instanceof DevCatalogSeedError ||
     error instanceof JobAdminError
   ) {
     console.error(error.message);

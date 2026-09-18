@@ -19,6 +19,10 @@
       "description": "Supplier cabinet (context `supplier`)"
     },
     {
+      "name": "catalog",
+      "description": "The catalog for every client, guests included (no session needed)"
+    },
+    {
       "name": "admin",
       "description": "Admin panel (context `admin`)"
     }
@@ -246,6 +250,846 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AuditLogPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/attribute-options/{optionId}": {
+      "patch": {
+        "operationId": "updateAttributeOption",
+        "summary": "Rename an option of a list attribute",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "optionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The names to change and the version they were read at",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAttributeOptionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The option",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeOptionResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/attribute-options/{optionId}/status": {
+      "post": {
+        "operationId": "setAttributeOptionStatus",
+        "summary": "Archive an option (hidden from forms and filters, values kept) or restore it",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "optionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new status and the version it replaces",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCatalogEntryStatusBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The option",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeOptionResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/attributes/{attributeId}": {
+      "patch": {
+        "operationId": "updateAttribute",
+        "summary": "Rename an attribute, change its unit, bounds or flags; the value type never changes",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "attributeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The fields to change and the version they were read at",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAttributeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The attribute",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/attributes/{attributeId}/options": {
+      "post": {
+        "operationId": "createAttributeOption",
+        "summary": "Add an option to a list attribute (at the end)",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "attributeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new option",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttributeOptionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The option",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeOptionResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/attributes/{attributeId}/options/order": {
+      "put": {
+        "operationId": "reorderAttributeOptions",
+        "summary": "Put the options of a list attribute in a new order",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "attributeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "Every option id of the attribute in the new order",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAttributeOptionsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The attribute",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/attributes/{attributeId}/status": {
+      "post": {
+        "operationId": "setAttributeStatus",
+        "summary": "Archive an attribute (hidden from forms and filters, values kept) or restore it",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "attributeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new status and the version it replaces",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCatalogEntryStatusBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The attribute",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/categories": {
+      "get": {
+        "operationId": "listAdminCategories",
+        "summary": "The whole category tree with every status, names in all languages and versions",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryTreeResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCategory",
+        "summary": "Create a node or a subcategory (at the end of its siblings)",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new category",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The category",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/categories/{categoryId}": {
+      "patch": {
+        "operationId": "updateCategory",
+        "summary": "Rename a category, change its icon or compatibility flag, or move a subcategory to another node of the same kind",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The fields to change and the version they were read at",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The category",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/categories/{categoryId}/attributes": {
+      "get": {
+        "operationId": "listAdminAttributes",
+        "summary": "The attributes of a category with their options, every status included",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The attributes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeListResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAttribute",
+        "summary": "Add an attribute to a subcategory (number, list, yes/no or text); items of the category get an empty value",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new attribute",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttributeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The attribute",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/categories/{categoryId}/attributes/order": {
+      "put": {
+        "operationId": "reorderAttributes",
+        "summary": "Put the attributes of a category in a new order",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "Every attribute id of the category in the new order",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAttributesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The attributes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAttributeListResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/categories/{categoryId}/status": {
+      "post": {
+        "operationId": "setCategoryStatus",
+        "summary": "Hide, archive or restore a category; a hidden or archived node hides its subcategories from clients",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new status and the version it replaces",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCategoryStatusBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The category",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/categories/order": {
+      "put": {
+        "operationId": "reorderCategories",
+        "summary": "Put the subcategories of a node, or the nodes of a kind, in a new order",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The siblings and every one of their ids in the new order",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderCategoriesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryTreeResponse"
                 }
               }
             }
@@ -1239,6 +2083,86 @@
         }
       }
     },
+    "/catalog/categories": {
+      "get": {
+        "operationId": "getCatalogCategories",
+        "summary": "The active category tree (goods, then services) in the language of the request; open to guests, cacheable for a minute",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The category tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryTreeResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/catalog/categories/{categoryId}/attributes": {
+      "get": {
+        "operationId": "getCatalogCategoryAttributes",
+        "summary": "What the forms and filters of an active category are made of: its active attributes with types, units, bounds and options; hidden, archived and missing categories answer 404 alike",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The category and its attributes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryAttributesResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -1455,6 +2379,453 @@
           "admin"
         ]
       },
+      "AdminAttribute": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/AttributeValueType"
+          },
+          "names": {
+            "$ref": "#/components/schemas/CatalogTexts"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogTexts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NumberSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isFilterable": {
+            "type": "boolean"
+          },
+          "isRequiredForComplete": {
+            "type": "boolean"
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/CatalogEntryStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAttributeOption"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "categoryId",
+          "code",
+          "valueType",
+          "names",
+          "unit",
+          "number",
+          "isFilterable",
+          "isRequiredForComplete",
+          "sort",
+          "status",
+          "version",
+          "archivedAt",
+          "updatedAt",
+          "options"
+        ]
+      },
+      "AdminAttributeListResponse": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/AdminCategory"
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminAttribute"
+            }
+          }
+        },
+        "required": [
+          "category",
+          "attributes"
+        ]
+      },
+      "AdminAttributeOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "attributeId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "names": {
+            "$ref": "#/components/schemas/CatalogTexts"
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/CatalogEntryStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "attributeId",
+          "code",
+          "names",
+          "sort",
+          "status",
+          "version",
+          "archivedAt",
+          "updatedAt"
+        ]
+      },
+      "AdminAttributeOptionResponse": {
+        "type": "object",
+        "properties": {
+          "option": {
+            "$ref": "#/components/schemas/AdminAttributeOption"
+          }
+        },
+        "required": [
+          "option"
+        ]
+      },
+      "AdminAttributeResponse": {
+        "type": "object",
+        "properties": {
+          "attribute": {
+            "$ref": "#/components/schemas/AdminAttribute"
+          }
+        },
+        "required": [
+          "attribute"
+        ]
+      },
+      "AdminCategory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 1
+              },
+              {
+                "type": "number",
+                "const": 2
+              }
+            ]
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "names": {
+            "$ref": "#/components/schemas/CatalogTexts"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/CategoryStatus"
+          },
+          "visibleToClients": {
+            "type": "boolean"
+          },
+          "compatibilityRequired": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "level",
+          "parentId",
+          "names",
+          "icon",
+          "sort",
+          "status",
+          "visibleToClients",
+          "compatibilityRequired",
+          "version",
+          "archivedAt",
+          "updatedAt"
+        ]
+      },
+      "AdminCategoryNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "number",
+                "const": 1
+              },
+              {
+                "type": "number",
+                "const": 2
+              }
+            ]
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "names": {
+            "$ref": "#/components/schemas/CatalogTexts"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/CategoryStatus"
+          },
+          "visibleToClients": {
+            "type": "boolean"
+          },
+          "compatibilityRequired": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCategory"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "level",
+          "parentId",
+          "names",
+          "icon",
+          "sort",
+          "status",
+          "visibleToClients",
+          "compatibilityRequired",
+          "version",
+          "archivedAt",
+          "updatedAt",
+          "children"
+        ]
+      },
+      "AdminCategoryResponse": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/AdminCategory"
+          }
+        },
+        "required": [
+          "category"
+        ]
+      },
+      "AdminCategoryTreeResponse": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCategoryNode"
+            }
+          }
+        },
+        "required": [
+          "categories"
+        ]
+      },
       "AdministratorListResponse": {
         "type": "object",
         "properties": {
@@ -1518,6 +2889,36 @@
           "code",
           "message",
           "retryable"
+        ]
+      },
+      "AttributeOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name"
+        ]
+      },
+      "AttributeValueType": {
+        "type": "string",
+        "enum": [
+          "number",
+          "enum",
+          "bool",
+          "text"
         ]
       },
       "AuditActor": {
@@ -1688,6 +3089,453 @@
           "backupCodes"
         ]
       },
+      "CatalogEntryStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "archived"
+        ]
+      },
+      "CatalogLanguage": {
+        "type": "string",
+        "enum": [
+          "kk",
+          "ru",
+          "en"
+        ]
+      },
+      "CatalogNameTakenDetails": {
+        "type": "object",
+        "properties": {
+          "lang": {
+            "$ref": "#/components/schemas/CatalogLanguage"
+          },
+          "conflictingId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "lang",
+          "conflictingId"
+        ]
+      },
+      "CatalogText": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "source",
+              "manual",
+              "ai"
+            ]
+          },
+          "isManuallyEdited": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "origin",
+          "isManuallyEdited"
+        ]
+      },
+      "CatalogTexts": {
+        "type": "object",
+        "properties": {
+          "kk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ru": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "en": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kk",
+          "ru",
+          "en"
+        ]
+      },
+      "CatalogVersionConflictDetails": {
+        "type": "object",
+        "properties": {
+          "currentVersion": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "currentVersion"
+        ]
+      },
+      "CategoryAttribute": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/AttributeValueType"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NumberSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttributeOption"
+            }
+          },
+          "isFilterable": {
+            "type": "boolean"
+          },
+          "isRequiredForComplete": {
+            "type": "boolean"
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "valueType",
+          "unit",
+          "number",
+          "options",
+          "isFilterable",
+          "isRequiredForComplete",
+          "sort"
+        ]
+      },
+      "CategoryAttributesResponse": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "$ref": "#/components/schemas/CatalogLanguage"
+          },
+          "category": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "code": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/CategoryKind"
+              },
+              "name": {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              "icon": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CategoryIcon"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sort": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "compatibilityRequired": {
+                "type": "boolean"
+              },
+              "level": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "const": 1
+                  },
+                  {
+                    "type": "number",
+                    "const": 2
+                  }
+                ]
+              },
+              "parentId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "code",
+              "kind",
+              "name",
+              "icon",
+              "sort",
+              "compatibilityRequired",
+              "level",
+              "parentId"
+            ]
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryAttribute"
+            }
+          }
+        },
+        "required": [
+          "language",
+          "category",
+          "attributes"
+        ]
+      },
+      "CategoryIcon": {
+        "type": "string",
+        "enum": [
+          "air-conditioning",
+          "armchair",
+          "battery-automotive",
+          "bolt",
+          "bucket-droplet",
+          "bulb",
+          "car",
+          "car-door",
+          "car-fan",
+          "car-garage",
+          "car-lifter",
+          "car-suspension",
+          "car-turbine",
+          "category",
+          "disc",
+          "droplet",
+          "engine",
+          "filter",
+          "flask",
+          "gas-station",
+          "gauge",
+          "key",
+          "lamp",
+          "manual-gearbox",
+          "package",
+          "paint",
+          "plug",
+          "road",
+          "settings",
+          "shield",
+          "snowflake",
+          "spray",
+          "steering-wheel",
+          "tag",
+          "temperature",
+          "tool",
+          "tools",
+          "truck",
+          "wash",
+          "wheel",
+          "wiper",
+          "wiper-wash"
+        ]
+      },
+      "CategoryKind": {
+        "type": "string",
+        "enum": [
+          "goods",
+          "services"
+        ]
+      },
+      "CategoryNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "compatibilityRequired": {
+            "type": "boolean"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategorySubcategory"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "name",
+          "icon",
+          "sort",
+          "compatibilityRequired",
+          "children"
+        ]
+      },
+      "CategoryStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "hidden",
+          "archived"
+        ]
+      },
+      "CategorySubcategory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "compatibilityRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "name",
+          "icon",
+          "sort",
+          "compatibilityRequired"
+        ]
+      },
+      "CategoryTreeResponse": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "$ref": "#/components/schemas/CatalogLanguage"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryNode"
+            }
+          }
+        },
+        "required": [
+          "language",
+          "categories"
+        ]
+      },
       "ChangeSettingBody": {
         "type": "object",
         "properties": {
@@ -1770,6 +3618,261 @@
           "platform",
           "clientVersion",
           "minSupportedVersion"
+        ]
+      },
+      "CreateAttributeBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,62}$"
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/AttributeValueType"
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "ru": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "kk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "en": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "ru"
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "ru": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 12,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  "kk": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 12,
+                        "pattern": "^[^\\p{Cc}]*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "en": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 12,
+                        "pattern": "^[^\\p{Cc}]*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "ru"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "$ref": "#/components/schemas/NumberSettings"
+          },
+          "isFilterable": {
+            "type": "boolean"
+          },
+          "isRequiredForComplete": {
+            "type": "boolean"
+          },
+          "options": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateAttributeOptionBody"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "valueType",
+          "names"
+        ]
+      },
+      "CreateAttributeOptionBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{0,62}$"
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "ru": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "kk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "en": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "ru"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "names"
+        ]
+      },
+      "CreateCategoryBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,62}$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "ru": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "kk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "en": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "ru"
+            ]
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compatibilityRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "kind",
+          "names"
         ]
       },
       "CurrentAccountResponse": {
@@ -1862,6 +3965,16 @@
           "TOTP_SELF_RESET_FORBIDDEN",
           "SETTING_VERSION_CONFLICT",
           "SETTING_OPERATOR_ONLY",
+          "CATALOG_VERSION_CONFLICT",
+          "CATALOG_CODE_TAKEN",
+          "CATALOG_NAME_TAKEN",
+          "CATALOG_DEPTH_EXCEEDED",
+          "CATALOG_KIND_MISMATCH",
+          "CATALOG_LEVEL_IMMUTABLE",
+          "CATALOG_PARENT_ARCHIVED",
+          "CATALOG_NOT_SUBCATEGORY",
+          "CATALOG_ATTRIBUTE_TYPE_IMMUTABLE",
+          "CATALOG_ORDER_MISMATCH",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -1895,6 +4008,21 @@
           "status",
           "service",
           "timestamp"
+        ]
+      },
+      "LocalizedText": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "isFallback": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "isFallback"
         ]
       },
       "LoginCodeChannel": {
@@ -1978,6 +4106,31 @@
           "accountId",
           "session",
           "access"
+        ]
+      },
+      "NumberSettings": {
+        "type": "object",
+        "properties": {
+          "integer": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "integer",
+          "min",
+          "max"
         ]
       },
       "PlatformPolicy": {
@@ -2079,6 +4232,77 @@
         },
         "required": [
           "totpCode"
+        ]
+      },
+      "ReorderAttributeOptionsBody": {
+        "type": "object",
+        "properties": {
+          "optionIds": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "optionIds"
+        ]
+      },
+      "ReorderAttributesBody": {
+        "type": "object",
+        "properties": {
+          "attributeIds": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "attributeIds"
+        ]
+      },
+      "ReorderCategoriesBody": {
+        "type": "object",
+        "properties": {
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "categoryIds": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "parentId",
+          "kind",
+          "categoryIds"
         ]
       },
       "RequestLoginCodeBody": {
@@ -2377,6 +4601,40 @@
         "required": [
           "ended",
           "currentEnded"
+        ]
+      },
+      "SetCatalogEntryStatusBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/CatalogEntryStatus"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "status"
+        ]
+      },
+      "SetCategoryStatusBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/CategoryStatus"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "status"
         ]
       },
       "Setting": {
@@ -3089,6 +5347,240 @@
         },
         "required": [
           "signInStep"
+        ]
+      },
+      "UpdateAttributeBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "ru": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "kk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "en": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "ru": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 12,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  "kk": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 12,
+                        "pattern": "^[^\\p{Cc}]*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "en": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 12,
+                        "pattern": "^[^\\p{Cc}]*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "$ref": "#/components/schemas/NumberSettings"
+          },
+          "isFilterable": {
+            "type": "boolean"
+          },
+          "isRequiredForComplete": {
+            "type": "boolean"
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/AttributeValueType"
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
+      "UpdateAttributeOptionBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "ru": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "kk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "en": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
+      "UpdateCategoryBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "ru": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "kk": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "en": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compatibilityRequired": {
+            "type": "boolean"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          }
+        },
+        "required": [
+          "expectedVersion"
         ]
       },
       "VerifyLoginCodeBody": {

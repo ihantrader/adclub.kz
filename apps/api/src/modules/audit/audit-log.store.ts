@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
 import type { AuditActorRole } from "@adclub/contracts";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { auditLog } from "./schema";
@@ -21,6 +21,8 @@ export interface AuditLogRow {
   userAgent: string | null;
   requestId: string | null;
   createdAt: Date;
+  /** `created_at` in UTC to the microsecond (`2026-09-18T03:14:33.123456Z`): the paging position. */
+  position: string;
 }
 
 export interface NewAuditLogRow {
@@ -48,8 +50,8 @@ export interface AuditLogFilter {
   entityId?: string;
   actorAccountId?: string;
   actorRole?: AuditActorRole;
-  /** Only entries older than this position (keyset paging). */
-  before?: { createdAt: Date; id: string };
+  /** Only entries older than this position (keyset paging, `position` of an entry). */
+  before?: { position: string; id: string };
   limit: number;
 }
 
@@ -70,6 +72,7 @@ const columns = {
   userAgent: auditLog.userAgent,
   requestId: auditLog.requestId,
   createdAt: auditLog.createdAt,
+  position: sql<string>`to_char(${auditLog.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
 };
 
 /**
@@ -100,14 +103,10 @@ export class AuditLogStore {
       filter.actorAccountId ? eq(auditLog.actorAccountId, filter.actorAccountId) : undefined,
       filter.actorRole ? eq(auditLog.actorRole, filter.actorRole) : undefined,
       // Keyset paging: everything strictly older than the last entry read.
+      // Compared at the database's own precision (microseconds), never
+      // through a JavaScript `Date`.
       filter.before
-        ? or(
-            lt(auditLog.createdAt, filter.before.createdAt),
-            and(
-              eq(auditLog.createdAt, filter.before.createdAt),
-              lt(auditLog.id, sql`${filter.before.id}::uuid`),
-            ),
-          )
+        ? sql`(${auditLog.createdAt}, ${auditLog.id}) < (${filter.before.position}::timestamptz, ${filter.before.id}::uuid)`
         : undefined,
     ];
     return executor

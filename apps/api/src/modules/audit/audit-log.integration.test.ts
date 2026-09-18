@@ -16,7 +16,7 @@ import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redi
 import { Redis } from "ioredis";
 import { Client } from "pg";
 import request, { type Response, type Test } from "supertest";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../app.module";
 import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
@@ -30,6 +30,7 @@ import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "
 import { SettingsChangeService } from "../settings";
 import { AuditLog } from "./audit-log.service";
 import { AUDIT_VALUE_MAX_CHARS } from "./audit-log.service";
+import { AuditLogStore } from "./audit-log.store";
 
 /**
  * TASK-009: the action journal on a real PostgreSQL. Every significant
@@ -365,6 +366,8 @@ describe("action journal (PostgreSQL + Redis)", () => {
     ).rejects.toThrow("the action failed");
 
     expect(await rowCount()).toBe(0);
+    // Nor a line in the application log about an entry that doesn't exist (TASK-009.A).
+    expect(output.text()).not.toContain("Action recorded");
 
     // And a failure to write the entry fails the action with it.
     await expect(
@@ -377,6 +380,109 @@ describe("action journal (PostgreSQL + Redis)", () => {
       }),
     ).resolves.toBeDefined();
     expect(await rowCount()).toBe(1);
+  });
+
+  it("pages ten entries of one transaction, three at a time: every entry exactly once (TASK-009.A)", async () => {
+    const admin = await setUpAdmin();
+    const audit = app.get(AuditLog);
+    // Ten entries with one and the same time (`now()` of their transaction).
+    await app.get(DatabaseService).db.transaction(async (tx) => {
+      for (let index = 0; index < 10; index += 1) {
+        await audit.record(
+          {
+            action: auditActions.settingChanged,
+            actor: { role: "operator" },
+            entityType: "setting",
+            entityId: `bulk_${String(index)}`,
+            after: { value: index },
+          },
+          tx,
+        );
+      }
+    });
+    const { rows } = await db.query<{ id: string; at: string }>(
+      "SELECT id, created_at::text AS at FROM audit_log",
+    );
+    const bulkTimes = new Set(
+      (
+        await db.query<{ at: string }>(
+          "SELECT created_at::text AS at FROM audit_log WHERE entity_id LIKE 'bulk_%'",
+        )
+      ).rows.map((row) => row.at),
+    );
+    expect(bulkTimes.size).toBe(1);
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const query: string = `?limit=3${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const page = await journal(admin.accessToken, query);
+      expect(page.entries.length).toBeLessThanOrEqual(3);
+      seen.push(...page.entries.map((entry) => entry.id));
+      cursor = page.nextCursor;
+      pages += 1;
+    } while (cursor !== null && pages < 20);
+
+    expect(seen).toHaveLength(rows.length);
+    expect(new Set(seen).size).toBe(rows.length);
+    expect(new Set(seen)).toEqual(new Set(rows.map((row) => row.id)));
+    expect(pages).toBe(Math.ceil(rows.length / 3));
+  });
+
+  it("keeps entries that differ by less than a millisecond on their pages (TASK-009.A)", async () => {
+    const admin = await setUpAdmin();
+    // Two moments inside one millisecond: a cursor in milliseconds lost the later ones.
+    await db.query(
+      `INSERT INTO audit_log (action, actor_role, entity_type, entity_id, created_at)
+       SELECT 'setting.changed', 'operator', 'setting', 'micro_' || n,
+              timestamptz '2030-01-01 00:00:00.123' + n * interval '1 microsecond'
+       FROM generate_series(1, 6) AS n`,
+    );
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const query: string = `?entityType=setting&limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const page = await journal(admin.accessToken, query);
+      seen.push(...page.entries.map((entry) => entry.entityId));
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+
+    expect(seen.filter((id) => id.startsWith("micro_"))).toEqual([
+      "micro_6",
+      "micro_5",
+      "micro_4",
+      "micro_3",
+      "micro_2",
+      "micro_1",
+    ]);
+  });
+
+  it("fails the action when its entry can't be written: nothing of it stays (TASK-009.A)", async () => {
+    const store = app.get(AuditLogStore);
+    const append = vi
+      .spyOn(store, "append")
+      .mockRejectedValueOnce(new Error("the journal refused the entry"));
+    try {
+      await expect(
+        app.get(SettingsChangeService).change({
+          key: "supplier_response_hours",
+          value: 5,
+          expectedVersion: undefined,
+          reason: "an action without its entry must not happen",
+          actor: { kind: "operator" },
+        }),
+      ).rejects.toThrow("the journal refused the entry");
+    } finally {
+      append.mockRestore();
+    }
+
+    expect(await rowCount()).toBe(0);
+    const { rows } = await db.query(
+      "SELECT 1 FROM app_setting WHERE key = 'supplier_response_hours' UNION ALL SELECT 1 FROM app_setting_change WHERE key = 'supplier_response_hours'",
+    );
+    expect(rows).toHaveLength(0);
+    expect(output.text()).not.toContain("Action recorded");
   });
 
   it("refuses every attempt to change or delete an entry through the application", async () => {

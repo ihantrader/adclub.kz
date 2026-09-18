@@ -8,7 +8,7 @@ import {
 } from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
 import { getRequestId, getRequestOrigin } from "../../common/logging";
-import type { DbExecutor } from "../../database";
+import { afterCommit, type DbExecutor } from "../../database";
 import { AccountDirectory } from "../identity";
 import { AuditLogStore, type AuditLogRow } from "./audit-log.store";
 
@@ -57,23 +57,37 @@ function bounded(value: unknown): unknown {
   return { truncated: true, chars: text.length, preview: text.slice(0, 1000) };
 }
 
+/**
+ * The position of an entry in the journal: its time to the microsecond, as
+ * PostgreSQL keeps it, and its id. A cursor with the time in milliseconds
+ * (as a JavaScript `Date` has it) skips every entry between `X.123` and
+ * `X.123999` — above all the entries of one transaction, which share one
+ * time (TASK-009.A).
+ */
 function cursorOf(row: AuditLogRow): string {
-  return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`, "utf8").toString("base64url");
+  return Buffer.from(`${row.position}|${row.id}`, "utf8").toString("base64url");
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** `2026-09-18T03:14:33.123456Z`; a cursor issued before TASK-009.A has three digits. */
+const POSITION = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 
-function parseCursor(cursor: string): { createdAt: Date; id: string } {
-  const [at, id] = Buffer.from(cursor, "base64url").toString("utf8").split("|");
-  const createdAt = at ? new Date(at) : new Date(Number.NaN);
-  // The id goes into the query as a uuid: anything else is refused here
-  // rather than failing the statement.
-  if (!id || !UUID.test(id) || Number.isNaN(createdAt.getTime())) {
+function parseCursor(cursor: string): { position: string; id: string } {
+  const [position, id] = Buffer.from(cursor, "base64url").toString("utf8").split("|");
+  // Both go into the query (as a timestamp and a uuid): anything else is
+  // refused here rather than failing the statement.
+  if (
+    !id ||
+    !UUID.test(id) ||
+    !position ||
+    !POSITION.test(position) ||
+    Number.isNaN(new Date(position).getTime())
+  ) {
     throw new ApiException(400, "VALIDATION_ERROR", "The paging cursor is not one we issued", {
       details: [{ path: "cursor", message: "Use the nextCursor of the previous page" }],
     });
   }
-  return { createdAt, id };
+  return { position, id };
 }
 
 /**
@@ -125,9 +139,13 @@ export class AuditLog {
       },
       executor,
     );
-    // The entry itself holds the detail; the log line only says it exists.
-    this.logger.log(
-      `Action recorded action=${entry.action} entity=${entry.entityType}:${entry.entityId} by=${this.actorLabel(actor)} audit=${row.id}`,
+    // The entry itself holds the detail; the log line only says it exists —
+    // once the transaction of the action has committed, never for an
+    // action that was rolled back (TASK-009.A).
+    afterCommit(() =>
+      this.logger.log(
+        `Action recorded action=${entry.action} entity=${entry.entityType}:${entry.entityId} by=${this.actorLabel(actor)} audit=${row.id}`,
+      ),
     );
     return row.id;
   }

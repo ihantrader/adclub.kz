@@ -55,6 +55,19 @@ import { clientPlatformSchema } from "./client";
  * - `SETTING_OPERATOR_ONLY` (403): a sign-in security setting; only the
  *   server operator command changes it (D-053).
  *
+ * The request itself, not its data (TASK-009.A; before it, all of these
+ * came back as `VALIDATION_ERROR`, which is only for data that fails the
+ * route's schema):
+ * - `MALFORMED_REQUEST` (400): the body can't be read at all (not valid
+ *   JSON, a broken length).
+ * - `METHOD_NOT_ALLOWED` (405): the path exists, the method doesn't; the
+ *   `Allow` header lists the methods it takes.
+ * - `NOT_ACCEPTABLE` (406), `REQUEST_TIMEOUT` (408, retryable), `GONE`
+ *   (410), `PAYLOAD_TOO_LARGE` (413), `URI_TOO_LONG` (414),
+ *   `UNSUPPORTED_MEDIA_TYPE` (415 — the body isn't JSON, or in an encoding
+ *   the API doesn't take).
+ * - `REQUEST_REJECTED`: any other 4xx without a code of its own.
+ *
  * Extended as real endpoints need more specific codes (e.g.
  * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
  * are only ever added: clients must treat a code they don't know as a
@@ -92,6 +105,16 @@ export const errorCodeSchema = z.enum([
   // Settings (TASK-007, ARCHITECTURE 14).
   "SETTING_VERSION_CONFLICT",
   "SETTING_OPERATOR_ONLY",
+  // The request itself (TASK-009.A, ARCHITECTURE 7.1).
+  "MALFORMED_REQUEST",
+  "METHOD_NOT_ALLOWED",
+  "NOT_ACCEPTABLE",
+  "REQUEST_TIMEOUT",
+  "GONE",
+  "PAYLOAD_TOO_LARGE",
+  "URI_TOO_LONG",
+  "UNSUPPORTED_MEDIA_TYPE",
+  "REQUEST_REJECTED",
 ]);
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

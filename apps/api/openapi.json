@@ -1861,7 +1861,16 @@
           "FORBIDDEN",
           "TOTP_SELF_RESET_FORBIDDEN",
           "SETTING_VERSION_CONFLICT",
-          "SETTING_OPERATOR_ONLY"
+          "SETTING_OPERATOR_ONLY",
+          "MALFORMED_REQUEST",
+          "METHOD_NOT_ALLOWED",
+          "NOT_ACCEPTABLE",
+          "REQUEST_TIMEOUT",
+          "GONE",
+          "PAYLOAD_TOO_LARGE",
+          "URI_TOO_LONG",
+          "UNSUPPORTED_MEDIA_TYPE",
+          "REQUEST_REJECTED"
         ]
       },
       "HealthCheckResponse": {

@@ -36,6 +36,28 @@ export const auditActions = {
   supplierMemberAdded: "supplier_member.added",
   /** An employee was removed; their cabinet sessions of that company ended with it. */
   supplierMemberRemoved: "supplier_member.removed",
+  /** A category was created (TASK-010). `after`: the category. */
+  catalogCategoryCreated: "catalog_category.created",
+  /** Names, icon, compatibility flag or parent changed. `before`/`after`: the changed fields. */
+  catalogCategoryChanged: "catalog_category.changed",
+  /** Hidden, archived or restored. `before`/`after`: `{ status }`. */
+  catalogCategoryStatusChanged: "catalog_category.status_changed",
+  /**
+   * Siblings put in a new order. The entity is the parent category, or
+   * `goods`/`services` for the nodes of a kind; `before`/`after`: the ids in order.
+   */
+  catalogCategoriesReordered: "catalog_category.reordered",
+  catalogAttributeCreated: "catalog_attribute.created",
+  catalogAttributeChanged: "catalog_attribute.changed",
+  /** Archived or restored. */
+  catalogAttributeStatusChanged: "catalog_attribute.status_changed",
+  /** The attributes of a category put in a new order; the entity is the category. */
+  catalogAttributesReordered: "catalog_attribute.reordered",
+  catalogAttributeOptionCreated: "catalog_attribute_option.created",
+  catalogAttributeOptionChanged: "catalog_attribute_option.changed",
+  catalogAttributeOptionStatusChanged: "catalog_attribute_option.status_changed",
+  /** The options of an attribute put in a new order; the entity is the attribute. */
+  catalogAttributeOptionsReordered: "catalog_attribute_option.reordered",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -46,6 +68,9 @@ export const auditEntities = {
   admin: "admin_user",
   supplier: "supplier",
   supplierMember: "supplier_member",
+  catalogCategory: "catalog_category",
+  catalogAttribute: "catalog_attribute",
+  catalogAttributeOption: "catalog_attribute_option",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

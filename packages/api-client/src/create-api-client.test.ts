@@ -34,6 +34,8 @@ async function captureError(promise: Promise<unknown>): Promise<ApiError> {
   throw new Error("expected the request to fail");
 }
 
+const CATEGORY_ID = "0b6f7a2e-2c55-4f0e-9d8e-3b1c2a4d5e6f";
+
 describe("createApiClient", () => {
   it("exposes one method per contract route", () => {
     const client = clientWith(vi.fn());
@@ -341,6 +343,36 @@ describe("createApiClient", () => {
         reason: "Больше оценок",
       });
       expect(init.headers).toMatchObject({ Authorization: "Bearer admin-access" });
+    });
+
+    it("reads the catalog as a guest in the UI language, and patches a category as an administrator", async () => {
+      const fetchImpl = vi
+        .fn<FetchLike>()
+        .mockImplementation(() => Promise.resolve(jsonResponse(200, {})));
+      const guest = clientWith(fetchImpl, {
+        getAccessToken: () => "user-access",
+        getLanguage: () => "kk",
+      });
+      await guest.getCatalogCategoryAttributes({ categoryId: CATEGORY_ID });
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe(`http://api.test/catalog/categories/${CATEGORY_ID}/attributes`);
+      expect(init.headers).toMatchObject({ "Accept-Language": "kk" });
+      // A public route: the token isn't sent.
+      expect(init.headers).not.toHaveProperty("Authorization");
+
+      const admin = clientWith(fetchImpl, { getAccessToken: () => "admin-access" });
+      await admin.updateCategory(
+        { categoryId: CATEGORY_ID },
+        { expectedVersion: 3, names: { ru: "Колодки", kk: null } },
+      );
+      const [patchUrl, patch] = fetchImpl.mock.calls[1]!;
+      expect(patchUrl).toBe(`http://api.test/admin/catalog/categories/${CATEGORY_ID}`);
+      expect(patch.method).toBe("PATCH");
+      expect(JSON.parse(String(patch.body))).toEqual({
+        expectedVersion: 3,
+        names: { ru: "Колодки", kk: null },
+      });
+      expect(patch.headers).toMatchObject({ Authorization: "Bearer admin-access" });
     });
 
     it("refuses to call a route without its path parameters", async () => {

@@ -55,6 +55,28 @@ import { clientPlatformSchema } from "./client";
  * - `SETTING_OPERATOR_ONLY` (403): a sign-in security setting; only the
  *   server operator command changes it (D-053).
  *
+ * The catalog structure (TASK-010, ARCHITECTURE 4.15):
+ * - `CATALOG_VERSION_CONFLICT` (409): the category, attribute or option was
+ *   changed by someone else since the version the change was made from;
+ *   nothing was written. `details` is `CatalogVersionConflictDetails`.
+ * - `CATALOG_CODE_TAKEN` (409): the code is already used (categories —
+ *   anywhere; attributes — in the category; options — in the attribute).
+ * - `CATALOG_NAME_TAKEN` (409): a sibling already has this name in this
+ *   language, ignoring case; `details` is `CatalogNameTakenDetails`.
+ * - `CATALOG_DEPTH_EXCEEDED` (400): the parent is a subcategory — there
+ *   are two levels only.
+ * - `CATALOG_KIND_MISMATCH` (400): the parent is of the other kind (goods /
+ *   services), or the kind of a category was asked to change.
+ * - `CATALOG_LEVEL_IMMUTABLE` (400): a node can't become a subcategory and
+ *   a subcategory can't become a node.
+ * - `CATALOG_PARENT_ARCHIVED` (409): the node is archived — restore it (or
+ *   choose another node) first.
+ * - `CATALOG_NOT_SUBCATEGORY` (400): only a subcategory has attributes.
+ * - `CATALOG_ATTRIBUTE_TYPE_IMMUTABLE` (400): the value type of an
+ *   attribute never changes — archive it and create another one.
+ * - `CATALOG_ORDER_MISMATCH` (409): the new order doesn't name every
+ *   sibling exactly once (someone may have added one meanwhile) — reload.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -105,6 +127,17 @@ export const errorCodeSchema = z.enum([
   // Settings (TASK-007, ARCHITECTURE 14).
   "SETTING_VERSION_CONFLICT",
   "SETTING_OPERATOR_ONLY",
+  // Catalog structure (TASK-010, ARCHITECTURE 4.15).
+  "CATALOG_VERSION_CONFLICT",
+  "CATALOG_CODE_TAKEN",
+  "CATALOG_NAME_TAKEN",
+  "CATALOG_DEPTH_EXCEEDED",
+  "CATALOG_KIND_MISMATCH",
+  "CATALOG_LEVEL_IMMUTABLE",
+  "CATALOG_PARENT_ARCHIVED",
+  "CATALOG_NOT_SUBCATEGORY",
+  "CATALOG_ATTRIBUTE_TYPE_IMMUTABLE",
+  "CATALOG_ORDER_MISMATCH",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

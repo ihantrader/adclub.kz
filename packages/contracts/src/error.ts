@@ -76,6 +76,9 @@ import { clientPlatformSchema } from "./client";
  *   attribute never changes — archive it and create another one.
  * - `CATALOG_ORDER_MISMATCH` (409): the new order doesn't name every
  *   sibling exactly once (someone may have added one meanwhile) — reload.
+ * - `CATALOG_ORDER_CONFLICT` (409): the siblings were reordered by someone
+ *   else since the order the change was made from (`expectedOrder`);
+ *   nothing was written. `details` is `CatalogOrderConflictDetails`.
  *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
@@ -138,6 +141,7 @@ export const errorCodeSchema = z.enum([
   "CATALOG_NOT_SUBCATEGORY",
   "CATALOG_ATTRIBUTE_TYPE_IMMUTABLE",
   "CATALOG_ORDER_MISMATCH",
+  "CATALOG_ORDER_CONFLICT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

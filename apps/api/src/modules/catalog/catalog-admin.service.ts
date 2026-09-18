@@ -32,6 +32,7 @@ import {
   nameTaken,
   notFound,
   notSubcategory,
+  orderConflict,
   orderMismatch,
   parentArchived,
   validationError,
@@ -81,12 +82,40 @@ function numberOf(value: string | null): number | null {
   return value === null ? null : Number(value);
 }
 
-function sameOrder(current: readonly string[], wanted: readonly string[]): boolean {
+function sameSiblings(current: readonly string[], wanted: readonly string[]): boolean {
   return (
     current.length === wanted.length &&
     new Set(wanted).size === wanted.length &&
     wanted.every((id) => current.includes(id))
   );
+}
+
+function sameSequence(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/**
+ * Whether a new order of siblings is written (TASK-010.A): it must name
+ * every sibling once (`CATALOG_ORDER_MISMATCH`); the order already stored
+ * changes nothing and isn't journaled — a repeated request or someone
+ * else having put them the same way; an order made from another one than
+ * stored (`expectedOrder`) is refused rather than written over it.
+ */
+function orderChange(
+  current: readonly string[],
+  wanted: readonly string[],
+  expected: readonly string[] | undefined,
+): boolean {
+  if (!sameSiblings(current, wanted)) {
+    throw orderMismatch();
+  }
+  if (sameSequence(current, wanted)) {
+    return false;
+  }
+  if (expected !== undefined && !sameSequence(current, expected)) {
+    throw orderConflict(current);
+  }
+  return true;
 }
 
 /**
@@ -366,6 +395,7 @@ export class CatalogAdminService {
     parentId: string | null,
     kind: CategoryKind,
     categoryIds: readonly string[],
+    expectedOrder: readonly string[] | undefined,
     actor: CatalogActor,
   ): Promise<AdminCategoryTreeResponse> {
     return this.database.db.transaction(async (tx) => {
@@ -378,8 +408,8 @@ export class CatalogAdminService {
       }
       const siblings = await this.siblingsOf(tx, parentId, kind);
       const current = siblings.map((row) => row.id);
-      if (!sameOrder(current, categoryIds)) {
-        throw orderMismatch();
+      if (!orderChange(current, categoryIds, expectedOrder)) {
+        return this.tree(tx);
       }
       await this.applyOrder(tx, category, categoryIds);
       await this.audit.record(
@@ -647,14 +677,15 @@ export class CatalogAdminService {
   async reorderAttributes(
     categoryId: string,
     attributeIds: readonly string[],
+    expectedOrder: readonly string[] | undefined,
     actor: CatalogActor,
   ): Promise<AdminAttributeListResponse> {
     return this.database.db.transaction(async (tx) => {
       await tx.execute(CATALOG_LOCK);
       const owner = await this.findCategory(tx, categoryId);
       const current = (await this.attributeRowsOf(tx, owner.id)).map((row) => row.id);
-      if (!sameOrder(current, attributeIds)) {
-        throw orderMismatch();
+      if (!orderChange(current, attributeIds, expectedOrder)) {
+        return this.attributes(owner.id, tx);
       }
       await this.applyOrder(tx, attribute, attributeIds);
       await this.audit.record(
@@ -815,14 +846,15 @@ export class CatalogAdminService {
   async reorderOptions(
     attributeId: string,
     optionIds: readonly string[],
+    expectedOrder: readonly string[] | undefined,
     actor: CatalogActor,
   ): Promise<AdminAttribute> {
     return this.database.db.transaction(async (tx) => {
       await tx.execute(CATALOG_LOCK);
       const owner = await this.findAttribute(tx, attributeId);
       const current = (await this.optionRowsOf(tx, owner.id)).map((row) => row.id);
-      if (!sameOrder(current, optionIds)) {
-        throw orderMismatch();
+      if (!orderChange(current, optionIds, expectedOrder)) {
+        return this.describeAttribute(tx, owner);
       }
       await this.applyOrder(tx, attributeOption, optionIds);
       await this.audit.record(

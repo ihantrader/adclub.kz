@@ -23,14 +23,15 @@ import { codeForHttpStatus, HttpExceptionFilter } from "./http-exception.filter"
 function fakeHost() {
   const json = vi.fn();
   const status = vi.fn().mockReturnValue({ json });
-  const response = { status, json };
+  const setHeader = vi.fn();
+  const response = { status, json, setHeader };
   const host = {
     switchToHttp: () => ({
       getResponse: () => response,
       getRequest: () => ({}),
     }),
   } as unknown as ArgumentsHost;
-  return { host, status, json };
+  return { host, status, json, setHeader };
 }
 
 function fakeLogger(): JsonLoggerService {
@@ -76,6 +77,15 @@ describe("HttpExceptionFilter", () => {
     expect(status).toHaveBeenCalledWith(404);
     const body = json.mock.calls[0]?.[0] as ApiErrorResponse;
     expect(body).toEqual({ code: "NOT_FOUND", message: "Route not found", retryable: false });
+  });
+
+  it("lets no client or proxy keep an error, whatever the route set before failing (TASK-010.A)", () => {
+    const filter = new HttpExceptionFilter(fakeLogger(), fakeReporter());
+    for (const exception of [new NotFoundException(), new Error("boom")]) {
+      const { host, setHeader } = fakeHost();
+      filter.catch(exception, host);
+      expect(setHeader).toHaveBeenCalledWith("Cache-Control", "no-store");
+    }
   });
 
   it("formats a ConflictException as CONFLICT (409)", () => {

@@ -13,6 +13,7 @@ import {
   auditActions,
   auditLogPageSchema,
   CATALOG_CLIENT_CACHE_SECONDS,
+  catalogOrderConflictDetailsSchema,
   categoryAttributesResponseSchema,
   categoryTreeResponseSchema,
   totpSetupCompletedResponseSchema,
@@ -1071,14 +1072,14 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         auditActions.catalogAttributeCreated,
         auditActions.catalogCategoryChanged,
         auditActions.catalogCategoryStatusChanged,
-        auditActions.catalogCategoriesReordered,
+        // The only subcategory and the only attribute "put in order" change
+        // nothing and aren't journaled (TASK-010.A); the options really move.
         auditActions.catalogAttributeChanged,
         auditActions.catalogAttributeStatusChanged,
         auditActions.catalogAttributeOptionCreated,
         auditActions.catalogAttributeOptionChanged,
         auditActions.catalogAttributeOptionStatusChanged,
         auditActions.catalogAttributeOptionsReordered,
-        auditActions.catalogAttributesReordered,
       ]);
       const page = auditLogPageSchema.parse(
         (await asAdmin("get", `/admin/audit-log?action=${auditActions.catalogCategoryChanged}`))
@@ -1178,6 +1179,150 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         409,
         "CATALOG_VERSION_CONFLICT",
       );
+    });
+
+    it("never overwrites someone else's order silently; the same order again changes nothing (TASK-010.A)", async () => {
+      /**
+       * One set of siblings: how to reorder it and how to read its order back.
+       * Two administrators read the order and send different new ones at the
+       * same time, both from what they read.
+       */
+      async function race(siblings: {
+        ids: string[];
+        path: string;
+        body: (ids: string[], expectedOrder?: string[]) => object;
+        order: () => Promise<string[]>;
+        action: string;
+      }): Promise<void> {
+        const [a, b, c] = siblings.ids as [string, string, string];
+        expect(await siblings.order()).toEqual([a, b, c]);
+        const journaled = async () =>
+          (await journalActions()).filter((action) => action === siblings.action).length;
+        const before = await journaled();
+
+        const [first, second] = await Promise.all([
+          asAdmin("put", siblings.path, siblings.body([b, a, c], [a, b, c])),
+          asAdmin("put", siblings.path, siblings.body([c, b, a], [a, b, c])),
+        ]);
+        expect(
+          [first.status, second.status].sort(),
+          JSON.stringify([first.body, second.body]),
+        ).toEqual([200, 409]);
+        const winnerOrder = first.status === 200 ? [b, a, c] : [c, b, a];
+        const loser = first.status === 409 ? first : second;
+        expectError(loser, 409, "CATALOG_ORDER_CONFLICT");
+        expect(catalogOrderConflictDetailsSchema.parse(loser.body.details)).toEqual({
+          currentOrder: winnerOrder,
+        });
+        // The first one stays; one journal entry.
+        expect(await siblings.order()).toEqual(winnerOrder);
+        expect(await journaled()).toBe(before + 1);
+
+        // The same order again — repeated, or from the order read before
+        // (someone already put them this way): nothing changes, nothing is journaled.
+        for (const body of [
+          siblings.body(winnerOrder),
+          siblings.body(winnerOrder, winnerOrder),
+          siblings.body(winnerOrder, [a, b, c]),
+        ]) {
+          const again = await asAdmin("put", siblings.path, body);
+          expect(again.status, JSON.stringify(again.body)).toBe(200);
+        }
+        expect(await siblings.order()).toEqual(winnerOrder);
+        expect(await journaled()).toBe(before + 1);
+
+        // The one refused reloads and decides again: from the current order it is written.
+        const retried = await asAdmin("put", siblings.path, siblings.body([a, b, c], winnerOrder));
+        expect(retried.status, JSON.stringify(retried.body)).toBe(200);
+        expect(await siblings.order()).toEqual([a, b, c]);
+        expect(await journaled()).toBe(before + 2);
+        // Still: every sibling once, whatever the expected order says.
+        expectError(
+          await asAdmin("put", siblings.path, siblings.body([a, b], [a, b, c])),
+          409,
+          "CATALOG_ORDER_MISMATCH",
+        );
+      }
+
+      const { node, pads } = await brakes();
+      const discs = await createCategory({
+        code: "brake_discs",
+        kind: "goods",
+        parentId: node.id,
+        names: { ru: "Тормозные диски" },
+      });
+      const drums = await createCategory({
+        code: "brake_drums",
+        kind: "goods",
+        parentId: node.id,
+        names: { ru: "Тормозные барабаны" },
+      });
+      await race({
+        ids: [pads.id, discs.id, drums.id],
+        path: "/admin/catalog/categories/order",
+        body: (categoryIds, expectedOrder) => ({
+          parentId: node.id,
+          kind: "goods",
+          categoryIds,
+          ...(expectedOrder && { expectedOrder }),
+        }),
+        order: async () => {
+          const tree = adminCategoryTreeResponseSchema.parse(
+            (await asAdmin("get", "/admin/catalog/categories")).body,
+          );
+          return tree.categories
+            .find((entry) => entry.id === node.id)!
+            .children.map((child) => child.id);
+        },
+        action: auditActions.catalogCategoriesReordered,
+      });
+
+      const attributes: AdminAttribute[] = [];
+      for (const code of ["axle", "thickness", "wear_sensor"]) {
+        attributes.push(
+          await createAttribute(pads.id, {
+            code,
+            valueType: code === "axle" ? "enum" : "bool",
+            names: { ru: code },
+            ...(code === "axle" && {
+              options: [
+                { code: "front", names: { ru: "Передняя" } },
+                { code: "rear", names: { ru: "Задняя" } },
+                { code: "both", names: { ru: "Обе" } },
+              ],
+            }),
+          }),
+        );
+      }
+      const listed = async () =>
+        adminAttributeListResponseSchema.parse(
+          (await asAdmin("get", `/admin/catalog/categories/${pads.id}/attributes`)).body,
+        ).attributes;
+      await race({
+        ids: attributes.map((entry) => entry.id),
+        path: `/admin/catalog/categories/${pads.id}/attributes/order`,
+        body: (attributeIds, expectedOrder) => ({
+          attributeIds,
+          ...(expectedOrder && { expectedOrder }),
+        }),
+        order: async () => (await listed()).map((entry) => entry.id),
+        action: auditActions.catalogAttributesReordered,
+      });
+
+      const axle = attributes[0]!;
+      await race({
+        ids: axle.options.map((option) => option.id),
+        path: `/admin/catalog/attributes/${axle.id}/options/order`,
+        body: (optionIds, expectedOrder) => ({
+          optionIds,
+          ...(expectedOrder && { expectedOrder }),
+        }),
+        order: async () =>
+          (await listed())
+            .find((entry) => entry.id === axle.id)!
+            .options.map((option) => option.id),
+        action: auditActions.catalogAttributeOptionsReordered,
+      });
     });
   });
 
@@ -1279,6 +1424,43 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         expectError(answer, 404, "NOT_FOUND");
         expect(answer.body).toEqual(answers[0]!.body);
       }
+    });
+
+    it("never lets a 404 be kept: a category restored is seen at once (TASK-010.A)", async () => {
+      await seeded();
+      const pads = await categoryId("brake_pads");
+      await asAdmin("post", `/admin/catalog/categories/${pads}/status`, {
+        status: "hidden",
+        expectedVersion: 1,
+      });
+      for (const id of [pads, randomUUID(), "not-a-uuid"]) {
+        const missing = await asGuest(`/catalog/categories/${id}/attributes`, "ru");
+        expectError(missing, 404, "NOT_FOUND");
+        // Neither a client nor a proxy may keep it (unlike a success, kept a minute).
+        expect(missing.headers["cache-control"]).toBe("no-store");
+        // And a conditional request never turns it into "not modified".
+        const conditional = await asGuest(`/catalog/categories/${id}/attributes`, "ru").set(
+          "If-None-Match",
+          (missing.headers.etag as string | undefined) ?? "*",
+        );
+        expectError(conditional, 404, "NOT_FOUND");
+        expect(conditional.headers["cache-control"]).toBe("no-store");
+      }
+      // Restored: the very next request (through any proxy that obeyed) sees it.
+      const restored = await asAdmin("post", `/admin/catalog/categories/${pads}/status`, {
+        status: "active",
+        expectedVersion: 2,
+      });
+      expect(restored.status, JSON.stringify(restored.body)).toBe(200);
+      const found = await asGuest(`/catalog/categories/${pads}/attributes`, "ru");
+      expect(found.status).toBe(200);
+      expect(found.headers["cache-control"]).toBe(
+        `public, max-age=${CATALOG_CLIENT_CACHE_SECONDS}`,
+      );
+      // Any other refusal of a client route is not kept either.
+      const invalid = await asGuest(`/catalog/categories/${"x".repeat(101)}/attributes`, "ru");
+      expectError(invalid, 400, "VALIDATION_ERROR");
+      expect(invalid.headers["cache-control"]).toBe("no-store");
     });
 
     it("describes only active attributes and options, in order, in the language asked", async () => {

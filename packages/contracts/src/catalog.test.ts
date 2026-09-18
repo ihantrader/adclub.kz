@@ -5,6 +5,9 @@ import {
   categoryIcons,
   createAttributeBodySchema,
   createCategoryBodySchema,
+  reorderAttributeOptionsBodySchema,
+  reorderAttributesBodySchema,
+  reorderCategoriesBodySchema,
   updateAttributeBodySchema,
   updateCategoryBodySchema,
 } from "./catalog";
@@ -90,5 +93,35 @@ describe("catalog contract", () => {
   it("lets clients and proxies keep an answer a minute at most", () => {
     expect(CATALOG_CLIENT_CACHE_SECONDS).toBeGreaterThan(0);
     expect(CATALOG_CLIENT_CACHE_SECONDS).toBeLessThanOrEqual(60);
+  });
+
+  it("takes the order a new order was made from, and keeps it optional (TASK-010.A)", () => {
+    const a = "00000000-0000-4000-8000-000000000001";
+    const b = "00000000-0000-4000-8000-000000000002";
+    const bodies = [
+      (expectedOrder?: unknown) =>
+        reorderCategoriesBodySchema.safeParse({
+          parentId: null,
+          kind: "goods",
+          categoryIds: [b, a],
+          ...(expectedOrder !== undefined && { expectedOrder }),
+        }).success,
+      (expectedOrder?: unknown) =>
+        reorderAttributesBodySchema.safeParse({
+          attributeIds: [b, a],
+          ...(expectedOrder !== undefined && { expectedOrder }),
+        }).success,
+      (expectedOrder?: unknown) =>
+        reorderAttributeOptionsBodySchema.safeParse({
+          optionIds: [b, a],
+          ...(expectedOrder !== undefined && { expectedOrder }),
+        }).success,
+    ];
+    for (const parses of bodies) {
+      expect(parses()).toBe(true);
+      expect(parses([a, b])).toBe(true);
+      expect(parses(["not-a-uuid"])).toBe(false);
+      expect(parses("a,b")).toBe(false);
+    }
   });
 });

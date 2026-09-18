@@ -114,6 +114,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       });
     }
 
+    // An error is about this moment (a category hidden now may be back in a
+    // minute): no client or proxy keeps it, whatever the route set for a
+    // success before failing (TASK-010.A; ARCHITECTURE 4.16).
+    response.setHeader("Cache-Control", "no-store");
     if (exception instanceof ApiException) {
       for (const [name, value] of Object.entries(exception.options.headers ?? {})) {
         response.setHeader(name, value);

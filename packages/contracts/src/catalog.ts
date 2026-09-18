@@ -193,6 +193,16 @@ export type LocalizedText = z.infer<typeof localizedTextSchema>;
 
 const expectedVersionSchema = z.number().int().min(1);
 
+/**
+ * The order of the siblings the new order was made from, as the client
+ * read it (the ids in the order of the admin tree or list). The same as the
+ * stored order — the new one is written; another — someone reordered or
+ * changed the siblings meanwhile: 409 `CATALOG_ORDER_CONFLICT`, nothing
+ * written (TASK-010.A). Left out, the order is written over whatever is
+ * stored, as before it existed; the admin panel always sends it.
+ */
+const expectedOrderSchema = z.array(z.uuid()).max(500);
+
 // ------------------------------------------------------------ admin panel
 
 export const adminCategorySchema = z.object({
@@ -295,6 +305,7 @@ export const reorderCategoriesBodySchema = z.object({
   parentId: z.uuid().nullable(),
   kind: categoryKindSchema,
   categoryIds: z.array(z.uuid()).min(1).max(500),
+  expectedOrder: expectedOrderSchema.optional(),
 });
 
 export type ReorderCategoriesBody = z.infer<typeof reorderCategoriesBodySchema>;
@@ -426,6 +437,7 @@ export type SetCatalogEntryStatusBody = z.infer<typeof setCatalogEntryStatusBody
 /** `PUT /admin/catalog/categories/{categoryId}/attributes/order`: every attribute once. */
 export const reorderAttributesBodySchema = z.object({
   attributeIds: z.array(z.uuid()).min(1).max(500),
+  expectedOrder: expectedOrderSchema.optional(),
 });
 
 export type ReorderAttributesBody = z.infer<typeof reorderAttributesBodySchema>;
@@ -450,6 +462,7 @@ export type UpdateAttributeOptionBody = z.infer<typeof updateAttributeOptionBody
 /** `PUT /admin/catalog/attributes/{attributeId}/options/order`: every option once. */
 export const reorderAttributeOptionsBodySchema = z.object({
   optionIds: z.array(z.uuid()).min(1).max(500),
+  expectedOrder: expectedOrderSchema.optional(),
 });
 
 export type ReorderAttributeOptionsBody = z.infer<typeof reorderAttributeOptionsBodySchema>;
@@ -464,6 +477,13 @@ export const catalogVersionConflictDetailsSchema = z.object({
 });
 
 export type CatalogVersionConflictDetails = z.infer<typeof catalogVersionConflictDetailsSchema>;
+
+/** `details` of `CATALOG_ORDER_CONFLICT`: the order stored now, to show and decide again. */
+export const catalogOrderConflictDetailsSchema = z.object({
+  currentOrder: z.array(z.uuid()),
+});
+
+export type CatalogOrderConflictDetails = z.infer<typeof catalogOrderConflictDetailsSchema>;
 
 /** `details` of `CATALOG_NAME_TAKEN`: the language whose name a sibling already has. */
 export const catalogNameTakenDetailsSchema = z.object({

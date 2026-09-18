@@ -1,6 +1,7 @@
 import type {
   CatalogLanguage,
   CatalogNameTakenDetails,
+  CatalogOrderConflictDetails,
   CatalogVersionConflictDetails,
 } from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
@@ -90,5 +91,15 @@ export function orderMismatch(): ApiException {
     409,
     "CATALOG_ORDER_MISMATCH",
     "The new order must name every sibling exactly once; reload and try again",
+  );
+}
+
+export function orderConflict(currentOrder: readonly string[]): ApiException {
+  const details: CatalogOrderConflictDetails = { currentOrder: [...currentOrder] };
+  return new ApiException(
+    409,
+    "CATALOG_ORDER_CONFLICT",
+    "The order was changed by someone else; reload it and decide again",
+    { details },
   );
 }

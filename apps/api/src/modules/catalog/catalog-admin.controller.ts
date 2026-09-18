@@ -102,6 +102,7 @@ export class CatalogAdminController {
       body.parentId,
       body.kind,
       body.categoryIds,
+      body.expectedOrder,
       adminActor(session),
     );
   }
@@ -133,6 +134,7 @@ export class CatalogAdminController {
     return this.catalog.reorderAttributes(
       params.categoryId,
       body.attributeIds,
+      body.expectedOrder,
       adminActor(session),
     );
   }
@@ -186,6 +188,7 @@ export class CatalogAdminController {
       attribute: await this.catalog.reorderOptions(
         params.attributeId,
         body.optionIds,
+        body.expectedOrder,
         adminActor(session),
       ),
     };

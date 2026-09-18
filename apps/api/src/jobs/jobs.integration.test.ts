@@ -124,7 +124,14 @@ const minutelyJob = definePeriodicJob({
   singleton: true,
   schedule: () => EVERY_MINUTE,
 });
-const sweepJob = defineSweeperJob({ name: "test.sweep", batchSize: 10, timeoutSeconds: 30 });
+// A sweeper runs every minute; here the tests start it themselves
+// (`runNow`, `SweepRunner.run`), and a scheduled run falling inside one of
+// them took rows or added a quiet run of its own (CI runs 35314141949,
+// 35314700700). Scheduled once a year instead, it never does.
+const sweepJob = Object.freeze({
+  ...defineSweeperJob({ name: "test.sweep", batchSize: 10, timeoutSeconds: 30 }),
+  schedule: () => "0 0 1 1 *",
+});
 
 const CATALOG: JobDefinition[] = [
   recordJob,

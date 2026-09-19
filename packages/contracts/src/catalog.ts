@@ -442,7 +442,15 @@ export const reorderAttributesBodySchema = z.object({
 
 export type ReorderAttributesBody = z.infer<typeof reorderAttributesBodySchema>;
 
-export const adminAttributeResponseSchema = z.object({ attribute: adminAttributeSchema });
+export const adminAttributeResponseSchema = z.object({
+  attribute: adminAttributeSchema,
+  /**
+   * Items of the category (every status) without a value of this attribute
+   * — right after creation, all of them (SCREENS A-CAT-02 «У N позиций
+   * значение будет пустым»; TASK-011).
+   */
+  itemsWithoutValue: z.number().int(),
+});
 
 export type AdminAttributeResponse = z.infer<typeof adminAttributeResponseSchema>;
 

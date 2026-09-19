@@ -58,6 +58,27 @@ export const auditActions = {
   catalogAttributeOptionStatusChanged: "catalog_attribute_option.status_changed",
   /** The options of an attribute put in a new order; the entity is the attribute. */
   catalogAttributeOptionsReordered: "catalog_attribute_option.reordered",
+  /** A brand was created (TASK-011). `after`: name, spellings, OEM flag. */
+  catalogBrandCreated: "catalog_brand.created",
+  /** Name, spellings or OEM flag changed. `before`/`after`: the changed fields. */
+  catalogBrandChanged: "catalog_brand.changed",
+  /** Archived or restored. */
+  catalogBrandStatusChanged: "catalog_brand.status_changed",
+  /** An item was created. `after`: the item with its values (by attribute code). */
+  catalogItemCreated: "catalog_item.created",
+  /** Category, brand, article or names changed. `before`/`after`: the changed fields. */
+  catalogItemChanged: "catalog_item.changed",
+  /** Draft, active or archived. */
+  catalogItemStatusChanged: "catalog_item.status_changed",
+  /**
+   * Attribute values of one item changed, by attribute code (a list value
+   * by option code, `null` — emptied); `via`: `item` (its card) or `fill`
+   * (the bulk fill, one entry per item touched).
+   */
+  catalogItemValuesChanged: "catalog_item.values_changed",
+  /** Two items were linked as analogs; one entry, on the item the link was made from. */
+  catalogItemAnalogLinked: "catalog_item.analog_linked",
+  catalogItemAnalogUnlinked: "catalog_item.analog_unlinked",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -71,6 +92,8 @@ export const auditEntities = {
   catalogCategory: "catalog_category",
   catalogAttribute: "catalog_attribute",
   catalogAttributeOption: "catalog_attribute_option",
+  catalogBrand: "catalog_brand",
+  catalogItem: "catalog_item",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

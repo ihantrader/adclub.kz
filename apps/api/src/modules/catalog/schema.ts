@@ -3,16 +3,22 @@ import {
   integer,
   numeric,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  AttributeValueSource,
   AttributeValueType,
   CatalogEntryStatus,
+  CatalogItemStatus,
+  CatalogItemType,
   CategoryKind,
   CategoryStatus,
+  ItemAnalogStatus,
+  ItemCompleteness,
 } from "@adclub/contracts";
 
 /**
@@ -21,7 +27,7 @@ import type {
  * and foreign keys that hold two levels; ARCHITECTURE 5.2, 5.4, 4.15).
  */
 
-export type TranslationEntityType = "category" | "attribute" | "attribute_option";
+export type TranslationEntityType = "category" | "attribute" | "attribute_option" | "catalog_item";
 export type TranslationField = "name" | "unit";
 export type TranslationOrigin = "source" | "manual" | "ai";
 
@@ -89,9 +95,92 @@ export const translation = pgTable("translation", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Items of the catalog (`…_create-catalog-items.sql`; ARCHITECTURE 5.2, 4.17; TASK-011). */
+export const brand = pgTable("brand", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  isOem: boolean("is_oem").notNull().default(false),
+  status: text("status").$type<CatalogEntryStatus>().notNull().default("active"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const brandSpelling = pgTable("brand_spelling", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  brandId: uuid("brand_id").notNull(),
+  text: text("text").notNull(),
+  key: text("key").notNull(),
+  isName: boolean("is_name").notNull(),
+});
+
+export const catalogItem = pgTable("catalog_item", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemType: text("item_type").$type<CatalogItemType>().notNull(),
+  categoryId: uuid("category_id").notNull(),
+  categoryKind: text("category_kind").$type<CategoryKind>().notNull(),
+  categoryLevel: smallint("category_level").notNull().default(2),
+  brandId: uuid("brand_id"),
+  article: text("article"),
+  articleNorm: text("article_norm"),
+  status: text("status").$type<CatalogItemStatus>().notNull().default("active"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  completeness: text("completeness").$type<ItemCompleteness>().notNull().default("complete"),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const itemAttributeValue = pgTable(
+  "item_attribute_value",
+  {
+    itemId: uuid("item_id").notNull(),
+    attributeId: uuid("attribute_id").notNull(),
+    attributeValueType: text("attribute_value_type").$type<AttributeValueType>().notNull(),
+    valueNum: numeric("value_num"),
+    valueOptionId: uuid("value_option_id"),
+    valueBool: boolean("value_bool"),
+    valueText: text("value_text"),
+    source: text("source").$type<AttributeValueSource>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.attributeId] })],
+);
+
+export const itemAnalog = pgTable(
+  "item_analog",
+  {
+    itemId: uuid("item_id").notNull(),
+    analogItemId: uuid("analog_item_id").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    itemType: text("item_type").notNull().default("part"),
+    relation: text("relation").notNull().default("analog_of"),
+    status: text("status").$type<ItemAnalogStatus>().notNull().default("approved"),
+    source: text("source").$type<"admin" | "supplier" | "ai">().notNull().default("admin"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.itemId, table.analogItemId] })],
+);
+
 export type CategoryRow = typeof category.$inferSelect;
 export type AttributeRow = typeof attribute.$inferSelect;
 export type AttributeOptionRow = typeof attributeOption.$inferSelect;
 export type TranslationRow = typeof translation.$inferSelect;
+export type BrandRow = typeof brand.$inferSelect;
+export type BrandSpellingRow = typeof brandSpelling.$inferSelect;
+export type CatalogItemRow = typeof catalogItem.$inferSelect;
+export type ItemAttributeValueRow = typeof itemAttributeValue.$inferSelect;
 
-export const catalogTables = [category, attribute, attributeOption, translation];
+export const catalogTables = [
+  category,
+  attribute,
+  attributeOption,
+  translation,
+  brand,
+  brandSpelling,
+  catalogItem,
+  itemAttributeValue,
+  itemAnalog,
+];

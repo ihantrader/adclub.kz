@@ -1,7 +1,12 @@
 import type {
+  CatalogAnalogInvalidDetails,
+  CatalogBrandSpellingTakenDetails,
+  CatalogItemDuplicateDetails,
   CatalogLanguage,
   CatalogNameTakenDetails,
   CatalogOrderConflictDetails,
+  CatalogValueRejection,
+  CatalogValuesRejectedDetails,
   CatalogVersionConflictDetails,
 } from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
@@ -102,4 +107,77 @@ export function orderConflict(currentOrder: readonly string[]): ApiException {
     "The order was changed by someone else; reload it and decide again",
     { details },
   );
+}
+
+// ------------------------------------------------------------ items (TASK-011)
+
+export function brandSpellingTaken(spelling: string, conflictingBrandId: string): ApiException {
+  const details: CatalogBrandSpellingTakenDetails = { spelling, conflictingBrandId };
+  return new ApiException(
+    409,
+    "CATALOG_BRAND_SPELLING_TAKEN",
+    "Another brand already has this name or spelling (case and spaces are ignored)",
+    { details },
+  );
+}
+
+export function brandArchived(): ApiException {
+  return new ApiException(
+    409,
+    "CATALOG_BRAND_ARCHIVED",
+    "The brand is archived: restore it or choose another one",
+  );
+}
+
+export function categoryArchived(): ApiException {
+  return new ApiException(
+    409,
+    "CATALOG_CATEGORY_ARCHIVED",
+    "The subcategory (or its node) is archived and takes no items",
+  );
+}
+
+export function itemDuplicate(existingItemId: string): ApiException {
+  const details: CatalogItemDuplicateDetails = { existingItemId };
+  return new ApiException(409, "CATALOG_ITEM_DUPLICATE", "This item already exists", { details });
+}
+
+export function itemTypeImmutable(): ApiException {
+  return new ApiException(
+    400,
+    "CATALOG_ITEM_TYPE_IMMUTABLE",
+    "The type of an item never changes: create another item instead",
+  );
+}
+
+export function itemHasAnalogs(): ApiException {
+  return new ApiException(
+    409,
+    "CATALOG_ITEM_HAS_ANALOGS",
+    "An item with analogs stays in its subcategory: remove the links first",
+  );
+}
+
+export function valuesRejected(rejections: CatalogValueRejection[]): ApiException {
+  const details: CatalogValuesRejectedDetails = { rejections };
+  const conflict = rejections.some((rejection) => rejection.reason === "conflict");
+  return new ApiException(
+    conflict ? 409 : 400,
+    "CATALOG_VALUES_REJECTED",
+    conflict
+      ? "Some values were changed by someone else meanwhile; nothing was written"
+      : "Some values can't be written; nothing was written",
+    { details },
+  );
+}
+
+export function analogInvalid(reason: CatalogAnalogInvalidDetails["reason"]): ApiException {
+  const details: CatalogAnalogInvalidDetails = { reason };
+  const messages: Record<CatalogAnalogInvalidDetails["reason"], string> = {
+    self: "An item is not its own analog",
+    not_part: "Only parts are linked as analogs",
+    other_category: "Analogs are parts of one subcategory",
+    archived: "An archived item takes no new links",
+  };
+  return new ApiException(400, "CATALOG_ANALOG_INVALID", messages[reason], { details });
 }

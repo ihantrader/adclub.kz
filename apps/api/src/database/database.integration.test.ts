@@ -78,10 +78,80 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789660681238_add-sign-in-data-cleanup-indexes",
       "1789677720444_create-audit-log",
       "1789740000000_create-catalog-structure",
+      "1789830000000_create-catalog-items",
     ]);
   });
 
-  it("rolls back the latest migration only (the catalog structure), keeping the journal", async () => {
+  it("rolls back the latest migration only (catalog items), keeping the structure", async () => {
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('brakes', 'goods', 1) RETURNING id",
+    );
+    const pads = await client.query<{ id: string }>(
+      `INSERT INTO category (code, kind, level, parent_id, parent_level)
+       VALUES ('brake_pads', 'goods', 2, $1, 1) RETURNING id`,
+      [node.rows[0]!.id],
+    );
+    const axle = await client.query<{ id: string }>(
+      `INSERT INTO attribute (category_id, code, value_type) VALUES ($1, 'axle', 'enum') RETURNING id`,
+      [pads.rows[0]!.id],
+    );
+    const front = await client.query<{ id: string }>(
+      "INSERT INTO attribute_option (attribute_id, code) VALUES ($1, 'front') RETURNING id",
+      [axle.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    await client.query(
+      "INSERT INTO brand_spelling (brand_id, text, key, is_name) VALUES ($1, 'Geely', 'geely', true)",
+      [brand.rows[0]!.id],
+    );
+    const items: string[] = [];
+    for (const article of ["04465-0K090", "GDB3534"]) {
+      const item = await client.query<{ id: string }>(
+        `INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id, article, article_norm)
+         VALUES ('part', $1, 'goods', $2, $3, $4) RETURNING id`,
+        [pads.rows[0]!.id, brand.rows[0]!.id, article, article.replace(/[^A-Z0-9]/g, "")],
+      );
+      items.push(item.rows[0]!.id);
+      await client.query(
+        `INSERT INTO item_attribute_value (item_id, attribute_id, attribute_value_type, value_option_id, source)
+         VALUES ($1, $2, 'enum', $3, 'admin')`,
+        [item.rows[0]!.id, axle.rows[0]!.id, front.rows[0]!.id],
+      );
+      await client.query(
+        `INSERT INTO translation (entity_type, entity_id, field, lang, text, origin, is_manually_edited)
+         VALUES ('catalog_item', $1, 'name', 'ru', 'Колодки', 'source', true)`,
+        [item.rows[0]!.id],
+      );
+    }
+    items.sort();
+    await client.query(
+      "INSERT INTO item_analog (item_id, analog_item_id, category_id) VALUES ($1, $2, $3)",
+      [items[0], items[1], pads.rows[0]!.id],
+    );
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    for (const table of [
+      "brand",
+      "brand_spelling",
+      "catalog_item",
+      "item_attribute_value",
+      "item_analog",
+    ]) {
+      expect(await tableExists(client, table), table).toBe(false);
+    }
+    // The structure stays; the items' names go with them.
+    expect(await tableExists(client, "category")).toBe(true);
+    const texts = await client.query("SELECT entity_type FROM translation");
+    expect(texts.rows).toEqual([]);
+    await client.query("DELETE FROM attribute_option");
+    await client.query("DELETE FROM attribute");
+    await client.query("DELETE FROM category WHERE level = 2");
+    await client.query("DELETE FROM category");
+  });
+
+  it("rolls back the next one (the catalog structure), keeping the journal", async () => {
     const node = await client.query<{ id: string }>(
       "INSERT INTO category (code, kind, level) VALUES ('brakes', 'goods', 1) RETURNING id",
     );
@@ -259,6 +329,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(await tableExists(client, "admin_user")).toBe(true);
     expect(await tableExists(client, "app_setting")).toBe(true);
     expect(await tableExists(client, "app_setting_change")).toBe(true);
+    expect(await tableExists(client, "catalog_item")).toBe(true);
+    expect(await tableExists(client, "item_analog")).toBe(true);
   });
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {

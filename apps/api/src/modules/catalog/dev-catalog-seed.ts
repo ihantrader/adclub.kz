@@ -1,12 +1,21 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { CategoryIcon, CategoryKind, CreateAttributeBody } from "@adclub/contracts";
+import type {
+  CatalogItemType,
+  CategoryIcon,
+  CategoryKind,
+  CreateAttributeBody,
+} from "@adclub/contracts";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import { CatalogAdminService, type CatalogActor } from "./catalog-admin.service";
+import { CatalogBrandsService } from "./catalog-brands.service";
+import { CatalogItemsService } from "./catalog-items.service";
 
 /**
  * An example tree for development and tests (TASK-010 п. 5; PRODUCT 7.2):
  * the seven goods nodes with 2–4 subcategories each, the attributes of
- * «Моторные масла» and «Тормозные колодки», and three nodes of services.
+ * «Моторные масла» and «Тормозные колодки», and three nodes of services;
+ * with TASK-011 — brands, brake pads of two brands (a pair of analogs),
+ * engine oils by attributes (two of them incomplete) and three services.
  * Kazakh names are a first draft and need checking by a native speaker
  * (TASK-010-REPORT).
  */
@@ -205,7 +214,9 @@ export const devCatalogTree: readonly SeedNode[] = [
             valueType: "enum",
             names: { ru: "Допуск", kk: "Рұқсат", en: "Approval" },
             isFilterable: true,
-            isRequiredForComplete: false,
+            // PRODUCT 7.3: an oil is its brand, viscosity, approval and volume
+            // (with TASK-011 these identify a product — ARCHITECTURE 4.17).
+            isRequiredForComplete: true,
             options: [
               { code: "api_sn", names: same("API SN") },
               { code: "api_sp", names: same("API SP") },
@@ -296,9 +307,147 @@ export const devCatalogTree: readonly SeedNode[] = [
   },
 ];
 
+interface SeedBrand {
+  name: string;
+  aliases: string[];
+  isOem: boolean;
+}
+
+interface SeedItem {
+  type: CatalogItemType;
+  /** The code of the subcategory. */
+  category: string;
+  brand?: string;
+  article?: string;
+  names: Names;
+  /** By attribute code: a number, an option code, yes/no or a text. */
+  values?: Record<string, number | string | boolean>;
+}
+
+/** Brands and items for development and tests (TASK-011 requirement 8). */
+export const devCatalogBrands: readonly SeedBrand[] = [
+  { name: "Geely", aliases: ["GEELY Auto", "Джили"], isOem: true },
+  { name: "TRW", aliases: [], isOem: false },
+  { name: "Shell", aliases: [], isOem: false },
+  { name: "Mobil", aliases: ["Mobil 1"], isOem: false },
+];
+
+export const devCatalogItems: readonly SeedItem[] = [
+  {
+    type: "part",
+    category: "brake_pads",
+    brand: "Geely",
+    article: "04465-0K090",
+    names: {
+      ru: "Колодки тормозные передние",
+      kk: "Алдыңғы тежегіш қалыптары",
+      en: "Front brake pads",
+    },
+    values: { axle: "front" },
+  },
+  {
+    type: "part",
+    category: "brake_pads",
+    brand: "TRW",
+    article: "GDB3534",
+    names: {
+      ru: "Колодки тормозные передние TRW",
+      kk: "TRW алдыңғы тежегіш қалыптары",
+      en: "TRW front brake pads",
+    },
+    values: { axle: "front" },
+  },
+  {
+    type: "part",
+    category: "brake_pads",
+    brand: "Geely",
+    article: "4050068800",
+    names: {
+      ru: "Колодки тормозные задние",
+      kk: "Артқы тежегіш қалыптары",
+      en: "Rear brake pads",
+    },
+    values: { axle: "rear" },
+  },
+  {
+    type: "generic",
+    category: "engine_oils",
+    brand: "Shell",
+    names: same("Shell Helix HX8 5W-30, 4 л"),
+    values: { viscosity: "5w_30", approval: "api_sp", volume: 4 },
+  },
+  {
+    type: "generic",
+    category: "engine_oils",
+    brand: "Mobil",
+    names: same("Mobil Super 3000 5W-40, 4 л"),
+    values: { viscosity: "5w_40", approval: "acea_a3_b4", volume: 4 },
+  },
+  {
+    // Incomplete: no approval yet.
+    type: "generic",
+    category: "engine_oils",
+    brand: "Shell",
+    names: same("Shell Helix Ultra 0W-20, 1 л"),
+    values: { viscosity: "0w_20", volume: 1 },
+  },
+  {
+    // Incomplete: no volume yet.
+    type: "generic",
+    category: "engine_oils",
+    brand: "Mobil",
+    names: same("Mobil 1 ESP 5W-30"),
+    values: { viscosity: "5w_30", approval: "acea_c3" },
+  },
+  {
+    type: "service",
+    category: "oil_change",
+    names: {
+      ru: "Замена моторного масла",
+      kk: "Мотор майын ауыстыру",
+      en: "Engine oil change",
+    },
+  },
+  {
+    type: "service",
+    category: "brake_pad_replacement",
+    names: {
+      ru: "Замена передних тормозных колодок",
+      kk: "Алдыңғы тежегіш қалыптарын ауыстыру",
+      en: "Front brake pad replacement",
+    },
+  },
+  {
+    type: "service",
+    category: "computer_diagnostics",
+    names: {
+      ru: "Компьютерная диагностика двигателя",
+      kk: "Қозғалтқышты компьютерлік диагностикалау",
+      en: "Engine computer diagnostics",
+    },
+  },
+];
+
+/** Pairs of analogs, each item by its brand and article. */
+export const devCatalogAnalogs: readonly [[string, string], [string, string]][] = [
+  [
+    ["Geely", "04465-0K090"],
+    ["TRW", "GDB3534"],
+  ],
+];
+
+interface SeedCounts {
+  categories: number;
+  attributes: number;
+  options: number;
+  brands: number;
+  items: number;
+  analogs: number;
+}
+
 export interface DevCatalogSeedResult {
-  created: { categories: number; attributes: number; options: number };
-  existing: { categories: number; attributes: number; options: number };
+  created: SeedCounts;
+  existing: SeedCounts;
 }
 
 export class DevCatalogSeedError extends Error {}
@@ -319,6 +468,8 @@ export class DevCatalogSeed {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CatalogAdminService) private readonly catalog: CatalogAdminService,
+    @Inject(CatalogBrandsService) private readonly brands: CatalogBrandsService,
+    @Inject(CatalogItemsService) private readonly items: CatalogItemsService,
   ) {}
 
   async run(): Promise<DevCatalogSeedResult> {
@@ -327,10 +478,15 @@ export class DevCatalogSeed {
         "The catalog is kept by the administrator; the example tree is for development and tests only",
       );
     }
-    const result: DevCatalogSeedResult = {
-      created: { categories: 0, attributes: 0, options: 0 },
-      existing: { categories: 0, attributes: 0, options: 0 },
-    };
+    const zero = (): SeedCounts => ({
+      categories: 0,
+      attributes: 0,
+      options: 0,
+      brands: 0,
+      items: 0,
+      analogs: 0,
+    });
+    const result: DevCatalogSeedResult = { created: zero(), existing: zero() };
     for (const node of devCatalogTree) {
       const nodeId = await this.category(result, {
         code: node.code,
@@ -351,10 +507,80 @@ export class DevCatalogSeed {
         }
       }
     }
+    await this.seedItems(result);
     this.logger.log(
       `Development catalog seeded created=${JSON.stringify(result.created)} existing=${JSON.stringify(result.existing)}`,
     );
     return result;
+  }
+
+  /** Brands, items with their values, and analogs; what exists already is left as it is. */
+  private async seedItems(result: DevCatalogSeedResult): Promise<void> {
+    const brandIds = new Map<string, string>();
+    for (const spec of devCatalogBrands) {
+      const existing = await this.brands.findBySpelling(spec.name);
+      if (existing) {
+        result.existing.brands += 1;
+        brandIds.set(spec.name, existing.id);
+        continue;
+      }
+      const created = await this.brands.create(spec, OPERATOR);
+      result.created.brands += 1;
+      brandIds.set(spec.name, created.id);
+    }
+    const itemIds = new Map<string, string>();
+    for (const spec of devCatalogItems) {
+      const owner = (await this.catalog.findCategoryByCode(spec.category))!;
+      const brandId = spec.brand ? brandIds.get(spec.brand)! : null;
+      const existing =
+        brandId && spec.article
+          ? await this.items.findByArticle(brandId, spec.article)
+          : await this.items.findByRussianName(owner.id, spec.names.ru);
+      if (existing) {
+        result.existing.items += 1;
+        if (spec.article) {
+          itemIds.set(`${spec.brand}|${spec.article}`, existing.id);
+        }
+        continue;
+      }
+      const values: { attributeId: string; value: number | string | boolean }[] = [];
+      for (const [code, value] of Object.entries(spec.values ?? {})) {
+        const target = (await this.catalog.findAttributeByCode(owner.id, code))!;
+        values.push({
+          attributeId: target.id,
+          value:
+            target.valueType === "enum"
+              ? (await this.catalog.findOptionByCode(target.id, String(value)))!.id
+              : value,
+        });
+      }
+      const card = await this.items.create(
+        {
+          type: spec.type,
+          categoryId: owner.id,
+          brandId,
+          article: spec.article ?? null,
+          names: spec.names,
+          values,
+        },
+        OPERATOR,
+      );
+      result.created.items += 1;
+      if (spec.article) {
+        itemIds.set(`${spec.brand}|${spec.article}`, card.item.id);
+      }
+    }
+    for (const [[brandA, articleA], [brandB, articleB]] of devCatalogAnalogs) {
+      const itemId = itemIds.get(`${brandA}|${articleA}`)!;
+      const analogId = itemIds.get(`${brandB}|${articleB}`)!;
+      const card = await this.items.card(itemId);
+      if (card.analogs.some((analog) => analog.item.id === analogId)) {
+        result.existing.analogs += 1;
+        continue;
+      }
+      await this.items.linkAnalog(itemId, analogId, OPERATOR);
+      result.created.analogs += 1;
+    }
   }
 
   private async category(

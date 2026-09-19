@@ -111,6 +111,11 @@ describe("ormTables", () => {
         "attribute",
         "attribute_option",
         "translation",
+        "brand",
+        "brand_spelling",
+        "catalog_item",
+        "item_attribute_value",
+        "item_analog",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

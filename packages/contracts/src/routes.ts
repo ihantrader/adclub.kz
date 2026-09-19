@@ -36,6 +36,28 @@ import {
   updateAttributeOptionBodySchema,
   updateCategoryBodySchema,
 } from "./catalog";
+import {
+  adminBrandPageSchema,
+  adminBrandResponseSchema,
+  adminCatalogItemCardSchema,
+  adminCatalogItemPageSchema,
+  brandIdPathSchema,
+  brandListQuerySchema,
+  catalogItemIdPathSchema,
+  catalogItemListQuerySchema,
+  categoryFillPageSchema,
+  categoryFillQuerySchema,
+  createBrandBodySchema,
+  createCatalogItemBodySchema,
+  fillCategoryBodySchema,
+  fillCategoryResponseSchema,
+  itemAnalogPathSchema,
+  linkItemAnalogBodySchema,
+  setCatalogItemStatusBodySchema,
+  setItemValuesBodySchema,
+  updateBrandBodySchema,
+  updateCatalogItemBodySchema,
+} from "./catalog-items";
 import { clientPolicyResponseSchema } from "./client-policy";
 import { healthCheckResponseSchema } from "./health";
 import {
@@ -829,6 +851,245 @@ export const apiRoutes = {
     },
     responses: {
       200: { description: "The option", schema: adminAttributeOptionResponseSchema },
+    },
+  }),
+  listAdminBrands: defineRoute({
+    operationId: "listAdminBrands",
+    method: "GET",
+    path: "/admin/catalog/brands",
+    summary:
+      "Brands by name with their spellings; search by a part of any spelling, case and spaces ignored",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: brandListQuerySchema,
+    responses: {
+      200: { description: "A page of brands", schema: adminBrandPageSchema },
+    },
+  }),
+  createBrand: defineRoute({
+    operationId: "createBrand",
+    method: "POST",
+    path: "/admin/catalog/brands",
+    summary: "Create a brand with its name, other spellings and the OEM flag",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: {
+      description: "The new brand",
+      schema: createBrandBodySchema,
+    },
+    responses: {
+      201: { description: "The brand", schema: adminBrandResponseSchema },
+    },
+  }),
+  updateBrand: defineRoute({
+    operationId: "updateBrand",
+    method: "PATCH",
+    path: "/admin/catalog/brands/{brandId}",
+    summary: "Rename a brand, replace its other spellings or change the OEM flag",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: brandIdPathSchema,
+    requestBody: {
+      description: "The fields to change and the version they were read at",
+      schema: updateBrandBodySchema,
+    },
+    responses: {
+      200: { description: "The brand", schema: adminBrandResponseSchema },
+    },
+  }),
+  setBrandStatus: defineRoute({
+    operationId: "setBrandStatus",
+    method: "POST",
+    path: "/admin/catalog/brands/{brandId}/status",
+    summary: "Archive a brand (no new items get it, existing ones keep it) or restore it",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: brandIdPathSchema,
+    requestBody: {
+      description: "The new status and the version it replaces",
+      schema: setCatalogEntryStatusBodySchema,
+    },
+    responses: {
+      200: { description: "The brand", schema: adminBrandResponseSchema },
+    },
+  }),
+  listAdminCatalogItems: defineRoute({
+    operationId: "listAdminCatalogItems",
+    method: "GET",
+    path: "/admin/catalog/items",
+    summary:
+      "Items of the catalog, newest first: search by a part of the normalized article or of a name in any language; filters by category, brand, type, status and completeness",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: catalogItemListQuerySchema,
+    responses: {
+      200: { description: "A page of items", schema: adminCatalogItemPageSchema },
+    },
+  }),
+  createCatalogItem: defineRoute({
+    operationId: "createCatalogItem",
+    method: "POST",
+    path: "/admin/catalog/items",
+    summary:
+      "Create a part, a product described by attributes, or a service; a duplicate is refused with a link to the existing item",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: {
+      description: "The new item and its values",
+      schema: createCatalogItemBodySchema,
+    },
+    responses: {
+      201: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  getAdminCatalogItem: defineRoute({
+    operationId: "getAdminCatalogItem",
+    method: "GET",
+    path: "/admin/catalog/items/{itemId}",
+    summary:
+      "The item card: the item, the active attributes of its category with its values (empty ones explicit) and its analogs",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    responses: {
+      200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  updateCatalogItem: defineRoute({
+    operationId: "updateCatalogItem",
+    method: "PATCH",
+    path: "/admin/catalog/items/{itemId}",
+    summary:
+      "Change the category (of the same kind), brand, article or names of an item; its type never changes",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    requestBody: {
+      description: "The fields to change and the version they were read at",
+      schema: updateCatalogItemBodySchema,
+    },
+    responses: {
+      200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  setCatalogItemStatus: defineRoute({
+    operationId: "setCatalogItemStatus",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/status",
+    summary: "Make an item a draft, active or archived; there is no deletion",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    requestBody: {
+      description: "The new status and the version it replaces",
+      schema: setCatalogItemStatusBodySchema,
+    },
+    responses: {
+      200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  setCatalogItemValues: defineRoute({
+    operationId: "setCatalogItemValues",
+    method: "PUT",
+    path: "/admin/catalog/items/{itemId}/values",
+    summary: "Set or empty attribute values of an item, all or none, with the refused ones listed",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    requestBody: {
+      description: "The values and the version of the item they were read at",
+      schema: setItemValuesBodySchema,
+    },
+    responses: {
+      200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  linkItemAnalog: defineRoute({
+    operationId: "linkItemAnalog",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/analogs",
+    summary:
+      "Link two parts of one subcategory as analogs of each other (a link that exists changes nothing)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    requestBody: {
+      description: "The analog",
+      schema: linkItemAnalogBodySchema,
+    },
+    responses: {
+      200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  unlinkItemAnalog: defineRoute({
+    operationId: "unlinkItemAnalog",
+    method: "DELETE",
+    path: "/admin/catalog/items/{itemId}/analogs/{analogItemId}",
+    summary: "Remove the analog link between two items",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: itemAnalogPathSchema,
+    responses: {
+      200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  getCategoryFill: defineRoute({
+    operationId: "getCategoryFill",
+    method: "GET",
+    path: "/admin/catalog/categories/{categoryId}/fill",
+    summary:
+      "The bulk fill table: items of a subcategory by its active attributes, newest first, optionally only those where one attribute is empty",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: categoryIdPathSchema,
+    query: categoryFillQuerySchema,
+    responses: {
+      200: { description: "A page of the table", schema: categoryFillPageSchema },
+    },
+  }),
+  fillCategory: defineRoute({
+    operationId: "fillCategory",
+    method: "PUT",
+    path: "/admin/catalog/categories/{categoryId}/fill",
+    summary:
+      "Change many cells of the bulk fill table at once: all or none, a cell changed by someone else since it was read is a conflict",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: categoryIdPathSchema,
+    requestBody: {
+      description: "The cells with the values they were read with",
+      schema: fillCategoryBodySchema,
+    },
+    responses: {
+      200: { description: "The rows changed", schema: fillCategoryResponseSchema },
     },
   }),
 } as const;

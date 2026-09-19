@@ -539,12 +539,13 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         archivedAt: null,
         visibleToClients: true,
       });
-      // No route deletes anything.
+      // No route deletes a catalog entry; the one DELETE (TASK-011) removes
+      // a link between two items, never an item.
       expect(
-        Object.values(apiRoutes).filter(
-          (route) => route.path.startsWith("/admin/catalog") && route.method === "DELETE",
-        ),
-      ).toEqual([]);
+        Object.values(apiRoutes)
+          .filter((route) => route.path.startsWith("/admin/catalog") && route.method === "DELETE")
+          .map((route) => route.path),
+      ).toEqual(["/admin/catalog/items/{itemId}/analogs/{analogItemId}"]);
     });
 
     it("checks names, icons, codes and the compatibility flag", async () => {
@@ -1599,11 +1600,16 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         categoryId: pads.id,
         attributeId: attribute.id,
         optionId: attribute.options[0]!.id,
+        // TASK-011: the caller is refused before anything is looked up.
+        brandId: randomUUID(),
+        itemId: randomUUID(),
+        analogItemId: randomUUID(),
       };
       const adminRoutes = Object.values(apiRoutes).filter((route) =>
         route.path.startsWith("/admin/catalog"),
       );
-      expect(adminRoutes).toHaveLength(14);
+      // 14 of the structure (TASK-010) and 14 of brands, items and the fill (TASK-011).
+      expect(adminRoutes).toHaveLength(28);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },
@@ -1652,7 +1658,14 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
     it("fills the example tree once; a second run creates nothing; not outside development and tests", async () => {
       const seed = app.get(DevCatalogSeed);
       const first = await seed.run();
-      expect(first.created).toEqual({ categories: 37, attributes: 4, options: 10 });
+      expect(first.created).toEqual({
+        categories: 37,
+        attributes: 4,
+        options: 10,
+        brands: 4,
+        items: 10,
+        analogs: 1,
+      });
       const rows = {
         categories: await count("category"),
         attributes: await count("attribute"),
@@ -1660,7 +1673,14 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         texts: await count("translation"),
       };
       const second = await seed.run();
-      expect(second.created).toEqual({ categories: 0, attributes: 0, options: 0 });
+      expect(second.created).toEqual({
+        categories: 0,
+        attributes: 0,
+        options: 0,
+        brands: 0,
+        items: 0,
+        analogs: 0,
+      });
       expect(second.existing).toEqual(first.created);
       expect({
         categories: await count("category"),

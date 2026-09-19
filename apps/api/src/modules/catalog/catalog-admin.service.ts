@@ -38,6 +38,7 @@ import {
   validationError,
   versionConflict,
 } from "./catalog-errors";
+import { STRUCTURE_LOCK } from "./catalog-locks";
 import {
   describeTexts,
   languagesOf,
@@ -49,6 +50,7 @@ import {
   writeTexts,
   type TextIndex,
 } from "./catalog-texts";
+import { refreshCategoryCompleteness } from "./completeness";
 import {
   attribute,
   attributeOption,
@@ -67,12 +69,13 @@ type Names = Record<CatalogLanguage, string | null>;
 const NO_TEXTS: Names = { kk: null, ru: null, en: null };
 
 /**
- * Every change of the catalog structure takes this one transaction lock:
+ * Every change of the catalog structure takes this one transaction lock
+ * (exclusively; changes of items take it shared — catalog-locks.ts):
  * changes are rare (an administrator at a screen), and with them
  * serialized the checks that span rows — two levels, unique names among
  * neighbours, the full list of siblings to reorder — can't race.
  */
-const CATALOG_LOCK = sql`SELECT pg_advisory_xact_lock(hashtext('catalog_structure'))`;
+const CATALOG_LOCK = STRUCTURE_LOCK;
 
 function iso(date: Date | null): string | null {
   return date ? date.toISOString() : null;
@@ -507,6 +510,9 @@ export class CatalogAdminService {
           mergeTexts(NO_TEXTS, option.names),
         );
       }
+      if (created.isRequiredForComplete) {
+        await refreshCategoryCompleteness(tx, owner.id);
+      }
       const described = await this.describeAttribute(tx, created);
       await this.audit.record(
         {
@@ -605,6 +611,9 @@ export class CatalogAdminService {
         .returning();
       await writeTexts(tx, "attribute", row.id, "name", currentNames, names);
       await writeTexts(tx, "attribute", row.id, "unit", currentUnit, unit);
+      if (isRequiredForComplete !== row.isRequiredForComplete) {
+        await refreshCategoryCompleteness(tx, row.categoryId);
+      }
       await this.audit.record(
         {
           action: auditActions.catalogAttributeChanged,
@@ -658,6 +667,9 @@ export class CatalogAdminService {
         })
         .where(eq(attribute.id, row.id))
         .returning();
+      if (row.isRequiredForComplete) {
+        await refreshCategoryCompleteness(tx, row.categoryId);
+      }
       await this.audit.record(
         {
           action: auditActions.catalogAttributeStatusChanged,
@@ -870,6 +882,23 @@ export class CatalogAdminService {
       );
       return this.describeAttribute(tx, owner);
     });
+  }
+
+  /**
+   * Items of the attribute's category (every status) without a value of it
+   * (SCREENS A-CAT-02 «У N позиций значение будет пустым»).
+   */
+  async itemsWithoutValue(
+    row: Pick<AdminAttribute, "id" | "categoryId">,
+    executor: DbExecutor = this.database.db,
+  ): Promise<number> {
+    const result = await executor.execute<{ count: string }>(sql`
+      SELECT count(*)::text AS count FROM catalog_item i
+      WHERE i.category_id = ${row.categoryId}
+        AND NOT EXISTS (
+          SELECT 1 FROM item_attribute_value v WHERE v.item_id = i.id AND v.attribute_id = ${row.id}
+        )`);
+    return Number(result.rows[0]?.count ?? 0);
   }
 
   // -------------------------------------------------------------- helpers

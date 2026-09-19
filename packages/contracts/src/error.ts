@@ -80,6 +80,25 @@ import { clientPlatformSchema } from "./client";
  *   else since the order the change was made from (`expectedOrder`);
  *   nothing was written. `details` is `CatalogOrderConflictDetails`.
  *
+ * Items of the catalog (TASK-011, ARCHITECTURE 4.17):
+ * - `CATALOG_BRAND_SPELLING_TAKEN` (409): another brand already has this
+ *   name or spelling (case and spaces ignored); `details` is
+ *   `CatalogBrandSpellingTakenDetails`.
+ * - `CATALOG_BRAND_ARCHIVED` (409): an archived brand can't be chosen.
+ * - `CATALOG_CATEGORY_ARCHIVED` (409): an archived subcategory (or one of an
+ *   archived node) can't take items.
+ * - `CATALOG_ITEM_DUPLICATE` (409): «Такая позиция уже есть» — the same
+ *   brand and article, or a product with the same brand and identifying
+ *   values in the category; `details` is `CatalogItemDuplicateDetails`.
+ * - `CATALOG_ITEM_TYPE_IMMUTABLE` (400): the type of an item never changes.
+ * - `CATALOG_ITEM_HAS_ANALOGS` (409): an item with analogs stays in its
+ *   subcategory — remove the links first.
+ * - `CATALOG_VALUES_REJECTED` (400; 409 when a value was changed by someone
+ *   else meanwhile): nothing was written; `details` is
+ *   `CatalogValuesRejectedDetails` with every refused value.
+ * - `CATALOG_ANALOG_INVALID` (400): `details` is
+ *   `CatalogAnalogInvalidDetails`.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -142,6 +161,15 @@ export const errorCodeSchema = z.enum([
   "CATALOG_ATTRIBUTE_TYPE_IMMUTABLE",
   "CATALOG_ORDER_MISMATCH",
   "CATALOG_ORDER_CONFLICT",
+  // Catalog items (TASK-011, ARCHITECTURE 4.17).
+  "CATALOG_BRAND_SPELLING_TAKEN",
+  "CATALOG_BRAND_ARCHIVED",
+  "CATALOG_CATEGORY_ARCHIVED",
+  "CATALOG_ITEM_DUPLICATE",
+  "CATALOG_ITEM_TYPE_IMMUTABLE",
+  "CATALOG_ITEM_HAS_ANALOGS",
+  "CATALOG_VALUES_REJECTED",
+  "CATALOG_ANALOG_INVALID",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

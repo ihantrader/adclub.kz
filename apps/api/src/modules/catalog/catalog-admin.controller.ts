@@ -15,6 +15,7 @@ import {
   updateAttributeBodySchema,
   updateAttributeOptionBodySchema,
   updateCategoryBodySchema,
+  type AdminAttribute,
   type AdminAttributeListResponse,
   type AdminAttributeOptionResponse,
   type AdminAttributeResponse,
@@ -40,7 +41,7 @@ import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../iden
 import { CatalogAdminService, type CatalogActor } from "./catalog-admin.service";
 
 /** The administrator a session of the `admin` context belongs to (the access rule set it). */
-function adminActor(session: AuthenticatedSession): CatalogActor {
+export function adminActor(session: AuthenticatedSession): CatalogActor {
   if (!session.adminUserId) {
     throw new Error("An admin route reached without an administrator");
   }
@@ -52,6 +53,11 @@ function adminActor(session: AuthenticatedSession): CatalogActor {
 export class CatalogAdminController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(CatalogAdminService) private readonly catalog: CatalogAdminService) {}
+
+  /** An attribute with the number of items that have no value of it (TASK-011, A-CAT-02). */
+  private async withCount(attribute: AdminAttribute): Promise<AdminAttributeResponse> {
+    return { attribute, itemsWithoutValue: await this.catalog.itemsWithoutValue(attribute) };
+  }
 
   @SessionRoute(apiRoutes.listAdminCategories)
   tree(): Promise<AdminCategoryTreeResponse> {
@@ -120,9 +126,9 @@ export class CatalogAdminController {
     @Body(new ZodValidationPipe(createAttributeBodySchema)) body: CreateAttributeBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AdminAttributeResponse> {
-    return {
-      attribute: await this.catalog.createAttribute(params.categoryId, body, adminActor(session)),
-    };
+    return this.withCount(
+      await this.catalog.createAttribute(params.categoryId, body, adminActor(session)),
+    );
   }
 
   @SessionRoute(apiRoutes.reorderAttributes)
@@ -145,9 +151,9 @@ export class CatalogAdminController {
     @Body(new ZodValidationPipe(updateAttributeBodySchema)) body: UpdateAttributeBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AdminAttributeResponse> {
-    return {
-      attribute: await this.catalog.updateAttribute(params.attributeId, body, adminActor(session)),
-    };
+    return this.withCount(
+      await this.catalog.updateAttribute(params.attributeId, body, adminActor(session)),
+    );
   }
 
   @SessionRoute(apiRoutes.setAttributeStatus)
@@ -156,14 +162,14 @@ export class CatalogAdminController {
     @Body(new ZodValidationPipe(setCatalogEntryStatusBodySchema)) body: SetCatalogEntryStatusBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AdminAttributeResponse> {
-    return {
-      attribute: await this.catalog.setAttributeStatus(
+    return this.withCount(
+      await this.catalog.setAttributeStatus(
         params.attributeId,
         body.status,
         body.expectedVersion,
         adminActor(session),
       ),
-    };
+    );
   }
 
   @SessionRoute(apiRoutes.createAttributeOption)
@@ -184,14 +190,14 @@ export class CatalogAdminController {
     body: ReorderAttributeOptionsBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AdminAttributeResponse> {
-    return {
-      attribute: await this.catalog.reorderOptions(
+    return this.withCount(
+      await this.catalog.reorderOptions(
         params.attributeId,
         body.optionIds,
         body.expectedOrder,
         adminActor(session),
       ),
-    };
+    );
   }
 
   @SessionRoute(apiRoutes.updateAttributeOption)

@@ -51,7 +51,7 @@ export interface OnDemandJobDefinition<Payload> extends JobDefinitionBase {
   readonly payload: z.ZodType<Payload>;
 }
 
-/** Reads a setting for a schedule; the value is at most 30 seconds old. */
+/** Reads a setting for a schedule, as stored when the schedule pass began. */
 export type SettingReader = <Key extends SettingKey>(key: Key) => Promise<SettingValue<Key>>;
 
 export interface SweepOptions {

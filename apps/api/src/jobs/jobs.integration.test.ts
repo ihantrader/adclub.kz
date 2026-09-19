@@ -13,7 +13,7 @@ import { ConfigModule, loadConfig, type AppConfig } from "../config";
 import { DatabaseModule, DatabaseService, type DbExecutor } from "../database";
 import { runMigrate } from "../database/migrate-cli";
 import { AuditModule } from "../modules/audit";
-import { SettingsModule } from "../modules/settings";
+import { AppSettings, SettingsModule } from "../modules/settings";
 import { ObservabilityModule } from "../observability";
 import { captureOutput, rememberSecret } from "../testing/output-capture";
 import { TestSettings } from "../testing/settings";
@@ -301,6 +301,7 @@ class TestJobsHost {
     role: "producer" | "worker",
     name: string,
     tuning: Partial<JobsTuning>,
+    settingsMaxAgeMs = 300,
   ): DynamicModule {
     return {
       module: TestJobsHost,
@@ -310,7 +311,7 @@ class TestJobsHost {
         DatabaseModule,
         // Settings record their changes in the action journal (TASK-009).
         AuditModule.forRoot({ http: false }),
-        SettingsModule.forRoot({ http: false, cache: { maxAgeMs: 300 } }),
+        SettingsModule.forRoot({ http: false, cache: { maxAgeMs: settingsMaxAgeMs } }),
         JobsModule.forRoot({ role, catalog: CATALOG, tuning }),
       ],
       providers: [
@@ -354,7 +355,12 @@ describe("background jobs (PostgreSQL)", () => {
 
   async function start(
     name: string,
-    options: { role?: "producer" | "worker"; tuning?: Partial<JobsTuning>; proxied?: boolean } = {},
+    options: {
+      role?: "producer" | "worker";
+      tuning?: Partial<JobsTuning>;
+      proxied?: boolean;
+      settingsMaxAgeMs?: number;
+    } = {},
   ): Promise<INestApplicationContext> {
     const app = await NestFactory.createApplicationContext(
       TestJobsHost.forRoot(
@@ -362,6 +368,7 @@ describe("background jobs (PostgreSQL)", () => {
         options.role ?? "worker",
         name,
         { ...FAST, ...options.tuning },
+        options.settingsMaxAgeMs,
       ),
       { bufferLogs: true },
     );
@@ -582,6 +589,36 @@ describe("background jobs (PostgreSQL)", () => {
       // Any worker's sync gives the same schedule; nothing flips back.
       await second.get(JobRunner).syncSchedules();
       expect((await boss.getSchedule(dailyJob.name))?.cron).toBe(dailyAt(hour));
+    });
+
+    it("never puts a changed schedule back from a worker whose settings are cached from before the change", async () => {
+      const boss = await ready(first);
+      const cronNow = async () => (await boss.getSchedule(dailyJob.name))?.cron;
+      const before = (almatyHourAgo() + 7) % 24;
+      const after = (before + 1) % 24;
+      await new TestSettings(producer).set({ billing_notify_hour: before });
+      await waitFor(async () => (await cronNow()) === dailyAt(before), "the schedule at `before`");
+      // A third worker that read the settings now and keeps them for an
+      // hour; it synchronizes only when the test says so.
+      const stale = await start("stale", {
+        tuning: { scheduleSyncIntervalMs: 3_600_000 },
+        settingsMaxAgeMs: 3_600_000,
+      });
+      try {
+        await ready(stale);
+        await stale.get(JobRunner).syncSchedules();
+        await new TestSettings(producer).set({ billing_notify_hour: after });
+        // Its cache really is from before the change…
+        expect(await stale.get(AppSettings).get("billing_notify_hour")).toBe(before);
+        await waitFor(async () => (await cronNow()) === dailyAt(after), "the schedule at `after`");
+        // …and still its pass keeps the new time.
+        await stale.get(JobRunner).syncSchedules();
+        expect(await cronNow()).toBe(dailyAt(after));
+        await Promise.all([first, second, stale].map((app) => app.get(JobRunner).syncSchedules()));
+        expect(await cronNow()).toBe(dailyAt(after));
+      } finally {
+        await stop(stale);
+      }
     });
 
     it("never runs a singleton job twice at a time, whichever worker takes it", async () => {

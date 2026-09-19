@@ -154,6 +154,15 @@ export class AppSettings implements OnModuleInit {
     await this.reload();
   }
 
+  /**
+   * The values read by a query that starts after this call (and the cache
+   * updated with them). Throws if the database can't be read.
+   */
+  async fresh(): Promise<Readonly<SettingValues>> {
+    await this.refresh();
+    return this.snapshot!.values;
+  }
+
   private reload(): Promise<void> {
     this.loading ??= this.load().finally(() => {
       this.loading = undefined;

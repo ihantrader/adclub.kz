@@ -29,5 +29,5 @@ export { JobSettingsReader } from "./job-settings";
 export { SweepRunner } from "./sweeper";
 export type { Sweeper, SweepResult } from "./sweeper";
 export { jobsTables } from "./schema";
-export { DevJobsModule, devAlwaysFailingJob, devJobCatalog } from "./dev-jobs";
+export { DevJobsModule, devAlwaysFailingJob, devDailyJob, devJobCatalog } from "./dev-jobs";
 export { JOB_QUEUE_SCHEMA } from "./job-queue-schema";

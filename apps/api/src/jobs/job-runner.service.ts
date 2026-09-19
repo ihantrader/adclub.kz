@@ -5,11 +5,17 @@ import {
   type BeforeApplicationShutdown,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
+import { sql } from "drizzle-orm";
 import type { JobResult, JobWithMetadata, PgBoss } from "pg-boss";
 import { describeError } from "../common/health";
-import { withoutQueryParameters } from "../database";
+import { DatabaseService, withoutQueryParameters } from "../database";
 import { ErrorReporter, sanitizeForLog } from "../observability";
-import { ALMATY_TIME_ZONE, type JobDefinition, type PeriodicJobDefinition } from "./job-definition";
+import {
+  ALMATY_TIME_ZONE,
+  type JobDefinition,
+  type PeriodicJobDefinition,
+  type SettingReader,
+} from "./job-definition";
 import { PermanentJobError } from "./job-handler";
 import { JobQueue } from "./job-queue.service";
 import { JobRegistry, type RegisteredJob } from "./job-registry";
@@ -27,6 +33,14 @@ function failureText(error: unknown): string {
   const name = safe instanceof Error ? safe.name : "Error";
   return sanitizeForLog(`${name}: ${describeError(safe)}`).slice(0, 500);
 }
+
+/**
+ * One schedule pass at a time across all workers: each reads the settings
+ * after it holds the lock and writes before releasing it, so the passes
+ * see the stored settings in commit order and a schedule never goes back
+ * to a value an earlier pass already replaced (TASK-011.A).
+ */
+const SCHEDULE_SYNC_LOCK = sql`SELECT pg_advisory_xact_lock(hashtext('job_schedule_sync'))`;
 
 /**
  * The worker side of the queue (ARCHITECTURE 4.12): consumes every
@@ -52,6 +66,7 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
     @Inject(JobRegistry) private readonly registry: JobRegistry,
     @Inject(PeriodicJobStateStore) private readonly states: PeriodicJobStateStore,
     @Inject(JobSettingsReader) private readonly settings: JobSettingsReader,
+    @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(JOBS_OPTIONS) private readonly options: JobsModuleOptions,
   ) {}
 
@@ -169,33 +184,45 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
       (job): job is PeriodicJobDefinition => job.kind === "periodic",
     );
     try {
-      const existing = new Map((await boss.getSchedules()).map((row) => [row.name, row]));
-      for (const job of periodic) {
-        let cron: string;
-        try {
-          cron = await job.schedule((key) => this.settings.get(key));
-        } catch (error) {
-          this.logger.error(
-            `Schedule of ${job.name} could not be computed: ${describeError(error)}`,
-          );
-          continue;
-        }
-        const current = existing.get(job.name);
-        existing.delete(job.name);
-        if (current && current.cron === cron && current.timezone === ALMATY_TIME_ZONE) {
-          continue;
-        }
-        await boss.schedule(job.name, cron, null, { tz: ALMATY_TIME_ZONE, missed: "once" });
-        this.logger.log(
-          `Job schedule ${current ? "changed" : "set"} job=${job.name} cron="${cron}" tz=${ALMATY_TIME_ZONE}${current ? ` was="${current.cron}"` : ""}`,
-        );
-      }
-      for (const name of existing.keys()) {
-        await boss.unschedule(name);
-        this.logger.log(`Job schedule removed job=${name} (no longer declared)`);
-      }
+      await this.database.db.transaction(async (tx) => {
+        await tx.execute(SCHEDULE_SYNC_LOCK);
+        // Not the cache: two workers' caches may hold different values for
+        // up to 30 seconds, and the stale one would put the old time back.
+        const settings = await this.settings.fresh();
+        await this.writeSchedules(boss, periodic, (key) => Promise.resolve(settings[key]));
+      });
     } catch (error) {
       this.logger.warn(`Job schedules could not be synchronized: ${describeError(error)}`);
+    }
+  }
+
+  private async writeSchedules(
+    boss: PgBoss,
+    periodic: PeriodicJobDefinition[],
+    setting: SettingReader,
+  ): Promise<void> {
+    const existing = new Map((await boss.getSchedules()).map((row) => [row.name, row]));
+    for (const job of periodic) {
+      let cron: string;
+      try {
+        cron = await job.schedule(setting);
+      } catch (error) {
+        this.logger.error(`Schedule of ${job.name} could not be computed: ${describeError(error)}`);
+        continue;
+      }
+      const current = existing.get(job.name);
+      existing.delete(job.name);
+      if (current && current.cron === cron && current.timezone === ALMATY_TIME_ZONE) {
+        continue;
+      }
+      await boss.schedule(job.name, cron, null, { tz: ALMATY_TIME_ZONE, missed: "once" });
+      this.logger.log(
+        `Job schedule ${current ? "changed" : "set"} job=${job.name} cron="${cron}" tz=${ALMATY_TIME_ZONE}${current ? ` was="${current.cron}"` : ""}`,
+      );
+    }
+    for (const name of existing.keys()) {
+      await boss.unschedule(name);
+      this.logger.log(`Job schedule removed job=${name} (no longer declared)`);
     }
   }
 

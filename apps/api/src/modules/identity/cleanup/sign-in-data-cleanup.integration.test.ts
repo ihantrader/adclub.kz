@@ -351,6 +351,8 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "SELECT name, cron, timezone FROM pgboss.schedule ORDER BY name",
     );
     expect(rows).toEqual([
+      // Development and tests only: daily at `billing_notify_hour` (10 by default).
+      { name: "dev.daily-at-setting", cron: "0 10 * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-login-codes", cron: "* * * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-sessions", cron: "* * * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-sign-in-steps", cron: "* * * * *", timezone: "Asia/Almaty" },
@@ -399,6 +401,7 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "identity.cleanup-sign-in-steps",
       "identity.cleanup-sessions",
       "dev.always-fails",
+      "dev.daily-at-setting",
     ]);
     expect(status.find((row) => row.job === "identity.cleanup-sessions")).toMatchObject({
       kind: "periodic",

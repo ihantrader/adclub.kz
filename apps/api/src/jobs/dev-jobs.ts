@@ -2,8 +2,8 @@ import { Inject, Injectable, Module, type OnModuleInit } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { DatabaseService } from "../database";
-import { defineJob } from "./job-definition";
-import type { JobHandler } from "./job-handler";
+import { dailyAt, defineJob, definePeriodicJob } from "./job-definition";
+import type { JobHandler, JobRunOutcome, PeriodicJobHandler } from "./job-handler";
 import { JobRegistry } from "./job-registry";
 
 /**
@@ -24,7 +24,21 @@ export const devAlwaysFailingJob = defineJob({
   singleton: false,
 });
 
-export const devJobCatalog = [devAlwaysFailingJob];
+/**
+ * Development and tests only (TASK-011.A): a daily job at the hour of the
+ * setting `billing_notify_hour` that does nothing — so that a schedule
+ * following a setting can be seen in dev (`jobs:status`) before the first
+ * real daily job (billing) exists.
+ */
+export const devDailyJob = definePeriodicJob({
+  name: "dev.daily-at-setting",
+  timeoutSeconds: 30,
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: async (setting) => dailyAt(await setting("billing_notify_hour")),
+});
+
+export const devJobCatalog = [devAlwaysFailingJob, devDailyJob];
 
 @Injectable()
 class DevAlwaysFailingJob implements JobHandler<{ note: string; failOnQuery?: boolean }> {
@@ -42,6 +56,10 @@ class DevAlwaysFailingJob implements JobHandler<{ note: string; failOnQuery?: bo
   }
 }
 
+const devDailyHandler: PeriodicJobHandler = {
+  run: (): Promise<JobRunOutcome> => Promise.resolve({ worked: false }),
+};
+
 @Module({ providers: [DevAlwaysFailingJob] })
 export class DevJobsModule implements OnModuleInit {
   constructor(
@@ -51,5 +69,6 @@ export class DevJobsModule implements OnModuleInit {
 
   onModuleInit(): void {
     this.registry.handle(devAlwaysFailingJob, this.failing);
+    this.registry.handlePeriodic(devDailyJob, devDailyHandler);
   }
 }

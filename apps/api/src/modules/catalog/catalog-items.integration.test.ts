@@ -1683,6 +1683,330 @@ describe("catalog items (PostgreSQL + Redis)", () => {
 
   // -------------------------------------------------------------- search
 
+  // ------------------------------------------- pairs made by the structure
+
+  describe("products made the same by a change of the structure (TASK-011.A)", () => {
+    /** Ids listed by `sameProduct=matching`. */
+    async function matching(categoryId?: string): Promise<string[]> {
+      const scope = categoryId ? `&categoryId=${categoryId}` : "";
+      const page = await ok(
+        await asAdmin("get", `/admin/catalog/items?sameProduct=matching&limit=100${scope}`),
+        (value) => adminCatalogItemPageSchema.parse(value),
+      );
+      expect(page.total).toBe(page.items.length);
+      return page.items.map((entry) => entry.id).sort();
+    }
+
+    async function attributeCall(
+      method: Method,
+      path: string,
+      body: object,
+    ): Promise<{ attribute: AdminAttribute; sameProductItems: number }> {
+      return ok(await asAdmin(method, path, body), (value) =>
+        adminAttributeResponseSchema.parse(value),
+      );
+    }
+
+    async function setValues(itemId: string, values: object[]): Promise<Response> {
+      return asAdmin("put", `/admin/catalog/items/${itemId}/values`, {
+        expectedVersion: (await card(itemId)).item.version,
+        values,
+      });
+    }
+
+    it("reports the pairs, lists them, lets the rest of such an item change and refuses only a change of its identity into another pair", async () => {
+      const f = await fixture();
+      const shellOil = (ru: string, viscosity: string, approval: string, volume: number) =>
+        createItem(oil(f, f.shell.id, ru, { viscosity, approval, volume }));
+      const twin1 = await shellOil("Shell 5W-30 SP 4 л", "5w_30", "api_sp", 4);
+      const twin2 = await shellOil("Shell 5W-30 C3 4 л", "5w_30", "acea_c3", 4);
+      const third = await shellOil("Shell 5W-40 SP 4 л", "5w_40", "api_sp", 4);
+      const small = await shellOil("Shell 5W-30 SP 1 л", "5w_30", "api_sp", 1);
+      // Another brand with the same values is another product.
+      await createItem(
+        oil(f, f.mobil.id, "Mobil 5W-30 SP 4 л", {
+          viscosity: "5w_30",
+          approval: "api_sp",
+          volume: 4,
+        }),
+      );
+      expect(await matching()).toEqual([]);
+
+      // Archiving «Допуск» is not refused; the answer counts the pair.
+      const archived = await attributeCall(
+        "post",
+        `/admin/catalog/attributes/${f.approval.id}/status`,
+        { status: "archived", expectedVersion: f.approval.version },
+      );
+      expect(archived.attribute.status).toBe("archived");
+      expect(archived.sameProductItems).toBe(2);
+      const pair = [twin1.item.id, twin2.item.id].sort();
+      expect(await matching()).toEqual(pair);
+      expect(await matching(f.oils.id)).toEqual(pair);
+      expect(await matching(f.pads.id)).toEqual([]);
+      // A number stored with another scale is the same number.
+      await db.query(
+        "UPDATE item_attribute_value SET value_num = 4.000 WHERE item_id = $1 AND attribute_id = $2",
+        [twin2.item.id, f.volume.id],
+      );
+      expect(await matching()).toEqual(pair);
+
+      // Everything but the identity of such an item changes as before.
+      const noted = await setValues(twin1.item.id, [
+        { attributeId: f.note.id, value: "Для турбированных" },
+        { attributeId: f.synthetic.id, value: true },
+        { attributeId: f.packs.id, value: 4 },
+      ]);
+      expect(noted.status, JSON.stringify(noted.body)).toBe(200);
+      const renamed = await asAdmin("patch", `/admin/catalog/items/${twin1.item.id}`, {
+        expectedVersion: (await card(twin1.item.id)).item.version,
+        names: { ru: "Shell Helix HX8 5W-30, 4 л" },
+      });
+      expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
+      const drafted = await asAdmin("post", `/admin/catalog/items/${twin1.item.id}/status`, {
+        status: "draft",
+        expectedVersion: (await card(twin1.item.id)).item.version,
+      });
+      expect(drafted.status, JSON.stringify(drafted.body)).toBe(200);
+
+      // A change of the identity into the same as a third product is refused…
+      const toSmall = await setValues(twin1.item.id, [{ attributeId: f.volume.id, value: 1 }]);
+      expectError(toSmall, 409, "CATALOG_ITEM_DUPLICATE");
+      expect(toSmall.body.details).toEqual({ existingItemId: small.item.id });
+      const toThird = await setValues(twin1.item.id, [
+        { attributeId: f.viscosity.id, value: option(f.viscosity, "5w_40") },
+      ]);
+      expectError(toThird, 409, "CATALOG_ITEM_DUPLICATE");
+      expect(toThird.body.details).toEqual({ existingItemId: third.item.id });
+      // …one that makes it unique goes through and ends the pair, and going
+      // back into the pair is a change of the identity like any other.
+      const apart = await setValues(twin1.item.id, [{ attributeId: f.volume.id, value: 5 }]);
+      expect(apart.status, JSON.stringify(apart.body)).toBe(200);
+      expect(await matching()).toEqual([]);
+      const back = await setValues(twin1.item.id, [{ attributeId: f.volume.id, value: 4 }]);
+      expectError(back, 409, "CATALOG_ITEM_DUPLICATE");
+      expect(back.body.details).toEqual({ existingItemId: twin2.item.id });
+      await db.query(
+        "UPDATE item_attribute_value SET value_num = 4 WHERE item_id = $1 AND attribute_id = $2",
+        [twin1.item.id, f.volume.id],
+      );
+      expect(await matching()).toEqual(pair);
+
+      // The fill: cells outside the identity of the pair go through…
+      const fillPath = `/admin/catalog/categories/${f.oils.id}/fill`;
+      const filled = await asAdmin("put", fillPath, {
+        cells: [
+          {
+            itemId: twin1.item.id,
+            attributeId: f.note.id,
+            previous: "Для турбированных",
+            value: "Для турбо",
+          },
+          { itemId: twin2.item.id, attributeId: f.packs.id, previous: null, value: 6 },
+          { itemId: third.item.id, attributeId: f.packs.id, previous: null, value: 6 },
+        ],
+      });
+      expect(filled.status, JSON.stringify(filled.body)).toBe(200);
+      expect(fillCategoryResponseSchema.parse(filled.body).changedCells).toBe(3);
+      // …a cell that makes one the same as another product is refused, and
+      // with it the whole request.
+      const refusedFill = await asAdmin("put", fillPath, {
+        cells: [
+          { itemId: twin2.item.id, attributeId: f.note.id, previous: null, value: "Не запишется" },
+          { itemId: twin2.item.id, attributeId: f.volume.id, previous: 4, value: 1 },
+        ],
+      });
+      expectError(refusedFill, 400, "CATALOG_VALUES_REJECTED");
+      expect(catalogValuesRejectedDetailsSchema.parse(refusedFill.body.details).rejections).toEqual(
+        [
+          expect.objectContaining({
+            index: 1,
+            itemId: twin2.item.id,
+            attributeId: f.volume.id,
+            reason: "duplicate_item",
+            existingItemId: small.item.id,
+          }),
+        ],
+      );
+      const twin2Card = await card(twin2.item.id);
+      expect(twin2Card.values.find((v) => v.attributeId === f.note.id)!.value).toBeNull();
+
+      // Restoring «Допуск» ends the pair: the answer and the list say so.
+      const restored = await attributeCall(
+        "post",
+        `/admin/catalog/attributes/${f.approval.id}/status`,
+        { status: "active", expectedVersion: archived.attribute.version },
+      );
+      expect(restored.sameProductItems).toBe(0);
+      expect(await matching()).toEqual([]);
+
+      // Not counting it for completeness makes the pair again; counting it ends it.
+      const notCounted = await attributeCall(
+        "patch",
+        `/admin/catalog/attributes/${f.approval.id}`,
+        { expectedVersion: restored.attribute.version, isRequiredForComplete: false },
+      );
+      expect(notCounted.sameProductItems).toBe(2);
+      expect(await matching()).toEqual(pair);
+      const counted = await attributeCall("patch", `/admin/catalog/attributes/${f.approval.id}`, {
+        expectedVersion: notCounted.attribute.version,
+        isRequiredForComplete: true,
+      });
+      expect(counted.sameProductItems).toBe(0);
+      expect(await matching()).toEqual([]);
+
+      // Archiving an option leaves the stored values as they are: no pair from it.
+      const c3 = f.approval.options.find((entry) => entry.code === "acea_c3")!;
+      const optionArchived = await asAdmin(
+        "post",
+        `/admin/catalog/attribute-options/${c3.id}/status`,
+        { status: "archived", expectedVersion: c3.version },
+      );
+      expect(optionArchived.status, JSON.stringify(optionArchived.body)).toBe(200);
+      expect(await matching()).toEqual([]);
+    });
+  });
+
+  // ------------------------------------------------ the unique keys, raced
+
+  describe("a unique key refusing a change whose rival is gone (TASK-011.A)", () => {
+    /**
+     * The database refuses a write by the unique key although no row holds
+     * the value by the time the service looks (the rival change was rolled
+     * back or changed it again meanwhile). A trigger plays that refusal —
+     * `once`: only the first write, `always`: every one.
+     */
+    async function refuseByUniqueKey(
+      table: string,
+      column: string,
+      value: string,
+      constraint: string,
+      mode: "once" | "always",
+    ): Promise<() => Promise<void>> {
+      await db.query("CREATE SEQUENCE test_unique_race");
+      await db.query(`
+        CREATE FUNCTION test_unique_race() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.${column} = '${value}' THEN
+            IF '${mode}' = 'always' OR nextval('test_unique_race') = 1 THEN
+              RAISE unique_violation USING
+                MESSAGE = 'duplicate key value violates unique constraint "${constraint}"',
+                CONSTRAINT = '${constraint}';
+            END IF;
+          END IF;
+          RETURN NEW;
+        END $$`);
+      await db.query(
+        `CREATE TRIGGER test_unique_race BEFORE INSERT OR UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION test_unique_race()`,
+      );
+      return async () => {
+        await db.query(`DROP TRIGGER IF EXISTS test_unique_race ON ${table}`);
+        await db.query("DROP FUNCTION IF EXISTS test_unique_race()");
+        await db.query("DROP SEQUENCE IF EXISTS test_unique_race");
+      };
+    }
+
+    it("answers a brand's spelling with 201 once the rival is gone, or with 409 — never 500", async () => {
+      const key = "brand_spelling_key_key";
+      let drop = await refuseByUniqueKey("brand_spelling", "key", "racebrand", key, "once");
+      try {
+        const made = await asAdmin("post", "/admin/catalog/brands", { name: "Race Brand" });
+        expect(made.status, JSON.stringify(made.body)).toBe(201);
+      } finally {
+        await drop();
+      }
+      const other = await brandOf({ name: "Other Brand" });
+      drop = await refuseByUniqueKey("brand_spelling", "key", "racebrand2", key, "always");
+      try {
+        const refused = await asAdmin("post", "/admin/catalog/brands", { name: "Race Brand 2" });
+        expectError(refused, 409, "CONFLICT");
+        expect(refused.body.retryable).toBe(true);
+        const renamed = await asAdmin("patch", `/admin/catalog/brands/${other.id}`, {
+          expectedVersion: other.version,
+          aliases: ["Race Brand 2"],
+        });
+        expectError(renamed, 409, "CONFLICT");
+      } finally {
+        await drop();
+      }
+      const { rows } = await db.query<{ key: string }>(
+        "SELECT key FROM brand_spelling ORDER BY key",
+      );
+      expect(rows.map((row) => row.key)).toEqual(["otherbrand", "racebrand"]);
+    });
+
+    it("answers an article with 201 once the rival is gone, or with 409 — never 500", async () => {
+      const f = await fixture();
+      const part = (article: string) => ({
+        type: "part",
+        categoryId: f.pads.id,
+        brandId: f.trw.id,
+        article,
+        names: { ru: `Колодки ${article}` },
+      });
+      const key = "catalog_item_brand_article_key";
+      let drop = await refuseByUniqueKey("catalog_item", "article_norm", "RACE1", key, "once");
+      try {
+        const made = await asAdmin("post", "/admin/catalog/items", part("RACE-1"));
+        expect(made.status, JSON.stringify(made.body)).toBe(201);
+      } finally {
+        await drop();
+      }
+      const other = await createItem(part("OTHER-1"));
+      drop = await refuseByUniqueKey("catalog_item", "article_norm", "RACE2", key, "always");
+      try {
+        const refused = await asAdmin("post", "/admin/catalog/items", part("RACE-2"));
+        expectError(refused, 409, "CONFLICT");
+        const changed = await asAdmin("patch", `/admin/catalog/items/${other.item.id}`, {
+          expectedVersion: other.item.version,
+          article: "RACE 2",
+        });
+        expectError(changed, 409, "CONFLICT");
+      } finally {
+        await drop();
+      }
+      const { rows } = await db.query<{ article_norm: string }>(
+        "SELECT article_norm FROM catalog_item ORDER BY article_norm",
+      );
+      expect(rows.map((row) => row.article_norm)).toEqual(["OTHER1", "RACE1"]);
+    });
+
+    it("lets the other of two simultaneous registrations of one spelling in when the first rolls back", async () => {
+      // The first request's transaction holds the spelling for a second,
+      // then fails (as if something after it went wrong) and rolls back.
+      await db.query("CREATE SEQUENCE test_rollback_race");
+      await db.query(`
+        CREATE FUNCTION test_rollback_race() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.key = 'rollbackbrand' THEN
+            IF nextval('test_rollback_race') = 1 THEN
+              PERFORM pg_sleep(1);
+              RAISE EXCEPTION 'planned failure after the spelling was written';
+            END IF;
+          END IF;
+          RETURN NEW;
+        END $$`);
+      await db.query(
+        "CREATE TRIGGER test_rollback_race AFTER INSERT ON brand_spelling FOR EACH ROW EXECUTE FUNCTION test_rollback_race()",
+      );
+      try {
+        const first = asAdmin("post", "/admin/catalog/brands", { name: "Rollback Brand" }).then(
+          (response) => response,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const second = await asAdmin("post", "/admin/catalog/brands", { name: "ROLLBACK brand" });
+        expect((await first).status).toBe(500);
+        expect(second.status, JSON.stringify(second.body)).toBe(201);
+      } finally {
+        await db.query("DROP TRIGGER IF EXISTS test_rollback_race ON brand_spelling");
+        await db.query("DROP FUNCTION IF EXISTS test_rollback_race()");
+        await db.query("DROP SEQUENCE IF EXISTS test_rollback_race");
+      }
+      const { rows } = await db.query("SELECT text FROM brand_spelling");
+      expect(rows).toEqual([{ text: "ROLLBACK brand" }]);
+    });
+  });
+
   describe("search and paging (AC-9)", () => {
     it("finds by a part of the normalized article and by a name in any language, with filters, page by page", async () => {
       const f = await fixture();

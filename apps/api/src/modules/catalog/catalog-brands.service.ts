@@ -13,8 +13,19 @@ import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
 import type { CatalogActor } from "./catalog-admin.service";
-import { brandSpellingTaken, notFound, validationError, versionConflict } from "./catalog-errors";
-import { decodeCursor, encodeCursor, uniqueViolation } from "./catalog-paging";
+import {
+  brandSpellingTaken,
+  notFound,
+  uniqueRace,
+  validationError,
+  versionConflict,
+} from "./catalog-errors";
+import {
+  decodeCursor,
+  encodeCursor,
+  UNIQUE_RACE_ATTEMPTS,
+  uniqueViolation,
+} from "./catalog-paging";
 import { normalizeText } from "./catalog-texts";
 import { brand, brandSpelling, type BrandRow, type BrandSpellingRow } from "./schema";
 
@@ -320,21 +331,28 @@ export class CatalogBrandsService {
 
   /**
    * Two brands given one spelling at once: the unique key refuses the
-   * second, which is then answered like the check before it.
+   * second, which is then answered like the check before it. If the
+   * spelling that clashed is already gone (the other change was rolled
+   * back or changed it again), the work is done once more; a second such
+   * clash is a 409 all the same, never a 500 (TASK-011.A).
    */
   private async guardSpellings<T>(
     texts: readonly string[],
     selfId: string | undefined,
     work: () => Promise<T>,
   ): Promise<T> {
-    try {
-      return await work();
-    } catch (error) {
-      if (!uniqueViolation(error, "brand_spelling_key_key")) {
-        throw error;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await work();
+      } catch (error) {
+        if (!uniqueViolation(error, "brand_spelling_key_key")) {
+          throw error;
+        }
+        await this.assertSpellingsFree(this.database.db, texts, selfId);
+        if (attempt >= UNIQUE_RACE_ATTEMPTS) {
+          throw uniqueRace();
+        }
       }
-      await this.assertSpellingsFree(this.database.db, texts, selfId);
-      throw error;
     }
   }
 }

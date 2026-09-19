@@ -1592,6 +1592,17 @@
             }
           },
           {
+            "name": "sameProduct",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "matching"
+              ]
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -3549,11 +3560,17 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "sameProductItems": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": [
           "attribute",
-          "itemsWithoutValue"
+          "itemsWithoutValue",
+          "sameProductItems"
         ]
       },
       "AdminBrand": {

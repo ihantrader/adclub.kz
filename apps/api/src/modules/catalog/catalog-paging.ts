@@ -38,6 +38,9 @@ export function decodeCursor(cursor: string): { position: string; id: string } {
 export const TIME_POSITION = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 /** The PostgreSQL error behind a failed query, if it broke this unique constraint. */
+/** How many times a change refused by a unique key whose clashing row is gone is tried. */
+export const UNIQUE_RACE_ATTEMPTS = 2;
+
 export function uniqueViolation(error: unknown, constraint: string): boolean {
   for (let current: unknown = error; current; current = (current as { cause?: unknown }).cause) {
     const candidate = current as { code?: unknown; constraint?: unknown };

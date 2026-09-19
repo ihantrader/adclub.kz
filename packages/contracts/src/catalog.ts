@@ -450,6 +450,14 @@ export const adminAttributeResponseSchema = z.object({
    * значение будет пустым»; TASK-011).
    */
   itemsWithoutValue: z.number().int(),
+  /**
+   * Products of the category that, after this change, are the same as
+   * another product by every identifying value (archiving an attribute or
+   * no longer counting it for completeness can make them so). Such items
+   * are not refused; `GET /admin/catalog/items?sameProduct=matching` lists
+   * them (TASK-011.A).
+   */
+  sameProductItems: z.number().int(),
 });
 
 export type AdminAttributeResponse = z.infer<typeof adminAttributeResponseSchema>;

@@ -98,6 +98,10 @@ import { clientPlatformSchema } from "./client";
  *   `CatalogValuesRejectedDetails` with every refused value.
  * - `CATALOG_ANALOG_INVALID` (400): `details` is
  *   `CatalogAnalogInvalidDetails`.
+ * - `CONFLICT` (409, retryable): a brand's spelling or an item's article was
+ *   refused by the unique key while no other brand or item has it any more
+ *   (the rival change was rolled back meanwhile); nothing was written,
+ *   repeating the request decides it (TASK-011.A).
  *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the

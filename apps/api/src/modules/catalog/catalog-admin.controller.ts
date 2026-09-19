@@ -54,9 +54,17 @@ export class CatalogAdminController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(CatalogAdminService) private readonly catalog: CatalogAdminService) {}
 
-  /** An attribute with the number of items that have no value of it (TASK-011, A-CAT-02). */
+  /**
+   * An attribute with the number of items that have no value of it
+   * (TASK-011, A-CAT-02) and of the products its category now has that are
+   * the same as another one (TASK-011.A).
+   */
   private async withCount(attribute: AdminAttribute): Promise<AdminAttributeResponse> {
-    return { attribute, itemsWithoutValue: await this.catalog.itemsWithoutValue(attribute) };
+    const [itemsWithoutValue, sameProductItems] = await Promise.all([
+      this.catalog.itemsWithoutValue(attribute),
+      this.catalog.sameProductItems(attribute.categoryId),
+    ]);
+    return { attribute, itemsWithoutValue, sameProductItems };
   }
 
   @SessionRoute(apiRoutes.listAdminCategories)

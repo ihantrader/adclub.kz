@@ -309,6 +309,12 @@ export const catalogItemListQuerySchema = z.object({
   type: catalogItemTypeSchema.optional(),
   status: catalogItemStatusSchema.optional(),
   completeness: itemCompletenessSchema.optional(),
+  /**
+   * `matching` — only products that are the same as another product of
+   * their category and brand by every identifying value; such pairs appear
+   * when the attributes that identify a product change (TASK-011.A).
+   */
+  sameProduct: z.enum(["matching"]).optional(),
   limit: pageLimitSchema,
   cursor: cursorSchema.optional(),
 });

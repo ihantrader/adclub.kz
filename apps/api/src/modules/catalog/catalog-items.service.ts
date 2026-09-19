@@ -37,6 +37,7 @@ import {
   kindMismatch,
   notFound,
   notSubcategory,
+  uniqueRace,
   validationError,
   valuesRejected,
   versionConflict,
@@ -47,6 +48,7 @@ import {
   encodeCursor,
   escapeLike,
   TIME_POSITION,
+  UNIQUE_RACE_ATTEMPTS,
   uniqueViolation,
 } from "./catalog-paging";
 import {
@@ -60,6 +62,7 @@ import {
 } from "./catalog-texts";
 import { checkValue, journalValue, sameValue, valueOf, type StoredColumns } from "./catalog-values";
 import { refreshItemsCompleteness } from "./completeness";
+import { sameProductItemIds } from "./same-products";
 import {
   attribute,
   attributeOption,
@@ -99,6 +102,17 @@ interface ValueChange {
   columns: StoredColumns | null;
   before: AttributeValue;
   after: AttributeValue;
+}
+
+/**
+ * Whether a value of the attribute is part of a product's identity: an
+ * active attribute that counts for completeness (TASK-011 requirement 2).
+ * Only a change of the identity is checked against the other products
+ * (TASK-011.A): a pair that became the same when the structure changed
+ * does not block the rest of the item.
+ */
+function identifies(entry: AttributeRow): boolean {
+  return entry.status === "active" && entry.isRequiredForComplete;
 }
 
 /** The attributes of a category with their options, for checking values. */
@@ -146,6 +160,9 @@ export class CatalogItemsService {
       query.status ? eq(catalogItem.status, query.status) : undefined,
       query.completeness ? eq(catalogItem.completeness, query.completeness) : undefined,
       query.q ? this.searchCondition(query.q) : undefined,
+      query.sameProduct === "matching"
+        ? sql`${catalogItem.id} IN (${sameProductItemIds(query.categoryId)})`
+        : undefined,
     ];
     return this.pageOf(filters, query.limit, query.cursor);
   }
@@ -544,7 +561,9 @@ export class CatalogItemsService {
         .set({ version: row.version + 1, updatedAt: new Date() })
         .where(eq(catalogItem.id, row.id))
         .returning();
-      await this.assertNoSameProduct(tx, updated!);
+      if (changes.some((change) => identifies(change.attribute))) {
+        await this.assertNoSameProduct(tx, updated!);
+      }
       await refreshItemsCompleteness(tx, [row.id]);
       await this.recordValues(tx, actor, row.id, changes, "item", updated!.version);
       return this.card(row.id, tx);
@@ -587,26 +606,20 @@ export class CatalogItemsService {
           .set({ version: sql`${catalogItem.version} + 1`, updatedAt: new Date() })
           .where(eq(catalogItem.id, id))
           .returning();
-        const same = await this.sameProduct(tx, updated!);
-        if (same) {
-          const first = changes.find((change) => change.item.id === id)!;
+        const own = changes.filter((change) => change.item.id === id);
+        const identity = own.find((change) => identifies(change.attribute));
+        const same = identity ? await this.sameProduct(tx, updated!) : null;
+        if (identity && same) {
           rejections.push({
-            index: first.index,
+            index: identity.index,
             itemId: id,
-            attributeId: first.attribute.id,
+            attributeId: identity.attribute.id,
             reason: "duplicate_item",
             message: "With these values the product is the same as another one",
             existingItemId: same,
           });
         }
-        await this.recordValues(
-          tx,
-          actor,
-          id,
-          changes.filter((change) => change.item.id === id),
-          "fill",
-          updated!.version,
-        );
+        await this.recordValues(tx, actor, id, own, "fill", updated!.version);
       }
       if (rejections.length > 0) {
         throw valuesRejected(rejections);
@@ -1028,23 +1041,34 @@ export class CatalogItemsService {
   /**
    * Two requests for one article of one brand at once: both pass the check,
    * the unique index lets one in and refuses the other, which is answered
-   * with the item that got in (TASK-011 AC-3).
+   * with the item that got in (TASK-011 AC-3). If that item no longer has
+   * the article (the other change was rolled back or changed it again), the
+   * work is done once more; a second such clash is a 409 all the same,
+   * never a 500 (TASK-011.A).
    */
   private async guardArticle<T>(
     brandId: string | null,
     article: { text: string; norm: string } | null,
     work: () => Promise<T>,
   ): Promise<T> {
-    try {
-      return await work();
-    } catch (error) {
-      if (brandId && article && uniqueViolation(error, "catalog_item_brand_article_key")) {
-        const existing = await this.itemWithArticle(this.database.db, brandId, article.norm);
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await work();
+      } catch (error) {
+        if (!uniqueViolation(error, "catalog_item_brand_article_key")) {
+          throw error;
+        }
+        const existing =
+          brandId && article
+            ? await this.itemWithArticle(this.database.db, brandId, article.norm)
+            : undefined;
         if (existing) {
           throw itemDuplicate(existing);
         }
+        if (attempt >= UNIQUE_RACE_ATTEMPTS) {
+          throw uniqueRace();
+        }
       }
-      throw error;
     }
   }
 

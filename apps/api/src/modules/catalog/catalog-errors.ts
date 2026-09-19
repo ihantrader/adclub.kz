@@ -137,6 +137,21 @@ export function categoryArchived(): ApiException {
   );
 }
 
+/**
+ * The unique key refused a brand's spelling or an item's article twice, and
+ * both times the row that took it was gone by the time it was looked for
+ * (the other change was rolled back or changed it again meanwhile;
+ * TASK-011.A): nothing was written, repeating the request decides it.
+ */
+export function uniqueRace(): ApiException {
+  return new ApiException(
+    409,
+    "CONFLICT",
+    "Another change took the same name or article at the same moment; repeat the request",
+    { retryable: true },
+  );
+}
+
 export function itemDuplicate(existingItemId: string): ApiException {
   const details: CatalogItemDuplicateDetails = { existingItemId };
   return new ApiException(409, "CATALOG_ITEM_DUPLICATE", "This item already exists", { details });

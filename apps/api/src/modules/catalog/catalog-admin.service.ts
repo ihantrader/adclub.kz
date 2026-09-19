@@ -51,6 +51,7 @@ import {
   type TextIndex,
 } from "./catalog-texts";
 import { refreshCategoryCompleteness } from "./completeness";
+import { countSameProductItems } from "./same-products";
 import {
   attribute,
   attributeOption,
@@ -899,6 +900,11 @@ export class CatalogAdminService {
           SELECT 1 FROM item_attribute_value v WHERE v.item_id = i.id AND v.attribute_id = ${row.id}
         )`);
     return Number(result.rows[0]?.count ?? 0);
+  }
+
+  /** Products of the category that are the same as another one (TASK-011.A). */
+  sameProductItems(categoryId: string, executor: DbExecutor = this.database.db): Promise<number> {
+    return countSameProductItems(executor, categoryId);
   }
 
   // -------------------------------------------------------------- helpers

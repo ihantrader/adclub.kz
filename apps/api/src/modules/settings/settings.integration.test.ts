@@ -376,6 +376,7 @@ describe("settings (PostgreSQL + Redis)", () => {
         "orders",
         "notifications",
         "guest_assistant",
+        "translation",
         "rating",
         "pricelist",
         "reviews",

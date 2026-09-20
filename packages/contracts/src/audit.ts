@@ -79,6 +79,16 @@ export const auditActions = {
   /** Two items were linked as analogs; one entry, on the item the link was made from. */
   catalogItemAnalogLinked: "catalog_item.analog_linked",
   catalogItemAnalogUnlinked: "catalog_item.analog_unlinked",
+  /**
+   * An administrator wrote a translation by hand (TASK-012). The entity is
+   * the thing translated (`entityId`); `before`/`after`: `entityType`,
+   * `field`, `lang` and the text.
+   */
+  catalogTranslationEdited: "catalog_translation.edited",
+  /** A manual edit was released: the language is under automatic translation again. */
+  catalogTranslationReleased: "catalog_translation.released",
+  /** "Translate again" was asked for a language (or one without a translation). */
+  catalogTranslationRequeued: "catalog_translation.requeued",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -94,6 +104,8 @@ export const auditEntities = {
   catalogAttributeOption: "catalog_attribute_option",
   catalogBrand: "catalog_brand",
   catalogItem: "catalog_item",
+  /** The translations of one entity (`entityId` — the entity's id, `after.entityType` says which). */
+  catalogTranslation: "catalog_translation",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

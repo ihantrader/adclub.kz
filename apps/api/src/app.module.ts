@@ -8,6 +8,7 @@ import { HealthModule } from "./health/health.module";
 import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
+import { AiModule } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
 import { CatalogModule } from "./modules/catalog";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
@@ -44,6 +45,7 @@ export class AppModule implements NestModule {
         StorageModule,
         AuditModule.forRoot({ http: true }),
         SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
+        AiModule.forRoot(config, { metrics: config.metrics.enabled }),
         // The API puts jobs on the queue; the worker runs them.
         JobsModule.forRoot({
           role: "producer",
@@ -58,7 +60,7 @@ export class AppModule implements NestModule {
         // contract routes alone.
         ...(config.nodeEnv === "production" ? [] : [OpenApiModule]),
         IdentityModule.forRoot(config),
-        CatalogModule.forRoot({ http: true }),
+        CatalogModule.forRoot({ http: true, metrics: config.metrics.enabled }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

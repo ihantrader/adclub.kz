@@ -29,6 +29,11 @@ export interface EnqueueOptions {
   startAfter?: Date;
   /** Only one waiting job per key (with a singleton job: per key instead of per job). */
   singletonKey?: string;
+  /**
+   * Retries of this job instead of the declaration's (a limit that is a
+   * setting, TASK-012). A field left out keeps the declaration's value.
+   */
+  retry?: { limit?: number; delaySeconds?: number };
 }
 
 /** Completed jobs stay a day for inspection, then pg-boss deletes them (and their data). */
@@ -124,6 +129,12 @@ export class JobQueue implements OnApplicationBootstrap, BeforeApplicationShutdo
     }
     if (options.singletonKey) {
       send.singletonKey = options.singletonKey;
+    }
+    if (options.retry?.limit !== undefined) {
+      send.retryLimit = options.retry.limit;
+    }
+    if (options.retry?.delaySeconds !== undefined) {
+      send.retryDelay = options.retry.delaySeconds;
     }
     return boss.send(definition.name, data, send);
   }

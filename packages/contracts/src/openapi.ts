@@ -104,6 +104,22 @@ import {
 } from "./error";
 import { healthCheckResponseSchema } from "./health";
 import {
+  editTranslationBodySchema,
+  entityTranslationsResponseSchema,
+  translationEntityTypeSchema,
+  translationFailureSchema,
+  translationFieldSchema,
+  translationFieldViewSchema,
+  translationLanguageSchema,
+  translationOriginSchema,
+  translationQueueItemSchema,
+  translationQueuePageSchema,
+  translationQueueStateSchema,
+  translationTargetLanguageSchema,
+  translationTaskSchema,
+  translationTextSchema,
+} from "./translations";
+import {
   loginCodeChannelSchema,
   loginCodeInvalidDetailsSchema,
   loginCodeSentResponseSchema,
@@ -298,6 +314,20 @@ const componentSchemas: Record<string, z.ZodType> = {
   SetItemValuesBody: setItemValuesBodySchema,
   UpdateBrandBody: updateBrandBodySchema,
   UpdateCatalogItemBody: updateCatalogItemBodySchema,
+  EditTranslationBody: editTranslationBodySchema,
+  EntityTranslationsResponse: entityTranslationsResponseSchema,
+  TranslationEntityType: translationEntityTypeSchema,
+  TranslationFailure: translationFailureSchema,
+  TranslationField: translationFieldSchema,
+  TranslationFieldView: translationFieldViewSchema,
+  TranslationLanguage: translationLanguageSchema,
+  TranslationOrigin: translationOriginSchema,
+  TranslationQueueItem: translationQueueItemSchema,
+  TranslationQueuePage: translationQueuePageSchema,
+  TranslationQueueState: translationQueueStateSchema,
+  TranslationTargetLanguage: translationTargetLanguageSchema,
+  TranslationTask: translationTaskSchema,
+  TranslationText: translationTextSchema,
 };
 
 type JsonObject = Record<string, unknown>;

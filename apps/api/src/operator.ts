@@ -18,8 +18,14 @@ import {
   OperatorCommandError,
   OperatorService,
 } from "./modules/identity";
+import { AiModule, AiService } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
-import { CatalogModule, DevCatalogSeed, DevCatalogSeedError } from "./modules/catalog";
+import {
+  CatalogModule,
+  DevCatalogSeed,
+  DevCatalogSeedError,
+  TranslationQueue,
+} from "./modules/catalog";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
 import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
@@ -52,6 +58,16 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   jobs:delete <deadJobId>      drop a dead job
  *   jobs:run <name>              start a periodic job now (e.g. identity.cleanup-sessions)
  *
+ * AI and automatic translation of the catalog (ARCHITECTURE 4.19):
+ *   ai:status                    the provider, today's spend against the daily budget, today's
+ *                                calls by kind and status, the latest failed calls
+ *   translations:status          the queue: pending, held by a run, waiting after a temporary
+ *                                failure, and the tasks refused for good with the reason
+ *   translations:queue-missing   queue a translation for every language that has none (what
+ *                                came before automatic translation, or was cleared)
+ *   translations:run             put a translation run on the queue now
+ *   translations:retry-failed    queue the tasks refused for good again
+ *
  * Development and tests only (the real flows arrive with TASK-016/017):
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
@@ -79,6 +95,7 @@ class OperatorModule {
         DatabaseModule,
         AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false }),
+        AiModule.forRoot(config),
         CatalogModule.forRoot({ http: false }),
         JobsModule.forRoot({
           role: "producer",
@@ -105,6 +122,11 @@ const USAGE = `Usage: operator <command> [arguments]
   jobs:retry <deadJobId>
   jobs:delete <deadJobId>
   jobs:run <name>
+  ai:status
+  translations:status
+  translations:queue-missing
+  translations:run
+  translations:retry-failed
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
@@ -146,10 +168,12 @@ interface Services {
   queue: JobQueue;
   devJobs: boolean;
   catalogSeed: DevCatalogSeed;
+  ai: AiService;
+  translations: TranslationQueue;
 }
 
 async function run(
-  { operator, settings, jobs, queue, devJobs, catalogSeed }: Services,
+  { operator, settings, jobs, queue, devJobs, catalogSeed, ai, translations }: Services,
   argv: string[],
 ): Promise<unknown> {
   const { positionals, values } = parseArgs({
@@ -208,6 +232,16 @@ async function run(
       return jobs.deleteDead(required(first, "<deadJobId>"));
     case "jobs:run":
       return jobs.runNow(required(first, "<name>"));
+    case "ai:status":
+      return ai.status();
+    case "translations:status":
+      return translations.status();
+    case "translations:queue-missing":
+      return translations.queueMissing();
+    case "translations:run":
+      return { jobId: await translations.wake() };
+    case "translations:retry-failed":
+      return translations.retryFailed();
     case "dev:jobs:fail": {
       if (!devJobs) {
         throw new OperatorCommandError("dev:jobs:fail is available in development and tests only");
@@ -261,6 +295,8 @@ async function main(): Promise<void> {
         queue: app.get(JobQueue),
         devJobs: hasDevJobs(config),
         catalogSeed: app.get(DevCatalogSeed),
+        ai: app.get(AiService),
+        translations: app.get(TranslationQueue),
       },
       process.argv.slice(2),
     );

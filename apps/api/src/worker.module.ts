@@ -7,7 +7,9 @@ import { JsonLoggerService } from "./common/logging";
 import { ObservabilityModule } from "./observability";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { IdentityJobsModule } from "./modules/identity";
+import { AiModule, type AiServiceOptions } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
+import { CatalogJobsModule } from "./modules/catalog";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -26,6 +28,8 @@ export class WorkerModule {
       settingsCache?: Partial<SettingsCacheOptions>;
       /** Tests shorten the queue timings. */
       jobs?: Partial<JobsTuning>;
+      /** Tests shorten the time limit of an AI call. */
+      ai?: Partial<AiServiceOptions>;
     } = {},
   ) {
     return {
@@ -38,12 +42,14 @@ export class WorkerModule {
         StorageModule,
         AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false, cache: options.settingsCache }),
+        AiModule.forRoot(config, { service: options.ai }),
         JobsModule.forRoot({
           role: "worker",
           catalog: backgroundJobCatalog(config),
           tuning: options.jobs,
         }),
         IdentityJobsModule,
+        CatalogJobsModule,
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

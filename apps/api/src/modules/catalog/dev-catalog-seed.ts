@@ -9,6 +9,7 @@ import { APP_CONFIG, type AppConfig } from "../../config";
 import { CatalogAdminService, type CatalogActor } from "./catalog-admin.service";
 import { CatalogBrandsService } from "./catalog-brands.service";
 import { CatalogItemsService } from "./catalog-items.service";
+import { TranslationQueue } from "./translation-queue.service";
 
 /**
  * An example tree for development and tests (TASK-010 п. 5; PRODUCT 7.2):
@@ -20,10 +21,15 @@ import { CatalogItemsService } from "./catalog-items.service";
  * (TASK-010-REPORT).
  */
 
+/**
+ * Russian is required; a name left without Kazakh or English is one the
+ * automatic translation fills in (TASK-012): the seed keeps some that way
+ * on purpose, to see it work in development.
+ */
 interface Names {
   ru: string;
-  kk: string;
-  en: string;
+  kk?: string;
+  en?: string;
 }
 
 interface SeedSubcategory {
@@ -179,11 +185,9 @@ export const devCatalogTree: readonly SeedNode[] = [
     names: { ru: "Салон", kk: "Салон", en: "Interior" },
     children: [
       { code: "floor_mats", names: { ru: "Коврики", kk: "Кілемшелер", en: "Floor mats" } },
-      { code: "seat_covers", names: { ru: "Чехлы", kk: "Қаптар", en: "Seat covers" } },
-      {
-        code: "accessories",
-        names: { ru: "Аксессуары", kk: "Аксессуарлар", en: "Accessories" },
-      },
+      // Russian only: the automatic translation names them in Kazakh and English (TASK-012).
+      { code: "seat_covers", names: { ru: "Чехлы" } },
+      { code: "accessories", names: { ru: "Аксессуары" } },
     ],
   },
   {
@@ -373,14 +377,14 @@ export const devCatalogItems: readonly SeedItem[] = [
     type: "generic",
     category: "engine_oils",
     brand: "Shell",
-    names: same("Shell Helix HX8 5W-30, 4 л"),
+    names: { ru: "Shell Helix HX8 5W-30, 4 л" },
     values: { viscosity: "5w_30", approval: "api_sp", volume: 4 },
   },
   {
     type: "generic",
     category: "engine_oils",
     brand: "Mobil",
-    names: same("Mobil Super 3000 5W-40, 4 л"),
+    names: { ru: "Mobil Super 3000 5W-40, 4 л" },
     values: { viscosity: "5w_40", approval: "acea_a3_b4", volume: 4 },
   },
   {
@@ -388,7 +392,7 @@ export const devCatalogItems: readonly SeedItem[] = [
     type: "generic",
     category: "engine_oils",
     brand: "Shell",
-    names: same("Shell Helix Ultra 0W-20, 1 л"),
+    names: { ru: "Shell Helix Ultra 0W-20, 1 л" },
     values: { viscosity: "0w_20", volume: 1 },
   },
   {
@@ -396,7 +400,7 @@ export const devCatalogItems: readonly SeedItem[] = [
     type: "generic",
     category: "engine_oils",
     brand: "Mobil",
-    names: same("Mobil 1 ESP 5W-30"),
+    names: { ru: "Mobil 1 ESP 5W-30" },
     values: { viscosity: "5w_30", approval: "acea_c3" },
   },
   {
@@ -448,6 +452,8 @@ interface SeedCounts {
 export interface DevCatalogSeedResult {
   created: SeedCounts;
   existing: SeedCounts;
+  /** Translations queued for names without one (TASK-012); the worker makes them. */
+  translationsQueued: number;
 }
 
 export class DevCatalogSeedError extends Error {}
@@ -470,6 +476,7 @@ export class DevCatalogSeed {
     @Inject(CatalogAdminService) private readonly catalog: CatalogAdminService,
     @Inject(CatalogBrandsService) private readonly brands: CatalogBrandsService,
     @Inject(CatalogItemsService) private readonly items: CatalogItemsService,
+    @Inject(TranslationQueue) private readonly translations: TranslationQueue,
   ) {}
 
   async run(): Promise<DevCatalogSeedResult> {
@@ -486,7 +493,11 @@ export class DevCatalogSeed {
       items: 0,
       analogs: 0,
     });
-    const result: DevCatalogSeedResult = { created: zero(), existing: zero() };
+    const result: DevCatalogSeedResult = {
+      created: zero(),
+      existing: zero(),
+      translationsQueued: 0,
+    };
     for (const node of devCatalogTree) {
       const nodeId = await this.category(result, {
         code: node.code,
@@ -511,6 +522,8 @@ export class DevCatalogSeed {
     this.logger.log(
       `Development catalog seeded created=${JSON.stringify(result.created)} existing=${JSON.stringify(result.existing)}`,
     );
+    // What has no Kazakh or English name yet — the seed leaves some Russian-only — is translated.
+    result.translationsQueued = (await this.translations.queueMissing()).queued;
     return result;
   }
 

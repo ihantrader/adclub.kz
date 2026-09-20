@@ -58,11 +58,11 @@ import {
   normalizeText,
   plainTexts,
   textsOf,
-  writeTexts,
 } from "./catalog-texts";
 import { checkValue, journalValue, sameValue, valueOf, type StoredColumns } from "./catalog-values";
 import { refreshItemsCompleteness } from "./completeness";
 import { sameProductItemIds } from "./same-products";
+import { TranslationQueue } from "./translation-queue.service";
 import {
   attribute,
   attributeOption,
@@ -148,6 +148,7 @@ export class CatalogItemsService {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(CatalogAdminService) private readonly structure: CatalogAdminService,
     @Inject(CatalogBrandsService) private readonly brands: CatalogBrandsService,
+    @Inject(TranslationQueue) private readonly translations: TranslationQueue,
   ) {}
 
   // ---------------------------------------------------------------- reads
@@ -320,7 +321,7 @@ export class CatalogItemsService {
           })
           .returning();
         const created = row!;
-        await writeTexts(tx, "catalog_item", created.id, "name", {}, names);
+        await this.translations.writeTexts(tx, "catalog_item", created.id, "name", {}, names);
         const changes = await this.applyValueRequests(
           tx,
           owner.id,
@@ -466,7 +467,14 @@ export class CatalogItemsService {
             })
             .where(eq(catalogItem.id, row.id))
             .returning();
-          await writeTexts(tx, "catalog_item", row.id, "name", currentNames, names);
+          await this.translations.writeTexts(
+            tx,
+            "catalog_item",
+            row.id,
+            "name",
+            currentNames,
+            names,
+          );
           if (categoryId !== row.categoryId || brandId !== row.brandId) {
             await this.assertNoSameProduct(tx, updated!);
           }

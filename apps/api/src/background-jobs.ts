@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config";
 import { devJobCatalog, type JobDefinition } from "./jobs";
+import { catalogJobCatalog } from "./modules/catalog";
 import { identityJobCatalog } from "./modules/identity";
 
 /**
@@ -10,7 +11,11 @@ import { identityJobCatalog } from "./modules/identity";
  * them here.
  */
 export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDefinition[] {
-  return [...identityJobCatalog, ...(hasDevJobs(config) ? devJobCatalog : [])];
+  return [
+    ...identityJobCatalog,
+    ...catalogJobCatalog,
+    ...(hasDevJobs(config) ? devJobCatalog : []),
+  ];
 }
 
 /** The always-failing job of `operator dev:jobs:fail` exists in development and tests only. */

@@ -48,6 +48,7 @@ describe("settings registry", () => {
       "orders",
       "notifications",
       "guest_assistant",
+      "translation",
       "rating",
       "pricelist",
       "reviews",

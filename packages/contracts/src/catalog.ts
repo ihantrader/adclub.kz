@@ -128,7 +128,7 @@ export const attributeOptionCodeSchema = z.string().regex(/^[a-z0-9][a-z0-9_]{0,
  * A name in one language. The server also brings it to one form (Unicode
  * NFC, runs of spaces as one) before storing and comparing it.
  */
-function nameText(max: number) {
+export function catalogNameText(max: number) {
   return z
     .string()
     .trim()
@@ -140,18 +140,18 @@ function nameText(max: number) {
 /** Names of a new entry: Russian is required, Kazakh and English may wait (TASK-012 translates). */
 function newNamesSchema(max: number) {
   return z.object({
-    ru: nameText(max),
-    kk: nameText(max).nullable().optional(),
-    en: nameText(max).nullable().optional(),
+    ru: catalogNameText(max),
+    kk: catalogNameText(max).nullable().optional(),
+    en: catalogNameText(max).nullable().optional(),
   });
 }
 
 /** Names being changed: a language left out stays; `null` clears Kazakh or English. */
 function nameChangesSchema(max: number) {
   return z.object({
-    ru: nameText(max).optional(),
-    kk: nameText(max).nullable().optional(),
-    en: nameText(max).nullable().optional(),
+    ru: catalogNameText(max).optional(),
+    kk: catalogNameText(max).nullable().optional(),
+    en: catalogNameText(max).nullable().optional(),
   });
 }
 
@@ -369,7 +369,7 @@ export const adminAttributeListResponseSchema = z.object({
 
 export type AdminAttributeListResponse = z.infer<typeof adminAttributeListResponseSchema>;
 
-const unitText = nameText(ATTRIBUTE_UNIT_MAX_LENGTH);
+const unitText = catalogNameText(ATTRIBUTE_UNIT_MAX_LENGTH);
 
 const newOptionSchema = z.object({
   code: attributeOptionCodeSchema,

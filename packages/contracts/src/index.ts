@@ -204,6 +204,7 @@ export {
   catalogCodeSchema,
   catalogEntryStatusSchema,
   catalogLanguageSchema,
+  catalogNameText,
   catalogNameTakenDetailsSchema,
   catalogTextSchema,
   catalogTextsSchema,
@@ -388,6 +389,46 @@ export type {
   ApiRoutes,
   HttpMethod,
 } from "./routes";
+
+export {
+  editTranslationBodySchema,
+  entityTranslationsResponseSchema,
+  translationEntityPathSchema,
+  translationEntityTypeSchema,
+  translationFailureSchema,
+  translationFieldSchema,
+  translationFieldViewSchema,
+  translationLanguageSchema,
+  translationMaxLengths,
+  translationOriginSchema,
+  translationQueueItemSchema,
+  translationQueuePageSchema,
+  translationQueueQuerySchema,
+  translationQueueStateSchema,
+  translationTargetLanguageSchema,
+  translationTargetPathSchema,
+  translationTaskSchema,
+  translationTextSchema,
+} from "./translations";
+export type {
+  EditTranslationBody,
+  EntityTranslationsResponse,
+  TranslationEntityPath,
+  TranslationEntityType,
+  TranslationFailure,
+  TranslationField,
+  TranslationFieldView,
+  TranslationLanguage,
+  TranslationOrigin,
+  TranslationQueueItem,
+  TranslationQueuePage,
+  TranslationQueueQuery,
+  TranslationQueueState,
+  TranslationTargetLanguage,
+  TranslationTargetPath,
+  TranslationTask,
+  TranslationText,
+} from "./translations";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

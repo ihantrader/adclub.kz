@@ -59,6 +59,14 @@ import {
   updateCatalogItemBodySchema,
 } from "./catalog-items";
 import { clientPolicyResponseSchema } from "./client-policy";
+import {
+  editTranslationBodySchema,
+  entityTranslationsResponseSchema,
+  translationEntityPathSchema,
+  translationQueuePageSchema,
+  translationQueueQuerySchema,
+  translationTargetPathSchema,
+} from "./translations";
 import { healthCheckResponseSchema } from "./health";
 import {
   loginCodeSentResponseSchema,
@@ -1090,6 +1098,82 @@ export const apiRoutes = {
     },
     responses: {
       200: { description: "The rows changed", schema: fillCategoryResponseSchema },
+    },
+  }),
+  listTranslationQueue: defineRoute({
+    operationId: "listTranslationQueue",
+    method: "GET",
+    path: "/admin/translations",
+    summary:
+      "What waits for a translation or is out of date, filtered by kind of entity, language and state: the volume of work, with counts by state",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: translationQueueQuerySchema,
+    responses: {
+      200: { description: "A page of what is waiting", schema: translationQueuePageSchema },
+    },
+  }),
+  getEntityTranslations: defineRoute({
+    operationId: "getEntityTranslations",
+    method: "GET",
+    path: "/admin/translations/{entityType}/{entityId}",
+    summary:
+      "The translations of one entity by field and language: text, source (Russian, AI, manual), whether the Russian text changed since, the model and time of an automatic one, a pending task",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: translationEntityPathSchema,
+    responses: {
+      200: { description: "The translations", schema: entityTranslationsResponseSchema },
+    },
+  }),
+  editTranslation: defineRoute({
+    operationId: "editTranslation",
+    method: "PUT",
+    path: "/admin/translations/{entityType}/{entityId}/{field}/{lang}",
+    summary:
+      "Write a translation by hand: it is marked as manually edited and automatic translation never overwrites it; checked like any name, a neighbour's name is refused",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: translationTargetPathSchema,
+    requestBody: { description: "The text", schema: editTranslationBodySchema },
+    responses: {
+      200: { description: "The translations", schema: entityTranslationsResponseSchema },
+    },
+  }),
+  releaseTranslation: defineRoute({
+    operationId: "releaseTranslation",
+    method: "POST",
+    path: "/admin/translations/{entityType}/{entityId}/{field}/{lang}/release",
+    summary:
+      "Release a manual edit: the text stays until the automatic translation replaces it, and the language is queued for translation",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: translationTargetPathSchema,
+    responses: {
+      200: { description: "The translations", schema: entityTranslationsResponseSchema },
+    },
+  }),
+  retranslate: defineRoute({
+    operationId: "retranslate",
+    method: "POST",
+    path: "/admin/translations/{entityType}/{entityId}/{field}/{lang}/retranslate",
+    summary:
+      "Translate again: only for an automatic text, a missing one or one refused before; a manually edited text is refused (TRANSLATION_MANUALLY_EDITED)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: translationTargetPathSchema,
+    responses: {
+      200: { description: "The translations", schema: entityTranslationsResponseSchema },
     },
   }),
 } as const;

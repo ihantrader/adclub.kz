@@ -8,3 +8,6 @@ export { CatalogReadService } from "./catalog-read.service";
 export { DevCatalogSeed, DevCatalogSeedError, devCatalogTree } from "./dev-catalog-seed";
 export type { DevCatalogSeedResult } from "./dev-catalog-seed";
 export { catalogTables } from "./schema";
+export { CatalogJobsModule, TranslationRunner, TranslationWake } from "./translation-runner";
+export { catalogJobCatalog, translateJob, translationWakeJob } from "./translation-jobs";
+export { TranslationQueue } from "./translation-queue.service";

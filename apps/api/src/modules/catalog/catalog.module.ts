@@ -7,10 +7,16 @@ import { CatalogItemsService } from "./catalog-items.service";
 import { CatalogReadService } from "./catalog-read.service";
 import { CatalogController } from "./catalog.controller";
 import { DevCatalogSeed } from "./dev-catalog-seed";
+import { TranslationAdminController } from "./translation-admin.controller";
+import { TranslationAdminService } from "./translation-admin.service";
+import { TranslationMetrics } from "./translation-runner";
+import { TranslationQueue } from "./translation-queue.service";
 
 export interface CatalogModuleOptions {
   /** Serve the admin and client routes (the API process only). */
   http: boolean;
+  /** Sample the translation queue for metrics (the process that serves them). */
+  metrics?: boolean;
 }
 
 /**
@@ -25,7 +31,12 @@ export class CatalogModule {
     return {
       module: CatalogModule,
       controllers: options.http
-        ? [CatalogController, CatalogAdminController, CatalogItemsController]
+        ? [
+            CatalogController,
+            CatalogAdminController,
+            CatalogItemsController,
+            TranslationAdminController,
+          ]
         : [],
       providers: [
         CatalogAdminService,
@@ -33,6 +44,9 @@ export class CatalogModule {
         CatalogItemsService,
         CatalogReadService,
         DevCatalogSeed,
+        TranslationQueue,
+        TranslationAdminService,
+        ...(options.metrics ? [TranslationMetrics] : []),
       ],
       exports: [
         CatalogAdminService,
@@ -40,6 +54,8 @@ export class CatalogModule {
         CatalogItemsService,
         CatalogReadService,
         DevCatalogSeed,
+        TranslationQueue,
+        TranslationAdminService,
       ],
     };
   }

@@ -351,6 +351,8 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "SELECT name, cron, timezone FROM pgboss.schedule ORDER BY name",
     );
     expect(rows).toEqual([
+      // Safety net of automatic translation (TASK-012): every five minutes.
+      { name: "catalog.translation-wake", cron: "*/5 * * * *", timezone: "Asia/Almaty" },
       // Development and tests only: daily at `billing_notify_hour` (10 by default).
       { name: "dev.daily-at-setting", cron: "0 10 * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-login-codes", cron: "* * * * *", timezone: "Asia/Almaty" },
@@ -400,6 +402,8 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "identity.cleanup-login-codes",
       "identity.cleanup-sign-in-steps",
       "identity.cleanup-sessions",
+      "catalog.translate",
+      "catalog.translation-wake",
       "dev.always-fails",
       "dev.daily-at-setting",
     ]);

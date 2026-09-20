@@ -39,6 +39,7 @@ import {
   versionConflict,
 } from "./catalog-errors";
 import { STRUCTURE_LOCK } from "./catalog-locks";
+import { findNameClash } from "./catalog-names";
 import {
   describeTexts,
   languagesOf,
@@ -47,11 +48,11 @@ import {
   nameKey,
   plainTexts,
   textsOf,
-  writeTexts,
   type TextIndex,
 } from "./catalog-texts";
 import { refreshCategoryCompleteness } from "./completeness";
 import { countSameProductItems } from "./same-products";
+import { TranslationQueue } from "./translation-queue.service";
 import {
   attribute,
   attributeOption,
@@ -138,6 +139,7 @@ export class CatalogAdminService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditLog) private readonly audit: AuditLog,
+    @Inject(TranslationQueue) private readonly translations: TranslationQueue,
   ) {}
 
   // ---------------------------------------------------------------- reads
@@ -232,7 +234,7 @@ export class CatalogAdminService {
         })
         .returning();
       const created = row!;
-      await writeTexts(tx, "category", created.id, "name", {}, names);
+      await this.translations.writeTexts(tx, "category", created.id, "name", {}, names);
       const described = await this.describeCategoryById(tx, created);
       await this.audit.record(
         {
@@ -315,7 +317,7 @@ export class CatalogAdminService {
         })
         .where(eq(category.id, row.id))
         .returning();
-      await writeTexts(tx, "category", row.id, "name", currentTexts, names);
+      await this.translations.writeTexts(tx, "category", row.id, "name", currentTexts, names);
       await this.audit.record(
         {
           action: auditActions.catalogCategoryChanged,
@@ -493,16 +495,23 @@ export class CatalogAdminService {
         })
         .returning();
       const created = row!;
-      await writeTexts(tx, "attribute", created.id, "name", {}, names);
+      await this.translations.writeTexts(tx, "attribute", created.id, "name", {}, names);
       if (input.unit) {
-        await writeTexts(tx, "attribute", created.id, "unit", {}, mergeTexts(NO_TEXTS, input.unit));
+        await this.translations.writeTexts(
+          tx,
+          "attribute",
+          created.id,
+          "unit",
+          {},
+          mergeTexts(NO_TEXTS, input.unit),
+        );
       }
       for (const [index, option] of options.entries()) {
         const [optionRow] = await tx
           .insert(attributeOption)
           .values({ attributeId: created.id, code: option.code, sort: index })
           .returning();
-        await writeTexts(
+        await this.translations.writeTexts(
           tx,
           "attribute_option",
           optionRow!.id,
@@ -610,8 +619,8 @@ export class CatalogAdminService {
         })
         .where(eq(attribute.id, row.id))
         .returning();
-      await writeTexts(tx, "attribute", row.id, "name", currentNames, names);
-      await writeTexts(tx, "attribute", row.id, "unit", currentUnit, unit);
+      await this.translations.writeTexts(tx, "attribute", row.id, "name", currentNames, names);
+      await this.translations.writeTexts(tx, "attribute", row.id, "unit", currentUnit, unit);
       if (isRequiredForComplete !== row.isRequiredForComplete) {
         await refreshCategoryCompleteness(tx, row.categoryId);
       }
@@ -740,7 +749,7 @@ export class CatalogAdminService {
         .values({ attributeId: owner.id, code: input.code, sort: this.nextSort(siblings) })
         .returning();
       const created = row!;
-      await writeTexts(tx, "attribute_option", created.id, "name", {}, names);
+      await this.translations.writeTexts(tx, "attribute_option", created.id, "name", {}, names);
       const described = await this.describeOption(tx, created);
       await this.audit.record(
         {
@@ -789,7 +798,7 @@ export class CatalogAdminService {
         .set({ version: row.version + 1, updatedAt: new Date() })
         .where(eq(attributeOption.id, row.id))
         .returning();
-      await writeTexts(tx, "attribute_option", row.id, "name", current, names);
+      await this.translations.writeTexts(tx, "attribute_option", row.id, "name", current, names);
       await this.audit.record(
         {
           action: auditActions.catalogAttributeOptionChanged,
@@ -1055,8 +1064,8 @@ export class CatalogAdminService {
 
   /**
    * No other non-archived neighbour has any of these names, whatever the
-   * case (edge case «Колодки» / «колодки»). Archived neighbours don't
-   * count — a name is checked again when one comes back from the archive.
+   * case (edge case «Колодки» / «колодки»); the check itself is shared with
+   * automatic translation (`findNameClash`).
    */
   private async assertNamesFree(
     executor: DbExecutor,
@@ -1065,24 +1074,9 @@ export class CatalogAdminService {
     names: Names,
     selfId: string | undefined,
   ): Promise<void> {
-    const others = siblings.filter((row) => row.id !== selfId && row.status !== "archived");
-    if (others.length === 0) {
-      return;
-    }
-    const texts = await loadTexts(
-      executor,
-      entityType,
-      others.map((row) => row.id),
-    );
-    for (const { lang, text } of languagesOf(names)) {
-      const key = nameKey(text);
-      const clash = others.find((row) => {
-        const other = textsOf(texts, row.id, "name")[lang];
-        return other !== undefined && nameKey(other.text) === key;
-      });
-      if (clash) {
-        throw nameTaken(lang, clash.id);
-      }
+    const clash = await findNameClash(executor, entityType, siblings, names, selfId);
+    if (clash) {
+      throw nameTaken(clash.lang, clash.id);
     }
   }
 

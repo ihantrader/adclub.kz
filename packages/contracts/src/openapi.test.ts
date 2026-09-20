@@ -44,6 +44,11 @@ describe("buildOpenApiDocument", () => {
       "/admin/settings/{key}/history",
       "/admin/settings/{key}/reset",
       "/admin/totp/backup-codes",
+      "/admin/translations",
+      "/admin/translations/{entityType}/{entityId}",
+      "/admin/translations/{entityType}/{entityId}/{field}/{lang}",
+      "/admin/translations/{entityType}/{entityId}/{field}/{lang}/release",
+      "/admin/translations/{entityType}/{entityId}/{field}/{lang}/retranslate",
       "/auth/login-code",
       "/auth/login-code/verify",
       "/auth/logout",
@@ -294,5 +299,35 @@ describe("buildOpenApiDocument", () => {
     expect(JSON.stringify(buildOpenApiDocument([...routes].reverse()))).toBe(
       JSON.stringify(document),
     );
+  });
+});
+
+describe("translations of the catalog (TASK-012)", () => {
+  it("documents the admin routes, their contexts, and the new error codes", () => {
+    for (const path of [
+      "/admin/translations",
+      "/admin/translations/{entityType}/{entityId}",
+      "/admin/translations/{entityType}/{entityId}/{field}/{lang}",
+    ]) {
+      const operations = Object.values(document.paths[path]) as Json[];
+      expect(operations.length).toBeGreaterThan(0);
+      for (const operation of operations) {
+        expect(operation["x-access-contexts"]).toEqual(["admin"]);
+      }
+    }
+    expect(document.paths["/admin/translations"].get.parameters.map((p: Json) => p.name)).toEqual(
+      expect.arrayContaining(["entityType", "lang", "state", "limit", "cursor"]),
+    );
+    expect(document.components.schemas.ErrorCode.enum).toEqual(
+      expect.arrayContaining(["TRANSLATION_MANUALLY_EDITED", "TRANSLATION_NOT_MANUAL"]),
+    );
+    expect(document.components.schemas.TranslationOrigin.enum).toEqual(["source", "ai", "manual"]);
+    expect(document.components.schemas.TranslationFailure.enum).toEqual([
+      "empty",
+      "too_long",
+      "control_characters",
+      "wrong_language",
+      "name_taken",
+    ]);
   });
 });

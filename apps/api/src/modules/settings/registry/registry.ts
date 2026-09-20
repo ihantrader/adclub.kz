@@ -276,7 +276,8 @@ const guestAssistant = group({
       min: 0,
       max: 100_000,
       default: 100,
-      description: "Общий дневной бюджет на ИИ; при исчерпании помощник отключается.",
+      description:
+        "Общий дневной бюджет на ИИ (сутки по времени Алматы); при исчерпании помощник отключается и новые задачи автоперевода не отправляются.",
     }),
     assistant_symptom_disclaimer: define.localizedText({
       maxLength: 500,
@@ -286,6 +287,38 @@ const guestAssistant = group({
         en: "The assistant may be wrong. Only a car service can find the exact cause of the problem.",
       },
       description: "Оговорка, которую сервер добавляет к ответу помощника на описание симптома.",
+    }),
+  },
+});
+
+const translation = group({
+  id: "translation",
+  title: "Переводы справочника",
+  editableBy: "admin",
+  settings: {
+    translation_batch_size: define.integer({
+      unit: "count",
+      min: 1,
+      max: 100,
+      default: 20,
+      description:
+        "Сколько названий справочника отправляется ИИ на автоперевод одним запросом (пакет).",
+    }),
+    translation_retry_limit: define.integer({
+      unit: "count",
+      min: 0,
+      max: 10,
+      default: 3,
+      description:
+        "Сколько раз задача автоперевода повторяется при временной ошибке ИИ, прежде чем попасть в мёртвую очередь (0 — без повторов). Действует на задачи, поставленные после изменения.",
+    }),
+    translation_retry_delay_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: 3600,
+      default: 60,
+      description:
+        "Пауза перед первым повтором задачи автоперевода; каждый следующий повтор вдвое дольше. Действует на задачи, поставленные после изменения.",
     }),
   },
 });
@@ -799,6 +832,7 @@ export const settingGroups = [
   orders,
   notifications,
   guestAssistant,
+  translation,
   rating,
   pricelist,
   reviews,
@@ -815,6 +849,7 @@ export const settingDefinitions = {
   ...orders.settings,
   ...notifications.settings,
   ...guestAssistant.settings,
+  ...translation.settings,
   ...rating.settings,
   ...pricelist.settings,
   ...reviews.settings,

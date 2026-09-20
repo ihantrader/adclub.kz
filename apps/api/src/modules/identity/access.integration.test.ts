@@ -1823,6 +1823,8 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "GET /admin/catalog/items/{itemId}",
         "GET /admin/settings",
         "GET /admin/settings/{key}/history",
+        "GET /admin/translations",
+        "GET /admin/translations/{entityType}/{entityId}",
         "PATCH /admin/catalog/attribute-options/{optionId}",
         "PATCH /admin/catalog/attributes/{attributeId}",
         "PATCH /admin/catalog/brands/{brandId}",
@@ -1842,12 +1844,15 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "POST /admin/catalog/items/{itemId}/status",
         "POST /admin/settings/{key}/reset",
         "POST /admin/totp/backup-codes",
+        "POST /admin/translations/{entityType}/{entityId}/{field}/{lang}/release",
+        "POST /admin/translations/{entityType}/{entityId}/{field}/{lang}/retranslate",
         "PUT /admin/catalog/attributes/{attributeId}/options/order",
         "PUT /admin/catalog/categories/order",
         "PUT /admin/catalog/categories/{categoryId}/attributes/order",
         "PUT /admin/catalog/categories/{categoryId}/fill",
         "PUT /admin/catalog/items/{itemId}/values",
         "PUT /admin/settings/{key}",
+        "PUT /admin/translations/{entityType}/{entityId}/{field}/{lang}",
       ]);
       // The list only reads (405 names what it takes, TASK-009.A); an
       // administrator by id has no route at all.

@@ -46,7 +46,8 @@ export function nameKey(value: string): string {
   return normalizeText(value).toLowerCase();
 }
 
-function sourceHash(text: string): string {
+/** SHA-256 of a source text: what a translation records it was made from (`source_hash`). */
+export function sourceHash(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
@@ -126,10 +127,22 @@ export function mergeTexts(
   return merged;
 }
 
+/** What `writeTexts` did: which languages it wrote or removed (TASK-012 queues automatic translation from it). */
+export interface TextWriteResult {
+  /** The Russian text was created or changed. */
+  sourceChanged: boolean;
+  /** Languages (other than Russian) written by hand in this call. */
+  written: CatalogLanguage[];
+  /** Languages (other than Russian) removed in this call. */
+  removed: CatalogLanguage[];
+}
+
 /**
  * Writes one field of one entity so it holds exactly `wanted` (a
  * language with `null` is removed). Rows whose text doesn't change are
- * left as they are — their origin and hash stay true.
+ * left as they are — their origin and hash stay true. What is written
+ * here is written by the administrator (or the seed): `manual`, and
+ * automatic translation never overwrites it (TASK-012).
  */
 export async function writeTexts(
   executor: DbExecutor,
@@ -138,7 +151,8 @@ export async function writeTexts(
   field: TranslationField,
   current: StoredTexts,
   wanted: Record<CatalogLanguage, string | null>,
-): Promise<void> {
+): Promise<TextWriteResult> {
+  const result: TextWriteResult = { sourceChanged: false, written: [], removed: [] };
   const source = wanted[SOURCE_LANGUAGE];
   for (const lang of LANGUAGES) {
     const text = wanted[lang];
@@ -146,6 +160,9 @@ export async function writeTexts(
     if (text === null) {
       if (existing) {
         await executor.delete(translation).where(eq(translation.id, existing.id));
+        if (lang !== SOURCE_LANGUAGE) {
+          result.removed.push(lang);
+        }
       }
       continue;
     }
@@ -161,6 +178,8 @@ export async function writeTexts(
       origin: isSource ? ("source" as const) : ("manual" as const),
       isManuallyEdited: true,
       sourceHash: isSource ? null : sourceHash(source as string),
+      aiModel: null,
+      aiJobId: null,
       updatedAt: new Date(),
     };
     if (existing) {
@@ -168,7 +187,13 @@ export async function writeTexts(
     } else {
       await executor.insert(translation).values({ entityType, entityId, field, lang, ...values });
     }
+    if (isSource) {
+      result.sourceChanged = true;
+    } else {
+      result.written.push(lang);
+    }
   }
+  return result;
 }
 
 /** Every language that has a text, in order. */

@@ -2361,6 +2361,461 @@
         }
       }
     },
+    "/admin/translations": {
+      "get": {
+        "operationId": "listTranslationQueue",
+        "summary": "What waits for a translation or is out of date, filtered by kind of entity, language and state: the volume of work, with counts by state",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "category",
+                "attribute",
+                "attribute_option",
+                "catalog_item"
+              ]
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kk",
+                "en"
+              ]
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "missing",
+                "queued",
+                "failed",
+                "outdated"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of what is waiting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationQueuePage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/translations/{entityType}/{entityId}": {
+      "get": {
+        "operationId": "getEntityTranslations",
+        "summary": "The translations of one entity by field and language: text, source (Russian, AI, manual), whether the Russian text changed since, the model and time of an automatic one, a pending task",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "category",
+                "attribute",
+                "attribute_option",
+                "catalog_item"
+              ]
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The translations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityTranslationsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/translations/{entityType}/{entityId}/{field}/{lang}": {
+      "put": {
+        "operationId": "editTranslation",
+        "summary": "Write a translation by hand: it is marked as manually edited and automatic translation never overwrites it; checked like any name, a neighbour's name is refused",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "category",
+                "attribute",
+                "attribute_option",
+                "catalog_item"
+              ]
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "field",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "unit"
+              ]
+            }
+          },
+          {
+            "name": "lang",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kk",
+                "en"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The text",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTranslationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The translations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityTranslationsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/translations/{entityType}/{entityId}/{field}/{lang}/release": {
+      "post": {
+        "operationId": "releaseTranslation",
+        "summary": "Release a manual edit: the text stays until the automatic translation replaces it, and the language is queued for translation",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "category",
+                "attribute",
+                "attribute_option",
+                "catalog_item"
+              ]
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "field",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "unit"
+              ]
+            }
+          },
+          {
+            "name": "lang",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kk",
+                "en"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The translations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityTranslationsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/translations/{entityType}/{entityId}/{field}/{lang}/retranslate": {
+      "post": {
+        "operationId": "retranslate",
+        "summary": "Translate again: only for an automatic text, a missing one or one refused before; a manually edited text is refused (TRANSLATION_MANUALLY_EDITED)",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "category",
+                "attribute",
+                "attribute_option",
+                "catalog_item"
+              ]
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "field",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "unit"
+              ]
+            }
+          },
+          {
+            "name": "lang",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kk",
+                "en"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The translations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityTranslationsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/auth/login-code": {
       "post": {
         "operationId": "requestLoginCode",
@@ -5574,6 +6029,44 @@
           "status"
         ]
       },
+      "EditTranslationBody": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\p{Cc}]*$"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "EntityTranslationsResponse": {
+        "type": "object",
+        "properties": {
+          "entityType": {
+            "$ref": "#/components/schemas/TranslationEntityType"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranslationFieldView"
+            }
+          }
+        },
+        "required": [
+          "entityType",
+          "entityId",
+          "fields"
+        ]
+      },
       "ErrorCode": {
         "type": "string",
         "enum": [
@@ -5623,6 +6116,8 @@
           "CATALOG_ITEM_HAS_ANALOGS",
           "CATALOG_VALUES_REJECTED",
           "CATALOG_ANALOG_INVALID",
+          "TRANSLATION_MANUALLY_EDITED",
+          "TRANSLATION_NOT_MANUAL",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -7206,6 +7701,315 @@
         },
         "required": [
           "signInStep"
+        ]
+      },
+      "TranslationEntityType": {
+        "type": "string",
+        "enum": [
+          "category",
+          "attribute",
+          "attribute_option",
+          "catalog_item"
+        ]
+      },
+      "TranslationFailure": {
+        "type": "string",
+        "enum": [
+          "empty",
+          "too_long",
+          "control_characters",
+          "wrong_language",
+          "name_taken"
+        ]
+      },
+      "TranslationField": {
+        "type": "string",
+        "enum": [
+          "name",
+          "unit"
+        ]
+      },
+      "TranslationFieldView": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "$ref": "#/components/schemas/TranslationField"
+          },
+          "texts": {
+            "type": "object",
+            "properties": {
+              "kk": {
+                "$ref": "#/components/schemas/TranslationLanguage"
+              },
+              "ru": {
+                "$ref": "#/components/schemas/TranslationLanguage"
+              },
+              "en": {
+                "$ref": "#/components/schemas/TranslationLanguage"
+              }
+            },
+            "required": [
+              "kk",
+              "ru",
+              "en"
+            ]
+          }
+        },
+        "required": [
+          "field",
+          "texts"
+        ]
+      },
+      "TranslationLanguage": {
+        "type": "object",
+        "properties": {
+          "translation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationTask"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "translation",
+          "task"
+        ]
+      },
+      "TranslationOrigin": {
+        "type": "string",
+        "enum": [
+          "source",
+          "ai",
+          "manual"
+        ]
+      },
+      "TranslationQueueItem": {
+        "type": "object",
+        "properties": {
+          "entityType": {
+            "$ref": "#/components/schemas/TranslationEntityType"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "field": {
+            "$ref": "#/components/schemas/TranslationField"
+          },
+          "lang": {
+            "$ref": "#/components/schemas/TranslationTargetLanguage"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TranslationQueueState"
+          },
+          "sourceText": {
+            "type": "string"
+          },
+          "currentText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currentOrigin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isSourceChanged": {
+            "type": "boolean"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "entityType",
+          "entityId",
+          "field",
+          "lang",
+          "state",
+          "sourceText",
+          "currentText",
+          "currentOrigin",
+          "isSourceChanged",
+          "failure"
+        ]
+      },
+      "TranslationQueuePage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranslationQueueItem"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "missing": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "queued": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "outdated": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "missing",
+              "queued",
+              "failed",
+              "outdated"
+            ]
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "counts",
+          "nextCursor"
+        ]
+      },
+      "TranslationQueueState": {
+        "type": "string",
+        "enum": [
+          "missing",
+          "queued",
+          "failed",
+          "outdated"
+        ]
+      },
+      "TranslationTargetLanguage": {
+        "type": "string",
+        "enum": [
+          "kk",
+          "en"
+        ]
+      },
+      "TranslationTask": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "failed"
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "state",
+          "failure",
+          "attempts",
+          "updatedAt"
+        ]
+      },
+      "TranslationText": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/TranslationOrigin"
+          },
+          "isManuallyEdited": {
+            "type": "boolean"
+          },
+          "isSourceChanged": {
+            "type": "boolean"
+          },
+          "aiModel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "text",
+          "origin",
+          "isManuallyEdited",
+          "isSourceChanged",
+          "aiModel",
+          "updatedAt"
         ]
       },
       "UpdateAttributeBody": {

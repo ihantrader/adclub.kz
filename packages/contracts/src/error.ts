@@ -102,6 +102,11 @@ import { clientPlatformSchema } from "./client";
  *   refused by the unique key while no other brand or item has it any more
  *   (the rival change was rolled back meanwhile); nothing was written,
  *   repeating the request decides it (TASK-011.A).
+ * - `TRANSLATION_MANUALLY_EDITED` (409): "translate again" was asked for a
+ *   text an administrator wrote by hand — automatic translation never
+ *   overwrites it; release the manual edit first (TASK-012).
+ * - `TRANSLATION_NOT_MANUAL` (409): the manual edit to release isn't one
+ *   (the text is automatic).
  *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
@@ -174,6 +179,9 @@ export const errorCodeSchema = z.enum([
   "CATALOG_ITEM_HAS_ANALOGS",
   "CATALOG_VALUES_REJECTED",
   "CATALOG_ANALOG_INVALID",
+  // Translations of the catalog's texts (TASK-012, ARCHITECTURE 4.19).
+  "TRANSLATION_MANUALLY_EDITED",
+  "TRANSLATION_NOT_MANUAL",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

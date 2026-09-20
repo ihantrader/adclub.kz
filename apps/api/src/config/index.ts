@@ -5,8 +5,12 @@ export {
   ConfigValidationError,
   DEV_ADMIN_WEB_RELEASE_VERSION,
   loginCodeChannelProviders,
+  aiProviders,
+  aiTestModes,
 } from "./env.schema";
 export type {
+  AiProviderName,
+  AiTestMode,
   AppConfig,
   LogLevel,
   LoginCodeChannelProvider,

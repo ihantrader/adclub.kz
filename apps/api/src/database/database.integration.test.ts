@@ -79,10 +79,46 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789677720444_create-audit-log",
       "1789740000000_create-catalog-structure",
       "1789830000000_create-catalog-items",
+      "1789900000000_create-ai-jobs-and-translation-tasks",
     ]);
   });
 
-  it("rolls back the latest migration only (catalog items), keeping the structure", async () => {
+  it("rolls back the latest migration only (AI calls and translation tasks), keeping the texts", async () => {
+    const job = await client.query<{ id: string }>(
+      `INSERT INTO ai_job (kind, provider, model, initiator_type, status, finished_at)
+       VALUES ('translate', 'test', 'claude-sonnet-5', 'system', 'succeeded', now()) RETURNING id`,
+    );
+    const entityId = "00000000-0000-4000-8000-000000000001";
+    await client.query(
+      `INSERT INTO translation (entity_type, entity_id, field, lang, text, origin, is_manually_edited, source_hash, ai_model, ai_job_id)
+       VALUES ('category', $1, 'name', 'en', 'Brakes', 'ai', false, 'hash', 'claude-sonnet-5', $2),
+              ('category', $1, 'name', 'ru', 'Тормоза', 'source', true, NULL, NULL, NULL)`,
+      [entityId, job.rows[0]!.id],
+    );
+    await client.query(
+      `INSERT INTO translation_task (entity_type, entity_id, field, lang, source_hash)
+       VALUES ('category', $1, 'name', 'kk', 'hash')`,
+      [entityId],
+    );
+    const output = runMigrate("down", container.getConnectionUri());
+    expect(output).toContain("Migrations complete");
+    expect(await tableExists(client, "ai_job")).toBe(false);
+    expect(await tableExists(client, "translation_task")).toBe(false);
+    // The texts stay (an automatic one keeps its origin); only the columns of the call are gone.
+    const texts = await client.query("SELECT * FROM translation WHERE entity_id = $1", [entityId]);
+    expect(texts.rows.map((row) => row.lang).sort()).toEqual(["en", "ru"]);
+    expect(Object.keys(texts.rows[0]!)).not.toContain("ai_model");
+    expect(Object.keys(texts.rows[0]!)).not.toContain("ai_job_id");
+    // And it goes up again on its own (the suite goes on from the state before).
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "translation_task")).toBe(true);
+    await client.query("DELETE FROM translation_task");
+    await client.query("DELETE FROM translation");
+    await client.query("DELETE FROM ai_job");
+    runMigrate("down", container.getConnectionUri());
+  });
+
+  it("rolls back the next one (catalog items), keeping the structure", async () => {
     const node = await client.query<{ id: string }>(
       "INSERT INTO category (code, kind, level) VALUES ('brakes', 'goods', 1) RETURNING id",
     );

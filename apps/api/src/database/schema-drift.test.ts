@@ -111,6 +111,8 @@ describe("ormTables", () => {
         "attribute",
         "attribute_option",
         "translation",
+        "translation_task",
+        "ai_job",
         "brand",
         "brand_spelling",
         "catalog_item",

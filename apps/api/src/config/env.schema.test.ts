@@ -49,6 +49,7 @@ describe("loadConfig", () => {
       signIn: { totpEncryptionKey: expect.any(String) },
       monitoring: { target: undefined, environment: "development" },
       metrics: { enabled: true, token: undefined },
+      ai: { provider: "test", anthropicApiKey: undefined, testMode: "ok" },
       ignoredVariables: [],
     });
   });
@@ -226,6 +227,73 @@ describe("loadConfig", () => {
           ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
         }),
       ).toThrow(/ADMIN_WEB_RELEASE_VERSION: required when NODE_ENV=staging/);
+    });
+  });
+
+  describe("AI provider (TASK-012)", () => {
+    const KEY = "sk-ant-not-a-real-key-for-tests-only";
+    const PRODUCTION_ENV = {
+      ...VALID_ENV,
+      NODE_ENV: "production",
+      LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
+      SESSION_TOKEN_SECRET: "a-production-session-secret-of-32-chars",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-production-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+    };
+
+    it("runs the test provider without a key and Claude with one", () => {
+      expect(loadConfig(VALID_ENV).ai).toEqual({
+        provider: "test",
+        anthropicApiKey: undefined,
+        testMode: "ok",
+      });
+      expect(loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: KEY }).ai).toEqual({
+        provider: "claude",
+        anthropicApiKey: KEY,
+        testMode: "ok",
+      });
+      // The provider can be chosen even with a key (development with a real key at hand).
+      expect(
+        loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: KEY, AI_PROVIDER: "test" }).ai.provider,
+      ).toBe("test");
+      // Empty variables in a copied .env count as unset.
+      expect(
+        loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: "", AI_PROVIDER: "", AI_TEST_MODE: "" }).ai,
+      ).toEqual({
+        provider: "test",
+        anthropicApiKey: undefined,
+        testMode: "ok",
+      });
+    });
+
+    it("takes the mode of the test provider and refuses an unknown one", () => {
+      expect(loadConfig({ ...VALID_ENV, AI_TEST_MODE: "unavailable" }).ai.testMode).toBe(
+        "unavailable",
+      );
+      expect(() => loadConfig({ ...VALID_ENV, AI_TEST_MODE: "broken" })).toThrow(/AI_TEST_MODE/);
+    });
+
+    it("refuses Claude without a key and production with the test provider, naming the variable only", () => {
+      expect(() => loadConfig({ ...VALID_ENV, AI_PROVIDER: "claude" })).toThrow(
+        /ANTHROPIC_API_KEY: required when AI_PROVIDER=claude/,
+      );
+      expect(() => loadConfig(PRODUCTION_ENV)).toThrow(
+        /AI_PROVIDER: the test AI provider is not allowed when NODE_ENV=production/,
+      );
+      try {
+        loadConfig({ ...PRODUCTION_ENV, AI_PROVIDER: "test", ANTHROPIC_API_KEY: KEY });
+        expect.unreachable();
+      } catch (error) {
+        expect((error as Error).message).toMatch(/AI_PROVIDER/);
+        expect((error as Error).message).not.toContain(KEY);
+      }
+      // Staging may run the test provider; production with a key has no complaint about AI.
+      expect(loadConfig({ ...PRODUCTION_ENV, NODE_ENV: "staging" }).ai.provider).toBe("test");
+      try {
+        loadConfig({ ...PRODUCTION_ENV, ANTHROPIC_API_KEY: KEY });
+      } catch (error) {
+        expect((error as Error).message).not.toMatch(/AI_PROVIDER|ANTHROPIC_API_KEY/);
+      }
     });
   });
 

@@ -91,6 +91,32 @@ export const translation = pgTable("translation", {
   origin: text("origin").$type<TranslationOrigin>().notNull(),
   isManuallyEdited: boolean("is_manually_edited").notNull(),
   sourceHash: text("source_hash"),
+  /** The model and the call (`ai_job`) of an automatic translation (TASK-012). */
+  aiModel: text("ai_model"),
+  aiJobId: uuid("ai_job_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TranslationTaskFailure =
+  "empty" | "too_long" | "control_characters" | "wrong_language" | "name_taken";
+
+/**
+ * Translations still to be made (`…_create-ai-jobs-and-translation-tasks.sql`;
+ * ARCHITECTURE 4.19, TASK-012): one row per entity, field and target language.
+ */
+export const translationTask = pgTable("translation_task", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  entityType: text("entity_type").$type<TranslationEntityType>().notNull(),
+  entityId: uuid("entity_id").notNull(),
+  field: text("field").$type<TranslationField>().notNull(),
+  lang: text("lang").$type<"kk" | "en">().notNull(),
+  sourceHash: text("source_hash").notNull(),
+  status: text("status").$type<"pending" | "failed">().notNull().default("pending"),
+  failure: text("failure").$type<TranslationTaskFailure>(),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  claimedUntil: timestamp("claimed_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -168,6 +194,7 @@ export type CategoryRow = typeof category.$inferSelect;
 export type AttributeRow = typeof attribute.$inferSelect;
 export type AttributeOptionRow = typeof attributeOption.$inferSelect;
 export type TranslationRow = typeof translation.$inferSelect;
+export type TranslationTaskRow = typeof translationTask.$inferSelect;
 export type BrandRow = typeof brand.$inferSelect;
 export type BrandSpellingRow = typeof brandSpelling.$inferSelect;
 export type CatalogItemRow = typeof catalogItem.$inferSelect;
@@ -178,6 +205,7 @@ export const catalogTables = [
   attribute,
   attributeOption,
   translation,
+  translationTask,
   brand,
   brandSpelling,
   catalogItem,

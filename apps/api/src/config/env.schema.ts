@@ -69,6 +69,34 @@ const loginCodeChannelList = z
   .pipe(z.array(z.enum(["whatsapp", "sms"])));
 
 /**
+ * Where AI calls go (TASK-012, ARCHITECTURE 9.6, 4.19). `claude` needs
+ * `ANTHROPIC_API_KEY`; `test` is an in-process stand-in that calls nothing
+ * (development, tests and CI) and is refused in production, where its
+ * made-up texts would end up in the catalog.
+ */
+export const aiProviders = ["test", "claude"] as const;
+export type AiProviderName = (typeof aiProviders)[number];
+
+/**
+ * What the test AI provider does with a request (`AI_TEST_MODE`, development
+ * and tests): `ok` — translates (deterministically); `unavailable` — fails
+ * like an unreachable provider; `rejected` — refuses like a bad key;
+ * `slow` — answers after a delay; `empty`, `too_long`, `control_characters`,
+ * `wrong_language` — answers with a text the checks refuse.
+ */
+export const aiTestModes = [
+  "ok",
+  "unavailable",
+  "rejected",
+  "slow",
+  "empty",
+  "too_long",
+  "control_characters",
+  "wrong_language",
+] as const;
+export type AiTestMode = (typeof aiTestModes)[number];
+
+/**
  * Used only when no secret is configured in development and tests, so a
  * fresh checkout runs without extra setup. Every other environment must
  * set `LOGIN_CODE_HASH_SECRET`.
@@ -190,6 +218,20 @@ export const envSchema = z.object({
   METRICS_ENABLED: z.stringbool().optional(),
   // When set, the collector must present it: `Authorization: Bearer <token>`.
   METRICS_TOKEN: z.string().min(16).optional(),
+  // AI (ARCHITECTURE 9.6, 4.19; TASK-012). Unset provider: `claude` when a
+  // key is set, `test` otherwise. An empty variable counts as unset.
+  AI_PROVIDER: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(aiProviders).optional(),
+  ),
+  ANTHROPIC_API_KEY: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().min(10).optional(),
+  ),
+  AI_TEST_MODE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(aiTestModes).default("ok"),
+  ),
 });
 
 export interface RateLimitSettings {
@@ -254,6 +296,13 @@ export type AppConfig = {
     /** Bearer token the collector must present; `undefined` — no token needed. */
     token: string | undefined;
   };
+  ai: {
+    provider: AiProviderName;
+    /** The Anthropic key; `undefined` without one (then only the test provider runs). */
+    anthropicApiKey: string | undefined;
+    /** What the test provider does (ignored by `claude`). */
+    testMode: AiTestMode;
+  };
   /**
    * Variables present in the environment that used to hold what are
    * settings now; they have no effect (`main.ts`, `worker.ts` warn).
@@ -312,6 +361,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (!isLocal && !parsed[name]) {
       environmentIssues.push(`${name}: required when NODE_ENV=${parsed.NODE_ENV}`);
     }
+  }
+  const aiProvider: AiProviderName =
+    parsed.AI_PROVIDER ?? (parsed.ANTHROPIC_API_KEY ? "claude" : "test");
+  if (aiProvider === "claude" && !parsed.ANTHROPIC_API_KEY) {
+    environmentIssues.push("ANTHROPIC_API_KEY: required when AI_PROVIDER=claude");
+  }
+  if (parsed.NODE_ENV === "production" && aiProvider === "test") {
+    environmentIssues.push(
+      "AI_PROVIDER: the test AI provider is not allowed when NODE_ENV=production (set ANTHROPIC_API_KEY)",
+    );
   }
   let monitoringTarget: MonitoringTarget | undefined;
   if (parsed.MONITORING_DSN) {
@@ -384,6 +443,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     metrics: {
       enabled: metricsEnabled,
       token: parsed.METRICS_TOKEN,
+    },
+    ai: {
+      provider: aiProvider,
+      anthropicApiKey: parsed.ANTHROPIC_API_KEY,
+      testMode: parsed.AI_TEST_MODE,
     },
     ignoredVariables: Object.keys(env)
       .filter((name) => SETTINGS_FORMERLY_IN_ENVIRONMENT.some((pattern) => pattern.test(name)))

@@ -13,6 +13,8 @@ function row(lang: "kk" | "ru" | "en", text: string): TranslationRow {
     origin: lang === "ru" ? "source" : "manual",
     isManuallyEdited: true,
     sourceHash: null,
+    aiModel: null,
+    aiJobId: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

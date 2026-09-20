@@ -54,6 +54,22 @@ export class Metrics {
     "adclub_login_code_deliveries_total",
     "Login code deliveries by channel and outcome (sent, failed)",
   );
+  private readonly aiSpend = this.registry.gauge(
+    "adclub_ai_spend_today_usd",
+    "Spend on AI calls since the start of the Almaty day, USD (from ai_job)",
+  );
+  private readonly aiBudget = this.registry.gauge(
+    "adclub_ai_daily_budget_usd",
+    "The daily AI budget, USD (setting ai_daily_budget_usd); spend at or above it stops new calls",
+  );
+  private readonly aiCalls = this.registry.gauge(
+    "adclub_ai_calls_today",
+    "AI calls since the start of the Almaty day by kind and status (from ai_job)",
+  );
+  private readonly translationTasks = this.registry.gauge(
+    "adclub_translation_tasks",
+    "Automatic translations waiting (pending) or refused for good (failed), by state",
+  );
   private readonly dependencyUp = this.registry.gauge(
     "adclub_dependency_up",
     "1 when a dependency answered the last /ready check, 0 when it did not",
@@ -97,6 +113,22 @@ export class Metrics {
     this.loginCodeDeliveries.increment({ channel, outcome });
   }
 
+  setAiSpend(usd: number): void {
+    this.aiSpend.set({}, usd);
+  }
+
+  setAiBudget(usd: number): void {
+    this.aiBudget.set({}, usd);
+  }
+
+  setAiCalls(kind: string, status: string, count: number): void {
+    this.aiCalls.set({ kind, status }, count);
+  }
+
+  setTranslationTasks(state: string, count: number): void {
+    this.translationTasks.set({ state }, count);
+  }
+
   setDependencyUp(dependency: string, up: boolean): void {
     this.dependencyUp.set({ dependency }, up ? 1 : 0);
   }
@@ -121,6 +153,20 @@ export class Metrics {
       this.jobDead,
       this.periodicJobState,
     ]);
+  }
+
+  /**
+   * AI spend and the daily budget, sampled when metrics are scraped (from
+   * the database, like the jobs: the worker makes the calls, the API serves
+   * the scrape).
+   */
+  collectAi(collector: MetricCollector): void {
+    this.registry.collect("ai", collector, [this.aiSpend, this.aiBudget, this.aiCalls]);
+  }
+
+  /** The automatic translation queue, sampled like the AI spend. */
+  collectTranslation(collector: MetricCollector): void {
+    this.registry.collect("translation", collector, [this.translationTasks]);
   }
 
   render(): Promise<string> {

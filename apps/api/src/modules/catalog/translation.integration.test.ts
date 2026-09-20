@@ -586,6 +586,10 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       expect(asked.status, JSON.stringify(asked.body)).toBe(200);
       await asAdmin("post", `${base}/en/retranslate`).expect(200);
       expect(await tasksOf(category.id)).toMatchObject([{ lang: "en", status: "pending" }]);
+      const requeued = (await journalActions()).filter(
+        (action) => action === auditActions.catalogTranslationRequeued,
+      );
+      expect(requeued).toHaveLength(2);
       // An automatic text is not a manual edit to release.
       await insertAi(category.id, "en", "Shock absorbers", "Амортизаторы");
       expectError(await asAdmin("post", `${base}/en/release`), 409, "TRANSLATION_NOT_MANUAL");

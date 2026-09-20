@@ -70,7 +70,7 @@ COMPLETED
 | `pnpm --filter @adclub/api openapi:compat --base HEAD` | PASS | «No breaking changes to report» — изменение аддитивно, трейлер не нужен |
 | `pnpm --filter api migrate` → `migrate:down` → `migrate` | PASS | миграция применяется, откатывается и применяется снова; откат проверен и тестом (см. AC-12) |
 | CI на `main` | PASS | run **35530341048**, коммит `4718f0c` — **success с первой попытки** (`gh run view 35530341048`) |
-| CI коммита с отчётом | — | номер и статус дописаны отдельным коммитом, как в TASK-053.A |
+| CI коммита с отчётом | PASS | run **35530699643**, коммит `3a26e52` — **success с первой попытки** |
 
 **Важно о локальном прогоне интеграционных тестов.** На машине разработки (12 ядер, Docker Desktop под Windows) `pnpm test:integration` с параллелизмом по умолчанию падает случайными `ECONNRESET` в разных файлах: 14 файлов поднимают свои контейнеры почти одновременно. С `--maxWorkers=3` (столько же параллельных файлов, сколько на 4-ядерном раннере GitHub) прогон зелёный целиком. Это ограничение локальной среды, а не продукта; конфигурация тестов не менялась.
 
@@ -104,7 +104,7 @@ COMPLETED
 - **AC-10 — PASS.** «lets a picture through on the upload route and refuses one everywhere else»: картинка на маршруте загрузки — 201; тот же путь методом `GET` с телом-картинкой — 415; другой маршрут с телом-картинкой — 415; обычный JSON-маршрут — 201. Плюс `routes.test.ts` — «names every route whose body is a file, and only those».
 - **AC-11 — PASS.** «serves the photo routes to an administrator only» (мобильная сессия — 403 `FORBIDDEN`, без сессии — 401 `AUTH_REQUIRED`, ничего не сохранено). Кроме того, все четыре маршрута попали в существующие матрицы доступа: `catalog.integration.test.ts` (32 админских маршрута каталога) и `catalog-items.integration.test.ts` (18 маршрутов брендов, позиций и дозаполнения) — обе матрицы теперь шлют на маршрут-загрузку настоящую картинку, чтобы отказ был про доступ, а не про тело.
 - **AC-12 — PASS.** Контракт, OpenAPI (включая тело-файл) и клиент обновлены; `openapi:check` — PASS, `openapi:compat --base HEAD` — «No breaking changes to report» (трейлер не нужен). Миграция обратима: новый тест `database.integration.test.ts` → «rolls back the latest migration only (photos of items), keeping the items» (таблицы и колонка исчезают, позиция остаётся, `up` возвращает всё). Таблицы добавлены в сверку схемы (`ormTables`, `schema-drift.test.ts`) и в очистку между тестами. Существующие тесты не ослаблены — наоборот, три матрицы доступа и список фоновых задач расширены; перехват вывода интеграционных тестов чист (ни один тест не упал по утечке).
-- **AC-13 — PASS.** Пять коммитов по D-024 (состав ниже), правки Product Owner отдельным коммитом. CI на `main`: run **35530341048** (`4718f0c`) — `success`, с первой попытки. Номер и статус прогона коммита с отчётом дописываются отдельным коммитом (как в TASK-053.A).
+- **AC-13 — PASS.** Пять коммитов по D-024 (состав ниже), правки Product Owner отдельным коммитом. CI на `main`: run **35530341048** (`4718f0c`) — `success`, с первой попытки. Коммит с отчётом — run **35530699643** (`3a26e52`), `success`, тоже с первой попытки (этот номер записан следующим коммитом).
 - **AC-14 — PASS.** ARCHITECTURE.md 0.25: новый раздел 4.22 (I199–I205), уточнены 5.2 (`item_photo`, `item_photo_file`, `catalog_item.primary_photo_id`), 14 (четыре настройки группы «Фото»), 15.2 (как на самом деле идёт загрузка), версия и история изменений. CLAUDE.md блок 0: модуль в описании структуры, `minio-init` в запуске dev, раздел «Фотографии позиций в dev», состав интеграционных тестов.
 
 ## Состав коммитов
@@ -116,7 +116,8 @@ COMPLETED
 | `4b9c998` | `infra/docker/compose.dev.yml` — создание бакета в dev |
 | `b8c5a32` | Сама задача, 41 файл: контракт (`catalog-photos.ts`, `routes.ts`, `openapi.ts`, `catalog-items.ts`, `error.ts`, `audit.ts`, `index.ts` и их тесты), клиент (`create-api-client.ts` + тест), `apps/api/openapi.json`, миграция, модуль фотографий (`photo-image.ts` + тест, `photo-storage.ts`, `catalog-photos.service.ts`, `catalog-photos.controller.ts`, `photo-jobs.ts`, `photo-cleanup.ts`, интеграционный тест), чтение тела-файла (`upload-routes.ts`, `upload-body.middleware.ts`, `json-body.middleware.ts`, `app.module.ts`, `common/http/index.ts`), встраивание (`catalog-items.service.ts`, `schema.ts`, `catalog.module.ts`, `catalog/index.ts`, `translation-runner.ts`, `background-jobs.ts`, `operator.ts`, реестр настроек), обновлённые существующие тесты (`schema-drift.test.ts`, `database.integration.test.ts`, `catalog.integration.test.ts`, `catalog-items.integration.test.ts`, `access.integration.test.ts`, `sign-in-data-cleanup.integration.test.ts`, `testing/database.ts`) |
 | `4718f0c` | `ARCHITECTURE.md` 0.25, `CLAUDE.md` |
-| последний | `tasks/TASK-013-REPORT.md` (и отдельный коммит с номером его CI-прогона) |
+| `3a26e52` | `tasks/TASK-013-REPORT.md` |
+| последний | `tasks/TASK-013-REPORT.md` — номер CI-прогона коммита с отчётом |
 
 ## Errors & Fixes
 

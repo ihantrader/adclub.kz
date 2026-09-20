@@ -291,6 +291,48 @@ const guestAssistant = group({
   },
 });
 
+/**
+ * An OpenRouter model identifier: `author/slug`, optionally an alias
+ * (`~author/slug-latest`) or a variant (`author/slug:batch`). Checked
+ * here so a typo is refused where it is made; whether OpenRouter actually
+ * serves the model is answered by the call itself (`model_unavailable`,
+ * ARCHITECTURE 4.20 I187).
+ */
+const MODEL_ID = {
+  regex: /^~?[a-z0-9]([a-z0-9._-]*[a-z0-9])?\/[a-z0-9]([a-z0-9._:-]*[a-z0-9])?$/,
+  message: "Must be an OpenRouter model identifier, e.g. google/gemini-3.8-flash",
+};
+
+const ai = group({
+  id: "ai",
+  title: "ИИ",
+  editableBy: "admin",
+  settings: {
+    ai_model_translate_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-3.8-flash",
+      description:
+        "Модель OpenRouter для автоперевода справочника. Меняется без релиза; после изменения новые пакеты уходят новой модели не позже чем через 30 секунд.",
+    }),
+    ai_model_translate_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "openai/gpt-5.4-mini",
+      description:
+        "Запасная модель автоперевода: используется, когда основная недоступна или её нет у OpenRouter. Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
+    ai_call_reservation_usd: define.number({
+      unit: "usd",
+      min: 0.001,
+      max: 10,
+      default: 0.05,
+      description:
+        "Сколько резервируется из дневного бюджета на один вызов ИИ, пока провайдер не сообщит настоящую стоимость. Резерв держит предел при одновременных вызовах и остаётся учтённой стоимостью, если провайдер стоимость не сообщил.",
+    }),
+  },
+});
+
 const translation = group({
   id: "translation",
   title: "Переводы справочника",
@@ -832,6 +874,7 @@ export const settingGroups = [
   orders,
   notifications,
   guestAssistant,
+  ai,
   translation,
   rating,
   pricelist,
@@ -849,6 +892,7 @@ export const settingDefinitions = {
   ...orders.settings,
   ...notifications.settings,
   ...guestAssistant.settings,
+  ...ai.settings,
   ...translation.settings,
   ...rating.settings,
   ...pricelist.settings,

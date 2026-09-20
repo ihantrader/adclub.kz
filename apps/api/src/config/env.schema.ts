@@ -39,6 +39,12 @@ export const DEV_ADMIN_WEB_RELEASE_VERSION = "0.1.0";
  * ARCHITECTURE 4.11). Still present in an environment, they are ignored —
  * `loadConfig` reports them so nobody believes they still apply.
  */
+/** The public address of OpenRouter (D-055); `OPENROUTER_BASE_URL` overrides it in development. */
+export const OPENROUTER_PUBLIC_URL = "https://openrouter.ai/api/v1";
+
+/** Variables of a provider the project no longer has (TASK-053: the direct Anthropic channel). */
+const REMOVED_FROM_ENVIRONMENT = [/^ANTHROPIC_API_KEY$/];
+
 const SETTINGS_FORMERLY_IN_ENVIRONMENT = [
   /^CLIENT_MIN_VERSION_/,
   /^CLIENT_UPDATE_MESSAGE_/,
@@ -69,26 +75,35 @@ const loginCodeChannelList = z
   .pipe(z.array(z.enum(["whatsapp", "sms"])));
 
 /**
- * Where AI calls go (TASK-012, ARCHITECTURE 9.6, 4.19). `claude` needs
- * `ANTHROPIC_API_KEY`; `test` is an in-process stand-in that calls nothing
+ * Where AI calls go (TASK-053, ARCHITECTURE 9.6, 4.20; D-055). OpenRouter
+ * is the only provider of the project — one key, one account, the model of
+ * every operation chosen by a setting. `openrouter` needs
+ * `OPENROUTER_API_KEY`; `test` is an in-process stand-in that calls nothing
  * (development, tests and CI) and is refused in production, where its
  * made-up texts would end up in the catalog.
  */
-export const aiProviders = ["test", "claude"] as const;
+export const aiProviders = ["test", "openrouter"] as const;
 export type AiProviderName = (typeof aiProviders)[number];
 
 /**
  * What the test AI provider does with a request (`AI_TEST_MODE`, development
  * and tests): `ok` — translates (deterministically); `unavailable` — fails
  * like an unreachable provider; `rejected` — refuses like a bad key;
- * `slow` — answers after a delay; `empty`, `too_long`, `control_characters`,
- * `wrong_language` — answers with a text the checks refuse.
+ * `no_private_provider` — refuses like a model no provider serves without
+ * storing the request (D-057); `slow` — answers after a delay;
+ * `incomplete` — leaves the last text of the batch out, like a provider
+ * that answered only partly; `no_cost` — answers without saying what the
+ * call cost; `empty`, `too_long`, `control_characters`, `wrong_language` —
+ * answers with a text the checks refuse.
  */
 export const aiTestModes = [
   "ok",
   "unavailable",
   "rejected",
+  "no_private_provider",
   "slow",
+  "incomplete",
+  "no_cost",
   "empty",
   "too_long",
   "control_characters",
@@ -218,15 +233,21 @@ export const envSchema = z.object({
   METRICS_ENABLED: z.stringbool().optional(),
   // When set, the collector must present it: `Authorization: Bearer <token>`.
   METRICS_TOKEN: z.string().min(16).optional(),
-  // AI (ARCHITECTURE 9.6, 4.19; TASK-012). Unset provider: `claude` when a
-  // key is set, `test` otherwise. An empty variable counts as unset.
+  // AI (ARCHITECTURE 9.6, 4.20; TASK-053). Unset provider: `openrouter`
+  // when a key is set, `test` otherwise. An empty variable counts as unset.
   AI_PROVIDER: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.enum(aiProviders).optional(),
   ),
-  ANTHROPIC_API_KEY: z.preprocess(
+  OPENROUTER_API_KEY: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().trim().min(10).optional(),
+  ),
+  // Where OpenRouter is; only development changes it (an unreachable
+  // address, to see the retries of translation without touching the network).
+  OPENROUTER_BASE_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.url().optional(),
   ),
   AI_TEST_MODE: z.preprocess(
     (value) => (value === "" ? undefined : value),
@@ -298,14 +319,17 @@ export type AppConfig = {
   };
   ai: {
     provider: AiProviderName;
-    /** The Anthropic key; `undefined` without one (then only the test provider runs). */
-    anthropicApiKey: string | undefined;
+    /** The OpenRouter key; `undefined` without one (then only the test provider runs). */
+    openRouterApiKey: string | undefined;
+    /** Where OpenRouter is (the public address unless development says otherwise). */
+    openRouterBaseUrl: string;
     /** What the test provider does (ignored by `claude`). */
     testMode: AiTestMode;
   };
   /**
    * Variables present in the environment that used to hold what are
-   * settings now; they have no effect (`main.ts`, `worker.ts` warn).
+   * settings now, or belong to something the project no longer has; they
+   * have no effect (`main.ts`, `worker.ts` warn).
    */
   ignoredVariables: string[];
 };
@@ -363,13 +387,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
   const aiProvider: AiProviderName =
-    parsed.AI_PROVIDER ?? (parsed.ANTHROPIC_API_KEY ? "claude" : "test");
-  if (aiProvider === "claude" && !parsed.ANTHROPIC_API_KEY) {
-    environmentIssues.push("ANTHROPIC_API_KEY: required when AI_PROVIDER=claude");
+    parsed.AI_PROVIDER ?? (parsed.OPENROUTER_API_KEY ? "openrouter" : "test");
+  if (aiProvider === "openrouter" && !parsed.OPENROUTER_API_KEY) {
+    environmentIssues.push("OPENROUTER_API_KEY: required when AI_PROVIDER=openrouter");
   }
   if (parsed.NODE_ENV === "production" && aiProvider === "test") {
     environmentIssues.push(
-      "AI_PROVIDER: the test AI provider is not allowed when NODE_ENV=production (set ANTHROPIC_API_KEY)",
+      "AI_PROVIDER: the test AI provider is not allowed when NODE_ENV=production (set OPENROUTER_API_KEY)",
     );
   }
   let monitoringTarget: MonitoringTarget | undefined;
@@ -446,11 +470,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     ai: {
       provider: aiProvider,
-      anthropicApiKey: parsed.ANTHROPIC_API_KEY,
+      openRouterApiKey: parsed.OPENROUTER_API_KEY,
+      openRouterBaseUrl: parsed.OPENROUTER_BASE_URL ?? OPENROUTER_PUBLIC_URL,
       testMode: parsed.AI_TEST_MODE,
     },
     ignoredVariables: Object.keys(env)
-      .filter((name) => SETTINGS_FORMERLY_IN_ENVIRONMENT.some((pattern) => pattern.test(name)))
+      .filter((name) =>
+        [...SETTINGS_FORMERLY_IN_ENVIRONMENT, ...REMOVED_FROM_ENVIRONMENT].some((pattern) =>
+          pattern.test(name),
+        ),
+      )
       .sort(),
   };
 }

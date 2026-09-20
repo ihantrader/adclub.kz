@@ -19,12 +19,13 @@ import {
   AiBudgetExhaustedError,
   AiGatewayError,
   AiService,
+  type AiInitiator,
   type TranslateItem,
   type TranslateOutput,
 } from "../ai";
 import { Metrics } from "../../observability";
 import { AppSettings } from "../settings";
-import { STRUCTURE_LOCK } from "./catalog-locks";
+import { nameScopeLock, STRUCTURE_LOCK_SHARED } from "./catalog-locks";
 import { findNameClash, nameNeighbours } from "./catalog-names";
 import { SOURCE_LANGUAGE, sourceHash } from "./catalog-texts";
 import { checkTranslation, maxLengthOf } from "./translation-checks";
@@ -57,6 +58,8 @@ interface ClaimedTask {
   entityId: string;
   field: TranslationField;
   lang: TranslationTargetLanguage;
+  /** The administrator who asked for this translation; `null` — nobody in particular. */
+  requestedBy: string | null;
 }
 
 /** One text of a batch: what is translated, and the tasks that ask for it. */
@@ -70,7 +73,7 @@ interface BatchItem {
   tasks: ClaimedTask[];
 }
 
-export type SaveOutcome = "saved" | "failed" | "skipped" | "superseded";
+export type SaveOutcome = "saved" | "failed" | "skipped" | "superseded" | "incomplete";
 
 /**
  * The translation job (TASK-012; ARCHITECTURE 4.19): claims pending tasks
@@ -95,8 +98,16 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
 
   async run(_payload: Record<string, never>, context: JobRunContext): Promise<void> {
     const startedAt = Date.now();
-    const totals = { saved: 0, failed: 0, skipped: 0, superseded: 0, batches: 0 };
-    for (;;) {
+    const totals = {
+      saved: 0,
+      failed: 0,
+      skipped: 0,
+      superseded: 0,
+      incomplete: 0,
+      batches: 0,
+    };
+    let stopped = false;
+    for (; !stopped;) {
       if (context.signal.aborted) {
         return;
       }
@@ -110,18 +121,34 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       if (claimed.length === 0) {
         break;
       }
-      const outcome = await this.translateBatch(claimed);
-      if (outcome === "budget") {
-        break;
-      }
-      totals.batches += 1;
-      for (const [key, count] of Object.entries(outcome)) {
-        totals[key as SaveOutcome] += count;
+      // One call per initiator: a call asked for by an administrator is
+      // recorded as theirs, not as the system's (TASK-053 requirement 4).
+      for (const group of byInitiator(claimed)) {
+        const outcome = await this.translateBatch(group.tasks, group.initiator);
+        if (outcome === "budget") {
+          stopped = true;
+          break;
+        }
+        totals.batches += 1;
+        for (const [key, count] of Object.entries(outcome)) {
+          totals[key as SaveOutcome] += count;
+        }
       }
     }
     if (totals.batches > 0) {
       this.logger.log(
-        `Translation run finished batches=${totals.batches} saved=${totals.saved} failed=${totals.failed} skipped=${totals.skipped} superseded=${totals.superseded} durationMs=${Date.now() - startedAt}`,
+        `Translation run finished batches=${totals.batches} saved=${totals.saved} failed=${totals.failed} skipped=${totals.skipped} superseded=${totals.superseded} incomplete=${totals.incomplete} durationMs=${Date.now() - startedAt}`,
+      );
+    }
+    if (totals.incomplete > 0) {
+      // The provider answered, but not about everything it was asked. That is
+      // a trouble of the moment, not a verdict on those texts: the missing
+      // ones stay pending and this job is retried by its own rules
+      // (`translation_retry_limit`, `translation_retry_delay_seconds`), which
+      // ask for them again. The dead letter queue is where it ends if the
+      // provider keeps leaving them out — visible, unlike a false "empty".
+      throw new Error(
+        `The AI provider answered about ${totals.saved + totals.failed} texts and left ${totals.incomplete} of them out; the missing ones are asked again`,
       );
     }
   }
@@ -134,6 +161,7 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       entity_id: string;
       field: TranslationField;
       lang: TranslationTargetLanguage;
+      requested_by: string | null;
     }>(sql`
       UPDATE translation_task SET claimed_until = now() + make_interval(secs => ${LEASE_SECONDS})
       WHERE id IN (
@@ -143,20 +171,28 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       )
-      RETURNING id, entity_type, entity_id, field, lang`);
+      RETURNING id, entity_type, entity_id, field, lang, requested_by`);
     return result.rows.map((row) => ({
       id: row.id,
       entityType: row.entity_type,
       entityId: row.entity_id,
       field: row.field,
       lang: row.lang,
+      requestedBy: row.requested_by,
     }));
   }
 
   private async translateBatch(
     claimed: ClaimedTask[],
+    initiator: AiInitiator,
   ): Promise<Record<SaveOutcome, number> | "budget"> {
-    const counts: Record<SaveOutcome, number> = { saved: 0, failed: 0, skipped: 0, superseded: 0 };
+    const counts: Record<SaveOutcome, number> = {
+      saved: 0,
+      failed: 0,
+      skipped: 0,
+      superseded: 0,
+      incomplete: 0,
+    };
     const items = await this.itemsOf(claimed, counts);
     if (items.length === 0) {
       return counts;
@@ -176,7 +212,7 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       const result = await this.ai.translate(
         { items: request },
         {
-          initiator: { type: "system" },
+          initiator,
           inputRef: { tasks: claimed.length, items: items.length, languages },
         },
       );
@@ -201,14 +237,20 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
     const texts = new Map(
       output.translations.map((entry) => [`${entry.id}:${entry.lang}`, entry.text]),
     );
+    const missing: string[] = [];
     for (const item of items) {
       for (const task of item.tasks) {
+        const text = texts.get(`${item.id}:${task.lang}`);
+        if (text === undefined) {
+          // The provider said nothing about this one: ask again later
+          // (TASK-053 requirement 4), never "the translation was empty".
+          missing.push(task.id);
+          counts.incomplete += 1;
+          continue;
+        }
         let outcome: SaveOutcome;
         try {
-          outcome = await this.save(task, item, texts.get(`${item.id}:${task.lang}`), {
-            jobId,
-            model,
-          });
+          outcome = await this.save(task, item, text, { jobId, model });
         } catch (error) {
           // One task failing to save (a lock timeout, a deadlock) must not lose the others:
           // its lease is released and a later run tries it again.
@@ -220,6 +262,12 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
         }
         counts[outcome] += 1;
       }
+    }
+    if (missing.length > 0) {
+      this.logger.warn(
+        `The AI answer left ${missing.length} of ${missing.length + counts.saved + counts.failed} texts out; they stay pending and are asked again job=${jobId} model=${model}`,
+      );
+      await this.release(missing, "incomplete_answer");
     }
     return counts;
   }
@@ -271,8 +319,12 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
   }
 
   /**
-   * Saves one translation, or decides it can't be saved — all under the
-   * catalog lock, in one transaction, on what is true now.
+   * Saves one translation, or decides it can't be saved — in one
+   * transaction, on what is true now, holding the structure of the catalog
+   * against change (shared, like every write of an item) and the names of
+   * this entity's neighbours against another writer (ARCHITECTURE 4.20
+   * I191). Translations of different neighbourhoods, and the
+   * administrator's work on items, no longer wait for each other.
    */
   async save(
     task: ClaimedTask,
@@ -281,7 +333,11 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
     call: { jobId: string; model: string },
   ): Promise<SaveOutcome> {
     return this.database.db.transaction(async (tx) => {
-      await tx.execute(STRUCTURE_LOCK);
+      await tx.execute(STRUCTURE_LOCK_SHARED);
+      const scope = task.field === "name" ? await this.nameScope(tx, task) : null;
+      if (scope) {
+        await tx.execute(nameScopeLock(scope));
+      }
       const [row] = await tx
         .select()
         .from(translationTask)
@@ -374,6 +430,12 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
     });
   }
 
+  /** What set of names this entity's name belongs to; `null` — it has no neighbours. */
+  private async nameScope(tx: DbExecutor, task: ClaimedTask): Promise<string | null> {
+    const info = await nameNeighbours(tx, task.entityType, task.entityId);
+    return info?.scope ?? null;
+  }
+
   /** Whether a neighbour already has this name in this language (archived entities aren't checked, 4.15 I144). */
   private async clash(tx: DbExecutor, task: ClaimedTask, text: string): Promise<boolean> {
     const info = await nameNeighbours(tx, task.entityType, task.entityId);
@@ -423,6 +485,30 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       );
     }
   }
+}
+
+/**
+ * The claimed tasks split by who asked for them, so every AI call is
+ * recorded with its real initiator (TASK-053 requirement 4): the
+ * administrator who pressed "translate again" or released a manual text,
+ * or the system — a change of a Russian text, an operator command, the
+ * safety net. Tasks of one administrator stay one call.
+ */
+function byInitiator(claimed: ClaimedTask[]): { initiator: AiInitiator; tasks: ClaimedTask[] }[] {
+  const groups = new Map<string, ClaimedTask[]>();
+  for (const task of claimed) {
+    const key = task.requestedBy ?? "";
+    const known = groups.get(key);
+    if (known) {
+      known.push(task);
+    } else {
+      groups.set(key, [task]);
+    }
+  }
+  return [...groups].map(([key, tasks]) => ({
+    initiator: key === "" ? { type: "system" } : { type: "account", id: key },
+    tasks,
+  }));
 }
 
 /**

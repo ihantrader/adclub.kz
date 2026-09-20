@@ -7222,6 +7222,9 @@
               "type": "string"
             }
           },
+          "pattern": {
+            "type": "string"
+          },
           "languages": {
             "type": "array",
             "items": {

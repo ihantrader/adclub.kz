@@ -42,6 +42,16 @@ function iso(date: Date): string {
  * Every change is one transaction under the catalog lock with its entry in
  * the action journal.
  */
+/**
+ * The account behind an administrator's action, or `null` for the server
+ * operator command, which has no account (D-045). The translation task
+ * remembers it so the AI call made for it is recorded as that
+ * administrator's, not as the system's (TASK-053 requirement 4).
+ */
+function accountOf(actor: CatalogActor): string | null {
+  return actor.role === "admin" ? actor.accountId : null;
+}
+
 @Injectable()
 export class TranslationAdminService {
   private readonly logger = new Logger("Translation");
@@ -236,7 +246,7 @@ export class TranslationAdminService {
           updatedAt: new Date(),
         })
         .where(eq(translation.id, existing.id));
-      await this.queue.request(tx, entityType, entityId, field, [lang], source);
+      await this.queue.request(tx, entityType, entityId, field, [lang], source, accountOf(actor));
       await this.audit.record(
         {
           action: auditActions.catalogTranslationReleased,
@@ -280,7 +290,7 @@ export class TranslationAdminService {
           "This text was written by hand and is never overwritten by automatic translation; release the manual edit first",
         );
       }
-      await this.queue.request(tx, entityType, entityId, field, [lang], source);
+      await this.queue.request(tx, entityType, entityId, field, [lang], source, accountOf(actor));
       await this.audit.record(
         {
           action: auditActions.catalogTranslationRequeued,

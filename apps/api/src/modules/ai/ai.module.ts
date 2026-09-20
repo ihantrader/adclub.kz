@@ -15,7 +15,7 @@ import {
   defaultAiServiceOptions,
   type AiServiceOptions,
 } from "./ai.service";
-import { ClaudeAiGateway } from "./claude-ai-gateway";
+import { OpenRouterAiGateway } from "./openrouter-ai-gateway";
 import { TestAiGateway } from "./test-ai-gateway";
 
 /**
@@ -50,21 +50,23 @@ export interface AiModuleOptions {
 }
 
 /**
- * AI behind the internal interface (ARCHITECTURE 9.6, 4.19; TASK-012): the
- * provider is chosen by configuration (`AI_PROVIDER`; without a key the
- * test one), `AiService` records and limits every call. Global: modules
- * use `AiService` without importing this one.
+ * AI behind the internal interface (ARCHITECTURE 9.6, 4.19, 4.20;
+ * TASK-012, TASK-053): the provider is OpenRouter (D-055), chosen by
+ * configuration (`AI_PROVIDER`; without a key the test one), and
+ * `AiService` records and limits every call. Global: modules use
+ * `AiService` without importing this one.
  */
 @Global()
 @Module({})
 export class AiModule {
   static forRoot(config: AppConfig, options: AiModuleOptions = {}): DynamicModule {
     const gateway =
-      config.ai.provider === "claude" && config.ai.anthropicApiKey
+      config.ai.provider === "openrouter" && config.ai.openRouterApiKey
         ? [
             {
               provide: AiGateway,
-              useFactory: () => new ClaudeAiGateway(config.ai.anthropicApiKey!),
+              useFactory: () =>
+                new OpenRouterAiGateway(config.ai.openRouterApiKey!, config.ai.openRouterBaseUrl),
             },
           ]
         : [

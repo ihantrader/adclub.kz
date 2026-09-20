@@ -1,22 +1,25 @@
 import { z } from "zod";
 import type { AiProviderName } from "../../config";
+import type { SettingKey } from "../settings";
 
 /**
- * The internal interface to AI (ARCHITECTURE 9.6, 4.19; TASK-012) and the
- * pattern every later use follows (price matching, the assistant, document
- * recognition — each its own task):
+ * The internal interface to AI (ARCHITECTURE 9.6, 4.19, 4.20; TASK-012,
+ * TASK-053) and the pattern every later use follows (price matching, the
+ * assistant, document recognition — each its own task):
  *
  * 1. an operation is a method of `AiGateway` with a zod schema for what it
- *    returns, and an entry in `AiOperation` (kind, model, schema) — that is
- *    all a use adds;
+ *    returns, and an entry in `AiOperation` (kind, the settings that hold
+ *    its models, schema) — that is all a use adds;
  * 2. modules never call `AiGateway` directly: they call `AiService`, which
- *    checks the daily budget, writes the `ai_job` record of the call, cuts
- *    a call that takes too long, checks the answer against the operation's
- *    schema and classifies failures — so no implementation can forget
- *    accounting, and the checks are the same for every provider;
- * 3. implementations (`TestAiGateway`, `ClaudeAiGateway`) only talk to their
- *    provider: they return the raw structured answer with the usage the
- *    provider reported and raise `AiGatewayError` with the right `kind`.
+ *    reserves the call against the daily budget, picks the model of the
+ *    operation from the settings (the fallback when the first one can't be
+ *    reached), records the call in `ai_job`, cuts a call that takes too
+ *    long, checks the answer against the operation's schema and classifies
+ *    failures — so no implementation can forget accounting, and the checks
+ *    are the same for every provider;
+ * 3. implementations (`TestAiGateway`, `OpenRouterAiGateway`) only talk to
+ *    their provider: they return the raw structured answer with the usage
+ *    the provider reported and raise `AiGatewayError` with the right `kind`.
  */
 
 /** Kinds of AI calls, as `ai_job.kind` (ARCHITECTURE 5.12). */
@@ -32,17 +35,12 @@ export type AiJobKind =
   | "photo_search"
   | "attr_fill";
 
-/** Models by task (ARCHITECTURE 9.6). */
-export const AI_MODELS = {
-  /** Translation of the catalog, column recognition, documents, photos. */
-  standard: "claude-sonnet-5",
-  /** Matching, compatibility, the assistant. */
-  advanced: "claude-opus-5",
-  /** Classification and simple checks. */
-  light: "claude-haiku-4-5",
-} as const;
-
-/** What a provider reported for one call; `costUsd` — only if it (or its price list) can tell. */
+/**
+ * What a provider reported for one call. `costUsd` is what the provider
+ * says the call cost (D-055: OpenRouter reports it with the answer);
+ * `null` — the provider did not say, and the caller must not read that as
+ * free (`AiService` keeps the reservation instead, ARCHITECTURE 4.20 I188).
+ */
 export interface AiUsage {
   tokensIn: number;
   tokensOut: number;
@@ -52,6 +50,7 @@ export interface AiUsage {
 /** A provider's answer: the structured output, not yet checked, and what it cost. */
 export interface AiResult {
   output: unknown;
+  /** The model that actually answered, as the provider names it. */
   model: string;
   usage: AiUsage;
 }
@@ -60,13 +59,28 @@ export interface AiResult {
  * Why a call failed, which decides what happens to the work:
  * - `unavailable` — the provider can't be reached now, is overloaded or
  *   limits us: try again later;
+ * - `model_unavailable` — this model is unknown, withdrawn or has no
+ *   endpoint that can serve the request: retrying the same model can't
+ *   help, but the fallback model may (TASK-053 requirement 2);
+ * - `no_private_provider` — no provider of this model keeps requests
+ *   unstored and untrained-on, so the request was not made at all
+ *   (D-057): neither this model nor a retry will do, a person decides;
  * - `rejected` — the provider refuses the request for good (bad key,
  *   forbidden, malformed request): retrying can't help;
  * - `invalid_output` — the answer doesn't match the schema of the
  *   operation: a retry may give a good one;
  * - `not_configured` — no provider is set up for this.
  */
-export type AiFailureKind = "unavailable" | "rejected" | "invalid_output" | "not_configured";
+export type AiFailureKind =
+  | "unavailable"
+  | "model_unavailable"
+  | "no_private_provider"
+  | "rejected"
+  | "invalid_output"
+  | "not_configured";
+
+/** Failures after which the fallback model of the operation is worth trying (D-056). */
+export const FALLBACK_WORTHY: readonly AiFailureKind[] = ["unavailable", "model_unavailable"];
 
 /** A failed call. `message` is safe for a log: no request or answer content. */
 export class AiGatewayError extends Error {
@@ -124,30 +138,41 @@ export const translateOutputSchema = z.object({
 export type TranslateOutput = z.infer<typeof translateOutputSchema>;
 
 /**
- * The provider behind the interface. `signal` is aborted when the call takes
- * longer than `AiService` allows.
+ * The provider behind the interface. `model` is the one `AiService` chose
+ * from the settings of the operation; `signal` is aborted when the call
+ * takes longer than `AiService` allows.
  */
 export abstract class AiGateway {
   abstract readonly provider: AiProviderName;
 
-  abstract translate(input: TranslateInput, signal: AbortSignal): Promise<AiResult>;
+  abstract translate(input: TranslateInput, model: string, signal: AbortSignal): Promise<AiResult>;
+}
+
+/**
+ * Which settings hold the models of an operation (D-056): both are
+ * changed without a release, and the fallback is used when the first one
+ * can't answer. The same model in both means there is no fallback.
+ */
+export interface AiOperationModels {
+  primary: SettingKey;
+  fallback: SettingKey;
 }
 
 /**
  * What `AiService` needs to know to run one operation on a gateway: how it
- * is recorded, the model, how its answer is checked and how it is called.
+ * is recorded, where its models come from, how its answer is checked and
+ * how it is called.
  */
 export interface AiOperation<Input, Output> {
   kind: AiJobKind;
-  /** The model recorded for a failed call (a successful one records what the provider reports). */
-  model: string;
+  models: AiOperationModels;
   outputSchema: z.ZodType<Output>;
-  invoke(gateway: AiGateway, input: Input, signal: AbortSignal): Promise<AiResult>;
+  invoke(gateway: AiGateway, input: Input, model: string, signal: AbortSignal): Promise<AiResult>;
 }
 
 export const translateOperation: AiOperation<TranslateInput, TranslateOutput> = {
   kind: "translate",
-  model: AI_MODELS.standard,
+  models: { primary: "ai_model_translate_primary", fallback: "ai_model_translate_fallback" },
   outputSchema: translateOutputSchema,
-  invoke: (gateway, input, signal) => gateway.translate(input, signal),
+  invoke: (gateway, input, model, signal) => gateway.translate(input, model, signal),
 };

@@ -79,6 +79,10 @@ type Method = "get" | "post" | "put" | "patch";
 // A raw control character, written as code so the source stays plain text.
 const BELL = String.fromCharCode(7);
 
+/** The models `ai_model_translate_*` name by default (TASK-053, ARCHITECTURE 9.6). */
+const DEFAULT_MODEL = "google/gemini-3.8-flash";
+const FALLBACK_MODEL = "openai/gpt-5.4-mini";
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(
@@ -331,8 +335,8 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       `INSERT INTO translation (entity_type, entity_id, field, lang, text, origin, is_manually_edited,
                                 source_hash, ai_model)
        VALUES ('category', $1, 'name', $2, $3, 'ai', false,
-               encode(sha256(convert_to($4::text, 'UTF8')), 'hex'), 'claude-sonnet-5')`,
-      [entityId, lang, text, russian],
+               encode(sha256(convert_to($4::text, 'UTF8')), 'hex'), $5)`,
+      [entityId, lang, text, russian, DEFAULT_MODEL],
     );
   }
 
@@ -491,7 +495,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       expect((await names(category.id)).en.translation).toMatchObject({
         origin: "ai",
         isSourceChanged: false,
-        aiModel: "claude-sonnet-5",
+        aiModel: DEFAULT_MODEL,
       });
       await patchCategory(category, { names: { ru: "Тормозная система" } });
       const shown = await names(category.id);
@@ -733,7 +737,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         origin: "ai",
         isManuallyEdited: false,
         isSourceChanged: false,
-        aiModel: "claude-sonnet-5",
+        aiModel: DEFAULT_MODEL,
       });
       expect(shown.en.translation).toMatchObject({
         text: testTranslation(marker, "en", 40),
@@ -748,7 +752,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       expect(jobs[0]).toMatchObject({
         kind: "translate",
         provider: "test",
-        model: "claude-sonnet-5",
+        model: DEFAULT_MODEL,
         initiator_type: "system",
         initiator_id: null,
         status: "succeeded",
@@ -851,7 +855,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         }
       }
       // A unit is told from a name to the provider, and a name of a brand is not sent at all.
-      const sent = gateway.requests.flatMap((entry) => entry.items);
+      const sent = gateway.requests.flatMap((entry) => entry.input.items);
       expect(sent.find((entry) => entry.text === "мм")!.context).toContain("unit of measure");
       expect(sent.find((entry) => entry.text === "мм")!.maxLength).toBe(12);
       expect(sent.find((entry) => entry.text === "Тормоза")!.maxLength).toBe(40);
@@ -872,10 +876,13 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       // A valid answer of the provider, judged by an operation that expects another shape.
       const operation = {
         kind: "translate" as const,
-        model: "claude-sonnet-5",
+        models: {
+          primary: "ai_model_translate_primary",
+          fallback: "ai_model_translate_fallback",
+        } as const,
         outputSchema: z.object({ verdict: z.string() }),
-        invoke: (g: AiGateway, input: TranslateInput, signal: AbortSignal) =>
-          g.translate(input, signal),
+        invoke: (g: AiGateway, input: TranslateInput, model: string, signal: AbortSignal) =>
+          g.translate(input, model, signal),
       };
       const request = {
         items: [
@@ -913,7 +920,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       await drained();
       // 10 tasks, 3 at a time: no request carries more than 3 tasks.
       const perRequest = gateway.requests.map((entry) =>
-        entry.items.reduce((sum, item) => sum + item.languages.length, 0),
+        entry.input.items.reduce((sum, item) => sum + item.languages.length, 0),
       );
       expect(perRequest.reduce((a, b) => a + b, 0)).toBe(10);
       expect(Math.max(...perRequest)).toBeLessThanOrEqual(3);
@@ -945,7 +952,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         isSourceChanged: true,
       });
       // Only the English was translated again.
-      expect(gateway.requests.at(-1)!.items[0]).toMatchObject({ languages: ["en"] });
+      expect(gateway.requests.at(-1)!.input.items[0]).toMatchObject({ languages: ["en"] });
 
       // "Translate again": for the automatic text it works, for the manual one it is refused.
       const before = gateway.requests.length;
@@ -1071,9 +1078,18 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         "the dead letter queue",
         30_000,
       );
-      // Two attempts (first run and one retry), both recorded as failed calls.
-      expect(gateway.requests).toHaveLength(2);
+      // Two attempts (first run and one retry), both recorded as failed calls —
+      // and each asked both models of the operation, the primary and the fallback
+      // (TASK-053: an unreachable provider is what a fallback model is for).
+      expect(gateway.requests).toHaveLength(4);
+      expect(gateway.requests.map((request) => request.model)).toEqual([
+        DEFAULT_MODEL,
+        FALLBACK_MODEL,
+        DEFAULT_MODEL,
+        FALLBACK_MODEL,
+      ]);
       expect(await count("ai_job", "status = 'failed' AND error_kind = 'unavailable'")).toBe(2);
+      expect(await count("ai_job", "is_fallback")).toBe(2);
       // The tasks wait, marked with a temporary failure; no text was lost or invented.
       expect(await tasksOf(category.id)).toMatchObject([
         { lang: "en", status: "pending", last_error: "unavailable" },
@@ -1211,7 +1227,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         await app.get(TranslationQueue).wake();
       }
       await drained();
-      const requested = gateway.requests.flatMap((entry) => entry.items);
+      const requested = gateway.requests.flatMap((entry) => entry.input.items);
       expect(requested.map((item) => item.text)).toEqual(["Остаётся"]);
       expect([...requested[0]!.languages].sort()).toEqual(["en", "kk"]);
       expect(await count("translation", `entity_id = '${kept.id}' AND origin = 'ai'`)).toBe(2);
@@ -1232,7 +1248,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         second.useLogger(second.get(JsonLoggerService));
         await drained();
         const asked = [...first.requests, ...(second.get(AiGateway) as TestAiGateway).requests]
-          .flatMap((entry) => entry.items)
+          .flatMap((entry) => entry.input.items)
           .flatMap((item) => item.languages.map((lang) => `${item.text}/${lang}`));
         expect(asked).toHaveLength(16);
         expect(new Set(asked).size).toBe(16);
@@ -1271,6 +1287,305 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       expect(text).toContain('adclub_ai_calls_today{kind="translate",status="succeeded"} 1');
       expect(text).toContain('adclub_translation_tasks{state="pending"} 0');
       expect(text).toContain('adclub_translation_tasks{state="failed"} 0');
+    });
+  });
+
+  // ============================================ TASK-053: the gateway itself
+
+  describe("the gateway through OpenRouter (the test provider stands in for it)", () => {
+    /** The `ai_job` rows of the day, newest last. */
+    async function calls(): Promise<
+      {
+        model: string;
+        status: string;
+        error_kind: string | null;
+        cost_usd: string | null;
+        cost_is_estimate: boolean;
+        is_fallback: boolean;
+        initiator_type: string;
+        initiator_id: string | null;
+      }[]
+    > {
+      const { rows } = await db.query(
+        `SELECT model, status, error_kind, cost_usd, cost_is_estimate, is_fallback,
+                initiator_type, initiator_id
+         FROM ai_job ORDER BY created_at`,
+      );
+      return rows as never;
+    }
+
+    it("takes the model of the setting, and a new setting changes it without a restart (AC-2)", async () => {
+      await setSettings({ ai_model_translate_primary: "google/gemini-3.8-flash" });
+      const gateway = await startWorker();
+      await createCategory({ ru: "Первая" });
+      await drained();
+      expect(gateway.requests.at(-1)!.model).toBe("google/gemini-3.8-flash");
+
+      // The worker keeps running; only the setting changes.
+      await setSettings({ ai_model_translate_primary: "openai/gpt-5.4-mini" });
+      await createCategory({ ru: "Вторая" });
+      await drained();
+      expect(gateway.requests.at(-1)!.model).toBe("openai/gpt-5.4-mini");
+      expect((await calls()).map((call) => call.model)).toEqual([
+        "google/gemini-3.8-flash",
+        "openai/gpt-5.4-mini",
+      ]);
+    });
+
+    it("uses the fallback model when the first one cannot answer, and records that it did (AC-2)", async () => {
+      await setSettings({
+        ai_model_translate_primary: "missing/not-a-model",
+        ai_model_translate_fallback: "openai/gpt-5.4-mini",
+      });
+      const gateway = await startWorker();
+      const category = await createCategory({ ru: "Запаска" });
+      await drained();
+      // Both models were asked, in order; the translation is the fallback's.
+      expect(gateway.requests.map((request) => request.model)).toEqual([
+        "missing/not-a-model",
+        "openai/gpt-5.4-mini",
+      ]);
+      const done = await calls();
+      expect(done).toHaveLength(1);
+      expect(done[0]).toMatchObject({
+        status: "succeeded",
+        model: "openai/gpt-5.4-mini",
+        is_fallback: true,
+      });
+      expect((await names(category.id)).kk.translation).toMatchObject({
+        origin: "ai",
+        aiModel: "openai/gpt-5.4-mini",
+      });
+      // The trouble with the primary model is in the log, not silent.
+      expect(appLogText(output.text())).toContain("missing/not-a-model");
+    });
+
+    it("says plainly when no model of the setting can answer, and loses no translation (AC-2)", async () => {
+      await setSettings({
+        ai_model_translate_primary: "missing/one",
+        ai_model_translate_fallback: "missing/two",
+        translation_retry_limit: 0,
+      });
+      await startWorker();
+      const category = await createCategory({ ru: "Ничей" });
+      // The call is recorded failed a moment before the tasks are given back:
+      // wait for the tasks, which is what the assertions below are about.
+      await waitFor(
+        async () => (await count("translation_task", "last_error IS NOT NULL")) === 2,
+        "the tasks given back",
+      );
+      const [call] = await calls();
+      expect(call).toMatchObject({ status: "failed", error_kind: "model_unavailable" });
+      // The work is not lost: the tasks are still pending, with the reason of the last try.
+      expect(await tasksOf(category.id)).toMatchObject([
+        { lang: "en", status: "pending", last_error: "model_unavailable" },
+        { lang: "kk", status: "pending", last_error: "model_unavailable" },
+      ]);
+      const status = await worker!.get(AiService).status();
+      expect(status.recentFailures[0]).toMatchObject({ errorKind: "model_unavailable" });
+    });
+
+    it("does not send anything when no provider of the model keeps requests unstored (AC-5)", async () => {
+      await setSettings({ translation_retry_limit: 0 });
+      const gateway = await startWorker();
+      gateway.mode = "no_private_provider";
+      const category = await createCategory({ ru: "Приватность" });
+      await waitFor(
+        async () => (await count("translation_task", "last_error IS NOT NULL")) === 2,
+        "the tasks given back",
+      );
+      expect((await calls())[0]).toMatchObject({
+        status: "failed",
+        error_kind: "no_private_provider",
+      });
+      // Nothing was translated and nothing was thrown away.
+      expect((await names(category.id)).kk.translation).toBeNull();
+      expect(await tasksOf(category.id)).toHaveLength(2);
+      // The operator sees it.
+      const status = await worker!.get(AiService).status();
+      expect(status.recentFailures[0]).toMatchObject({ errorKind: "no_private_provider" });
+      // The fallback model is not tried: the request was never made, another model would not help.
+      expect(gateway.requests.map((request) => request.model)).toEqual([
+        (await new TestSettings(app).values()).ai_model_translate_primary,
+      ]);
+    });
+
+    it("counts what the provider says the call cost, and an unknown cost as the reservation (AC-3)", async () => {
+      await setSettings({ ai_call_reservation_usd: 0.07 });
+      const gateway = await startWorker();
+      await createCategory({ ru: "Стоимость" });
+      await drained();
+      const [reported] = await calls();
+      const answered = gateway.requests.length;
+      expect(answered).toBe(1);
+      expect(reported).toMatchObject({ cost_is_estimate: false });
+      // The provider's own figure, not a price list of ours, and not the reservation.
+      expect(Number(reported!.cost_usd)).toBeGreaterThan(0);
+      expect(Number(reported!.cost_usd)).not.toBeCloseTo(0.07, 6);
+
+      gateway.mode = "no_cost";
+      await createCategory({ ru: "Безмолвие" });
+      await drained();
+      const silent = (await calls()).at(-1)!;
+      expect(silent).toMatchObject({ status: "succeeded", cost_is_estimate: true });
+      // Not free: the reservation stays as the cost of the call.
+      expect(Number(silent.cost_usd)).toBeCloseTo(0.07, 6);
+      const status = await worker!.get(AiService).status();
+      expect(status.estimatedCostCalls).toBe(1);
+      expect(status.spentUsd).toBeCloseTo(Number(reported!.cost_usd) + 0.07, 6);
+    });
+
+    it("lets no two calls at once past the daily budget (AC-3)", async () => {
+      // Room for two calls of the reservation, asked for by four at the same time.
+      await setSettings({ ai_call_reservation_usd: 0.5, ai_daily_budget_usd: 1 });
+      const gateway = await startWorker();
+      gateway.mode = "slow";
+      gateway.delayMs = 1000;
+      const ai = worker!.get(AiService);
+      const one = (index: number) =>
+        ai.translate(
+          {
+            items: [
+              {
+                id: "0",
+                text: `Параллель ${index}`,
+                context: "a name",
+                maxLength: 40,
+                languages: ["kk"] as const,
+              },
+            ],
+          },
+          { initiator: { type: "system" }, inputRef: { items: 1 } },
+        );
+      const outcomes = await Promise.allSettled([one(1), one(2), one(3), one(4)]);
+      const refused = outcomes.filter(
+        (outcome) =>
+          outcome.status === "rejected" &&
+          (outcome.reason as Error).name === "AiBudgetExhaustedError",
+      );
+      // Two got in (0.5 + 0.5 = the budget), the others were told the budget is spent
+      // before anything was sent — they never reached the provider.
+      expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(2);
+      expect(refused).toHaveLength(2);
+      expect(gateway.requests).toHaveLength(2);
+      expect(await count("ai_job")).toBe(2);
+      const spent = (await calls()).reduce((sum, call) => sum + Number(call.cost_usd), 0);
+      expect(spent).toBeLessThanOrEqual(1);
+    });
+
+    it("asks again for a part of the batch the provider left out, instead of calling it empty (AC-4)", async () => {
+      await setSettings({ translation_batch_size: 10, translation_retry_limit: 1 });
+      const gateway = await startWorker();
+      gateway.mode = "incomplete";
+      const category = await createCategory({ ru: "Неполный" });
+      // The last text of every answer is missing: its task stays pending with a
+      // temporary reason, and never becomes a refusal for good.
+      await waitFor(
+        async () => (await count("translation_task", "last_error = 'incomplete_answer'")) > 0,
+        "a task asked again",
+      );
+      const tasks = await tasksOf(category.id);
+      expect(tasks.every((task) => task.status === "pending")).toBe(true);
+      expect(tasks.some((task) => task.failure !== null)).toBe(false);
+      expect(await count("translation_task", "failure = 'empty'")).toBe(0);
+
+      // When the provider answers in full again, the missing text is translated.
+      gateway.mode = "ok";
+      await app.get(TranslationQueue).wake();
+      await drained();
+      expect((await names(category.id)).kk.translation).toMatchObject({ origin: "ai" });
+      expect((await names(category.id)).en.translation).toMatchObject({ origin: "ai" });
+    });
+
+    it("records the administrator who asked for a translation, not the system (AC-4)", async () => {
+      const category = await createCategory({ ru: "Инициатор" });
+      const gateway = await startWorker();
+      await drained();
+      // The first translation was nobody's in particular: a Russian text was written.
+      expect((await calls())[0]).toMatchObject({ initiator_type: "system", initiator_id: null });
+
+      // "Translate again", pressed by an administrator.
+      await asAdmin(
+        "post",
+        `/admin/translations/category/${category.id}/name/kk/retranslate`,
+      ).expect(200);
+      await drained();
+      const { rows } = await db.query<{ account_id: string }>(
+        "SELECT account_id FROM admin_user LIMIT 1",
+      );
+      const last = (await calls()).at(-1)!;
+      expect(last).toMatchObject({ initiator_type: "account", initiator_id: rows[0]!.account_id });
+      expect(gateway.requests.at(-1)!.input.items[0]!.text).toBe("Инициатор");
+    });
+
+    it("shows the operator the failures of this day only (AC-4)", async () => {
+      await setSettings({ translation_retry_limit: 0 });
+      const gateway = await startWorker();
+      gateway.mode = "unavailable";
+      await createCategory({ ru: "Сегодня" });
+      await waitFor(async () => (await count("ai_job", "status = 'failed'")) > 0, "a failed call");
+      // A failure of an earlier day, written as the worker would have written it.
+      await db.query(
+        `INSERT INTO ai_job (kind, provider, model, initiator_type, status, error_kind, error,
+                             created_at, finished_at)
+         VALUES ('translate', 'test', 'google/gemini-3.8-flash', 'system', 'failed', 'unavailable',
+                 'yesterday', now() - interval '2 days', now() - interval '2 days')`,
+      );
+      const status = await worker!.get(AiService).status();
+      expect(status.recentFailures).toHaveLength(1);
+      expect(status.recentFailures[0]!.error).not.toContain("yesterday");
+      // The spend of the day does not count the older call either.
+      expect(status.today.every((row) => row.kind === "translate")).toBe(true);
+    });
+
+    it("saves a translation without stopping the administrator's work on the catalog (AC-6)", async () => {
+      const first = await createCategory({ ru: "Соседка" });
+      const other = await createCategory({ ru: "Далёкая" });
+      const gateway = await startWorker();
+      await drained();
+
+      // A transaction holding the catalog the way a write of an item does.
+      const database = app.get(DatabaseService);
+      const client = await database.pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock_shared(hashtext('catalog_structure'))");
+        // With the exclusive structure lock of TASK-012 this save would wait for
+        // that transaction; now it only needs the names of its own neighbours.
+        const runner = worker!.get(TranslationRunner);
+        const saved = await Promise.race([
+          runner.save(
+            {
+              id: randomUUID(),
+              entityType: "category",
+              entityId: other.id,
+              field: "name",
+              lang: "kk",
+              requestedBy: null,
+            },
+            {
+              id: "0",
+              entityType: "category",
+              entityId: other.id,
+              field: "name",
+              source: "Далёкая",
+              hash: "x",
+              tasks: [],
+            },
+            "Алыс",
+            { jobId: randomUUID(), model: "google/gemini-3.8-flash" },
+          ),
+          sleep(5000).then(() => "waited" as const),
+        ]);
+        // The task is gone (it was translated already), so the save is a no-op —
+        // but it got there and back without waiting for the other transaction.
+        expect(saved).toBe("skipped");
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+      }
+      expect((await names(first.id)).kk.translation).toMatchObject({ origin: "ai" });
+      expect(gateway.requests.length).toBeGreaterThan(0);
     });
   });
 });

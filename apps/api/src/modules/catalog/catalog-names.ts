@@ -58,17 +58,19 @@ export async function findNameClash(
 }
 
 /**
- * The entity's status and everyone whose name it must differ from
- * (`entity` included): subcategories of one node, nodes of one kind,
- * attributes of one category, options of one attribute. Items are
- * neighbours of nobody (an item is told apart by brand and article), so
- * theirs is empty. `undefined` — no such entity.
+ * The entity's status, everyone whose name it must differ from (`entity`
+ * included) and what names that set of neighbours is — subcategories of
+ * one node, nodes of one kind, attributes of one category, options of one
+ * attribute. `scope` names that set, so a writer can take a lock on just
+ * it (`nameScopeLock`, ARCHITECTURE 4.20 I191). Items are neighbours of
+ * nobody (an item is told apart by brand and article), so theirs is empty
+ * and has no scope. `undefined` — no such entity.
  */
 export async function nameNeighbours(
   executor: DbExecutor,
   entityType: TranslationEntityType,
   entityId: string,
-): Promise<{ status: string; neighbours: NameNeighbour[] } | undefined> {
+): Promise<{ status: string; neighbours: NameNeighbour[]; scope: string | null } | undefined> {
   switch (entityType) {
     case "category": {
       const [self] = await executor.select().from(category).where(eq(category.id, entityId));
@@ -83,7 +85,11 @@ export async function nameNeighbours(
             ? eq(category.parentId, self.parentId)
             : and(isNull(category.parentId), eq(category.kind, self.kind)),
         );
-      return { status: self.status, neighbours };
+      return {
+        status: self.status,
+        neighbours,
+        scope: self.parentId ? `category:${self.parentId}` : `category:root:${self.kind}`,
+      };
     }
     case "attribute": {
       const [self] = await executor.select().from(attribute).where(eq(attribute.id, entityId));
@@ -94,7 +100,7 @@ export async function nameNeighbours(
         .select({ id: attribute.id, status: attribute.status })
         .from(attribute)
         .where(eq(attribute.categoryId, self.categoryId));
-      return { status: self.status, neighbours };
+      return { status: self.status, neighbours, scope: `attribute:${self.categoryId}` };
     }
     case "attribute_option": {
       const [self] = await executor
@@ -108,11 +114,15 @@ export async function nameNeighbours(
         .select({ id: attributeOption.id, status: attributeOption.status })
         .from(attributeOption)
         .where(eq(attributeOption.attributeId, self.attributeId));
-      return { status: self.status, neighbours };
+      return {
+        status: self.status,
+        neighbours,
+        scope: `attribute_option:${self.attributeId}`,
+      };
     }
     case "catalog_item": {
       const [self] = await executor.select().from(catalogItem).where(eq(catalogItem.id, entityId));
-      return self ? { status: self.status, neighbours: [] } : undefined;
+      return self ? { status: self.status, neighbours: [], scope: null } : undefined;
     }
   }
 }

@@ -116,6 +116,8 @@ export const translationTask = pgTable("translation_task", {
   failure: text("failure").$type<TranslationTaskFailure>(),
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
+  /** The administrator who asked for this translation; `null` — nobody in particular (TASK-053). */
+  requestedBy: uuid("requested_by"),
   claimedUntil: timestamp("claimed_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

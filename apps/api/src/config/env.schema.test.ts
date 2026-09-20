@@ -49,7 +49,12 @@ describe("loadConfig", () => {
       signIn: { totpEncryptionKey: expect.any(String) },
       monitoring: { target: undefined, environment: "development" },
       metrics: { enabled: true, token: undefined },
-      ai: { provider: "test", anthropicApiKey: undefined, testMode: "ok" },
+      ai: {
+        provider: "test",
+        openRouterApiKey: undefined,
+        openRouterBaseUrl: "https://openrouter.ai/api/v1",
+        testMode: "ok",
+      },
       ignoredVariables: [],
     });
   });
@@ -230,8 +235,8 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("AI provider (TASK-012)", () => {
-    const KEY = "sk-ant-not-a-real-key-for-tests-only";
+  describe("AI provider (TASK-012, TASK-053)", () => {
+    const KEY = "sk-or-v1-not-a-real-key-for-tests-only";
     const PRODUCTION_ENV = {
       ...VALID_ENV,
       NODE_ENV: "production",
@@ -241,29 +246,57 @@ describe("loadConfig", () => {
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
 
-    it("runs the test provider without a key and Claude with one", () => {
+    const PUBLIC_URL = "https://openrouter.ai/api/v1";
+
+    it("runs the test provider without a key and OpenRouter with one", () => {
       expect(loadConfig(VALID_ENV).ai).toEqual({
         provider: "test",
-        anthropicApiKey: undefined,
+        openRouterApiKey: undefined,
+        openRouterBaseUrl: PUBLIC_URL,
         testMode: "ok",
       });
-      expect(loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: KEY }).ai).toEqual({
-        provider: "claude",
-        anthropicApiKey: KEY,
+      expect(loadConfig({ ...VALID_ENV, OPENROUTER_API_KEY: KEY }).ai).toEqual({
+        provider: "openrouter",
+        openRouterApiKey: KEY,
+        openRouterBaseUrl: PUBLIC_URL,
         testMode: "ok",
       });
       // The provider can be chosen even with a key (development with a real key at hand).
       expect(
-        loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: KEY, AI_PROVIDER: "test" }).ai.provider,
+        loadConfig({ ...VALID_ENV, OPENROUTER_API_KEY: KEY, AI_PROVIDER: "test" }).ai.provider,
       ).toBe("test");
+      // Development may send the calls elsewhere (an address that is not there, to see the retries).
+      expect(
+        loadConfig({
+          ...VALID_ENV,
+          OPENROUTER_API_KEY: KEY,
+          OPENROUTER_BASE_URL: "http://127.0.0.1:9/api/v1",
+        }).ai.openRouterBaseUrl,
+      ).toBe("http://127.0.0.1:9/api/v1");
+      expect(() => loadConfig({ ...VALID_ENV, OPENROUTER_BASE_URL: "not a url" })).toThrow(
+        /OPENROUTER_BASE_URL/,
+      );
       // Empty variables in a copied .env count as unset.
       expect(
-        loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: "", AI_PROVIDER: "", AI_TEST_MODE: "" }).ai,
+        loadConfig({
+          ...VALID_ENV,
+          OPENROUTER_API_KEY: "",
+          OPENROUTER_BASE_URL: "",
+          AI_PROVIDER: "",
+          AI_TEST_MODE: "",
+        }).ai,
       ).toEqual({
         provider: "test",
-        anthropicApiKey: undefined,
+        openRouterApiKey: undefined,
+        openRouterBaseUrl: PUBLIC_URL,
         testMode: "ok",
       });
+    });
+
+    it("says that the key of the provider the project no longer has does nothing", () => {
+      const config = loadConfig({ ...VALID_ENV, ANTHROPIC_API_KEY: "sk-ant-whatever-it-was" });
+      expect(config.ignoredVariables).toContain("ANTHROPIC_API_KEY");
+      expect(config.ai.provider).toBe("test");
     });
 
     it("takes the mode of the test provider and refuses an unknown one", () => {
@@ -273,15 +306,15 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...VALID_ENV, AI_TEST_MODE: "broken" })).toThrow(/AI_TEST_MODE/);
     });
 
-    it("refuses Claude without a key and production with the test provider, naming the variable only", () => {
-      expect(() => loadConfig({ ...VALID_ENV, AI_PROVIDER: "claude" })).toThrow(
-        /ANTHROPIC_API_KEY: required when AI_PROVIDER=claude/,
+    it("refuses OpenRouter without a key and production with the test provider, naming the variable only", () => {
+      expect(() => loadConfig({ ...VALID_ENV, AI_PROVIDER: "openrouter" })).toThrow(
+        /OPENROUTER_API_KEY: required when AI_PROVIDER=openrouter/,
       );
       expect(() => loadConfig(PRODUCTION_ENV)).toThrow(
         /AI_PROVIDER: the test AI provider is not allowed when NODE_ENV=production/,
       );
       try {
-        loadConfig({ ...PRODUCTION_ENV, AI_PROVIDER: "test", ANTHROPIC_API_KEY: KEY });
+        loadConfig({ ...PRODUCTION_ENV, AI_PROVIDER: "test", OPENROUTER_API_KEY: KEY });
         expect.unreachable();
       } catch (error) {
         expect((error as Error).message).toMatch(/AI_PROVIDER/);
@@ -290,9 +323,9 @@ describe("loadConfig", () => {
       // Staging may run the test provider; production with a key has no complaint about AI.
       expect(loadConfig({ ...PRODUCTION_ENV, NODE_ENV: "staging" }).ai.provider).toBe("test");
       try {
-        loadConfig({ ...PRODUCTION_ENV, ANTHROPIC_API_KEY: KEY });
+        loadConfig({ ...PRODUCTION_ENV, OPENROUTER_API_KEY: KEY });
       } catch (error) {
-        expect((error as Error).message).not.toMatch(/AI_PROVIDER|ANTHROPIC_API_KEY/);
+        expect((error as Error).message).not.toMatch(/AI_PROVIDER|OPENROUTER_API_KEY/);
       }
     });
   });

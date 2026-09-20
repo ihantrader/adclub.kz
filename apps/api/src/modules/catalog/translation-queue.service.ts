@@ -74,7 +74,9 @@ export class TranslationQueue {
   /**
    * Asks for automatic translation of `source` into `languages` and wakes
    * the worker, in the caller's transaction. A language that already has a
-   * task gets the new source hash and a fresh start.
+   * task gets the new source hash and a fresh start. `requestedBy` is the
+   * account of the administrator who asked, when one did: the AI call is
+   * then recorded as theirs (TASK-053 requirement 4).
    */
   async request(
     executor: DbExecutor,
@@ -83,6 +85,7 @@ export class TranslationQueue {
     field: TranslationField,
     languages: readonly TranslationTargetLanguage[],
     source: string,
+    requestedBy: string | null = null,
   ): Promise<void> {
     if (languages.length === 0) {
       return;
@@ -98,6 +101,7 @@ export class TranslationQueue {
           field,
           lang,
           sourceHash: hash,
+          requestedBy,
         })),
       )
       .onConflictDoUpdate({
@@ -113,6 +117,7 @@ export class TranslationQueue {
           failure: null,
           attempts: 0,
           lastError: null,
+          requestedBy,
           updatedAt: now,
         },
       });

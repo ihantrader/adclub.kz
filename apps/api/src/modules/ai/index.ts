@@ -1,10 +1,10 @@
 export { AiModule } from "./ai.module";
 export type { AiModuleOptions } from "./ai.module";
 export {
-  AI_MODELS,
   AiBudgetExhaustedError,
   AiGateway,
   AiGatewayError,
+  FALLBACK_WORTHY,
   translateOperation,
   translateOutputSchema,
 } from "./ai-gateway";
@@ -12,6 +12,7 @@ export type {
   AiFailureKind,
   AiJobKind,
   AiOperation,
+  AiOperationModels,
   AiResult,
   AiUsage,
   TranslateInput,
@@ -27,8 +28,7 @@ export type {
   AiServiceOptions,
   AiStatus,
 } from "./ai.service";
-export { ClaudeAiGateway } from "./claude-ai-gateway";
-export { estimateCostUsd } from "./ai-pricing";
-export { TestAiGateway, testTranslation } from "./test-ai-gateway";
+export { OpenRouterAiGateway } from "./openrouter-ai-gateway";
+export { MISSING_MODEL_PREFIX, TestAiGateway, testTranslation } from "./test-ai-gateway";
 export { aiJob, aiTables } from "./schema";
 export type { AiJobRow } from "./schema";

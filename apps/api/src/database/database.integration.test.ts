@@ -14,6 +14,15 @@ async function tableExists(client: Client, table: string): Promise<boolean> {
   return rows[0]?.exists ?? false;
 }
 
+async function columnExists(client: Client, table: string, column: string): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name = $1 AND column_name = $2) AS exists`,
+    [table, column],
+  );
+  return rows[0]?.exists ?? false;
+}
+
 /**
  * Real PostgreSQL, no mocks (ARCHITECTURE 15.5, TASK-002 requirement 7):
  * the actual `migrate`/`migrate:down` CLI commands run against a fresh
@@ -34,6 +43,22 @@ describe("PostgreSQL: migrations and readiness", () => {
     client.on("error", () => undefined);
     await client.connect();
   }, 120_000);
+
+  /**
+   * Rolls migrations back until `stillThere` says the thing this test put
+   * on the database is gone. The tests below walk down one migration per
+   * test, and a `runMigrate("up")` in the middle brings back every later
+   * migration too — this keeps that from shifting the ones that follow.
+   */
+  async function walkDownPast(stillThere: () => Promise<boolean>): Promise<void> {
+    for (let step = 0; step < 10; step += 1) {
+      runMigrate("down", container.getConnectionUri());
+      if (!(await stillThere())) {
+        return;
+      }
+    }
+    throw new Error("The migrations did not walk back down");
+  }
 
   afterAll(async () => {
     await client?.end().catch(() => undefined);
@@ -80,10 +105,56 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789740000000_create-catalog-structure",
       "1789830000000_create-catalog-items",
       "1789900000000_create-ai-jobs-and-translation-tasks",
+      "1789990000000_ai-through-openrouter",
     ]);
   });
 
-  it("rolls back the latest migration only (AI calls and translation tasks), keeping the texts", async () => {
+  it("rolls back the latest migration only (AI through OpenRouter), keeping the calls", async () => {
+    await client.query(
+      `INSERT INTO ai_job (kind, provider, model, initiator_type, status, finished_at,
+                           cost_usd, cost_is_estimate, is_fallback)
+       VALUES ('translate', 'openrouter', 'google/gemini-3.8-flash', 'system', 'succeeded', now(),
+               0.05, true, true)`,
+    );
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77011234567') RETURNING id",
+    );
+    const entityId = "00000000-0000-4000-8000-000000000009";
+    await client.query(
+      `INSERT INTO translation_task (entity_type, entity_id, field, lang, source_hash, requested_by)
+       VALUES ('category', $1, 'name', 'kk', 'hash', $2)`,
+      [entityId, account.rows[0]!.id],
+    );
+    // A failure that only the new schema knows.
+    await client.query(
+      `INSERT INTO ai_job (kind, provider, model, initiator_type, status, error_kind, error, finished_at)
+       VALUES ('translate', 'openrouter', 'missing/model', 'system', 'failed',
+               'no_private_provider', 'nothing was sent', now())`,
+    );
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The columns are gone; the calls themselves and their history stay.
+    const calls = await client.query("SELECT * FROM ai_job ORDER BY created_at");
+    expect(calls.rows).toHaveLength(2);
+    expect(Object.keys(calls.rows[0]!)).not.toContain("cost_is_estimate");
+    expect(Object.keys(calls.rows[0]!)).not.toContain("is_fallback");
+    const tasks = await client.query("SELECT * FROM translation_task");
+    expect(Object.keys(tasks.rows[0]!)).not.toContain("requested_by");
+    // And it goes up again on its own; the columns come back with their
+    // defaults (what a dropped column held is gone — the calls are not).
+    runMigrate("up", container.getConnectionUri());
+    const back = await client.query("SELECT cost_is_estimate, is_fallback FROM ai_job");
+    expect(back.rows).toHaveLength(2);
+    expect(back.rows[0]).toMatchObject({ cost_is_estimate: false, is_fallback: false });
+    expect(await columnExists(client, "translation_task", "requested_by")).toBe(true);
+    await client.query("DELETE FROM translation_task");
+    await client.query("DELETE FROM ai_job");
+    await client.query("DELETE FROM account");
+    // The tests below walk down one migration at a time, so leave the database
+    // where this one found it: `up` brought back every migration, not just this.
+    await walkDownPast(() => columnExists(client, "ai_job", "cost_is_estimate"));
+  });
+
+  it("rolls back the next one (AI calls and translation tasks), keeping the texts", async () => {
     const job = await client.query<{ id: string }>(
       `INSERT INTO ai_job (kind, provider, model, initiator_type, status, finished_at)
        VALUES ('translate', 'test', 'claude-sonnet-5', 'system', 'succeeded', now()) RETURNING id`,
@@ -115,7 +186,7 @@ describe("PostgreSQL: migrations and readiness", () => {
     await client.query("DELETE FROM translation_task");
     await client.query("DELETE FROM translation");
     await client.query("DELETE FROM ai_job");
-    runMigrate("down", container.getConnectionUri());
+    await walkDownPast(() => tableExists(client, "ai_job"));
   });
 
   it("rolls back the next one (catalog items), keeping the structure", async () => {

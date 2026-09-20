@@ -50,6 +50,8 @@ export interface BooleanDefinition extends DefinitionBase {
 export interface StringDefinition extends DefinitionBase {
   type: "string";
   maxLength: number;
+  /** The form a value must have; a value of another form is refused with `message`. */
+  pattern?: { regex: RegExp; message: string };
   default: string;
 }
 
@@ -146,8 +148,12 @@ function schemaFor(definition: SettingDefinition, context: SettingCheckContext):
       return z.number().min(definition.min).max(definition.max);
     case "boolean":
       return z.boolean();
-    case "string":
-      return z.string().trim().min(1).max(definition.maxLength);
+    case "string": {
+      const text = z.string().trim().min(1).max(definition.maxLength);
+      return definition.pattern
+        ? text.regex(definition.pattern.regex, { message: definition.pattern.message })
+        : text;
+    }
     case "enum":
       return z.enum(definition.values);
     case "localized_text":
@@ -215,7 +221,11 @@ export function describeConstraints(
     case "boolean":
       return {};
     case "string":
-      return { minLength: 1, maxLength: definition.maxLength };
+      return {
+        minLength: 1,
+        maxLength: definition.maxLength,
+        ...(definition.pattern ? { pattern: definition.pattern.regex.source } : {}),
+      };
     case "enum":
       return { allowedValues: [...definition.values] };
     case "localized_text":

@@ -70,6 +70,8 @@ export const settingConstraintsSchema = z.object({
   minLength: z.number().int().optional(),
   maxLength: z.number().int().optional(),
   allowedValues: z.array(z.string()).optional(),
+  /** `string`: the form a value must have, as a regular expression (TASK-053: model identifiers). */
+  pattern: z.string().optional(),
   /** `localized_text`: the languages every value must have. */
   languages: z.array(z.string()).optional(),
   /** `composite`: JSON Schema of the value. */

@@ -17,6 +17,20 @@ export const STRUCTURE_LOCK = sql`SELECT pg_advisory_xact_lock(hashtext('catalog
 export const STRUCTURE_LOCK_SHARED = sql`SELECT pg_advisory_xact_lock_shared(hashtext('catalog_structure'))`;
 
 /**
+ * The names of one set of neighbours — subcategories of a node, nodes of
+ * one kind, attributes of a category, options of an attribute — while a
+ * name is checked and written (TASK-053 requirement 4). Automatic
+ * translation takes this together with the shared structure lock instead
+ * of the exclusive one: it still cannot race a change of the structure,
+ * and two translations of neighbours still take turns, but translations
+ * of different neighbourhoods, and every change of items, no longer wait
+ * for each other (ARCHITECTURE 4.20 I191).
+ */
+export function nameScopeLock(scope: string): SQL {
+  return sql`SELECT pg_advisory_xact_lock(hashtext('catalog_name'), hashtext(${scope}))`;
+}
+
+/**
  * The identity of products (`generic`) of one category: whether two of
  * them are the same depends on the values of both, so writers of a
  * category's products take turns (TASK-011 requirement 2). Ids are sorted

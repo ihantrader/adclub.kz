@@ -1,0 +1,3712 @@
+{
+  "startedAt": "2026-09-20T19:33:57.261Z",
+  "finishedAt": "2026-09-20T19:53:03.613Z",
+  "dataVersion": 1,
+  "samples": 55,
+  "options": {
+    "batchSize": 10,
+    "glossary": false,
+    "languages": [
+      "kk",
+      "en"
+    ],
+    "label": "models"
+  },
+  "glossaryTerms": 0,
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "google/gemini-3.8-flash",
+      "answeredBy": [
+        "google/gemini-3.8-flash"
+      ],
+      "calls": 6,
+      "failedCalls": 0,
+      "failures": [],
+      "costUsd": 0.02309,
+      "costIsEstimate": false,
+      "tokensIn": 4564,
+      "tokensOut": 5244,
+      "latencyMs": {
+        "min": 3035,
+        "median": 4628,
+        "max": 15881
+      },
+      "durationMs": 40017,
+      "quality": {
+        "expected": 110,
+        "answered": 110,
+        "counts": {
+          "missing": 0,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 5,
+          "russism": 1,
+          "inconsistent_term": 3,
+          "term_absent": 1,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 9,
+        "problemShare": 0.082,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"Ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Тежегіш колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"колодки\" is rendered 2 ways across the set: \"колодк\" (cat-brake-pads) vs \"қалып\" (item-pads-front-geely, item-pads-rear-geely, item-pads-front-trw, svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"Төсемдер мен тығыздамалар\" has no known rendering of \"сальник\""
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.655,
+          "enTitleCaseShare": 0.767
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Қозғалтқыш",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тежегіш жүйесі",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Аспа",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Шанақ",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrics",
+        "cat-interior:kk": "Интерьер",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Шығын материалдары",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Техникалық қызмет көрсету",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Шина монтаждау",
+        "cat-tire-service:en": "Tire service",
+        "cat-brake-pads:kk": "Тежегіш колодкалары",
+        "cat-brake-pads:en": "Brake Pads",
+        "cat-brake-discs:kk": "Тежегіш дискілері",
+        "cat-brake-discs:en": "Brake Discs",
+        "cat-calipers:kk": "Суппорттар",
+        "cat-calipers:en": "Brake Calipers",
+        "cat-brake-fluid:kk": "Тежегіш сұйықтығы",
+        "cat-brake-fluid:en": "Brake Fluid",
+        "cat-belts:kk": "Қайыстар мен роликтер",
+        "cat-belts:en": "Belts and Rollers",
+        "cat-spark-plugs:kk": "Оталдыру білтелері",
+        "cat-spark-plugs:en": "Spark Plugs",
+        "cat-gaskets:kk": "Төсемдер мен тығыздамалар",
+        "cat-gaskets:en": "Gaskets and Seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock Absorbers",
+        "cat-control-arms:kk": "Иінтіректер",
+        "cat-control-arms:en": "Control Arms",
+        "cat-stabilizer-links:kk": "Тұрақтандырғыш тіректері",
+        "cat-stabilizer-links:en": "Stabilizer Links",
+        "cat-mirrors:kk": "Айналар",
+        "cat-mirrors:en": "Mirrors",
+        "cat-wipers:kk": "Әйнек тазалағыш щеткалары",
+        "cat-wipers:en": "Wiper Blades",
+        "cat-seat-covers:kk": "Қаптар",
+        "cat-seat-covers:en": "Seat Covers",
+        "cat-floor-mats:kk": "Кілемшелер",
+        "cat-floor-mats:en": "Floor Mats",
+        "cat-engine-oils:kk": "Мотор майлары",
+        "cat-engine-oils:en": "Engine Oils",
+        "cat-oil-filters:kk": "Май сүзгілері",
+        "cat-oil-filters:en": "Oil Filters",
+        "cat-air-filters:kk": "Ауа сүзгілері",
+        "cat-air-filters:en": "Air Filters",
+        "cat-cabin-filters:kk": "Салон сүзгілері",
+        "cat-cabin-filters:en": "Cabin Air Filters",
+        "attr-viscosity:kk": "Тұтқырлық",
+        "attr-viscosity:en": "Viscosity",
+        "attr-approval:kk": "Рұқсат",
+        "attr-approval:en": "OEM Approval",
+        "attr-volume:kk": "Көлемі",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негізі",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетикалық",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетикалық",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералды",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металды",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "l",
+        "unit-piece:kk": "дана",
+        "unit-piece:en": "pcs",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Алдыңғы тежегіш қалыптары Geely 04465-0K090",
+        "item-pads-front-geely:en": "Front brake pads Geely 04465-0K090",
+        "item-pads-rear-geely:kk": "Артқы тежегіш қалыптары Geely 4050068800",
+        "item-pads-rear-geely:en": "Rear brake pads Geely 4050068800",
+        "item-pads-front-trw:kk": "Алдыңғы тежегіш қалыптары TRW GDB3534",
+        "item-pads-front-trw:en": "Front brake pads TRW GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 l",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 l",
+        "svc-oil-change:kk": "Қозғалтқыш майын ауыстыру",
+        "svc-oil-change:en": "Engine oil change",
+        "svc-front-pads-change:kk": "Алдыңғы тежегіш қалыптарын ауыстыру",
+        "svc-front-pads-change:en": "Front brake pads replacement",
+        "svc-rear-pads-change:kk": "Артқы тежегіш қалыптарын ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pads replacement",
+        "svc-engine-diagnostics:kk": "Қозғалтқышты компьютерлік диагностикалау",
+        "svc-engine-diagnostics:en": "Engine computer diagnostics",
+        "svc-seasonal-tire-change:kk": "Маусымдық шиналарды ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Дөңгелектерді теңгерімдеу",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "openai/gpt-5.4-mini",
+      "answeredBy": [
+        "openai/gpt-5.4-mini"
+      ],
+      "calls": 6,
+      "failedCalls": 0,
+      "failures": [],
+      "costUsd": 0.012666,
+      "costIsEstimate": false,
+      "tokensIn": 3993,
+      "tokensOut": 2149,
+      "latencyMs": {
+        "min": 1891,
+        "median": 2493,
+        "max": 4102
+      },
+      "durationMs": 16015,
+      "quality": {
+        "expected": 110,
+        "answered": 110,
+        "counts": {
+          "missing": 0,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 9,
+          "russism": 7,
+          "inconsistent_term": 2,
+          "term_absent": 0,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 18,
+        "problemShare": 0.164,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "left as the Russian text: \"Кузов\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "left as the Russian text: \"Салон\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-tire-service",
+            "source": "Шиномонтаж",
+            "detail": "left as the Russian text: \"Шиномонтаж\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"Ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Тежегіш колодкалар\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Geely алдыңғы тежегіш колодкалары 04465-0K090\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Geely артқы тежегіш колодкалары 4050068800\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"TRW алдыңғы тежегіш колодкалары GDB3534\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдыңғы тежегіш колодкаларын ауыстыру\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Артқы тежегіш колодкаларын ауыстыру\" (\"колодк\")"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"сальник\" stayed Russian inside \"Прокладкалар және сальниктер\" (\"сальник\")"
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.582,
+          "enTitleCaseShare": 0.143
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Қозғалтқыш",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тежегіштер",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Аспа",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Кузов",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrics",
+        "cat-interior:kk": "Салон",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Шығын материалдары",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Техқызмет",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Шиномонтаж",
+        "cat-tire-service:en": "Tire Service",
+        "cat-brake-pads:kk": "Тежегіш колодкалар",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Тежегіш дискілер",
+        "cat-brake-discs:en": "Brake discs",
+        "cat-calipers:kk": "Суппорттар",
+        "cat-calipers:en": "Calipers",
+        "cat-brake-fluid:kk": "Тежегіш сұйықтығы",
+        "cat-brake-fluid:en": "Brake fluid",
+        "cat-belts:kk": "Белдіктер және роликтер",
+        "cat-belts:en": "Belts and rollers",
+        "cat-spark-plugs:kk": "Оталдыру шамдары",
+        "cat-spark-plugs:en": "Spark plugs",
+        "cat-gaskets:kk": "Прокладкалар және сальниктер",
+        "cat-gaskets:en": "Gaskets and seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock absorbers",
+        "cat-control-arms:kk": "Иінтіректер",
+        "cat-control-arms:en": "Control arms",
+        "cat-stabilizer-links:kk": "Тұрақтандырғыш тіректері",
+        "cat-stabilizer-links:en": "Stabilizer links",
+        "cat-mirrors:kk": "Айна",
+        "cat-mirrors:en": "Mirrors",
+        "cat-wipers:kk": "Әйнек сыпырғыш щеткалары",
+        "cat-wipers:en": "Wiper blades",
+        "cat-seat-covers:kk": "Қаптар",
+        "cat-seat-covers:en": "Seat covers",
+        "cat-floor-mats:kk": "Кілемшелер",
+        "cat-floor-mats:en": "Floor mats",
+        "cat-engine-oils:kk": "Мотор майлары",
+        "cat-engine-oils:en": "Engine oils",
+        "cat-oil-filters:kk": "Май сүзгілері",
+        "cat-oil-filters:en": "Oil filters",
+        "cat-air-filters:kk": "Ауа сүзгілері",
+        "cat-air-filters:en": "Air filters",
+        "cat-cabin-filters:kk": "Салон сүзгілері",
+        "cat-cabin-filters:en": "Cabin filters",
+        "attr-viscosity:kk": "Тұтқырлық",
+        "attr-viscosity:en": "Viscosity",
+        "attr-approval:kk": "Рұқсат",
+        "attr-approval:en": "Approval",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералдық",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металлды",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "l",
+        "unit-piece:kk": "дана",
+        "unit-piece:en": "pc",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Geely алдыңғы тежегіш колодкалары 04465-0K090",
+        "item-pads-front-geely:en": "Geely front brake pads 04465-0K090",
+        "item-pads-rear-geely:kk": "Geely артқы тежегіш колодкалары 4050068800",
+        "item-pads-rear-geely:en": "Geely rear brake pads 4050068800",
+        "item-pads-front-trw:kk": "TRW алдыңғы тежегіш колодкалары GDB3534",
+        "item-pads-front-trw:en": "TRW front brake pads GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 l",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 l",
+        "svc-oil-change:kk": "Мотор майын ауыстыру",
+        "svc-oil-change:en": "Engine oil change",
+        "svc-front-pads-change:kk": "Алдыңғы тежегіш колодкаларын ауыстыру",
+        "svc-front-pads-change:en": "Front brake pad replacement",
+        "svc-rear-pads-change:kk": "Артқы тежегіш колодкаларын ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pad replacement",
+        "svc-engine-diagnostics:kk": "Қозғалтқыштың компьютерлік диагностикасы",
+        "svc-engine-diagnostics:en": "Computer diagnostics of the engine",
+        "svc-seasonal-tire-change:kk": "Маусымдық шиналарды ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Дөңгелектерді теңгеру",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash-lite",
+      "answeredBy": [
+        "google/gemini-2.5-flash-lite"
+      ],
+      "calls": 6,
+      "failedCalls": 0,
+      "failures": [],
+      "costUsd": 0.002068,
+      "costIsEstimate": false,
+      "tokensIn": 3634,
+      "tokensOut": 4264,
+      "latencyMs": {
+        "min": 1717,
+        "median": 1965,
+        "max": 2227
+      },
+      "durationMs": 11860,
+      "quality": {
+        "expected": 110,
+        "answered": 110,
+        "counts": {
+          "missing": 0,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 6,
+          "russism": 6,
+          "inconsistent_term": 0,
+          "term_absent": 7,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 18,
+        "problemShare": 0.164,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "left as the Russian text: \"Кузов\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"Тежеуіш төсемдері\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдыңғы тежегіш колодкалар Geely 04465-0K090\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Артқы тежегіш колодкалар Geely 4050068800\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдыңғы тежегіш колодкалар TRW GDB3534\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдыңғы тежегіш колодкаларды ауыстыру\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Артқы тежегіш колодкаларды ауыстыру\" (\"колодк\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "тормозной",
+            "detail": "\"Тежеуіш төсемдері\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-discs",
+            "source": "тормозной",
+            "detail": "\"Тежеуіш дискілері\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-fluid",
+            "source": "тормозной",
+            "detail": "\"Тежеуіш сұйықтығы\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-oil-filters",
+            "source": "фильтр",
+            "detail": "\"Май филтрлері\" has no known rendering of \"фильтр\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-air-filters",
+            "source": "фильтр",
+            "detail": "\"Ауа филтрлері\" has no known rendering of \"фильтр\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-cabin-filters",
+            "source": "фильтр",
+            "detail": "\"Салон филтрлері\" has no known rendering of \"фильтр\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"сальник\" stayed Russian inside \"Тығыздағыштар мен сальниктер\" (\"сальник\")"
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.6,
+          "enTitleCaseShare": 0.444
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Қозғалтқыш",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тежегіштер",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Аспа",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Кузов",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrics",
+        "cat-interior:kk": "Ішкі жабдық",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Шығын материалдары",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Техникалық қызмет көрсету",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Дөңгелек қызметі",
+        "cat-tire-service:en": "Tire Service",
+        "cat-brake-pads:kk": "Тежеуіш төсемдері",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Тежеуіш дискілері",
+        "cat-brake-discs:en": "Brake discs",
+        "cat-calipers:kk": "Суппорттар",
+        "cat-calipers:en": "Calipers",
+        "cat-brake-fluid:kk": "Тежеуіш сұйықтығы",
+        "cat-brake-fluid:en": "Brake fluid",
+        "cat-belts:kk": "Белдеулер мен роликтер",
+        "cat-belts:en": "Belts and rollers",
+        "cat-spark-plugs:kk": "Шамдар",
+        "cat-spark-plugs:en": "Spark plugs",
+        "cat-gaskets:kk": "Тығыздағыштар мен сальниктер",
+        "cat-gaskets:en": "Gaskets and seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock absorbers",
+        "cat-control-arms:kk": "Басқару рычагтары",
+        "cat-control-arms:en": "Control arms",
+        "cat-stabilizer-links:kk": "Тұрақтандырғыш тіректері",
+        "cat-stabilizer-links:en": "Stabilizer links",
+        "cat-mirrors:kk": "Айналар",
+        "cat-mirrors:en": "Mirrors",
+        "cat-wipers:kk": "Шыны тазалағыш щеткалар",
+        "cat-wipers:en": "Wipers",
+        "cat-seat-covers:kk": "Отырғыш жапқыштары",
+        "cat-seat-covers:en": "Seat Covers",
+        "cat-floor-mats:kk": "Еден төсеніштері",
+        "cat-floor-mats:en": "Floor Mats",
+        "cat-engine-oils:kk": "Мотор майлары",
+        "cat-engine-oils:en": "Engine Oils",
+        "cat-oil-filters:kk": "Май филтрлері",
+        "cat-oil-filters:en": "Oil Filters",
+        "cat-air-filters:kk": "Ауа филтрлері",
+        "cat-air-filters:en": "Air Filters",
+        "cat-cabin-filters:kk": "Салон филтрлері",
+        "cat-cabin-filters:en": "Cabin Filters",
+        "attr-viscosity:kk": "Тұтқырлық",
+        "attr-viscosity:en": "Viscosity",
+        "attr-approval:kk": "Мақұлдау",
+        "attr-approval:en": "Approval",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералды",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Білік",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металл",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "l",
+        "unit-piece:kk": "дана",
+        "unit-piece:en": "pc",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Алдыңғы тежегіш колодкалар Geely 04465-0K090",
+        "item-pads-front-geely:en": "Front brake pads Geely 04465-0K090",
+        "item-pads-rear-geely:kk": "Артқы тежегіш колодкалар Geely 4050068800",
+        "item-pads-rear-geely:en": "Rear brake pads Geely 4050068800",
+        "item-pads-front-trw:kk": "Алдыңғы тежегіш колодкалар TRW GDB3534",
+        "item-pads-front-trw:en": "Front brake pads TRW GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 l",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 l",
+        "svc-oil-change:kk": "Мотор майын ауыстыру",
+        "svc-oil-change:en": "Engine oil change",
+        "svc-front-pads-change:kk": "Алдыңғы тежегіш колодкаларды ауыстыру",
+        "svc-front-pads-change:en": "Front brake pad change",
+        "svc-rear-pads-change:kk": "Артқы тежегіш колодкаларды ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pad change",
+        "svc-engine-diagnostics:kk": "Қозғалтқышты компьютерлік диагностикалау",
+        "svc-engine-diagnostics:en": "Engine computer diagnostics",
+        "svc-seasonal-tire-change:kk": "Маусымдық шиналарды ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Дөңгелектерді теңдестіру",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "openai/gpt-5-nano",
+      "answeredBy": [
+        "openai/gpt-5-nano"
+      ],
+      "calls": 6,
+      "failedCalls": 3,
+      "failures": [
+        {
+          "batch": 3,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        },
+        {
+          "batch": 5,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        },
+        {
+          "batch": 6,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        }
+      ],
+      "costUsd": 0.15753,
+      "costIsEstimate": false,
+      "tokensIn": 2020,
+      "tokensOut": 18573,
+      "latencyMs": {
+        "min": 22555,
+        "median": 36013,
+        "max": 37942
+      },
+      "durationMs": 276640,
+      "quality": {
+        "expected": 110,
+        "answered": 43,
+        "counts": {
+          "missing": 67,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 10,
+          "russism": 2,
+          "inconsistent_term": 1,
+          "term_absent": 1,
+          "duplicate": 0,
+          "lowercase_name": 7
+        },
+        "problemTexts": 84,
+        "problemShare": 0.764,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "left as the Russian text: \"Кузов\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "left as the Russian text: \"Салон\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-consumables",
+            "source": "Расходники",
+            "detail": "left as the Russian text: \"Расходники\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-tire-service",
+            "source": "Шиномонтаж",
+            "detail": "left as the Russian text: \"Шиномонтаж\""
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-brake-discs",
+            "source": "Тормозные диски",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-calipers",
+            "source": "Суппорты",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-calipers",
+            "source": "Суппорты",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-brake-fluid",
+            "source": "Тормозная жидкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-brake-fluid",
+            "source": "Тормозная жидкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-belts",
+            "source": "Ремни и ролики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-belts",
+            "source": "Ремни и ролики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-spark-plugs",
+            "source": "Свечи зажигания",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-spark-plugs",
+            "source": "Свечи зажигания",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "Прокладки и сальники",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-gaskets",
+            "source": "Прокладки и сальники",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-shock-absorbers",
+            "source": "Амортизаторы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-shock-absorbers",
+            "source": "Амортизаторы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-control-arms",
+            "source": "Рычаги",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-control-arms",
+            "source": "Рычаги",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-stabilizer-links",
+            "source": "Стойки стабилизатора",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-stabilizer-links",
+            "source": "Стойки стабилизатора",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-mirrors",
+            "source": "Зеркала",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-mirrors",
+            "source": "Зеркала",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-wipers",
+            "source": "Щётки стеклоочистителя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-wipers",
+            "source": "Щётки стеклоочистителя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-seat-covers",
+            "source": "Чехлы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-seat-covers",
+            "source": "Чехлы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-floor-mats",
+            "source": "Коврики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-floor-mats",
+            "source": "Коврики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-engine-oils",
+            "source": "Моторные масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-engine-oils",
+            "source": "Моторные масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-oil-filters",
+            "source": "Масляные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-oil-filters",
+            "source": "Масляные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-air-filters",
+            "source": "Воздушные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-air-filters",
+            "source": "Воздушные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-cabin-filters",
+            "source": "Салонные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-cabin-filters",
+            "source": "Салонные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "attr-viscosity",
+            "source": "Вязкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "attr-viscosity",
+            "source": "Вязкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "attr-approval",
+            "source": "Допуск",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "attr-approval",
+            "source": "Допуск",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "attr-volume",
+            "source": "Объём",
+            "detail": "starts with a small letter: \"көлем\""
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "attr-oil-base",
+            "source": "Основа",
+            "detail": "starts with a small letter: \"негіз\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "opt-mineral",
+            "source": "Минеральное",
+            "detail": "starts with a small letter: \"минералдық\""
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "starts with a small letter: \"ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"ось\""
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "starts with a small letter: \"материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"материал\""
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "opt-axle-front",
+            "source": "Передняя",
+            "detail": "starts with a small letter: \"алдыңғы\""
+          },
+          {
+            "check": "lowercase_name",
+            "lang": "kk",
+            "sampleId": "opt-axle-rear",
+            "source": "Задняя",
+            "detail": "starts with a small letter: \"артқы\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "opt-semi-metallic",
+            "source": "Полуметаллические",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "opt-semi-metallic",
+            "source": "Полуметаллические",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "unit-litre",
+            "source": "л",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "unit-litre",
+            "source": "л",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "unit-piece",
+            "source": "шт",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "unit-piece",
+            "source": "шт",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "unit-millimetre",
+            "source": "мм",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "unit-millimetre",
+            "source": "мм",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "Колодки тормозные передние Geely 04465-0K090",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "item-pads-front-geely",
+            "source": "Колодки тормозные передние Geely 04465-0K090",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "Колодки тормозные задние Geely 4050068800",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "item-pads-rear-geely",
+            "source": "Колодки тормозные задние Geely 4050068800",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "Колодки тормозные передние TRW GDB3534",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "item-pads-front-trw",
+            "source": "Колодки тормозные передние TRW GDB3534",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "item-oil-shell",
+            "source": "Shell Helix HX8 5W-30, 4 л",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "item-oil-shell",
+            "source": "Shell Helix HX8 5W-30, 4 л",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "item-oil-mobil",
+            "source": "Mobil Super 3000 5W-40, 4 л",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "item-oil-mobil",
+            "source": "Mobil Super 3000 5W-40, 4 л",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "svc-oil-change",
+            "source": "Замена моторного масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "svc-oil-change",
+            "source": "Замена моторного масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "Замена передних тормозных колодок",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "Замена передних тормозных колодок",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "Замена задних тормозных колодок",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "Замена задних тормозных колодок",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "svc-engine-diagnostics",
+            "source": "Компьютерная диагностика двигателя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "svc-engine-diagnostics",
+            "source": "Компьютерная диагностика двигателя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "svc-seasonal-tire-change",
+            "source": "Сезонная замена шин",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "svc-seasonal-tire-change",
+            "source": "Сезонная замена шин",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "svc-wheel-balancing",
+            "source": "Балансировка колёс",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "svc-wheel-balancing",
+            "source": "Балансировка колёс",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Тормоздық колодкалар\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық колодкалар\" (\"тормоз\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-discs",
+            "source": "тормозной",
+            "detail": "\"Төзороздық дисктері\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "тормозной",
+            "detail": "\"тормозной\" is rendered 2 ways across the set: \"тежег\" (cat-brakes) vs \"тормоз\" (cat-brake-pads)"
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.5,
+          "enTitleCaseShare": 0
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Қозғалтқыш",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тежегіштер",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Серіппе жүйесі",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Кузов",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrical",
+        "cat-interior:kk": "Салон",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Расходники",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Техқызмет",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Шиномонтаж",
+        "cat-tire-service:en": "Tire mounting",
+        "cat-brake-pads:kk": "Тормоздық колодкалар",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Төзороздық дисктері",
+        "attr-volume:kk": "көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "минералдық",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic"
+      }
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "answeredBy": [
+        "deepseek/deepseek-v4-flash"
+      ],
+      "calls": 6,
+      "failedCalls": 0,
+      "failures": [],
+      "costUsd": 0.001102,
+      "costIsEstimate": false,
+      "tokensIn": 3775,
+      "tokensOut": 3659,
+      "latencyMs": {
+        "min": 11066,
+        "median": 12560,
+        "max": 51172
+      },
+      "durationMs": 116648,
+      "quality": {
+        "expected": 110,
+        "answered": 110,
+        "counts": {
+          "missing": 0,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 6,
+          "russism": 4,
+          "inconsistent_term": 2,
+          "term_absent": 6,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 15,
+        "problemShare": 0.136,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "left as the Russian text: \"Салон\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"Тежегіш қаптамалары\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Geely 04465-0K090 алдыңғы тежеуіш колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Geely 4050068800 артқы тежеуіш колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"TRW GDB3534 алдыңғы тежеуіш колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"Алдыңғы тежегіш жастықшаларын ауыстыру\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"Артқы тежегіш жастықшаларын ауыстыру\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "тормозной",
+            "detail": "\"Geely 04465-0K090 алдыңғы тежеуіш колодкалары\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "тормозной",
+            "detail": "\"Geely 4050068800 артқы тежеуіш колодкалары\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "тормозной",
+            "detail": "\"TRW GDB3534 алдыңғы тежеуіш колодкалары\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"сальник\" stayed Russian inside \"Тығындар мен сальниктер\" (\"сальник\")"
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.655,
+          "enTitleCaseShare": 0.179
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Қозғалтқыш",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тежегіштер",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Аспа",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Шанақ",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrics",
+        "cat-interior:kk": "Салон",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Шығын материалдары",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Техникалық қызмет",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Дөңгелек монтажы",
+        "cat-tire-service:en": "Tire service",
+        "cat-brake-pads:kk": "Тежегіш қаптамалары",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Тежегіш дискілері",
+        "cat-brake-discs:en": "Brake discs",
+        "cat-calipers:kk": "Суппорттар",
+        "cat-calipers:en": "Calipers",
+        "cat-brake-fluid:kk": "Тежегіш сұйықтығы",
+        "cat-brake-fluid:en": "Brake fluid",
+        "cat-belts:kk": "Белдіктер мен роликтер",
+        "cat-belts:en": "Belts and rollers",
+        "cat-spark-plugs:kk": "Тұтану шамдары",
+        "cat-spark-plugs:en": "Spark plugs",
+        "cat-gaskets:kk": "Тығындар мен сальниктер",
+        "cat-gaskets:en": "Gaskets and seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock absorbers",
+        "cat-control-arms:kk": "Тіректер",
+        "cat-control-arms:en": "Control arms",
+        "cat-stabilizer-links:kk": "Стабилизатор тіректері",
+        "cat-stabilizer-links:en": "Stabilizer links",
+        "cat-mirrors:kk": "Айналар",
+        "cat-mirrors:en": "Mirrors",
+        "cat-wipers:kk": "Шыны тазалағыш щеткалар",
+        "cat-wipers:en": "Wiper blades",
+        "cat-seat-covers:kk": "Тұлбалар",
+        "cat-seat-covers:en": "Seat covers",
+        "cat-floor-mats:kk": "Төсеніштер",
+        "cat-floor-mats:en": "Floor mats",
+        "cat-engine-oils:kk": "Қозғалтқыш майлары",
+        "cat-engine-oils:en": "Engine oils",
+        "cat-oil-filters:kk": "Май сүзгілері",
+        "cat-oil-filters:en": "Oil filters",
+        "cat-air-filters:kk": "Ауа сүзгілері",
+        "cat-air-filters:en": "Air filters",
+        "cat-cabin-filters:kk": "Кабина сүзгілері",
+        "cat-cabin-filters:en": "Cabin filters",
+        "attr-viscosity:kk": "Тұтқырлық",
+        "attr-viscosity:en": "Viscosity",
+        "attr-approval:kk": "Рұқсат",
+        "attr-approval:en": "Approval",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералды",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Өзек",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металды",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "L",
+        "unit-piece:kk": "дана",
+        "unit-piece:en": "pc",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Geely 04465-0K090 алдыңғы тежеуіш колодкалары",
+        "item-pads-front-geely:en": "Front brake pads Geely 04465-0K090",
+        "item-pads-rear-geely:kk": "Geely 4050068800 артқы тежеуіш колодкалары",
+        "item-pads-rear-geely:en": "Rear brake pads Geely 4050068800",
+        "item-pads-front-trw:kk": "TRW GDB3534 алдыңғы тежеуіш колодкалары",
+        "item-pads-front-trw:en": "Front brake pads TRW GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 L",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 L",
+        "svc-oil-change:kk": "Мотор майын ауыстыру",
+        "svc-oil-change:en": "Engine oil change",
+        "svc-front-pads-change:kk": "Алдыңғы тежегіш жастықшаларын ауыстыру",
+        "svc-front-pads-change:en": "Front brake pads replacement",
+        "svc-rear-pads-change:kk": "Артқы тежегіш жастықшаларын ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pads replacement",
+        "svc-engine-diagnostics:kk": "Қозғалтқыштың компьютерлік диагностикасы",
+        "svc-engine-diagnostics:en": "Engine computer diagnostics",
+        "svc-seasonal-tire-change:kk": "Шиналарды маусымдық ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Доңғалақтарды теңгерімдеу",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "z-ai/glm-5.3-flash",
+      "answeredBy": [
+        "z-ai/glm-5.3-flash"
+      ],
+      "calls": 6,
+      "failedCalls": 0,
+      "failures": [],
+      "costUsd": 0.006352,
+      "costIsEstimate": false,
+      "tokensIn": 3614,
+      "tokensOut": 11803,
+      "latencyMs": {
+        "min": 8139,
+        "median": 11736,
+        "max": 42793
+      },
+      "durationMs": 109400,
+      "quality": {
+        "expected": 110,
+        "answered": 110,
+        "counts": {
+          "missing": 0,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 8,
+          "russism": 3,
+          "inconsistent_term": 2,
+          "term_absent": 15,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 22,
+        "problemShare": 0.2,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "left as the Russian text: \"Кузов\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "left as the Russian text: \"Салон\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"Ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"Тежеу төбеттері\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"Алдыңғы тежеу төсемдері Geely 04465-0K090\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"Артқы тежеу төсемдері Geely 4050068800\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"Алдыңғы тежеу төсемдері TRW GDB3534\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"Алдыңғы тежеу бегіттерін ауыстыру\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"Артқы тежеу бегіттерін ауыстыру\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "тормозной",
+            "detail": "\"Тежеу төбеттері\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-discs",
+            "source": "тормозной",
+            "detail": "\"Тежеу дискілері\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brake-fluid",
+            "source": "тормозной",
+            "detail": "\"Тежеу сұйықтығы\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "тормозной",
+            "detail": "\"Алдыңғы тежеу төсемдері Geely 04465-0K090\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "тормозной",
+            "detail": "\"Артқы тежеу төсемдері Geely 4050068800\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "тормозной",
+            "detail": "\"Алдыңғы тежеу төсемдері TRW GDB3534\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "тормозной",
+            "detail": "\"Алдыңғы тежеу бегіттерін ауыстыру\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "тормозной",
+            "detail": "\"Артқы тежеу бегіттерін ауыстыру\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-oil-filters",
+            "source": "фильтр",
+            "detail": "\"фильтр\" stayed Russian inside \"Май фильтрлері\" (\"фильтр\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-air-filters",
+            "source": "фильтр",
+            "detail": "\"фильтр\" stayed Russian inside \"Ауа фильтрлері\" (\"фильтр\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-cabin-filters",
+            "source": "фильтр",
+            "detail": "\"фильтр\" stayed Russian inside \"Салондық фильтрлер\" (\"фильтр\")"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"Прокладкалар мен мөрлер\" has no known rendering of \"сальник\""
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.582,
+          "enTitleCaseShare": 0.185
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Қозғалтқыш",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тежегіштер",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Аспа",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Кузов",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrical",
+        "cat-interior:kk": "Салон",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Тұтыну материалдары",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Техникалық қызмет көрсету",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Шина монтажы",
+        "cat-tire-service:en": "Tire service",
+        "cat-brake-pads:kk": "Тежеу төбеттері",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Тежеу дискілері",
+        "cat-brake-discs:en": "Brake discs",
+        "cat-calipers:kk": "Суппорттар",
+        "cat-calipers:en": "Calipers",
+        "cat-brake-fluid:kk": "Тежеу сұйықтығы",
+        "cat-brake-fluid:en": "Brake fluid",
+        "cat-belts:kk": "Белдіктер мен роликтер",
+        "cat-belts:en": "Belts and pulleys",
+        "cat-spark-plugs:kk": "Жарық беретін шамдар",
+        "cat-spark-plugs:en": "Spark plugs",
+        "cat-gaskets:kk": "Прокладкалар мен мөрлер",
+        "cat-gaskets:en": "Gaskets and seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock absorbers",
+        "cat-control-arms:kk": "Иінтірлер",
+        "cat-control-arms:en": "Control arms",
+        "cat-stabilizer-links:kk": "Стабилизатор тіректері",
+        "cat-stabilizer-links:en": "Stabilizer links",
+        "cat-mirrors:kk": "Айналар",
+        "cat-mirrors:en": "Mirrors",
+        "cat-wipers:kk": "Шыны сүргіш щеткалар",
+        "cat-wipers:en": "Wiper blades",
+        "cat-seat-covers:kk": "Чехолдар",
+        "cat-seat-covers:en": "Covers",
+        "cat-floor-mats:kk": "Кілемшелер",
+        "cat-floor-mats:en": "Floor mats",
+        "cat-engine-oils:kk": "Мотор майлары",
+        "cat-engine-oils:en": "Engine oils",
+        "cat-oil-filters:kk": "Май фильтрлері",
+        "cat-oil-filters:en": "Oil filters",
+        "cat-air-filters:kk": "Ауа фильтрлері",
+        "cat-air-filters:en": "Air filters",
+        "cat-cabin-filters:kk": "Салондық фильтрлер",
+        "cat-cabin-filters:en": "Cabin filters",
+        "attr-viscosity:kk": "Тұтқырлық",
+        "attr-viscosity:en": "Viscosity",
+        "attr-approval:kk": "Рұқсаттама",
+        "attr-approval:en": "Approval",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералды",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металлдық",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "L",
+        "unit-piece:kk": "дана",
+        "unit-piece:en": "pcs",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Алдыңғы тежеу төсемдері Geely 04465-0K090",
+        "item-pads-front-geely:en": "Front brake pads Geely 04465-0K090",
+        "item-pads-rear-geely:kk": "Артқы тежеу төсемдері Geely 4050068800",
+        "item-pads-rear-geely:en": "Rear brake pads Geely 4050068800",
+        "item-pads-front-trw:kk": "Алдыңғы тежеу төсемдері TRW GDB3534",
+        "item-pads-front-trw:en": "Front brake pads TRW GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 L",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 L",
+        "svc-oil-change:kk": "Мотор майын ауыстыру",
+        "svc-oil-change:en": "Engine oil change",
+        "svc-front-pads-change:kk": "Алдыңғы тежеу бегіттерін ауыстыру",
+        "svc-front-pads-change:en": "Front brake pad replacement",
+        "svc-rear-pads-change:kk": "Артқы тежеу бегіттерін ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pad replacement",
+        "svc-engine-diagnostics:kk": "Қозғалтқыштың компьютерлік диагностикасы",
+        "svc-engine-diagnostics:en": "Engine computer diagnostics",
+        "svc-seasonal-tire-change:kk": "Шиналарды маусымдық ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Дөңгелектерді балансалау",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "qwen/qwen3.5-flash-02-23",
+      "answeredBy": [],
+      "calls": 1,
+      "failedCalls": 1,
+      "failures": [
+        {
+          "batch": 1,
+          "kind": "no_private_provider",
+          "message": "No provider of this model keeps requests unstored, so nothing was sent: No endpoints found matching your data policy (Zero data retention). Configure: https://openrouter.ai/settings/privacy"
+        }
+      ],
+      "costUsd": 0,
+      "costIsEstimate": false,
+      "tokensIn": 0,
+      "tokensOut": 0,
+      "latencyMs": {
+        "min": 0,
+        "median": 0,
+        "max": 0
+      },
+      "durationMs": 134,
+      "quality": null,
+      "texts": {}
+    },
+    {
+      "model": "mistralai/mistral-small-3.2-24b-instruct",
+      "answeredBy": [
+        "mistralai/mistral-small-3.2-24b-instruct"
+      ],
+      "calls": 6,
+      "failedCalls": 0,
+      "failures": [],
+      "costUsd": 0.000921,
+      "costIsEstimate": false,
+      "tokensIn": 3942,
+      "tokensOut": 2367,
+      "latencyMs": {
+        "min": 12348,
+        "median": 19862,
+        "max": 21846
+      },
+      "durationMs": 109466,
+      "quality": {
+        "expected": 110,
+        "answered": 110,
+        "counts": {
+          "missing": 0,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 5,
+          "russism": 10,
+          "inconsistent_term": 3,
+          "term_absent": 11,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 21,
+        "problemShare": 0.191,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"Ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Тормоздық колодкалар\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Geely 04465-0K090 алдыңғы брейк колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Geely 4050068800 артқы брейк колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"TRW GDB3534 алдыңғы брейк колодкалары\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдыңғы тежеу колодкасының ауыстырылуы\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Артқы тежеу колодкасының ауыстырылуы\" (\"колодк\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-brakes",
+            "source": "тормозной",
+            "detail": "\"Тыныс\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық колодкалар\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-discs",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық дисктер\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-fluid",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық сұйықтық\" (\"тормоз\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "тормозной",
+            "detail": "\"Geely 04465-0K090 алдыңғы брейк колодкалары\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "тормозной",
+            "detail": "\"Geely 4050068800 артқы брейк колодкалары\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "тормозной",
+            "detail": "\"TRW GDB3534 алдыңғы брейк колодкалары\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "тормозной",
+            "detail": "\"Алдыңғы тежеу колодкасының ауыстырылуы\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "тормозной",
+            "detail": "\"Артқы тежеу колодкасының ауыстырылуы\" has no known rendering of \"тормозной\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"Алдыңғы тежеу колодкасының ауыстырылуы\" has no known rendering of \"замена\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"Артқы тежеу колодкасының ауыстырылуы\" has no known rendering of \"замена\""
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "kk",
+            "sampleId": "svc-seasonal-tire-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"алмастыру\" (svc-oil-change) vs \"ауыстыру\" (svc-seasonal-tire-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "opt-axle-rear",
+            "source": "задний",
+            "detail": "\"Артық\" has no known rendering of \"задний\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-engine",
+            "source": "двигатель",
+            "detail": "\"Мотоцикл\" has no known rendering of \"двигатель\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-engine-diagnostics",
+            "source": "двигатель",
+            "detail": "\"Компьютерлік диагностика\" has no known rendering of \"двигатель\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"сальник\" stayed Russian inside \"Прокладкалар мен сальниктер\" (\"сальник\")"
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.564,
+          "enTitleCaseShare": 0.222
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Мотоцикл",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тыныс",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Күтеру",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Дене",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электр",
+        "cat-electrics:en": "Electrics",
+        "cat-interior:kk": "Ишкі жабдық",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Жеңілдету",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Күтім",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Шина қызметі",
+        "cat-tire-service:en": "Tire service",
+        "cat-brake-pads:kk": "Тормоздық колодкалар",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Тормоздық дисктер",
+        "cat-brake-discs:en": "Brake discs",
+        "cat-calipers:kk": "Суппорттар",
+        "cat-calipers:en": "Calipers",
+        "cat-brake-fluid:kk": "Тормоздық сұйықтық",
+        "cat-brake-fluid:en": "Brake fluid",
+        "cat-belts:kk": "Жіптер мен роліктер",
+        "cat-belts:en": "Belts and pulleys",
+        "cat-spark-plugs:kk": "Жанғыш шымтезектер",
+        "cat-spark-plugs:en": "Spark plugs",
+        "cat-gaskets:kk": "Прокладкалар мен сальниктер",
+        "cat-gaskets:en": "Gaskets and seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock absorbers",
+        "cat-control-arms:kk": "Рычактар",
+        "cat-control-arms:en": "Control arms",
+        "cat-stabilizer-links:kk": "Стабилизаторлық стойкалар",
+        "cat-stabilizer-links:en": "Stabilizer links",
+        "cat-mirrors:kk": "Көрсеткіштер",
+        "cat-mirrors:en": "Mirrors",
+        "cat-wipers:kk": "Жаңбыр сөгетін сүзгілер",
+        "cat-wipers:en": "Wipers",
+        "cat-seat-covers:kk": "Орындық жапсырмалары",
+        "cat-seat-covers:en": "Seat covers",
+        "cat-floor-mats:kk": "Жабындылар",
+        "cat-floor-mats:en": "Floor mats",
+        "cat-engine-oils:kk": "Мотоцикл майлары",
+        "cat-engine-oils:en": "Engine oils",
+        "cat-oil-filters:kk": "Май сүзгілері",
+        "cat-oil-filters:en": "Oil filters",
+        "cat-air-filters:kk": "Ауа сүзгілері",
+        "cat-air-filters:en": "Air filters",
+        "cat-cabin-filters:kk": "Көліктену сүзгілері",
+        "cat-cabin-filters:en": "Cabin filters",
+        "attr-viscosity:kk": "Жабысқыштығы",
+        "attr-viscosity:en": "Viscosity",
+        "attr-approval:kk": "Рұқсат ету",
+        "attr-approval:en": "Approval",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералды",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артық",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металл",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "l",
+        "unit-piece:kk": "б",
+        "unit-piece:en": "pc",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Geely 04465-0K090 алдыңғы брейк колодкалары",
+        "item-pads-front-geely:en": "Geely 04465-0K090 Front Brake Pads",
+        "item-pads-rear-geely:kk": "Geely 4050068800 артқы брейк колодкалары",
+        "item-pads-rear-geely:en": "Geely 4050068800 Rear Brake Pads",
+        "item-pads-front-trw:kk": "TRW GDB3534 алдыңғы брейк колодкалары",
+        "item-pads-front-trw:en": "TRW GDB3534 Front Brake Pads",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 l",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 l",
+        "svc-oil-change:kk": "Мотор майын алмастыру",
+        "svc-oil-change:en": "Engine Oil Change",
+        "svc-front-pads-change:kk": "Алдыңғы тежеу колодкасының ауыстырылуы",
+        "svc-front-pads-change:en": "Front brake pads replacement",
+        "svc-rear-pads-change:kk": "Артқы тежеу колодкасының ауыстырылуы",
+        "svc-rear-pads-change:en": "Rear brake pads replacement",
+        "svc-engine-diagnostics:kk": "Компьютерлік диагностика",
+        "svc-engine-diagnostics:en": "Engine diagnostics",
+        "svc-seasonal-tire-change:kk": "Мәуімілік шины ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Дөңгелектердің балансировкасы",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "answeredBy": [
+        "meta-llama/llama-3.3-70b-instruct"
+      ],
+      "calls": 6,
+      "failedCalls": 2,
+      "failures": [
+        {
+          "batch": 1,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        },
+        {
+          "batch": 3,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        }
+      ],
+      "costUsd": 0.101565,
+      "costIsEstimate": false,
+      "tokensIn": 2468,
+      "tokensOut": 2301,
+      "latencyMs": {
+        "min": 6969,
+        "median": 14768,
+        "max": 52159
+      },
+      "durationMs": 208764,
+      "quality": {
+        "expected": 110,
+        "answered": 70,
+        "counts": {
+          "missing": 40,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 4,
+          "russism": 13,
+          "inconsistent_term": 2,
+          "term_absent": 3,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 56,
+        "problemShare": 0.509,
+        "findings": [
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-engine",
+            "source": "Двигатель",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-engine",
+            "source": "Двигатель",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-brakes",
+            "source": "Тормоза",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-brakes",
+            "source": "Тормоза",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-suspension",
+            "source": "Подвеска",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-suspension",
+            "source": "Подвеска",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-consumables",
+            "source": "Расходники",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-consumables",
+            "source": "Расходники",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-maintenance",
+            "source": "Техобслуживание",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-maintenance",
+            "source": "Техобслуживание",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-tire-service",
+            "source": "Шиномонтаж",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-tire-service",
+            "source": "Шиномонтаж",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-mirrors",
+            "source": "Зеркала",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-mirrors",
+            "source": "Зеркала",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-wipers",
+            "source": "Щётки стеклоочистителя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-wipers",
+            "source": "Щётки стеклоочистителя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-seat-covers",
+            "source": "Чехлы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-seat-covers",
+            "source": "Чехлы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-floor-mats",
+            "source": "Коврики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-floor-mats",
+            "source": "Коврики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-engine-oils",
+            "source": "Моторные масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-engine-oils",
+            "source": "Моторные масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-oil-filters",
+            "source": "Масляные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-oil-filters",
+            "source": "Масляные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-air-filters",
+            "source": "Воздушные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-air-filters",
+            "source": "Воздушные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-cabin-filters",
+            "source": "Салонные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-cabin-filters",
+            "source": "Салонные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "attr-viscosity",
+            "source": "Вязкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "attr-viscosity",
+            "source": "Вязкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "attr-approval",
+            "source": "Допуск",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "attr-approval",
+            "source": "Допуск",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-synthetic",
+            "source": "Синтетика",
+            "detail": "left as the Russian text: \"Синтетика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"Ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "opt-ceramic",
+            "source": "Керамика",
+            "detail": "left as the Russian text: \"Керамика\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Тормоздық колодкалар\" (\"колодк\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"Тормоз колдогері алдыңғы Geely 04465-0K090\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"Тормоз колдогері артқы Geely 4050068800\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"Тормоз колдогері алдыңғы TRW GDB3534\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдыңғы тормоз колодкаларын ауыстыру\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Артқы тормоз колодкаларын ауыстыру\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық колодкалар\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-discs",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық дискілер\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brake-fluid",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздық сұйықтық\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоз колдогері алдыңғы Geely 04465-0K090\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоз колдогері артқы Geely 4050068800\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоз колдогері алдыңғы TRW GDB3534\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Алдыңғы тормоз колодкаларын ауыстыру\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Артқы тормоз колодкаларын ауыстыру\" (\"тормоз\")"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-front-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-rear-pads-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change, svc-seasonal-tire-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "svc-engine-diagnostics",
+            "source": "двигатель",
+            "detail": "\"двигатель\" stayed Russian inside \"Компьютерлік двигатель диагностикасы\" (\"двигател\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "сальник",
+            "detail": "\"сальник\" stayed Russian inside \"Прокладкалар мен сальниктер\" (\"сальник\")"
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.486,
+          "enTitleCaseShare": 0.25
+        }
+      },
+      "texts": {
+        "cat-brake-pads:kk": "Тормоздық колодкалар",
+        "cat-brake-pads:en": "Brake pads",
+        "cat-brake-discs:kk": "Тормоздық дискілер",
+        "cat-brake-discs:en": "Brake discs",
+        "cat-calipers:kk": "Суппорталар",
+        "cat-calipers:en": "Calipers",
+        "cat-brake-fluid:kk": "Тормоздық сұйықтық",
+        "cat-brake-fluid:en": "Brake fluid",
+        "cat-belts:kk": "Ремни мен роликтер",
+        "cat-belts:en": "Belts and rollers",
+        "cat-spark-plugs:kk": "Жанармалық шамдар",
+        "cat-spark-plugs:en": "Spark plugs",
+        "cat-gaskets:kk": "Прокладкалар мен сальниктер",
+        "cat-gaskets:en": "Gaskets and seals",
+        "cat-shock-absorbers:kk": "Амортизаторлар",
+        "cat-shock-absorbers:en": "Shock absorbers",
+        "cat-control-arms:kk": "Рычагтар",
+        "cat-control-arms:en": "Control arms",
+        "cat-stabilizer-links:kk": "Стабилизаторлардың стойкалары",
+        "cat-stabilizer-links:en": "Stabilizer links",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "Негіз",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетика",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Жартылай синтетика",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минерал",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдыңғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Артқы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамика",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Жартылай металл",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "l",
+        "unit-piece:kk": "шт",
+        "unit-piece:en": "pcs",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Тормоз колдогері алдыңғы Geely 04465-0K090",
+        "item-pads-front-geely:en": "Brake pads front Geely 04465-0K090",
+        "item-pads-rear-geely:kk": "Тормоз колдогері артқы Geely 4050068800",
+        "item-pads-rear-geely:en": "Brake pads rear Geely 4050068800",
+        "item-pads-front-trw:kk": "Тормоз колдогері алдыңғы TRW GDB3534",
+        "item-pads-front-trw:en": "Brake pads front TRW GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 l",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 l",
+        "svc-oil-change:kk": "Мотор майын ауыстыру",
+        "svc-oil-change:en": "Oil change",
+        "svc-front-pads-change:kk": "Алдыңғы тормоз колодкаларын ауыстыру",
+        "svc-front-pads-change:en": "Front brake pads replacement",
+        "svc-rear-pads-change:kk": "Артқы тормоз колодкаларын ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pads replacement",
+        "svc-engine-diagnostics:kk": "Компьютерлік двигатель диагностикасы",
+        "svc-engine-diagnostics:en": "Engine computer diagnostics",
+        "svc-seasonal-tire-change:kk": "Маусымдық шина ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire change",
+        "svc-wheel-balancing:kk": "Дөңгелек балансировкасы",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    },
+    {
+      "model": "openai/gpt-oss-20b",
+      "answeredBy": [
+        "openai/gpt-oss-20b"
+      ],
+      "calls": 6,
+      "failedCalls": 2,
+      "failures": [
+        {
+          "batch": 2,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        },
+        {
+          "batch": 3,
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        }
+      ],
+      "costUsd": 0.100839,
+      "costIsEstimate": false,
+      "tokensIn": 2611,
+      "tokensOut": 5661,
+      "latencyMs": {
+        "min": 6678,
+        "median": 35381,
+        "max": 59878
+      },
+      "durationMs": 257408,
+      "quality": {
+        "expected": 110,
+        "answered": 70,
+        "counts": {
+          "missing": 40,
+          "empty": 0,
+          "too_long": 0,
+          "control_characters": 0,
+          "wrong_language": 0,
+          "untranslated": 8,
+          "russism": 7,
+          "inconsistent_term": 3,
+          "term_absent": 9,
+          "duplicate": 0,
+          "lowercase_name": 0
+        },
+        "problemTexts": 59,
+        "problemShare": 0.536,
+        "findings": [
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-suspension",
+            "source": "Подвеска",
+            "detail": "left as the Russian text: \"Подвеска\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-body",
+            "source": "Кузов",
+            "detail": "left as the Russian text: \"Кузов\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-electrics",
+            "source": "Электрика",
+            "detail": "left as the Russian text: \"Электрика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-interior",
+            "source": "Салон",
+            "detail": "left as the Russian text: \"Салон\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-diagnostics",
+            "source": "Диагностика",
+            "detail": "left as the Russian text: \"Диагностика\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "cat-tire-service",
+            "source": "Шиномонтаж",
+            "detail": "left as the Russian text: \"Шиномонтаж\""
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-brake-pads",
+            "source": "Тормозные колодки",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-brake-pads",
+            "source": "Тормозные колодки",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-brake-discs",
+            "source": "Тормозные диски",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-brake-discs",
+            "source": "Тормозные диски",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-calipers",
+            "source": "Суппорты",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-calipers",
+            "source": "Суппорты",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-brake-fluid",
+            "source": "Тормозная жидкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-brake-fluid",
+            "source": "Тормозная жидкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-belts",
+            "source": "Ремни и ролики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-belts",
+            "source": "Ремни и ролики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-spark-plugs",
+            "source": "Свечи зажигания",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-spark-plugs",
+            "source": "Свечи зажигания",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-gaskets",
+            "source": "Прокладки и сальники",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-gaskets",
+            "source": "Прокладки и сальники",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-shock-absorbers",
+            "source": "Амортизаторы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-shock-absorbers",
+            "source": "Амортизаторы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-control-arms",
+            "source": "Рычаги",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-control-arms",
+            "source": "Рычаги",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-stabilizer-links",
+            "source": "Стойки стабилизатора",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-stabilizer-links",
+            "source": "Стойки стабилизатора",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-mirrors",
+            "source": "Зеркала",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-mirrors",
+            "source": "Зеркала",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-wipers",
+            "source": "Щётки стеклоочистителя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-wipers",
+            "source": "Щётки стеклоочистителя",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-seat-covers",
+            "source": "Чехлы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-seat-covers",
+            "source": "Чехлы",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-floor-mats",
+            "source": "Коврики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-floor-mats",
+            "source": "Коврики",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-engine-oils",
+            "source": "Моторные масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-engine-oils",
+            "source": "Моторные масла",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-oil-filters",
+            "source": "Масляные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-oil-filters",
+            "source": "Масляные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-air-filters",
+            "source": "Воздушные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-air-filters",
+            "source": "Воздушные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "cat-cabin-filters",
+            "source": "Салонные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "cat-cabin-filters",
+            "source": "Салонные фильтры",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "attr-viscosity",
+            "source": "Вязкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "attr-viscosity",
+            "source": "Вязкость",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "kk",
+            "sampleId": "attr-approval",
+            "source": "Допуск",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "missing",
+            "lang": "en",
+            "sampleId": "attr-approval",
+            "source": "Допуск",
+            "detail": "the model said nothing about this text"
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-axle",
+            "source": "Ось",
+            "detail": "left as the Russian text: \"Ось\""
+          },
+          {
+            "check": "untranslated",
+            "lang": "kk",
+            "sampleId": "attr-material",
+            "source": "Материал",
+            "detail": "left as the Russian text: \"Материал\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдынғы тормоз колодкалары Geely 04465-0K090\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Артқы тормоз колодкалары Geely 4050068800\" (\"колодк\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "колодки",
+            "detail": "\"колодки\" stayed Russian inside \"Алдынғы тормоз колодкалары TRW GDB3534\" (\"колодк\")"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "колодки",
+            "detail": "\"Алдынғы тежегіш блоктарын ауыстыру\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "колодки",
+            "detail": "\"Артқы тежегіш блоктарын ауыстыру\" has no known rendering of \"колодки\""
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "cat-brakes",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Тормоздар\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Алдынғы тормоз колодкалары Geely 04465-0K090\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-rear-geely",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Артқы тормоз колодкалары Geely 4050068800\" (\"тормоз\")"
+          },
+          {
+            "check": "russism",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "тормозной",
+            "detail": "\"тормозной\" stayed Russian inside \"Алдынғы тормоз колодкалары TRW GDB3534\" (\"тормоз\")"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "тормозной",
+            "detail": "\"тормозной\" is rendered 2 ways across the set: \"тормоз\" (cat-brakes, item-pads-front-geely, item-pads-rear-geely, item-pads-front-trw) vs \"тежег\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "kk",
+            "sampleId": "svc-rear-pads-change",
+            "source": "тормозной",
+            "detail": "\"тормозной\" is rendered 2 ways across the set: \"тормоз\" (cat-brakes, item-pads-front-geely, item-pads-rear-geely, item-pads-front-trw) vs \"тежег\" (svc-front-pads-change, svc-rear-pads-change)"
+          },
+          {
+            "check": "inconsistent_term",
+            "lang": "en",
+            "sampleId": "svc-oil-change",
+            "source": "замена",
+            "detail": "\"замена\" is rendered 2 ways across the set: \"change\" (svc-oil-change) vs \"replac\" (svc-front-pads-change, svc-rear-pads-change, svc-seasonal-tire-change)"
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "opt-axle-front",
+            "source": "передний",
+            "detail": "\"Алдынғы\" has no known rendering of \"передний\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-geely",
+            "source": "передний",
+            "detail": "\"Алдынғы тормоз колодкалары Geely 04465-0K090\" has no known rendering of \"передний\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "item-pads-front-trw",
+            "source": "передний",
+            "detail": "\"Алдынғы тормоз колодкалары TRW GDB3534\" has no known rendering of \"передний\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-front-pads-change",
+            "source": "передний",
+            "detail": "\"Алдынғы тежегіш блоктарын ауыстыру\" has no known rendering of \"передний\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "opt-axle-rear",
+            "source": "задний",
+            "detail": "\"Арғы\" has no known rendering of \"задний\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "cat-engine",
+            "source": "двигатель",
+            "detail": "\"Мотор\" has no known rendering of \"двигатель\""
+          },
+          {
+            "check": "term_absent",
+            "lang": "kk",
+            "sampleId": "svc-engine-diagnostics",
+            "source": "двигатель",
+            "detail": "\"Моторды компьютерлік диагностика\" has no known rendering of \"двигатель\""
+          }
+        ],
+        "observations": {
+          "kazakhLetterShare": 0.457,
+          "enTitleCaseShare": 0.5
+        }
+      },
+      "texts": {
+        "cat-engine:kk": "Мотор",
+        "cat-engine:en": "Engine",
+        "cat-brakes:kk": "Тормоздар",
+        "cat-brakes:en": "Brakes",
+        "cat-suspension:kk": "Подвеска",
+        "cat-suspension:en": "Suspension",
+        "cat-body:kk": "Кузов",
+        "cat-body:en": "Body",
+        "cat-electrics:kk": "Электрика",
+        "cat-electrics:en": "Electrics",
+        "cat-interior:kk": "Салон",
+        "cat-interior:en": "Interior",
+        "cat-consumables:kk": "Жұқпалы заттар",
+        "cat-consumables:en": "Consumables",
+        "cat-maintenance:kk": "Сервис",
+        "cat-maintenance:en": "Maintenance",
+        "cat-diagnostics:kk": "Диагностика",
+        "cat-diagnostics:en": "Diagnostics",
+        "cat-tire-service:kk": "Шиномонтаж",
+        "cat-tire-service:en": "Tire Service",
+        "attr-volume:kk": "Көлем",
+        "attr-volume:en": "Volume",
+        "attr-oil-base:kk": "База",
+        "attr-oil-base:en": "Base",
+        "opt-synthetic:kk": "Синтетикалық",
+        "opt-synthetic:en": "Synthetic",
+        "opt-semi-synthetic:kk": "Полисинтетикалық",
+        "opt-semi-synthetic:en": "Semi-synthetic",
+        "opt-mineral:kk": "Минералдық",
+        "opt-mineral:en": "Mineral",
+        "attr-axle:kk": "Ось",
+        "attr-axle:en": "Axle",
+        "attr-material:kk": "Материал",
+        "attr-material:en": "Material",
+        "opt-axle-front:kk": "Алдынғы",
+        "opt-axle-front:en": "Front",
+        "opt-axle-rear:kk": "Арғы",
+        "opt-axle-rear:en": "Rear",
+        "opt-ceramic:kk": "Керамикалық",
+        "opt-ceramic:en": "Ceramic",
+        "opt-semi-metallic:kk": "Полу-металлик",
+        "opt-semi-metallic:en": "Semi-metallic",
+        "unit-litre:kk": "л",
+        "unit-litre:en": "L",
+        "unit-piece:kk": "шт",
+        "unit-piece:en": "pcs",
+        "unit-millimetre:kk": "мм",
+        "unit-millimetre:en": "mm",
+        "item-pads-front-geely:kk": "Алдынғы тормоз колодкалары Geely 04465-0K090",
+        "item-pads-front-geely:en": "Front brake pads Geely 04465-0K090",
+        "item-pads-rear-geely:kk": "Артқы тормоз колодкалары Geely 4050068800",
+        "item-pads-rear-geely:en": "Rear brake pads Geely 4050068800",
+        "item-pads-front-trw:kk": "Алдынғы тормоз колодкалары TRW GDB3534",
+        "item-pads-front-trw:en": "Front brake pads TRW GDB3534",
+        "item-oil-shell:kk": "Shell Helix HX8 5W-30, 4 л",
+        "item-oil-shell:en": "Shell Helix HX8 5W-30, 4 L",
+        "item-oil-mobil:kk": "Mobil Super 3000 5W-40, 4 л",
+        "item-oil-mobil:en": "Mobil Super 3000 5W-40, 4 L",
+        "svc-oil-change:kk": "Мотор майын ауыстыру",
+        "svc-oil-change:en": "Oil change",
+        "svc-front-pads-change:kk": "Алдынғы тежегіш блоктарын ауыстыру",
+        "svc-front-pads-change:en": "Front brake pads replacement",
+        "svc-rear-pads-change:kk": "Артқы тежегіш блоктарын ауыстыру",
+        "svc-rear-pads-change:en": "Rear brake pads replacement",
+        "svc-engine-diagnostics:kk": "Моторды компьютерлік диагностика",
+        "svc-engine-diagnostics:en": "Engine diagnostics",
+        "svc-seasonal-tire-change:kk": "Сезондық шина ауыстыру",
+        "svc-seasonal-tire-change:en": "Seasonal tire replacement",
+        "svc-wheel-balancing:kk": "Торқаларды балансировка",
+        "svc-wheel-balancing:en": "Wheel balancing"
+      }
+    }
+  ]
+}

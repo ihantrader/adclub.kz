@@ -79,9 +79,12 @@ type Method = "get" | "post" | "put" | "patch";
 // A raw control character, written as code so the source stays plain text.
 const BELL = String.fromCharCode(7);
 
-/** The models `ai_model_translate_*` name by default (TASK-053, ARCHITECTURE 9.6). */
-const DEFAULT_MODEL = "google/gemini-3.8-flash";
-const FALLBACK_MODEL = "openai/gpt-5.4-mini";
+/**
+ * The models `ai_model_translate_*` name by default, chosen by measuring
+ * them on the sample set (TASK-053.B, D-058; ARCHITECTURE 9.6, 4.23).
+ */
+const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
+const FALLBACK_MODEL = "deepseek/deepseek-v4-flash";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -1330,6 +1333,24 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         "google/gemini-3.8-flash",
         "openai/gpt-5.4-mini",
       ]);
+    });
+
+    it("sends the term glossary with the texts, and nothing about terms when it is off (TASK-053.B)", async () => {
+      const gateway = await startWorker();
+      await createCategory({ ru: "Тормозные колодки" });
+      await drained();
+      const withGlossary = gateway.requests.at(-1)!.input.glossary;
+      // On by default: the terms of `translation-glossary.json` travel with the texts.
+      expect(withGlossary?.length).toBeGreaterThanOrEqual(10);
+      expect(withGlossary?.every((entry) => entry.ru.length > 0)).toBe(true);
+      expect(withGlossary?.some((entry) => entry.ru === "тормозные колодки")).toBe(true);
+
+      // The worker keeps running; only the setting changes.
+      await setSettings({ translation_glossary_enabled: false });
+      await createCategory({ ru: "Тормозные диски" });
+      await drained();
+      expect(gateway.requests.at(-1)!.input.glossary).toBeUndefined();
+      await setSettings({ translation_glossary_enabled: true });
     });
 
     it("uses the fallback model when the first one cannot answer, and records that it did (AC-2)", async () => {

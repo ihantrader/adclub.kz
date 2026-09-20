@@ -27,6 +27,7 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
 import { CatalogAdminService, type CatalogActor } from "./catalog-admin.service";
 import { CatalogBrandsService } from "./catalog-brands.service";
+import { CatalogPhotosService } from "./catalog-photos.service";
 import {
   analogInvalid,
   brandArchived,
@@ -148,6 +149,7 @@ export class CatalogItemsService {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(CatalogAdminService) private readonly structure: CatalogAdminService,
     @Inject(CatalogBrandsService) private readonly brands: CatalogBrandsService,
+    @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
     @Inject(TranslationQueue) private readonly translations: TranslationQueue,
   ) {}
 
@@ -180,6 +182,7 @@ export class CatalogItemsService {
     const active = attributes.filter((entry) => entry.status === "active");
     const stored = await this.valuesOf(executor, [row.id]);
     const own = stored.get(row.id) ?? new Map<string, ItemAttributeValueRow>();
+    const photos = await this.photos.adminPhotosFor(executor, row.id);
     const links = await executor
       .select()
       .from(itemAnalog)
@@ -216,6 +219,7 @@ export class CatalogItemsService {
         status: link.status,
         source: link.source,
       })),
+      photos,
     };
   }
 
@@ -1171,7 +1175,7 @@ export class CatalogItemsService {
       return [];
     }
     const brandIds = [...new Set(rows.flatMap((row) => (row.brandId ? [row.brandId] : [])))];
-    const [texts, brandRows] = await Promise.all([
+    const [texts, brandRows, images] = await Promise.all([
       loadTexts(
         executor,
         "catalog_item",
@@ -1180,6 +1184,9 @@ export class CatalogItemsService {
       brandIds.length === 0
         ? Promise.resolve([])
         : executor.select().from(brand).where(inArray(brand.id, brandIds)),
+      // The approved primary photo, in the mode `photo_display_mode` asks
+      // for and never full-size (TASK-013 requirement 4).
+      this.photos.imagesFor(executor, rows),
     ]);
     const brands = new Map(
       (await this.brands.describeMany(executor, brandRows)).map((entry) => [entry.id, entry]),
@@ -1199,6 +1206,7 @@ export class CatalogItemsService {
         status: row.status,
         completeness: row.completeness,
         version: row.version,
+        photo: images.get(row.id) ?? null,
         archivedAt: iso(row.archivedAt),
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),

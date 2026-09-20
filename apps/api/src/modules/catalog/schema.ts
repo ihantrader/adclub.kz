@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -19,6 +20,10 @@ import type {
   CategoryStatus,
   ItemAnalogStatus,
   ItemCompleteness,
+  ItemPhotoProposedBy,
+  ItemPhotoSourceType,
+  ItemPhotoStatus,
+  ItemPhotoVariant,
 } from "@adclub/contracts";
 
 /**
@@ -154,6 +159,8 @@ export const catalogItem = pgTable("catalog_item", {
   status: text("status").$type<CatalogItemStatus>().notNull().default("active"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   completeness: text("completeness").$type<ItemCompleteness>().notNull().default("complete"),
+  /** The approved photo shown in lists (TASK-013); `null` — the client shows a placeholder. */
+  primaryPhotoId: uuid("primary_photo_id"),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -192,6 +199,51 @@ export const itemAnalog = pgTable(
   (table) => [primaryKey({ columns: [table.itemId, table.analogItemId] })],
 );
 
+/**
+ * Photos of items (`…_create-item-photos.sql`; ARCHITECTURE 5.2, 4.22;
+ * TASK-013): the picture belongs to the item, its source and status are
+ * kept, and only an approved one reaches clients.
+ */
+export const itemPhoto = pgTable("item_photo", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemId: uuid("item_id").notNull(),
+  sourceType: text("source_type").$type<ItemPhotoSourceType>().notNull(),
+  sourceUrl: text("source_url"),
+  sourceEvidence: jsonb("source_evidence"),
+  status: text("status").$type<ItemPhotoStatus>().notNull().default("proposed"),
+  rejectionReason: text("rejection_reason"),
+  proposedBy: text("proposed_by").$type<ItemPhotoProposedBy>().notNull().default("admin"),
+  aiScore: numeric("ai_score"),
+  aiJobId: uuid("ai_job_id"),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  checksum: text("checksum").notNull(),
+  sort: integer("sort").notNull().default(0),
+  uploadedBy: uuid("uploaded_by"),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+  filesDeletedAt: timestamp("files_deleted_at", { withTimezone: true }),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One stored object per size of a photo; no row — no object (ARCHITECTURE 4.22). */
+export const itemPhotoFile = pgTable("item_photo_file", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  photoId: uuid("photo_id").notNull(),
+  variant: text("variant").$type<ItemPhotoVariant>().notNull(),
+  storageKey: text("storage_key").notNull(),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type CategoryRow = typeof category.$inferSelect;
 export type AttributeRow = typeof attribute.$inferSelect;
 export type AttributeOptionRow = typeof attributeOption.$inferSelect;
@@ -201,6 +253,8 @@ export type BrandRow = typeof brand.$inferSelect;
 export type BrandSpellingRow = typeof brandSpelling.$inferSelect;
 export type CatalogItemRow = typeof catalogItem.$inferSelect;
 export type ItemAttributeValueRow = typeof itemAttributeValue.$inferSelect;
+export type ItemPhotoRow = typeof itemPhoto.$inferSelect;
+export type ItemPhotoFileRow = typeof itemPhotoFile.$inferSelect;
 
 export const catalogTables = [
   category,
@@ -213,4 +267,6 @@ export const catalogTables = [
   catalogItem,
   itemAttributeValue,
   itemAnalog,
+  itemPhoto,
+  itemPhotoFile,
 ];

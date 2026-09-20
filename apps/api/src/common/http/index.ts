@@ -1,6 +1,8 @@
 export { readCookie } from "./cookies";
 export { JsonBodyMiddleware } from "./json-body.middleware";
 export { OriginPolicyMiddleware } from "./origin-policy.middleware";
+export { UploadBodyMiddleware } from "./upload-body.middleware";
+export { contractPathOf, mediaTypeOf, uploadRouteFor } from "./upload-routes";
 export {
   corsOptions,
   CORS_ALLOWED_HEADERS,

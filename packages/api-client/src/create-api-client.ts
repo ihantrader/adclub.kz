@@ -4,6 +4,7 @@ import {
   buildRouteQuery,
   CLIENT_HEADER,
   formatClientHeader,
+  isUploadRoute,
   type ApiRouteDefinition,
   type ApiRouteName,
   type ApiRoutePathParams,
@@ -52,7 +53,36 @@ export interface RequestOptions {
  * always is.
  */
 export type CallOptions<Route extends ApiRouteDefinition> = RequestOptions &
-  ([ApiRouteQuery<Route>] extends [never] ? unknown : { query?: ApiRouteQuery<Route> });
+  ([ApiRouteQuery<Route>] extends [never] ? unknown : { query?: ApiRouteQuery<Route> }) &
+  (Route extends { upload: unknown } ? UploadOptions : unknown);
+
+/**
+ * A route whose body is a file needs the type of that file: the bytes
+ * alone don't say it, and the server takes only the types the route
+ * declares. A `Blob` or `File` brings its own `type`, which is used when
+ * `contentType` is left out.
+ */
+export interface UploadOptions {
+  contentType?: string;
+}
+
+function isBlobLike(
+  value: unknown,
+): value is { type: string; arrayBuffer(): Promise<ArrayBuffer> } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { arrayBuffer?: unknown }).arrayBuffer === "function"
+  );
+}
+
+/** The bytes of an upload as one buffer, whatever the caller passed. */
+function bytesOf(file: Uint8Array | ArrayBuffer): ArrayBuffer {
+  if (file instanceof ArrayBuffer) {
+    return file;
+  }
+  return file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
+}
 
 type Result<Route extends ApiRouteDefinition> = Promise<ApiRouteResponse<Route>>;
 
@@ -131,7 +161,12 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
 
   async function request<Route extends ApiRouteDefinition>(
     route: Route,
-    requestOptions: RequestOptions & { body?: unknown; params?: unknown; query?: unknown } = {},
+    requestOptions: RequestOptions & {
+      body?: unknown;
+      params?: unknown;
+      query?: unknown;
+      contentType?: string;
+    } = {},
   ): Promise<ApiRouteResponse<Route>> {
     const path =
       buildRoutePath(route, (requestOptions.params ?? {}) as Readonly<Record<string, string>>) +
@@ -146,13 +181,31 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         headers.Authorization = `Bearer ${accessToken}`;
       }
     }
-    let body: string | undefined;
+    let body: string | ArrayBuffer | undefined;
     if (route.requestBody) {
       if (requestOptions.body === undefined) {
         throw new TypeError(`${route.operationId} requires a request body`);
       }
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(requestOptions.body);
+    } else if (isUploadRoute(route)) {
+      const file = requestOptions.body;
+      if (file === undefined) {
+        throw new TypeError(`${route.operationId} requires a file to upload`);
+      }
+      const contentType =
+        requestOptions.contentType ?? (isBlobLike(file) ? file.type : undefined) ?? "";
+      if (!route.upload?.contentTypes.includes(contentType)) {
+        throw new TypeError(
+          `${route.operationId} takes ${route.upload?.contentTypes.join(", ") ?? "no"} — not ${contentType || "an unnamed type"}`,
+        );
+      }
+      headers["Content-Type"] = contentType;
+      // Sent as bytes: a `Blob` is read here so every runtime (browser,
+      // React Native, Node) sends the same request.
+      body = isBlobLike(file)
+        ? await file.arrayBuffer()
+        : bytesOf(file as Uint8Array | ArrayBuffer);
     }
     const language = options.getLanguage?.();
     if (language) {
@@ -226,6 +279,14 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   }
 
   const operation = (route: ApiRouteDefinition) => {
+    if (route.pathParams && isUploadRoute(route)) {
+      return (params: unknown, file: unknown, requestOptions?: RequestOptions) =>
+        request(route, { ...requestOptions, params, body: file });
+    }
+    if (isUploadRoute(route)) {
+      return (file: unknown, requestOptions?: RequestOptions) =>
+        request(route, { ...requestOptions, body: file });
+    }
     if (route.pathParams && route.requestBody) {
       return (params: unknown, body: unknown, requestOptions?: RequestOptions) =>
         request(route, { ...requestOptions, params, body });

@@ -1952,6 +1952,311 @@
         }
       }
     },
+    "/admin/catalog/items/{itemId}/photos": {
+      "get": {
+        "operationId": "listItemPhotos",
+        "summary": "Photos of an item with their source and status, approved ones in their order first",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The item's photos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItemPhotosResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadItemPhoto",
+        "summary": "Upload a picture for an item: the body is the file itself, checked by its content and not by its name; it is stored stripped of camera metadata and waits for approval",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "sourceType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "admin_upload",
+              "type": "string",
+              "enum": [
+                "manufacturer",
+                "official_catalog",
+                "multi_store",
+                "supplier_photo",
+                "admin_upload"
+              ]
+            }
+          },
+          {
+            "name": "sourceUrl",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2000,
+              "format": "uri"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The picture itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The item already has this very picture; nothing was stored twice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItemPhotosResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The photo was stored and waits for approval",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItemPhotosResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/items/{itemId}/photos/{photoId}/status": {
+      "post": {
+        "operationId": "setItemPhotoStatus",
+        "summary": "Approve, reject (with a reason) or remove a photo; removing or rejecting the primary one hands the role to the next approved photo",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The new status, the version it was read at and a reason for a refusal",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetItemPhotoStatusBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The item's photos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItemPhotosResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog/items/{itemId}/photos/order": {
+      "put": {
+        "operationId": "reorderItemPhotos",
+        "summary": "Put the approved photos of an item in order; the first one becomes the primary photo shown in lists",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "Every approved photo of the item exactly once, the primary one first",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderItemPhotosBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The item's photos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItemPhotosResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/catalog/items/{itemId}/status": {
       "post": {
         "operationId": "setCatalogItemStatus",
@@ -4169,6 +4474,16 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPhotoImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "archivedAt": {
             "anyOf": [
               {
@@ -4203,6 +4518,7 @@
           "status",
           "completeness",
           "version",
+          "photo",
           "archivedAt",
           "createdAt",
           "updatedAt"
@@ -4242,6 +4558,12 @@
             "items": {
               "$ref": "#/components/schemas/ItemAnalog"
             }
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminItemPhoto"
+            }
           }
         },
         "required": [
@@ -4250,7 +4572,8 @@
           "attributes",
           "values",
           "missingAttributeIds",
-          "analogs"
+          "analogs",
+          "photos"
         ]
       },
       "AdminCatalogItemPage": {
@@ -4520,6 +4843,202 @@
         },
         "required": [
           "categories"
+        ]
+      },
+      "AdminItemPhoto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ItemPhotoStatus"
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/ItemPhotoSourceType"
+          },
+          "sourceUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "proposedBy": {
+            "$ref": "#/components/schemas/ItemPhotoProposedBy"
+          },
+          "aiScore": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rejectionReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "width": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "checksum": {
+            "type": "string"
+          },
+          "isPrimary": {
+            "type": "boolean"
+          },
+          "sort": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "reviewedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "removedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filesDeletedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "image": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPhotoImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "originalUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemId",
+          "status",
+          "sourceType",
+          "sourceUrl",
+          "proposedBy",
+          "aiScore",
+          "rejectionReason",
+          "contentType",
+          "byteSize",
+          "width",
+          "height",
+          "checksum",
+          "isPrimary",
+          "sort",
+          "uploadedAt",
+          "reviewedAt",
+          "removedAt",
+          "filesDeletedAt",
+          "version",
+          "image",
+          "originalUrl"
+        ]
+      },
+      "AdminItemPhotosResponse": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "names": {
+            "$ref": "#/components/schemas/CatalogTexts"
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminItemPhoto"
+            }
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPhotoImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "displayMode": {
+            "$ref": "#/components/schemas/PhotoDisplayMode"
+          }
+        },
+        "required": [
+          "itemId",
+          "names",
+          "photos",
+          "photo",
+          "displayMode"
         ]
       },
       "AdministratorListResponse": {
@@ -4919,6 +5438,32 @@
         "required": [
           "lang",
           "conflictingId"
+        ]
+      },
+      "CatalogPhotoInvalidDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/CatalogPhotoInvalidReason"
+          },
+          "detected": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "CatalogPhotoInvalidReason": {
+        "type": "string",
+        "enum": [
+          "empty",
+          "not_an_image",
+          "unsupported_format",
+          "broken",
+          "too_many_pixels",
+          "source_url_required",
+          "too_many_photos"
         ]
       },
       "CatalogText": {
@@ -6118,6 +6663,9 @@
           "CATALOG_ANALOG_INVALID",
           "TRANSLATION_MANUALLY_EDITED",
           "TRANSLATION_NOT_MANUAL",
+          "CATALOG_PHOTO_INVALID",
+          "CATALOG_PHOTO_NOT_APPROVED",
+          "CATALOG_PHOTO_FILES_DELETED",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -6266,6 +6814,108 @@
         "enum": [
           "complete",
           "incomplete"
+        ]
+      },
+      "ItemPhotoImage": {
+        "type": "object",
+        "properties": {
+          "photoId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PhotoDisplayMode"
+          },
+          "url": {
+            "type": "string"
+          },
+          "thumbUrl": {
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/ItemPhotoSourceType"
+          },
+          "sourceUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "photoId",
+          "mode",
+          "url",
+          "thumbUrl",
+          "width",
+          "height",
+          "expiresAt",
+          "sourceType",
+          "sourceUrl"
+        ]
+      },
+      "ItemPhotoProposedBy": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "supplier",
+          "ai"
+        ]
+      },
+      "ItemPhotoSourceType": {
+        "type": "string",
+        "enum": [
+          "manufacturer",
+          "official_catalog",
+          "multi_store",
+          "supplier_photo",
+          "admin_upload"
+        ]
+      },
+      "ItemPhotoStatus": {
+        "type": "string",
+        "enum": [
+          "proposed",
+          "approved",
+          "rejected",
+          "deleted"
         ]
       },
       "ItemValueInput": {
@@ -6419,6 +7069,13 @@
           "integer",
           "min",
           "max"
+        ]
+      },
+      "PhotoDisplayMode": {
+        "type": "string",
+        "enum": [
+          "copy",
+          "link"
         ]
       },
       "PlatformPolicy": {
@@ -6618,6 +7275,24 @@
           "parentId",
           "kind",
           "categoryIds"
+        ]
+      },
+      "ReorderItemPhotosBody": {
+        "type": "object",
+        "properties": {
+          "photoIds": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "photoIds"
         ]
       },
       "RequestLoginCodeBody": {
@@ -6962,6 +7637,29 @@
           },
           "status": {
             "$ref": "#/components/schemas/CategoryStatus"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "status"
+        ]
+      },
+      "SetItemPhotoStatusBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/ItemPhotoStatus"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "^[^\\p{Cc}]*$"
           }
         },
         "required": [

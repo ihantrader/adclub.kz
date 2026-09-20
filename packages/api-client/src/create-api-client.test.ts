@@ -35,6 +35,7 @@ async function captureError(promise: Promise<unknown>): Promise<ApiError> {
 }
 
 const CATEGORY_ID = "0b6f7a2e-2c55-4f0e-9d8e-3b1c2a4d5e6f";
+const ITEM_ID = "4f2a1b3c-5d6e-4f70-8a91-b2c3d4e5f607";
 
 describe("createApiClient", () => {
   it("exposes one method per contract route", () => {
@@ -389,6 +390,48 @@ describe("createApiClient", () => {
 
       await clientWith(fetchImpl).refreshSession({});
       expect(fetchImpl.mock.calls[1]![1]).not.toHaveProperty("credentials");
+    });
+
+    it("sends a file upload as bytes with the media type the route takes", async () => {
+      const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(201, { photos: [] }));
+      const client = clientWith(fetchImpl, { getAccessToken: () => "admin-token" });
+      const picture = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+
+      await client.uploadItemPhoto({ itemId: ITEM_ID }, picture, {
+        contentType: "image/jpeg",
+        query: { sourceType: "manufacturer", sourceUrl: "https://geely.example/part.jpg" },
+      });
+
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe(
+        `http://api.test/admin/catalog/items/${ITEM_ID}/photos` +
+          "?sourceType=manufacturer&sourceUrl=https%3A%2F%2Fgeely.example%2Fpart.jpg",
+      );
+      expect(init.method).toBe("POST");
+      expect(init.headers).toMatchObject({
+        "Content-Type": "image/jpeg",
+        Authorization: "Bearer admin-token",
+      });
+      expect(new Uint8Array(init.body as ArrayBuffer)).toEqual(picture);
+    });
+
+    it("takes the media type from a Blob and refuses a type the route doesn't accept", async () => {
+      const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(201, { photos: [] }));
+      const client = clientWith(fetchImpl);
+
+      await client.uploadItemPhoto(
+        { itemId: ITEM_ID },
+        new Blob([new Uint8Array([1, 2])], { type: "image/png" }),
+      );
+      expect(fetchImpl.mock.calls[0]![1].headers).toMatchObject({ "Content-Type": "image/png" });
+
+      await expect(
+        client.uploadItemPhoto(
+          { itemId: ITEM_ID },
+          new Blob([new Uint8Array([1, 2])], { type: "image/svg+xml" }),
+        ),
+      ).rejects.toThrow(/image\/jpeg, image\/png, image\/webp/);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
     it("tells an expired access token from an ended session", async () => {

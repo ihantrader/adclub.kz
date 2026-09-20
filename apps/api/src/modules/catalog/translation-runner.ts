@@ -29,6 +29,9 @@ import { nameScopeLock, STRUCTURE_LOCK_SHARED } from "./catalog-locks";
 import { findNameClash, nameNeighbours } from "./catalog-names";
 import { SOURCE_LANGUAGE, sourceHash } from "./catalog-texts";
 import { checkTranslation, maxLengthOf } from "./translation-checks";
+import { PhotoFileDeletion, PhotoOrphanCleanup } from "./photo-cleanup";
+import { photoFileDeletionJob, photoOrphanCleanupJob } from "./photo-jobs";
+import { PhotoStorage } from "./photo-storage";
 import { translateJob, translationWakeJob } from "./translation-jobs";
 import { TranslationQueue } from "./translation-queue.service";
 import {
@@ -580,16 +583,29 @@ export class TranslationMetrics implements OnModuleInit {
 }
 
 /** The catalog's background jobs, for the worker process. */
-@Module({ providers: [TranslationQueue, TranslationRunner, TranslationWake] })
+@Module({
+  providers: [
+    TranslationQueue,
+    TranslationRunner,
+    TranslationWake,
+    PhotoStorage,
+    PhotoFileDeletion,
+    PhotoOrphanCleanup,
+  ],
+})
 export class CatalogJobsModule implements OnModuleInit {
   constructor(
     @Inject(JobRegistry) private readonly registry: JobRegistry,
     @Inject(TranslationRunner) private readonly runner: TranslationRunner,
     @Inject(TranslationWake) private readonly wake: TranslationWake,
+    @Inject(PhotoFileDeletion) private readonly photoFiles: PhotoFileDeletion,
+    @Inject(PhotoOrphanCleanup) private readonly photoOrphans: PhotoOrphanCleanup,
   ) {}
 
   onModuleInit(): void {
     this.registry.handle(translateJob, this.runner);
     this.registry.handlePeriodic(translationWakeJob, this.wake);
+    this.registry.sweep(photoFileDeletionJob, this.photoFiles);
+    this.registry.handlePeriodic(photoOrphanCleanupJob, this.photoOrphans);
   }
 }

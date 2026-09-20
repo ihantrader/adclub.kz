@@ -58,6 +58,15 @@ import {
   updateBrandBodySchema,
   updateCatalogItemBodySchema,
 } from "./catalog-items";
+import {
+  adminItemPhotosResponseSchema,
+  itemPhotoPathSchema,
+  PHOTO_CONTENT_TYPES,
+  PHOTO_MAX_UPLOAD_BYTES,
+  reorderItemPhotosBodySchema,
+  setItemPhotoStatusBodySchema,
+  uploadItemPhotoQuerySchema,
+} from "./catalog-photos";
 import { clientPolicyResponseSchema } from "./client-policy";
 import {
   editTranslationBodySchema,
@@ -116,6 +125,40 @@ export interface ApiRequestBodyDefinition {
 }
 
 /**
+ * A file upload (TASK-013): the body is the file's bytes, not JSON, so
+ * the route has no body schema. Everything else the request says travels
+ * in the path and the query, which are validated as usual.
+ *
+ * These are the only routes excluded from the "every body is JSON" check
+ * (ARCHITECTURE 4.14 I136, 4.22): the server derives the exclusion from
+ * this field, so no path list has to be kept in step by hand.
+ */
+export interface ApiUploadBodyDefinition {
+  description: string;
+  /** `Content-Type`s of the body the route takes; anything else is 415. */
+  contentTypes: readonly string[];
+  /**
+   * The most the server reads before looking at the body at all. A lower
+   * product limit (a setting) is applied afterwards.
+   */
+  maxBytes: number;
+}
+
+/**
+ * A `Blob` or `File` described structurally: the contracts package carries
+ * no DOM and no Node types (ARCHITECTURE 4.1), and the same client runs in
+ * a browser, in React Native and on the server.
+ */
+export interface BlobLike {
+  readonly size: number;
+  readonly type: string;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+/** What a caller passes as the body of an upload route. */
+export type ApiUploadBody = Uint8Array | ArrayBuffer | BlobLike;
+
+/**
  * One HTTP route of the public API: the single description the server
  * binds its handler to (`@ApiRoute` in `apps/api`), the OpenAPI document
  * is generated from, and the typed client calls. Error responses (the
@@ -169,10 +212,15 @@ export interface ApiRouteDefinition {
   query?: z.ZodObject;
   /** Required JSON body; the lowest listed 2xx status is the success status. */
   requestBody?: ApiRequestBodyDefinition;
+  /** A file upload instead of a JSON body; never both (TASK-013). */
+  upload?: ApiUploadBodyDefinition;
   responses: Readonly<Record<number, ApiResponseDefinition>>;
 }
 
 function defineRoute<const Route extends ApiRouteDefinition>(route: Route): Route {
+  if (route.requestBody && route.upload) {
+    throw new Error(`${route.operationId}: a route takes either a JSON body or a file, not both`);
+  }
   return route;
 }
 
@@ -1100,6 +1148,86 @@ export const apiRoutes = {
       200: { description: "The rows changed", schema: fillCategoryResponseSchema },
     },
   }),
+  uploadItemPhoto: defineRoute({
+    operationId: "uploadItemPhoto",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/photos",
+    summary:
+      "Upload a picture for an item: the body is the file itself, checked by its content and not by its name; it is stored stripped of camera metadata and waits for approval",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    query: uploadItemPhotoQuerySchema,
+    upload: {
+      description: "The picture itself (JPEG, PNG or WebP)",
+      contentTypes: PHOTO_CONTENT_TYPES,
+      maxBytes: PHOTO_MAX_UPLOAD_BYTES,
+    },
+    responses: {
+      201: {
+        description: "The photo was stored and waits for approval",
+        schema: adminItemPhotosResponseSchema,
+      },
+      200: {
+        description: "The item already has this very picture; nothing was stored twice",
+        schema: adminItemPhotosResponseSchema,
+      },
+    },
+  }),
+  listItemPhotos: defineRoute({
+    operationId: "listItemPhotos",
+    method: "GET",
+    path: "/admin/catalog/items/{itemId}/photos",
+    summary: "Photos of an item with their source and status, approved ones in their order first",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    responses: {
+      200: { description: "The item's photos", schema: adminItemPhotosResponseSchema },
+    },
+  }),
+  setItemPhotoStatus: defineRoute({
+    operationId: "setItemPhotoStatus",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/photos/{photoId}/status",
+    summary:
+      "Approve, reject (with a reason) or remove a photo; removing or rejecting the primary one hands the role to the next approved photo",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: itemPhotoPathSchema,
+    requestBody: {
+      description: "The new status, the version it was read at and a reason for a refusal",
+      schema: setItemPhotoStatusBodySchema,
+    },
+    responses: {
+      200: { description: "The item's photos", schema: adminItemPhotosResponseSchema },
+    },
+  }),
+  reorderItemPhotos: defineRoute({
+    operationId: "reorderItemPhotos",
+    method: "PUT",
+    path: "/admin/catalog/items/{itemId}/photos/order",
+    summary:
+      "Put the approved photos of an item in order; the first one becomes the primary photo shown in lists",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    requestBody: {
+      description: "Every approved photo of the item exactly once, the primary one first",
+      schema: reorderItemPhotosBodySchema,
+    },
+    responses: {
+      200: { description: "The item's photos", schema: adminItemPhotosResponseSchema },
+    },
+  }),
   listTranslationQueue: defineRoute({
     operationId: "listTranslationQueue",
     method: "GET",
@@ -1185,12 +1313,36 @@ type ResponseBody<Definition> = Definition extends { schema: infer Schema extend
   ? z.output<Schema>
   : never;
 
-/** Body a caller passes to a route (`never` for routes without one). */
+/**
+ * Body a caller passes to a route (`never` for routes without one): the
+ * JSON body of a route that declares a schema, the file's bytes of a route
+ * that declares an upload.
+ */
 export type ApiRouteRequestBody<Route extends ApiRouteDefinition> = Route extends {
   requestBody: { schema: infer Schema extends z.ZodType };
 }
   ? z.input<Schema>
-  : never;
+  : Route extends { upload: ApiUploadBodyDefinition }
+    ? ApiUploadBody
+    : never;
+
+/** Whether a route takes a file rather than a JSON body. */
+export function isUploadRoute(route: ApiRouteDefinition): boolean {
+  return route.upload !== undefined;
+}
+
+/**
+ * Paths of every route that takes a file (`{param}` placeholders kept).
+ * The server excludes exactly these from the "every body is JSON" check
+ * (ARCHITECTURE 4.22).
+ */
+export const uploadRoutePaths: readonly string[] = Object.freeze([
+  ...new Set(
+    Object.values(apiRoutes)
+      .filter((route: ApiRouteDefinition) => isUploadRoute(route))
+      .map((route: ApiRouteDefinition) => route.path),
+  ),
+]);
 
 /** Path parameters a caller passes to a route (`never` for routes without them). */
 export type ApiRoutePathParams<Route extends ApiRouteDefinition> = Route extends {

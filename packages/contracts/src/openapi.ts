@@ -95,6 +95,19 @@ import {
   updateBrandBodySchema,
   updateCatalogItemBodySchema,
 } from "./catalog-items";
+import {
+  adminItemPhotoSchema,
+  adminItemPhotosResponseSchema,
+  catalogPhotoInvalidDetailsSchema,
+  catalogPhotoInvalidReasonSchema,
+  itemPhotoImageSchema,
+  itemPhotoProposedBySchema,
+  itemPhotoSourceTypeSchema,
+  itemPhotoStatusSchema,
+  photoDisplayModeSchema,
+  reorderItemPhotosBodySchema,
+  setItemPhotoStatusBodySchema,
+} from "./catalog-photos";
 import { CLIENT_HEADER, clientPlatformSchema } from "./client";
 import { clientPolicyResponseSchema, platformPolicySchema } from "./client-policy";
 import {
@@ -314,6 +327,17 @@ const componentSchemas: Record<string, z.ZodType> = {
   SetItemValuesBody: setItemValuesBodySchema,
   UpdateBrandBody: updateBrandBodySchema,
   UpdateCatalogItemBody: updateCatalogItemBodySchema,
+  AdminItemPhoto: adminItemPhotoSchema,
+  AdminItemPhotosResponse: adminItemPhotosResponseSchema,
+  CatalogPhotoInvalidDetails: catalogPhotoInvalidDetailsSchema,
+  CatalogPhotoInvalidReason: catalogPhotoInvalidReasonSchema,
+  ItemPhotoImage: itemPhotoImageSchema,
+  ItemPhotoProposedBy: itemPhotoProposedBySchema,
+  ItemPhotoSourceType: itemPhotoSourceTypeSchema,
+  ItemPhotoStatus: itemPhotoStatusSchema,
+  PhotoDisplayMode: photoDisplayModeSchema,
+  ReorderItemPhotosBody: reorderItemPhotosBodySchema,
+  SetItemPhotoStatusBody: setItemPhotoStatusBodySchema,
   EditTranslationBody: editTranslationBodySchema,
   EntityTranslationsResponse: entityTranslationsResponseSchema,
   TranslationEntityType: translationEntityTypeSchema,
@@ -458,6 +482,9 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
     if (route.auth === "session" && (route.contexts?.length ?? 0) === 0) {
       throw new Error(`${route.operationId}: a session route must declare its contexts`);
     }
+    if (route.requestBody && route.upload) {
+      throw new Error(`${route.operationId}: a route takes either a JSON body or a file, not both`);
+    }
     const responses: JsonObject = {};
     for (const [status, response] of Object.entries(route.responses)) {
       const id = componentId(response.schema, `Response ${status} of ${route.operationId}`);
@@ -494,6 +521,23 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
             schemaRef(
               componentId(route.requestBody.schema, `Request body of ${route.operationId}`),
             ),
+          ),
+        },
+      }),
+      // A file upload (TASK-013): the body is the bytes themselves, one
+      // entry per accepted media type, so the document says exactly which
+      // formats the route takes.
+      ...(route.upload && {
+        requestBody: {
+          description: route.upload.description,
+          required: true,
+          content: Object.fromEntries(
+            [...route.upload.contentTypes].sort().map((type) => [
+              type,
+              {
+                schema: { type: "string", format: "binary", contentMediaType: type },
+              },
+            ]),
           ),
         },
       }),

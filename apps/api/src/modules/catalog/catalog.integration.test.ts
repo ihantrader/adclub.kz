@@ -16,6 +16,7 @@ import {
   catalogOrderConflictDetailsSchema,
   categoryAttributesResponseSchema,
   categoryTreeResponseSchema,
+  isUploadRoute,
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
   totpStepRequiredDetailsSchema,
@@ -28,6 +29,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
 import { Client } from "pg";
+import sharp from "sharp";
 import request, { type Response, type Test } from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../../app.module";
@@ -1608,8 +1610,9 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       const adminRoutes = Object.values(apiRoutes).filter((route) =>
         route.path.startsWith("/admin/catalog"),
       );
-      // 14 of the structure (TASK-010) and 14 of brands, items and the fill (TASK-011).
-      expect(adminRoutes).toHaveLength(28);
+      // 14 of the structure (TASK-010), 14 of brands, items and the fill
+      // (TASK-011) and 4 of photos (TASK-013).
+      expect(adminRoutes).toHaveLength(32);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },
@@ -1622,6 +1625,11 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         },
       ] as const;
       const before = { categories: await count("category"), journal: await count("audit_log") };
+      const picture = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: { r: 1, g: 2, b: 3 } },
+      })
+        .jpeg()
+        .toBuffer();
       for (const route of adminRoutes) {
         expect((route as ApiRouteDefinition).contexts).toEqual(["admin"]);
         const path = route.path.replace(/\{(\w+)\}/g, (_match, name: string) => ids[name]!);
@@ -1632,13 +1640,17 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
           if (caller.token) {
             call = call.set("Authorization", `Bearer ${caller.token}`);
           }
-          const response = await call.send({
-            code: "intruder",
-            kind: "goods",
-            names: { ru: "Чужая" },
-            expectedVersion: 1,
-            status: "archived",
-          });
+          // A route that takes a file gets a real picture, so the refusal
+          // is about who is asking and not about the body (TASK-013).
+          const response = isUploadRoute(route as ApiRouteDefinition)
+            ? await call.set("Content-Type", "image/jpeg").send(picture)
+            : await call.send({
+                code: "intruder",
+                kind: "goods",
+                names: { ru: "Чужая" },
+                expectedVersion: 1,
+                status: "archived",
+              });
           expectError(response, caller.status, caller.code as ErrorCode);
         }
       }

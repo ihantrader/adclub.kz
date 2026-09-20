@@ -106,10 +106,60 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789830000000_create-catalog-items",
       "1789900000000_create-ai-jobs-and-translation-tasks",
       "1789990000000_ai-through-openrouter",
+      "1790050000000_create-item-photos",
     ]);
   });
 
-  it("rolls back the latest migration only (AI through OpenRouter), keeping the calls", async () => {
+  it("rolls back the latest migration only (photos of items), keeping the items", async () => {
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('photo_node', 'goods', 1) RETURNING id",
+    );
+    const pads = await client.query<{ id: string }>(
+      `INSERT INTO category (code, kind, level, parent_id, parent_level)
+       VALUES ('photo_pads', 'goods', 2, $1, 1) RETURNING id`,
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand (is_oem) VALUES (true) RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      `INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id, article, article_norm)
+       VALUES ('part', $1, 'goods', $2, '04465-0K090', '044650K090') RETURNING id`,
+      [pads.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const photo = await client.query<{ id: string }>(
+      `INSERT INTO item_photo (item_id, source_type, content_type, byte_size, width, height, checksum)
+       VALUES ($1, 'admin_upload', 'image/jpeg', 1000, 800, 600, repeat('a', 64)) RETURNING id`,
+      [item.rows[0]!.id],
+    );
+    await client.query(
+      `INSERT INTO item_photo_file (photo_id, variant, storage_key, content_type, byte_size, width, height)
+       VALUES ($1, 'original', 'catalog-photos/x/y/original.jpg', 'image/jpeg', 1000, 800, 600)`,
+      [photo.rows[0]!.id],
+    );
+    await client.query("UPDATE catalog_item SET primary_photo_id = $1 WHERE id = $2", [
+      photo.rows[0]!.id,
+      item.rows[0]!.id,
+    ]);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // The photos are gone with their tables; the item they belonged to stays.
+    expect(await tableExists(client, "item_photo")).toBe(false);
+    expect(await tableExists(client, "item_photo_file")).toBe(false);
+    expect(await columnExists(client, "catalog_item", "primary_photo_id")).toBe(false);
+    const items = await client.query("SELECT article FROM catalog_item");
+    expect(items.rows).toEqual([{ article: "04465-0K090" }]);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "item_photo")).toBe(true);
+    await client.query("DELETE FROM catalog_item");
+    await client.query("DELETE FROM brand");
+    await client.query("DELETE FROM category");
+    await walkDownPast(() => tableExists(client, "item_photo"));
+  });
+
+  it("rolls back the next one (AI through OpenRouter), keeping the calls", async () => {
     await client.query(
       `INSERT INTO ai_job (kind, provider, model, initiator_type, status, finished_at,
                            cost_usd, cost_is_estimate, is_fallback)

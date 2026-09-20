@@ -108,6 +108,16 @@ import { clientPlatformSchema } from "./client";
  * - `TRANSLATION_NOT_MANUAL` (409): the manual edit to release isn't one
  *   (the text is automatic).
  *
+ * Photos of items (TASK-013, ARCHITECTURE 4.22):
+ * - `CATALOG_PHOTO_INVALID` (400): the uploaded bytes are not a picture the
+ *   catalog takes — the content is looked at, not the name or the declared
+ *   type; `details` is `CatalogPhotoInvalidDetails`. A file above the size
+ *   limit comes back as `PAYLOAD_TOO_LARGE` (413).
+ * - `CATALOG_PHOTO_NOT_APPROVED` (409): only an approved photo is the
+ *   primary one or takes a place in the order.
+ * - `CATALOG_PHOTO_FILES_DELETED` (409): the files of this photo were
+ *   removed after their retention — nothing brings it back, upload again.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -182,6 +192,10 @@ export const errorCodeSchema = z.enum([
   // Translations of the catalog's texts (TASK-012, ARCHITECTURE 4.19).
   "TRANSLATION_MANUALLY_EDITED",
   "TRANSLATION_NOT_MANUAL",
+  // Photos of items (TASK-013, ARCHITECTURE 4.22).
+  "CATALOG_PHOTO_INVALID",
+  "CATALOG_PHOTO_NOT_APPROVED",
+  "CATALOG_PHOTO_FILES_DELETED",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

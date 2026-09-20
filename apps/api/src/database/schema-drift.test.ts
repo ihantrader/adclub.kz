@@ -118,6 +118,8 @@ describe("ormTables", () => {
         "catalog_item",
         "item_attribute_value",
         "item_analog",
+        "item_photo",
+        "item_photo_file",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

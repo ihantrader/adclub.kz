@@ -11,6 +11,7 @@ import {
   type AppConfig,
 } from "./config";
 import { DatabaseModule, withoutQueryParameters } from "./database";
+import { StorageModule } from "./storage";
 import { describeError } from "./common/health";
 import { ApiException } from "./common/errors";
 import {
@@ -93,6 +94,9 @@ class OperatorModule {
         ConfigModule.forRoot(config),
         ObservabilityModule.forRoot(config, { http: false }),
         DatabaseModule,
+        // The catalog module keeps photos, which live in the object
+        // storage (TASK-013).
+        StorageModule,
         AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false }),
         AiModule.forRoot(config),

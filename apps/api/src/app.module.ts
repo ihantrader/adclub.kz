@@ -15,7 +15,7 @@ import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
-import { JsonBodyMiddleware, OriginPolicyMiddleware } from "./common/http";
+import { JsonBodyMiddleware, OriginPolicyMiddleware, UploadBodyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
 import { ObservabilityModule } from "./observability";
 
@@ -71,9 +71,17 @@ export class AppModule implements NestModule {
 
   configure(consumer: MiddlewareConsumer): void {
     // Order matters: the access log line needs the request id context, and
-    // a request refused for its origin or its body type should still be logged.
+    // a request refused for its origin or its body type should still be
+    // logged. `UploadBodyMiddleware` comes after the body-type check and
+    // touches only the routes that take a file (TASK-013).
     consumer
-      .apply(RequestIdMiddleware, AccessLogMiddleware, OriginPolicyMiddleware, JsonBodyMiddleware)
+      .apply(
+        RequestIdMiddleware,
+        AccessLogMiddleware,
+        OriginPolicyMiddleware,
+        JsonBodyMiddleware,
+        UploadBodyMiddleware,
+      )
       .forRoutes("*");
   }
 }

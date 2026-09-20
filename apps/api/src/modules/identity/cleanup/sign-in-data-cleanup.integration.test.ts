@@ -351,6 +351,10 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "SELECT name, cron, timezone FROM pgboss.schedule ORDER BY name",
     );
     expect(rows).toEqual([
+      // Files of photos no record points at (TASK-013): hourly.
+      { name: "catalog.cleanup-photo-files", cron: "17 * * * *", timezone: "Asia/Almaty" },
+      // Files of removed photos, once their retention has passed (TASK-013).
+      { name: "catalog.delete-photo-files", cron: "* * * * *", timezone: "Asia/Almaty" },
       // Safety net of automatic translation (TASK-012): every five minutes.
       { name: "catalog.translation-wake", cron: "*/5 * * * *", timezone: "Asia/Almaty" },
       // Development and tests only: daily at `billing_notify_hour` (10 by default).
@@ -404,6 +408,8 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "identity.cleanup-sessions",
       "catalog.translate",
       "catalog.translation-wake",
+      "catalog.delete-photo-files",
+      "catalog.cleanup-photo-files",
       "dev.always-fails",
       "dev.daily-at-setting",
     ]);

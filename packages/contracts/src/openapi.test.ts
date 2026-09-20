@@ -37,6 +37,9 @@ describe("buildOpenApiDocument", () => {
       "/admin/catalog/items/{itemId}",
       "/admin/catalog/items/{itemId}/analogs",
       "/admin/catalog/items/{itemId}/analogs/{analogItemId}",
+      "/admin/catalog/items/{itemId}/photos",
+      "/admin/catalog/items/{itemId}/photos/order",
+      "/admin/catalog/items/{itemId}/photos/{photoId}/status",
       "/admin/catalog/items/{itemId}/status",
       "/admin/catalog/items/{itemId}/values",
       "/admin/settings",
@@ -140,6 +143,54 @@ describe("buildOpenApiDocument", () => {
     expect(body.required).toEqual(["phone"]);
     expect(body.properties.phone.maxLength).toBe(32);
     expect(body.properties.channel).toEqual({ $ref: "#/components/schemas/LoginCodeChannel" });
+  });
+
+  it("documents a file upload as a binary body of the media types it takes", () => {
+    const upload = document.paths["/admin/catalog/items/{itemId}/photos"].post;
+    expect(upload.operationId).toBe("uploadItemPhoto");
+    expect(upload.requestBody.required).toBe(true);
+    expect(Object.keys(upload.requestBody.content)).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ]);
+    expect(upload.requestBody.content["image/jpeg"].schema).toEqual({
+      type: "string",
+      format: "binary",
+      contentMediaType: "image/jpeg",
+    });
+    // The source travels in the query, since the body is the file itself.
+    const names = upload.parameters.map((parameter: Json) => parameter.name);
+    expect(names).toContain("sourceType");
+    expect(names).toContain("sourceUrl");
+    expect(upload.responses["201"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/AdminItemPhotosResponse",
+    });
+  });
+
+  it("refuses a route that declares both a JSON body and a file", () => {
+    const both: ApiRouteDefinition = {
+      ...apiRoutes.uploadItemPhoto,
+      requestBody: { description: "both", schema: apiErrorResponseSchema },
+    };
+    expect(() => buildOpenApiDocument([both])).toThrow(/either a JSON body or a file/);
+  });
+
+  it("documents the photo error codes and their details", () => {
+    expect(document.components.schemas.ErrorCode.enum).toEqual(
+      expect.arrayContaining([
+        "CATALOG_PHOTO_INVALID",
+        "CATALOG_PHOTO_NOT_APPROVED",
+        "CATALOG_PHOTO_FILES_DELETED",
+      ]),
+    );
+    expect(document.components.schemas.CatalogPhotoInvalidDetails.required).toEqual(["reason"]);
+    expect(document.components.schemas.ItemPhotoStatus.enum).toEqual([
+      "proposed",
+      "approved",
+      "rejected",
+      "deleted",
+    ]);
   });
 
   it("documents the login code error codes and their details", () => {

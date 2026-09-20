@@ -89,6 +89,19 @@ export const auditActions = {
   catalogTranslationReleased: "catalog_translation.released",
   /** "Translate again" was asked for a language (or one without a translation). */
   catalogTranslationRequeued: "catalog_translation.requeued",
+  /**
+   * A photo was uploaded for an item and waits for approval (TASK-013).
+   * `after`: source, size and checksum — never the picture itself.
+   */
+  catalogItemPhotoUploaded: "catalog_item_photo.uploaded",
+  /**
+   * A photo was approved, refused (with the reason) or removed.
+   * `before`/`after`: `{ status }`, the reason and the primary photo of the
+   * item if the role moved.
+   */
+  catalogItemPhotoStatusChanged: "catalog_item_photo.status_changed",
+  /** The photos of an item put in a new order; the entity is the item. */
+  catalogItemPhotosReordered: "catalog_item_photo.reordered",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -106,6 +119,8 @@ export const auditEntities = {
   catalogItem: "catalog_item",
   /** The translations of one entity (`entityId` — the entity's id, `after.entityType` says which). */
   catalogTranslation: "catalog_translation",
+  /** One photo of an item; a reorder names the item instead (TASK-013). */
+  catalogItemPhoto: "catalog_item_photo",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

@@ -5,6 +5,7 @@ import {
   catalogEntryStatusSchema,
   catalogTextsSchema,
 } from "./catalog";
+import { adminItemPhotoSchema, itemPhotoImageSchema } from "./catalog-photos";
 
 /**
  * Items of the catalog (PRODUCT 7.1, 7.3–7.5, 11; ARCHITECTURE 5.2, 4.17;
@@ -206,6 +207,12 @@ export const adminCatalogItemSchema = z.object({
   completeness: itemCompletenessSchema,
   /** Pass it back as `expectedVersion` when changing the item or its values. */
   version: z.number().int(),
+  /**
+   * The item's picture as clients get it (TASK-013): the approved primary
+   * photo, never the full-size file. `null` — the item has no approved
+   * photo and the client shows a placeholder (DESIGN).
+   */
+  photo: itemPhotoImageSchema.nullable(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -365,6 +372,12 @@ export const adminCatalogItemCardSchema = z.object({
   missingAttributeIds: z.array(z.uuid()),
   /** Analogs of any status, newest link first. */
   analogs: z.array(itemAnalogSchema),
+  /**
+   * Every photo of the item with its source and status (TASK-013): the
+   * approved ones in their order first, then what waits for a decision and
+   * what was refused or removed.
+   */
+  photos: z.array(adminItemPhotoSchema),
 });
 
 export type AdminCatalogItemCard = z.infer<typeof adminCatalogItemCardSchema>;

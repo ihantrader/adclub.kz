@@ -376,7 +376,54 @@ export type {
   UpdateCatalogItemBody,
 } from "./catalog-items";
 
-export { apiRoutes, buildRoutePath, buildRouteQuery } from "./routes";
+export {
+  ITEM_PHOTOS_MAX,
+  PHOTO_CARD_MAX_PX,
+  PHOTO_CONTENT_TYPES,
+  PHOTO_MAX_PIXELS,
+  PHOTO_MAX_UPLOAD_BYTES,
+  PHOTO_REJECTION_REASON_MAX_LENGTH,
+  PHOTO_SOURCE_URL_MAX_LENGTH,
+  PHOTO_THUMB_MAX_PX,
+  adminItemPhotoSchema,
+  adminItemPhotosResponseSchema,
+  catalogPhotoInvalidDetailsSchema,
+  catalogPhotoInvalidReasonSchema,
+  itemPhotoImageSchema,
+  itemPhotoPathSchema,
+  itemPhotoProposedBySchema,
+  itemPhotoSourceTypeSchema,
+  itemPhotoStatusSchema,
+  itemPhotoVariantSchema,
+  photoDisplayModeSchema,
+  reorderItemPhotosBodySchema,
+  setItemPhotoStatusBodySchema,
+  uploadItemPhotoQuerySchema,
+} from "./catalog-photos";
+export type {
+  AdminItemPhoto,
+  AdminItemPhotosResponse,
+  CatalogPhotoInvalidDetails,
+  CatalogPhotoInvalidReason,
+  ItemPhotoImage,
+  ItemPhotoPath,
+  ItemPhotoProposedBy,
+  ItemPhotoSourceType,
+  ItemPhotoStatus,
+  ItemPhotoVariant,
+  PhotoDisplayMode,
+  ReorderItemPhotosBody,
+  SetItemPhotoStatusBody,
+  UploadItemPhotoQuery,
+} from "./catalog-photos";
+
+export {
+  apiRoutes,
+  buildRoutePath,
+  buildRouteQuery,
+  isUploadRoute,
+  uploadRoutePaths,
+} from "./routes";
 export type {
   ApiRequestBodyDefinition,
   ApiResponseDefinition,
@@ -387,6 +434,9 @@ export type {
   ApiRouteRequestBody,
   ApiRouteResponse,
   ApiRoutes,
+  ApiUploadBody,
+  ApiUploadBodyDefinition,
+  BlobLike,
   HttpMethod,
 } from "./routes";
 

@@ -1,6 +1,6 @@
 import type { AppConfig } from "./config";
 import { devJobCatalog, type JobDefinition } from "./jobs";
-import { catalogJobCatalog } from "./modules/catalog";
+import { catalogJobCatalog, photoJobCatalog } from "./modules/catalog";
 import { identityJobCatalog } from "./modules/identity";
 
 /**
@@ -14,6 +14,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
   return [
     ...identityJobCatalog,
     ...catalogJobCatalog,
+    ...photoJobCatalog,
     ...(hasDevJobs(config) ? devJobCatalog : []),
   ];
 }

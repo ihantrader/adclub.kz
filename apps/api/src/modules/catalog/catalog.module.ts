@@ -4,6 +4,9 @@ import { CatalogAdminService } from "./catalog-admin.service";
 import { CatalogBrandsService } from "./catalog-brands.service";
 import { CatalogItemsController } from "./catalog-items.controller";
 import { CatalogItemsService } from "./catalog-items.service";
+import { CatalogPhotosController } from "./catalog-photos.controller";
+import { CatalogPhotosService } from "./catalog-photos.service";
+import { PhotoStorage } from "./photo-storage";
 import { CatalogReadService } from "./catalog-read.service";
 import { CatalogController } from "./catalog.controller";
 import { DevCatalogSeed } from "./dev-catalog-seed";
@@ -23,7 +26,9 @@ export interface CatalogModuleOptions {
  * The catalog structure (ARCHITECTURE 4.15, 5.2, 5.4; TASK-010):
  * categories, attributes and list options with their names, the admin
  * routes that keep them and the client routes that read the active part;
- * brands, items, their values and analogs (TASK-011, ARCHITECTURE 4.17).
+ * brands, items, their values and analogs (TASK-011, ARCHITECTURE 4.17);
+ * photos of items with their source and moderation (TASK-013,
+ * ARCHITECTURE 4.22).
  */
 @Module({})
 export class CatalogModule {
@@ -35,6 +40,7 @@ export class CatalogModule {
             CatalogController,
             CatalogAdminController,
             CatalogItemsController,
+            CatalogPhotosController,
             TranslationAdminController,
           ]
         : [],
@@ -42,7 +48,9 @@ export class CatalogModule {
         CatalogAdminService,
         CatalogBrandsService,
         CatalogItemsService,
+        CatalogPhotosService,
         CatalogReadService,
+        PhotoStorage,
         DevCatalogSeed,
         TranslationQueue,
         TranslationAdminService,
@@ -52,7 +60,9 @@ export class CatalogModule {
         CatalogAdminService,
         CatalogBrandsService,
         CatalogItemsService,
+        CatalogPhotosService,
         CatalogReadService,
+        PhotoStorage,
         DevCatalogSeed,
         TranslationQueue,
         TranslationAdminService,

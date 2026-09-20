@@ -21,6 +21,7 @@ import {
   catalogValuesRejectedDetailsSchema,
   categoryFillPageSchema,
   fillCategoryResponseSchema,
+  isUploadRoute,
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
   totpStepRequiredDetailsSchema,
@@ -35,6 +36,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
 import { Client } from "pg";
+import sharp from "sharp";
 import request, { type Response, type Test } from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../../app.module";
@@ -2225,7 +2227,7 @@ describe("catalog items (PostgreSQL + Redis)", () => {
           route.path.startsWith("/admin/catalog/items") ||
           route.path.endsWith("/fill"),
       );
-      expect(routes).toHaveLength(14);
+      expect(routes).toHaveLength(18);
       const item = await createItem({
         type: "part",
         categoryId: f.pads.id,
@@ -2260,6 +2262,13 @@ describe("catalog items (PostgreSQL + Redis)", () => {
         },
       ] as const;
       const before = { items: await count("catalog_item"), journal: await count("audit_log") };
+      // A route that takes a file gets a real picture, so the refusal is
+      // about who is asking and not about the body (TASK-013).
+      const picture = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: { r: 1, g: 2, b: 3 } },
+      })
+        .jpeg()
+        .toBuffer();
       for (const route of routes) {
         expect((route as ApiRouteDefinition).contexts).toEqual(["admin"]);
         const path = route.path.replace(/\{(\w+)\}/g, (_match, name: string) => ids[name]!);
@@ -2270,11 +2279,10 @@ describe("catalog items (PostgreSQL + Redis)", () => {
           if (caller.token) {
             test = test.set("Authorization", `Bearer ${caller.token}`);
           }
-          expectError(
-            await test.send({ name: "Чужой", expectedVersion: 1, status: "archived", cells: [] }),
-            caller.status,
-            caller.code as ErrorCode,
-          );
+          const sent = isUploadRoute(route as ApiRouteDefinition)
+            ? test.set("Content-Type", "image/jpeg").send(picture)
+            : test.send({ name: "Чужой", expectedVersion: 1, status: "archived", cells: [] });
+          expectError(await sent, caller.status, caller.code as ErrorCode);
         }
       }
       expect({ items: await count("catalog_item"), journal: await count("audit_log") }).toEqual(

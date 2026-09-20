@@ -25,6 +25,9 @@ import {
   CatalogModule,
   DevCatalogSeed,
   DevCatalogSeedError,
+  recheckEvalRun,
+  saveEvalRun,
+  TranslationEval,
   TranslationQueue,
 } from "./modules/catalog";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
@@ -69,6 +72,20 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   translations:run             put a translation run on the queue now
  *   translations:retry-failed    queue the tasks refused for good again
  *
+ * Choosing the model of an operation (TASK-053.B, D-058) — development only:
+ *   ai:eval:translate --models <a,b,…> --confirm-spend <usd> [--glossary]
+ *                     [--batch-size <n>] [--label <text>]
+ *                                translate the sample set of `ai-eval/translate`
+ *                                once with each model and collect what the run
+ *                                cost, how long it took, what failed and what the
+ *                                machine checks found; the result is written to
+ *                                `ai-eval/translate/results/`. The spend has to be
+ *                                stated and must fit in what is left of the daily
+ *                                budget, which is what stops a run.
+ *   ai:eval:recheck <name>       run the checks over a saved result again (the texts
+ *                                are in the file): nothing is called and nothing is
+ *                                spent, and a sharper check applies to past runs too
+ *
  * Development and tests only (the real flows arrive with TASK-016/017):
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
@@ -107,7 +124,7 @@ class OperatorModule {
           startOnBoot: false,
         }),
       ],
-      providers: [JsonLoggerService, ...identityOperatorProviders],
+      providers: [JsonLoggerService, ...identityOperatorProviders, TranslationEval],
     };
   }
 }
@@ -131,6 +148,8 @@ const USAGE = `Usage: operator <command> [arguments]
   translations:queue-missing
   translations:run
   translations:retry-failed
+  ai:eval:translate --models <a,b,...> --confirm-spend <usd> [--glossary] [--batch-size <n>] [--label <text>]
+  ai:eval:recheck <result file name>
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
@@ -174,10 +193,23 @@ interface Services {
   catalogSeed: DevCatalogSeed;
   ai: AiService;
   translations: TranslationQueue;
+  translationEval: TranslationEval;
+  devCommands: boolean;
 }
 
 async function run(
-  { operator, settings, jobs, queue, devJobs, catalogSeed, ai, translations }: Services,
+  {
+    operator,
+    settings,
+    jobs,
+    queue,
+    devJobs,
+    catalogSeed,
+    ai,
+    translations,
+    translationEval,
+    devCommands,
+  }: Services,
   argv: string[],
 ): Promise<unknown> {
   const { positionals, values } = parseArgs({
@@ -191,6 +223,11 @@ async function run(
       job: { type: "string" },
       note: { type: "string" },
       "on-query": { type: "boolean" },
+      models: { type: "string" },
+      "confirm-spend": { type: "string" },
+      "batch-size": { type: "string" },
+      glossary: { type: "boolean" },
+      label: { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -246,6 +283,78 @@ async function run(
       return { jobId: await translations.wake() };
     case "translations:retry-failed":
       return translations.retryFailed();
+    case "ai:eval:recheck": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "ai:eval:recheck is available in development and tests only",
+        );
+      }
+      return recheckEvalRun(required(first, "<result file name>"));
+    }
+    case "ai:eval:translate": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "ai:eval:translate is available in development and tests only",
+        );
+      }
+      const models = required(values.models, "--models")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0);
+      if (models.length === 0) {
+        throw new OperatorCommandError("--models lists no model");
+      }
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.5");
+      }
+      // What stops a run is the daily budget itself (the comparison goes
+      // through `AiService` like everything else), so the stated spend has to
+      // fit in what is left of it; otherwise the run could quietly cost more.
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const batchSize = values["batch-size"] === undefined ? 10 : Number(values["batch-size"]);
+      if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) {
+        throw new OperatorCommandError("--batch-size must be a whole number from 1 to 100");
+      }
+      const run = await translationEval.run({
+        models,
+        batchSize,
+        glossary: values.glossary === true,
+        languages: ["kk", "en"],
+        ...(values.label === undefined ? {} : { label: values.label }),
+      });
+      const name = `${run.startedAt.slice(0, 10)}-${values.label ?? "models"}`;
+      const path = saveEvalRun(run, name);
+      return {
+        saved: path,
+        dataVersion: run.dataVersion,
+        samples: run.samples,
+        glossary: run.options.glossary,
+        // The texts themselves are in the saved file; here only the numbers.
+        results: run.results.map((result) => ({
+          model: result.model,
+          calls: result.calls,
+          failedCalls: result.failedCalls,
+          failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
+          costUsd: result.costUsd,
+          tokensIn: result.tokensIn,
+          tokensOut: result.tokensOut,
+          latencyMs: result.latencyMs,
+          answered: result.quality?.answered ?? 0,
+          expected: result.quality?.expected ?? 0,
+          problemTexts: result.quality?.problemTexts ?? null,
+          problemShare: result.quality?.problemShare ?? null,
+          counts: result.quality?.counts ?? null,
+          observations: result.quality?.observations ?? null,
+        })),
+      };
+    }
     case "dev:jobs:fail": {
       if (!devJobs) {
         throw new OperatorCommandError("dev:jobs:fail is available in development and tests only");
@@ -301,6 +410,8 @@ async function main(): Promise<void> {
         catalogSeed: app.get(DevCatalogSeed),
         ai: app.get(AiService),
         translations: app.get(TranslationQueue),
+        translationEval: app.get(TranslationEval),
+        devCommands: hasDevJobs(config),
       },
       process.argv.slice(2),
     );

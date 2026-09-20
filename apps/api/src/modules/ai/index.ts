@@ -15,6 +15,7 @@ export type {
   AiOperationModels,
   AiResult,
   AiUsage,
+  TranslateGlossaryEntry,
   TranslateInput,
   TranslateItem,
   TranslateOutput,

@@ -36,6 +36,14 @@ export interface AiCallMeta {
   initiator: AiInitiator;
   /** What the call is about, without content: counts, kinds, ids. Stored in `ai_job.input_ref`. */
   inputRef: Record<string, unknown>;
+  /**
+   * Ask this one model instead of the operation's settings, and do not
+   * fall back (TASK-053.B): the only caller is the model comparison, which
+   * measures one named model at a time and must not silently record
+   * another one's answer. Ordinary calls leave it out and take the models
+   * of the operation from the settings (D-056).
+   */
+  model?: string;
 }
 
 export interface AiCallResult<Output> {
@@ -131,7 +139,8 @@ export class AiService {
     input: Input,
     meta: AiCallMeta,
   ): Promise<AiCallResult<Output>> {
-    const models = await this.modelsOf(operation);
+    const models: [string, ...string[]] =
+      meta.model === undefined ? await this.modelsOf(operation) : [meta.model];
     const { jobId, reservationUsd } = await this.reserve(operation, meta, models[0]);
     const startedAt = Date.now();
     let failure: AiGatewayError | undefined;

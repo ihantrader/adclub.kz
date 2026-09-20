@@ -6,6 +6,7 @@ import {
   type AiFailureKind,
   type AiResult,
   type AiUsage,
+  type TranslateGlossaryEntry,
   type TranslateInput,
 } from "./ai-gateway";
 
@@ -32,6 +33,18 @@ Rules:
 - A translation is a name, not a sentence: no quotes, no explanations, no trailing punctuation unless the source has it.
 - Never exceed the maxLength of an item (characters); if the natural translation is longer, use the shorter common term.
 - Return exactly one translation for every item and each of the languages listed for it, using the item's id.`;
+
+/**
+ * The line that carries the glossary (TASK-053.B requirement 5). It goes
+ * with the texts rather than into the system text above, so the fixed
+ * part of the prompt stays the same whether a glossary is sent or not.
+ */
+const GLOSSARY_INSTRUCTION =
+  // The terms are written in lower case, and a model that copies that case
+  // gives back names that start with a small letter — measured at 20 of 104
+  // names on one of the models tried (TASK-053.B), which a catalog shows as
+  // it is. The case of a name is the name's, not the glossary's.
+  "Use exactly these terms wherever they occur, adapting the grammatical form to the phrase; the terms are listed in lower case, but each translation keeps the capitalisation of its own text:";
 
 /** The longest answer a translation batch may produce. */
 const TRANSLATE_MAX_TOKENS = 16_000;
@@ -175,7 +188,10 @@ export class OpenRouterAiGateway extends AiGateway {
         response_format: TRANSLATE_FORMAT,
         messages: [
           { role: "system", content: TRANSLATE_SYSTEM },
-          { role: "user", content: `Translate these items:\n${JSON.stringify(request)}` },
+          {
+            role: "user",
+            content: `${glossaryText(input.glossary)}Translate these items:\n${JSON.stringify(request)}`,
+          },
         ],
       },
       signal,
@@ -257,6 +273,21 @@ export class OpenRouterAiGateway extends AiGateway {
     }
     return { output, model: answer.data.model ?? model, usage };
   }
+}
+
+/** The glossary as a block before the texts; nothing at all when there is none. */
+function glossaryText(glossary: readonly TranslateGlossaryEntry[] | undefined): string {
+  if (!glossary || glossary.length === 0) {
+    return "";
+  }
+  const lines = glossary.map((entry) => {
+    const languages = [
+      ...(entry.kk === undefined ? [] : [`kk: ${entry.kk}`]),
+      ...(entry.en === undefined ? [] : [`en: ${entry.en}`]),
+    ];
+    return `- ${entry.ru} — ${languages.join("; ")}`;
+  });
+  return `${GLOSSARY_INSTRUCTION}\n${lines.join("\n")}\n\n`;
 }
 
 function safeJson(text: string): unknown {

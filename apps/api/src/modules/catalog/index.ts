@@ -14,3 +14,9 @@ export { CatalogJobsModule, TranslationRunner, TranslationWake } from "./transla
 export { catalogJobCatalog, translateJob, translationWakeJob } from "./translation-jobs";
 export { photoFileDeletionJob, photoJobCatalog, photoOrphanCleanupJob } from "./photo-jobs";
 export { TranslationQueue } from "./translation-queue.service";
+export { evalDataDirectory, loadEvalData, loadGlossary } from "./eval/eval-data";
+export type { EvalData, EvalSample, EvalTerm } from "./eval/eval-data";
+export { EvalBudgetError, recheckEvalRun, saveEvalRun, TranslationEval } from "./eval/eval-runner";
+export type { EvalModelResult, EvalRun, EvalRunOptions } from "./eval/eval-runner";
+export { answerKey, checkRun, qualityChecks } from "./eval/translation-quality";
+export type { QualityCheck, QualityFinding, QualityReport } from "./eval/translation-quality";

@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "about": "Словарь терминов для машинных проверок перевода (TASK-053.B, требование 2). Составлен по замечаниям приёмки TASK-053.A и по казахским черновикам dev-справочника (apps/api/src/modules/catalog/dev-catalog-seed.ts), которые писал Product Owner. Проверки не оценивают смысл: они видят только, одинаково ли один и тот же русский термин передан в разных названиях и не остался ли он русским словом.",
+  "fields": {
+    "ru": "русский термин",
+    "samples": "идентификаторы примеров из samples.json, в которых этот термин встречается",
+    "kkForms": "принятые казахские основы (сравнение по подстроке, без учёта регистра); две разные основы среди примеров — разнобой",
+    "kkRussisms": "русские основы, оставшиеся в казахском тексте: это и есть русизм",
+    "enForms": "английские основы; две разные среди примеров — разнобой (например replacement против change)"
+  },
+  "terms": [
+    {
+      "ru": "колодки",
+      "samples": [
+        "cat-brake-pads",
+        "item-pads-front-geely",
+        "item-pads-rear-geely",
+        "item-pads-front-trw",
+        "svc-front-pads-change",
+        "svc-rear-pads-change"
+      ],
+      "kkForms": ["қалып"],
+      "kkRussisms": ["колодк"],
+      "enForms": ["pad"]
+    },
+    {
+      "ru": "тормозной",
+      "samples": [
+        "cat-brakes",
+        "cat-brake-pads",
+        "cat-brake-discs",
+        "cat-brake-fluid",
+        "item-pads-front-geely",
+        "item-pads-rear-geely",
+        "item-pads-front-trw",
+        "svc-front-pads-change",
+        "svc-rear-pads-change"
+      ],
+      "kkForms": ["тежег"],
+      "kkRussisms": ["тормоз"],
+      "enForms": ["brake"]
+    },
+    {
+      "ru": "масло",
+      "samples": ["cat-engine-oils", "cat-oil-filters", "svc-oil-change"],
+      "kkForms": ["май"],
+      "kkRussisms": ["масл"],
+      "enForms": ["oil"]
+    },
+    {
+      "ru": "фильтр",
+      "samples": ["cat-oil-filters", "cat-air-filters", "cat-cabin-filters"],
+      "kkForms": ["сүзгі"],
+      "kkRussisms": ["фильтр"],
+      "enForms": ["filter"]
+    },
+    {
+      "ru": "замена",
+      "samples": [
+        "svc-oil-change",
+        "svc-front-pads-change",
+        "svc-rear-pads-change",
+        "svc-seasonal-tire-change"
+      ],
+      "kkForms": ["ауыстыру", "алмастыру"],
+      "kkRussisms": ["замена"],
+      "enForms": ["replac", "change"]
+    },
+    {
+      "ru": "передний",
+      "samples": [
+        "opt-axle-front",
+        "item-pads-front-geely",
+        "item-pads-front-trw",
+        "svc-front-pads-change"
+      ],
+      "kkForms": ["алдыңғы"],
+      "kkRussisms": ["передн"],
+      "enForms": ["front"]
+    },
+    {
+      "ru": "задний",
+      "samples": ["opt-axle-rear", "item-pads-rear-geely", "svc-rear-pads-change"],
+      "kkForms": ["артқы"],
+      "kkRussisms": ["задн"],
+      "enForms": ["rear"]
+    },
+    {
+      "ru": "двигатель",
+      "samples": ["cat-engine", "svc-engine-diagnostics"],
+      "kkForms": ["қозғалтқыш"],
+      "kkRussisms": ["двигател"],
+      "enForms": ["engine"]
+    },
+    {
+      "ru": "сальник",
+      "samples": ["cat-gaskets"],
+      "kkForms": ["тығыздағыш"],
+      "kkRussisms": ["сальник"],
+      "enForms": ["seal"]
+    }
+  ]
+}

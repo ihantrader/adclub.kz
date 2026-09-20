@@ -142,8 +142,23 @@ export interface TranslateItem {
   languages: readonly ("kk" | "en")[];
 }
 
+/**
+ * One term the translation must use as given (TASK-053.B requirement 5):
+ * the Russian term and what it is called in each language. A short list
+ * of them travels with the texts, so the same term is not called two
+ * things in two names and an industry word is not replaced by an everyday
+ * one. It is data (`translate-glossary.json`), not code.
+ */
+export interface TranslateGlossaryEntry {
+  ru: string;
+  kk?: string;
+  en?: string;
+}
+
 export interface TranslateInput {
   items: readonly TranslateItem[];
+  /** Terms to keep to; absent or empty — nothing is sent about terms. */
+  glossary?: readonly TranslateGlossaryEntry[];
 }
 
 /** One translation: the item, the language and the text. */

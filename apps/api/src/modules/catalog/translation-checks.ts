@@ -20,6 +20,28 @@ import { normalizeText } from "./catalog-texts";
 
 const CYRILLIC = /\p{Script=Cyrillic}/u;
 
+/**
+ * What a text is, told to the model so it translates it in its sense
+ * ("the name of a product category"). Here rather than with the job that
+ * sends it, so the model comparison (TASK-053.B) asks in exactly the same
+ * words as the running translation and its numbers mean something for it.
+ */
+const CONTEXTS: Record<string, string> = {
+  "category:name": "the name of a product category in an automotive parts and services catalog",
+  "attribute:name": "the name of a characteristic (attribute) of automotive products",
+  "attribute:unit":
+    "the unit of measure of a characteristic of automotive products (an abbreviation)",
+  "attribute_option:name": "one option of a list characteristic of automotive products",
+  "catalog_item:name": "the name of a catalog item: an automotive spare part, a fluid or a service",
+};
+
+export function translateContextOf(
+  entityType: TranslationEntityType,
+  field: TranslationField,
+): string {
+  return CONTEXTS[`${entityType}:${field}`] ?? "a name in an automotive catalog";
+}
+
 export type TranslationCheck =
   { ok: true; text: string } | { ok: false; failure: Exclude<TranslationFailure, "name_taken"> };
 

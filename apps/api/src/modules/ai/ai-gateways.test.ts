@@ -211,6 +211,41 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     ]);
   });
 
+  it("carries the term glossary with the texts, and sends nothing about terms without one", async () => {
+    const withGlossary = gatewayWith(() => answer(ANSWER));
+    await withGlossary.gateway.translate(
+      {
+        items: [REQUEST.items[0]!],
+        glossary: [
+          { ru: "тормозные колодки", kk: "тежегіш қалыптары", en: "brake pads" },
+          { ru: "ось", kk: "білік" },
+        ],
+      },
+      MODEL,
+      SIGNAL,
+    );
+    const messages = withGlossary.seen[0]!.body.messages as { role: string; content: string }[];
+    const asked = messages.find((message) => message.role === "user")!.content;
+    expect(asked).toContain("тормозные колодки — kk: тежегіш қалыптары; en: brake pads");
+    // A term given in one language only says only that much.
+    expect(asked).toContain("ось — kk: білік");
+    expect(asked).toContain("Translate these items:");
+    // The fixed part of the prompt is the same either way.
+    const plain = gatewayWith(() => answer(ANSWER));
+    await plain.gateway.translate({ items: [REQUEST.items[0]!] }, MODEL, SIGNAL);
+    const both = [withGlossary, plain].map(
+      (seen) =>
+        (seen.seen[0]!.body.messages as { role: string; content: string }[]).find(
+          (message) => message.role === "system",
+        )!.content,
+    );
+    expect(both[0]).toBe(both[1]);
+    const plainAsked = (plain.seen[0]!.body.messages as { role: string; content: string }[]).find(
+      (message) => message.role === "user",
+    )!.content;
+    expect(plainAsked.startsWith("Translate these items:")).toBe(true);
+  });
+
   it("does not read a missing or zero cost as free", async () => {
     const without = gatewayWith(() => answer({ ...ANSWER, usage: undefined }));
     expect((await without.gateway.translate(REQUEST, MODEL, SIGNAL)).usage.costUsd).toBeNull();

@@ -311,16 +311,16 @@ const ai = group({
     ai_model_translate_primary: define.string({
       maxLength: 100,
       pattern: MODEL_ID,
-      default: "google/gemini-3.8-flash",
+      default: "google/gemini-2.5-flash-lite",
       description:
-        "Модель OpenRouter для автоперевода справочника. Меняется без релиза; после изменения новые пакеты уходят новой модели не позже чем через 30 секунд.",
+        "Модель OpenRouter для автоперевода справочника. Выбрана измерением на наборе примеров (TASK-053.B, D-058): вдесятеро дешевле прежней при том же результате проверок и самый устойчивый ответ по времени. Меняется без релиза; после изменения новые пакеты уходят новой модели не позже чем через 30 секунд.",
     }),
     ai_model_translate_fallback: define.string({
       maxLength: 100,
       pattern: MODEL_ID,
-      default: "openai/gpt-5.4-mini",
+      default: "deepseek/deepseek-v4-flash",
       description:
-        "Запасная модель автоперевода: используется, когда основная недоступна или её нет у OpenRouter. Чтобы запасной не было, укажите ту же модель, что и основную.",
+        "Запасная модель автоперевода: используется, когда основная недоступна или её нет у OpenRouter. Другой поставщик, чем основная, — иначе сбой у одного остановит обе (TASK-053.B). Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
     ai_call_reservation_usd: define.number({
       unit: "usd",
@@ -353,6 +353,11 @@ const translation = group({
       default: 3,
       description:
         "Сколько раз задача автоперевода повторяется при временной ошибке ИИ, прежде чем попасть в мёртвую очередь (0 — без повторов). Действует на задачи, поставленные после изменения.",
+    }),
+    translation_glossary_enabled: define.boolean({
+      default: true,
+      description:
+        "Передавать ли модели короткий словарь терминов вместе с текстами (файл translation-glossary.json). На нашем наборе примеров словарь убрал русизмы и разнобой терминов у обеих дешёвых моделей; выключается, если словарь начнёт мешать.",
     }),
     translation_retry_delay_seconds: define.duration({
       unit: "seconds",

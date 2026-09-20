@@ -28,7 +28,8 @@ import { AppSettings } from "../settings";
 import { nameScopeLock, STRUCTURE_LOCK_SHARED } from "./catalog-locks";
 import { findNameClash, nameNeighbours } from "./catalog-names";
 import { SOURCE_LANGUAGE, sourceHash } from "./catalog-texts";
-import { checkTranslation, maxLengthOf } from "./translation-checks";
+import { checkTranslation, maxLengthOf, translateContextOf } from "./translation-checks";
+import { loadGlossary } from "./translation-glossary";
 import { PhotoFileDeletion, PhotoOrphanCleanup } from "./photo-cleanup";
 import { photoFileDeletionJob, photoOrphanCleanupJob } from "./photo-jobs";
 import { PhotoStorage } from "./photo-storage";
@@ -45,15 +46,6 @@ import {
 const MAX_RUN_MS = 150_000;
 /** A task a run has claimed stays its own this long; then another run may take it (a run that died). */
 const LEASE_SECONDS = 300;
-
-const CONTEXTS: Record<string, string> = {
-  "category:name": "the name of a product category in an automotive parts and services catalog",
-  "attribute:name": "the name of a characteristic (attribute) of automotive products",
-  "attribute:unit":
-    "the unit of measure of a characteristic of automotive products (an abbreviation)",
-  "attribute_option:name": "one option of a list characteristic of automotive products",
-  "catalog_item:name": "the name of a catalog item: an automotive spare part, a fluid or a service",
-};
 
 interface ClaimedTask {
   id: string;
@@ -216,12 +208,18 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       const request: TranslateItem[] = items.map((item) => ({
         id: item.id,
         text: item.source,
-        context: CONTEXTS[`${item.entityType}:${item.field}`] ?? "a name in an automotive catalog",
+        context: translateContextOf(item.entityType, item.field),
         maxLength: maxLengthOf(item.entityType, item.field),
         languages: item.tasks.map((task) => task.lang),
       }));
+      // The terms the catalog keeps to, with the texts (D-058, TASK-053.B):
+      // measured to remove the russisms and the one-term-two-ways of an
+      // unaided translation. Switched by a setting, like the models.
+      const glossary = (await this.settings.get("translation_glossary_enabled"))
+        ? loadGlossary()
+        : [];
       const result = await this.ai.translate(
-        { items: request },
+        { items: request, ...(glossary.length > 0 && { glossary }) },
         {
           initiator,
           inputRef: { tasks: claimed.length, items: items.length, languages },

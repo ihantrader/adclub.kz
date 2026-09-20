@@ -1,0 +1,417 @@
+{
+  "version": 1,
+  "about": "Постоянный набор примеров для сравнения моделей на переводе справочника (TASK-053.B, D-058). Русские тексты — из предметной области проекта: узлы и подкатегории, характеристики и варианты списков, единицы измерения, позиции с брендом и артикулом, услуги. Набор меняется осознанно: прогоны в results/ сравнимы между собой только при одной version.",
+  "fields": {
+    "id": "устойчивый идентификатор примера; по нему на пример ссылаются terms.json и сохранённые прогоны",
+    "text": "русский текст — то, что уходит модели",
+    "entityType": "вид сущности справочника: из него берутся контекст запроса и предел длины, те же, что в рабочем автопереводе",
+    "field": "поле: name или unit",
+    "scope": "соседи: тексты одного scope не должны совпасть между собой — это то, что рабочий перевод отклоняет как «занято соседом»",
+    "note": "почему пример в наборе (для сложных случаев из приёмки TASK-053.A)"
+  },
+  "samples": [
+    {
+      "id": "cat-engine",
+      "text": "Двигатель",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods"
+    },
+    {
+      "id": "cat-brakes",
+      "text": "Тормоза",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods"
+    },
+    {
+      "id": "cat-suspension",
+      "text": "Подвеска",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods"
+    },
+    {
+      "id": "cat-body",
+      "text": "Кузов",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods"
+    },
+    {
+      "id": "cat-electrics",
+      "text": "Электрика",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods",
+      "note": "TASK-053.A: английское название вышло прилагательным"
+    },
+    {
+      "id": "cat-interior",
+      "text": "Салон",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods",
+      "note": "TASK-053.A: заимствование, оставленное без перевода"
+    },
+    {
+      "id": "cat-consumables",
+      "text": "Расходники",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-goods",
+      "note": "TASK-053.A: «Шығыс» вместо «Шығын» — ошибка слова"
+    },
+    {
+      "id": "cat-maintenance",
+      "text": "Техобслуживание",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-services"
+    },
+    {
+      "id": "cat-diagnostics",
+      "text": "Диагностика",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-services",
+      "note": "TASK-053.A: заимствование"
+    },
+    {
+      "id": "cat-tire-service",
+      "text": "Шиномонтаж",
+      "entityType": "category",
+      "field": "name",
+      "scope": "root-services",
+      "note": "TASK-053.A: осталось русским словом при переведённом английском"
+    },
+    {
+      "id": "cat-brake-pads",
+      "text": "Тормозные колодки",
+      "entityType": "category",
+      "field": "name",
+      "scope": "brakes"
+    },
+    {
+      "id": "cat-brake-discs",
+      "text": "Тормозные диски",
+      "entityType": "category",
+      "field": "name",
+      "scope": "brakes"
+    },
+    {
+      "id": "cat-calipers",
+      "text": "Суппорты",
+      "entityType": "category",
+      "field": "name",
+      "scope": "brakes"
+    },
+    {
+      "id": "cat-brake-fluid",
+      "text": "Тормозная жидкость",
+      "entityType": "category",
+      "field": "name",
+      "scope": "brakes"
+    },
+    {
+      "id": "cat-belts",
+      "text": "Ремни и ролики",
+      "entityType": "category",
+      "field": "name",
+      "scope": "engine"
+    },
+    {
+      "id": "cat-spark-plugs",
+      "text": "Свечи зажигания",
+      "entityType": "category",
+      "field": "name",
+      "scope": "engine",
+      "note": "TASK-053.A: «От алдыру» против «Оталдыру» — слитно или раздельно"
+    },
+    {
+      "id": "cat-gaskets",
+      "text": "Прокладки и сальники",
+      "entityType": "category",
+      "field": "name",
+      "scope": "engine",
+      "note": "TASK-053.A: «сальниктер» — русизм"
+    },
+    {
+      "id": "cat-shock-absorbers",
+      "text": "Амортизаторы",
+      "entityType": "category",
+      "field": "name",
+      "scope": "suspension"
+    },
+    {
+      "id": "cat-control-arms",
+      "text": "Рычаги",
+      "entityType": "category",
+      "field": "name",
+      "scope": "suspension"
+    },
+    {
+      "id": "cat-stabilizer-links",
+      "text": "Стойки стабилизатора",
+      "entityType": "category",
+      "field": "name",
+      "scope": "suspension",
+      "note": "TASK-053.A: составной термин"
+    },
+    {
+      "id": "cat-mirrors",
+      "text": "Зеркала",
+      "entityType": "category",
+      "field": "name",
+      "scope": "body"
+    },
+    {
+      "id": "cat-wipers",
+      "text": "Щётки стеклоочистителя",
+      "entityType": "category",
+      "field": "name",
+      "scope": "body"
+    },
+    {
+      "id": "cat-seat-covers",
+      "text": "Чехлы",
+      "entityType": "category",
+      "field": "name",
+      "scope": "interior",
+      "note": "TASK-053.A: казахское осталось общим, английское уточнило «для сидений»"
+    },
+    {
+      "id": "cat-floor-mats",
+      "text": "Коврики",
+      "entityType": "category",
+      "field": "name",
+      "scope": "interior"
+    },
+    {
+      "id": "cat-engine-oils",
+      "text": "Моторные масла",
+      "entityType": "category",
+      "field": "name",
+      "scope": "consumables"
+    },
+    {
+      "id": "cat-oil-filters",
+      "text": "Масляные фильтры",
+      "entityType": "category",
+      "field": "name",
+      "scope": "consumables"
+    },
+    {
+      "id": "cat-air-filters",
+      "text": "Воздушные фильтры",
+      "entityType": "category",
+      "field": "name",
+      "scope": "consumables"
+    },
+    {
+      "id": "cat-cabin-filters",
+      "text": "Салонные фильтры",
+      "entityType": "category",
+      "field": "name",
+      "scope": "consumables"
+    },
+    {
+      "id": "attr-viscosity",
+      "text": "Вязкость",
+      "entityType": "attribute",
+      "field": "name",
+      "scope": "attrs-oil"
+    },
+    {
+      "id": "attr-approval",
+      "text": "Допуск",
+      "entityType": "attribute",
+      "field": "name",
+      "scope": "attrs-oil",
+      "note": "TASK-053.A: «Рұқсат» — бытовое разрешение вместо отраслевого допуска масла"
+    },
+    {
+      "id": "attr-volume",
+      "text": "Объём",
+      "entityType": "attribute",
+      "field": "name",
+      "scope": "attrs-oil"
+    },
+    {
+      "id": "attr-oil-base",
+      "text": "Основа",
+      "entityType": "attribute",
+      "field": "name",
+      "scope": "attrs-oil"
+    },
+    {
+      "id": "opt-synthetic",
+      "text": "Синтетика",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-oil-base",
+      "note": "TASK-053.A: оставлено как есть, при том что «Минеральное» приведено к казахской форме"
+    },
+    {
+      "id": "opt-semi-synthetic",
+      "text": "Полусинтетика",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-oil-base"
+    },
+    {
+      "id": "opt-mineral",
+      "text": "Минеральное",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-oil-base"
+    },
+    {
+      "id": "attr-axle",
+      "text": "Ось",
+      "entityType": "attribute",
+      "field": "name",
+      "scope": "attrs-pads",
+      "note": "TASK-053.A: осталось русским словом (казахское — «білік»)"
+    },
+    {
+      "id": "attr-material",
+      "text": "Материал",
+      "entityType": "attribute",
+      "field": "name",
+      "scope": "attrs-pads"
+    },
+    {
+      "id": "opt-axle-front",
+      "text": "Передняя",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-axle"
+    },
+    {
+      "id": "opt-axle-rear",
+      "text": "Задняя",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-axle"
+    },
+    {
+      "id": "opt-ceramic",
+      "text": "Керамика",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-pad-material"
+    },
+    {
+      "id": "opt-semi-metallic",
+      "text": "Полуметаллические",
+      "entityType": "attribute_option",
+      "field": "name",
+      "scope": "opts-pad-material"
+    },
+    {
+      "id": "unit-litre",
+      "text": "л",
+      "entityType": "attribute",
+      "field": "unit",
+      "scope": "units",
+      "note": "TASK-053.A: регистр английской единицы (l против L) плавал"
+    },
+    {
+      "id": "unit-piece",
+      "text": "шт",
+      "entityType": "attribute",
+      "field": "unit",
+      "scope": "units"
+    },
+    {
+      "id": "unit-millimetre",
+      "text": "мм",
+      "entityType": "attribute",
+      "field": "unit",
+      "scope": "units"
+    },
+    {
+      "id": "item-pads-front-geely",
+      "text": "Колодки тормозные передние Geely 04465-0K090",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "items-pads",
+      "note": "бренд и артикул должны остаться как есть"
+    },
+    {
+      "id": "item-pads-rear-geely",
+      "text": "Колодки тормозные задние Geely 4050068800",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "items-pads",
+      "note": "TASK-053.A: «колодкалар» здесь против «қалыптары» в соседнем названии"
+    },
+    {
+      "id": "item-pads-front-trw",
+      "text": "Колодки тормозные передние TRW GDB3534",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "items-pads",
+      "note": "TASK-053.A: порядок слов с брендом"
+    },
+    {
+      "id": "item-oil-shell",
+      "text": "Shell Helix HX8 5W-30, 4 л",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "items-oil",
+      "note": "бренд и вязкость не переводятся, единица внутри названия — переводится"
+    },
+    {
+      "id": "item-oil-mobil",
+      "text": "Mobil Super 3000 5W-40, 4 л",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "items-oil"
+    },
+    {
+      "id": "svc-oil-change",
+      "text": "Замена моторного масла",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "svc-maintenance"
+    },
+    {
+      "id": "svc-front-pads-change",
+      "text": "Замена передних тормозных колодок",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "svc-maintenance"
+    },
+    {
+      "id": "svc-rear-pads-change",
+      "text": "Замена задних тормозных колодок",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "svc-maintenance"
+    },
+    {
+      "id": "svc-engine-diagnostics",
+      "text": "Компьютерная диагностика двигателя",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "svc-diagnostics",
+      "note": "TASK-053.A: две разные конструкции перевода"
+    },
+    {
+      "id": "svc-seasonal-tire-change",
+      "text": "Сезонная замена шин",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "svc-tire"
+    },
+    {
+      "id": "svc-wheel-balancing",
+      "text": "Балансировка колёс",
+      "entityType": "catalog_item",
+      "field": "name",
+      "scope": "svc-tire"
+    }
+  ]
+}

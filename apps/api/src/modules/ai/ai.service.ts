@@ -9,6 +9,7 @@ import {
   AiGateway,
   AiGatewayError,
   FALLBACK_WORTHY,
+  NOT_BILLED,
   translateOperation,
   type AiFailureKind,
   type AiOperation,
@@ -278,10 +279,13 @@ export class AiService {
       try {
         result = await operation.invoke(this.gateway, input, model, controller.signal);
       } catch (error) {
+        const failure = this.asGatewayError(error, controller.signal);
         return {
           ok: false,
-          error: this.asGatewayError(error, controller.signal),
-          result: undefined,
+          error: failure,
+          // An answer the gateway could not use was still paid for: what it
+          // cost is recorded, not the reservation (TASK-053.A).
+          result: failure.usage ? { output: undefined, model, usage: failure.usage } : undefined,
         };
       }
       const parsed = operation.outputSchema.safeParse(result.output);
@@ -358,6 +362,8 @@ export class AiService {
    * Closes the record: what the call cost according to the provider, or —
    * when the provider did not say — the hold it took, kept and flagged, so
    * an unknown cost is never counted as nothing (TASK-053 requirement 3).
+   * A failure the provider decided before serving anything (`NOT_BILLED`)
+   * is the one case where the cost is known to be zero.
    */
   private async finish(
     jobId: string,
@@ -376,6 +382,11 @@ export class AiService {
   ): Promise<void> {
     const usage = outcome.result?.usage;
     const known = usage?.costUsd !== null && usage?.costUsd !== undefined;
+    // Nothing was served and nothing was answered: the call is free, not unknown.
+    const notBilled =
+      outcome.status === "failed" &&
+      outcome.result === undefined &&
+      NOT_BILLED.includes(outcome.errorKind);
     const model =
       outcome.status === "succeeded"
         ? outcome.result.model
@@ -392,8 +403,8 @@ export class AiService {
             : {}),
           tokensIn: usage?.tokensIn ?? null,
           tokensOut: usage?.tokensOut ?? null,
-          costUsd: known ? String(usage.costUsd) : String(reservationUsd),
-          costIsEstimate: !known,
+          costUsd: known ? String(usage.costUsd) : notBilled ? "0" : String(reservationUsd),
+          costIsEstimate: !known && !notBilled,
           latencyMs: Date.now() - startedAt,
           finishedAt: new Date(),
         })

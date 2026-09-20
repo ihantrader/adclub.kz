@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AiGatewayError, translateOutputSchema } from "./ai-gateway";
+import { AiGatewayError, FALLBACK_WORTHY, translateOutputSchema } from "./ai-gateway";
 import { OpenRouterAiGateway, failureOf, strictJsonSchema } from "./openrouter-ai-gateway";
 import { MISSING_MODEL_PREFIX, TestAiGateway, testTranslation } from "./test-ai-gateway";
 
@@ -198,6 +198,17 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     // The catalog texts went as data of the request, nothing else of ours.
     expect(JSON.stringify(seen[0]!.body)).toContain("Тормозные колодки");
     expect(JSON.stringify(seen[0]!.body)).not.toContain(KEY);
+    // Nothing the answer does not need: with `require_parameters` every
+    // extra parameter drops the endpoints that do not take it, and
+    // `temperature` left both default models without one (TASK-053.A).
+    expect(seen[0]!.body).not.toHaveProperty("temperature");
+    expect(Object.keys(seen[0]!.body).sort()).toEqual([
+      "max_tokens",
+      "messages",
+      "model",
+      "provider",
+      "response_format",
+    ]);
   });
 
   it("does not read a missing or zero cost as free", async () => {
@@ -267,9 +278,40 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     expect(await given({ ...ANSWER, choices: [] })).toMatchObject({ kind: "invalid_output" });
   });
 
+  it("keeps what an unusable answer cost, so the day is not charged the reservation", async () => {
+    const { gateway } = gatewayWith(() =>
+      answer({
+        ...ANSWER,
+        choices: [{ finish_reason: "stop", message: { content: '{"translations":[' } }],
+      }),
+    );
+    const error = (await gateway
+      .translate(REQUEST, MODEL, SIGNAL)
+      .catch((thrown: unknown) => thrown)) as AiGatewayError;
+    expect(error.kind).toBe("invalid_output");
+    // The provider answered and billed for it: its own figures, not ours.
+    expect(error.usage).toEqual({ tokensIn: 120, tokensOut: 40, costUsd: 0.000345 });
+    // How it ended tells a cut-off answer from prose; the text itself never appears.
+    expect(error.message).toContain("ends open");
+    expect(error.message).not.toContain("translations");
+    // A refusal before the provider was reached carries no cost at all.
+    expect(failureOf(404, "No endpoints found for nonexistent/model").usage).toBeUndefined();
+  });
+
   it("names the kind of trouble and the status, never our request", () => {
     expect(failureOf(503, "upstream unavailable")).toMatchObject({ kind: "unavailable" });
     expect(failureOf(404, undefined)).toMatchObject({ kind: "model_unavailable" });
     expect(failureOf(401, "invalid api key").message).not.toContain(KEY);
+  });
+
+  it("tells a model OpenRouter does not know from a request it will not take", () => {
+    // A model id that does not exist is a 400, not a 404 (TASK-053.A), and
+    // the setting's fallback model is exactly what it is for.
+    expect(failureOf(400, "missing/none is not a valid model ID")).toMatchObject({
+      kind: "model_unavailable",
+    });
+    expect(FALLBACK_WORTHY).toContain("model_unavailable");
+    // Every other 400 is about the request: another model would answer it the same.
+    expect(failureOf(400, "messages: must be an array")).toMatchObject({ kind: "rejected" });
   });
 });

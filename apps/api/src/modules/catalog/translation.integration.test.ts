@@ -1376,6 +1376,12 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       );
       const [call] = await calls();
       expect(call).toMatchObject({ status: "failed", error_kind: "model_unavailable" });
+      // Nothing was served, so the day is charged nothing for it — not the
+      // reservation: a wrong model name must not eat the budget through
+      // retries alone (TASK-053.A).
+      expect(Number(call!.cost_usd)).toBe(0);
+      expect(call).toMatchObject({ cost_is_estimate: false });
+      expect((await worker!.get(AiService).status()).spentUsd).toBe(0);
       // The work is not lost: the tasks are still pending, with the reason of the last try.
       expect(await tasksOf(category.id)).toMatchObject([
         { lang: "en", status: "pending", last_error: "model_unavailable" },

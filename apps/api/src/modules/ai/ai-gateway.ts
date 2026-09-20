@@ -82,15 +82,37 @@ export type AiFailureKind =
 /** Failures after which the fallback model of the operation is worth trying (D-056). */
 export const FALLBACK_WORTHY: readonly AiFailureKind[] = ["unavailable", "model_unavailable"];
 
-/** A failed call. `message` is safe for a log: no request or answer content. */
+/**
+ * Failures the provider decides before any model runs, so the call cost
+ * nothing at all: OpenRouter refuses routing and nothing is served
+ * (TASK-053.A). The day must not be charged the reservation for them —
+ * a wrong model name would otherwise eat a daily budget through retries
+ * alone and stop the work that does cost money. Everything else keeps the
+ * reservation: a timeout, a 5xx or a refusal may still have been billed.
+ */
+export const NOT_BILLED: readonly AiFailureKind[] = [
+  "model_unavailable",
+  "no_private_provider",
+  "not_configured",
+];
+
+/**
+ * A failed call. `message` is safe for a log: no request or answer
+ * content. `usage` is set when the provider did answer and the answer
+ * turned out unusable — it was still charged for, and the day's budget
+ * must count what it really cost instead of the reservation (TASK-053.A).
+ */
 export class AiGatewayError extends Error {
+  readonly usage: AiUsage | undefined;
+
   constructor(
     readonly kind: AiFailureKind,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { usage?: AiUsage },
   ) {
     super(message, options);
     this.name = "AiGatewayError";
+    this.usage = options?.usage;
   }
 }
 

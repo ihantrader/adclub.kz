@@ -3,7 +3,9 @@ import {
   AiGateway,
   AiGatewayError,
   translateOutputSchema,
+  type AiFailureKind,
   type AiResult,
+  type AiUsage,
   type TranslateInput,
 } from "./ai-gateway";
 
@@ -40,6 +42,14 @@ const TRANSLATE_MAX_TOKENS = 16_000;
  * collect data (`data_collection`), and only endpoints that honour every
  * parameter we send — `require_parameters` keeps the request away from an
  * endpoint that would quietly ignore `response_format` and answer prose.
+ *
+ * `require_parameters` is also why a request carries no parameter it can
+ * do without (ARCHITECTURE 4.21 I195): every one of them narrows the
+ * endpoints left, and an endpoint that does not take it is dropped rather
+ * than asked. `temperature` cost us both default models that way — the
+ * endpoints of a reasoning model do not take it, and with it in the body
+ * OpenRouter answered 404 "no endpoints found that can handle the
+ * requested parameters" and nothing was sent.
  */
 const PRIVATE_ROUTING = {
   zdr: true,
@@ -55,6 +65,16 @@ const PRIVATE_ROUTING = {
  * privacy, and an operator has to see which it was.
  */
 const NO_PRIVATE_PROVIDER_MARKERS = ["data polic", "data retention", "zdr", "zero data"];
+
+/**
+ * How OpenRouter says it does not know a model at all: a 400, not the 404
+ * of a model it knows but cannot serve (TASK-053.A — a model id that does
+ * not exist answers `"<id> is not a valid model ID"`). It has to be told
+ * apart from the other 400s, which are about the request and which no
+ * other model would fix: a setting naming a withdrawn or mistyped model is
+ * exactly what the fallback model is for (D-056).
+ */
+const UNKNOWN_MODEL_MARKER = "not a valid model";
 
 const usageSchema = z.object({
   prompt_tokens: z.number().nonnegative().optional(),
@@ -149,8 +169,9 @@ export class OpenRouterAiGateway extends AiGateway {
       {
         model,
         max_tokens: TRANSLATE_MAX_TOKENS,
-        // A short-answer task with one right shape: no room for invention.
-        temperature: 0,
+        // No `temperature`: the shape of the answer is held by the strict
+        // schema, and asking for the parameter loses the endpoints that do
+        // not take it (see PRIVATE_ROUTING).
         response_format: TRANSLATE_FORMAT,
         messages: [
           { role: "system", content: TRANSLATE_SYSTEM },
@@ -198,37 +219,43 @@ export class OpenRouterAiGateway extends AiGateway {
     if (answer.data.error) {
       throw failureOf(response.status, answer.data.error.message);
     }
+    // From here on the provider answered and charged for it: every refusal
+    // below carries what it cost, so the day counts the real figure and not
+    // the reservation (TASK-053.A).
+    const reported = answer.data.usage;
+    const usage: AiUsage = {
+      tokensIn: reported?.prompt_tokens ?? 0,
+      tokensOut: reported?.completion_tokens ?? 0,
+      // What the provider says it cost (D-055). Missing — unknown, never zero;
+      // a cost of exactly 0 is only believable for a free model, and reading
+      // it as unknown just keeps the reservation, which is the safe side.
+      costUsd: reported?.cost === undefined || reported.cost === 0 ? null : reported.cost,
+    };
+    const unusable = (message: string, kind: AiFailureKind = "invalid_output"): AiGatewayError =>
+      new AiGatewayError(kind, message, { usage });
     const choice = answer.data.choices?.[0];
     if (!choice) {
-      throw new AiGatewayError("invalid_output", "OpenRouter answered without a choice");
+      throw unusable("OpenRouter answered without a choice");
     }
     if (choice.finish_reason === "length") {
-      throw new AiGatewayError("invalid_output", "The answer was cut off (max_tokens)");
+      throw unusable("The answer was cut off (max_tokens)");
     }
     if (choice.finish_reason === "content_filter") {
-      throw new AiGatewayError("rejected", "The model refused the request");
+      throw unusable("The model refused the request", "rejected");
     }
     const content = choice.message?.content;
     if (!content) {
-      throw new AiGatewayError("invalid_output", "The answer has no content");
+      throw unusable("The answer has no content");
     }
     const output = safeJson(content);
     if (output === undefined) {
-      throw new AiGatewayError("invalid_output", "The answer is not the JSON the schema asked for");
+      // The text itself is never logged; its size and how it ended are what
+      // tell a truncated answer from prose, and they name nothing.
+      throw unusable(
+        `The answer is not the JSON the schema asked for (${content.length} characters, ${content.trimEnd().endsWith("}") ? "ends closed" : "ends open"})`,
+      );
     }
-    const usage = answer.data.usage;
-    return {
-      output,
-      model: answer.data.model ?? model,
-      usage: {
-        tokensIn: usage?.prompt_tokens ?? 0,
-        tokensOut: usage?.completion_tokens ?? 0,
-        // What the provider says it cost (D-055). Missing — unknown, never zero;
-        // a cost of exactly 0 is only believable for a free model, and reading
-        // it as unknown just keeps the reservation, which is the safe side.
-        costUsd: usage?.cost === undefined || usage.cost === 0 ? null : usage.cost,
-      },
-    };
+    return { output, model: answer.data.model ?? model, usage };
   }
 }
 
@@ -258,8 +285,10 @@ function messageOf(parsed: unknown): string | undefined {
  * pass, 404 is about the model — and a 404 caused by the privacy
  * requirement (D-057) is told apart by what OpenRouter says, because only
  * then was the request refused for keeping data rather than for the model
- * not existing. The message of the provider is kept (it names the model or
- * the policy, never our texts) and `AiService` sanitizes it before it is
+ * not existing. A 400 is about the request, which no other model would
+ * fix — except the one that says the model id itself is unknown (4.21
+ * I196). The message of the provider is kept (it names the model or the
+ * policy, never our texts) and `AiService` sanitizes it before it is
  * written anywhere.
  */
 export function failureOf(status: number, message: string | undefined): AiGatewayError {
@@ -276,6 +305,9 @@ export function failureOf(status: number, message: string | undefined): AiGatewa
       "model_unavailable",
       `OpenRouter has no endpoint for this model${said}`,
     );
+  }
+  if (status === 400 && (message ?? "").toLowerCase().includes(UNKNOWN_MODEL_MARKER)) {
+    return new AiGatewayError("model_unavailable", `OpenRouter has no such model${said}`);
   }
   if (status === 408 || status === 409 || status === 429 || status >= 500) {
     return new AiGatewayError("unavailable", `OpenRouter answered ${String(status)}${said}`);

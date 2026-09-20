@@ -49,7 +49,7 @@ COMPLETED
 - `pnpm test:integration` — PASS — 281 тест в 13 файлах, все зелёные (прогон с `--maxWorkers=2`: при полном параллелизме на этой машине набор падал обрывами соединений к контейнерам Postgres — см. Errors & Fixes п. 4; затронутый изменением файл `translation.integration.test.ts` (34 теста) проходил в каждом из трёх прогонов)
 - настоящий прогон перевода через OpenRouter — PASS — 144 перевода, 10 вызовов за сутки, $0.045741 (AC-1)
 - ключ не попал в код, журналы и коммиты — PASS — `git grep -F` по значению ключа: 0 совпадений в отслеживаемых файлах, 0 в журналах worker'а; `git check-ignore .env` — да
-- CI на `main` — записан отдельным коммитом после прогона (см. AC-7)
+- CI на `main` — PASS — прогон 35525043091 на коммите `d4886d0` (отчёт): success
 
 ## UAT / E2E
 
@@ -168,8 +168,8 @@ COMPLETED
   - `5b31b63` — Update project plan, state and TASK-053.A (Product Owner edits)
   - `4a1393a` — Fix what the first real OpenRouter calls showed (TASK-053.A)
   - `a44cd5e` — Record what the real provider required (TASK-053.A)
-  - `CI_COMMIT_PLACEHOLDER` — Add the TASK-053.A report
-- CI на `main`: CI_RUN_PLACEHOLDER
+  - `d4886d0` — Add the TASK-053.A report
+- CI на `main`: прогон **35525043091** на коммите отчёта `d4886d0` — **success** (`gh run view 35525043091 --repo ihantrader/adclub.kz`). Следом идёт один коммит «Record the CI run of the TASK-053.A report commit», который только вписывает этот номер в отчёт и кода не касается; его собственный прогон CI назван в ответе к задаче.
 
 ## Errors & Fixes
 

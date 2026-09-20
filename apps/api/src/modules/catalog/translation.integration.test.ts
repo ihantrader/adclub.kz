@@ -1488,6 +1488,10 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
       expect(tasks.every((task) => task.status === "pending")).toBe(true);
       expect(tasks.some((task) => task.failure !== null)).toBe(false);
       expect(await count("translation_task", "failure = 'empty'")).toBe(0);
+      // And the run stopped instead of asking the same provider again at once:
+      // a tight loop here would be paid calls, one after another.
+      await sleep(1000);
+      expect(await count("ai_job")).toBeLessThan(5);
 
       // When the provider answers in full again, the missing text is translated.
       gateway.mode = "ok";

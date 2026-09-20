@@ -107,7 +107,7 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       batches: 0,
     };
     let stopped = false;
-    for (; !stopped;) {
+    while (!stopped) {
       if (context.signal.aborted) {
         return;
       }
@@ -132,6 +132,14 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
         totals.batches += 1;
         for (const [key, count] of Object.entries(outcome)) {
           totals[key as SaveOutcome] += count;
+        }
+        if (outcome.incomplete > 0) {
+          // The texts left out are pending again and could be claimed by this
+          // very run: asking the same provider again straight away would be a
+          // tight loop of paid calls. The run stops here, and the retries of
+          // the job, with their pause, decide when to ask again.
+          stopped = true;
+          break;
         }
       }
     }

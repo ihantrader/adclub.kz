@@ -61,8 +61,18 @@ COMPLETED
 | `pnpm build` | PASS | 11 задач; `apps/api/dist/modules/catalog/translation-glossary.json` есть в сборке |
 | `pnpm --filter @adclub/api openapi:check` | PASS | «matches the contract and the served routes» — контракт не менялся |
 | `pnpm --filter api migrate` | PASS | «No migrations to run» — новых таблиц нет |
+| CI на `main` | PASS | run **35535874701** (коммит `dfca5a7`, «Add the TASK-053.B report») — **success** с первой попытки; push содержал все четыре коммита задачи, прогон один, по головному |
 
 **Первый прогон интеграционных тестов дал 9 падений**, из них одно настоящее (тест закреплял прежние модели по умолчанию — исправлено) и восемь от нехватки ресурсов машины: рядом работал dev-стек Docker, контейнеры Testcontainers падали с `ECONNRESET` и отвечали 503. После остановки dev-стека и правки ожиданий — 314 из 314.
+
+## Состав коммитов
+
+| Коммит | Что в нём |
+|---|---|
+| `9b717b8` | `Update project plan and state, add TASK-053.B (Product Owner edits)` — правки Product Owner из рабочего дерева, отдельным коммитом по D-024 |
+| `7966723` | `Compare translation models on a sample set and send a term glossary` — набор, словари, проверки, прогон, серверные команды, механизм словаря в шлюзе, явная модель у вызова, тесты |
+| `952178f` | `Choose the translation models by measurement (D-058)` — новые умолчания моделей, пять сохранённых прогонов, ARCHITECTURE 0.26 (4.23, 9.6, 14), CLAUDE.md, ожидания интеграционного теста |
+| `dfca5a7` | `Add the TASK-053.B report` — этот отчёт |
 
 ## UAT / E2E
 

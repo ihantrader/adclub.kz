@@ -57,7 +57,7 @@ PARTIAL — 9 из 11 обязательных AC выполнены. AC-7 и AC
 | `0c25f9b` | `Document the AI gateway through OpenRouter (TASK-053)` — `ARCHITECTURE.md`, `CLAUDE.md` |
 | `acb005a` | `Stop a translation run after an incomplete answer (TASK-053)` — `apps/api/src/modules/catalog/translation-runner.ts`, `apps/api/src/modules/catalog/translation.integration.test.ts` (найдено при просмотре итогового diff, см. «Errors & Fixes») |
 | `e0b0a71` | `Add the TASK-053 report` — `tasks/TASK-053-REPORT.md` |
-| `42cd48a` | `tasks/TASK-053-REPORT.md` — номер и статус прогона CI коммита с отчётом |
+| `9806aa3` | `Record the CI run of the TASK-053 report commit` — `tasks/TASK-053-REPORT.md`: номер и статус прогона CI коммита с отчётом |
 
 Состав каждого коммита собирался перечислением путей (`git add <путь> …`), `git add -A`/`-a`/`.` не использовались (D-024).
 
@@ -176,7 +176,7 @@ PARTIAL — 9 из 11 обязательных AC выполнены. AC-7 и AC
 35490011256 2bbe3ba completed success
 ```
 
-Прогон CI для коммита с отчётом — **№ 35521185016**, коммит `e0b0a71`, статус **completed / success**, тоже с первой попытки (дописано в отчёт коммитом `42cd48a`).
+Прогон CI для коммита с отчётом — **№ 35521185016**, коммит `e0b0a71`, статус **completed / success**, тоже с первой попытки.
 
 ## Errors & Fixes
 

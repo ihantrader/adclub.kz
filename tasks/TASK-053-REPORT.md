@@ -56,7 +56,8 @@ PARTIAL — 9 из 11 обязательных AC выполнены. AC-7 и AC
 | `93a537d` | `Send every AI call through OpenRouter (TASK-053)` — 31 файл: `.env.example`, `apps/api/package.json`, `pnpm-lock.yaml`, `packages/contracts/src/settings.ts`, `apps/api/openapi.json`, `apps/api/src/config/{env.schema.ts,env.schema.test.ts,ignored-variables.ts}`, `apps/api/src/modules/ai/{ai-gateway.ts,ai.module.ts,ai.service.ts,index.ts,schema.ts,openrouter-ai-gateway.ts,test-ai-gateway.ts,ai-gateways.test.ts}` (+ удалены `claude-ai-gateway.ts`, `ai-pricing.ts`), `apps/api/src/modules/settings/registry/{registry.ts,registry.test.ts,setting-definition.ts}`, `apps/api/src/modules/settings/settings.integration.test.ts`, `apps/api/src/modules/catalog/{catalog-locks.ts,catalog-names.ts,schema.ts,translation-admin.service.ts,translation-queue.service.ts,translation-runner.ts,translation.integration.test.ts}`, `apps/api/src/database/database.integration.test.ts`, `infra/migrations/1789990000000_ai-through-openrouter.sql` |
 | `0c25f9b` | `Document the AI gateway through OpenRouter (TASK-053)` — `ARCHITECTURE.md`, `CLAUDE.md` |
 | `acb005a` | `Stop a translation run after an incomplete answer (TASK-053)` — `apps/api/src/modules/catalog/translation-runner.ts`, `apps/api/src/modules/catalog/translation.integration.test.ts` (найдено при просмотре итогового diff, см. «Errors & Fixes») |
-| `<коммит отчёта>` | `tasks/TASK-053-REPORT.md` |
+| `e0b0a71` | `Add the TASK-053 report` — `tasks/TASK-053-REPORT.md` |
+| `42cd48a` | `tasks/TASK-053-REPORT.md` — номер и статус прогона CI коммита с отчётом |
 
 Состав каждого коммита собирался перечислением путей (`git add <путь> …`), `git add -A`/`-a`/`.` не использовались (D-024).
 
@@ -175,9 +176,7 @@ PARTIAL — 9 из 11 обязательных AC выполнены. AC-7 и AC
 35490011256 2bbe3ba completed success
 ```
 
-Прогон CI для коммита с этим отчётом дописан ниже после push.
-
-<!-- CI_REPORT_RUN -->
+Прогон CI для коммита с отчётом — **№ 35521185016**, коммит `e0b0a71`, статус **completed / success**, тоже с первой попытки (дописано в отчёт коммитом `42cd48a`).
 
 ## Errors & Fixes
 

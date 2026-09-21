@@ -107,4 +107,5 @@ None.
 
 **CI на `main`:**
 - коммиты 1–5 отправлены одним пушем (`cca3996..669011e`); прогон CI последнего из них `669011e` — [#35653194640](https://github.com/ihantrader/adclub.kz/actions/runs/35653194640): `completed / success`, попытка 1 (зелёный с первой попытки; `gh run view 35653194640 --json status,conclusion,attempt`).
-- прогон CI коммита с этим отчётом — записан следующим коммитом «Record the CI run of the TASK-018 report commit» (как в TASK-017).
+- коммит с отчётом `5a6f8f8` — [#35653981442](https://github.com/ihantrader/adclub.kz/actions/runs/35653981442): `completed / success`, попытка 1.
+7. Record the CI run of the TASK-018 report commit: `tasks/TASK-018-REPORT.md` (только эта запись; его CI — в ответе сессии).

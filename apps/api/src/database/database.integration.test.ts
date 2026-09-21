@@ -111,7 +111,92 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790150000000_create-item-compatibility",
       "1790200000000_create-suppliers",
       "1790250000000_supplier-members",
+      "1790300000000_create-offers",
     ]);
+  });
+
+  it("holds the rules of offers in the database and rolls back keeping the suppliers (offers)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('offers-city', 'Город предложений') RETURNING id",
+    );
+    const companies: { supplierId: string; locationId: string }[] = [];
+    for (const name of ["Первая", "Вторая"]) {
+      const supplier = await client.query<{ id: string }>(
+        "INSERT INTO supplier (name, city_id) VALUES ($1, $2) RETURNING id",
+        [name, city.rows[0]!.id],
+      );
+      const location = await client.query<{ id: string }>(
+        "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+        [supplier.rows[0]!.id, city.rows[0]!.id],
+      );
+      companies.push({ supplierId: supplier.rows[0]!.id, locationId: location.rows[0]!.id });
+    }
+    const [first, second] = companies as [
+      { supplierId: string; locationId: string },
+      { supplierId: string; locationId: string },
+    ];
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('offers_node', 'goods', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('offers_sub', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+      [subcategory.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const itemId = item.rows[0]!.id;
+    const insert = (values: Record<string, unknown>) => {
+      const row = {
+        supplier_id: first.supplierId,
+        location_id: first.locationId,
+        item_id: itemId,
+        item_type: "generic",
+        price: 1000,
+        availability: "in_stock",
+        lead_days: 0,
+        pickup: false,
+        delivery: true,
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO offer (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    await expect(insert({ availability: "on_order", lead_days: 0 })).rejects.toThrow(
+      /offer_on_order_lead_check/,
+    );
+    await expect(insert({ delivery: false })).rejects.toThrow(/offer_receipt_check/);
+    await expect(insert({ warranty_months: 6, warranty_text: "полгода" })).rejects.toThrow(
+      /offer_warranty_check/,
+    );
+    await expect(insert({ status: "withdrawn" })).rejects.toThrow(/offer_withdrawn_check/);
+    await expect(insert({ location_id: second.locationId })).rejects.toThrow(/offer_location_fkey/);
+    await expect(insert({ item_type: "part" })).rejects.toThrow(/offer_item_fkey/);
+    await insert({});
+    await expect(insert({ price: 900 })).rejects.toThrow(/offer_location_item_key/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "offer")).toBe(false);
+    const { rows: keys } = await client.query(
+      "SELECT 1 FROM pg_constraint WHERE conname = 'supplier_location_id_supplier_key'",
+    );
+    expect(keys).toEqual([]);
+    expect(await count("supplier_location", "city_id = $1", [city.rows[0]!.id])).toBe(2);
+    expect(await count("catalog_item", "id = $1", [itemId])).toBe(1);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [itemId]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brand.rows[0]!.id]);
+    await client.query("DELETE FROM category WHERE code IN ('offers_sub')");
+    await client.query("DELETE FROM category WHERE code IN ('offers_node')");
+    await client.query("DELETE FROM supplier_location WHERE city_id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM supplier WHERE city_id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
   });
 
   it("gives existing companies a contact person and recipients, and rolls back keeping the employees (supplier members)", async () => {
@@ -181,7 +266,7 @@ describe("PostgreSQL: migrations and readiness", () => {
       [supplierId, memberIds[1]],
     );
 
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    await walkDownPast(() => columnExists(client, "supplier_member", "is_contact_person"));
     expect(await columnExists(client, "supplier_member", "is_contact_person")).toBe(false);
     expect(await count("supplier_member", "supplier_id = $1", [supplierId])).toBe(7);
     // A value the old list doesn't know stays in its row.

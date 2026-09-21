@@ -1851,6 +1851,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "GET /admin/suppliers",
         "GET /admin/suppliers/{supplierId}",
         "GET /admin/suppliers/{supplierId}/members",
+        "GET /admin/suppliers/{supplierId}/offers",
         "GET /admin/suppliers/{supplierId}/sessions",
         "GET /admin/translations",
         "GET /admin/translations/{entityType}/{entityId}",

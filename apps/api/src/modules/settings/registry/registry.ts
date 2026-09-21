@@ -640,6 +640,51 @@ const suppliers = group({
   },
 });
 
+const offers = group({
+  id: "offers",
+  title: "Предложения поставщиков",
+  editableBy: "admin",
+  settings: {
+    offer_price_min_kzt: define.integer({
+      unit: "kzt",
+      min: 1,
+      max: 1_000_000,
+      default: 1,
+      description: "Наименьшая цена предложения поставщика, тенге.",
+    }),
+    offer_price_max_kzt: define.integer({
+      unit: "kzt",
+      min: 1,
+      max: 2_000_000_000,
+      default: 100_000_000,
+      description:
+        "Наибольшая цена предложения поставщика, тенге; защита от ошибки ввода (лишние нули).",
+    }),
+    offer_lead_days_max: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 90,
+      description: "Наибольший срок предложения в рабочих днях с момента подтверждения заявки.",
+    }),
+    offer_item_search_per_member: define.integer({
+      unit: "count",
+      min: 1,
+      max: 100_000,
+      default: 60,
+      description:
+        "Сколько поисков позиции справочника один сотрудник поставщика может сделать за окно; сверх — отказ с временем ожидания (справочник целиком поставщику не выдаётся).",
+    }),
+    offer_item_search_per_member_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита поисков позиции справочника одним сотрудником.",
+    }),
+  },
+});
+
 const publicLimits = group({
   id: "public_limits",
   title: "Открытые маршруты",
@@ -1074,6 +1119,7 @@ export const settingGroups = [
   vehicles,
   compatibility,
   suppliers,
+  offers,
   publicLimits,
   billing,
   clients,
@@ -1096,6 +1142,7 @@ export const settingDefinitions = {
   ...vehicles.settings,
   ...compatibility.settings,
   ...suppliers.settings,
+  ...offers.settings,
   ...publicLimits.settings,
   ...billing.settings,
   ...clients.settings,

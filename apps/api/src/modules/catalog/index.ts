@@ -4,7 +4,7 @@ export { CatalogAdminService } from "./catalog-admin.service";
 export type { CatalogActor } from "./catalog-admin.service";
 export { CatalogBrandsService } from "./catalog-brands.service";
 export { adminActor } from "./catalog-admin.controller";
-export { normalizeText } from "./catalog-texts";
+export { loadTexts, localize, normalizeText, plainTexts, textsOf } from "./catalog-texts";
 export { decodeCursor, encodeCursor, escapeLike, TIME_POSITION } from "./catalog-paging";
 export { CatalogItemsService } from "./catalog-items.service";
 export { CatalogPhotosService } from "./catalog-photos.service";
@@ -24,3 +24,4 @@ export type { EvalModelResult, EvalRun, EvalRunOptions } from "./eval/eval-runne
 export { answerKey, checkRun, qualityChecks } from "./eval/translation-quality";
 export type { QualityCheck, QualityFinding, QualityReport } from "./eval/translation-quality";
 export { brandSpelling, catalogItem, category, itemAnalog, translation } from "./schema";
+export type { CatalogItemRow } from "./schema";

@@ -14,6 +14,7 @@ import { CatalogModule } from "./modules/catalog";
 import { VehiclesModule } from "./modules/vehicles";
 import { CompatibilityModule } from "./modules/compatibility";
 import { SuppliersModule } from "./modules/suppliers";
+import { OffersModule } from "./modules/offers";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -37,6 +38,8 @@ export class AppModule implements NestModule {
       jobs?: Partial<JobsTuning>;
     } = {},
   ) {
+    // One catalog module: offers import this very instance.
+    const catalog = CatalogModule.forRoot({ http: true, metrics: config.metrics.enabled });
     return {
       module: AppModule,
       imports: [
@@ -63,10 +66,11 @@ export class AppModule implements NestModule {
         // contract routes alone.
         ...(config.nodeEnv === "production" ? [] : [OpenApiModule]),
         IdentityModule.forRoot(config),
-        CatalogModule.forRoot({ http: true, metrics: config.metrics.enabled }),
+        catalog,
         VehiclesModule.forRoot({ http: true }),
         CompatibilityModule.forRoot({ http: true }),
         SuppliersModule.forRoot({ http: true, devOutbox: config.loginCode.devOutbox }),
+        OffersModule.forRoot({ http: true, catalog }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

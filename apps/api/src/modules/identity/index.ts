@@ -35,3 +35,4 @@ export {
   signInStepCleanupJob,
 } from "./cleanup/sign-in-data-cleanup";
 export type { SignInDataRetention } from "./cleanup/sign-in-data-cleanup";
+export { supplier } from "./schema";

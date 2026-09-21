@@ -1,0 +1,10 @@
+export { CompatibilityModule } from "./compatibility.module";
+export type { CompatibilityModuleOptions } from "./compatibility.module";
+export { CompatibilityEvaluator } from "./compatibility-evaluator";
+export type { CompatibilityScope } from "./compatibility-evaluator";
+export { CompatibilityRecordsService } from "./compatibility-records.service";
+export type { CompatibilityActor } from "./compatibility-records.service";
+export { CompatibilityProposalsService } from "./compatibility-proposals.service";
+export { DevCompatibilitySeed, DevCompatibilitySeedError } from "./dev-compatibility-seed";
+export type { DevCompatibilitySeedResult } from "./dev-compatibility-seed";
+export { compatibilityTables } from "./schema";

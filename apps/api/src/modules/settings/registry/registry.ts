@@ -564,6 +564,22 @@ const vehicles = group({
   },
 });
 
+const compatibility = group({
+  id: "compatibility",
+  title: "Совместимость",
+  editableBy: "admin",
+  settings: {
+    compatibility_proposals_per_supplier_day: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 200,
+      description:
+        "Сколько предложений совместимости один поставщик может прислать за скользящие 24 часа; сверх — отказ с временем ожидания.",
+    }),
+  },
+});
+
 const billing = group({
   id: "billing",
   title: "Подписки и оплата",
@@ -956,6 +972,7 @@ export const settingGroups = [
   reviews,
   photos,
   vehicles,
+  compatibility,
   billing,
   clients,
   cleanup,
@@ -975,6 +992,7 @@ export const settingDefinitions = {
   ...reviews.settings,
   ...photos.settings,
   ...vehicles.settings,
+  ...compatibility.settings,
   ...billing.settings,
   ...clients.settings,
   ...cleanup.settings,

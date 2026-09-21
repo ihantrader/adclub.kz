@@ -3,6 +3,7 @@ import { jobsTables } from "./jobs";
 import { aiTables } from "./modules/ai";
 import { auditTables } from "./modules/audit";
 import { catalogTables } from "./modules/catalog";
+import { compatibilityTables } from "./modules/compatibility";
 import { identityTables } from "./modules/identity";
 import { settingsTables } from "./modules/settings";
 import { vehicleTables } from "./modules/vehicles";
@@ -20,5 +21,6 @@ export const ormTables: readonly PgTable[] = [
   ...aiTables,
   ...catalogTables,
   ...vehicleTables,
+  ...compatibilityTables,
   ...jobsTables,
 ];

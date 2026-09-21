@@ -2227,7 +2227,8 @@ describe("catalog items (PostgreSQL + Redis)", () => {
           route.path.startsWith("/admin/catalog/items") ||
           route.path.endsWith("/fill"),
       );
-      expect(routes).toHaveLength(18);
+      // With the 3 compatibility routes of an item (TASK-015).
+      expect(routes).toHaveLength(21);
       const item = await createItem({
         type: "part",
         categoryId: f.pads.id,

@@ -117,6 +117,8 @@ describe("ormTables", () => {
         "brand_spelling",
         "catalog_item",
         "item_attribute_value",
+        "item_compatibility",
+        "item_compatibility_proposal",
         "item_analog",
         "item_photo",
         "item_photo_file",

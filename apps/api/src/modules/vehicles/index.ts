@@ -25,3 +25,14 @@ export {
 } from "./dev-vehicle-seed";
 export type { DevVehicleSeedResult } from "./dev-vehicle-seed";
 export { vehicleTables } from "./schema";
+export {
+  vehicleEngine,
+  vehicleEngineSpelling,
+  vehicleMake,
+  vehicleGeneration,
+  vehicleMakeSpelling,
+  vehicleModel,
+  vehicleModelSpelling,
+  vehicleModification,
+  vehicleOption,
+} from "./schema";

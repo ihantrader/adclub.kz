@@ -108,10 +108,70 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789990000000_ai-through-openrouter",
       "1790050000000_create-item-photos",
       "1790100000000_create-vehicles",
+      "1790150000000_create-item-compatibility",
     ]);
   });
 
-  it("rolls back the latest migration only (the vehicle catalog), keeping the catalog", async () => {
+  it("rolls back the latest migration only (compatibility), keeping items and cars", async () => {
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('fit_node', 'goods', 1) RETURNING id",
+    );
+    const pads = await client.query<{ id: string }>(
+      `INSERT INTO category (code, kind, level, parent_id, parent_level)
+       VALUES ('fit_pads', 'goods', 2, $1, 1) RETURNING id`,
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand (is_oem) VALUES (true) RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      `INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id, article, article_norm)
+       VALUES ('part', $1, 'goods', $2, '04465-0K090', '044650K090') RETURNING id`,
+      [pads.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const make = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_make DEFAULT VALUES RETURNING id",
+    );
+    const record = await client.query<{ id: string }>(
+      `INSERT INTO item_compatibility (item_id, item_type, make_id, source, evidence)
+       VALUES ($1, 'part', $2, 'admin', 'catalog') RETURNING id`,
+      [item.rows[0]!.id, make.rows[0]!.id],
+    );
+    await client.query(
+      `INSERT INTO item_compatibility_proposal (item_id, item_type, make_id, evidence, source, status, resolution, compatibility_id, reviewed_at)
+       VALUES ($1, 'part', $2, 'catalog', 'ai', 'approved', 'already_approved', $3, now())`,
+      [item.rows[0]!.id, make.rows[0]!.id, record.rows[0]!.id],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // Compatibility is gone with its tables, triggers and the key on items;
+    // the item and the make stay.
+    expect(await tableExists(client, "item_compatibility")).toBe(false);
+    expect(await tableExists(client, "item_compatibility_proposal")).toBe(false);
+    const { rows: functions } = await client.query(
+      "SELECT proname FROM pg_proc WHERE proname LIKE 'item_compatibility_%'",
+    );
+    expect(functions).toEqual([]);
+    const { rows: keys } = await client.query(
+      "SELECT conname FROM pg_constraint WHERE conname = 'catalog_item_id_type_key'",
+    );
+    expect(keys).toEqual([]);
+    expect((await client.query("SELECT article FROM catalog_item")).rows).toEqual([
+      { article: "04465-0K090" },
+    ]);
+    expect((await client.query("SELECT id FROM vehicle_make")).rows).toHaveLength(1);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "item_compatibility")).toBe(true);
+    await client.query("DELETE FROM vehicle_make");
+    await client.query("DELETE FROM catalog_item");
+    await client.query("DELETE FROM brand");
+    await client.query("DELETE FROM category");
+    await walkDownPast(() => tableExists(client, "item_compatibility"));
+  });
+
+  it("rolls back the next one (the vehicle catalog), keeping the catalog", async () => {
     await client.query(
       "INSERT INTO category (code, kind, level) VALUES ('vehicle_node', 'goods', 1)",
     );

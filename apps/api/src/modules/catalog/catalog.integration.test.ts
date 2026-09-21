@@ -1606,13 +1606,15 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         brandId: randomUUID(),
         itemId: randomUUID(),
         analogItemId: randomUUID(),
+        recordId: randomUUID(),
+        proposalId: randomUUID(),
       };
       const adminRoutes = Object.values(apiRoutes).filter((route) =>
         route.path.startsWith("/admin/catalog"),
       );
       // 14 of the structure (TASK-010), 14 of brands, items and the fill
-      // (TASK-011) and 4 of photos (TASK-013).
-      expect(adminRoutes).toHaveLength(32);
+      // (TASK-011), 4 of photos (TASK-013) and 5 of compatibility (TASK-015).
+      expect(adminRoutes).toHaveLength(37);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },

@@ -383,6 +383,7 @@ describe("settings (PostgreSQL + Redis)", () => {
         "reviews",
         "photos",
         "vehicles",
+        "compatibility",
         "billing",
         "clients",
         "cleanup",

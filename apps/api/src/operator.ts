@@ -32,6 +32,11 @@ import {
 } from "./modules/catalog";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
 import { DevVehicleSeed, DevVehicleSeedError, VehiclesModule } from "./modules/vehicles";
+import {
+  CompatibilityModule,
+  DevCompatibilitySeed,
+  DevCompatibilitySeedError,
+} from "./modules/compatibility";
 import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
@@ -95,6 +100,8 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                a second run creates nothing
  *   dev:vehicles:seed            fill the vehicle catalog with draft example data
  *                                (TASK-014); a second run creates nothing
+ *   dev:compatibility:seed       both seeds above, then compatibility of the
+ *                                example items (TASK-015); idempotent
  *   dev:jobs:fail [--note <text>] [--on-query]
  *                                put a job that always fails on the queue;
  *                                with --on-query it fails on a real SQL query
@@ -122,6 +129,7 @@ class OperatorModule {
         AiModule.forRoot(config),
         CatalogModule.forRoot({ http: false }),
         VehiclesModule.forRoot({ http: false }),
+        CompatibilityModule.forRoot({ http: false }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -159,6 +167,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:member:remove <memberId>
   dev:catalog:seed
   dev:vehicles:seed
+  dev:compatibility:seed
   dev:jobs:fail [--note <text>] [--on-query]`;
 
 function required(value: string | undefined, what: string): string {
@@ -197,6 +206,7 @@ interface Services {
   devJobs: boolean;
   catalogSeed: DevCatalogSeed;
   vehicleSeed: DevVehicleSeed;
+  compatibilitySeed: DevCompatibilitySeed;
   ai: AiService;
   translations: TranslationQueue;
   translationEval: TranslationEval;
@@ -212,6 +222,7 @@ async function run(
     devJobs,
     catalogSeed,
     vehicleSeed,
+    compatibilitySeed,
     ai,
     translations,
     translationEval,
@@ -393,6 +404,12 @@ async function run(
       return catalogSeed.run();
     case "dev:vehicles:seed":
       return vehicleSeed.run();
+    case "dev:compatibility:seed":
+      return {
+        catalog: await catalogSeed.run(),
+        vehicles: await vehicleSeed.run(),
+        compatibility: await compatibilitySeed.run(),
+      };
     case "dev:member:remove":
       return { removed: true, ...(await operator.removeMember(required(first, "<memberId>"))) };
     default:
@@ -418,6 +435,7 @@ async function main(): Promise<void> {
         devJobs: hasDevJobs(config),
         catalogSeed: app.get(DevCatalogSeed),
         vehicleSeed: app.get(DevVehicleSeed),
+        compatibilitySeed: app.get(DevCompatibilitySeed),
         ai: app.get(AiService),
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),
@@ -437,6 +455,7 @@ main().catch((error: unknown) => {
     error instanceof OperatorCommandError ||
     error instanceof DevCatalogSeedError ||
     error instanceof DevVehicleSeedError ||
+    error instanceof DevCompatibilitySeedError ||
     error instanceof JobAdminError
   ) {
     console.error(error.message);

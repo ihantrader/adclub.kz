@@ -147,6 +147,14 @@ export const devVehicleMakes: readonly MakeSeed[] = [
             yearTo: 2022,
             modifications: [kz("crossover", "JLC-4G24", "at", "awd", 2018, 2022)],
           },
+          {
+            // The second generation: the target of the compatibility
+            // examples of TASK-015 (front pads fit it, not the first one).
+            name: "II (FX11)",
+            yearFrom: 2023,
+            yearTo: null,
+            modifications: [kz("crossover", "JLH-4G20TD", "at", "awd", 2024)],
+          },
         ],
       },
       {

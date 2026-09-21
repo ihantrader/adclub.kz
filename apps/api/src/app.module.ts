@@ -12,6 +12,7 @@ import { AiModule } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
 import { CatalogModule } from "./modules/catalog";
 import { VehiclesModule } from "./modules/vehicles";
+import { CompatibilityModule } from "./modules/compatibility";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -63,6 +64,7 @@ export class AppModule implements NestModule {
         IdentityModule.forRoot(config),
         CatalogModule.forRoot({ http: true, metrics: config.metrics.enabled }),
         VehiclesModule.forRoot({ http: true }),
+        CompatibilityModule.forRoot({ http: true }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

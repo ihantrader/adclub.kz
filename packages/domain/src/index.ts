@@ -15,3 +15,23 @@ export type {
   ContextLossReason,
   SessionKind,
 } from "./access/access-predicate";
+export { checkKzBin, kzBinCheckDigit, maskBin } from "./company/kz-bin";
+export type { KzBinCheck } from "./company/kz-bin";
+export {
+  canOnboardLead,
+  isWorkingLeadStatus,
+  supplierLeadStatuses,
+  supplierLeadTransition,
+  supplierLeadWorkingStatuses,
+} from "./supplier/supplier-lead";
+export type {
+  SupplierLeadStatus,
+  SupplierLeadTransition,
+  SupplierLeadWorkingStatus,
+} from "./supplier/supplier-lead";
+export { supplierState, supplierVisibleOnShowcase } from "./supplier/supplier-state";
+export type {
+  SupplierPauseReason,
+  SupplierState,
+  SupplierStateFacts,
+} from "./supplier/supplier-state";

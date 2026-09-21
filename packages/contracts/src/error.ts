@@ -137,6 +137,27 @@ import { clientPlatformSchema } from "./client";
  *   this (applied twice, cancelled after it started to apply…); `details`
  *   is `VehicleImportStateDetails`.
  *
+ * Compatibility of items with cars (TASK-015, ARCHITECTURE 4.25):
+ * - `COMPATIBILITY_CONDITIONS_INVALID` (400): the levels of a record or a
+ *   proposal don't hold together; `details` is
+ *   `CompatibilityConditionsInvalidDetails`.
+ * - `COMPATIBILITY_VEHICLE_INVALID` (400): the car of a check doesn't hold
+ *   together; `details` is `CompatibilityVehicleInvalidDetails`.
+ * - `COMPATIBILITY_VERSION_CONFLICT` (409): the record was changed by
+ *   someone else; nothing was written. `details` is
+ *   `CompatibilityVersionConflictDetails`.
+ * - `COMPATIBILITY_DUPLICATE` (409): the item already has an approved
+ *   record with these conditions; `details` is `CompatibilityDuplicateDetails`.
+ * - `COMPATIBILITY_NOT_APPLICABLE` (409): compatibility isn't kept for
+ *   services.
+ * - `COMPATIBILITY_ITEM_ARCHIVED` (409): the item is archived.
+ * - `COMPATIBILITY_NOT_ANALOG` (409): compatibility is copied only from an
+ *   analog of the item.
+ * - `COMPATIBILITY_PROPOSAL_STATE` (409): the proposal was already
+ *   reviewed; `details` is `CompatibilityProposalStateDetails`.
+ * - `COMPATIBILITY_PROPOSAL_DUPLICATE` (409): the company already waits
+ *   on the same proposal for this item.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -223,6 +244,16 @@ export const errorCodeSchema = z.enum([
   "VEHICLE_YEARS_INVALID",
   "VEHICLE_IMPORT_FILE_INVALID",
   "VEHICLE_IMPORT_STATE",
+  // Compatibility of items with cars (TASK-015, ARCHITECTURE 4.25).
+  "COMPATIBILITY_CONDITIONS_INVALID",
+  "COMPATIBILITY_VEHICLE_INVALID",
+  "COMPATIBILITY_VERSION_CONFLICT",
+  "COMPATIBILITY_DUPLICATE",
+  "COMPATIBILITY_NOT_APPLICABLE",
+  "COMPATIBILITY_ITEM_ARCHIVED",
+  "COMPATIBILITY_NOT_ANALOG",
+  "COMPATIBILITY_PROPOSAL_STATE",
+  "COMPATIBILITY_PROPOSAL_DUPLICATE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

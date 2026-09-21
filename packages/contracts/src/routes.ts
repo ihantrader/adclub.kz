@@ -126,6 +126,30 @@ import {
 } from "./vehicles";
 import { clientPolicyResponseSchema } from "./client-policy";
 import {
+  adminCompatibilityProposalPageSchema,
+  adminCompatibilityProposalQuerySchema,
+  adminCompatibilityProposalResponseSchema,
+  adminCompatibilityRecordResponseSchema,
+  adminItemCompatibilityResponseSchema,
+  approveCompatibilityProposalBodySchema,
+  archiveCompatibilityRecordBodySchema,
+  compatibilityCheckBodySchema,
+  compatibilityCheckResponseSchema,
+  compatibilityItemPathSchema,
+  compatibilityProposalPathSchema,
+  compatibilityRecordPathSchema,
+  copyCompatibilityBodySchema,
+  copyCompatibilityResponseSchema,
+  createCompatibilityProposalBodySchema,
+  createCompatibilityRecordBodySchema,
+  itemCompatibilityQuerySchema,
+  rejectCompatibilityProposalBodySchema,
+  supplierCompatibilityProposalPageSchema,
+  supplierCompatibilityProposalQuerySchema,
+  supplierCompatibilityProposalResponseSchema,
+  updateCompatibilityRecordBodySchema,
+} from "./compatibility";
+import {
   editTranslationBodySchema,
   entityTranslationsResponseSchema,
   translationEntityPathSchema,
@@ -1921,6 +1945,206 @@ export const apiRoutes = {
     pathParams: vehicleImportIdPathSchema,
     responses: {
       200: { description: "The import, cancelled", schema: adminVehicleImportResponseSchema },
+    },
+  }),
+  // ------------------------------------------------ compatibility (TASK-015)
+  getItemCompatibility: defineRoute({
+    operationId: "getItemCompatibility",
+    method: "GET",
+    path: "/admin/catalog/items/{itemId}/compatibility",
+    summary:
+      "The compatibility of an item: approved records (archived ones on request) and proposals waiting for review",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityItemPathSchema,
+    query: itemCompatibilityQuerySchema,
+    responses: {
+      200: { description: "The compatibility card", schema: adminItemCompatibilityResponseSchema },
+    },
+  }),
+  createCompatibilityRecord: defineRoute({
+    operationId: "createCompatibilityRecord",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/compatibility",
+    summary:
+      "Add an approved compatibility record to a part or a product: a make and, optionally, finer levels and years, with its grounds",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityItemPathSchema,
+    requestBody: {
+      description: "The conditions and grounds",
+      schema: createCompatibilityRecordBodySchema,
+    },
+    responses: {
+      201: { description: "The record", schema: adminCompatibilityRecordResponseSchema },
+    },
+  }),
+  copyCompatibility: defineRoute({
+    operationId: "copyCompatibility",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/compatibility/copy",
+    summary:
+      "Copy the approved compatibility records of an analog onto the item in one action; records it already has are skipped",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityItemPathSchema,
+    requestBody: { description: "The analog to copy from", schema: copyCompatibilityBodySchema },
+    responses: {
+      200: { description: "What was copied", schema: copyCompatibilityResponseSchema },
+    },
+  }),
+  updateCompatibilityRecord: defineRoute({
+    operationId: "updateCompatibilityRecord",
+    method: "PATCH",
+    path: "/admin/catalog/compatibility/{recordId}",
+    summary: "Change the conditions or the grounds of an approved record",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityRecordPathSchema,
+    requestBody: { description: "What changes", schema: updateCompatibilityRecordBodySchema },
+    responses: {
+      200: { description: "The record", schema: adminCompatibilityRecordResponseSchema },
+    },
+  }),
+  archiveCompatibilityRecord: defineRoute({
+    operationId: "archiveCompatibilityRecord",
+    method: "POST",
+    path: "/admin/catalog/compatibility/{recordId}/archive",
+    summary: "Remove an approved record: it stops counting and stays as history",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityRecordPathSchema,
+    requestBody: {
+      description: "The version it is removed from",
+      schema: archiveCompatibilityRecordBodySchema,
+    },
+    responses: {
+      200: { description: "The record, archived", schema: adminCompatibilityRecordResponseSchema },
+    },
+  }),
+  listCompatibilityProposals: defineRoute({
+    operationId: "listCompatibilityProposals",
+    method: "GET",
+    path: "/admin/compatibility-proposals",
+    summary:
+      "The moderation queue of compatibility proposals (pending by default), oldest first, with the item, the company and whether an equal record is already approved",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminCompatibilityProposalQuerySchema,
+    responses: {
+      200: { description: "Proposals", schema: adminCompatibilityProposalPageSchema },
+    },
+  }),
+  approveCompatibilityProposal: defineRoute({
+    operationId: "approveCompatibilityProposal",
+    method: "POST",
+    path: "/admin/compatibility-proposals/{proposalId}/approve",
+    summary:
+      "Approve a proposal as it is or with corrected conditions: it becomes an approved record (an equal approved record is reused, never duplicated)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityProposalPathSchema,
+    requestBody: {
+      description: "Corrections, if any",
+      schema: approveCompatibilityProposalBodySchema,
+    },
+    responses: {
+      200: {
+        description: "The proposal and its record",
+        schema: adminCompatibilityProposalResponseSchema,
+      },
+    },
+  }),
+  rejectCompatibilityProposal: defineRoute({
+    operationId: "rejectCompatibilityProposal",
+    method: "POST",
+    path: "/admin/compatibility-proposals/{proposalId}/reject",
+    summary: "Reject a proposal with the reason the supplier sees",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityProposalPathSchema,
+    requestBody: { description: "The reason", schema: rejectCompatibilityProposalBodySchema },
+    responses: {
+      200: {
+        description: "The proposal, rejected",
+        schema: adminCompatibilityProposalResponseSchema,
+      },
+    },
+  }),
+  createCompatibilityProposal: defineRoute({
+    operationId: "createCompatibilityProposal",
+    method: "POST",
+    path: "/supplier/catalog/items/{itemId}/compatibility-proposals",
+    summary:
+      "Propose a compatibility record for an active part or product with its grounds; it changes nothing for users until an administrator approves it",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: compatibilityItemPathSchema,
+    requestBody: {
+      description: "The conditions and grounds",
+      schema: createCompatibilityProposalBodySchema,
+    },
+    responses: {
+      201: { description: "The proposal", schema: supplierCompatibilityProposalResponseSchema },
+    },
+  }),
+  listSupplierCompatibilityProposals: defineRoute({
+    operationId: "listSupplierCompatibilityProposals",
+    method: "GET",
+    path: "/supplier/compatibility-proposals",
+    summary: "The own compatibility proposals of the company and their state, newest first",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierCompatibilityProposalQuerySchema,
+    responses: {
+      200: { description: "Proposals", schema: supplierCompatibilityProposalPageSchema },
+    },
+  }),
+  getSupplierCompatibilityProposal: defineRoute({
+    operationId: "getSupplierCompatibilityProposal",
+    method: "GET",
+    path: "/supplier/compatibility-proposals/{proposalId}",
+    summary: "One proposal of the company; one of another company answers like a missing one (404)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: compatibilityProposalPathSchema,
+    responses: {
+      200: { description: "The proposal", schema: supplierCompatibilityProposalResponseSchema },
+    },
+  }),
+  checkCompatibility: defineRoute({
+    operationId: "checkCompatibility",
+    method: "POST",
+    path: "/catalog/compatibility/check",
+    summary:
+      "The compatibility of items (by ids, or a whole subcategory) with a car, complete or partly known: the result, missing levels, whether a list shows the item and whether it needs a warning; open to guests",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    requestBody: { description: "The car and the items", schema: compatibilityCheckBodySchema },
+    responses: {
+      200: { description: "The result per item", schema: compatibilityCheckResponseSchema },
     },
   }),
 } as const;

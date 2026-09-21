@@ -142,6 +142,18 @@ export const auditActions = {
   vehicleImportCancelled: "vehicle_import.cancelled",
   /** The check or the application broke off (`after.error`). */
   vehicleImportFailed: "vehicle_import.failed",
+  /**
+   * Compatibility of items (TASK-015). A record: `created` (by hand, from
+   * a proposal, or copied from an analog — `after.source`), `changed`,
+   * `archived`. A proposal: `created` (by the supplier), `approved`
+   * (`after.recordId`, `after.resolution`), `rejected` (`reason`).
+   */
+  itemCompatibilityCreated: "item_compatibility.created",
+  itemCompatibilityChanged: "item_compatibility.changed",
+  itemCompatibilityArchived: "item_compatibility.archived",
+  compatibilityProposalCreated: "item_compatibility_proposal.created",
+  compatibilityProposalApproved: "item_compatibility_proposal.approved",
+  compatibilityProposalRejected: "item_compatibility_proposal.rejected",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -168,6 +180,8 @@ export const auditEntities = {
   vehicleEngine: "vehicle_engine",
   vehicleModification: "vehicle_modification",
   vehicleImport: "vehicle_import",
+  itemCompatibility: "item_compatibility",
+  itemCompatibilityProposal: "item_compatibility_proposal",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

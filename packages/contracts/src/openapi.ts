@@ -1,4 +1,5 @@
 import { z } from "zod";
+import * as compatibilityContract from "./compatibility";
 import * as vehicleContract from "./vehicles";
 import {
   accessContextSchema,
@@ -191,23 +192,27 @@ import {
  * anonymous type.
  */
 /**
- * Every schema of the vehicle catalog (TASK-014), named after its export
- * without `Schema` (`adminVehicleMakeSchema` → `AdminVehicleMake`).
+ * Every schema of a contract module, named after its export without
+ * `Schema` (`adminVehicleMakeSchema` → `AdminVehicleMake`): the vehicle
+ * catalog (TASK-014) and compatibility (TASK-015).
  */
-const vehicleComponentSchemas: Record<string, z.ZodType> = Object.fromEntries(
-  (Object.entries(vehicleContract) as [string, unknown][])
-    .filter(
-      (entry): entry is [string, z.ZodType] =>
-        entry[0].endsWith("Schema") && entry[1] instanceof z.ZodType,
-    )
-    .map(([name, schema]) => [
-      `${name.charAt(0).toUpperCase()}${name.slice(1, -"Schema".length)}`,
-      schema,
-    ]),
-);
+function moduleComponentSchemas(contract: object): Record<string, z.ZodType> {
+  return Object.fromEntries(
+    (Object.entries(contract) as [string, unknown][])
+      .filter(
+        (entry): entry is [string, z.ZodType] =>
+          entry[0].endsWith("Schema") && entry[1] instanceof z.ZodType,
+      )
+      .map(([name, schema]) => [
+        `${name.charAt(0).toUpperCase()}${name.slice(1, -"Schema".length)}`,
+        schema,
+      ]),
+  );
+}
 
 const componentSchemas: Record<string, z.ZodType> = {
-  ...vehicleComponentSchemas,
+  ...moduleComponentSchemas(vehicleContract),
+  ...moduleComponentSchemas(compatibilityContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,

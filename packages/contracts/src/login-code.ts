@@ -124,6 +124,8 @@ export const rateLimitNameSchema = z.enum([
   // Admin second factor (TASK-006).
   "admin_totp_per_admin",
   "admin_totp_per_ip",
+  // Compatibility proposals of a supplier (TASK-015).
+  "compatibility_proposals_per_supplier",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

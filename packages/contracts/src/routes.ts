@@ -157,7 +157,43 @@ import {
   translationQueueQuerySchema,
   translationTargetPathSchema,
 } from "./translations";
+import {
+  addSupplierLeadNoteBodySchema,
+  adminCityListResponseSchema,
+  adminCityResponseSchema,
+  adminSupplierLeadPageSchema,
+  adminSupplierLeadResponseSchema,
+  adminSupplierPageSchema,
+  adminSupplierResponseSchema,
+  cityIdPathSchema,
+  cityListResponseSchema,
+  createCityBodySchema,
+  createSupplierBodySchema,
+  createSupplierLeadBodySchema,
+  onboardSupplierLeadBodySchema,
+  reorderCitiesBodySchema,
+  setCityStatusBodySchema,
+  setSupplierBlockBodySchema,
+  setSupplierLeadStatusBodySchema,
+  setSupplierPauseBodySchema,
+  setSupplierScheduleBodySchema,
+  setSupplierVerificationBodySchema,
+  submitSupplierLeadBodySchema,
+  supplierAdminPathSchema,
+  supplierCardResponseSchema,
+  supplierInvitationResponseSchema,
+  supplierLeadIdPathSchema,
+  supplierLeadListQuerySchema,
+  supplierLeadReceivedResponseSchema,
+  supplierListQuerySchema,
+  supplierMemberPathSchema,
+  supplierOnboardedResponseSchema,
+  updateCityBodySchema,
+  updateSupplierBodySchema,
+  updateSupplierLeadBodySchema,
+} from "./suppliers";
 import { healthCheckResponseSchema } from "./health";
+import type { RateLimitName } from "./login-code";
 import {
   loginCodeSentResponseSchema,
   loginCodeVerifiedResponseSchema,
@@ -295,6 +331,19 @@ export interface ApiRouteDefinition {
   requestBody?: ApiRequestBodyDefinition;
   /** A file upload instead of a JSON body; never both (TASK-013). */
   upload?: ApiUploadBodyDefinition;
+  /**
+   * A route open without signing in, limited per client address (TASK-016,
+   * ARCHITECTURE 4.26): `limit` names the limit (its settings
+   * `<limit>` and `<limit>_window_seconds`); over it — 429 `RATE_LIMITED`
+   * with `Retry-After`. `whenUnavailable`: what happens when the limit
+   * can't be counted (Redis down) — `refuse` (503 `SERVICE_UNAVAILABLE`,
+   * for anything that writes) or `allow` (a read is served). The server
+   * refuses to bind such a route without the guard that counts it.
+   */
+  rateLimit?: {
+    limit: RateLimitName;
+    whenUnavailable: "refuse" | "allow";
+  };
   responses: Readonly<Record<number, ApiResponseDefinition>>;
 }
 
@@ -2139,12 +2188,368 @@ export const apiRoutes = {
     method: "POST",
     path: "/catalog/compatibility/check",
     summary:
-      "The compatibility of items (by ids, or a whole subcategory) with a car, complete or partly known: the result, missing levels, whether a list shows the item and whether it needs a warning; open to guests",
+      "The compatibility of items (by ids, or a whole subcategory page by page) with a car, complete or partly known: the result, missing levels, whether a list shows the item and whether it needs a warning; open to guests",
     tag: "catalog",
     clientVersionCheck: "enforced",
+    rateLimit: { limit: "compatibility_check_per_ip", whenUnavailable: "allow" },
     requestBody: { description: "The car and the items", schema: compatibilityCheckBodySchema },
     responses: {
       200: { description: "The result per item", schema: compatibilityCheckResponseSchema },
+    },
+  }),
+  getCities: defineRoute({
+    operationId: "getCities",
+    method: "GET",
+    path: "/cities",
+    summary:
+      "Active cities in their order, in the language of the request, with the default one; open to guests, cacheable for a minute",
+    tag: "public",
+    clientVersionCheck: "enforced",
+    responses: {
+      200: { description: "The cities", schema: cityListResponseSchema },
+    },
+  }),
+  submitSupplierLead: defineRoute({
+    operationId: "submitSupplierLead",
+    method: "POST",
+    path: "/supplier-leads",
+    summary:
+      "A request to connect a company (the public form, without signing in); the same answer whether the company is known or not",
+    tag: "public",
+    clientVersionCheck: "enforced",
+    rateLimit: { limit: "supplier_lead_per_ip", whenUnavailable: "refuse" },
+    requestBody: { description: "The form", schema: submitSupplierLeadBodySchema },
+    responses: {
+      202: { description: "The request was received", schema: supplierLeadReceivedResponseSchema },
+    },
+  }),
+  listAdminCities: defineRoute({
+    operationId: "listAdminCities",
+    method: "GET",
+    path: "/admin/cities",
+    summary: "Every city in its order, archived ones included, with the default one marked",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    responses: {
+      200: { description: "The cities", schema: adminCityListResponseSchema },
+    },
+  }),
+  createCity: defineRoute({
+    operationId: "createCity",
+    method: "POST",
+    path: "/admin/cities",
+    summary: "Add a city (names kk/ru/en, time zone); it goes last",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "The new city", schema: createCityBodySchema },
+    responses: {
+      201: { description: "The city", schema: adminCityResponseSchema },
+    },
+  }),
+  updateCity: defineRoute({
+    operationId: "updateCity",
+    method: "PATCH",
+    path: "/admin/cities/{cityId}",
+    summary: "Rename a city or change its time zone",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: cityIdPathSchema,
+    requestBody: { description: "What changes", schema: updateCityBodySchema },
+    responses: {
+      200: { description: "The city", schema: adminCityResponseSchema },
+    },
+  }),
+  setCityStatus: defineRoute({
+    operationId: "setCityStatus",
+    method: "POST",
+    path: "/admin/cities/{cityId}/status",
+    summary: "Archive or restore a city (there is no deletion)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: cityIdPathSchema,
+    requestBody: { description: "The new status", schema: setCityStatusBodySchema },
+    responses: {
+      200: { description: "The city", schema: adminCityResponseSchema },
+    },
+  }),
+  reorderCities: defineRoute({
+    operationId: "reorderCities",
+    method: "PUT",
+    path: "/admin/cities/order",
+    summary: "Put every city in a new order",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "Every city, in order", schema: reorderCitiesBodySchema },
+    responses: {
+      200: { description: "The cities in the new order", schema: adminCityListResponseSchema },
+    },
+  }),
+  listSupplierLeads: defineRoute({
+    operationId: "listSupplierLeads",
+    method: "GET",
+    path: "/admin/supplier-leads",
+    summary: "Connection requests, newest first, with counts per status of the funnel",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: supplierLeadListQuerySchema,
+    responses: {
+      200: { description: "A page of requests", schema: adminSupplierLeadPageSchema },
+    },
+  }),
+  createSupplierLead: defineRoute({
+    operationId: "createSupplierLead",
+    method: "POST",
+    path: "/admin/supplier-leads",
+    summary: "Add a connection request by hand after a call",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "The request", schema: createSupplierLeadBodySchema },
+    responses: {
+      201: { description: "The request", schema: adminSupplierLeadResponseSchema },
+    },
+  }),
+  getSupplierLead: defineRoute({
+    operationId: "getSupplierLead",
+    method: "GET",
+    path: "/admin/supplier-leads/{leadId}",
+    summary: "A connection request with its notes and the other requests with its BIN",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierLeadIdPathSchema,
+    responses: {
+      200: { description: "The request", schema: adminSupplierLeadResponseSchema },
+    },
+  }),
+  updateSupplierLead: defineRoute({
+    operationId: "updateSupplierLead",
+    method: "PATCH",
+    path: "/admin/supplier-leads/{leadId}",
+    summary: "Correct the data of a request not yet onboarded",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierLeadIdPathSchema,
+    requestBody: { description: "What changes", schema: updateSupplierLeadBodySchema },
+    responses: {
+      200: { description: "The request", schema: adminSupplierLeadResponseSchema },
+    },
+  }),
+  setSupplierLeadStatus: defineRoute({
+    operationId: "setSupplierLeadStatus",
+    method: "POST",
+    path: "/admin/supplier-leads/{leadId}/status",
+    summary: "Move a request along the funnel; rejecting and returning to work need a reason",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierLeadIdPathSchema,
+    requestBody: { description: "The new status", schema: setSupplierLeadStatusBodySchema },
+    responses: {
+      200: { description: "The request", schema: adminSupplierLeadResponseSchema },
+    },
+  }),
+  addSupplierLeadNote: defineRoute({
+    operationId: "addSupplierLeadNote",
+    method: "POST",
+    path: "/admin/supplier-leads/{leadId}/notes",
+    summary: "Add a note to a request",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierLeadIdPathSchema,
+    requestBody: { description: "The note", schema: addSupplierLeadNoteBodySchema },
+    responses: {
+      201: { description: "The request", schema: adminSupplierLeadResponseSchema },
+    },
+  }),
+  onboardSupplierLead: defineRoute({
+    operationId: "onboardSupplierLead",
+    method: "POST",
+    path: "/admin/supplier-leads/{leadId}/onboard",
+    summary:
+      "Create the supplier from a request with a signed contract: the company, its pickup point, the first employee and the invitation, in one transaction",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierLeadIdPathSchema,
+    requestBody: {
+      description: "The supplier; what is left out comes from the request",
+      schema: onboardSupplierLeadBodySchema,
+    },
+    responses: {
+      201: { description: "The supplier", schema: supplierOnboardedResponseSchema },
+    },
+  }),
+  listSuppliers: defineRoute({
+    operationId: "listSuppliers",
+    method: "GET",
+    path: "/admin/suppliers",
+    summary: "Suppliers by name, filtered by state, city and type, searched by name and BIN",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: supplierListQuerySchema,
+    responses: {
+      200: { description: "A page of suppliers", schema: adminSupplierPageSchema },
+    },
+  }),
+  createSupplier: defineRoute({
+    operationId: "createSupplier",
+    method: "POST",
+    path: "/admin/suppliers",
+    summary:
+      "Create a supplier without a request: the company, its pickup point, the first employee and the invitation",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "The supplier", schema: createSupplierBodySchema },
+    responses: {
+      201: { description: "The supplier", schema: supplierOnboardedResponseSchema },
+    },
+  }),
+  getAdminSupplier: defineRoute({
+    operationId: "getAdminSupplier",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}",
+    summary: "The card of a supplier: profile, pickup point, schedule, states, employees",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    responses: {
+      200: { description: "The supplier", schema: adminSupplierResponseSchema },
+    },
+  }),
+  updateSupplier: defineRoute({
+    operationId: "updateSupplier",
+    method: "PATCH",
+    path: "/admin/suppliers/{supplierId}",
+    summary: "Change the profile of a supplier and its pickup point",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    requestBody: { description: "What changes", schema: updateSupplierBodySchema },
+    responses: {
+      200: { description: "The supplier", schema: adminSupplierResponseSchema },
+    },
+  }),
+  setAdminSupplierSchedule: defineRoute({
+    operationId: "setAdminSupplierSchedule",
+    method: "PUT",
+    path: "/admin/suppliers/{supplierId}/schedule",
+    summary: "Replace the hours by day of the week and the days off of a supplier",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    requestBody: { description: "The schedule", schema: setSupplierScheduleBodySchema },
+    responses: {
+      200: { description: "The supplier", schema: adminSupplierResponseSchema },
+    },
+  }),
+  setSupplierVerification: defineRoute({
+    operationId: "setSupplierVerification",
+    method: "POST",
+    path: "/admin/suppliers/{supplierId}/verification",
+    summary:
+      "Make a supplier a verified partner (with the contract date) or lift it (with the reason)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    requestBody: { description: "Verified or not", schema: setSupplierVerificationBodySchema },
+    responses: {
+      200: { description: "The supplier", schema: adminSupplierResponseSchema },
+    },
+  }),
+  setSupplierPause: defineRoute({
+    operationId: "setSupplierPause",
+    method: "POST",
+    path: "/admin/suppliers/{supplierId}/pause",
+    summary:
+      "Pause a supplier (billing or an administrator's decision) or lift the pause; the cabinet stays open",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    requestBody: { description: "Paused or not, and why", schema: setSupplierPauseBodySchema },
+    responses: {
+      200: { description: "The supplier", schema: adminSupplierResponseSchema },
+    },
+  }),
+  setSupplierBlock: defineRoute({
+    operationId: "setSupplierBlock",
+    method: "POST",
+    path: "/admin/suppliers/{supplierId}/block",
+    summary: "Block a supplier or lift the blocking, with the reason; the cabinet stays open",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    requestBody: { description: "Blocked or not, and why", schema: setSupplierBlockBodySchema },
+    responses: {
+      200: { description: "The supplier", schema: adminSupplierResponseSchema },
+    },
+  }),
+  resendSupplierInvitation: defineRoute({
+    operationId: "resendSupplierInvitation",
+    method: "POST",
+    path: "/admin/suppliers/{supplierId}/members/{memberId}/invitations",
+    summary: "Send the invitation to an employee again (limited in frequency)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierMemberPathSchema,
+    responses: {
+      202: {
+        description: "The invitation is on the queue",
+        schema: supplierInvitationResponseSchema,
+      },
+    },
+  }),
+  setSupplierSchedule: defineRoute({
+    operationId: "setSupplierSchedule",
+    method: "PUT",
+    path: "/supplier/company/schedule",
+    summary:
+      "The cabinet replaces its own hours by day of the week and days off (everything else of the card is the administrator's)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "The schedule", schema: setSupplierScheduleBodySchema },
+    responses: {
+      200: { description: "The company's card", schema: supplierCardResponseSchema },
     },
   }),
 } as const;

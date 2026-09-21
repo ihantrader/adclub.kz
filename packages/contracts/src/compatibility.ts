@@ -22,6 +22,12 @@ export const COMPATIBILITY_REJECTION_REASON_MAX_LENGTH = 500;
 export const COMPATIBILITY_CHECK_MAX_ITEMS = 500;
 export const COMPATIBILITY_PAGE_MAX_SIZE = 100;
 export const COMPATIBILITY_PAGE_DEFAULT_SIZE = 50;
+/**
+ * Items one answer about a whole subcategory holds at most (TASK-016): the
+ * rest comes page by page with `cursor` — an open route never answers
+ * without a bound.
+ */
+export const COMPATIBILITY_CHECK_CATEGORY_PAGE_MAX = 500;
 
 const YEAR_MIN = 1900;
 const YEAR_MAX = 2100;
@@ -449,11 +455,19 @@ export type CompatibilityVehicle = z.infer<typeof compatibilityVehicleSchema>;
  * Items to check: `itemIds` (up to `COMPATIBILITY_CHECK_MAX_ITEMS`) or a
  * whole subcategory by `categoryId` — exactly one of them. Without
  * `vehicle` — no car is chosen (D-029: everything is shown).
+ *
+ * A subcategory is answered page by page, newest items first (TASK-016):
+ * `limit` items at most (default and maximum
+ * `COMPATIBILITY_CHECK_CATEGORY_PAGE_MAX`), the next page with `cursor` =
+ * `nextCursor` of the previous answer and the same car. Both are refused
+ * with `itemIds`.
  */
 export const compatibilityCheckBodySchema = z.object({
   vehicle: compatibilityVehicleSchema.nullable().optional(),
   itemIds: z.array(z.uuid()).min(1).max(COMPATIBILITY_CHECK_MAX_ITEMS).optional(),
   categoryId: z.uuid().optional(),
+  limit: z.number().int().min(1).max(COMPATIBILITY_CHECK_CATEGORY_PAGE_MAX).optional(),
+  cursor: z.string().min(1).max(300).optional(),
 });
 
 export type CompatibilityCheckBody = z.infer<typeof compatibilityCheckBodySchema>;
@@ -516,6 +530,11 @@ export const compatibilityCheckResponseSchema = z.object({
    * hidden subcategory — alike.
    */
   notFound: z.array(z.uuid()),
+  /**
+   * A subcategory with more items: pass as `cursor` for the next page.
+   * `null` — the last page, and always for `itemIds`.
+   */
+  nextCursor: z.string().nullable(),
 });
 
 export type CompatibilityCheckResponse = z.infer<typeof compatibilityCheckResponseSchema>;

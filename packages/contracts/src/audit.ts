@@ -30,7 +30,11 @@ export const auditActions = {
   adminTotpReset: "admin.totp_reset",
   /** An administrator replaced their own backup codes. */
   adminBackupCodesRegenerated: "admin.backup_codes_regenerated",
-  /** A company was created (development operator command until TASK-016). */
+  /**
+   * A company was created: by the development operator command, or (since
+   * TASK-016) by an administrator — from a request or by hand. `after`:
+   * name, city, type, whether from a request.
+   */
   supplierCreated: "supplier.created",
   /** An employee was added to a company (development operator command until TASK-017). */
   supplierMemberAdded: "supplier_member.added",
@@ -154,6 +158,38 @@ export const auditActions = {
   compatibilityProposalCreated: "item_compatibility_proposal.created",
   compatibilityProposalApproved: "item_compatibility_proposal.approved",
   compatibilityProposalRejected: "item_compatibility_proposal.rejected",
+  /**
+   * Cities (TASK-016). `created`: the city; `changed`: names or time zone;
+   * `status_changed`: archived or restored; `reordered`: the entity is
+   * `cities`, `before`/`after` — the ids in order.
+   */
+  cityCreated: "city.created",
+  cityChanged: "city.changed",
+  cityStatusChanged: "city.status_changed",
+  citiesReordered: "city.reordered",
+  /**
+   * Connection requests (TASK-016). `created`: from the public form (actor
+   * `system`) or by hand; `after` never holds the phone number or the БИН
+   * (the request row does). `changed`: corrected data; `status_changed`:
+   * a move along the funnel with the reason (also `onboarded` when the
+   * supplier was created from it); `note_added`.
+   */
+  supplierLeadCreated: "supplier_lead.created",
+  supplierLeadChanged: "supplier_lead.changed",
+  supplierLeadStatusChanged: "supplier_lead.status_changed",
+  supplierLeadNoteAdded: "supplier_lead.note_added",
+  /** The profile of a supplier: `before`/`after` — the changed fields. */
+  supplierChanged: "supplier.changed",
+  /** Hours and days off, by an administrator or the supplier itself (actor `supplier`). */
+  supplierScheduleChanged: "supplier.schedule_changed",
+  /** Verified partner set (with the contract date) or lifted (with the reason). */
+  supplierVerificationChanged: "supplier.verification_changed",
+  /** Paused (reason `billing`/`admin`) or the pause lifted; `reason` — the note. */
+  supplierPauseChanged: "supplier.pause_changed",
+  /** Blocked or unblocked; `reason` — why. */
+  supplierBlockChanged: "supplier.block_changed",
+  /** An invitation to an employee was put on the queue (the first one, or again). */
+  supplierInvitationRequested: "supplier_invitation.requested",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -182,6 +218,9 @@ export const auditEntities = {
   vehicleImport: "vehicle_import",
   itemCompatibility: "item_compatibility",
   itemCompatibilityProposal: "item_compatibility_proposal",
+  city: "city",
+  supplierLead: "supplier_lead",
+  supplierInvitation: "supplier_invitation",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

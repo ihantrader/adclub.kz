@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { supplierCardSchema } from "./suppliers";
 
 /**
  * Where a protected route can be used (ARCHITECTURE 8.3). Rights come
@@ -63,12 +64,14 @@ export type SupplierMembershipListResponse = z.infer<typeof supplierMembershipLi
 export const supplierCompanyResponseSchema = z.object({
   supplier: supplierSummarySchema.extend({
     /**
-     * Pause and blocking don't close the cabinet (SCREENS 6.0); the values
-     * gain meaning with the supplier lifecycle (TASK-016). New values may
+     * `active`, `paused` or `blocked` (TASK-016; `company.state`). Pause
+     * and blocking don't close the cabinet (SCREENS 6.0). New values may
      * appear.
      */
     status: z.string(),
   }),
+  /** The company's card (TASK-016): profile, pickup point, schedule, states. */
+  company: supplierCardSchema,
 });
 
 export type SupplierCompanyResponse = z.infer<typeof supplierCompanyResponseSchema>;

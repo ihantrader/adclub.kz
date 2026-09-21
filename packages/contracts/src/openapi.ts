@@ -1,5 +1,6 @@
 import { z } from "zod";
 import * as compatibilityContract from "./compatibility";
+import * as supplierContract from "./suppliers";
 import * as vehicleContract from "./vehicles";
 import {
   accessContextSchema,
@@ -194,7 +195,8 @@ import {
 /**
  * Every schema of a contract module, named after its export without
  * `Schema` (`adminVehicleMakeSchema` → `AdminVehicleMake`): the vehicle
- * catalog (TASK-014) and compatibility (TASK-015).
+ * catalog (TASK-014), compatibility (TASK-015), cities and suppliers
+ * (TASK-016).
  */
 function moduleComponentSchemas(contract: object): Record<string, z.ZodType> {
   return Object.fromEntries(
@@ -213,6 +215,7 @@ function moduleComponentSchemas(contract: object): Record<string, z.ZodType> {
 const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(vehicleContract),
   ...moduleComponentSchemas(compatibilityContract),
+  ...moduleComponentSchemas(supplierContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,
@@ -536,6 +539,7 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
         security: [{ sessionAccessToken: [] }],
         "x-access-contexts": [...(route.contexts ?? [])],
       }),
+      ...(route.rateLimit && { "x-rate-limit": { ...route.rateLimit } }),
       ...(route.requestBody && {
         requestBody: {
           description: route.requestBody.description,
@@ -587,6 +591,11 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
         name: "vehicles",
         description:
           "The vehicle catalog for choosing a car, for every client, guests included (no session needed)",
+      },
+      {
+        name: "public",
+        description:
+          "Open without signing in: cities and the connection request form (limited per client address)",
       },
       { name: "admin", description: "Admin panel (context `admin`)" },
     ],

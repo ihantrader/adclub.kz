@@ -158,6 +158,24 @@ import { clientPlatformSchema } from "./client";
  * - `COMPATIBILITY_PROPOSAL_DUPLICATE` (409): the company already waits
  *   on the same proposal for this item.
  *
+ * Cities and suppliers (TASK-016, ARCHITECTURE 4.26):
+ * - `CITY_VERSION_CONFLICT` (409): the city was changed by someone else;
+ *   `details` is `SupplierVersionConflictDetails` — reload and decide again.
+ * - `CITY_DUPLICATE` (409): another city has this code or name (case
+ *   ignored); `details` is `CityDuplicateDetails`.
+ * - `CITY_ORDER_MISMATCH` (409): the new order doesn't name every city
+ *   exactly once — reload.
+ * - `CITY_ARCHIVED` (409): an archived city can't be chosen for a request
+ *   or a supplier — restore it or choose another.
+ * - `SUPPLIER_VERSION_CONFLICT` (409): the request or the supplier was
+ *   changed by someone else; `details` is `SupplierVersionConflictDetails`.
+ * - `SUPPLIER_BIN_TAKEN` (409): a supplier with this БИН exists — one БИН,
+ *   one supplier; `details` is `SupplierBinTakenDetails`.
+ * - `SUPPLIER_LEAD_STATE` (409): the request can't do this in its status;
+ *   `details` is `SupplierLeadStateDetails`.
+ * - `SUPPLIER_STATE` (409): nothing to lift (or already blocked);
+ *   `details` is `SupplierStateDetails`.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -254,6 +272,15 @@ export const errorCodeSchema = z.enum([
   "COMPATIBILITY_NOT_ANALOG",
   "COMPATIBILITY_PROPOSAL_STATE",
   "COMPATIBILITY_PROPOSAL_DUPLICATE",
+  // Cities and suppliers (TASK-016, ARCHITECTURE 4.26).
+  "CITY_VERSION_CONFLICT",
+  "CITY_DUPLICATE",
+  "CITY_ORDER_MISMATCH",
+  "CITY_ARCHIVED",
+  "SUPPLIER_VERSION_CONFLICT",
+  "SUPPLIER_BIN_TAKEN",
+  "SUPPLIER_LEAD_STATE",
+  "SUPPLIER_STATE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

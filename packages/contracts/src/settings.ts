@@ -78,6 +78,11 @@ export const settingConstraintsSchema = z.object({
   schema: z.record(z.string(), z.unknown()).optional(),
   /** `app_version`: the highest version accepted (the admin panel minimum — its current release). */
   maxVersion: z.string().optional(),
+  /**
+   * `string`: the value names a record of a directory — `city`: an active
+   * city of `GET /admin/cities` by its code (TASK-016).
+   */
+  reference: z.enum(["city"]).optional(),
 });
 
 export type SettingConstraints = z.infer<typeof settingConstraintsSchema>;

@@ -126,6 +126,13 @@ export const rateLimitNameSchema = z.enum([
   "admin_totp_per_ip",
   // Compatibility proposals of a supplier (TASK-015).
   "compatibility_proposals_per_supplier",
+  // Routes open without signing in (TASK-016, ARCHITECTURE 4.26): per client address.
+  "supplier_lead_per_ip",
+  "compatibility_check_per_ip",
+  // The connection request form: per phone number.
+  "supplier_lead_per_phone",
+  // Sending an invitation to an employee again.
+  "supplier_invitation_resend",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

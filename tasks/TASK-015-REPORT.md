@@ -86,7 +86,7 @@ COMPLETED
 - **AC-8 — PASS.** «serves the admin routes to the admin context and proposals to the cabinet only»: 8 админских маршрутов — 403 мобильной и кабинету, 401 гостю; 3 маршрута кабинета — 403 мобильной и админке, 401 гостю; ничего не изменилось. Своя компания — отдельные тесты AC-3 (чужое — 404, пустой список). Контракт — `compatibility.test.ts`.
 - **AC-9 — PASS.** «fills the examples once and gives the scenarios of the task» (`created 3` → `existing 3`) и dev (`created 0, existing 3` при повторе).
 - **AC-10 — PASS (с оговоркой о CI — см. AC-11).** Контракт, OpenAPI, клиент (`@adclub/api-client` строится по `apiRoutes`, новые маршруты доступны без правок) — `openapi:check` PASS, `openapi:compat` — совместимо, трейлер не нужен. Миграция обратима — тест отката в `database.integration.test.ts` и ручной down/up в dev. Таблицы в сверке схемы (`orm-tables.ts`, `schema-drift`). Существующие тесты не ослаблены — только дополнены списки. Перехват вывода — в каждом интеграционном файле, секреты не найдены.
-- **AC-11 — CI_RESULT.**
+- **AC-11 — PASS.** Коммиты по D-024 — раздел «Commits». CI на `main`: прогон **#86** (id 35589944629) коммита `1b28e92` «Add the TASK-015 report» (последний коммит пуша с кодом, документацией и отчётом) — `completed / success` с первой попытки, по `gh run view`; job `ci` включает format, lint, typecheck, test, test:integration, build, openapi:check, openapi:compat и проверку остановки. Коммит с этой записью — отдельный, его прогон проверен так же (см. ответ в сессии).
 - **AC-12 — PASS.** ARCHITECTURE.md 0.28: 4.25 (I231–I243), 5.3, 14, версия, история; CLAUDE.md, блок 0: модуль, dev-команда, как добавить, предложить, подтвердить и проверить.
 
 ## Commits
@@ -96,7 +96,8 @@ COMPLETED
 2. `d637db0` — Add the compatibility contract: `packages/contracts/src/{compatibility.ts, compatibility.test.ts, audit.ts, error.ts, index.ts, login-code.ts, openapi.ts, openapi.test.ts, routes.ts}`, `apps/api/openapi.json`.
 3. `7683a9d` — Keep compatibility of items with cars and check it for a car: миграция `infra/migrations/1790150000000_create-item-compatibility.sql`, модуль `apps/api/src/modules/compatibility/*` (13 файлов), подключение (`app.module.ts`, `operator.ts`, `orm-tables.ts`, `testing/database.ts`), экспорт таблиц (`catalog/index.ts`, `identity/index.ts`, `vehicles/index.ts`), настройка (`settings/registry/registry.ts`), `vehicles/dev-vehicle-seed.ts`, дополненные тесты (`database.integration`, `schema-drift`, `catalog.integration`, `catalog-items.integration`, `access.integration`, `registry.test`, `settings.integration`).
 4. `03b9797` — Describe compatibility in the architecture and the development guide: `ARCHITECTURE.md`, `CLAUDE.md`.
-5. Отчёт — `tasks/TASK-015-REPORT.md` (этот файл, отдельным коммитом; номер прогона CI — в AC-11).
+5. `1b28e92` — Add the TASK-015 report: `tasks/TASK-015-REPORT.md`.
+6. Запись номера прогона CI — `tasks/TASK-015-REPORT.md` (отдельный коммит «Record the CI run of the TASK-015 report commit»).
 
 ## Errors & Fixes
 - **OpenAPI не собирался:** схемы нового модуля не были зарегистрированы в компонентах — сборка компонентов обобщена на модули (`vehicles`, `compatibility`). `transform` в схеме запроса не выражается в JSON Schema — заменён на enum `"true"|"false"`.

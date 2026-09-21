@@ -480,5 +480,7 @@ export type {
   TranslationText,
 } from "./translations";
 
+export * from "./vehicles";
+
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

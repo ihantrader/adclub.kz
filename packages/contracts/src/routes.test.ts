@@ -29,7 +29,10 @@ describe("buildRoutePath", () => {
 
 describe("upload routes", () => {
   it("names every route whose body is a file, and only those", () => {
-    expect(uploadRoutePaths).toEqual(["/admin/catalog/items/{itemId}/photos"]);
+    expect(uploadRoutePaths).toEqual([
+      "/admin/catalog/items/{itemId}/photos",
+      "/admin/vehicles/imports",
+    ]);
     expect(isUploadRoute(apiRoutes.uploadItemPhoto)).toBe(true);
     expect(isUploadRoute(apiRoutes.createCatalogItem)).toBe(false);
   });

@@ -434,6 +434,35 @@ describe("createApiClient", () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
+    it("uploads a vehicle import file as CSV bytes and walks the client choice (TASK-014)", async () => {
+      const fetchImpl = vi
+        .fn<FetchLike>()
+        .mockResolvedValueOnce(jsonResponse(201, { import: {} }))
+        .mockResolvedValue(jsonResponse(200, { modifications: [] }));
+      const client = clientWith(fetchImpl, { getAccessToken: () => "admin-token" });
+      const file = new TextEncoder().encode("make,model\r\nGeely,Coolray\r\n");
+
+      await client.uploadVehicleImport(file, {
+        contentType: "text/csv",
+        query: { fileName: "Geely KZ.csv" },
+      });
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      expect(url).toBe("http://api.test/admin/vehicles/imports?fileName=Geely%20KZ.csv");
+      expect(init.headers).toMatchObject({ "Content-Type": "text/csv" });
+      expect(new Uint8Array(init.body as ArrayBuffer)).toEqual(file);
+      await expect(
+        client.uploadVehicleImport(new Blob(["<svg/>"], { type: "image/svg+xml" })),
+      ).rejects.toThrow(/text\/csv/);
+
+      await client.getVehicleGenerationModifications(
+        { generationId: ITEM_ID },
+        { query: { market: "kz" } },
+      );
+      expect(fetchImpl.mock.calls[1]![0]).toBe(
+        `http://api.test/vehicles/generations/${ITEM_ID}/modifications?market=kz`,
+      );
+    });
+
     it("tells an expired access token from an ended session", async () => {
       const respond = (code: string) =>
         vi

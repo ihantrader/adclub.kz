@@ -102,6 +102,46 @@ export const auditActions = {
   catalogItemPhotoStatusChanged: "catalog_item_photo.status_changed",
   /** The photos of an item put in a new order; the entity is the item. */
   catalogItemPhotosReordered: "catalog_item_photo.reordered",
+  /**
+   * The vehicle catalog (TASK-014). `created`: the record; `changed`:
+   * `before`/`after` with the changed fields and the new version;
+   * `status_changed`: archived or restored.
+   */
+  vehicleOptionCreated: "vehicle_option.created",
+  vehicleOptionChanged: "vehicle_option.changed",
+  vehicleOptionStatusChanged: "vehicle_option.status_changed",
+  vehicleMakeCreated: "vehicle_make.created",
+  vehicleMakeChanged: "vehicle_make.changed",
+  vehicleMakeStatusChanged: "vehicle_make.status_changed",
+  vehicleModelCreated: "vehicle_model.created",
+  /** Also a move to another make (`makeId`). */
+  vehicleModelChanged: "vehicle_model.changed",
+  vehicleModelStatusChanged: "vehicle_model.status_changed",
+  vehicleGenerationCreated: "vehicle_generation.created",
+  /** Also a move to another model (`modelId`). */
+  vehicleGenerationChanged: "vehicle_generation.changed",
+  vehicleGenerationStatusChanged: "vehicle_generation.status_changed",
+  vehicleEngineCreated: "vehicle_engine.created",
+  vehicleEngineChanged: "vehicle_engine.changed",
+  vehicleEngineStatusChanged: "vehicle_engine.status_changed",
+  vehicleModificationCreated: "vehicle_modification.created",
+  vehicleModificationChanged: "vehicle_modification.changed",
+  vehicleModificationStatusChanged: "vehicle_modification.status_changed",
+  /** A file was uploaded for import. `after`: file name, size, checksum, rows. */
+  vehicleImportUploaded: "vehicle_import.uploaded",
+  /** The administrator confirmed the report; applying began. `after`: the planned counts. */
+  vehicleImportApplyStarted: "vehicle_import.apply_started",
+  /**
+   * Applying finished (written by the worker for the administrator who
+   * confirmed it). `after`: what was created, updated, unchanged and
+   * rejected. What each row did is kept with the import's rows, and every
+   * record it created carries the import (`importId`).
+   */
+  vehicleImportApplied: "vehicle_import.applied",
+  /** The administrator declined the import before it was applied. */
+  vehicleImportCancelled: "vehicle_import.cancelled",
+  /** The check or the application broke off (`after.error`). */
+  vehicleImportFailed: "vehicle_import.failed",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -121,6 +161,13 @@ export const auditEntities = {
   catalogTranslation: "catalog_translation",
   /** One photo of an item; a reorder names the item instead (TASK-013). */
   catalogItemPhoto: "catalog_item_photo",
+  vehicleOption: "vehicle_option",
+  vehicleMake: "vehicle_make",
+  vehicleModel: "vehicle_model",
+  vehicleGeneration: "vehicle_generation",
+  vehicleEngine: "vehicle_engine",
+  vehicleModification: "vehicle_modification",
+  vehicleImport: "vehicle_import",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

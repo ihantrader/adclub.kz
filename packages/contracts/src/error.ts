@@ -118,6 +118,25 @@ import { clientPlatformSchema } from "./client";
  * - `CATALOG_PHOTO_FILES_DELETED` (409): the files of this photo were
  *   removed after their retention — nothing brings it back, upload again.
  *
+ * The vehicle catalog (TASK-014, ARCHITECTURE 4.24):
+ * - `VEHICLE_VERSION_CONFLICT` (409): the record was changed by someone
+ *   else since the version the change was made from; nothing was written.
+ *   `details` is `VehicleVersionConflictDetails`.
+ * - `VEHICLE_DUPLICATE` (409): «Такая запись уже есть» — a make or model
+ *   with this name or spelling, a generation with this name, an engine
+ *   with this code, an option with this code or name, or a modification
+ *   with the same set of values; `details` is `VehicleDuplicateDetails`.
+ * - `VEHICLE_PARENT_ARCHIVED` (409): the make, model or generation above is
+ *   archived — restore it (or choose another one) first.
+ * - `VEHICLE_REFERENCE_ARCHIVED` (409): an archived engine or option can't
+ *   be chosen; `details` is `VehicleReferenceArchivedDetails`.
+ * - `VEHICLE_YEARS_INVALID` (400): `details` is `VehicleYearsInvalidDetails`.
+ * - `VEHICLE_IMPORT_FILE_INVALID` (400): the import file can't be taken;
+ *   `details` is `VehicleImportFileInvalidDetails`.
+ * - `VEHICLE_IMPORT_STATE` (409): the import isn't in a state that allows
+ *   this (applied twice, cancelled after it started to apply…); `details`
+ *   is `VehicleImportStateDetails`.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -196,6 +215,14 @@ export const errorCodeSchema = z.enum([
   "CATALOG_PHOTO_INVALID",
   "CATALOG_PHOTO_NOT_APPROVED",
   "CATALOG_PHOTO_FILES_DELETED",
+  // The vehicle catalog (TASK-014, ARCHITECTURE 4.24).
+  "VEHICLE_VERSION_CONFLICT",
+  "VEHICLE_DUPLICATE",
+  "VEHICLE_PARENT_ARCHIVED",
+  "VEHICLE_REFERENCE_ARCHIVED",
+  "VEHICLE_YEARS_INVALID",
+  "VEHICLE_IMPORT_FILE_INVALID",
+  "VEHICLE_IMPORT_STATE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

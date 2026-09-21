@@ -1,4 +1,5 @@
 import { z } from "zod";
+import * as vehicleContract from "./vehicles";
 import {
   accessContextSchema,
   administratorListResponseSchema,
@@ -189,7 +190,24 @@ import {
  * listed here fails generation, so the document never silently inlines an
  * anonymous type.
  */
+/**
+ * Every schema of the vehicle catalog (TASK-014), named after its export
+ * without `Schema` (`adminVehicleMakeSchema` → `AdminVehicleMake`).
+ */
+const vehicleComponentSchemas: Record<string, z.ZodType> = Object.fromEntries(
+  (Object.entries(vehicleContract) as [string, unknown][])
+    .filter(
+      (entry): entry is [string, z.ZodType] =>
+        entry[0].endsWith("Schema") && entry[1] instanceof z.ZodType,
+    )
+    .map(([name, schema]) => [
+      `${name.charAt(0).toUpperCase()}${name.slice(1, -"Schema".length)}`,
+      schema,
+    ]),
+);
+
 const componentSchemas: Record<string, z.ZodType> = {
+  ...vehicleComponentSchemas,
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,
@@ -559,6 +577,11 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       {
         name: "catalog",
         description: "The catalog for every client, guests included (no session needed)",
+      },
+      {
+        name: "vehicles",
+        description:
+          "The vehicle catalog for choosing a car, for every client, guests included (no session needed)",
       },
       { name: "admin", description: "Admin panel (context `admin`)" },
     ],

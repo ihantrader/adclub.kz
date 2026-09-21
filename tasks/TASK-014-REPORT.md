@@ -113,7 +113,7 @@ Dev на этой машине: API (`src/main.ts`) и worker (`src/worker.ts`) 
 - **AC-9 — PASS.** Тест «serves the admin routes to the admin context only»: 31 маршрут `/admin/vehicles`, у каждого `contexts: ["admin"]`; без входа 401 `AUTH_REQUIRED`, мобильная сессия и кабинет — 403 `FORBIDDEN`; журнал и импорты не изменились. Контракт — `vehicles.test.ts`.
 - **AC-10 — PASS.** Тест «fills the catalog once…»: повторный запуск создаёт 0; выбор на казахском по данным заполнения; вне development/test — `DevVehicleSeedError`. В dev то же проверено командой (см. UAT). Примеры файлов: `apps/api/fixtures/vehicles/`.
 - **AC-11 — PASS.** Контракт, OpenAPI и клиент аддитивны (`openapi:compat` — совместимо, трейлер не нужен). Миграция обратима (тест цикла и ручной `down`/`up`). Таблицы добавлены в `orm-tables.ts`, сверка схемы проходит. Существующие тесты не ослаблены: в них добавлены только новые элементы списков. Перехват вывода чист.
-- **AC-12 — PASS.** Коммиты по D-024, состав каждого — в разделе Commits; в каждый добавлялись только явно перечисленные файлы, состав проверялся `git diff --cached --stat`. CI на `main`: run 35581588757 для `a2e63f1` — `success`, attempt 1 (`gh run view`). CI коммита с этим отчётом записывается следующим коммитом (`Record the CI run of the TASK-014 report commit`).
+- **AC-12 — PASS.** Коммиты по D-024, состав каждого — в разделе Commits; в каждый добавлялись только явно перечисленные файлы, состав проверялся `git diff --cached --stat`. CI на `main`: run 35581588757 для `a2e63f1` — `success`, attempt 1 (`gh run view`). CI коммита с отчётом `0603f2c`: run 35582447493 — `success`, attempt 1.
 - **AC-13 — PASS.** ARCHITECTURE.md 0.27: 4.24 (I214–I230), 5.3, 13.2, 14, версия и история. CLAUDE.md, блок 0: «Справочник автомобилей в dev» — заполнение, выбор, ведение, импорт и отчёт.
 
 ## Commits
@@ -125,7 +125,8 @@ Dev на этой машине: API (`src/main.ts`) и worker (`src/worker.ts`) 
   - тесты: `apps/api/src/modules/settings/settings.integration.test.ts`, `apps/api/src/database/{database.integration.test.ts, schema-drift.test.ts}`, `apps/api/src/modules/identity/access.integration.test.ts`, `apps/api/src/modules/identity/cleanup/sign-in-data-cleanup.integration.test.ts`;
   - `ARCHITECTURE.md` — входит в этот коммит, потому что раздел 14 читает тест реестра настроек.
 - `a2e63f1` — Describe the vehicle catalog in the development guide: `CLAUDE.md`.
-- Коммит с этим отчётом: `tasks/TASK-014-REPORT.md`.
+- `0603f2c` — Add the TASK-014 report: `tasks/TASK-014-REPORT.md` (CI run 35582447493 — success, attempt 1).
+- Следующий коммит — Record the CI run of the TASK-014 report commit: `tasks/TASK-014-REPORT.md`.
 
 ## Errors & Fixes
 - **ECONNRESET при `pnpm --filter api migrate` в dev.** На `[::1]:5432` слушает `wslrelay` (сторонний Postgres в WSL), и `localhost` из `.env` уходит туда, а не в Docker. `.env` не менял: для dev-проверки передал `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` с `127.0.0.1` через окружение процесса (dotenv их не перекрывает).

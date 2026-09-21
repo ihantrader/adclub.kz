@@ -526,6 +526,44 @@ const photos = group({
   },
 });
 
+const vehicles = group({
+  id: "vehicles",
+  title: "Справочник автомобилей",
+  editableBy: "admin",
+  settings: {
+    vehicle_import_max_file_mb: define.integer({
+      unit: "megabytes",
+      min: 1,
+      max: 20,
+      default: 5,
+      description: "Наибольший размер файла импорта справочника автомобилей.",
+    }),
+    vehicle_import_max_rows: define.integer({
+      unit: "rows",
+      min: 10,
+      max: 50_000,
+      default: 10_000,
+      description: "Наибольшее число строк в одном файле импорта справочника автомобилей.",
+    }),
+    vehicle_import_batch_size: define.integer({
+      unit: "rows",
+      min: 10,
+      max: 5000,
+      default: 500,
+      description:
+        "Сколько строк импорта фоновая задача проверяет или применяет за один пакет (одну транзакцию).",
+    }),
+    vehicle_import_timeout_minutes: define.duration({
+      unit: "minutes",
+      min: 1,
+      max: 60,
+      default: 30,
+      description:
+        "Сколько минут может идти проверка или применение одного импорта; дольше — импорт помечается ошибкой.",
+    }),
+  },
+});
+
 const billing = group({
   id: "billing",
   title: "Подписки и оплата",
@@ -917,6 +955,7 @@ export const settingGroups = [
   pricelist,
   reviews,
   photos,
+  vehicles,
   billing,
   clients,
   cleanup,
@@ -935,6 +974,7 @@ export const settingDefinitions = {
   ...pricelist.settings,
   ...reviews.settings,
   ...photos.settings,
+  ...vehicles.settings,
   ...billing.settings,
   ...clients.settings,
   ...cleanup.settings,

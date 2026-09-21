@@ -5,6 +5,7 @@ import { auditTables } from "./modules/audit";
 import { catalogTables } from "./modules/catalog";
 import { identityTables } from "./modules/identity";
 import { settingsTables } from "./modules/settings";
+import { vehicleTables } from "./modules/vehicles";
 
 /**
  * Every table the application describes in Drizzle. The schema drift
@@ -18,5 +19,6 @@ export const ormTables: readonly PgTable[] = [
   ...auditTables,
   ...aiTables,
   ...catalogTables,
+  ...vehicleTables,
   ...jobsTables,
 ];

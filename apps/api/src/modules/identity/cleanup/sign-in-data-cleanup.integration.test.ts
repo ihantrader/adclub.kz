@@ -362,6 +362,8 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       { name: "identity.cleanup-login-codes", cron: "* * * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-sessions", cron: "* * * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-sign-in-steps", cron: "* * * * *", timezone: "Asia/Almaty" },
+      // Imports of the vehicle catalog stuck longer than allowed (TASK-014).
+      { name: "vehicles.expire-imports", cron: "* * * * *", timezone: "Asia/Almaty" },
     ]);
     await staleCode(OTHER_PHONE, 30, "expired");
     // No runNow here: the schedule alone has to clean this up.
@@ -410,6 +412,9 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "catalog.translation-wake",
       "catalog.delete-photo-files",
       "catalog.cleanup-photo-files",
+      "vehicles.analyze-import",
+      "vehicles.apply-import",
+      "vehicles.expire-imports",
       "dev.always-fails",
       "dev.daily-at-setting",
     ]);

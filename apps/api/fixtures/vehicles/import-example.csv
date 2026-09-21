@@ -1,0 +1,7 @@
+make,model,generation,generation_year_from,generation_year_to,body,engine_code,engine_displacement_l,engine_fuel,engine_power_hp,transmission,drive,year_from,year_to,market
+Geely,Coolray,I (SX11),,,crossover,JLH-3G15TD,1.5,petrol,177,dct,fwd,2020,,global
+Geely,Monjaro,I (KX11),,,crossover,JLH-4G20TDB,2.0,petrol,238,at,awd,2022,,kz
+Geely,Emgrand,IV (SS11),,,sedan,BHE15-EFZ,1.5,petrol,122,mt,fwd,2022,,global
+GEELY,Okavango,I (VX11),2020,,crossover,JLE-4G18TDB,1.8,petrol,184,dct,fwd,2021,,kz
+Chery,Tiggo 8 Pro,I,2021,,crossover,SQRF4J16,1.6,petrol,186,dct,fwd,2021,,kz
+Haval,Jolion,I,2020,,crossover,GW4B15A,1.5,petrol,143,dct,fwd,2021,,kz

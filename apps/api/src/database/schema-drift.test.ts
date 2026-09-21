@@ -120,6 +120,17 @@ describe("ormTables", () => {
         "item_analog",
         "item_photo",
         "item_photo_file",
+        "vehicle_option",
+        "vehicle_make",
+        "vehicle_make_spelling",
+        "vehicle_model",
+        "vehicle_model_spelling",
+        "vehicle_generation",
+        "vehicle_engine",
+        "vehicle_engine_spelling",
+        "vehicle_modification",
+        "vehicle_import",
+        "vehicle_import_row",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

@@ -1,0 +1,7 @@
+make,model,generation,generation_year_from,generation_year_to,body,engine_code,engine_displacement_l,engine_fuel,engine_power_hp,transmission,drive,year_from,year_to,market
+Geely,Tugella,I (FY11),,,crossover,JLH-4G20TD,2.0,petrol,238,at,awd,2023,,global
+Geely,Tugella,I (FY11),,,кабриолет-пикап,JLH-4G20TD,2.0,petrol,238,at,awd,2023,,kz
+Geely,Atlas,I (NL-3),,,crossover,JLC-4G24,2.4,petrol,148,at,awd,2021,2024,kz
+Geely,Tugella,I (FY11),,,crossover,JLH-4G20TD,2.0,petrol,238,at,awd,2023,,global
+Geely,Coolray,II,,,crossover,JLH-3G15TD,1.5,petrol,177,dct,fwd,2024,,kz
+Geely,Atlas,I (NL-3),,,crossover,JLC-4G24,2.4,petrol,148,at,fwd,2018,2022,kz

@@ -31,6 +31,7 @@ import {
   TranslationQueue,
 } from "./modules/catalog";
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
+import { DevVehicleSeed, DevVehicleSeedError, VehiclesModule } from "./modules/vehicles";
 import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
@@ -92,6 +93,8 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   dev:member:remove <memberId>
  *   dev:catalog:seed             fill the catalog with the example tree (TASK-010);
  *                                a second run creates nothing
+ *   dev:vehicles:seed            fill the vehicle catalog with draft example data
+ *                                (TASK-014); a second run creates nothing
  *   dev:jobs:fail [--note <text>] [--on-query]
  *                                put a job that always fails on the queue;
  *                                with --on-query it fails on a real SQL query
@@ -118,6 +121,7 @@ class OperatorModule {
         SettingsModule.forRoot({ http: false }),
         AiModule.forRoot(config),
         CatalogModule.forRoot({ http: false }),
+        VehiclesModule.forRoot({ http: false }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -154,6 +158,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
   dev:catalog:seed
+  dev:vehicles:seed
   dev:jobs:fail [--note <text>] [--on-query]`;
 
 function required(value: string | undefined, what: string): string {
@@ -191,6 +196,7 @@ interface Services {
   queue: JobQueue;
   devJobs: boolean;
   catalogSeed: DevCatalogSeed;
+  vehicleSeed: DevVehicleSeed;
   ai: AiService;
   translations: TranslationQueue;
   translationEval: TranslationEval;
@@ -205,6 +211,7 @@ async function run(
     queue,
     devJobs,
     catalogSeed,
+    vehicleSeed,
     ai,
     translations,
     translationEval,
@@ -384,6 +391,8 @@ async function run(
       });
     case "dev:catalog:seed":
       return catalogSeed.run();
+    case "dev:vehicles:seed":
+      return vehicleSeed.run();
     case "dev:member:remove":
       return { removed: true, ...(await operator.removeMember(required(first, "<memberId>"))) };
     default:
@@ -408,6 +417,7 @@ async function main(): Promise<void> {
         queue: app.get(JobQueue),
         devJobs: hasDevJobs(config),
         catalogSeed: app.get(DevCatalogSeed),
+        vehicleSeed: app.get(DevVehicleSeed),
         ai: app.get(AiService),
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),
@@ -426,6 +436,7 @@ main().catch((error: unknown) => {
     error instanceof ConfigValidationError ||
     error instanceof OperatorCommandError ||
     error instanceof DevCatalogSeedError ||
+    error instanceof DevVehicleSeedError ||
     error instanceof JobAdminError
   ) {
     console.error(error.message);

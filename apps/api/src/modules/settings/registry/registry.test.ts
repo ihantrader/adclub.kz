@@ -54,6 +54,7 @@ describe("settings registry", () => {
       "pricelist",
       "reviews",
       "photos",
+      "vehicles",
       "billing",
       "clients",
       "cleanup",

@@ -107,10 +107,74 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1789900000000_create-ai-jobs-and-translation-tasks",
       "1789990000000_ai-through-openrouter",
       "1790050000000_create-item-photos",
+      "1790100000000_create-vehicles",
     ]);
   });
 
-  it("rolls back the latest migration only (photos of items), keeping the items", async () => {
+  it("rolls back the latest migration only (the vehicle catalog), keeping the catalog", async () => {
+    await client.query(
+      "INSERT INTO category (code, kind, level) VALUES ('vehicle_node', 'goods', 1)",
+    );
+    const [body, drive, transmission, fuel] = await Promise.all(
+      [
+        ["body", "sedan"],
+        ["drive", "fwd"],
+        ["transmission", "at"],
+        ["fuel", "petrol"],
+      ].map(async ([kind, code]) => {
+        const { rows } = await client.query<{ id: string }>(
+          "INSERT INTO vehicle_option (kind, code, name_ru) VALUES ($1, $2, $2) RETURNING id",
+          [kind, code],
+        );
+        return rows[0]!.id;
+      }),
+    );
+    const make = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_make DEFAULT VALUES RETURNING id",
+    );
+    const model = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+      [make.rows[0]!.id],
+    );
+    const generation = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_generation (model_id, name, name_key, year_from) VALUES ($1, 'I', 'i', 2019) RETURNING id",
+      [model.rows[0]!.id],
+    );
+    const engine = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_engine (fuel_id) VALUES ($1) RETURNING id",
+      [fuel],
+    );
+    await client.query(
+      `INSERT INTO vehicle_modification (generation_id, body_type_id, engine_id, transmission_type_id, drive_type_id, year_from, market)
+       VALUES ($1, $2, $3, $4, $5, 2020, 'kz')`,
+      [generation.rows[0]!.id, body, engine.rows[0]!.id, transmission, drive],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // The vehicle catalog is gone with its tables and triggers; the catalog of goods stays.
+    for (const table of [
+      "vehicle_modification",
+      "vehicle_option",
+      "vehicle_import",
+      "vehicle_make",
+    ]) {
+      expect(await tableExists(client, table)).toBe(false);
+    }
+    const { rows: functions } = await client.query(
+      "SELECT proname FROM pg_proc WHERE proname LIKE 'vehicle_%'",
+    );
+    expect(functions).toEqual([]);
+    const categories = await client.query("SELECT code FROM category");
+    expect(categories.rows).toEqual([{ code: "vehicle_node" }]);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "vehicle_modification")).toBe(true);
+    await client.query("DELETE FROM category");
+    await walkDownPast(() => tableExists(client, "vehicle_option"));
+  });
+
+  it("rolls back the next one (photos of items), keeping the items", async () => {
     const node = await client.query<{ id: string }>(
       "INSERT INTO category (code, kind, level) VALUES ('photo_node', 'goods', 1) RETURNING id",
     );

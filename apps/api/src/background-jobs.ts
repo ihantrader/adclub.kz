@@ -2,6 +2,7 @@ import type { AppConfig } from "./config";
 import { devJobCatalog, type JobDefinition } from "./jobs";
 import { catalogJobCatalog, photoJobCatalog } from "./modules/catalog";
 import { identityJobCatalog } from "./modules/identity";
+import { vehicleJobCatalog } from "./modules/vehicles";
 
 /**
  * Every background job the application declares (ARCHITECTURE 13.2, 4.12).
@@ -15,6 +16,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
     ...identityJobCatalog,
     ...catalogJobCatalog,
     ...photoJobCatalog,
+    ...vehicleJobCatalog,
     ...(hasDevJobs(config) ? devJobCatalog : []),
   ];
 }

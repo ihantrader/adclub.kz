@@ -1,7 +1,13 @@
 import { Inject, Module, type DynamicModule, type OnModuleInit } from "@nestjs/common";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import { JobRegistry } from "../../jobs";
-import { AccountStore, AdminUserStore, SupplierMembershipStore } from "../identity";
+import {
+  AccountStore,
+  AdminUserStore,
+  SessionStore,
+  SupplierMemberRemover,
+  SupplierMembershipStore,
+} from "../identity";
 import { CitiesController } from "./cities.controller";
 import { CitiesService } from "./cities.service";
 import { DevSupplierInvitationsController } from "./dev-supplier-invitations.controller";
@@ -14,6 +20,11 @@ import {
   SupplierMessages,
   TestSupplierMessages,
 } from "./supplier-invitations";
+import {
+  SupplierMembersAdminController,
+  SupplierMembersCabinetController,
+} from "./supplier-members.controller";
+import { SupplierMembersService } from "./supplier-members.service";
 import { SupplierLeadForm } from "./supplier-lead-form.service";
 import { SupplierLeadsController } from "./supplier-leads.controller";
 import { SupplierLeadsService } from "./supplier-leads.service";
@@ -37,8 +48,11 @@ const sharedProviders = [
   AccountStore,
   AdminUserStore,
   SupplierMembershipStore,
+  SessionStore,
+  SupplierMemberRemover,
   CitiesService,
   SupplierInvitations,
+  SupplierMembersService,
   SuppliersService,
   SupplierLeadsService,
   DevSupplierSeed,
@@ -61,6 +75,8 @@ export class SuppliersModule {
             SupplierLeadsController,
             SuppliersAdminController,
             SupplierCabinetController,
+            SupplierMembersCabinetController,
+            SupplierMembersAdminController,
             ...(options.devOutbox ? [DevSupplierInvitationsController] : []),
           ]
         : [],

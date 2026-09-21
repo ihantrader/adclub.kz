@@ -161,6 +161,12 @@ export class SupplierMembershipStore {
       displayName: string;
       /** Who adds: the operator command (development) or an administrator (TASK-016). */
       addedBy?: "operator" | "admin";
+      /** The administrator who adds (TASK-017). */
+      addedByAdminId?: string | null;
+      /** A new employee's notification switch is on (TASK-017: while below the limit). */
+      notificationsOn?: boolean;
+      /** The first employee of a new company is its contact person (TASK-017). */
+      isContactPerson?: boolean;
     },
     executor: DbExecutor = this.database.db,
   ): Promise<{ memberId: string; created: boolean }> {
@@ -172,6 +178,9 @@ export class SupplierMembershipStore {
         accountId: input.accountId,
         displayName: input.displayName,
         addedBy: input.addedBy ?? "operator",
+        addedByAdminId: input.addedByAdminId ?? null,
+        notificationsEnabledAt: input.notificationsOn ? now : null,
+        isContactPerson: input.isContactPerson ?? false,
       })
       .onConflictDoUpdate({
         target: [supplierMember.accountId, supplierMember.supplierId],
@@ -188,16 +197,26 @@ export class SupplierMembershipStore {
 
   /**
    * Marks a membership removed, in the caller's transaction (which must
-   * also end the membership's sessions); `undefined` if it wasn't active.
+   * also end the membership's sessions — `SupplierMemberRemover`);
+   * `undefined` if it wasn't active. The removed employee stops receiving
+   * notifications and is no longer the contact person.
    */
   async markRemoved(
     memberId: string,
+    removedByMemberId: string | null,
     now: Date,
     tx: DbExecutor,
   ): Promise<{ accountId: string; supplierId: string } | undefined> {
     const [row] = await tx
       .update(supplierMember)
-      .set({ status: "removed", removedAt: now, updatedAt: now })
+      .set({
+        status: "removed",
+        removedAt: now,
+        removedByMemberId,
+        notificationsEnabledAt: null,
+        isContactPerson: false,
+        updatedAt: now,
+      })
       .where(and(eq(supplierMember.id, memberId), eq(supplierMember.status, "active")))
       .returning({ accountId: supplierMember.accountId, supplierId: supplierMember.supplierId });
     return row;

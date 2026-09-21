@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   date,
   foreignKey,
   integer,
@@ -75,7 +76,9 @@ export type SessionRevokedReason =
   // The session lost its context (TASK-006).
   | "access_closed"
   | "admin_removed"
-  | "totp_reset";
+  | "totp_reset"
+  // An administrator ended an employee's cabinet session (TASK-017).
+  | "ended_by_admin";
 
 /** What the pause and the blocking make it (a check in the database keeps them in step). */
 export type SupplierStatus = "active" | "paused" | "blocked";
@@ -119,7 +122,12 @@ export const supplierCityName = sql<string>`(SELECT city.name_ru FROM city WHERE
 
 export type MembershipStatus = "active" | "removed";
 
-/** `supplier_member` (ARCHITECTURE 5.1, 8.3): an employee of a company. */
+/**
+ * `supplier_member` (ARCHITECTURE 5.1, 8.3, 4.27): an employee of a
+ * company. The colleague who added or removed an employee is a foreign
+ * key on `(id, supplier_id)` in the database — left out here, like the
+ * other self references.
+ */
 export const supplierMember = pgTable("supplier_member", {
   id: uuid("id").primaryKey().defaultRandom(),
   supplierId: uuid("supplier_id")
@@ -134,6 +142,16 @@ export const supplierMember = pgTable("supplier_member", {
   permissions: jsonb("permissions"),
   addedBy: text("added_by").$type<"admin" | "member" | "operator">().notNull(),
   removedAt: timestamp("removed_at", { withTimezone: true }),
+  // TASK-017.
+  notificationsEnabledAt: timestamp("notifications_enabled_at", { withTimezone: true }),
+  notificationLanguage: text("notification_language").$type<"kk" | "ru">().notNull().default("ru"),
+  isContactPerson: boolean("is_contact_person").notNull().default(false),
+  addedByMemberId: uuid("added_by_member_id"),
+  addedByAdminId: uuid("added_by_admin_id").references(() => adminUser.id),
+  removedByMemberId: uuid("removed_by_member_id"),
+  restoredAt: timestamp("restored_at", { withTimezone: true }),
+  restoredByAdminId: uuid("restored_by_admin_id").references(() => adminUser.id),
+  restoreReason: text("restore_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

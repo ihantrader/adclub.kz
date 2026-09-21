@@ -11,6 +11,7 @@ import {
   supplierListQuerySchema,
   supplierMemberPathSchema,
   updateSupplierBodySchema,
+  updateSupplierCompanyBodySchema,
   type AdminSupplierPage,
   type AdminSupplierResponse,
   type CreateSupplierBody,
@@ -27,6 +28,7 @@ import {
   type SupplierMemberPath,
   type SupplierOnboardedResponse,
   type UpdateSupplierBody,
+  type UpdateSupplierCompanyBody,
 } from "@adclub/contracts";
 import { ZodValidationPipe } from "../../common/validation";
 import { adminActor } from "../catalog";
@@ -139,11 +141,11 @@ export class SuppliersAdminController {
 }
 
 /**
- * The cabinet's own company (context `supplier`): its card, and its
- * schedule — the only part the supplier changes itself; the name, the
- * БИН, the address and the rest belong to the administrator (TASK-016
- * requirement 5). Any other company answers exactly like a missing one
- * (ARCHITECTURE 4.8 I70).
+ * The cabinet's own company (context `supplier`): its card; the supplier
+ * changes the address and district of its pickup point, the company's
+ * phone, the hours and the days off (S-COMP-01, TASK-017); the name, the
+ * БИН, the city and the states belong to the administrator. Any other
+ * company answers exactly like a missing one (ARCHITECTURE 4.8 I70).
  */
 @Controller()
 export class SupplierCabinetController {
@@ -165,6 +167,15 @@ export class SupplierCabinetController {
       return Promise.reject(notFound("company"));
     }
     return this.company(params.supplierId);
+  }
+
+  @SessionRoute(apiRoutes.updateSupplierCompany)
+  async updateCompany(
+    @Body(new ZodValidationPipe(updateSupplierCompanyBodySchema)) body: UpdateSupplierCompanyBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierCardResponse> {
+    const actor = supplierSelfActor(session);
+    return { company: await this.suppliers.updateOwn(actor.supplierId, body, actor) };
   }
 
   @SessionRoute(apiRoutes.setSupplierSchedule)

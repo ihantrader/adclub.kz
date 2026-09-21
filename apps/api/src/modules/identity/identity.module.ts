@@ -23,6 +23,7 @@ import { SignInStepsService } from "./session/sign-in-steps.service";
 import { SignInService } from "./session/sign-in.service";
 import { SupplierContextController } from "./supplier/supplier-context.controller";
 import { SupplierContextService } from "./supplier/supplier-context.service";
+import { SupplierMemberRemover } from "./supplier/supplier-member-remover";
 import { SupplierMembershipStore } from "./supplier/supplier-membership.store";
 
 function createLoginCodeChannels(
@@ -41,6 +42,7 @@ export const identityOperatorProviders = [
   AdminUserStore,
   SupplierMembershipStore,
   SessionStore,
+  SupplierMemberRemover,
   AdminAccessRevoker,
   OperatorService,
 ];

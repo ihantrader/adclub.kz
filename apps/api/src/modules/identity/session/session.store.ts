@@ -72,6 +72,18 @@ export interface SessionSummaryRow {
   expiresAt: Date;
 }
 
+/** A cabinet session as the administrator sees it: no token, no seed. */
+export interface SupplierSessionRow {
+  id: string;
+  deviceName: string | null;
+  clientPlatform: string | null;
+  clientVersion: string | null;
+  lastIp: string | null;
+  createdAt: Date;
+  lastUsedAt: Date;
+  expiresAt: Date;
+}
+
 /** What to do with a session locked for a refresh (decided by the service). */
 export type RefreshDecision =
   | { kind: "rotate"; generation: number; expiresAt: Date; lastIp: string | null }
@@ -229,6 +241,65 @@ export class SessionStore {
       .where(and(eq(session.supplierMemberId, memberId), isNull(session.revokedAt)))
       .returning({ id: session.id });
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * Active cabinet sessions of a company's employees (the administrator's
+   * view, TASK-017), most recently used first.
+   */
+  async listSupplierSessions(
+    supplierId: string,
+    now: Date,
+  ): Promise<(SupplierSessionRow & { member: { id: string; displayName: string } })[]> {
+    return this.database.db
+      .select({
+        id: session.id,
+        member: { id: supplierMember.id, displayName: supplierMember.displayName },
+        deviceName: session.deviceName,
+        clientPlatform: session.clientPlatform,
+        clientVersion: session.clientVersion,
+        lastIp: session.lastIp,
+        createdAt: session.createdAt,
+        lastUsedAt: session.lastUsedAt,
+        expiresAt: session.expiresAt,
+      })
+      .from(session)
+      .innerJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
+      .where(
+        and(eq(session.supplierId, supplierId), eq(session.kind, "supplier_web"), isActive(now)),
+      )
+      .orderBy(desc(session.lastUsedAt), desc(session.createdAt));
+  }
+
+  /**
+   * Ends active cabinet sessions of a company — one, those of one
+   * employee, or all — in the caller's transaction; never a session of
+   * another company. Returns the ended ones with their accounts.
+   */
+  async revokeSupplierSessions(
+    supplierId: string,
+    selection: { sessionId?: string; memberId?: string },
+    reason: SessionRevokedReason,
+    now: Date,
+    tx: DbExecutor,
+  ): Promise<{ id: string; accountId: string; memberId: string | null }[]> {
+    return tx
+      .update(session)
+      .set({ revokedAt: now, revokedReason: reason, updatedAt: now })
+      .where(
+        and(
+          eq(session.supplierId, supplierId),
+          eq(session.kind, "supplier_web"),
+          isActive(now),
+          selection.sessionId ? eq(session.id, selection.sessionId) : undefined,
+          selection.memberId ? eq(session.supplierMemberId, selection.memberId) : undefined,
+        ),
+      )
+      .returning({
+        id: session.id,
+        accountId: session.accountId,
+        memberId: session.supplierMemberId,
+      });
   }
 
   /**

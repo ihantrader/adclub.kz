@@ -110,8 +110,97 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790100000000_create-vehicles",
       "1790150000000_create-item-compatibility",
       "1790200000000_create-suppliers",
+      "1790250000000_supplier-members",
     ]);
   });
+
+  it("gives existing companies a contact person and recipients, and rolls back keeping the employees (supplier members)", async () => {
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await columnExists(client, "supplier_member", "notification_language")).toBe(false);
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('members-city', 'Город') RETURNING id",
+    );
+    const company = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Компания', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = company.rows[0]!.id;
+    const memberIds: string[] = [];
+    for (let n = 0; n < 7; n++) {
+      const account = await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ($1) RETURNING id",
+        [`+7705111000${n}`],
+      );
+      const removed = n === 0;
+      const member = await client.query<{ id: string }>(
+        `INSERT INTO supplier_member (supplier_id, account_id, display_name, added_by, status, removed_at, created_at)
+         VALUES ($1, $2, $3, 'admin', $4, $5, now() - make_interval(mins => 100 - $6::int)) RETURNING id`,
+        [
+          supplierId,
+          account.rows[0]!.id,
+          `Сотрудник ${n}`,
+          removed ? "removed" : "active",
+          removed ? new Date() : null,
+          n,
+        ],
+      );
+      memberIds.push(member.rows[0]!.id);
+    }
+
+    expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
+    const { rows } = await client.query<{
+      id: string;
+      is_contact_person: boolean;
+      on: boolean;
+      notification_language: string;
+    }>(
+      `SELECT id, is_contact_person, notifications_enabled_at IS NOT NULL AS on, notification_language
+       FROM supplier_member WHERE supplier_id = $1 ORDER BY created_at`,
+      [supplierId],
+    );
+    // The removed one is neither; the first active one is the contact person;
+    // the first five active ones receive notifications.
+    expect(rows.map((row) => [row.is_contact_person, row.on])).toEqual([
+      [false, false],
+      [true, true],
+      [false, true],
+      [false, true],
+      [false, true],
+      [false, true],
+      [false, false],
+    ]);
+    expect(new Set(rows.map((row) => row.notification_language))).toEqual(new Set(["ru"]));
+    // A second contact person of one company is refused by the database.
+    await expect(
+      client.query("UPDATE supplier_member SET is_contact_person = true WHERE id = $1", [
+        memberIds[2],
+      ]),
+    ).rejects.toThrow(/supplier_member_contact_person_key/);
+    await client.query(
+      "INSERT INTO supplier_invitation (supplier_id, member_id, status) VALUES ($1, $2, 'cancelled')",
+      [supplierId, memberIds[1]],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await columnExists(client, "supplier_member", "is_contact_person")).toBe(false);
+    expect(await count("supplier_member", "supplier_id = $1", [supplierId])).toBe(7);
+    // A value the old list doesn't know stays in its row.
+    expect(await count("supplier_invitation", "status = 'cancelled'")).toBe(1);
+    await client.query("DELETE FROM supplier_invitation");
+    await client.query("DELETE FROM supplier_member");
+    await client.query("DELETE FROM supplier_location");
+    await client.query("DELETE FROM supplier");
+    await client.query("DELETE FROM account WHERE phone LIKE '+7705111000%'");
+    await client.query("DELETE FROM city");
+  });
+
+  async function count(table: string, where = "true", params: unknown[] = []): Promise<number> {
+    const { rows } = await client.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM ${table} WHERE ${where}`,
+      params,
+    );
+    return rows[0]!.n;
+  }
 
   it("moves the city text of companies into the directory and back (suppliers), losing nothing", async () => {
     // Companies of before the directory: written with the city as text.
@@ -216,8 +305,9 @@ describe("PostgreSQL: migrations and readiness", () => {
     ]);
 
     // Back: every company has its city as text again (the directory's
-    // Russian name), and its state.
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // Russian name), and its state. (The `up` above brought the later
+    // migrations back too.)
+    await walkDownPast(() => tableExists(client, "city"));
     expect(await tableExists(client, "city")).toBe(false);
     expect(await tableExists(client, "supplier_lead")).toBe(false);
     const { rows: back } = await client.query(

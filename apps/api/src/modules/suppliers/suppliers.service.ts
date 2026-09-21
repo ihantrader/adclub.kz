@@ -15,6 +15,7 @@ import {
   type SupplierListQuery,
   type SupplierType,
   type UpdateSupplierBody,
+  type UpdateSupplierCompanyBody,
 } from "@adclub/contracts";
 import { maskBin, maskPhone, supplierState, supplierVisibleOnShowcase } from "@adclub/domain";
 import { and, asc, eq, gte, ilike, or, sql, type SQL } from "drizzle-orm";
@@ -22,17 +23,16 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog, type AuditActorRecord } from "../audit";
 import { decodeCursor, encodeCursor, escapeLike, normalizeText } from "../catalog";
 import {
-  account,
   AccountStore,
   AdminUserStore,
   supplier,
-  supplierMember,
   SupplierMembershipStore,
   type SupplierStatus,
 } from "../identity";
 import { CitiesService, cityRef } from "./cities.service";
 import { city, supplierClosedDate, supplierLocation, type CityRow } from "./schema";
 import {
+  adminIdOf,
   binLock,
   binTaken,
   Changes,
@@ -49,6 +49,7 @@ import {
   type SupplierSelfActor,
 } from "./supplier-common";
 import { describeInvitation, SupplierInvitations } from "./supplier-invitations";
+import { SupplierMembersService } from "./supplier-members.service";
 
 type SupplierRow = typeof supplier.$inferSelect;
 type LocationRow = typeof supplierLocation.$inferSelect;
@@ -109,6 +110,7 @@ export class SuppliersService {
     @Inject(AdminUserStore) private readonly admins: AdminUserStore,
     @Inject(SupplierMembershipStore) private readonly memberships: SupplierMembershipStore,
     @Inject(SupplierInvitations) private readonly invitations: SupplierInvitations,
+    @Inject(SupplierMembersService) private readonly members: SupplierMembersService,
   ) {}
 
   // ---------------------------------------------------------------- create
@@ -161,7 +163,11 @@ export class SuppliersService {
         supplierId,
         accountId: found.id,
         displayName: input.firstMember.name,
-        addedBy: "admin",
+        addedBy: actor.role,
+        addedByAdminId: adminIdOf(actor),
+        // The first employee receives notifications and is the contact person (TASK-017).
+        notificationsOn: true,
+        isContactPerson: true,
       },
       tx,
     );
@@ -232,37 +238,8 @@ export class SuppliersService {
       throw notFound("supplier");
     }
     const card = await this.card(executor, row);
-    const members = await executor
-      .select({
-        id: supplierMember.id,
-        displayName: supplierMember.displayName,
-        phone: account.phone,
-        status: supplierMember.status,
-        createdAt: supplierMember.createdAt,
-      })
-      .from(supplierMember)
-      .innerJoin(account, eq(account.id, supplierMember.accountId))
-      .where(eq(supplierMember.supplierId, supplierId))
-      .orderBy(asc(supplierMember.createdAt), asc(supplierMember.id));
-    const latest = await this.invitations.latestOf(
-      executor,
-      members.map((member) => member.id),
-    );
-    return {
-      ...card,
-      leadId: row.leadId,
-      members: members.map((member) => {
-        const invitation = latest.get(member.id);
-        return {
-          id: member.id,
-          displayName: member.displayName,
-          phone: member.phone,
-          status: member.status,
-          lastInvitation: invitation ? describeInvitation(invitation) : null,
-          createdAt: member.createdAt.toISOString(),
-        };
-      }),
-    };
+    const { members } = await this.members.adminView(executor, supplierId);
+    return { ...card, leadId: row.leadId, members };
   }
 
   /** The card of the cabinet's own company (`GET /supplier/company`). */
@@ -326,6 +303,40 @@ export class SuppliersService {
     input: UpdateSupplierBody,
     actor: SupplierAdminActor,
   ): Promise<AdminSupplierCard> {
+    await this.changeProfile(supplierId, input, actor);
+    return this.adminCard(supplierId);
+  }
+
+  /**
+   * What the supplier changes on its own card (S-COMP-01; TASK-017): the
+   * address and district of the pickup point and the company's phone —
+   * the same change, versions and journal as the administrator's, only
+   * narrower (the route's schema refuses the other fields).
+   */
+  async updateOwn(
+    supplierId: string,
+    input: UpdateSupplierCompanyBody,
+    actor: SupplierSelfActor,
+  ): Promise<SupplierCard> {
+    await this.changeProfile(
+      supplierId,
+      {
+        expectedVersion: input.expectedVersion,
+        address: input.address,
+        district: input.district,
+        contactPhone: input.contactPhone,
+      },
+      actor,
+    );
+    return (await this.ownCard(supplierId)).card;
+  }
+
+  /** A change of the profile: nothing written, no version raised when nothing differs. */
+  private async changeProfile(
+    supplierId: string,
+    input: UpdateSupplierBody,
+    actor: SupplierAdminActor | SupplierSelfActor,
+  ): Promise<void> {
     await this.database.db.transaction(async (tx) => {
       const row = await this.lock(tx, supplierId, input.expectedVersion);
       const location = await this.location(tx, supplierId);
@@ -421,7 +432,6 @@ export class SuppliersService {
         tx,
       );
     });
-    return this.adminCard(supplierId);
   }
 
   /**

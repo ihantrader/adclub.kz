@@ -11,7 +11,13 @@ import { AuditLog } from "../audit";
 import { account, supplier, supplierMember } from "../identity";
 import { AppSettings } from "../settings";
 import { supplierInvitation, type SupplierInvitationRow } from "./schema";
-import { adminIdOf, iso, notFound, type SupplierAdminActor } from "./supplier-common";
+import {
+  adminIdOf,
+  iso,
+  notFound,
+  type SupplierAdminActor,
+  type SupplierSelfActor,
+} from "./supplier-common";
 
 /**
  * Sends one invitation (SCREENS W-08) through the message channel.
@@ -146,7 +152,12 @@ export class SupplierInvitations {
   /** Writes the invitation and puts its sending on the queue — in the caller's transaction. */
   async enqueue(
     tx: DbExecutor,
-    input: { supplierId: string; memberId: string; actor: SupplierAdminActor; again: boolean },
+    input: {
+      supplierId: string;
+      memberId: string;
+      actor: SupplierAdminActor | SupplierSelfActor;
+      again: boolean;
+    },
   ): Promise<SupplierInvitationRow> {
     const [row] = await tx
       .insert(supplierInvitation)
@@ -233,6 +244,22 @@ export class SupplierInvitations {
     return describeInvitation(row);
   }
 
+  /**
+   * The removal of an employee cancels their invitations not yet sent, in
+   * the removal's transaction (TASK-017): a restored employee gets a new
+   * one, never an old one from before the removal.
+   */
+  async cancelQueued(tx: DbExecutor, memberId: string, now: Date): Promise<number> {
+    const rows = await tx
+      .update(supplierInvitation)
+      .set({ status: "cancelled", updatedAt: now })
+      .where(
+        and(eq(supplierInvitation.memberId, memberId), eq(supplierInvitation.status, "queued")),
+      )
+      .returning({ id: supplierInvitation.id });
+    return rows.length;
+  }
+
   /** The latest invitation of each employee. */
   async latestOf(
     executor: DbExecutor,
@@ -271,40 +298,91 @@ export class InvitationSender implements JobHandler<{ invitationId: string }> {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
+  /**
+   * Sends in a transaction that share-locks the employee's row for the
+   * send (TASK-017): a removal (which updates that row and cancels the
+   * queued invitations in its own transaction) either commits first — the
+   * invitation is `cancelled` or the employee `removed`, nothing is sent —
+   * or waits until the message is out. The lock order, employee then
+   * invitation, is the removal's too.
+   */
   async run({ invitationId }: { invitationId: string }, context: JobRunContext): Promise<void> {
+    const db = this.database.db;
+    const [peek] = await db
+      .select({ memberId: supplierInvitation.memberId })
+      .from(supplierInvitation)
+      .where(eq(supplierInvitation.id, invitationId));
+    if (!peek) {
+      return;
+    }
+    let failure: string | undefined;
+    await db.transaction(async (tx) => {
+      const [member] = await tx
+        .select({ status: supplierMember.status })
+        .from(supplierMember)
+        .where(eq(supplierMember.id, peek.memberId))
+        .for("share");
+      const [row] = await tx
+        .select()
+        .from(supplierInvitation)
+        .where(eq(supplierInvitation.id, invitationId))
+        .for("update");
+      if (!row || row.status !== "queued") {
+        return;
+      }
+      if (member?.status !== "active") {
+        await tx
+          .update(supplierInvitation)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(eq(supplierInvitation.id, row.id));
+        this.logger.log(
+          `Invitation cancelled: the employee is removed invitation=${row.id} member=${row.memberId}`,
+        );
+        return;
+      }
+      const target = await targetOf(tx, row.memberId);
+      if (!target) {
+        return;
+      }
+      const text = invitationText({ ...target, link: cabinetLink(this.config) });
+      try {
+        const { channel } = await this.messages.send({ phone: target.phone, text });
+        await tx
+          .update(supplierInvitation)
+          .set({
+            status: "sent",
+            channel,
+            sentAt: new Date(),
+            attempts: sql`${supplierInvitation.attempts} + 1`,
+            lastError: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(supplierInvitation.id, row.id));
+        this.logger.log(
+          `Invitation sent invitation=${row.id} member=${row.memberId} channel=${channel} phone=${maskPhone(target.phone)}`,
+        );
+      } catch (error) {
+        failure = error instanceof SupplierMessageDeliveryError ? error.reason : "unexpected_error";
+      }
+    });
+    if (failure !== undefined) {
+      await this.recordFailure(invitationId, failure, context);
+    }
+  }
+
+  private async recordFailure(
+    invitationId: string,
+    reason: string,
+    context: JobRunContext,
+  ): Promise<never> {
     const db = this.database.db;
     const [row] = await db
       .select()
       .from(supplierInvitation)
       .where(eq(supplierInvitation.id, invitationId));
-    if (!row || row.status === "sent") {
-      return;
-    }
-    const target = await targetOf(db, row.memberId);
-    if (!target) {
-      return;
-    }
-    const text = invitationText({ ...target, link: cabinetLink(this.config) });
-    try {
-      const { channel } = await this.messages.send({ phone: target.phone, text });
-      await db
-        .update(supplierInvitation)
-        .set({
-          status: "sent",
-          channel,
-          sentAt: new Date(),
-          attempts: sql`${supplierInvitation.attempts} + 1`,
-          lastError: null,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(supplierInvitation.id, row.id), eq(supplierInvitation.status, row.status)));
-      this.logger.log(
-        `Invitation sent invitation=${row.id} member=${row.memberId} channel=${channel} phone=${maskPhone(target.phone)}`,
-      );
-    } catch (error) {
-      const reason =
-        error instanceof SupplierMessageDeliveryError ? error.reason : "unexpected_error";
-      // The last run of the job: the invitation failed for good.
+    if (row) {
+      // The last run of the job: the invitation failed for good (unless
+      // a removal cancelled it meanwhile).
       const final = context.attempt > sendInvitationJob.retry.limit;
       await db
         .update(supplierInvitation)
@@ -314,12 +392,12 @@ export class InvitationSender implements JobHandler<{ invitationId: string }> {
           lastError: reason,
           updatedAt: new Date(),
         })
-        .where(eq(supplierInvitation.id, row.id));
+        .where(and(eq(supplierInvitation.id, row.id), eq(supplierInvitation.status, "queued")));
       this.logger.warn(
         `Invitation not delivered invitation=${row.id} member=${row.memberId} reason=${reason} attempt=${context.attempt}`,
       );
-      throw new SupplierMessageDeliveryError(reason);
     }
+    throw new SupplierMessageDeliveryError(reason);
   }
 }
 

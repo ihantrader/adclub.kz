@@ -30,6 +30,8 @@ export type {
   SupplierLeadWorkingStatus,
 } from "./supplier/supplier-lead";
 export { supplierState, supplierVisibleOnShowcase } from "./supplier/supplier-state";
+export { canEnableNotifications, notificationRecipients } from "./supplier/supplier-members";
+export type { NotificationCandidate, NotificationRecipients } from "./supplier/supplier-members";
 export type {
   SupplierPauseReason,
   SupplierState,

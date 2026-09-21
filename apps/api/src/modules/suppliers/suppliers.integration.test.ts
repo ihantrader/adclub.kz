@@ -804,19 +804,51 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
         (await form({ cityId: almaty, phone: "+77010000008" }, "2001:db8:5:7::1")).status,
       ).toBe(202);
 
-      // Per number, from different addresses.
-      await settings.set({ supplier_lead_per_ip: 100, supplier_lead_per_phone: 2 });
+      // Per number and БИН, from different addresses (TASK-017: new requests
+      // only — with the repeat window off every request is new here).
+      await settings.set({
+        supplier_lead_per_ip: 100,
+        supplier_lead_per_phone: 2,
+        supplier_lead_duplicate_window_minutes: 0,
+      });
       const phone = "+77019998877";
-      expect((await form({ cityId: almaty, bin: validBin("30000000001"), phone })).status).toBe(
-        202,
-      );
-      expect((await form({ cityId: almaty, bin: validBin("30000000002"), phone })).status).toBe(
-        202,
-      );
-      const perPhone = await form({ cityId: almaty, bin: validBin("30000000003"), phone });
+      const companyBin = validBin("30000000001");
+      expect((await form({ cityId: almaty, bin: companyBin, phone })).status).toBe(202);
+      expect((await form({ cityId: almaty, bin: companyBin, phone })).status).toBe(202);
+      const perPhone = await form({ cityId: almaty, bin: companyBin, phone });
       expectError(perPhone, 429, "RATE_LIMITED");
       expect(perPhone.body.details.limit).toBe("supplier_lead_per_phone");
       expect(perPhone.headers["retry-after"]).toBeDefined();
+      // Someone sending with this number and other БИН doesn't use up the
+      // company's own limit (and gets the same answer as anyone).
+      const stranger = "+77019998866";
+      for (const n of [2, 3, 4]) {
+        expect(
+          (await form({ cityId: almaty, bin: validBin(`3000000000${n}`), phone: stranger })).status,
+        ).toBe(202);
+      }
+      expect((await form({ cityId: almaty, bin: companyBin, phone: stranger })).status).toBe(202);
+    });
+
+    it("doesn't spend the number's limit on a repeat of the same request (TASK-017)", async () => {
+      const ids = await cities();
+      const almaty = ids.get("almaty")!;
+      await settings.set({ supplier_lead_per_phone: 2 });
+      const phone = "+77019998855";
+      const [one, two] = await Promise.all([
+        form({ cityId: almaty, bin: BIN_C, phone }),
+        form({ cityId: almaty, bin: BIN_C, phone }),
+      ]);
+      expect([one.status, two.status]).toEqual([202, 202]);
+      expect((await form({ cityId: almaty, bin: BIN_C, phone })).status).toBe(202);
+      expect(await count("supplier_lead", "bin = $1", [BIN_C])).toBe(1);
+      // Out of the repeat window: the second new request still fits the limit
+      // of two — the three presses above spent one.
+      await db.query("UPDATE supplier_lead SET created_at = now() - interval '11 minutes'");
+      expect((await form({ cityId: almaty, bin: BIN_C, phone })).status).toBe(202);
+      expect(await count("supplier_lead", "bin = $1", [BIN_C])).toBe(2);
+      await db.query("UPDATE supplier_lead SET created_at = now() - interval '11 minutes'");
+      expectError(await form({ cityId: almaty, bin: BIN_C, phone }), 429, "RATE_LIMITED");
     });
 
     it("hundreds of requests from one address are stopped at the limit", async () => {

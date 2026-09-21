@@ -64,7 +64,6 @@ export class SupplierLeadForm {
       // An archived city is as unknown as a missing one to the public form.
       throw validationError("cityId", "No such city");
     }
-    await this.limitPerPhone(phone);
     const [consentVersion, duplicateMinutes] = await Promise.all([
       this.settings.get("supplier_lead_consent_version"),
       this.settings.get("supplier_lead_duplicate_window_minutes"),
@@ -91,6 +90,9 @@ export class SupplierLeadForm {
           return { kind: "duplicate" as const, id: recent.id };
         }
       }
+      // Only a request that is really new spends the number's limit — a
+      // double click doesn't (TASK-017, the remark of TASK-016).
+      await this.limitPerPhone(phone, bin);
       const [row] = await tx
         .insert(supplierLead)
         .values({
@@ -126,14 +128,20 @@ export class SupplierLeadForm {
     return RECEIVED;
   }
 
-  private async limitPerPhone(phone: string): Promise<void> {
+  /**
+   * The limit of a number counts its requests **for one БИН**: someone
+   * sending requests with the company's number and other БИН (or none of
+   * the company's) doesn't use up the limit the company itself has; the
+   * limit per client address bounds anyone who tries many БИН.
+   */
+  private async limitPerPhone(phone: string, bin: string): Promise<void> {
     const [max, windowSeconds] = await Promise.all([
       this.settings.get("supplier_lead_per_phone"),
       this.settings.get("supplier_lead_per_phone_window_seconds"),
     ]);
     let hit;
     try {
-      hit = await this.limiter.hit(`public:supplier_lead_per_phone:${phone}`, {
+      hit = await this.limiter.hit(`public:supplier_lead_per_phone:${phone}:${bin}`, {
         max,
         windowSeconds,
       });

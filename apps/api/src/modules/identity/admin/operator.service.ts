@@ -5,7 +5,7 @@ import { APP_CONFIG, type AppConfig } from "../../../config";
 import { DatabaseService } from "../../../database";
 import { ActionJournal } from "../action-journal";
 import { AccountStore } from "../account/account.store";
-import { SessionStore } from "../session/session.store";
+import { SupplierMemberRemover } from "../supplier/supplier-member-remover";
 import { SupplierMembershipStore } from "../supplier/supplier-membership.store";
 import { AdminAccessRevoker } from "./admin-access-revoker";
 import { AdminUserStore } from "./admin-user.store";
@@ -47,7 +47,7 @@ export class OperatorService {
     @Inject(AdminUserStore) private readonly admins: AdminUserStore,
     @Inject(AdminAccessRevoker) private readonly revoker: AdminAccessRevoker,
     @Inject(SupplierMembershipStore) private readonly memberships: SupplierMembershipStore,
-    @Inject(SessionStore) private readonly sessions: SessionStore,
+    @Inject(SupplierMemberRemover) private readonly remover: SupplierMemberRemover,
     @Inject(ActionJournal) private readonly audit: ActionJournal,
   ) {}
 
@@ -226,11 +226,11 @@ export class OperatorService {
     this.assertLocal();
     const now = new Date();
     const result = await this.database.db.transaction(async (tx) => {
-      const removed = await this.memberships.markRemoved(memberId, now, tx);
+      const removed = await this.remover.remove(memberId, null, now, tx);
       if (!removed) {
         return undefined;
       }
-      const ended = await this.sessions.revokeMemberSessions(memberId, "access_closed", now, tx);
+      const ended = removed.endedSessionIds;
       await this.audit.record(
         {
           action: auditActions.supplierMemberRemoved,
@@ -251,11 +251,7 @@ export class OperatorService {
     if (!result) {
       throw new OperatorCommandError("No such active employee");
     }
-    for (const sessionId of result.ended) {
-      this.logger.log(
-        `Session ended session=${sessionId} account=${result.accountId} reason=access_closed`,
-      );
-    }
+    this.remover.logEnded(result);
     this.logger.log(
       `Operator: employee removed supplier=${result.supplierId} member=${memberId} account=${result.accountId} sessionsEnded=${result.ended.length}`,
     );

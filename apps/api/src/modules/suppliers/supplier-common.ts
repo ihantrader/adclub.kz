@@ -2,6 +2,9 @@ import type {
   CityDuplicateDetails,
   SupplierBinTakenDetails,
   SupplierLeadStateDetails,
+  SupplierMemberExistsDetails,
+  SupplierMemberStateDetails,
+  SupplierNotificationLimitDetails,
   SupplierStateDetails,
   SupplierVersionConflictDetails,
 } from "@adclub/contracts";
@@ -32,7 +35,7 @@ export function supplierSelfActor(session: AuthenticatedSession): SupplierSelfAc
   };
 }
 
-export function adminIdOf(actor: SupplierAdminActor): string | null {
+export function adminIdOf(actor: SupplierAdminActor | SupplierSelfActor): string | null {
   return actor.role === "admin" ? actor.adminId : null;
 }
 
@@ -190,13 +193,30 @@ export function yearsLater(date: string, years: number): string {
   return target.toISOString().slice(0, 10);
 }
 
+/**
+ * JSON with the keys of every object sorted: a value read back from a
+ * `jsonb` column (which keeps its own key order — `{"to","from"}`) equals
+ * the same value as a client sent it (TASK-017, the remark of TASK-016).
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.entries(inner as Record<string, unknown>).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
+      : inner,
+  );
+}
+
 /** Records the fields that differ into `before`/`after` (the action journal keeps only those). */
 export class Changes {
   readonly before: Record<string, unknown> = {};
   readonly after: Record<string, unknown> = {};
 
   note(field: string, was: unknown, now: unknown): void {
-    if (JSON.stringify(was) !== JSON.stringify(now)) {
+    if (canonicalJson(was) !== canonicalJson(now)) {
       this.before[field] = was;
       this.after[field] = now;
     }
@@ -213,4 +233,55 @@ export class Changes {
 
 export function iso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
+}
+
+// ------------------------------------------------------------- employees
+
+/**
+ * The employees of one company change one at a time (TASK-017): adding,
+ * removing, restoring, the notification switch and the contact person
+ * take this transaction lock first, so "at least one employee" and "no
+ * more than the limit receive notifications" are counted exactly under
+ * any concurrency. Other companies never wait for it.
+ */
+export function companyMembersLock(supplierId: string) {
+  return sql`SELECT pg_advisory_xact_lock(hashtext('supplier_members'), hashtext(${supplierId}))`;
+}
+
+export function lastMember(): ApiException {
+  return new ApiException(
+    409,
+    "SUPPLIER_LAST_MEMBER",
+    "The company must keep at least one employee: add another one first",
+  );
+}
+
+export function memberExists(details: SupplierMemberExistsDetails): ApiException {
+  return new ApiException(
+    409,
+    "SUPPLIER_MEMBER_EXISTS",
+    details.status === "active"
+      ? "This number is already an employee of the company"
+      : "This employee was removed; only an administrator of the club can restore their access",
+    { details },
+  );
+}
+
+export function memberState(refusal: SupplierMemberStateDetails["refusal"]): ApiException {
+  const details: SupplierMemberStateDetails = { refusal };
+  return new ApiException(
+    409,
+    "SUPPLIER_MEMBER_STATE",
+    refusal === "not_removed" ? "The employee isn't removed" : "The employee is removed",
+    { details },
+  );
+}
+
+export function notificationLimit(details: SupplierNotificationLimitDetails): ApiException {
+  return new ApiException(
+    409,
+    "SUPPLIER_NOTIFICATION_LIMIT",
+    `The limit is reached: no more than ${details.limit} employees receive notifications`,
+    { details },
+  );
 }

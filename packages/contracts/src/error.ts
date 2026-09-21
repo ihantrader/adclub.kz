@@ -187,6 +187,21 @@ import { clientPlatformSchema } from "./client";
  *   `max_notified_members` already have notifications on; `details` is
  *   `SupplierNotificationLimitDetails`.
  *
+ * Offers of suppliers (TASK-018, ARCHITECTURE 4.28):
+ * - `OFFER_EXISTS` (409): the pickup point already has an offer on this
+ *   item (on sale or withdrawn — return it instead); `details` is
+ *   `OfferExistsDetails`.
+ * - `OFFER_VERSION_CONFLICT` (409): the offer was changed by someone
+ *   else; `details` is `OfferVersionConflictDetails` — reload and decide again.
+ * - `OFFER_STATE` (409): the offer can't do this in its status (withdraw
+ *   one that isn't on sale, return one that isn't withdrawn); `details`
+ *   is `OfferStateDetails`.
+ * - `OFFER_PICKUP_NEEDS_ADDRESS` (409): pickup needs the address of the
+ *   pickup point — fill it in on the company card first.
+ * - `OFFER_NOT_APPLICABLE` (409): offers on services come with TASK-019.
+ * - `OFFER_ITEM_UNAVAILABLE` (409): the item is no longer active in the
+ *   catalog; the offer stays, but can't be returned to sale.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -297,6 +312,13 @@ export const errorCodeSchema = z.enum([
   "SUPPLIER_MEMBER_EXISTS",
   "SUPPLIER_MEMBER_STATE",
   "SUPPLIER_NOTIFICATION_LIMIT",
+  // Offers of suppliers (TASK-018, ARCHITECTURE 4.28).
+  "OFFER_EXISTS",
+  "OFFER_VERSION_CONFLICT",
+  "OFFER_STATE",
+  "OFFER_PICKUP_NEEDS_ADDRESS",
+  "OFFER_NOT_APPLICABLE",
+  "OFFER_ITEM_UNAVAILABLE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

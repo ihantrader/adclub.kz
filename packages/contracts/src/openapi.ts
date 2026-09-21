@@ -1,6 +1,7 @@
 import { z } from "zod";
 import * as compatibilityContract from "./compatibility";
 import * as supplierContract from "./suppliers";
+import * as offerContract from "./offers";
 import * as vehicleContract from "./vehicles";
 import {
   accessContextSchema,
@@ -216,6 +217,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(vehicleContract),
   ...moduleComponentSchemas(compatibilityContract),
   ...moduleComponentSchemas(supplierContract),
+  ...moduleComponentSchemas(offerContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,

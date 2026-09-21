@@ -483,6 +483,7 @@ export type {
 export * from "./vehicles";
 export * from "./compatibility";
 export * from "./suppliers";
+export * from "./offers";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

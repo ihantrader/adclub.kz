@@ -205,6 +205,16 @@ export const auditActions = {
   supplierBlockChanged: "supplier.block_changed",
   /** An invitation to an employee was put on the queue (the first one, or again). */
   supplierInvitationRequested: "supplier_invitation.requested",
+  /**
+   * Offers of a supplier (TASK-018), by an employee (actor `supplier`).
+   * `created`: the offer; `changed`: `before`/`after` — the changed fields
+   * and the new version; `withdrawn`: taken off sale (`after.reason`);
+   * `returned`: back on sale.
+   */
+  offerCreated: "offer.created",
+  offerChanged: "offer.changed",
+  offerWithdrawn: "offer.withdrawn",
+  offerReturned: "offer.returned",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -236,6 +246,7 @@ export const auditEntities = {
   city: "city",
   supplierLead: "supplier_lead",
   supplierInvitation: "supplier_invitation",
+  offer: "offer",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

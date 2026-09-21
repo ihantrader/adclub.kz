@@ -150,6 +150,21 @@ import {
   updateCompatibilityRecordBodySchema,
 } from "./compatibility";
 import {
+  createOfferBodySchema,
+  offerItemSearchQuerySchema,
+  offerItemSearchResponseSchema,
+  offerListQuerySchema,
+  offerPageSchema,
+  offerPathSchema,
+  offerReceiptPreviewQuerySchema,
+  offerReceiptPreviewResponseSchema,
+  offerReturnedResponseSchema,
+  offerStatusBodySchema,
+  supplierOfferResponseSchema,
+  supplierOffersPathSchema,
+  updateOfferBodySchema,
+} from "./offers";
+import {
   editTranslationBodySchema,
   entityTranslationsResponseSchema,
   translationEntityPathSchema,
@@ -2771,6 +2786,143 @@ export const apiRoutes = {
     requestBody: { description: "Whose sessions", schema: endSupplierSessionsBodySchema },
     responses: {
       200: { description: "How many ended", schema: supplierSessionsEndedResponseSchema },
+    },
+  }),
+  searchOfferItems: defineRoute({
+    operationId: "searchOfferItems",
+    method: "GET",
+    path: "/supplier/catalog/items/search",
+    summary:
+      "Find an active part or product of the catalog to put an offer on — only by a query (3+ letters or digits: an article in any spelling or a name in any language), a page of at most 20 and no further than the first 100 matches; with the company's offer on each; limited per employee",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: offerItemSearchQuerySchema,
+    responses: {
+      200: { description: "The items found", schema: offerItemSearchResponseSchema },
+    },
+  }),
+  listSupplierOffers: defineRoute({
+    operationId: "listSupplierOffers",
+    method: "GET",
+    path: "/supplier/offers",
+    summary:
+      "The company's offers: on sale or withdrawn, a search, in stock / on order, without a photo; the showcase sign with its reasons and the receipt date for an order confirmed now",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: offerListQuerySchema,
+    responses: {
+      200: { description: "Offers", schema: offerPageSchema },
+    },
+  }),
+  createSupplierOffer: defineRoute({
+    operationId: "createSupplierOffer",
+    method: "POST",
+    path: "/supplier/offers",
+    summary:
+      "Put an offer of the company's pickup point on an active part or product: price, availability, term, pickup and/or delivery, warranty; one offer per item",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "The offer", schema: createOfferBodySchema },
+    responses: {
+      201: { description: "The offer", schema: supplierOfferResponseSchema },
+    },
+  }),
+  previewOfferReceipt: defineRoute({
+    operationId: "previewOfferReceipt",
+    method: "GET",
+    path: "/supplier/offer-receipt-preview",
+    summary:
+      "The date a user would get the item if an order with this term were confirmed now, by the schedule of the company's pickup point («Клиент увидит: …»)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: offerReceiptPreviewQuerySchema,
+    responses: {
+      200: { description: "The receipt date", schema: offerReceiptPreviewResponseSchema },
+    },
+  }),
+  getSupplierOffer: defineRoute({
+    operationId: "getSupplierOffer",
+    method: "GET",
+    path: "/supplier/offers/{offerId}",
+    summary: "One offer of the company; another company's answers like a missing one (404)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: offerPathSchema,
+    responses: {
+      200: { description: "The offer", schema: supplierOfferResponseSchema },
+    },
+  }),
+  updateSupplierOffer: defineRoute({
+    operationId: "updateSupplierOffer",
+    method: "PATCH",
+    path: "/supplier/offers/{offerId}",
+    summary:
+      "Change fields of an offer straight from the list, with the version read; new orders take the new values, created ones keep theirs",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: offerPathSchema,
+    requestBody: { description: "What changes", schema: updateOfferBodySchema },
+    responses: {
+      200: { description: "The offer", schema: supplierOfferResponseSchema },
+    },
+  }),
+  withdrawSupplierOffer: defineRoute({
+    operationId: "withdrawSupplierOffer",
+    method: "POST",
+    path: "/supplier/offers/{offerId}/withdraw",
+    summary: "Take an offer off sale; it isn't deleted and waits on the «withdrawn» tab",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: offerPathSchema,
+    requestBody: { description: "The version read", schema: offerStatusBodySchema },
+    responses: {
+      200: { description: "The offer", schema: supplierOfferResponseSchema },
+    },
+  }),
+  returnSupplierOffer: defineRoute({
+    operationId: "returnSupplierOffer",
+    method: "POST",
+    path: "/supplier/offers/{offerId}/return",
+    summary:
+      "Put a withdrawn offer back on sale; the answer asks to check the price (`checkPrice`)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: offerPathSchema,
+    requestBody: { description: "The version read", schema: offerStatusBodySchema },
+    responses: {
+      200: { description: "The offer", schema: offerReturnedResponseSchema },
+    },
+  }),
+  listAdminSupplierOffers: defineRoute({
+    operationId: "listAdminSupplierOffers",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}/offers",
+    summary:
+      "A supplier's offers, read only (A-SUP-03 «Предложения»): the same tabs, filters and showcase sign as in the cabinet",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierOffersPathSchema,
+    query: offerListQuerySchema,
+    responses: {
+      200: { description: "Offers", schema: offerPageSchema },
     },
   }),
 } as const;

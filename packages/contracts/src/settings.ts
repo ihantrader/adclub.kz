@@ -50,6 +50,8 @@ export const settingUnitSchema = z.enum([
   "hour_of_day",
   "megabytes",
   "rows",
+  // Tenge (TASK-018: the bounds of an offer's price).
+  "kzt",
 ]);
 
 export type SettingUnit = z.infer<typeof settingUnitSchema>;

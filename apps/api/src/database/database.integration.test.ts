@@ -109,10 +109,131 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790050000000_create-item-photos",
       "1790100000000_create-vehicles",
       "1790150000000_create-item-compatibility",
+      "1790200000000_create-suppliers",
     ]);
   });
 
-  it("rolls back the latest migration only (compatibility), keeping items and cars", async () => {
+  it("moves the city text of companies into the directory and back (suppliers), losing nothing", async () => {
+    // Companies of before the directory: written with the city as text.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "city")).toBe(false);
+    const insert = async (name: string, city: string, status = "active") =>
+      (
+        await client.query<{ id: string }>(
+          "INSERT INTO supplier (name, city, status) VALUES ($1, $2, $3) RETURNING id",
+          [name, city, status],
+        )
+      ).rows[0]!.id;
+    const alpha = await insert("Альфа", "алматы");
+    const beta = await insert("Бета", "Almaty", "paused");
+    const gamma = await insert("Гамма", "Неизвестград");
+    const delta = await insert("Дельта", " неизвестград ", "draft");
+    const epsilon = await insert("Эпсилон", "Өскемен", "blocked");
+
+    expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
+    // Known names became the city with its code and three names; any other
+    // text a city of its own with that text as the Russian name.
+    const { rows: cities } = await client.query(
+      "SELECT code, name_ru, name_kk, name_en, source, status FROM city ORDER BY code",
+    );
+    expect(cities).toEqual([
+      {
+        code: "almaty",
+        name_ru: "Алматы",
+        name_kk: "Алматы",
+        name_en: "Almaty",
+        source: "migrated",
+        status: "active",
+      },
+      {
+        code: "migrated-1",
+        name_ru: "Неизвестград",
+        name_kk: null,
+        name_en: null,
+        source: "migrated",
+        status: "active",
+      },
+      {
+        code: "ust-kamenogorsk",
+        name_ru: "Усть-Каменогорск",
+        name_kk: "Өскемен",
+        name_en: "Oskemen",
+        source: "migrated",
+        status: "active",
+      },
+    ]);
+    const { rows: suppliers } = await client.query(
+      `SELECT s.name, c.code, s.status, s.pause_reason, s.block_reason IS NOT NULL AS blocked, s.type,
+              (SELECT count(*)::int FROM supplier_location l WHERE l.supplier_id = s.id AND l.city_id = s.city_id) AS points
+       FROM supplier s JOIN city c ON c.id = s.city_id ORDER BY s.name`,
+    );
+    expect(suppliers).toEqual([
+      {
+        name: "Альфа",
+        code: "almaty",
+        status: "active",
+        pause_reason: null,
+        blocked: false,
+        type: "both",
+        points: 1,
+      },
+      {
+        name: "Бета",
+        code: "almaty",
+        status: "paused",
+        pause_reason: "admin",
+        blocked: false,
+        type: "both",
+        points: 1,
+      },
+      {
+        name: "Гамма",
+        code: "migrated-1",
+        status: "active",
+        pause_reason: null,
+        blocked: false,
+        type: "both",
+        points: 1,
+      },
+      {
+        name: "Дельта",
+        code: "migrated-1",
+        status: "active",
+        pause_reason: null,
+        blocked: false,
+        type: "both",
+        points: 1,
+      },
+      {
+        name: "Эпсилон",
+        code: "ust-kamenogorsk",
+        status: "blocked",
+        pause_reason: null,
+        blocked: true,
+        type: "both",
+        points: 1,
+      },
+    ]);
+
+    // Back: every company has its city as text again (the directory's
+    // Russian name), and its state.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "city")).toBe(false);
+    expect(await tableExists(client, "supplier_lead")).toBe(false);
+    const { rows: back } = await client.query(
+      "SELECT id, city, status FROM supplier ORDER BY name",
+    );
+    expect(back).toEqual([
+      { id: alpha, city: "Алматы", status: "active" },
+      { id: beta, city: "Алматы", status: "paused" },
+      { id: gamma, city: "Неизвестград", status: "active" },
+      { id: delta, city: "Неизвестград", status: "active" },
+      { id: epsilon, city: "Усть-Каменогорск", status: "blocked" },
+    ]);
+    await client.query("DELETE FROM supplier");
+  });
+
+  it("rolls back the next one (compatibility), keeping items and cars", async () => {
     const node = await client.query<{ id: string }>(
       "INSERT INTO category (code, kind, level) VALUES ('fit_node', 'goods', 1) RETURNING id",
     );

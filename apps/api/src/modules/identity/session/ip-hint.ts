@@ -1,4 +1,4 @@
-import { rateLimitSubject } from "../login-code/rate-limit-subject";
+import { rateLimitSubject } from "../../../redis";
 
 /**
  * What the list of sessions shows of an address: the IPv4 /24 network

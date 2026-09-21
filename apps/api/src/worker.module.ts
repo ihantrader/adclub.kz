@@ -11,6 +11,7 @@ import { AiModule, type AiServiceOptions } from "./modules/ai";
 import { AuditModule } from "./modules/audit";
 import { CatalogJobsModule } from "./modules/catalog";
 import { VehicleJobsModule } from "./modules/vehicles";
+import { SupplierJobsModule } from "./modules/suppliers";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -52,6 +53,7 @@ export class WorkerModule {
         IdentityJobsModule,
         CatalogJobsModule,
         VehicleJobsModule,
+        SupplierJobsModule,
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

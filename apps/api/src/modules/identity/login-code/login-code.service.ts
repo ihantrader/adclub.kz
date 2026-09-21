@@ -17,10 +17,9 @@ import {
 } from "../../../common/errors";
 import { ZodValidationException } from "../../../common/validation";
 import { Metrics } from "../../../observability";
-import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
+import { RateLimiterService, RateLimiterUnavailableError, rateLimitSubject } from "../../../redis";
 import { LoginCodeChannels, LoginCodeDeliveryError } from "./channels/login-code-channels";
 import type { LoginCodeSettings } from "./login-code-settings.source";
-import { rateLimitSubject } from "./rate-limit-subject";
 import {
   generateLoginCode,
   hashLoginCode,

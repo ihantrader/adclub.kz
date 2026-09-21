@@ -56,6 +56,8 @@ describe("settings registry", () => {
       "photos",
       "vehicles",
       "compatibility",
+      "suppliers",
+      "public_limits",
       "billing",
       "clients",
       "cleanup",

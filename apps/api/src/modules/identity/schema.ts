@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
+  date,
   foreignKey,
   integer,
   jsonb,
@@ -75,20 +77,45 @@ export type SessionRevokedReason =
   | "admin_removed"
   | "totp_reset";
 
-export type SupplierStatus = "draft" | "active" | "paused" | "blocked";
+/** What the pause and the blocking make it (a check in the database keeps them in step). */
+export type SupplierStatus = "active" | "paused" | "blocked";
 
 /**
- * `supplier` (ARCHITECTURE 5.5): a company, reduced to what the cabinet
- * sign-in needs. Owned here until the supplier module arrives (TASK-016).
+ * `supplier` (ARCHITECTURE 5.5, 4.26): a company. The supplier module
+ * (`modules/suppliers`, TASK-016) keeps it; the table is described here
+ * because memberships and sessions point at it, and the identity module
+ * must not import the supplier module (which imports it). `city_id` and
+ * `lead_id` are foreign keys in the database (`city`, `supplier_lead`);
+ * they are left out here for the same reason.
  */
 export const supplier = pgTable("supplier", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  city: text("city").notNull(),
+  cityId: uuid("city_id").notNull(),
+  bin: text("bin"),
+  type: text("type").$type<"goods" | "services" | "both">().notNull().default("both"),
+  contactName: text("contact_name"),
+  contactPhone: text("contact_phone"),
+  timeZone: text("time_zone").notNull().default("Asia/Almaty"),
   status: text("status").$type<SupplierStatus>().notNull().default("active"),
+  pauseReason: text("pause_reason").$type<"billing" | "admin">(),
+  pauseNote: text("pause_note"),
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  blockReason: text("block_reason"),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  contractSignedOn: date("contract_signed_on"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  leadId: uuid("lead_id"),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The Russian name of the company's city, for the places that show a
+ * company in a line (the list of companies of an employee, sessions).
+ */
+export const supplierCityName = sql<string>`(SELECT city.name_ru FROM city WHERE city.id = supplier.city_id)`;
 
 export type MembershipStatus = "active" | "removed";
 

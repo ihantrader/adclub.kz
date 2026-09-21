@@ -10,6 +10,7 @@ import type {
   SettingListResponse,
   SettingVersionConflictDetails,
 } from "@adclub/contracts";
+import { sql } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService } from "../../database";
 import { AuditLog, type AuditActorRecord } from "../audit";
@@ -174,7 +175,38 @@ export class SettingsChangeService {
       );
       throw validationError(checked.issues);
     }
+    await this.assertReferenceExists(key, definition, checked.value, input.actor);
     return this.apply(key, input.expectedVersion, input.actor, "set", reason, checked.value);
+  }
+
+  /**
+   * A value that names a record of a directory must name one that exists
+   * and is active (`default_city` — a city by code, or by a name for
+   * values of before the directory; TASK-016).
+   */
+  private async assertReferenceExists(
+    key: SettingKey,
+    definition: SettingDefinition,
+    value: unknown,
+    actor: SettingChangeActor,
+  ): Promise<void> {
+    if (definition.type !== "string" || definition.reference !== "city") {
+      return;
+    }
+    const text = String(value);
+    const found = await this.database.db.execute(sql`
+      SELECT 1 FROM city
+      WHERE status = 'active'
+        AND (code = ${text} OR lower(${text}) IN (lower(name_ru), lower(name_kk), lower(name_en)))
+    `);
+    if (found.rows.length === 0) {
+      this.logger.log(
+        `Setting change refused key=${key} by=${this.actorLabel(actor)} reason=unknown_city`,
+      );
+      throw validationError([
+        { path: "value", message: "No active city of the directory has this code or name" },
+      ]);
+    }
   }
 
   async reset(input: ResetSettingInput): Promise<SettingChangedResponse> {

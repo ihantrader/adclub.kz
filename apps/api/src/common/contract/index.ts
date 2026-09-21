@@ -1,6 +1,7 @@
 export {
   ApiRoute,
   API_ROUTE_METADATA,
+  RateLimitGuardMark,
   SessionAccessGuard,
   toNestPath,
 } from "./api-route.decorator";

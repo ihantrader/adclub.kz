@@ -9,6 +9,7 @@ import {
   loginCodeVerifiedResponseSchema,
   sessionListResponseSchema,
   signInCompletedResponseSchema,
+  supplierCompanyResponseSchema,
   supplierSelectionRequiredDetailsSchema,
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
@@ -629,8 +630,18 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         body.session.accessToken,
         SUPPLIER_WEB,
       );
-      expect(current.body).toEqual({
-        supplier: { id: supplierId, name: "Шиномонтаж", city: "Астана", status: "active" },
+      const own = supplierCompanyResponseSchema.parse(current.body);
+      expect(own.supplier).toEqual({
+        id: supplierId,
+        name: "Шиномонтаж",
+        city: "Астана",
+        status: "active",
+      });
+      // The card of the company (TASK-016).
+      expect(own.company).toMatchObject({
+        id: supplierId,
+        name: "Шиномонтаж",
+        state: "active",
       });
       const list = sessionListResponseSchema.parse(
         (await bearer("get", "/auth/sessions", body.session.accessToken, SUPPLIER_WEB)).body,
@@ -650,8 +661,16 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     it("keeps a paused or blocked company's cabinet open", async () => {
       const supplierId = await company("На паузе");
       await employ(supplierId, PHONE);
-      for (const status of ["paused", "blocked"]) {
-        await db.query("UPDATE supplier SET status = $1 WHERE id = $2", [status, supplierId]);
+      // Pause and blocking are set the way the admin routes set them (TASK-016).
+      const states = {
+        paused: "pause_reason = 'admin', paused_at = now()",
+        blocked: "block_reason = 'test', blocked_at = now()",
+      } as const;
+      for (const status of ["paused", "blocked"] as const) {
+        await db.query(`UPDATE supplier SET ${states[status]}, status = $1 WHERE id = $2`, [
+          status,
+          supplierId,
+        ]);
         const session = await supplierSession(PHONE);
         const response = await bearer(
           "get",
@@ -1823,9 +1842,14 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "GET /admin/catalog/items/{itemId}",
         "GET /admin/catalog/items/{itemId}/compatibility",
         "GET /admin/catalog/items/{itemId}/photos",
+        "GET /admin/cities",
         "GET /admin/compatibility-proposals",
         "GET /admin/settings",
         "GET /admin/settings/{key}/history",
+        "GET /admin/supplier-leads",
+        "GET /admin/supplier-leads/{leadId}",
+        "GET /admin/suppliers",
+        "GET /admin/suppliers/{supplierId}",
         "GET /admin/translations",
         "GET /admin/translations/{entityType}/{entityId}",
         "GET /admin/vehicles/engines",
@@ -1844,6 +1868,9 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "PATCH /admin/catalog/categories/{categoryId}",
         "PATCH /admin/catalog/compatibility/{recordId}",
         "PATCH /admin/catalog/items/{itemId}",
+        "PATCH /admin/cities/{cityId}",
+        "PATCH /admin/supplier-leads/{leadId}",
+        "PATCH /admin/suppliers/{supplierId}",
         "PATCH /admin/vehicles/engines/{engineId}",
         "PATCH /admin/vehicles/generations/{generationId}",
         "PATCH /admin/vehicles/makes/{makeId}",
@@ -1867,9 +1894,20 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "POST /admin/catalog/items/{itemId}/photos",
         "POST /admin/catalog/items/{itemId}/photos/{photoId}/status",
         "POST /admin/catalog/items/{itemId}/status",
+        "POST /admin/cities",
+        "POST /admin/cities/{cityId}/status",
         "POST /admin/compatibility-proposals/{proposalId}/approve",
         "POST /admin/compatibility-proposals/{proposalId}/reject",
         "POST /admin/settings/{key}/reset",
+        "POST /admin/supplier-leads",
+        "POST /admin/supplier-leads/{leadId}/notes",
+        "POST /admin/supplier-leads/{leadId}/onboard",
+        "POST /admin/supplier-leads/{leadId}/status",
+        "POST /admin/suppliers",
+        "POST /admin/suppliers/{supplierId}/block",
+        "POST /admin/suppliers/{supplierId}/members/{memberId}/invitations",
+        "POST /admin/suppliers/{supplierId}/pause",
+        "POST /admin/suppliers/{supplierId}/verification",
         "POST /admin/totp/backup-codes",
         "POST /admin/translations/{entityType}/{entityId}/{field}/{lang}/release",
         "POST /admin/translations/{entityType}/{entityId}/{field}/{lang}/retranslate",
@@ -1894,7 +1932,9 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "PUT /admin/catalog/categories/{categoryId}/fill",
         "PUT /admin/catalog/items/{itemId}/photos/order",
         "PUT /admin/catalog/items/{itemId}/values",
+        "PUT /admin/cities/order",
         "PUT /admin/settings/{key}",
+        "PUT /admin/suppliers/{supplierId}/schedule",
         "PUT /admin/translations/{entityType}/{entityId}/{field}/{lang}",
       ]);
       // The list only reads (405 names what it takes, TASK-009.A); an

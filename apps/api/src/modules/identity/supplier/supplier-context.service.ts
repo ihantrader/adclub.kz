@@ -1,9 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type {
-  CurrentAccountResponse,
-  SupplierCompanyResponse,
-  SupplierMembershipListResponse,
-} from "@adclub/contracts";
+import type { CurrentAccountResponse, SupplierMembershipListResponse } from "@adclub/contracts";
 import { ApiException } from "../../../common/errors";
 import { DatabaseService } from "../../../database";
 import { sessionEndedException } from "../session/session-errors";
@@ -17,8 +13,8 @@ function companyNotFound(): ApiException {
 
 /**
  * The company a cabinet session works for (ARCHITECTURE 8.3): the
- * employee's companies, switching between them, and company data scoped
- * to the session — any other company answers exactly like a missing one.
+ * employee's companies and switching between them. The company's card,
+ * scoped to the session, is the supplier module's (TASK-016).
  */
 @Injectable()
 export class SupplierContextService {
@@ -88,17 +84,5 @@ export class SupplierContextService {
           supplierMemberId: switched.memberId,
         });
     }
-  }
-
-  async company(auth: AuthenticatedSession, supplierId: string): Promise<SupplierCompanyResponse> {
-    // Scoped to the session's company: a foreign and an unknown id look the same.
-    if (supplierId !== auth.supplierId) {
-      throw companyNotFound();
-    }
-    const row = await this.memberships.findSupplier(supplierId);
-    if (!row) {
-      throw companyNotFound();
-    }
-    return { supplier: { id: row.id, name: row.name, city: row.city, status: row.status } };
   }
 }

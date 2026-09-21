@@ -5,7 +5,7 @@ export type { CatalogActor } from "./catalog-admin.service";
 export { CatalogBrandsService } from "./catalog-brands.service";
 export { adminActor } from "./catalog-admin.controller";
 export { normalizeText } from "./catalog-texts";
-export { decodeCursor, encodeCursor, TIME_POSITION } from "./catalog-paging";
+export { decodeCursor, encodeCursor, escapeLike, TIME_POSITION } from "./catalog-paging";
 export { CatalogItemsService } from "./catalog-items.service";
 export { CatalogPhotosService } from "./catalog-photos.service";
 export { CATALOG_PHOTO_PREFIX, photoObjectKey, PhotoStorage } from "./photo-storage";

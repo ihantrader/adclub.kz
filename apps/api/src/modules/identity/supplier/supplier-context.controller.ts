@@ -1,11 +1,8 @@
-import { Body, Controller, Inject, Param } from "@nestjs/common";
+import { Body, Controller, Inject } from "@nestjs/common";
 import {
   apiRoutes,
-  supplierIdPathSchema,
   switchSupplierBodySchema,
   type CurrentAccountResponse,
-  type SupplierCompanyResponse,
-  type SupplierIdPath,
   type SupplierMembershipListResponse,
   type SwitchSupplierBody,
 } from "@adclub/contracts";
@@ -14,7 +11,11 @@ import { CurrentSession, SessionRoute } from "../session/session.guard";
 import type { AuthenticatedSession } from "../session/session.service";
 import { SupplierContextService } from "./supplier-context.service";
 
-/** Routes of the `supplier` context (a cabinet session of an active employee). */
+/**
+ * Routes of the `supplier` context (a cabinet session of an active
+ * employee) about the session itself. The company's card is served by the
+ * supplier module (`GET /supplier/company`, TASK-016).
+ */
 @Controller()
 export class SupplierContextController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
@@ -33,21 +34,5 @@ export class SupplierContextController {
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<CurrentAccountResponse> {
     return this.context.switchTo(session, body.supplierId);
-  }
-
-  @SessionRoute(apiRoutes.getSupplierCompany)
-  getSupplierCompany(
-    @CurrentSession() session: AuthenticatedSession,
-  ): Promise<SupplierCompanyResponse> {
-    // The access rule guarantees a supplier context has its company.
-    return this.context.company(session, session.supplierId ?? "");
-  }
-
-  @SessionRoute(apiRoutes.getSupplierCompanyById)
-  getSupplierCompanyById(
-    @Param(new ZodValidationPipe(supplierIdPathSchema)) params: SupplierIdPath,
-    @CurrentSession() session: AuthenticatedSession,
-  ): Promise<SupplierCompanyResponse> {
-    return this.context.company(session, params.supplierId);
   }
 }

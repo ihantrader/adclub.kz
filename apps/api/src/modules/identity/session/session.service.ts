@@ -28,9 +28,8 @@ import { describeError } from "../../../common/health";
 import { APP_CONFIG, type AppConfig, type RateLimitSettings } from "../../../config";
 import { afterCommit, withoutQueryParameters, type DbExecutor } from "../../../database";
 import { Metrics } from "../../../observability";
-import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
+import { RateLimiterService, RateLimiterUnavailableError, rateLimitSubject } from "../../../redis";
 import type { SessionRevokedReason } from "../schema";
-import { rateLimitSubject } from "../login-code/rate-limit-subject";
 import { ipHint } from "./ip-hint";
 import {
   accessTokenExpiredException,

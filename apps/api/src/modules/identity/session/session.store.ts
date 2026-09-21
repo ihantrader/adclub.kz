@@ -6,6 +6,7 @@ import {
   adminUser,
   session,
   supplier,
+  supplierCityName,
   supplierMember,
   type MembershipStatus,
   type SessionKindValue,
@@ -110,7 +111,7 @@ const refreshColumns = {
 const summaryColumns = {
   id: session.id,
   kind: session.kind,
-  supplier: { id: supplier.id, name: supplier.name, city: supplier.city },
+  supplier: { id: supplier.id, name: supplier.name, city: supplierCityName },
   deviceName: session.deviceName,
   clientPlatform: session.clientPlatform,
   clientVersion: session.clientVersion,

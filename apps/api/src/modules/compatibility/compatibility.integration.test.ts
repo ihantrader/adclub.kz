@@ -1507,7 +1507,22 @@ describe("compatibility of items (PostgreSQL + Redis)", () => {
       const started = performance.now();
       const overHttp = await check({ categoryId: w.brakePads, vehicle: { modelId: w.atlas } });
       const httpMs = performance.now() - started;
-      expect(overHttp.items.length).toBeGreaterThanOrEqual(ITEMS);
+      // Over HTTP a subcategory comes page by page (TASK-016): 500 items at
+      // most per answer, every item exactly once over the pages.
+      expect(overHttp.items).toHaveLength(500);
+      const pages = [overHttp];
+      for (let cursor = overHttp.nextCursor; cursor !== null;) {
+        const next = await check({
+          categoryId: w.brakePads,
+          vehicle: { modelId: w.atlas },
+          cursor,
+        });
+        pages.push(next);
+        cursor = next.nextCursor;
+      }
+      const overPages = pages.flatMap((page) => page.items.map((entry) => entry.itemId));
+      expect(overPages.length).toBeGreaterThanOrEqual(ITEMS);
+      expect(new Set(overPages).size).toBe(overPages.length);
       const byIds = performance.now();
       await check({
         itemIds: overHttp.items.slice(0, 500).map((entry) => entry.itemId),

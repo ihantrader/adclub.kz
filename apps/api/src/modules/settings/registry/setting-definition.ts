@@ -52,6 +52,12 @@ export interface StringDefinition extends DefinitionBase {
   maxLength: number;
   /** The form a value must have; a value of another form is refused with `message`. */
   pattern?: { regex: RegExp; message: string };
+  /**
+   * `city`: names an active city of the directory — its code or, for
+   * values written before the directory (TASK-016), one of its names. A
+   * change is checked against the database (`SettingsChangeService`).
+   */
+  reference?: "city";
   default: string;
 }
 
@@ -225,6 +231,7 @@ export function describeConstraints(
         minLength: 1,
         maxLength: definition.maxLength,
         ...(definition.pattern ? { pattern: definition.pattern.regex.source } : {}),
+        ...(definition.reference ? { reference: definition.reference } : {}),
       };
     case "enum":
       return { allowedValues: [...definition.values] };

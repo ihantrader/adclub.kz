@@ -284,8 +284,12 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       // The session context must be a real membership (TASK-006).
       const supplierId = randomUUID();
       const supplierMemberId = randomUUID();
+      // A company is in a city of the directory (TASK-016).
       await db.query(
-        "INSERT INTO supplier (id, name, city) VALUES ($1, 'Test company', 'Almaty')",
+        "INSERT INTO city (code, name_ru) VALUES ('almaty', 'Алматы') ON CONFLICT (code) DO NOTHING",
+      );
+      await db.query(
+        "INSERT INTO supplier (id, name, city_id) SELECT $1, 'Test company', id FROM city WHERE code = 'almaty'",
         [supplierId],
       );
       await db.query(

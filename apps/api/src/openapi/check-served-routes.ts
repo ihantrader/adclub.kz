@@ -1,6 +1,7 @@
 import type { ApiRouteDefinition } from "@adclub/contracts";
 import { toNestPath, type ServedRoute } from "../common/contract";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
+import { DEV_SUPPLIER_INVITATIONS_PATH } from "../modules/suppliers";
 import { METRICS_PATH } from "../observability";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
 
@@ -12,6 +13,7 @@ import { DEV_ONLY_PATHS } from "./openapi.controller";
 const NON_CONTRACT_PATHS: readonly string[] = [
   ...DEV_ONLY_PATHS,
   DEV_LOGIN_CODE_OUTBOX_PATH,
+  DEV_SUPPLIER_INVITATIONS_PATH,
   METRICS_PATH,
 ];
 

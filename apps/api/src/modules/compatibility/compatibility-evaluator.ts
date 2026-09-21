@@ -1,13 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type {
-  CompatibilityCheckBody,
-  CompatibilityCheckResponse,
-  CompatibilityItemResult,
-  CompatibilityLevel,
-  ResolvedCompatibilityVehicle,
+import {
+  COMPATIBILITY_CHECK_CATEGORY_PAGE_MAX,
+  type CompatibilityCheckBody,
+  type CompatibilityCheckResponse,
+  type CompatibilityItemResult,
+  type CompatibilityLevel,
+  type ResolvedCompatibilityVehicle,
 } from "@adclub/contracts";
 import { sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
+import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { resolveVehicle } from "./compatibility-conditions";
 import { notFound, validationError } from "./compatibility-errors";
 import { itemResultOf } from "./compatibility-rules";
@@ -16,8 +18,19 @@ import { itemResultOf } from "./compatibility-rules";
 export type CompatibilityScope =
   { kind: "items"; itemIds: readonly string[] } | { kind: "category"; categoryId: string };
 
+/**
+ * A page of a subcategory (TASK-016): at most `limit` items, newest first,
+ * after the position `after` (the time an item was created, to the
+ * microsecond, and its id).
+ */
+export interface CompatibilityPage {
+  limit: number;
+  after?: { position: string; id: string };
+}
+
 interface FactsRow extends Record<string, unknown> {
   item_id: string;
+  position: string;
   category_id: string;
   compatibility_required: boolean;
   records: number;
@@ -83,12 +96,26 @@ export class CompatibilityEvaluator {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
-  /** The check route: validates the request, resolves the car, evaluates. */
+  /**
+   * The check route: validates the request, resolves the car, evaluates.
+   * A subcategory is answered page by page (TASK-016): an open route never
+   * answers with an unbounded list.
+   */
   async check(body: CompatibilityCheckBody): Promise<CompatibilityCheckResponse> {
     const byIds = body.itemIds !== undefined;
     const byCategory = body.categoryId !== undefined;
     if (byIds === byCategory) {
       throw validationError("itemIds", "Name either itemIds or categoryId, exactly one of them");
+    }
+    if (byIds && (body.limit !== undefined || body.cursor !== undefined)) {
+      throw validationError(
+        body.limit !== undefined ? "limit" : "cursor",
+        "Pages are only for a whole subcategory (categoryId)",
+      );
+    }
+    const after = body.cursor === undefined ? undefined : decodeCursor(body.cursor);
+    if (after && !TIME_POSITION.test(after.position)) {
+      throw validationError("cursor", "Use the nextCursor of the previous answer");
     }
     const executor = this.database.db;
     const vehicle = body.vehicle ? await resolveVehicle(executor, body.vehicle) : null;
@@ -96,13 +123,44 @@ export class CompatibilityEvaluator {
       if (!(await this.visibleSubcategory(executor, body.categoryId))) {
         throw notFound("category");
       }
-      const items = await this.evaluate(vehicle, { kind: "category", categoryId: body.categoryId });
-      return { vehicle, items, notFound: [] };
+      const page = await this.evaluatePage(
+        vehicle,
+        body.categoryId,
+        { limit: body.limit ?? COMPATIBILITY_CHECK_CATEGORY_PAGE_MAX, after },
+        executor,
+      );
+      return { vehicle, items: page.items, notFound: [], nextCursor: page.nextCursor };
     }
     const itemIds = [...new Set(body.itemIds)];
     const items = await this.evaluate(vehicle, { kind: "items", itemIds });
     const found = new Set(items.map((item) => item.itemId));
-    return { vehicle, items, notFound: itemIds.filter((id) => !found.has(id)) };
+    return {
+      vehicle,
+      items,
+      notFound: itemIds.filter((id) => !found.has(id)),
+      nextCursor: null,
+    };
+  }
+
+  /** One page of a subcategory, newest items first, and the cursor of the next one. */
+  async evaluatePage(
+    vehicle: ResolvedCompatibilityVehicle | null,
+    categoryId: string,
+    page: CompatibilityPage,
+    executor: DbExecutor = this.database.db,
+  ): Promise<{ items: CompatibilityItemResult[]; nextCursor: string | null }> {
+    // One more than asked: whether a next page exists, without a count.
+    const rows = await this.facts(vehicle, { kind: "category", categoryId }, executor, {
+      limit: page.limit + 1,
+      after: page.after,
+    });
+    const more = rows.length > page.limit;
+    const shown = more ? rows.slice(0, page.limit) : rows;
+    const last = shown.at(-1);
+    return {
+      items: shown.map(({ result }) => result),
+      nextCursor: more && last ? encodeCursor(last.position, last.result.itemId) : null,
+    };
   }
 
   /**
@@ -115,6 +173,22 @@ export class CompatibilityEvaluator {
     scope: CompatibilityScope,
     executor: DbExecutor = this.database.db,
   ): Promise<CompatibilityItemResult[]> {
+    const rows = await this.facts(vehicle, scope, executor, undefined);
+    const answers = rows.map(({ result }) => result);
+    if (scope.kind === "items") {
+      const order = new Map(scope.itemIds.map((id, index) => [id, index]));
+      answers.sort((a, b) => order.get(a.itemId)! - order.get(b.itemId)!);
+    }
+    return answers;
+  }
+
+  /** The one statement: the result per item of the scope, with each item's position. */
+  private async facts(
+    vehicle: ResolvedCompatibilityVehicle | null,
+    scope: CompatibilityScope,
+    executor: DbExecutor,
+    page: CompatibilityPage | undefined,
+  ): Promise<{ result: CompatibilityItemResult; position: string }[]> {
     if (scope.kind === "items" && scope.itemIds.length === 0) {
       return [];
     }
@@ -178,14 +252,22 @@ export class CompatibilityEvaluator {
       ],
       sql`, `,
     );
+    const afterFilter = page?.after
+      ? sql`AND (i.created_at, i.id) < (${page.after.position}::timestamptz, ${page.after.id}::uuid)`
+      : sql``;
+    const pageLimit = page ? sql`LIMIT ${page.limit}` : sql``;
     const result = await executor.execute<FactsRow>(sql`
       WITH scope AS (
-        SELECT i.id, i.category_id, i.created_at, c.compatibility_required
+        SELECT i.id, i.category_id, i.created_at, c.compatibility_required,
+          to_char(i.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS position
         FROM catalog_item i
         JOIN category c ON c.id = i.category_id
         JOIN category p ON p.id = c.parent_id
         WHERE ${scopeFilter}
           AND i.status = 'active' AND c.status = 'active' AND p.status = 'active'
+          ${afterFilter}
+        ORDER BY i.created_at DESC, i.id DESC
+        ${pageLimit}
       ),
       rec AS (
         SELECT r.item_id,
@@ -211,7 +293,7 @@ export class CompatibilityEvaluator {
         WHERE NOT rec.conflict AND cardinality(rec.missing) = p.fewest AND NOT p.fits
         GROUP BY rec.item_id
       )
-      SELECT s.id AS item_id, s.category_id, s.compatibility_required,
+      SELECT s.id AS item_id, s.position, s.category_id, s.compatibility_required,
         coalesce(p.records, 0) AS records,
         coalesce(p.fits, false) AS fits,
         p.fewest IS NOT NULL AS viable,
@@ -221,8 +303,9 @@ export class CompatibilityEvaluator {
       LEFT JOIN need ON need.item_id = s.id
       ORDER BY s.created_at DESC, s.id DESC
     `);
-    const answers = result.rows.map((row) =>
-      itemResultOf({
+    return result.rows.map((row) => ({
+      position: row.position,
+      result: itemResultOf({
         itemId: row.item_id,
         categoryId: row.category_id,
         compatibilityRequired: row.compatibility_required,
@@ -233,12 +316,7 @@ export class CompatibilityEvaluator {
           missing: row.viable ? (row.missing ?? []) : null,
         },
       }),
-    );
-    if (scope.kind === "items") {
-      const order = new Map(scope.itemIds.map((id, index) => [id, index]));
-      answers.sort((a, b) => order.get(a.itemId)! - order.get(b.itemId)!);
-    }
-    return answers;
+    }));
   }
 
   private async visibleSubcategory(executor: DbExecutor, categoryId: string): Promise<boolean> {

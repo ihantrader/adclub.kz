@@ -580,6 +580,96 @@ const compatibility = group({
   },
 });
 
+const suppliers = group({
+  id: "suppliers",
+  title: "Поставщики",
+  editableBy: "admin",
+  settings: {
+    supplier_lead_per_phone: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 3,
+      description:
+        "Сколько заявок на подключение можно отправить с одним номером телефона за окно; сверх — отказ с временем ожидания.",
+    }),
+    supplier_lead_per_phone_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: 7 * DAY,
+      default: DAY,
+      description: "Окно лимита заявок на подключение с одного номера.",
+    }),
+    supplier_lead_duplicate_window_minutes: define.duration({
+      unit: "minutes",
+      min: 0,
+      max: 1440,
+      default: 10,
+      description:
+        "Повтор той же заявки (тот же БИН и номер) в течение стольких минут не создаёт вторую заявку (двойное нажатие); 0 — не проверять.",
+    }),
+    supplier_lead_consent_version: define.string({
+      maxLength: 50,
+      default: "1",
+      description:
+        "Версия текста согласия на обработку персональных данных на форме заявки; записывается в заявку вместе со временем согласия.",
+    }),
+    supplier_invitation_resend_interval_minutes: define.duration({
+      unit: "minutes",
+      min: 1,
+      max: 1440,
+      default: 5,
+      description:
+        "Через сколько минут после предыдущего приглашения сотруднику можно отправить его снова.",
+    }),
+    supplier_invitations_per_member_day: define.integer({
+      unit: "count",
+      min: 1,
+      max: 100,
+      default: 5,
+      description: "Сколько приглашений одному сотруднику можно отправить за скользящие 24 часа.",
+    }),
+  },
+});
+
+const publicLimits = group({
+  id: "public_limits",
+  title: "Открытые маршруты",
+  editableBy: "admin",
+  settings: {
+    supplier_lead_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 100_000,
+      default: 10,
+      description:
+        "Сколько заявок на подключение можно отправить с одного адреса (сети IPv6 /64) за окно; сверх — отказ с временем ожидания.",
+    }),
+    supplier_lead_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: HOUR,
+      description: "Окно лимита заявок на подключение с одного адреса.",
+    }),
+    compatibility_check_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000_000,
+      default: 120,
+      description:
+        "Сколько проверок совместимости без входа можно сделать с одного адреса за окно; сверх — отказ с временем ожидания.",
+    }),
+    compatibility_check_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита проверок совместимости с одного адреса.",
+    }),
+  },
+});
+
 const billing = group({
   id: "billing",
   title: "Подписки и оплата",
@@ -669,8 +759,10 @@ const clients = group({
     }),
     default_city: define.string({
       maxLength: 100,
-      default: "Алматы",
-      description: "Город по умолчанию, если город не определён и не выбран.",
+      default: "almaty",
+      reference: "city",
+      description:
+        "Город по умолчанию, если город не определён и не выбран: код активного города справочника (например, almaty); для совместимости принимается и его название.",
     }),
     offline_cache_max_age_days: define.duration({
       unit: "days",
@@ -973,6 +1065,8 @@ export const settingGroups = [
   photos,
   vehicles,
   compatibility,
+  suppliers,
+  publicLimits,
   billing,
   clients,
   cleanup,
@@ -993,6 +1087,8 @@ export const settingDefinitions = {
   ...photos.settings,
   ...vehicles.settings,
   ...compatibility.settings,
+  ...suppliers.settings,
+  ...publicLimits.settings,
   ...billing.settings,
   ...clients.settings,
   ...cleanup.settings,

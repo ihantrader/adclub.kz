@@ -415,6 +415,7 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "vehicles.analyze-import",
       "vehicles.apply-import",
       "vehicles.expire-imports",
+      "suppliers.send-invitation",
       "dev.always-fails",
       "dev.daily-at-setting",
     ]);

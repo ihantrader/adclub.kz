@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../../database";
-import { supplier, supplierMember, type SupplierStatus } from "../schema";
+import { supplier, supplierCityName, supplierMember, type SupplierStatus } from "../schema";
 
 /** An active membership with the company it gives access to. */
 export interface ActiveMembership {
@@ -20,13 +20,13 @@ export interface SupplierRecord {
 const membershipColumns = {
   memberId: supplierMember.id,
   displayName: supplierMember.displayName,
-  supplier: { id: supplier.id, name: supplier.name, city: supplier.city },
+  supplier: { id: supplier.id, name: supplier.name, city: supplierCityName },
 };
 
 const supplierColumns = {
   id: supplier.id,
   name: supplier.name,
-  city: supplier.city,
+  city: supplierCityName,
   status: supplier.status,
 };
 
@@ -100,15 +100,54 @@ export class SupplierMembershipStore {
 
   // Operator command (development and tests only, see `cli/operator.ts`).
 
+  /**
+   * A company in the city of this code or name (any language, case
+   * ignored), with its pickup point (every supplier has one, TASK-016).
+   * A city the directory doesn't know is added (`source = 'operator'`):
+   * the command is for development and tests, where the directory may be
+   * empty. The real way to create a supplier is the admin panel
+   * (`modules/suppliers`).
+   */
   async createSupplier(
     input: { name: string; city: string },
     executor: DbExecutor = this.database.db,
   ): Promise<SupplierRecord> {
+    const cityId = await this.cityFor(input.city, executor);
     const [row] = await executor
       .insert(supplier)
-      .values({ name: input.name, city: input.city })
-      .returning(supplierColumns);
-    return row!;
+      .values({ name: input.name, cityId })
+      .returning({ id: supplier.id });
+    await executor.execute(sql`
+      INSERT INTO supplier_location (supplier_id, city_id) VALUES (${row!.id}, ${cityId})
+    `);
+    const [created] = await executor
+      .select(supplierColumns)
+      .from(supplier)
+      .where(eq(supplier.id, row!.id));
+    return created!;
+  }
+
+  private async cityFor(text: string, executor: DbExecutor): Promise<string> {
+    const found = await executor.execute<{ id: string }>(sql`
+      SELECT id FROM city
+      WHERE code = ${text} OR lower(${text}) IN (lower(name_ru), lower(name_kk), lower(name_en))
+      ORDER BY status = 'active' DESC
+      LIMIT 1
+    `);
+    if (found.rows[0]) {
+      return found.rows[0].id;
+    }
+    const created = await executor.execute<{ id: string }>(sql`
+      INSERT INTO city (code, name_ru, source, sort)
+      VALUES (
+        'city-' || substr(md5(random()::text), 1, 8),
+        ${text},
+        'operator',
+        (SELECT coalesce(max(sort), -1) + 1 FROM city)
+      )
+      RETURNING id
+    `);
+    return created.rows[0]!.id;
   }
 
   /**
@@ -120,6 +159,8 @@ export class SupplierMembershipStore {
       supplierId: string;
       accountId: string;
       displayName: string;
+      /** Who adds: the operator command (development) or an administrator (TASK-016). */
+      addedBy?: "operator" | "admin";
     },
     executor: DbExecutor = this.database.db,
   ): Promise<{ memberId: string; created: boolean }> {
@@ -130,7 +171,7 @@ export class SupplierMembershipStore {
         supplierId: input.supplierId,
         accountId: input.accountId,
         displayName: input.displayName,
-        addedBy: "operator",
+        addedBy: input.addedBy ?? "operator",
       })
       .onConflictDoUpdate({
         target: [supplierMember.accountId, supplierMember.supplierId],

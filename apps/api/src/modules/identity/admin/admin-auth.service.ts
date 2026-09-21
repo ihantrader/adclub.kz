@@ -18,10 +18,9 @@ import {
 import { APP_CONFIG, type AppConfig, type RateLimitSettings } from "../../../config";
 import type { DbExecutor } from "../../../database";
 import { Metrics } from "../../../observability";
-import { RateLimiterService, RateLimiterUnavailableError } from "../../../redis";
+import { RateLimiterService, RateLimiterUnavailableError, rateLimitSubject } from "../../../redis";
 import { ActionJournal } from "../action-journal";
 import { AccountStore } from "../account/account.store";
-import { rateLimitSubject } from "../login-code/rate-limit-subject";
 import {
   notAdminException,
   signInStepInvalidException,

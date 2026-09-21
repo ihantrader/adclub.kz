@@ -38,7 +38,7 @@ import {
   type SupplierCompatibilityProposalResponse,
   type UpdateCompatibilityRecordBody,
 } from "@adclub/contracts";
-import { ApiRoute } from "../../common/contract";
+import { RateLimitedRoute } from "../../public-rate-limit";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
 import { CompatibilityEvaluator } from "./compatibility-evaluator";
@@ -209,7 +209,7 @@ export class CompatibilityController {
   // ---------------------------------------------------------------- client
 
   /** A read, though a POST: the car and the items travel in the body (200, not cached). */
-  @ApiRoute(apiRoutes.checkCompatibility)
+  @RateLimitedRoute(apiRoutes.checkCompatibility)
   check(
     @Body(new ZodValidationPipe(compatibilityCheckBodySchema)) body: CompatibilityCheckBody,
   ): Promise<CompatibilityCheckResponse> {

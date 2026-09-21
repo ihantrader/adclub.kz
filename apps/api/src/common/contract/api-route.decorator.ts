@@ -30,6 +30,24 @@ function isSessionAccessGuard(guard: Type<CanActivate>): boolean {
   return Reflect.getMetadata(SESSION_ACCESS_GUARD, guard) === true;
 }
 
+const RATE_LIMIT_GUARD = Symbol("RATE_LIMIT_GUARD");
+
+/**
+ * Marks the guard that counts the `rateLimit` of an open route
+ * (`PublicRateLimitGuard`, TASK-016). A route whose contract declares a
+ * limit is bound only together with it, so a limited route can't be
+ * served without its limit.
+ */
+export function RateLimitGuardMark(): ClassDecorator {
+  return (target) => {
+    Reflect.defineMetadata(RATE_LIMIT_GUARD, true, target);
+  };
+}
+
+function isRateLimitGuard(guard: Type<CanActivate>): boolean {
+  return Reflect.getMetadata(RATE_LIMIT_GUARD, guard) === true;
+}
+
 export interface ApiRouteOptions {
   /**
    * Guards run after the global ones (so an outdated client still gets
@@ -60,6 +78,11 @@ export function ApiRoute(
   options: ApiRouteOptions = {},
 ): MethodDecorator {
   const guards = options.guards ?? [];
+  if (route.rateLimit && !guards.some(isRateLimitGuard)) {
+    throw new Error(
+      `${route.operationId} declares a rate limit: bind it with the rate limit guard (RateLimitedRoute)`,
+    );
+  }
   if (route.auth === "session") {
     if (!guards.some(isSessionAccessGuard)) {
       throw new Error(

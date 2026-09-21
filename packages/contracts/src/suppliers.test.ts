@@ -3,6 +3,9 @@ import { buildOpenApiDocument } from "./openapi";
 import { apiRoutes } from "./routes";
 import {
   setSupplierScheduleBodySchema,
+  supplierInvitationStatusSchema,
+  updateSupplierCompanyBodySchema,
+  updateSupplierMemberBodySchema,
   submitSupplierLeadBodySchema,
   weeklyHoursSchema,
   type WeeklyHours,
@@ -123,5 +126,57 @@ describe("rate limits of open routes in the document", () => {
       whenUnavailable: "allow",
     });
     expect(document.paths["/cities"]!.get!["x-rate-limit"]).toBeUndefined();
+  });
+});
+
+describe("employees and the cabinet's card (TASK-017)", () => {
+  it("takes the address, district and phone of the card, and refuses anything of the administrator's by its path", () => {
+    expect(
+      updateSupplierCompanyBodySchema.safeParse({
+        expectedVersion: 3,
+        address: "ул. Райымбека, 200",
+        district: null,
+        contactPhone: "+7 705 999 88 77",
+      }).success,
+    ).toBe(true);
+    for (const field of ["name", "bin", "cityId", "type", "timeZone", "status"]) {
+      const result = updateSupplierCompanyBodySchema.safeParse({
+        expectedVersion: 3,
+        [field]: "x",
+      });
+      expect(result.success, field).toBe(false);
+      expect(result.error?.issues[0]?.path, field).toEqual([field]);
+    }
+  });
+
+  it("changes an employee only with something to change, in Kazakh or Russian", () => {
+    expect(updateSupplierMemberBodySchema.safeParse({}).success).toBe(false);
+    expect(updateSupplierMemberBodySchema.safeParse({ notificationLanguage: "kk" }).success).toBe(
+      true,
+    );
+    expect(updateSupplierMemberBodySchema.safeParse({ notificationLanguage: "en" }).success).toBe(
+      false,
+    );
+    expect(updateSupplierMemberBodySchema.safeParse({ displayName: "  " }).success).toBe(false);
+  });
+
+  it("only adds invitation statuses", () => {
+    expect(supplierInvitationStatusSchema.options).toEqual([
+      "queued",
+      "sent",
+      "failed",
+      "cancelled",
+    ]);
+  });
+
+  it("keeps the employees' routes in their contexts", () => {
+    expect(apiRoutes.removeSupplierMember).toMatchObject({
+      method: "DELETE",
+      path: "/supplier/members/{memberId}",
+      contexts: ["supplier"],
+    });
+    expect(apiRoutes.endSupplierSessions.contexts).toEqual(["admin"]);
+    const document = buildOpenApiDocument(Object.values(apiRoutes));
+    expect(JSON.stringify(document.components)).not.toContain('"additionalProperties":false');
   });
 });

@@ -176,6 +176,17 @@ import { clientPlatformSchema } from "./client";
  * - `SUPPLIER_STATE` (409): nothing to lift (or already blocked);
  *   `details` is `SupplierStateDetails`.
  *
+ * Employees of a supplier (TASK-017, ARCHITECTURE 4.27):
+ * - `SUPPLIER_LAST_MEMBER` (409): the company must keep at least one
+ *   active employee — add another before removing this one.
+ * - `SUPPLIER_MEMBER_EXISTS` (409): the number already has a membership in
+ *   this company; `details` is `SupplierMemberExistsDetails`.
+ * - `SUPPLIER_MEMBER_STATE` (409): the employee can't do this in their
+ *   status; `details` is `SupplierMemberStateDetails`.
+ * - `SUPPLIER_NOTIFICATION_LIMIT` (409): as many employees as the setting
+ *   `max_notified_members` already have notifications on; `details` is
+ *   `SupplierNotificationLimitDetails`.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -281,6 +292,11 @@ export const errorCodeSchema = z.enum([
   "SUPPLIER_BIN_TAKEN",
   "SUPPLIER_LEAD_STATE",
   "SUPPLIER_STATE",
+  // Employees of a supplier (TASK-017, ARCHITECTURE 4.27).
+  "SUPPLIER_LAST_MEMBER",
+  "SUPPLIER_MEMBER_EXISTS",
+  "SUPPLIER_MEMBER_STATE",
+  "SUPPLIER_NOTIFICATION_LIMIT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

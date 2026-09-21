@@ -593,7 +593,11 @@ export const supplierCardSchema = z.object({
 
 export type SupplierCard = z.infer<typeof supplierCardSchema>;
 
-export const supplierInvitationStatusSchema = z.enum(["queued", "sent", "failed"]);
+/**
+ * `cancelled` (TASK-017) — never sent: the employee was removed before
+ * the worker got to it (an employee restored later gets a new one).
+ */
+export const supplierInvitationStatusSchema = z.enum(["queued", "sent", "failed", "cancelled"]);
 
 export type SupplierInvitationStatus = z.infer<typeof supplierInvitationStatusSchema>;
 
@@ -607,7 +611,187 @@ export const supplierInvitationSchema = z.object({
 
 export type SupplierInvitation = z.infer<typeof supplierInvitationSchema>;
 
-/** An employee as the card of the supplier lists them (the full management is TASK-017). */
+/** The language of an employee's notifications (PRODUCT 12.6): Kazakh or Russian, Russian by default. */
+export const notificationLanguageSchema = z.enum(["kk", "ru"]);
+
+export type NotificationLanguage = z.infer<typeof notificationLanguageSchema>;
+
+/**
+ * Who receives the notifications about orders of a company (PRODUCT 12.6;
+ * ARCHITECTURE 4.27): `limit` — the setting `max_notified_members`;
+ * `enabled` — employees with the switch on; `recipients` — how many of
+ * them receive (the earliest `limit` to turn it on — lowering the setting
+ * never turns anyone's switch off, the latest ones just wait); `full` —
+ * no one else can turn it on now («Достигнут предел — N»).
+ */
+export const supplierNotificationSummarySchema = z.object({
+  limit: z.number().int(),
+  enabled: z.number().int(),
+  recipients: z.number().int(),
+  full: z.boolean(),
+});
+
+export type SupplierNotificationSummary = z.infer<typeof supplierNotificationSummarySchema>;
+
+/** The notification part of an employee, the same for the cabinet and the admin panel. */
+const memberNotificationFields = {
+  /** The switch «Получать уведомления». */
+  notificationsEnabled: z.boolean(),
+  /** The switch is on and the employee is within the limit: notifications go to them. */
+  receivesNotifications: z.boolean(),
+  notificationLanguage: notificationLanguageSchema,
+  /** Appointed by an administrator; one per company. */
+  isContactPerson: z.boolean(),
+};
+
+/**
+ * An active employee as the cabinet lists them (S-TEAM-01): the phone in
+ * full — these are colleagues.
+ */
+export const supplierMemberSchema = z.object({
+  id: z.uuid(),
+  displayName: z.string(),
+  /** E.164. */
+  phone: z.string(),
+  ...memberNotificationFields,
+  /** The employee of this session. */
+  isMe: z.boolean(),
+  createdAt: z.iso.datetime(),
+});
+
+export type SupplierMember = z.infer<typeof supplierMemberSchema>;
+
+/** `GET /supplier/members`: active employees, earliest first, and who receives notifications. */
+export const supplierMemberListResponseSchema = z.object({
+  members: z.array(supplierMemberSchema),
+  notifications: supplierNotificationSummarySchema,
+});
+
+export type SupplierMemberListResponse = z.infer<typeof supplierMemberListResponseSchema>;
+
+/**
+ * `POST /supplier/members` (and the administrator's): a colleague by name
+ * and Kazakhstan mobile number; the account of the number is created if
+ * there is none, and the invitation (W-08) goes out. A number already in
+ * the company — 409 `SUPPLIER_MEMBER_EXISTS` (`details.status` `active`,
+ * or `removed` — only an administrator of the club brings a removed
+ * employee back).
+ */
+export const addSupplierMemberBodySchema = z.object({
+  name: plainText(SUPPLIER_CONTACT_NAME_MAX_LENGTH),
+  phone: phoneInputSchema,
+});
+
+export type AddSupplierMemberBody = z.infer<typeof addSupplierMemberBodySchema>;
+
+/**
+ * What an employee changes about a colleague or about themselves; every
+ * employee is equal (PRODUCT 12.6). Turning notifications on beyond the
+ * limit — 409 `SUPPLIER_NOTIFICATION_LIMIT`. At least one field.
+ */
+export const updateSupplierMemberBodySchema = z
+  .object({
+    displayName: plainText(SUPPLIER_CONTACT_NAME_MAX_LENGTH).optional(),
+    notificationsEnabled: z.boolean().optional(),
+    notificationLanguage: notificationLanguageSchema.optional(),
+  })
+  .refine(
+    (body) =>
+      body.displayName !== undefined ||
+      body.notificationsEnabled !== undefined ||
+      body.notificationLanguage !== undefined,
+    { message: "Say what changes" },
+  );
+
+export type UpdateSupplierMemberBody = z.infer<typeof updateSupplierMemberBodySchema>;
+
+export const supplierMemberIdPathSchema = z.object({ memberId: z.uuid() });
+
+export type SupplierMemberIdPath = z.infer<typeof supplierMemberIdPathSchema>;
+
+/** An employee after a change, with the notification summary of the company. */
+export const supplierMemberResponseSchema = z.object({
+  member: supplierMemberSchema,
+  notifications: supplierNotificationSummarySchema,
+});
+
+export type SupplierMemberResponse = z.infer<typeof supplierMemberResponseSchema>;
+
+export const supplierMemberAddedResponseSchema = supplierMemberResponseSchema.extend({
+  /** The invitation W-08 on the queue. */
+  invitation: supplierInvitationSchema,
+});
+
+export type SupplierMemberAddedResponse = z.infer<typeof supplierMemberAddedResponseSchema>;
+
+/**
+ * `DELETE /supplier/members/{memberId}`: the employee lost access at once —
+ * every cabinet session of theirs in this company ended in the same
+ * transaction. `self` — the caller removed themselves: this session has
+ * ended too, the client signs out.
+ */
+export const supplierMemberRemovedResponseSchema = z.object({
+  memberId: z.uuid(),
+  sessionsEnded: z.number().int(),
+  self: z.boolean(),
+});
+
+export type SupplierMemberRemovedResponse = z.infer<typeof supplierMemberRemovedResponseSchema>;
+
+/** The fields of `PATCH /supplier/company`; any other one is the administrator's. */
+const SUPPLIER_COMPANY_FIELDS: ReadonlySet<string> = new Set([
+  "expectedVersion",
+  "address",
+  "district",
+  "contactPhone",
+]);
+
+/**
+ * `PATCH /supplier/company` — what the supplier changes on its card
+ * (S-COMP-01): the address of the pickup point and its district, the
+ * company's phone; the hours and days off are `PUT /supplier/company/schedule`.
+ * The name, the БИН, the city and the states are the administrator's: a
+ * body naming them is refused (400 `VALIDATION_ERROR`). A field left out
+ * stays, `null` clears it. Saving without a change doesn't raise the
+ * version.
+ */
+export const updateSupplierCompanyBodySchema = z
+  .object({
+    expectedVersion: expectedVersionSchema,
+    address: plainText(SUPPLIER_ADDRESS_MAX_LENGTH).nullable().optional(),
+    district: plainText(SUPPLIER_DISTRICT_MAX_LENGTH).nullable().optional(),
+    contactPhone: phoneInputSchema.nullable().optional(),
+  })
+  .loose()
+  .superRefine((body, context) => {
+    for (const key of Object.keys(body)) {
+      if (!SUPPLIER_COMPANY_FIELDS.has(key)) {
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: "Only an administrator of the club changes this",
+        });
+      }
+    }
+  });
+
+export type UpdateSupplierCompanyBody = z.infer<typeof updateSupplierCompanyBodySchema>;
+
+/** Who added an employee: an administrator, a colleague, the development operator command. */
+export const supplierMemberAddedBySchema = z.enum(["admin", "member", "operator"]);
+
+export type SupplierMemberAddedBy = z.infer<typeof supplierMemberAddedBySchema>;
+
+/** A colleague as the history of an employee names them. */
+export const supplierColleagueRefSchema = z.object({ id: z.uuid(), displayName: z.string() });
+
+export type SupplierColleagueRef = z.infer<typeof supplierColleagueRefSchema>;
+
+/**
+ * An employee as the admin panel lists them (A-SUP-03 «Сотрудники»):
+ * current and removed, who added and who removed them and when, the
+ * restore.
+ */
 export const adminSupplierMemberSchema = z.object({
   id: z.uuid(),
   displayName: z.string(),
@@ -616,9 +800,102 @@ export const adminSupplierMemberSchema = z.object({
   /** The latest invitation sent to this employee. */
   lastInvitation: supplierInvitationSchema.nullable(),
   createdAt: z.iso.datetime(),
+  // TASK-017.
+  ...memberNotificationFields,
+  addedBy: supplierMemberAddedBySchema,
+  /** The colleague who added (`addedBy = member`). */
+  addedByMember: supplierColleagueRefSchema.nullable(),
+  /** The administrator who added (`addedBy = admin`, since TASK-017). */
+  addedByAdminId: z.uuid().nullable(),
+  removedAt: z.iso.datetime().nullable(),
+  /** The colleague who removed; `null` — the development operator command. */
+  removedByMember: supplierColleagueRefSchema.nullable(),
+  /** The latest restore by an administrator. */
+  restore: z
+    .object({ at: z.iso.datetime(), adminId: z.uuid().nullable(), reason: z.string() })
+    .nullable(),
 });
 
 export type AdminSupplierMember = z.infer<typeof adminSupplierMemberSchema>;
+
+/** `GET /admin/suppliers/{supplierId}/members`: active first, then removed, earliest first. */
+export const adminSupplierMemberListResponseSchema = z.object({
+  members: z.array(adminSupplierMemberSchema),
+  notifications: supplierNotificationSummarySchema,
+});
+
+export type AdminSupplierMemberListResponse = z.infer<typeof adminSupplierMemberListResponseSchema>;
+
+export const adminSupplierMemberResponseSchema = z.object({
+  member: adminSupplierMemberSchema,
+  notifications: supplierNotificationSummarySchema,
+});
+
+export type AdminSupplierMemberResponse = z.infer<typeof adminSupplierMemberResponseSchema>;
+
+/** An employee added by an administrator: what the number already is, and the invitation. */
+export const adminSupplierMemberAddedResponseSchema = adminSupplierMemberResponseSchema.extend({
+  invitation: supplierInvitationSchema,
+  accountCreated: z.boolean(),
+  /** The number already works for another company (it keeps that access). */
+  memberOfOtherSuppliers: z.number().int(),
+  /** The number is also an administrator (the two sessions never mix). */
+  isAdministrator: z.boolean(),
+});
+
+export type AdminSupplierMemberAddedResponse = z.infer<
+  typeof adminSupplierMemberAddedResponseSchema
+>;
+
+/**
+ * «Восстановить доступ» — always with the reason. The sessions ended by
+ * the removal stay ended: the employee signs in again.
+ */
+export const restoreSupplierMemberBodySchema = z.object({ reason: reasonSchema });
+
+export type RestoreSupplierMemberBody = z.infer<typeof restoreSupplierMemberBodySchema>;
+
+/**
+ * An active cabinet session of an employee (A-SUP-03): the device and the
+ * times, never a token.
+ */
+export const adminSupplierSessionSchema = z.object({
+  id: z.uuid(),
+  member: supplierColleagueRefSchema,
+  deviceName: z.string().nullable(),
+  /** From `X-Client` at sign-in, `null` when unknown. */
+  platform: z.string().nullable(),
+  clientVersion: z.string().nullable(),
+  /** Shortened network address of the last use (`203.0.113.*`). */
+  ipHint: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  lastUsedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+});
+
+export type AdminSupplierSession = z.infer<typeof adminSupplierSessionSchema>;
+
+/** Most recently used first. */
+export const adminSupplierSessionListResponseSchema = z.object({
+  sessions: z.array(adminSupplierSessionSchema),
+});
+
+export type AdminSupplierSessionListResponse = z.infer<
+  typeof adminSupplierSessionListResponseSchema
+>;
+
+export const supplierSessionPathSchema = z.object({ supplierId: z.uuid(), sessionId: z.uuid() });
+
+export type SupplierSessionPath = z.infer<typeof supplierSessionPathSchema>;
+
+/** Every active cabinet session of the company, or only of one employee. */
+export const endSupplierSessionsBodySchema = z.object({ memberId: z.uuid().optional() });
+
+export type EndSupplierSessionsBody = z.infer<typeof endSupplierSessionsBodySchema>;
+
+export const supplierSessionsEndedResponseSchema = z.object({ ended: z.number().int() });
+
+export type SupplierSessionsEndedResponse = z.infer<typeof supplierSessionsEndedResponseSchema>;
 
 export const adminSupplierCardSchema = supplierCardSchema.extend({
   /** The request the supplier was created from. */
@@ -852,6 +1129,39 @@ export const supplierLeadStateDetailsSchema = z.object({
 });
 
 export type SupplierLeadStateDetails = z.infer<typeof supplierLeadStateDetailsSchema>;
+
+/**
+ * `details` of `SUPPLIER_MEMBER_EXISTS` (409): the number already has a
+ * membership in this company — `active`, or `removed` (only an
+ * administrator of the club restores it, PRODUCT 12.6).
+ */
+export const supplierMemberExistsDetailsSchema = z.object({
+  memberId: z.uuid(),
+  status: z.enum(["active", "removed"]),
+});
+
+export type SupplierMemberExistsDetails = z.infer<typeof supplierMemberExistsDetailsSchema>;
+
+/** `details` of `SUPPLIER_NOTIFICATION_LIMIT` (409): the limit and how many have it on. */
+export const supplierNotificationLimitDetailsSchema = z.object({
+  limit: z.number().int(),
+  enabled: z.number().int(),
+});
+
+export type SupplierNotificationLimitDetails = z.infer<
+  typeof supplierNotificationLimitDetailsSchema
+>;
+
+/**
+ * `details` of `SUPPLIER_MEMBER_STATE` (409): the employee can't do this
+ * in their status — `not_removed` (restore an active one), `removed`
+ * (appoint a removed one the contact person).
+ */
+export const supplierMemberStateDetailsSchema = z.object({
+  refusal: z.enum(["not_removed", "removed"]),
+});
+
+export type SupplierMemberStateDetails = z.infer<typeof supplierMemberStateDetailsSchema>;
 
 /**
  * `details` of `SUPPLIER_STATE` (409): the state already is what was asked

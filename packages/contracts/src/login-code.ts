@@ -133,6 +133,8 @@ export const rateLimitNameSchema = z.enum([
   "supplier_lead_per_phone",
   // Sending an invitation to an employee again.
   "supplier_invitation_resend",
+  // Employees added by the employees of one company (TASK-017).
+  "supplier_members_added_per_supplier",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

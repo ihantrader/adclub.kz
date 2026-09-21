@@ -36,10 +36,25 @@ export const auditActions = {
    * name, city, type, whether from a request.
    */
   supplierCreated: "supplier.created",
-  /** An employee was added to a company (development operator command until TASK-017). */
+  /**
+   * An employee was added to a company: by the development operator
+   * command, an administrator or (since TASK-017) a colleague in the
+   * cabinet (actor `supplier`).
+   */
   supplierMemberAdded: "supplier_member.added",
   /** An employee was removed; their cabinet sessions of that company ended with it. */
   supplierMemberRemoved: "supplier_member.removed",
+  /** An administrator brought a removed employee back (`reason` — why). TASK-017. */
+  supplierMemberRestored: "supplier_member.restored",
+  /**
+   * The name, the notification switch or language of an employee changed
+   * (by themselves or a colleague). `before`/`after`: the changed fields.
+   */
+  supplierMemberChanged: "supplier_member.changed",
+  /** An administrator appointed the contact person of a company (`before` — the previous one). */
+  supplierContactPersonChanged: "supplier_member.contact_person_changed",
+  /** An administrator ended cabinet sessions of employees; `after.sessionIds`. */
+  supplierMemberSessionsEnded: "supplier_member.sessions_ended",
   /** A category was created (TASK-010). `after`: the category. */
   catalogCategoryCreated: "catalog_category.created",
   /** Names, icon, compatibility flag or parent changed. `before`/`after`: the changed fields. */

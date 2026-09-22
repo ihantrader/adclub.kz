@@ -50,6 +50,8 @@ describe("buildOpenApiDocument", () => {
       "/admin/cities/order",
       "/admin/cities/{cityId}",
       "/admin/cities/{cityId}/status",
+      "/admin/club-access/grants",
+      "/admin/club-access/revoke",
       "/admin/compatibility-proposals",
       "/admin/compatibility-proposals/{proposalId}/approve",
       "/admin/compatibility-proposals/{proposalId}/reject",
@@ -123,7 +125,9 @@ describe("buildOpenApiDocument", () => {
       "/auth/suppliers",
       "/catalog/categories",
       "/catalog/categories/{categoryId}/attributes",
+      "/catalog/categories/{categoryId}/items",
       "/catalog/compatibility/check",
+      "/catalog/items/{itemId}",
       "/cities",
       "/health",
       "/meta/client-policy",
@@ -305,6 +309,10 @@ describe("buildOpenApiDocument", () => {
       const operation = document.paths[route.path][route.method.toLowerCase()];
       if (route.auth === "session") {
         expect(operation.security).toEqual([{ sessionAccessToken: [] }]);
+        expect(operation["x-access-contexts"]).toEqual(route.contexts);
+      } else if (route.auth === "optional") {
+        // Open to guests: no token (`{}`) or a session's (TASK-020).
+        expect(operation.security).toEqual([{}, { sessionAccessToken: [] }]);
         expect(operation["x-access-contexts"]).toEqual(route.contexts);
       } else {
         expect(operation.security).toBeUndefined();

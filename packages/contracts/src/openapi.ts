@@ -2,6 +2,8 @@ import { z } from "zod";
 import * as compatibilityContract from "./compatibility";
 import * as supplierContract from "./suppliers";
 import * as offerContract from "./offers";
+import * as clubAccessContract from "./club-access";
+import * as showcaseContract from "./showcase";
 import * as vehicleContract from "./vehicles";
 import {
   accessContextSchema,
@@ -218,6 +220,8 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(compatibilityContract),
   ...moduleComponentSchemas(supplierContract),
   ...moduleComponentSchemas(offerContract),
+  ...moduleComponentSchemas(clubAccessContract),
+  ...moduleComponentSchemas(showcaseContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,
@@ -507,7 +511,7 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
   };
 
   for (const route of sortedRoutes) {
-    if (route.auth === "session" && (route.contexts?.length ?? 0) === 0) {
+    if (route.auth !== undefined && (route.contexts?.length ?? 0) === 0) {
       throw new Error(`${route.operationId}: a session route must declare its contexts`);
     }
     if (route.requestBody && route.upload) {
@@ -539,6 +543,11 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       ],
       ...(route.auth === "session" && {
         security: [{ sessionAccessToken: [] }],
+        "x-access-contexts": [...(route.contexts ?? [])],
+      }),
+      // Open to guests, a session is optional (TASK-020): `{}` — no token.
+      ...(route.auth === "optional" && {
+        security: [{}, { sessionAccessToken: [] }],
         "x-access-contexts": [...(route.contexts ?? [])],
       }),
       ...(route.rateLimit && { "x-rate-limit": { ...route.rateLimit } }),

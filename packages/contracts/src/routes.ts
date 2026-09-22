@@ -165,6 +165,21 @@ import {
   updateOfferBodySchema,
 } from "./offers";
 import {
+  clubAccessGrantPageSchema,
+  clubAccessGrantQuerySchema,
+  clubAccessGrantResponseSchema,
+  grantClubAccessBodySchema,
+  revokeClubAccessBodySchema,
+} from "./club-access";
+import {
+  showcaseCategoryPathSchema,
+  showcaseItemPathSchema,
+  showcaseItemQuerySchema,
+  showcaseItemResponseSchema,
+  showcaseListQuerySchema,
+  showcaseListResponseSchema,
+} from "./showcase";
+import {
   editTranslationBodySchema,
   entityTranslationsResponseSchema,
   translationEntityPathSchema,
@@ -333,12 +348,16 @@ export interface ApiRouteDefinition {
   /**
    * `session`: only for a caller with a valid access token of an active
    * session (`Authorization: Bearer …`); anything else gets 401
-   * (`AUTH_REQUIRED`, `ACCESS_TOKEN_EXPIRED`, `SESSION_ENDED`). Omitted:
-   * public route.
+   * (`AUTH_REQUIRED`, `ACCESS_TOKEN_EXPIRED`, `SESSION_ENDED`).
+   * `optional` (TASK-020): open to guests; a caller that sends a token is
+   * held to exactly the same rules as on a `session` route (an invalid,
+   * expired or ended session is 401, another context 403 — never quietly
+   * served as a guest), and the answer may then depend on who it is.
+   * Omitted: public route.
    */
-  auth?: "session";
+  auth?: "session" | "optional";
   /**
-   * Required with `auth: "session"`: the contexts the route serves
+   * Required with `auth: "session"` and `auth: "optional"`: the contexts the route serves
    * (`AccessContext`). A session of any other context gets 403
    * `FORBIDDEN`; a cabinet session whose employee was removed gets 401
    * `SUPPLIER_ACCESS_CLOSED`. The server refuses to bind a session route
@@ -2923,6 +2942,85 @@ export const apiRoutes = {
     query: offerListQuerySchema,
     responses: {
       200: { description: "Offers", schema: offerPageSchema },
+    },
+  }),
+  // ------------------------------------------- the catalog for users (TASK-020)
+  getShowcaseItems: defineRoute({
+    operationId: "getShowcaseItems",
+    method: "GET",
+    path: "/catalog/categories/{categoryId}/items",
+    summary:
+      "The items of a subcategory that have offers users see (M-CAT-02, M-CAT-03): city, car, filters, three orders, pages; open to guests, a user's session optional",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    pathParams: showcaseCategoryPathSchema,
+    query: showcaseListQuerySchema,
+    responses: {
+      200: { description: "A page of items", schema: showcaseListResponseSchema },
+    },
+  }),
+  getShowcaseItem: defineRoute({
+    operationId: "getShowcaseItem",
+    method: "GET",
+    path: "/catalog/items/{itemId}",
+    summary:
+      "The card of an item with the offers users see (M-CAT-07): photos, characteristics, compatibility, offers with receipt dates, analogs; the supplier's name and point only with club access; open to guests",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    pathParams: showcaseItemPathSchema,
+    query: showcaseItemQuerySchema,
+    responses: {
+      200: { description: "The item and its offers", schema: showcaseItemResponseSchema },
+    },
+  }),
+  // ---------------------------------------------- club access (TASK-020, D-059)
+  listClubAccessGrants: defineRoute({
+    operationId: "listClubAccessGrants",
+    method: "GET",
+    path: "/admin/club-access/grants",
+    summary:
+      "Manual grants of club access, newest first: those in force, or all; of one account or everyone",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: clubAccessGrantQuerySchema,
+    responses: {
+      200: { description: "Grants", schema: clubAccessGrantPageSchema },
+    },
+  }),
+  grantClubAccess: defineRoute({
+    operationId: "grantClubAccess",
+    method: "POST",
+    path: "/admin/club-access/grants",
+    summary:
+      "Give the account of a phone number club access until a date, with a reason (replaces a current grant); recorded in the journal",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "Whom, until when and why", schema: grantClubAccessBodySchema },
+    responses: {
+      201: { description: "The grant", schema: clubAccessGrantResponseSchema },
+    },
+  }),
+  revokeClubAccess: defineRoute({
+    operationId: "revokeClubAccess",
+    method: "POST",
+    path: "/admin/club-access/revoke",
+    summary:
+      "End the current manual grant of club access of a phone number's account now, with a reason",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "Whose and why", schema: revokeClubAccessBodySchema },
+    responses: {
+      200: { description: "The ended grant", schema: clubAccessGrantResponseSchema },
     },
   }),
 } as const;

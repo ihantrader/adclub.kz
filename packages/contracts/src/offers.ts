@@ -69,7 +69,10 @@ export type OfferWithdrawnReason = z.infer<typeof offerWithdrawnReasonSchema>;
  * Why users don't see an offer (several at once, in this order): it is
  * withdrawn or suspended; the supplier is blocked or paused; the item is
  * not active in the catalog (archived by the administrator); its
- * subcategory or node is hidden or archived; the pickup point has no city.
+ * subcategory or node is hidden or archived; the pickup point has no city;
+ * the point's hours aren't given or have no working day (D-060: without a
+ * receipt date the offer isn't shown — fill the hours in on the company
+ * card).
  */
 export const offerHiddenReasonSchema = z.enum([
   "offer_withdrawn",
@@ -79,6 +82,10 @@ export const offerHiddenReasonSchema = z.enum([
   "item_unavailable",
   "category_hidden",
   "no_city",
+  // D-060 (TASK-020): no receipt date can be calculated — the point's
+  // hours aren't given, or give no working day at all.
+  "hours_not_set",
+  "no_working_day",
 ]);
 
 export type OfferHiddenReasonValue = z.infer<typeof offerHiddenReasonSchema>;

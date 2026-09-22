@@ -175,7 +175,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       Accept: "application/json",
       [CLIENT_HEADER]: clientHeader,
     };
-    if (route.auth === "session") {
+    if (route.auth === "session" || route.auth === "optional") {
       const accessToken = options.getAccessToken?.();
       if (accessToken) {
         headers.Authorization = `Bearer ${accessToken}`;

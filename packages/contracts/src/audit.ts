@@ -215,6 +215,14 @@ export const auditActions = {
   offerChanged: "offer.changed",
   offerWithdrawn: "offer.withdrawn",
   offerReturned: "offer.returned",
+  /**
+   * Club access given by hand (TASK-020, D-059), by an administrator or the
+   * operator command: `granted` — with `after.validUntil` (a grant that
+   * replaced a current one names it in `before`); `revoked` — the grant
+   * ended early. `reason` — why.
+   */
+  clubAccessGranted: "club_access.granted",
+  clubAccessRevoked: "club_access.revoked",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -247,6 +255,8 @@ export const auditEntities = {
   supplierLead: "supplier_lead",
   supplierInvitation: "supplier_invitation",
   offer: "offer",
+  /** A manual grant of club access (TASK-020). */
+  clubAccessGrant: "club_access_grant",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

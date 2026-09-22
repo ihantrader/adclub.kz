@@ -294,6 +294,25 @@ describe("createApiClient", () => {
       expect(authorization).toEqual(["Bearer access-1", undefined, undefined, undefined]);
     });
 
+    it("sends the token to the catalog, open to guests with an optional session (TASK-020)", async () => {
+      const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, {}));
+      const current: { token?: string } = {};
+      const client = clientWith(fetchImpl, { getAccessToken: () => current.token });
+      const ITEM = "0b9b3f0e-7c1a-4b8e-9d42-1f0c2a3b4c5d";
+
+      await client.getShowcaseItem({ itemId: ITEM }, { query: { sort: "cheaper" } });
+      current.token = "access-3";
+      await client.getShowcaseItem({ itemId: ITEM });
+
+      expect(fetchImpl.mock.calls[0]![0]).toBe(
+        `http://api.test/catalog/items/${ITEM}?sort=cheaper`,
+      );
+      expect(fetchImpl.mock.calls[0]![1].headers).not.toHaveProperty("Authorization");
+      expect(fetchImpl.mock.calls[1]![1].headers).toMatchObject({
+        Authorization: "Bearer access-3",
+      });
+    });
+
     it("reads the access token on every request and omits it when there is none", async () => {
       const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse(200, { sessions: [] }));
       const current: { token?: string } = {};

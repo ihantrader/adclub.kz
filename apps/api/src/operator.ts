@@ -38,6 +38,7 @@ import {
   DevCompatibilitySeedError,
 } from "./modules/compatibility";
 import { DevSupplierSeed, DevSupplierSeedError, SuppliersModule } from "./modules/suppliers";
+import { ClubAccessGrants, ClubAccessModule } from "./modules/club-access";
 import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
@@ -49,6 +50,15 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   admin:grant <phone>          appoint an administrator
  *   admin:revoke <phone>         remove one (their admin sessions end at once)
  *   admin:reset-totp <phone>     reset the second factor (e.g. the only administrator)
+ *
+ * Club access of users by hand (TASK-020, D-059) — every change is in the
+ * journal with `by=operator`:
+ *   club-access:grant <phone> --until <YYYY-MM-DD | ISO time> --reason <text>
+ *                                give the phone number's account club access
+ *                                (a date — through that day, Almaty time); a
+ *                                current grant is replaced
+ *   club-access:revoke <phone> --reason <text>   end the current grant now
+ *   club-access:status <phone>   the access now and every grant of the account
  *
  * Settings (ARCHITECTURE 4.11) — any setting, sign-in security ones
  * included (D-053); every change is recorded with `by=operator`:
@@ -135,6 +145,7 @@ class OperatorModule {
         VehiclesModule.forRoot({ http: false }),
         CompatibilityModule.forRoot({ http: false }),
         SuppliersModule.forRoot({ http: false }),
+        ClubAccessModule.forRoot({ http: false }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -150,6 +161,9 @@ const USAGE = `Usage: operator <command> [arguments]
   admin:grant <phone>
   admin:revoke <phone>
   admin:reset-totp <phone>
+  club-access:grant <phone> --until <YYYY-MM-DD | ISO time> --reason <text>
+  club-access:revoke <phone> --reason <text>
+  club-access:status <phone>
   settings:list
   settings:get <key>
   settings:set <key> <value> --reason <text> [--expected-version <n>]
@@ -204,6 +218,21 @@ function expectedVersion(text: string | undefined): number | undefined {
 
 const OPERATOR = { kind: "operator" } as const;
 
+/**
+ * `--until`: an ISO time, or a date — through that day in Almaty (UTC+5,
+ * the one time of Kazakhstan since 2024), that is until 00:00 of the next.
+ */
+function grantEnd(text: string): Date {
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  const end = date
+    ? new Date(Date.UTC(Number(date[1]), Number(date[2]) - 1, Number(date[3]) + 1) - 5 * 3_600_000)
+    : new Date(text);
+  if (Number.isNaN(end.getTime())) {
+    throw new OperatorCommandError("--until must be a date (YYYY-MM-DD) or an ISO time");
+  }
+  return end;
+}
+
 interface Services {
   operator: OperatorService;
   settings: SettingsChangeService;
@@ -214,6 +243,7 @@ interface Services {
   vehicleSeed: DevVehicleSeed;
   compatibilitySeed: DevCompatibilitySeed;
   supplierSeed: DevSupplierSeed;
+  clubAccess: ClubAccessGrants;
   ai: AiService;
   translations: TranslationQueue;
   translationEval: TranslationEval;
@@ -231,6 +261,7 @@ async function run(
     vehicleSeed,
     compatibilitySeed,
     supplierSeed,
+    clubAccess,
     ai,
     translations,
     translationEval,
@@ -245,6 +276,7 @@ async function run(
       name: { type: "string" },
       city: { type: "string" },
       reason: { type: "string" },
+      until: { type: "string" },
       "expected-version": { type: "string" },
       job: { type: "string" },
       note: { type: "string" },
@@ -397,6 +429,22 @@ async function run(
       return operator.revokeAdmin(required(first, "<phone>"));
     case "admin:reset-totp":
       return operator.resetAdminTotp(required(first, "<phone>"));
+    case "club-access:grant":
+      return clubAccess.grant(
+        {
+          phone: required(first, "<phone>"),
+          validUntil: grantEnd(required(values.until, "--until")),
+          reason: required(values.reason, "--reason"),
+        },
+        { role: "operator" },
+      );
+    case "club-access:revoke":
+      return clubAccess.revoke(
+        { phone: required(first, "<phone>"), reason: required(values.reason, "--reason") },
+        { role: "operator" },
+      );
+    case "club-access:status":
+      return clubAccess.statusOf(required(first, "<phone>"));
     case "dev:supplier:create":
       return operator.createSupplier({
         name: required(values.name, "--name"),
@@ -447,6 +495,7 @@ async function main(): Promise<void> {
         vehicleSeed: app.get(DevVehicleSeed),
         compatibilitySeed: app.get(DevCompatibilitySeed),
         supplierSeed: app.get(DevSupplierSeed),
+        clubAccess: app.get(ClubAccessGrants),
         ai: app.get(AiService),
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),

@@ -19,7 +19,14 @@ export type {
   IssueSessionInput,
   IssuedSession,
 } from "./session/session.service";
-export { CurrentSession, SessionGuard, SessionRoute } from "./session/session.guard";
+export {
+  CurrentSession,
+  OptionalSession,
+  OptionalSessionGuard,
+  OptionalSessionRoute,
+  SessionGuard,
+  SessionRoute,
+} from "./session/session.guard";
 export { SessionSettingsSource } from "./session/session-settings.source";
 export type { SessionSettings } from "./session/session-settings.source";
 export { REFRESH_COOKIE_NAMES, REFRESH_COOKIE_PATH } from "./session/session-cookie";

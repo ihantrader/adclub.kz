@@ -1659,11 +1659,12 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       expect({ categories: await count("category"), journal: await count("audit_log") }).toEqual(
         before,
       );
-      // The client routes are public.
+      // The client routes are open to guests: public, or (the catalog of
+      // TASK-020, which shows club members more) with an optional session.
       for (const route of Object.values(apiRoutes).filter((entry) =>
         entry.path.startsWith("/catalog"),
       )) {
-        expect(route).not.toHaveProperty("auth");
+        expect([undefined, "optional"]).toContain((route as { auth?: string }).auth);
       }
     });
   });

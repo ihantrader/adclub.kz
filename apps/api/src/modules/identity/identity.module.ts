@@ -14,7 +14,7 @@ import { LoginCodeController } from "./login-code/login-code.controller";
 import { LoginCodeService } from "./login-code/login-code.service";
 import { LoginCodeStore } from "./login-code/login-code.store";
 import { SessionController } from "./session/session.controller";
-import { SessionGuard } from "./session/session.guard";
+import { OptionalSessionGuard, SessionGuard } from "./session/session.guard";
 import { SessionService } from "./session/session.service";
 import { SessionStore } from "./session/session.store";
 import { SignInStepController } from "./session/sign-in-step.controller";
@@ -88,6 +88,7 @@ export class IdentityModule {
         ...identityOperatorProviders,
         SessionService,
         SessionGuard,
+        OptionalSessionGuard,
         SignInStepStore,
         SignInStepsService,
         AdminAuthService,
@@ -95,7 +96,7 @@ export class IdentityModule {
         SupplierContextService,
       ],
       // Other modules protect their routes with `SessionRoute` (SessionGuard).
-      exports: [LoginCodeService, SessionService, SessionGuard],
+      exports: [LoginCodeService, SessionService, SessionGuard, OptionalSessionGuard],
     };
   }
 }

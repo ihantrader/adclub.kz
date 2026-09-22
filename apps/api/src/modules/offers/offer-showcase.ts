@@ -1,5 +1,5 @@
 import type { OfferShowcase as OfferShowcaseSign } from "@adclub/contracts";
-import { offerVisibility, type SupplierPauseReason } from "@adclub/domain";
+import { offerVisibility, scheduleFact, type SupplierPauseReason } from "@adclub/domain";
 import { inArray, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { offer } from "./schema";
@@ -14,7 +14,9 @@ import { offer } from "./schema";
  *
  * Nothing is stored: a supplier's pause or block, an archived item or a
  * hidden category hide an offer only while they last, and the offer's own
- * status never changes because of them.
+ * status never changes because of them. Since TASK-020 (D-060) a pickup
+ * point whose hours aren't given, or give no working day, hides its offers
+ * too — there is no receipt date to show; the cabinet names the reason.
  */
 
 interface FactsRow extends Record<string, unknown> {
@@ -25,6 +27,7 @@ interface FactsRow extends Record<string, unknown> {
   item_status: string;
   category_visible: boolean;
   has_city: boolean;
+  weekly_hours: { intervals: unknown[] }[] | null;
 }
 
 /** The showcase sign of each offer (by id). */
@@ -43,7 +46,8 @@ export async function offerShowcase(
       s.blocked_at IS NOT NULL AS blocked,
       i.status AS item_status,
       (c.status = 'active' AND coalesce(p.status, 'active') = 'active') AS category_visible,
-      EXISTS (SELECT 1 FROM city WHERE city.id = l.city_id) AS has_city
+      EXISTS (SELECT 1 FROM city WHERE city.id = l.city_id) AS has_city,
+      l.weekly_hours
     FROM offer o
     JOIN supplier s ON s.id = o.supplier_id
     JOIN catalog_item i ON i.id = o.item_id
@@ -62,6 +66,7 @@ export async function offerShowcase(
         itemStatus: row.item_status,
         categoryVisible: row.category_visible,
         hasCity: row.has_city,
+        schedule: scheduleFact(row.weekly_hours),
       }),
     );
   }
@@ -71,7 +76,8 @@ export async function offerShowcase(
 /**
  * The same rule as a condition on `offer`: only offers users see. The
  * supplier's `status = 'active'` is exactly «neither paused nor blocked» —
- * the database keeps it so (ARCHITECTURE 4.26 I254).
+ * the database keeps it so (ARCHITECTURE 4.26 I254). The point's hours:
+ * given, with at least one day that has an interval (`scheduleFact`).
  */
 export function shownOffers(): SQL {
   return sql`(
@@ -87,6 +93,11 @@ export function shownOffers(): SQL {
     AND EXISTS (
       SELECT 1 FROM supplier_location l JOIN city ON city.id = l.city_id
       WHERE l.id = ${offer.locationId}
+        AND l.weekly_hours IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(l.weekly_hours) AS d
+          WHERE jsonb_array_length(d -> 'intervals') > 0
+        )
     )
   )`;
 }

@@ -8,3 +8,5 @@ export { CompatibilityProposalsService } from "./compatibility-proposals.service
 export { DevCompatibilitySeed, DevCompatibilitySeedError } from "./dev-compatibility-seed";
 export type { DevCompatibilitySeedResult } from "./dev-compatibility-seed";
 export { compatibilityTables } from "./schema";
+export { describeConditions, resolveVehicle } from "./compatibility-conditions";
+export { itemCompatibility } from "./schema";

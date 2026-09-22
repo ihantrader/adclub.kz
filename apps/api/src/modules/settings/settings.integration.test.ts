@@ -386,6 +386,7 @@ describe("settings (PostgreSQL + Redis)", () => {
         "compatibility",
         "suppliers",
         "offers",
+        "showcase",
         "public_limits",
         "billing",
         "clients",

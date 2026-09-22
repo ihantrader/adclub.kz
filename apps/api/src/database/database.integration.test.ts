@@ -112,7 +112,47 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790200000000_create-suppliers",
       "1790250000000_supplier-members",
       "1790300000000_create-offers",
+      "1790350000000_create-club-access",
     ]);
+  });
+
+  it("holds the rules of club access grants and rolls back keeping the accounts (club access)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000001') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const grant = (values: Record<string, unknown>) => {
+      const row = {
+        account_id: accountId,
+        valid_until: new Date(Date.now() + 86_400_000),
+        reason: "Альфа",
+        granted_by_role: "operator",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO club_access_grant (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    await expect(grant({ source: "store" })).rejects.toThrow(/club_access_grant_source_check/);
+    await expect(grant({ reason: " " })).rejects.toThrow(/club_access_grant_reason_check/);
+    await expect(grant({ granted_by_role: "admin" })).rejects.toThrow(
+      /club_access_grant_granted_by_check/,
+    );
+    await expect(grant({ ended_at: new Date() })).rejects.toThrow(/club_access_grant_ended_check/);
+    await grant({});
+    // One open grant per account: a second one only after the first is ended.
+    await expect(grant({})).rejects.toThrow(/club_access_grant_open_key/);
+    await client.query(
+      "UPDATE club_access_grant SET ended_at = now(), ended_how = 'replaced', ended_by_role = 'operator', end_reason = 'Новая'",
+    );
+    await grant({});
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "club_access_grant")).toBe(false);
+    expect(await count("account", "id = $1", [accountId])).toBe(1);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
   });
 
   it("holds the rules of offers in the database and rolls back keeping the suppliers (offers)", async () => {

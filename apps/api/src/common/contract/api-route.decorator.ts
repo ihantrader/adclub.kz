@@ -83,7 +83,7 @@ export function ApiRoute(
       `${route.operationId} declares a rate limit: bind it with the rate limit guard (RateLimitedRoute)`,
     );
   }
-  if (route.auth === "session") {
+  if (route.auth !== undefined) {
     if (!guards.some(isSessionAccessGuard)) {
       throw new Error(
         `${route.operationId} requires a session: bind it with the session access guard (SessionRoute)`,

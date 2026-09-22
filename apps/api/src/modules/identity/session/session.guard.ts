@@ -51,6 +51,67 @@ export class SessionGuard implements CanActivate {
   }
 }
 
+const optionalSessions = new WeakMap<Request, AuthenticatedSession | null>();
+
+/**
+ * The guard of `auth: "optional"` routes (TASK-020): a request without
+ * `Authorization` is a guest's; one with it is authenticated exactly as
+ * `SessionGuard` does — an invalid, expired or ended token is 401 and a
+ * session of another context 403, never quietly served as a guest (a
+ * client whose token expired refreshes it instead of seeing less).
+ */
+@Injectable()
+@SessionAccessGuard()
+export class OptionalSessionGuard implements CanActivate {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(
+    @Inject(Reflector) private readonly reflector: Reflector,
+    @Inject(SessionService) private readonly sessions: SessionService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const route = this.reflector.get<ApiRouteDefinition | undefined>(
+      API_ROUTE_METADATA,
+      context.getHandler(),
+    );
+    const contexts = route?.contexts ?? [];
+    if (contexts.length === 0) {
+      throw new Error("An optional session route without contexts reached the session guard");
+    }
+    const request = context.switchToHttp().getRequest<Request>();
+    if (request.headers.authorization === undefined) {
+      optionalSessions.set(request, null);
+      return true;
+    }
+    const session = await this.sessions.authenticate(
+      request.headers.authorization,
+      request.ip ?? null,
+      contexts,
+    );
+    optionalSessions.set(request, session);
+    return true;
+  }
+}
+
+/** A contract route with `auth: "optional"`, guarded by `OptionalSessionGuard`. */
+export function OptionalSessionRoute(route: ApiRouteDefinition): MethodDecorator {
+  if (route.auth !== "optional") {
+    throw new Error(`${route.operationId} is not an optional session route in the contract`);
+  }
+  return ApiRoute(route, { guards: [OptionalSessionGuard] });
+}
+
+/** The session of an `OptionalSessionRoute` request; `null` — a guest. */
+export const OptionalSession = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): AuthenticatedSession | null => {
+    const request = context.switchToHttp().getRequest<Request>();
+    if (!optionalSessions.has(request)) {
+      throw new Error("No optional session: the route is not an OptionalSessionRoute");
+    }
+    return optionalSessions.get(request) ?? null;
+  },
+);
+
 /** A contract route with `auth: "session"`, protected by `SessionGuard`. */
 export function SessionRoute(route: ApiRouteDefinition): MethodDecorator {
   if (route.auth !== "session") {

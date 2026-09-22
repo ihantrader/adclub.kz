@@ -1118,11 +1118,18 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
         adminCatalogItemPageSchema.parse(body).items.filter((item) => item.status === "active"),
       );
       const pads = await itemBy(PADS);
+      // D-060 (TASK-020): a point without hours, and one whose hours give no working day.
+      const noHours = await company("Без часов", { hours: null });
+      const closed = await company("Закрыто", {
+        hours: WEEK.map((day) => ({ day: day.day, intervals: [] })),
+      });
       const offers = [
         await put(own, pads.id),
         await put(own, items[0]!.id),
         await put(own, items[1]!.id),
         await put(paused, pads.id),
+        await put(noHours, pads.id),
+        await put(closed, pads.id),
       ];
       await ok(
         own.as("post", `/supplier/offers/${offers[1]!.id}/withdraw`, { expectedVersion: 1 }),
@@ -1155,6 +1162,8 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
         ids.filter((id) => rule.get(id)!.visible).sort(),
       );
       expect(shown.map((row) => row.id)).toEqual([offers[0]!.id]);
+      expect(rule.get(offers[4]!.id)).toEqual({ visible: false, reasons: ["hours_not_set"] });
+      expect(rule.get(offers[5]!.id)).toEqual({ visible: false, reasons: ["no_working_day"] });
     });
   });
 

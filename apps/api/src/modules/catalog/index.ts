@@ -23,5 +23,14 @@ export { EvalBudgetError, recheckEvalRun, saveEvalRun, TranslationEval } from ".
 export type { EvalModelResult, EvalRun, EvalRunOptions } from "./eval/eval-runner";
 export { answerKey, checkRun, qualityChecks } from "./eval/translation-quality";
 export type { QualityCheck, QualityFinding, QualityReport } from "./eval/translation-quality";
-export { brandSpelling, catalogItem, category, itemAnalog, translation } from "./schema";
-export type { CatalogItemRow } from "./schema";
+export {
+  attribute,
+  attributeOption,
+  brandSpelling,
+  catalogItem,
+  category,
+  itemAnalog,
+  itemAttributeValue,
+  translation,
+} from "./schema";
+export type { AttributeRow, CatalogItemRow, CategoryRow } from "./schema";

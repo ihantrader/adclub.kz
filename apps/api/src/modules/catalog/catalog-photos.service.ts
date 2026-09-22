@@ -161,6 +161,40 @@ export class CatalogPhotosService {
     return images;
   }
 
+  /**
+   * Every approved photo of an item as clients get them (the card of an
+   * item, M-CAT-07; TASK-020): in their order, the primary first, in the
+   * mode `photo_display_mode` asks for, never the full-size file.
+   */
+  async clientPhotosOf(executor: DbExecutor, item: CatalogItemRow): Promise<ItemPhotoImage[]> {
+    const approved = (await this.photosOfItem(executor, item.id)).filter(
+      (row) => row.status === "approved",
+    );
+    if (approved.length === 0) {
+      return [];
+    }
+    const [{ mode, ttlSeconds }, loaded] = await Promise.all([
+      this.delivery(),
+      this.loadPhotos(
+        executor,
+        approved.map((row) => row.id),
+      ),
+    ]);
+    const ordered = [
+      ...approved.filter((row) => row.id === item.primaryPhotoId),
+      ...approved.filter((row) => row.id !== item.primaryPhotoId),
+    ];
+    const images: ItemPhotoImage[] = [];
+    for (const row of ordered) {
+      const entry = loaded.get(row.id);
+      const image = entry ? await this.imageOf(entry, mode, ttlSeconds) : null;
+      if (image) {
+        images.push(image);
+      }
+    }
+    return images;
+  }
+
   /** Every photo of an item for the admin card, approved ones in their order first. */
   async adminPhotosFor(executor: DbExecutor, itemId: string): Promise<AdminItemPhoto[]> {
     const rows = await this.photosOfItem(executor, itemId);

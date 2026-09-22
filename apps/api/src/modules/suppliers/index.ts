@@ -1,6 +1,6 @@
 export { SuppliersModule, SupplierJobsModule } from "./suppliers.module";
 export type { SuppliersModuleOptions } from "./suppliers.module";
-export { CitiesService } from "./cities.service";
+export { CitiesService, localizedName as localizedCityName } from "./cities.service";
 export { SuppliersService } from "./suppliers.service";
 export { SupplierLeadsService } from "./supplier-leads.service";
 export {

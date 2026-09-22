@@ -58,6 +58,7 @@ describe("settings registry", () => {
       "compatibility",
       "suppliers",
       "offers",
+      "showcase",
       "public_limits",
       "billing",
       "clients",

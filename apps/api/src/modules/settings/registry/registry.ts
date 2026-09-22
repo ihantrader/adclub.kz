@@ -685,6 +685,40 @@ const offers = group({
   },
 });
 
+/**
+ * «Рекомендуемые» of the catalog (TASK-020; ARCHITECTURE 4.29): the
+ * weights of the parts of `recommendedScore` (`@adclub/domain`) — the
+ * price, the receipt date, an offer in the chosen city, a verified partner
+ * and the rating (none yet, EPIC-19). Each from 0 to 100; not all zero.
+ */
+const recommendedWeightsSchema = z
+  .strictObject({
+    price: z.number().min(0).max(100),
+    receipt: z.number().min(0).max(100),
+    city: z.number().min(0).max(100),
+    verified: z.number().min(0).max(100),
+    rating: z.number().min(0).max(100),
+  })
+  .refine(
+    (weights) =>
+      weights.price + weights.receipt + weights.city + weights.verified + weights.rating > 0,
+    { message: "At least one weight must be above 0" },
+  );
+
+const showcase = group({
+  id: "showcase",
+  title: "Каталог для пользователя",
+  editableBy: "admin",
+  settings: {
+    catalog_recommended_weights: define.composite({
+      schema: recommendedWeightsSchema,
+      default: { price: 1, receipt: 1, city: 3, verified: 0.5, rating: 0.5 },
+      description:
+        "Веса сортировки «Рекомендуемые» в каталоге: цена (дешевле — выше), дата получения (раньше — выше), предложение в выбранном городе, «проверенный партнёр», рейтинг (пока рейтинга нет, не влияет). Каждая часть — от 0 до 1, умножается на свой вес; по умолчанию предложение своего города выше остальных.",
+    }),
+  },
+});
+
 const publicLimits = group({
   id: "public_limits",
   title: "Открытые маршруты",
@@ -1120,6 +1154,7 @@ export const settingGroups = [
   compatibility,
   suppliers,
   offers,
+  showcase,
   publicLimits,
   billing,
   clients,
@@ -1143,6 +1178,7 @@ export const settingDefinitions = {
   ...compatibility.settings,
   ...suppliers.settings,
   ...offers.settings,
+  ...showcase.settings,
   ...publicLimits.settings,
   ...billing.settings,
   ...clients.settings,

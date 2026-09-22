@@ -129,6 +129,7 @@ describe("ormTables", () => {
         "item_photo",
         "item_photo_file",
         "offer",
+        "club_access_grant",
         "vehicle_option",
         "vehicle_make",
         "vehicle_make_spelling",

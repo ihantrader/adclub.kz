@@ -51,10 +51,13 @@ export type {
   ReceiptInterval,
   ReceiptSchedule,
 } from "./offer/receipt-date";
-export { offerVisibility } from "./offer/offer-visibility";
+export { offerVisibility, scheduleFact } from "./offer/offer-visibility";
 export type {
   OfferHiddenReason,
+  OfferScheduleFact,
   OfferStatus,
   OfferVisibility,
   OfferVisibilityFacts,
 } from "./offer/offer-visibility";
+export { daysBetween, recommendedScore } from "./offer/offer-ranking";
+export type { RankedOfferFacts, RecommendedWeights } from "./offer/offer-ranking";

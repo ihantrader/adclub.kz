@@ -41,7 +41,7 @@ export function cityRef(row: CityRow): CityRef {
   return { id: row.id, code: row.code, names: cityNames(row), status: row.status };
 }
 
-function localizedName(row: CityRow, lang: CatalogLanguage): LocalizedText {
+export function localizedName(row: CityRow, lang: CatalogLanguage): LocalizedText {
   const own = lang === "kk" ? row.nameKk : lang === "en" ? row.nameEn : row.nameRu;
   return own === null
     ? { text: row.nameRu, isFallback: lang !== "ru" }

@@ -97,8 +97,11 @@ describe("checkServedRoutesMatchContract", () => {
 
   it("reports a served route missing from the contract", () => {
     expect(
-      checkServedRoutesMatchContract([...served, { method: "POST", path: "/orders" }], contract),
-    ).toEqual(["POST /orders is served but missing from apiRoutes (@adclub/contracts)"]);
+      checkServedRoutesMatchContract(
+        [...served, { method: "POST", path: "/loyalty-cards" }],
+        contract,
+      ),
+    ).toEqual(["POST /loyalty-cards is served but missing from apiRoutes (@adclub/contracts)"]);
   });
 
   it("reports a contract route the server doesn't serve", () => {

@@ -210,6 +210,27 @@ import { clientPlatformSchema } from "./client";
  * - `CLUB_ACCESS_NOT_GRANTED` (409): there is no current manual grant of
  *   the account to revoke (never given, already revoked or expired).
  *
+ * Orders (TASK-021, ARCHITECTURE 4.31):
+ * - `SUBSCRIPTION_REQUIRED` (403): the user has no club access — only
+ *   members of the club order (show the subscription screen, M-SUB-01).
+ * - `ORDER_OFFER_UNAVAILABLE` (409): the offer isn't on the showcase any
+ *   more (withdrawn, the supplier paused, the item archived…) or never
+ *   was — «Поставщик снял это предложение».
+ * - `ORDER_KIND_NOT_SUPPORTED` (409): the offer is under order — such
+ *   orders come with EPIC-13.
+ * - `ORDER_FULFILLMENT_UNAVAILABLE` (409): the offer doesn't give the
+ *   chosen way to get it (pickup or delivery).
+ * - `ORDER_PRICE_CHANGED` (409): the price isn't the one the user saw;
+ *   `details` is `OrderPriceChangedDetails` — ask to order at the new one.
+ * - `ORDER_DUPLICATE_ACTIVE` (409): the user already has an active order
+ *   on this offer; `details` is `OrderDuplicateActiveDetails` — open it,
+ *   or send again with `allowAnotherActive`.
+ * - `ORDER_IDEMPOTENCY_MISMATCH` (409): the `idempotencyKey` was used for
+ *   another order (another offer, quantity or way to get it) — make a new key.
+ * - `ORDER_STATE_CONFLICT` (409): the order is no longer where the action
+ *   expected it (someone acted first, a deadline passed, the order is
+ *   final); nothing changed. `details` is `OrderStateConflictDetails`.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -223,8 +244,7 @@ import { clientPlatformSchema } from "./client";
  *   the API doesn't take).
  * - `REQUEST_REJECTED`: any other 4xx without a code of its own.
  *
- * Extended as real endpoints need more specific codes (e.g.
- * `SUBSCRIPTION_REQUIRED`, `ORDER_STATE_CONFLICT` in later tasks). Values
+ * Extended as real endpoints need more specific codes. Values
  * are only ever added: clients must treat a code they don't know as a
  * generic error (ARCHITECTURE 7.4), which `@adclub/api-client` does.
  */
@@ -330,6 +350,15 @@ export const errorCodeSchema = z.enum([
   "OFFER_WARRANTY_CONTACTS",
   // Club access (TASK-020, ARCHITECTURE 4.29).
   "CLUB_ACCESS_NOT_GRANTED",
+  // Orders (TASK-021, ARCHITECTURE 4.31).
+  "SUBSCRIPTION_REQUIRED",
+  "ORDER_OFFER_UNAVAILABLE",
+  "ORDER_KIND_NOT_SUPPORTED",
+  "ORDER_FULFILLMENT_UNAVAILABLE",
+  "ORDER_PRICE_CHANGED",
+  "ORDER_DUPLICATE_ACTIVE",
+  "ORDER_IDEMPOTENCY_MISMATCH",
+  "ORDER_STATE_CONFLICT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

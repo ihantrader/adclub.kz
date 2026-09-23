@@ -134,6 +134,8 @@ export const rateLimitNameSchema = z.enum([
   "catalog_read_per_account",
   // The connection request form: per phone number.
   "supplier_lead_per_phone",
+  // Orders a user creates (TASK-021): per account.
+  "order_create_per_account",
   // Sending an invitation to an employee again.
   "supplier_invitation_resend",
   // Employees added by the employees of one company (TASK-017).

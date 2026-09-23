@@ -223,6 +223,14 @@ export const auditActions = {
    */
   clubAccessGranted: "club_access.granted",
   clubAccessRevoked: "club_access.revoked",
+  /**
+   * Orders (TASK-021): the supplier accepted an order and the customer's
+   * phone number opened to it (actor `supplier` — the employee). The
+   * order's own journal (`order_event`) holds every move; this entry
+   * marks the disclosure of personal data (ARCHITECTURE 8.4). `after`
+   * has the order's number, never the phone.
+   */
+  orderPhoneRevealed: "order.phone_revealed",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -257,6 +265,8 @@ export const auditEntities = {
   offer: "offer",
   /** A manual grant of club access (TASK-020). */
   clubAccessGrant: "club_access_grant",
+  /** An order of a user (TASK-021). */
+  order: "order",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

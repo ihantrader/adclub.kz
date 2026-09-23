@@ -172,6 +172,23 @@ import {
   revokeClubAccessBodySchema,
 } from "./club-access";
 import {
+  adminOrderListQuerySchema,
+  adminOrderPageSchema,
+  adminOrderResponseSchema,
+  createOrderBodySchema,
+  createOrderResponseSchema,
+  declineOrderBodySchema,
+  declineOrderResponseSchema,
+  orderActionBodySchema,
+  orderPathSchema,
+  supplierOrderListQuerySchema,
+  supplierOrderPageSchema,
+  supplierOrderResponseSchema,
+  userOrderListQuerySchema,
+  userOrderPageSchema,
+  userOrderResponseSchema,
+} from "./orders";
+import {
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
   showcaseItemQuerySchema,
@@ -3040,6 +3057,174 @@ export const apiRoutes = {
     requestBody: { description: "Whose and why", schema: revokeClubAccessBodySchema },
     responses: {
       200: { description: "The ended grant", schema: clubAccessGrantResponseSchema },
+    },
+  }),
+  // ------------------------------------------- orders on items in stock (TASK-021)
+  createOrder: defineRoute({
+    operationId: "createOrder",
+    method: "POST",
+    path: "/orders",
+    summary:
+      "Order from one offer on the showcase (M-ORD-01): a quantity, pickup or delivery, a comment; club access required; the answer has the confirmation code and the QR — for this user only. The same `idempotencyKey` again returns the order already created",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: { description: "The order", schema: createOrderBodySchema },
+    responses: {
+      201: { description: "The order", schema: createOrderResponseSchema },
+    },
+  }),
+  listUserOrders: defineRoute({
+    operationId: "listUserOrders",
+    method: "GET",
+    path: "/orders",
+    summary: "The user's own orders (M-ORD-02): active or history, newest first; no codes",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    query: userOrderListQuerySchema,
+    responses: {
+      200: { description: "Orders", schema: userOrderPageSchema },
+    },
+  }),
+  getUserOrder: defineRoute({
+    operationId: "getUserOrder",
+    method: "GET",
+    path: "/orders/{orderId}",
+    summary:
+      "One order of the user (M-ORD-03): the status and deadlines, the code and the QR while active, the terms, the course of the order; once accepted — the address, hours and phone of the supplier. Another user's order answers like a missing one (404)",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "The order", schema: userOrderResponseSchema },
+    },
+  }),
+  cancelUserOrder: defineRoute({
+    operationId: "cancelUserOrder",
+    method: "POST",
+    path: "/orders/{orderId}/cancel",
+    summary:
+      "Cancel an order not given out yet, accepted ones too; cancelling an order already cancelled is no error",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "The order", schema: userOrderResponseSchema },
+    },
+  }),
+  listSupplierOrders: defineRoute({
+    operationId: "listSupplierOrders",
+    method: "GET",
+    path: "/supplier/orders",
+    summary:
+      "The company's orders (S-ORD-01): new (the nearest answer deadline first), in progress, finished; no customer data, no codes",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierOrderListQuerySchema,
+    responses: {
+      200: { description: "Orders", schema: supplierOrderPageSchema },
+    },
+  }),
+  getSupplierOrder: defineRoute({
+    operationId: "getSupplierOrder",
+    method: "GET",
+    path: "/supplier/orders/{orderId}",
+    summary:
+      "One order of the company (S-ORD-02) with its journal and the employees' names; the customer's phone only once this order is accepted; never the code. Another company's order answers like a missing one (404)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "The order", schema: supplierOrderResponseSchema },
+    },
+  }),
+  acceptSupplierOrder: defineRoute({
+    operationId: "acceptSupplierOrder",
+    method: "POST",
+    path: "/supplier/orders/{orderId}/accept",
+    summary:
+      "Accept a new order: the customer's phone opens, the pickup reserve starts. A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: orderPathSchema,
+    requestBody: { description: "The version seen", schema: orderActionBodySchema },
+    responses: {
+      200: { description: "The order", schema: supplierOrderResponseSchema },
+    },
+  }),
+  markSupplierOrderReady: defineRoute({
+    operationId: "markSupplierOrderReady",
+    method: "POST",
+    path: "/supplier/orders/{orderId}/ready",
+    summary:
+      "Mark an accepted order ready to be given out; a pickup reserve starts again from now (never shorter)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: orderPathSchema,
+    requestBody: { description: "The version seen", schema: orderActionBodySchema },
+    responses: {
+      200: { description: "The order", schema: supplierOrderResponseSchema },
+    },
+  }),
+  declineSupplierOrder: defineRoute({
+    operationId: "declineSupplierOrder",
+    method: "POST",
+    path: "/supplier/orders/{orderId}/decline",
+    summary:
+      "Decline an order, new or accepted (S-ORD-03), with an optional reason the user never sees; «out of stock» offers to take the offer off sale",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: orderPathSchema,
+    requestBody: { description: "The version seen and the reason", schema: declineOrderBodySchema },
+    responses: {
+      200: { description: "The declined order", schema: declineOrderResponseSchema },
+    },
+  }),
+  listAdminOrders: defineRoute({
+    operationId: "listAdminOrders",
+    method: "GET",
+    path: "/admin/orders",
+    summary:
+      "Any orders (A-ORD-01) by status, supplier, period and number; test orders apart; never the code",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminOrderListQuerySchema,
+    responses: {
+      200: { description: "Orders", schema: adminOrderPageSchema },
+    },
+  }),
+  getAdminOrder: defineRoute({
+    operationId: "getAdminOrder",
+    method: "GET",
+    path: "/admin/orders/{orderId}",
+    summary:
+      "One order (A-ORD-02): the customer, the supplier, the terms, the deadlines and the whole journal with who acted; never the code",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "The order", schema: adminOrderResponseSchema },
     },
   }),
 } as const;

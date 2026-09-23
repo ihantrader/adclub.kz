@@ -485,6 +485,7 @@ export * from "./compatibility";
 export * from "./suppliers";
 export * from "./offers";
 export * from "./club-access";
+export * from "./orders";
 export * from "./showcase";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";

@@ -3,6 +3,7 @@ import * as compatibilityContract from "./compatibility";
 import * as supplierContract from "./suppliers";
 import * as offerContract from "./offers";
 import * as clubAccessContract from "./club-access";
+import * as orderContract from "./orders";
 import * as showcaseContract from "./showcase";
 import * as vehicleContract from "./vehicles";
 import {
@@ -221,6 +222,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(supplierContract),
   ...moduleComponentSchemas(offerContract),
   ...moduleComponentSchemas(clubAccessContract),
+  ...moduleComponentSchemas(orderContract),
   ...moduleComponentSchemas(showcaseContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
@@ -607,6 +609,10 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
         name: "public",
         description:
           "Open without signing in: cities and the connection request form (limited per client address)",
+      },
+      {
+        name: "orders",
+        description: "The user's own orders (context `user`, the mobile app)",
       },
       { name: "admin", description: "Admin panel (context `admin`)" },
     ],

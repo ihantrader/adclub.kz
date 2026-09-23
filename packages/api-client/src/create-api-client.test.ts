@@ -128,14 +128,14 @@ describe("createApiClient", () => {
       vi
         .fn<FetchLike>()
         .mockResolvedValue(
-          jsonResponse(402, { code: "SUBSCRIPTION_REQUIRED", message: "Pay", retryable: false }),
+          jsonResponse(402, { code: "LOYALTY_TIER_REQUIRED", message: "Pay", retryable: false }),
         ),
     );
 
     const error = await captureError(client.getReadiness());
 
     expect(error.code).toBe("UNKNOWN_ERROR");
-    expect(error.serverCode).toBe("SUBSCRIPTION_REQUIRED");
+    expect(error.serverCode).toBe("LOYALTY_TIER_REQUIRED");
     expect(error.message).toBe("Pay");
   });
 

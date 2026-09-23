@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   auditActions,
@@ -25,6 +26,15 @@ export type ClubAccessChanger =
   { role: "admin"; adminId: string; accountId: string } | { role: "operator" };
 
 const DAY_MS = 86_400_000;
+
+/**
+ * Why a grant ended when a newer one replaced it (TASK-020.A): the history
+ * names the replacement, not the reason of the new grant — that one is
+ * the new grant's own.
+ */
+export function replacedReason(newGrantId: string): string {
+  return `Заменена новой выдачей ${newGrantId}`;
+}
 
 function validationError(path: string, message: string): ApiException {
   return new ApiException(400, "VALIDATION_ERROR", message, { details: [{ path, message }] });
@@ -90,6 +100,8 @@ export class ClubAccessGrants {
       throw validationError("validUntil", `Must be at most ${CLUB_ACCESS_MAX_DAYS} days ahead`);
     }
     const adminId = changer.role === "admin" ? changer.adminId : null;
+    // Known before the insert: the grant it replaces names it.
+    const grantId = randomUUID();
     const result = await this.database.db.transaction(async (tx) => {
       const owner = await this.accounts.findOrCreateByPhone(phone, tx);
       // One change of an account's grants at a time: two grants at once
@@ -102,13 +114,14 @@ export class ClubAccessGrants {
           endedHow: "replaced",
           endedByRole: changer.role,
           endedByAdminId: adminId,
-          endReason: reason,
+          endReason: replacedReason(grantId),
         })
         .where(and(eq(clubAccessGrant.accountId, owner.id), isNull(clubAccessGrant.endedAt)))
         .returning();
       const [row] = await tx
         .insert(clubAccessGrant)
         .values({
+          id: grantId,
           accountId: owner.id,
           validUntil: input.validUntil,
           reason,

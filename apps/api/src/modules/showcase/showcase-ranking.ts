@@ -9,6 +9,15 @@ import type { VisibleOffer } from "./showcase-offers";
  * `@adclub/domain` with the weights of `catalog_recommended_weights`; an
  * item of a list ranks by its best offer. Every order ends with the id, so
  * it is total: equal prices keep one order from page to page.
+ *
+ * The key of «Рекомендуемые» isn't absolute by itself: the price part is
+ * measured against the cheapest offer of the list, and the weights are a
+ * setting. So the first page fixes both — the frame (`RankFrame`) — and
+ * the cursor carries it: every next page ranks by the very frame of the
+ * first (TASK-020.A; ARCHITECTURE 4.30). An item's key then depends only
+ * on its own offers, as with «Дешевле» and «Быстрее»: an offer that comes
+ * or goes elsewhere, or new weights, move no other item across the
+ * cursor. A new list (no cursor) takes the current weights.
  */
 
 type Key = readonly (number | string)[];
@@ -98,24 +107,40 @@ export interface RankedItem {
   key: Key;
 }
 
-/**
- * The items of a list in the order asked for: each item by its offers
- * (those that pass the offer filters). «Рекомендуемые» — the best score of
- * its offers, the price part measured against the cheapest offer of the
- * whole list.
- */
-export function rankItems(
+/** What «Рекомендуемые» is measured against: fixed by the first page, carried by the cursor. */
+export interface RankFrame {
+  /** The cheapest price of the list when its first page was given. */
+  reference: number;
+  weights: RecommendedWeights;
+}
+
+/** The frame of a new list: its cheapest offer and the current weights. */
+export function rankFrame(
   offersByItem: ReadonlyMap<string, readonly VisibleOffer[]>,
-  sort: ShowcaseListSort,
-  cityId: string | null,
   weights: RecommendedWeights,
-): RankedItem[] {
+): RankFrame {
   let reference = Number.POSITIVE_INFINITY;
   for (const offers of offersByItem.values()) {
     for (const entry of offers) {
       reference = Math.min(reference, entry.price);
     }
   }
+  return { reference, weights };
+}
+
+/**
+ * The items of a list in the order asked for: each item by its offers
+ * (those that pass the offer filters). «Рекомендуемые» — the best score of
+ * its offers in the frame: the price part measured against the frame's
+ * reference, with the frame's weights.
+ */
+export function rankItems(
+  offersByItem: ReadonlyMap<string, readonly VisibleOffer[]>,
+  sort: ShowcaseListSort,
+  cityId: string | null,
+  frame: RankFrame,
+): RankedItem[] {
+  const { reference, weights } = frame;
   const ranked: RankedItem[] = [];
   for (const [itemId, offers] of offersByItem) {
     const summary = summarize(offers, cityId);
@@ -145,12 +170,49 @@ export function rankItems(
 
 /**
  * A cursor is the position of the last item shown (its sort key, the id
- * included) and the order it belongs to: the next page is everything after
- * that position — no item is skipped or repeated, even if items came and
- * went between the pages.
+ * included), the order it belongs to and, for «Рекомендуемые», the frame
+ * of the first page: the next page is everything after that position — no
+ * item is skipped or repeated, even if items came and went between the
+ * pages or the weights changed.
  */
-export function encodeListCursor(sort: ShowcaseListSort, key: Key): string {
-  return Buffer.from(JSON.stringify({ s: sort, k: key }), "utf8").toString("base64url");
+export function encodeListCursor(sort: ShowcaseListSort, key: Key, frame: RankFrame): string {
+  const value =
+    sort === "recommended"
+      ? { s: sort, k: key, f: { p: frame.reference, w: frame.weights } }
+      : { s: sort, k: key };
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+const WEIGHT_NAMES = ["price", "receipt", "city", "verified", "rating"] as const;
+
+/** A frame from a cursor, or `null` if it isn't one (the weights as the setting allows them). */
+function frameOf(value: unknown): RankFrame | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const { p, w } = value as { p?: unknown; w?: unknown };
+  if (typeof p !== "number" || !Number.isFinite(p) || p <= 0) {
+    return null;
+  }
+  if (typeof w !== "object" || w === null) {
+    return null;
+  }
+  const given = w as Record<string, unknown>;
+  if (Object.keys(given).length !== WEIGHT_NAMES.length) {
+    return null;
+  }
+  let sum = 0;
+  for (const name of WEIGHT_NAMES) {
+    const weight = given[name];
+    if (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0 || weight > 100) {
+      return null;
+    }
+    sum += weight;
+  }
+  if (sum <= 0) {
+    return null;
+  }
+  return { reference: p, weights: given as unknown as RecommendedWeights };
 }
 
 function badCursor(): ApiException {
@@ -160,14 +222,21 @@ function badCursor(): ApiException {
   });
 }
 
-export function decodeListCursor(cursor: string, sort: ShowcaseListSort): Key {
+/**
+ * The position of a cursor and, for «Рекомендуемые», its frame (`null` —
+ * a cursor given before the frame was carried: the current frame then).
+ */
+export function decodeListCursor(
+  cursor: string,
+  sort: ShowcaseListSort,
+): { key: Key; frame: RankFrame | null } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
   } catch {
     throw badCursor();
   }
-  const value = parsed as { s?: unknown; k?: unknown };
+  const value = parsed as { s?: unknown; k?: unknown; f?: unknown };
   const expectedLength = sort === "recommended" ? 4 : 3;
   if (
     typeof parsed !== "object" ||
@@ -179,7 +248,14 @@ export function decodeListCursor(cursor: string, sort: ShowcaseListSort): Key {
   ) {
     throw badCursor();
   }
-  return value.k as Key;
+  if (value.f === undefined) {
+    return { key: value.k as Key, frame: null };
+  }
+  const frame = sort === "recommended" ? frameOf(value.f) : null;
+  if (!frame) {
+    throw badCursor();
+  }
+  return { key: value.k as Key, frame };
 }
 
 /** The items after the cursor's position. */

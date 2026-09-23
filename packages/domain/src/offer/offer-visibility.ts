@@ -1,4 +1,5 @@
 import type { SupplierPauseReason } from "../supplier/supplier-state";
+import type { ScheduleFact } from "./receipt-date";
 
 /**
  * Whether an offer is shown to users, and why not (PRODUCT 9, 13, 14;
@@ -7,7 +8,8 @@ import type { SupplierPauseReason } from "../supplier/supplier-state";
  * and the client catalog (TASK-020). Hiding changes nothing in the offer:
  * a supplier's pause or block hides its offers while it lasts, and they
  * are shown again when it is lifted. Since TASK-020 (D-060) the point's
- * hours count too: without them there is no receipt date to show.
+ * schedule counts too: without a working day ahead there is no receipt
+ * date to show (`scheduleFact` of the receipt date, TASK-020.A).
  */
 
 export type OfferStatus = "active" | "withdrawn" | "suspended";
@@ -25,21 +27,13 @@ export type OfferHiddenReason =
   | "no_working_day";
 
 /**
- * The pickup point's hours as the receipt date needs them (D-060,
- * TASK-020): given with at least one working day a week; not given yet;
- * or given with no working day at all — then no date can be calculated.
+ * The pickup point's schedule as the receipt date needs it (D-060,
+ * TASK-020.A): `scheduleFact` of the receipt date — the hours are given
+ * and some day of the horizon works; the hours aren't given yet; or no
+ * day of the horizon works (no day of the week, or closed dates close it
+ * all). Then no date can be calculated.
  */
-export type OfferScheduleFact = "ok" | "hours_not_set" | "no_working_day";
-
-/** The schedule fact of a point from its weekly hours (`null` — not given yet). */
-export function scheduleFact(
-  weeklyHours: readonly { intervals: readonly unknown[] }[] | null,
-): OfferScheduleFact {
-  if (weeklyHours === null) {
-    return "hours_not_set";
-  }
-  return weeklyHours.some((day) => day.intervals.length > 0) ? "ok" : "no_working_day";
-}
+export type OfferScheduleFact = ScheduleFact;
 
 export interface OfferVisibilityFacts {
   offerStatus: OfferStatus;
@@ -52,10 +46,10 @@ export interface OfferVisibilityFacts {
   /** The pickup point has a city. */
   hasCity: boolean;
   /**
-   * The hours of the pickup point (D-060): an offer whose receipt date
+   * The schedule of the pickup point (D-060): an offer whose receipt date
    * can't be calculated isn't shown — a user always sees a date, never a
    * bare term (PRODUCT 9.1); the supplier sees the reason and fills the
-   * hours in.
+   * hours in, or opens closed dates again.
    */
   schedule: OfferScheduleFact;
 }

@@ -24,6 +24,7 @@ export {
   OptionalSession,
   OptionalSessionGuard,
   OptionalSessionRoute,
+  optionalSessionOf,
   SessionGuard,
   SessionRoute,
 } from "./session/session.guard";

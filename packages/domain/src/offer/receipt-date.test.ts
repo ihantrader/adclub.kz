@@ -4,6 +4,7 @@ import {
   nextDate,
   RECEIPT_DATE_HORIZON_DAYS,
   receiptDate,
+  scheduleFact,
   type ReceiptDayHours,
   type ReceiptSchedule,
 } from "./receipt-date";
@@ -289,6 +290,49 @@ describe("the receipt date", () => {
     expect(
       receiptDate(almaty("2026-09-22T10:00"), 3, schedule(aroundTheClock, closed)),
     ).toMatchObject({ ok: false, reason: "no_working_day" });
+  });
+
+  it("gives the one reason a date can't be had, the same for every term (TASK-020.A)", () => {
+    const days = (from: number, count: number) =>
+      Array.from({ length: count }, (_, index) =>
+        new Date(Date.UTC(2026, 8, from + index)).toISOString().slice(0, 10),
+      );
+    const at = almaty("2026-09-22T10:00");
+    // Closed dates close the whole horizon after today: hidden, whatever
+    // the term — even «today» of a point that still works today.
+    const horizon = schedule(aroundTheClock, days(23, RECEIPT_DATE_HORIZON_DAYS));
+    expect(scheduleFact(at, horizon)).toBe("no_working_day");
+    for (const leadDays of [0, 1, 5, 90]) {
+      expect(receiptDate(at, leadDays, horizon)).toMatchObject({
+        ok: false,
+        reason: "no_working_day",
+      });
+    }
+    // One day of the horizon opened again: a date for every term.
+    const reopened = schedule(
+      aroundTheClock,
+      days(23, RECEIPT_DATE_HORIZON_DAYS).filter((date) => date !== "2026-10-10"),
+    );
+    expect(scheduleFact(at, reopened)).toBe("ok");
+    expect(receiptDate(at, 1, reopened)).toMatchObject({ ok: true, date: "2026-10-10" });
+    // A long term past a later closure of more than the horizon is still
+    // a date: the point works within the horizon, so it takes orders.
+    const laterClosure = schedule(aroundTheClock, days(25, 70));
+    expect(scheduleFact(at, laterClosure)).toBe("ok");
+    expect(receiptDate(at, 5, laterClosure)).toMatchObject({ ok: true, date: "2026-12-06" });
+    // The fact and the date agree on every term and hour.
+    for (const entry of [horizon, reopened, laterClosure, schedule(allOff), schedule(null)]) {
+      for (const hour of ["00:30", "12:00", "23:59"]) {
+        const moment = almaty(`2026-09-22T${hour}`);
+        const fact = scheduleFact(moment, entry);
+        for (const leadDays of [0, 1, 3, 30]) {
+          const result = receiptDate(moment, leadDays, entry);
+          expect(result.ok ? "ok" : result.reason).toBe(fact);
+        }
+      }
+    }
+    expect(scheduleFact(at, schedule(null))).toBe("hours_not_set");
+    expect(scheduleFact(at, schedule(allOff))).toBe("no_working_day");
   });
 
   it("refuses a term that isn't a whole number of days from 0", () => {

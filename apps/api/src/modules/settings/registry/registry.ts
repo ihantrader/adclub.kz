@@ -754,6 +754,36 @@ const publicLimits = group({
       default: 60,
       description: "Окно лимита проверок совместимости с одного адреса.",
     }),
+    catalog_read_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000_000,
+      default: 300,
+      description:
+        "Сколько запросов каталога (список подкатегории и карточка позиции) без входа можно сделать с одного адреса (сети IPv6 /64) за окно; сверх — отказ с временем ожидания. Щедро: за одним адресом мобильного оператора много людей, а каталог не для выгрузки целиком.",
+    }),
+    catalog_read_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита запросов каталога без входа с одного адреса.",
+    }),
+    catalog_read_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000_000,
+      default: 120,
+      description:
+        "Сколько запросов каталога может сделать одна учётная запись с сессией за окно, с любого адреса; сверх — отказ с временем ожидания. Человек, быстро листающий каталог, делает в разы меньше.",
+    }),
+    catalog_read_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита запросов каталога одной учётной записью.",
+    }),
   },
 });
 

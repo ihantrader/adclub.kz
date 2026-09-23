@@ -3,6 +3,7 @@ import type {
   OfferStateDetails,
   OfferStatusValue,
   OfferVersionConflictDetails,
+  OfferWarrantyContactsDetails,
 } from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
 
@@ -69,5 +70,15 @@ export function itemUnavailable(): ApiException {
     409,
     "OFFER_ITEM_UNAVAILABLE",
     "The item is no longer active in the catalog: the offer stays, but can't go back on sale",
+  );
+}
+
+export function warrantyContacts(found: OfferWarrantyContactsDetails["found"]): ApiException {
+  const details: OfferWarrantyContactsDetails = { found };
+  return new ApiException(
+    400,
+    "OFFER_WARRANTY_CONTACTS",
+    "The company's name and contacts don't go in the warranty: a user sees them once the order is accepted. Remove the phone, link or e-mail",
+    { details },
   );
 }

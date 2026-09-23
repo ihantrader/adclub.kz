@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { supplierVisibleOnShowcase } from "../supplier/supplier-state";
-import { offerVisibility, scheduleFact, type OfferVisibilityFacts } from "./offer-visibility";
+import { offerVisibility, type OfferVisibilityFacts } from "./offer-visibility";
+import { scheduleFact } from "./receipt-date";
 
 const shown: OfferVisibilityFacts = {
   offerStatus: "active",
@@ -66,13 +67,45 @@ describe("an offer on the showcase", () => {
     }
   });
 
-  it("takes the schedule fact from the point's weekly hours", () => {
+  it("takes the schedule fact of the receipt date: hours, days off and closed dates", () => {
     const day = (n: number, open: boolean) => ({
       day: n,
       intervals: open ? [{ from: "09:00", to: "18:00" }] : [],
     });
-    expect(scheduleFact(null)).toBe("hours_not_set");
-    expect(scheduleFact([1, 2, 3, 4, 5, 6, 7].map((n) => day(n, false)))).toBe("no_working_day");
-    expect(scheduleFact([1, 2, 3, 4, 5, 6, 7].map((n) => day(n, n === 6)))).toBe("ok");
+    const at = new Date("2026-09-22T10:00:00+05:00");
+    const point = (weeklyHours: ReturnType<typeof day>[] | null, closedDates: string[] = []) => ({
+      timeZone: "Asia/Almaty",
+      weeklyHours,
+      closedDates,
+    });
+    const week = [1, 2, 3, 4, 5, 6, 7];
+    expect(scheduleFact(at, point(null))).toBe("hours_not_set");
+    expect(scheduleFact(at, point(week.map((n) => day(n, false))))).toBe("no_working_day");
+    expect(scheduleFact(at, point(week.map((n) => day(n, n === 6))))).toBe("ok");
+    // Every Saturday of the horizon closed: nothing works in it.
+    const saturdays = Array.from({ length: 9 }, (_, index) =>
+      new Date(Date.UTC(2026, 8, 26 + index * 7)).toISOString().slice(0, 10),
+    );
+    expect(
+      scheduleFact(
+        at,
+        point(
+          week.map((n) => day(n, n === 6)),
+          saturdays,
+        ),
+      ),
+    ).toBe("no_working_day");
+    expect(
+      offerVisibility({
+        ...shown,
+        schedule: scheduleFact(
+          at,
+          point(
+            week.map((n) => day(n, n === 6)),
+            saturdays,
+          ),
+        ),
+      }),
+    ).toEqual({ visible: false, reasons: ["no_working_day"] });
   });
 });

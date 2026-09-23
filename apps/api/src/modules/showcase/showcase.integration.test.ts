@@ -16,6 +16,7 @@ import {
   clubAccessGrantResponseSchema,
   showcaseItemResponseSchema,
   showcaseListResponseSchema,
+  offerPageSchema,
   supplierOfferResponseSchema,
   supplierOnboardedResponseSchema,
   totpSetupCompletedResponseSchema,
@@ -27,10 +28,18 @@ import {
   type ShowcaseListResponse,
   type SupplierOffer,
 } from "@adclub/contracts";
-import { kzBinCheckDigit, normalizeArticle, receiptDate } from "@adclub/domain";
+import {
+  kzBinCheckDigit,
+  localDateTime,
+  nextDate,
+  normalizeArticle,
+  RECEIPT_DATE_HORIZON_DAYS,
+  receiptDate,
+} from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
+import { and, inArray } from "drizzle-orm";
 import { Client } from "pg";
 import request, { type Response, type Test } from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -43,11 +52,13 @@ import { configureHttpApp } from "../../http-app";
 import { TRUNCATE_ALL } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
+import { TcpProxy } from "../../testing/tcp-proxy";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { DevCatalogSeed } from "../catalog";
 import { ClubAccess, ClubAccessGrants } from "../club-access";
 import { DevCompatibilitySeed } from "../compatibility";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
+import { offer, offerShowcase, shownOffers } from "../offers";
 import { DevVehicleSeed } from "../vehicles";
 
 /**
@@ -61,6 +72,12 @@ import { DevVehicleSeed } from "../vehicles";
  * of suppliers — the fields are absent, not empty — on every route of the
  * catalog; caching that never hands one role's answer to another; D-060;
  * the weights of «Рекомендуемые»; the list of thousands of items.
+ * TASK-020.A: the warranty text only with club access; the showcase rule,
+ * its SQL twin and the catalog's answer agree (closed dates over the
+ * horizon included); pages of «Рекомендуемые» when offers and weights
+ * change between them; the limits of the catalog by address and by
+ * account, and without Redis (behind a TCP proxy, to take it away);
+ * services outside the chosen city among analogs.
  */
 
 const ADMIN_PHONE = "+77011234567";
@@ -93,9 +110,27 @@ const NEVER: DayHours[] = [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, intervals: 
 
 const phoneOf = (n: number) => `+7705${String(n).padStart(7, "0")}`;
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Closed dates from today in Almaty over the whole horizon of the receipt
+ * date — and a day more, so that a midnight passing during the test still
+ * leaves every day of the horizon closed (TASK-020.A).
+ */
+function closedHorizon(): { date: string; note: string }[] {
+  const dates: { date: string; note: string }[] = [];
+  let date = localDateTime(new Date(), "Asia/Almaty").date;
+  for (let day = 0; day <= RECEIPT_DATE_HORIZON_DAYS + 1; day += 1) {
+    dates.push({ date, note: "Инвентаризация" });
+    date = nextDate(date);
+  }
+  return dates;
+}
+
 describe("the catalog for users (PostgreSQL + Redis)", () => {
   let postgres: StartedPostgreSqlContainer;
   let redisContainer: StartedRedisContainer;
+  let redisProxy: TcpProxy;
   let redis: Redis;
   let db: Client;
   let config: AppConfig;
@@ -121,11 +156,13 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
     db = new Client({ connectionString: postgres.getConnectionUri() });
     await db.connect();
     redis = new Redis(redisContainer.getConnectionUrl());
+    redisProxy = new TcpProxy(redisContainer.getHost(), redisContainer.getPort());
+    await redisProxy.start();
     config = loadConfig({
       NODE_ENV: "test",
       LOG_LEVEL: "log",
       DATABASE_URL: postgres.getConnectionUri(),
-      REDIS_URL: redisContainer.getConnectionUrl(),
+      REDIS_URL: `redis://127.0.0.1:${redisProxy.port}`,
       S3_ENDPOINT: "http://127.0.0.1:9",
       S3_ACCESS_KEY: "test",
       S3_SECRET_KEY: "test-secret",
@@ -147,6 +184,7 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
 
   afterAll(async () => {
     await app?.close();
+    await redisProxy?.stop();
     redis?.disconnect();
     await db?.end().catch(() => undefined);
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
@@ -507,12 +545,16 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
     );
   }
 
-  async function grant(phone: string, until = new Date(Date.now() + 30 * 86_400_000)) {
+  async function grant(
+    phone: string,
+    until = new Date(Date.now() + 30 * 86_400_000),
+    reason = "Внутренняя альфа",
+  ) {
     return ok(
       asAdmin("post", "/admin/club-access/grants", {
         phone,
         validUntil: until.toISOString(),
-        reason: "Внутренняя альфа",
+        reason,
       }),
       (body) => clubAccessGrantResponseSchema.parse(body),
       201,
@@ -588,8 +630,14 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       );
       expect(active.grants.map((entry) => entry.id)).toEqual([given.grant.id]);
 
-      // A second grant replaces the first.
-      const longer = await grant(USER_PHONE, new Date(Date.now() + 20 * 86_400_000));
+      // A second grant replaces the first; the first ends with the
+      // replacement as its reason, not with the reason of the second
+      // (TASK-020.A).
+      const longer = await grant(
+        USER_PHONE,
+        new Date(Date.now() + 20 * 86_400_000),
+        "Продление альфы",
+      );
       const all = await ok(
         asAdmin("get", `/admin/club-access/grants?status=all&accountId=${accountId}`),
         (body) => clubAccessGrantPageSchema.parse(body),
@@ -598,6 +646,12 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
         [longer.grant.id, "active"],
         [given.grant.id, "replaced"],
       ]);
+      expect(all.grants[0]).toMatchObject({ reason: "Продление альфы", revokeReason: null });
+      expect(all.grants[1]).toMatchObject({
+        reason: "Внутренняя альфа",
+        revokedBy: { role: "admin" },
+        revokeReason: `Заменена новой выдачей ${longer.grant.id}`,
+      });
 
       const revoked = await ok(
         asAdmin("post", "/admin/club-access/revoke", {
@@ -633,7 +687,7 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       );
       expect(rows.map((row) => [row.action, row.actor_role, row.reason])).toEqual([
         ["club_access.granted", "admin", "Внутренняя альфа"],
-        ["club_access.granted", "admin", "Внутренняя альфа"],
+        ["club_access.granted", "admin", "Продление альфы"],
         ["club_access.revoked", "admin", "Альфа закончилась"],
       ]);
       expect(JSON.stringify(rows)).not.toContain("1112233");
@@ -1155,7 +1209,6 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
         pickup: true,
         delivery: true,
         warrantyMonths: 12,
-        warrantyText: null,
         inCity: true,
         verifiedPartner: false,
         rating: null,
@@ -1164,9 +1217,18 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       });
       expect(second).toMatchObject({
         verifiedPartner: true,
-        warrantyText: "Обмен 14 дней",
+        warrantyMonths: null,
         inCity: false,
       });
+      // The warranty text only with club access (TASK-020.A): a guest has no such field.
+      expect(opened.offers.some((entry) => "warrantyText" in entry)).toBe(false);
+      const member = await sessionToken(MEMBER_PHONE, IOS);
+      await grant(MEMBER_PHONE);
+      expect(
+        (await card(w.helixHx8, { cityId: almaty }, member)).offers.map(
+          (entry) => entry.warrantyText,
+        ),
+      ).toEqual([null, "Обмен 14 дней"]);
       // The dates are those of `receiptDate` for a confirmation now.
       const expected = receiptDate(new Date(), 4, {
         timeZone: "Asia/Almaty",
@@ -1299,7 +1361,12 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       }
       const offerKeys = Object.keys(asGuest.offers[0]!).sort();
       expect(offerKeys).not.toContain("supplierId");
-      expect(Object.keys(asMember.offers[0]!).sort()).toEqual(offerKeys);
+      expect(offerKeys).not.toContain("warrantyText");
+      expect(Object.keys(asUser.offers[0]!).sort()).toEqual(offerKeys);
+      // Club access adds the warranty text (TASK-020.A) and nothing else.
+      expect(Object.keys(asMember.offers[0]!).sort()).toEqual(
+        [...offerKeys, "warrantyText"].sort(),
+      );
       expect(asMember.offers.map((entry) => entry.supplier)).toEqual([
         {
           kind: "visible",
@@ -1374,6 +1441,374 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       );
       expectError(await shop.as("get", path), 403, "FORBIDDEN");
       expectError(await asAdmin("get", path), 403, "FORBIDDEN");
+    });
+  });
+
+  describe("TASK-020.A", () => {
+    it("gives the warranty text only with club access; the months to everyone", async () => {
+      const w = await world();
+      const shop = await company("Автомаркет", almaty);
+      const other = await company("Деталь Астана", astana);
+      await put(shop, w.frontPads, { price: 11_000, warrantyText: "12 месяцев по чеку" });
+      await put(other, w.frontPads, { price: 12_500, warrantyMonths: 6 });
+      const user = await sessionToken(USER_PHONE, IOS);
+      const member = await sessionToken(MEMBER_PHONE, IOS);
+      await grant(MEMBER_PHONE);
+      const sorted = { cityId: almaty, sort: "cheaper" };
+      for (const answer of [
+        await card(w.frontPads, sorted),
+        await card(w.frontPads, sorted, user),
+      ]) {
+        expect(answer.offers.map((entry) => entry.warrantyMonths)).toEqual([null, 6]);
+        for (const entry of answer.offers) {
+          expect(Object.keys(entry)).not.toContain("warrantyText");
+        }
+        expect(JSON.stringify(answer)).not.toContain("по чеку");
+      }
+      const club = await card(w.frontPads, sorted, member);
+      expect(club.offers.map((entry) => [entry.warrantyMonths, entry.warrantyText])).toEqual([
+        [null, "12 месяцев по чеку"],
+        [6, null],
+      ]);
+      // The list never carries it.
+      expect(JSON.stringify(await list(w.brakePads, {}, member))).not.toContain("по чеку");
+    });
+
+    it("one showcase rule: the rule, its SQL twin and the catalog agree, closed dates over the horizon included", async () => {
+      const w = await world();
+      const shown = await company("Автомаркет", almaty);
+      const inventory = await company("Инвентаризация", almaty);
+      const noHours = await company("Без часов", almaty, { hours: null });
+      const never = await company("Без рабочих дней", almaty, { hours: NEVER });
+      const offers = [
+        await put(shown, w.frontPads, { price: 11_000 }),
+        await put(inventory, w.frontPads, { price: 10_000 }),
+        await put(inventory, w.trwPads, { price: 9_000, availability: "on_order", leadDays: 5 }),
+        await put(noHours, w.frontPads, { price: 9_500 }),
+        await put(never, w.frontPads, { price: 9_700 }),
+      ];
+      const ids = offers.map((entry) => entry.id);
+      const database = app.get(DatabaseService).db;
+      const schedule = async (of: Company, closedDates: { date: string; note: string }[]) =>
+        ok(
+          asAdmin("put", `/admin/suppliers/${of.supplierId}/schedule`, {
+            expectedVersion: await supplierVersion(of.supplierId),
+            weeklyHours: ALWAYS,
+            closedDates,
+          }),
+          (body) => body,
+        );
+      /** What the three places say: the rule, the SQL twin, the catalog (list and cards). */
+      const threePlaces = async () => {
+        const now = new Date();
+        const rule = await offerShowcase(database, ids, now);
+        const twin = await database
+          .select({ id: offer.id })
+          .from(offer)
+          .where(and(inArray(offer.id, ids), shownOffers(now)));
+        const cards = [...(await card(w.frontPads)).offers, ...(await card(w.trwPads)).offers].map(
+          (entry) => entry.id,
+        );
+        const listed = (await list(w.brakePads, { limit: "50" })).items;
+        return {
+          rule: ids.filter((id) => rule.get(id)!.visible).sort(),
+          twin: twin.map((row) => row.id).sort(),
+          catalog: cards.sort(),
+          listedCounts: Object.fromEntries(listed.map((entry) => [entry.id, entry.offers.count])),
+          reasons: ids.map((id) => rule.get(id)!.reasons),
+        };
+      };
+
+      // Closed dates over the whole horizon: hidden everywhere, with the reason.
+      await schedule(inventory, closedHorizon());
+      const closed = await threePlaces();
+      expect(closed.twin).toEqual(closed.rule);
+      expect(closed.catalog).toEqual(closed.rule);
+      expect(closed.rule).toEqual([offers[0]!.id]);
+      expect(closed.listedCounts).toEqual({ [w.frontPads]: 1 });
+      expect(closed.reasons).toEqual([
+        [],
+        ["no_working_day"],
+        ["no_working_day"],
+        ["hours_not_set"],
+        ["no_working_day"],
+      ]);
+      // The supplier sees the reason in «Мои предложения».
+      const mine = await ok(inventory.as("get", "/supplier/offers"), (body) =>
+        offerPageSchema.parse(body),
+      );
+      expect(mine.offers.map((entry) => entry.showcase)).toEqual([
+        { visible: false, reasons: ["no_working_day"] },
+        { visible: false, reasons: ["no_working_day"] },
+      ]);
+
+      // One day of the horizon opened again: shown everywhere, the date is that day.
+      const horizon = closedHorizon();
+      await schedule(
+        inventory,
+        horizon.filter((_, index) => index !== 21),
+      );
+      const reopened = await threePlaces();
+      expect(reopened.twin).toEqual(reopened.rule);
+      expect(reopened.catalog).toEqual(reopened.rule);
+      expect(reopened.rule).toEqual([offers[0]!.id, offers[1]!.id, offers[2]!.id].sort());
+      expect(reopened.listedCounts).toEqual({ [w.frontPads]: 2, [w.trwPads]: 1 });
+      const inventoryOffer = (await card(w.frontPads)).offers.find(
+        (entry) => entry.id === offers[1]!.id,
+      );
+      expect(inventoryOffer?.receipt.date).toBe(horizon[21]!.date);
+      // A long term runs past the rest of the closure: still a date.
+      const onOrder = (await card(w.trwPads)).offers[0]!;
+      expect(onOrder.receipt.date > horizon.at(-1)!.date).toBe(true);
+
+      // All dates opened: every place agrees again.
+      await schedule(inventory, []);
+      const open = await threePlaces();
+      expect(open.twin).toEqual(open.rule);
+      expect(open.catalog).toEqual(open.rule);
+    });
+
+    it("pages «Рекомендуемые» without skipping or repeating when offers and weights change between pages", async () => {
+      const w = await world();
+      const shop = await company("Автомаркет", almaty);
+      const brand = await idOf("SELECT brand_id AS id FROM brand_spelling WHERE key = 'shell'", []);
+      const item = async (n: number) =>
+        ok(
+          asAdmin("post", "/admin/catalog/items", {
+            type: "generic",
+            categoryId: w.engineOils,
+            brandId: brand,
+            names: { ru: `Масло страницы ${String(n)}` },
+            values: [{ attributeId: w.volume, value: n + 1 }],
+          }),
+          (body) => (body as { item: { id: string } }).item.id,
+          201,
+        );
+      // The price part is measured against the cheapest offer: with it at
+      // 1 000 a dear item received today ranks before a cheaper one in
+      // three days; measured against 5 000 (the cheapest gone), after it.
+      await settings.set({
+        catalog_recommended_weights: { price: 1, receipt: 0.1, city: 0, verified: 0, rating: 0 },
+      });
+      const cheapest = await put(shop, w.helixHx8, { price: 1_000 });
+      await put(shop, w.mobilSuper, { price: 6_000 });
+      await put(shop, w.helixUltra, { price: 5_000, availability: "on_order", leadDays: 3 });
+      await put(shop, w.mobilEsp, { price: 5_200, availability: "on_order", leadDays: 3 });
+      const fillers: string[] = [];
+      for (let n = 0; n < 6; n++) {
+        const id = await item(n);
+        fillers.push(id);
+        await put(shop, id, { price: 20_000 + n * 1_000 });
+      }
+      const everything = [w.helixHx8, w.mobilSuper, w.helixUltra, w.mobilEsp, ...fillers];
+
+      const pageThrough = async (between: (page: number) => Promise<void>) => {
+        const seen: string[] = [];
+        let cursor: string | null = null;
+        let page = 0;
+        do {
+          const answer: ShowcaseListResponse = await list(w.engineOils, {
+            limit: "2",
+            ...(cursor ? { cursor } : {}),
+          });
+          seen.push(...answer.items.map((entry) => entry.id));
+          cursor = answer.nextCursor;
+          page += 1;
+          if (cursor) {
+            await between(page);
+          }
+        } while (cursor);
+        return seen;
+      };
+
+      const first = (await list(w.engineOils, { limit: "2" })).items.map((entry) => entry.id);
+      expect(first).toEqual([w.helixHx8, w.mobilSuper]);
+
+      // The cheapest offer is withdrawn after the first page.
+      const withdrawn = await pageThrough(async (page) => {
+        if (page === 1) {
+          await ok(
+            shop.as("post", `/supplier/offers/${cheapest.id}/withdraw`, { expectedVersion: 1 }),
+            (body) => body,
+          );
+        }
+      });
+      expect(withdrawn.length).toBe(new Set(withdrawn).size);
+      expect(new Set(withdrawn)).toEqual(new Set(everything));
+      // A new list is measured afresh: the cheaper one in three days now leads.
+      const fresh = (await list(w.engineOils, { limit: "3" })).items.map((entry) => entry.id);
+      expect(fresh).toEqual([w.helixUltra, w.mobilEsp, w.mobilSuper]);
+
+      // The weights change after the first page, and an offer appears on a new item.
+      await ok(
+        shop.as("post", `/supplier/offers/${cheapest.id}/return`, { expectedVersion: 2 }),
+        (body) => body,
+      );
+      const late = await item(99);
+      const changed = await pageThrough(async (page) => {
+        if (page === 1) {
+          await settings.set({
+            catalog_recommended_weights: { price: 0, receipt: 1, city: 0, verified: 0, rating: 0 },
+          });
+          await put(shop, late, { price: 500 });
+        }
+      });
+      expect(changed.length).toBe(new Set(changed).size);
+      for (const id of everything) {
+        expect(
+          changed.filter((entry) => entry === id),
+          id,
+        ).toHaveLength(1);
+      }
+
+      // A cursor with a made-up frame is refused; one of another order carries none.
+      const bad = Buffer.from(
+        JSON.stringify({ s: "recommended", k: [-1, 1, "2026-01-01", w.helixHx8], f: { p: -1 } }),
+      ).toString("base64url");
+      expectError(
+        await guest(`/catalog/categories/${w.engineOils}/items?cursor=${bad}`),
+        400,
+        "VALIDATION_ERROR",
+      );
+    });
+
+    it("limits the catalog: a guest by address (IPv6 by /64), a session by its account; served without Redis", async () => {
+      const w = await world();
+      const shop = await company("Автомаркет", almaty);
+      await put(shop, w.frontPads);
+      const user = await sessionToken(USER_PHONE, IOS);
+      const member = await sessionToken(MEMBER_PHONE, IOS);
+      await settings.set({ catalog_read_per_ip: 4, catalog_read_per_account: 3 });
+      const listPath = `/catalog/categories/${w.brakePads}/items`;
+      const cardPath = `/catalog/items/${w.frontPads}`;
+      const from = (ip: string, path: string, bearer?: string) => {
+        const test = http().get(path).set("X-Client", IOS).set("X-Forwarded-For", ip);
+        return bearer ? test.set("Authorization", `Bearer ${bearer}`) : test;
+      };
+
+      // Guests share the address: the list and the card count together.
+      const ip = "203.0.113.50";
+      for (const path of [listPath, cardPath, listPath, cardPath]) {
+        expect((await from(ip, path)).status).toBe(200);
+      }
+      const limited = await from(ip, cardPath);
+      expectError(limited, 429, "RATE_LIMITED");
+      expect(limited.body.details.limit).toBe("catalog_read_per_ip");
+      expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+      expect((await from("203.0.113.51", listPath)).status).toBe(200);
+
+      // Sessions behind the very same address are counted by account.
+      for (let n = 0; n < 3; n++) {
+        expect((await from(ip, listPath, user)).status).toBe(200);
+      }
+      const userLimited = await from(ip, cardPath, user);
+      expectError(userLimited, 429, "RATE_LIMITED");
+      expect(userLimited.body.details.limit).toBe("catalog_read_per_account");
+      // …from any address.
+      expectError(await from("198.51.100.200", listPath, user), 429, "RATE_LIMITED");
+      // Another person behind the same address isn't affected.
+      expect((await from(ip, listPath, member)).status).toBe(200);
+
+      // IPv6: one /64 network is one guest bucket, another network its own.
+      const net = "2001:db8:abcd:12";
+      for (let n = 0; n < 4; n++) {
+        expect((await from(`${net}::${String(n + 1)}`, listPath)).status).toBe(200);
+      }
+      expectError(await from(`${net}:ffff::9`, listPath), 429, "RATE_LIMITED");
+      expect((await from("2001:db8:abcd:13::1", listPath)).status).toBe(200);
+
+      // Ordinary browsing never reaches the default limits.
+      await settings.set({ catalog_read_per_ip: 300, catalog_read_per_account: 120 });
+      await redis.flushall();
+      for (let n = 0; n < 40; n++) {
+        expect((await from("203.0.113.60", n % 2 ? cardPath : listPath)).status).toBe(200);
+        expect((await from("203.0.113.60", n % 2 ? cardPath : listPath, member)).status).toBe(200);
+      }
+
+      // Without Redis the catalog is read by guests and sessions alike.
+      await settings.set({ catalog_read_per_ip: 1, catalog_read_per_account: 1 });
+      await redisProxy.stop();
+      try {
+        for (let n = 0; n < 3; n++) {
+          expect((await from(ip, listPath)).status).toBe(200);
+          expect((await from(ip, cardPath, user)).status).toBe(200);
+        }
+      } finally {
+        await redisProxy.start();
+      }
+      const deadline = Date.now() + 20_000;
+      let status = 0;
+      while (Date.now() < deadline) {
+        status = (await from("203.0.113.70", listPath)).status;
+        if (status === 200 && (await from("203.0.113.70", listPath)).status === 429) {
+          status = 429;
+          break;
+        }
+        await redis.flushall();
+        await sleep(250);
+      }
+      expect(status).toBe(429);
+      expect(output.text()).toContain("Served without the limit limit=catalog_read_per_ip");
+      expect(output.text()).toContain("Served without the limit limit=catalog_read_per_account");
+    });
+
+    it("keeps services outside the chosen city out of the analogs, as the list and the card", async () => {
+      const w = await world();
+      const shop = await company("Автомаркет", almaty);
+      const seeded = await put(shop, w.frontPads);
+      const service = async (name: string) =>
+        ok(
+          asAdmin("post", "/admin/catalog/items", {
+            type: "service",
+            categoryId: w.oilChange,
+            names: { ru: name },
+          }),
+          (body) => (body as { item: { id: string } }).item.id,
+          201,
+        );
+      const main = await service("Замена масла с фильтром");
+      const analog = await service("Замена масла экспресс");
+      // Services have no offers and no analogs until TASK-019: the checks
+      // that say so are lifted for this test only, to see the rule the
+      // analogs share with the list and the card.
+      await db.query("ALTER TABLE offer DROP CONSTRAINT offer_item_type_check");
+      await db.query("ALTER TABLE item_analog DROP CONSTRAINT item_analog_type_check");
+      try {
+        for (const itemId of [main, analog]) {
+          await db.query(
+            `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability,
+               lead_days, pickup, delivery, created_by_member_id, updated_by_member_id)
+             SELECT supplier_id, location_id, $2, 'service', 3000, 'in_stock', 0, true, false,
+               created_by_member_id, updated_by_member_id
+             FROM offer WHERE id = $1`,
+            [seeded.id, itemId],
+          );
+        }
+        const [low, high] = [main, analog].sort();
+        await db.query(
+          "INSERT INTO item_analog (item_id, analog_item_id, category_id, item_type) VALUES ($1, $2, $3, 'service')",
+          [low, high, w.oilChange],
+        );
+        const inAlmaty = await card(main, { cityId: almaty });
+        expect(inAlmaty.offers).toHaveLength(1);
+        expect(inAlmaty.analogs.map((entry) => entry.id)).toEqual([analog]);
+        for (const query of [{ cityId: astana }, {}] as Record<string, string>[]) {
+          const elsewhere = await card(main, query);
+          expect(elsewhere.offers).toEqual([]);
+          expect(elsewhere.analogs).toEqual([]);
+        }
+        expect((await list(w.oilChange, { cityId: astana })).items).toEqual([]);
+        expect((await list(w.oilChange, { cityId: almaty })).total).toBe(2);
+      } finally {
+        await db.query("DELETE FROM item_analog WHERE item_type = 'service'");
+        await db.query("DELETE FROM offer WHERE item_type = 'service'");
+        await db.query(
+          "ALTER TABLE offer ADD CONSTRAINT offer_item_type_check CHECK (item_type IN ('part', 'generic'))",
+        );
+        await db.query(
+          "ALTER TABLE item_analog ADD CONSTRAINT item_analog_type_check CHECK (item_type = 'part')",
+        );
+      }
     });
   });
 

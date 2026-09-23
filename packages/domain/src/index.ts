@@ -43,6 +43,7 @@ export {
   nextDate,
   RECEIPT_DATE_HORIZON_DAYS,
   receiptDate,
+  scheduleFact,
 } from "./offer/receipt-date";
 export type {
   ReceiptDateResult,
@@ -50,8 +51,9 @@ export type {
   ReceiptDayHours,
   ReceiptInterval,
   ReceiptSchedule,
+  ScheduleFact,
 } from "./offer/receipt-date";
-export { offerVisibility, scheduleFact } from "./offer/offer-visibility";
+export { offerVisibility } from "./offer/offer-visibility";
 export type {
   OfferHiddenReason,
   OfferScheduleFact,
@@ -59,5 +61,7 @@ export type {
   OfferVisibility,
   OfferVisibilityFacts,
 } from "./offer/offer-visibility";
+export { warrantyTextContacts } from "./offer/warranty-text";
+export type { WarrantyContactKind } from "./offer/warranty-text";
 export { daysBetween, recommendedScore } from "./offer/offer-ranking";
 export type { RankedOfferFacts, RecommendedWeights } from "./offer/offer-ranking";

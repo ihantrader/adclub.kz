@@ -49,16 +49,23 @@ import {
 import type { AuthenticatedSession } from "../identity";
 import { AppSettings } from "../settings";
 import { city, localizedCityName } from "../suppliers";
-import { visibleOffers, type VisibleOffer } from "./showcase-offers";
+import { offersInReach, visibleOffers, type VisibleOffer } from "./showcase-offers";
 import {
   after,
   decodeListCursor,
   encodeListCursor,
+  rankFrame,
   rankItems,
   sortOffers,
   summarize,
 } from "./showcase-ranking";
-import { describeViewer, offerSuppliers, viewerOf, type Viewer } from "./showcase-visibility";
+import {
+  clubOnlyOfferFields,
+  describeViewer,
+  offerSuppliers,
+  viewerOf,
+  type Viewer,
+} from "./showcase-visibility";
 
 const NO_NAME: LocalizedText = { text: "", isFallback: true };
 
@@ -175,7 +182,7 @@ export class ShowcaseService {
     const cityId = chosenCity?.id ?? null;
     const sort = query.sort ?? "recommended";
     const limit = query.limit ?? SHOWCASE_PAGE_DEFAULT_SIZE;
-    const cursorKey = query.cursor ? decodeListCursor(query.cursor, sort) : null;
+    const cursor = query.cursor ? decodeListCursor(query.cursor, sort) : null;
     const answer = (found: {
       items: ShowcaseListItem[];
       total: number;
@@ -200,11 +207,13 @@ export class ShowcaseService {
     if (subcategory.kind === "services" && cityId === null) {
       return answer({ items: [], total: 0, empty: "city_required", brands: [], nextCursor: null });
     }
-    let offers = await visibleOffers(executor, { categoryId: subcategory.id }, now);
-    if (subcategory.kind === "services") {
-      offers = offers.filter((entry) => entry.cityId === cityId);
-    }
-    const offered = groupByItem(offers);
+    const offered = groupByItem(
+      offersInReach(
+        subcategory.kind,
+        await visibleOffers(executor, { categoryId: subcategory.id }, now),
+        cityId,
+      ),
+    );
 
     // Compatibility and D-029 — the one calculation, for the whole
     // subcategory in one statement (by the subcategory rather than by a
@@ -257,8 +266,10 @@ export class ShowcaseService {
       }
     }
 
-    const ranked = rankItems(filtered, sort, cityId, weights);
-    const remaining = cursorKey ? after(ranked, cursorKey) : ranked;
+    // «Рекомендуемые» of a next page is ranked in the frame of the first (TASK-020.A).
+    const frame = cursor?.frame ?? rankFrame(filtered, weights);
+    const ranked = rankItems(filtered, sort, cityId, frame);
+    const remaining = cursor ? after(ranked, cursor.key) : ranked;
     const page = remaining.slice(0, limit);
     const last = page.at(-1);
     const empty: ShowcaseEmptyReason | null =
@@ -284,7 +295,7 @@ export class ShowcaseService {
       total: ranked.length,
       empty,
       brands,
-      nextCursor: remaining.length > limit && last ? encodeListCursor(sort, last.key) : null,
+      nextCursor: remaining.length > limit && last ? encodeListCursor(sort, last.key, frame) : null,
     });
   }
 
@@ -311,8 +322,6 @@ export class ShowcaseService {
       this.settings.get("catalog_recommended_weights"),
     ]);
     const cityId = chosenCity?.id ?? null;
-    const byCity = (entry: VisibleOffer) =>
-      subcategory.kind !== "services" || (cityId !== null && entry.cityId === cityId);
 
     const [offersOfItem, [compatibility], fitsFor, photos, attributes, analogIds, texts] =
       await Promise.all([
@@ -325,7 +334,7 @@ export class ShowcaseService {
         loadTexts(executor, "category", [subcategory.id, subcategory.parentId!]),
       ]);
     const offers = sortOffers(
-      offersOfItem.filter(byCity),
+      offersInReach(subcategory.kind, offersOfItem, cityId),
       query.sort ?? "recommended",
       cityId,
       weights,
@@ -374,7 +383,7 @@ export class ShowcaseService {
         delivery: entry.delivery,
         receipt: entry.receipt,
         warrantyMonths: entry.warrantyMonths,
-        warrantyText: entry.warrantyText,
+        ...clubOnlyOfferFields(viewer, entry),
         city: { id: entry.cityId, name: cityNames.get(entry.cityId) ?? NO_NAME },
         inCity: cityId !== null && entry.cityId === cityId,
         verifiedPartner: entry.verified,
@@ -727,8 +736,9 @@ export class ShowcaseService {
 
   /**
    * Analogs as links (M-CAT-07, D-031): only those users can get — active
-   * items with visible offers — and, as in any list, only those D-029 lets
-   * a list show for the car. The cheapest first.
+   * items with visible offers, a service only in the chosen city
+   * (`offersInReach`, as the list and the card) — and, as in any list,
+   * only those D-029 lets a list show for the car. The cheapest first.
    */
   private async analogs(
     executor: DbExecutor,
@@ -741,7 +751,22 @@ export class ShowcaseService {
     if (analogIds.length === 0) {
       return [];
     }
-    const offers = groupByItem(await visibleOffers(executor, { itemIds: analogIds }, now));
+    const found = groupByItem(await visibleOffers(executor, { itemIds: analogIds }, now));
+    if (found.size === 0) {
+      return [];
+    }
+    const kinds = await executor
+      .select({ itemId: catalogItem.id, kind: category.kind })
+      .from(catalogItem)
+      .innerJoin(category, eq(category.id, catalogItem.categoryId))
+      .where(inArray(catalogItem.id, [...found.keys()]));
+    const offers = new Map<string, VisibleOffer[]>();
+    for (const { itemId, kind } of kinds) {
+      const reachable = offersInReach(kind, found.get(itemId) ?? [], cityId);
+      if (reachable.length > 0) {
+        offers.set(itemId, reachable);
+      }
+    }
     if (offers.size === 0) {
       return [];
     }

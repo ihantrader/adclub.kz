@@ -101,6 +101,15 @@ export function OptionalSessionRoute(route: ApiRouteDefinition): MethodDecorator
   return ApiRoute(route, { guards: [OptionalSessionGuard] });
 }
 
+/**
+ * The session `OptionalSessionGuard` found for a request: `null` — a
+ * guest; `undefined` — the guard hasn't run for it. For guards that run
+ * after it (the limit per account of the catalog, TASK-020.A).
+ */
+export function optionalSessionOf(request: Request): AuthenticatedSession | null | undefined {
+  return optionalSessions.has(request) ? (optionalSessions.get(request) ?? null) : undefined;
+}
+
 /** The session of an `OptionalSessionRoute` request; `null` — a guest. */
 export const OptionalSession = createParamDecorator(
   (_data: unknown, context: ExecutionContext): AuthenticatedSession | null => {

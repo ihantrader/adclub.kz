@@ -1,4 +1,4 @@
-import type { ShowcaseOfferSupplier, ShowcaseViewer } from "@adclub/contracts";
+import type { ShowcaseOffer, ShowcaseOfferSupplier, ShowcaseViewer } from "@adclub/contracts";
 import { and, eq, inArray } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import type { ClubAccess } from "../club-access";
@@ -18,6 +18,12 @@ import { supplierLocation } from "../suppliers";
  *   of the supplier, and the district and address of its pickup point
  *   (D-030). Never the phone or the hours (D-026: after an order is
  *   accepted, EPIC-08).
+ *
+ * The supplier's own free text about an offer — the warranty text — could
+ * name the supplier (TASK-020.A): it goes with the name, only with club
+ * access (`clubOnlyOfferFields`); without it the field is absent, and the
+ * warranty is its term in months. The text itself can't carry contacts
+ * (`warrantyTextContacts` checks every save, `offers`).
  */
 export interface Viewer {
   accountId: string | null;
@@ -32,6 +38,14 @@ export async function viewerOf(
     return { accountId: null, clubAccess: false };
   }
   return { accountId: session.accountId, clubAccess: await access.has(session.accountId) };
+}
+
+/** The fields of an offer only a viewer with club access gets; nothing for anyone else. */
+export function clubOnlyOfferFields(
+  viewer: Viewer,
+  entry: { warrantyText: string | null },
+): Pick<ShowcaseOffer, "warrantyText"> {
+  return viewer.clubAccess ? { warrantyText: entry.warrantyText } : {};
 }
 
 export function describeViewer(viewer: Viewer): ShowcaseViewer {

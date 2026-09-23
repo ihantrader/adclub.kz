@@ -16,7 +16,8 @@ import {
 import { pickLanguage } from "@adclub/i18n";
 import type { Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
-import { OptionalSession, OptionalSessionRoute, type AuthenticatedSession } from "../identity";
+import { RateLimitedRoute } from "../../public-rate-limit";
+import { OptionalSession, type AuthenticatedSession } from "../identity";
 import { ShowcaseService } from "./showcase.service";
 
 /**
@@ -39,13 +40,18 @@ export function roleSafeCaching(response: Response, lang: string, signedIn: bool
   response.setHeader("Content-Language", lang);
 }
 
-/** The catalog for users (M-CAT-02, M-CAT-03, M-CAT-07), guests included. */
+/**
+ * The catalog for users (M-CAT-02, M-CAT-03, M-CAT-07), guests included.
+ * Both routes are limited (TASK-020.A): a guest by address
+ * (`catalog_read_per_ip`), a session by its account
+ * (`catalog_read_per_account`); without Redis they are served unlimited.
+ */
 @Controller()
 export class ShowcaseController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(ShowcaseService) private readonly showcase: ShowcaseService) {}
 
-  @OptionalSessionRoute(apiRoutes.getShowcaseItems)
+  @RateLimitedRoute(apiRoutes.getShowcaseItems)
   async list(
     @Param(new ZodValidationPipe(showcaseCategoryPathSchema)) params: ShowcaseCategoryPath,
     @Query(new ZodValidationPipe(showcaseListQuerySchema)) query: ShowcaseListQuery,
@@ -60,7 +66,7 @@ export class ShowcaseController {
     return answer;
   }
 
-  @OptionalSessionRoute(apiRoutes.getShowcaseItem)
+  @RateLimitedRoute(apiRoutes.getShowcaseItem)
   async card(
     @Param(new ZodValidationPipe(showcaseItemPathSchema)) params: ShowcaseItemPath,
     @Query(new ZodValidationPipe(showcaseItemQuerySchema)) query: ShowcaseItemQuery,

@@ -14,9 +14,15 @@
  *   hours; otherwise the nearest working day after it;
  * - term N > 0: the N-th working day after the day of the confirmation
  *   (the day itself never counts, whatever the hour);
- * - no working day within `RECEIPT_DATE_HORIZON_DAYS` days in a row — the
- *   date isn't calculated (the supplier's schedule is wrong), and neither
- *   is it when the hours aren't given yet.
+ * - the date isn't calculated when the hours aren't given yet, and when
+ *   the point has no working day in the `RECEIPT_DATE_HORIZON_DAYS` days
+ *   after the day of the confirmation (`scheduleFact`) — no day of the
+ *   week works, or closed dates close the whole horizon. That fact is the
+ *   only reason a date can't be had: the showcase rule, its SQL twin and
+ *   the catalog all take it (TASK-020.A, ARCHITECTURE 4.30), so an offer
+ *   is either shown with a date everywhere or hidden with its reason.
+ *   With a working day in the horizon a date is always found, however
+ *   far a long term takes it past later closed dates.
  */
 
 /** One working interval, `HH:MM`–`HH:MM` (`24:00` only as an end), never across midnight. */
@@ -40,10 +46,18 @@ export interface ReceiptSchedule {
   closedDates: readonly string[];
 }
 
-/** How many days in a row without a working day make the schedule unusable. */
+/** How many days after today must hold a working day for the point to take orders. */
 export const RECEIPT_DATE_HORIZON_DAYS = 60;
 
 export type ReceiptDateUnavailable = "hours_not_set" | "no_working_day";
+
+/**
+ * Whether the point can give a receipt date at `at` (D-060, TASK-020.A):
+ * `hours_not_set` — the hours aren't given; `no_working_day` — none of
+ * the `RECEIPT_DATE_HORIZON_DAYS` days after today (in the point's time
+ * zone) is a working day; otherwise `ok`.
+ */
+export type ScheduleFact = "ok" | ReceiptDateUnavailable;
 
 export type ReceiptDateResult =
   | {
@@ -92,6 +106,39 @@ export function isoWeekday(date: string): number {
   return weekday === 0 ? 7 : weekday;
 }
 
+function workingDays(schedule: ReceiptSchedule): ((date: string) => boolean) | null {
+  const weeklyHours = schedule.weeklyHours;
+  if (weeklyHours === null) {
+    return null;
+  }
+  const closed = new Set(schedule.closedDates);
+  return (date: string) =>
+    !closed.has(date) &&
+    (weeklyHours.find((entry) => entry.day === isoWeekday(date))?.intervals.length ?? 0) > 0;
+}
+
+/** Is there a working day among the horizon's days after `today`? */
+function worksWithinHorizon(isWorking: (date: string) => boolean, today: string): boolean {
+  let date = today;
+  for (let day = 0; day < RECEIPT_DATE_HORIZON_DAYS; day += 1) {
+    date = nextDate(date);
+    if (isWorking(date)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The schedule fact of a point at `at` — the one reason a receipt date can't be had. */
+export function scheduleFact(at: Date, schedule: ReceiptSchedule): ScheduleFact {
+  const isWorking = workingDays(schedule);
+  if (!isWorking) {
+    return "hours_not_set";
+  }
+  const today = localDateTime(at, schedule.timeZone).date;
+  return worksWithinHorizon(isWorking, today) ? "ok" : "no_working_day";
+}
+
 /**
  * The receipt date for a confirmation at `confirmedAt` and a term of
  * `leadDays` working days (an integer from 0).
@@ -106,14 +153,15 @@ export function receiptDate(
   }
   const local = localDateTime(confirmedAt, schedule.timeZone);
   const confirmedOn = local.date;
-  const weeklyHours = schedule.weeklyHours;
-  if (weeklyHours === null) {
+  const isWorking = workingDays(schedule);
+  if (!isWorking) {
     return { ok: false, reason: "hours_not_set", confirmedOn };
   }
-  const closed = new Set(schedule.closedDates);
+  if (!worksWithinHorizon(isWorking, confirmedOn)) {
+    return { ok: false, reason: "no_working_day", confirmedOn };
+  }
   const intervalsOf = (date: string) =>
-    weeklyHours.find((entry) => entry.day === isoWeekday(date))?.intervals ?? [];
-  const isWorking = (date: string) => !closed.has(date) && intervalsOf(date).length > 0;
+    schedule.weeklyHours?.find((entry) => entry.day === isoWeekday(date))?.intervals ?? [];
 
   if (leadDays === 0 && isWorking(confirmedOn)) {
     const closesAt = Math.max(...intervalsOf(confirmedOn).map((entry) => minutesOf(entry.to)));
@@ -121,23 +169,18 @@ export function receiptDate(
       return { ok: true, date: confirmedOn, confirmedOn };
     }
   }
-  // Term 0 after closing (or on a day off) — the nearest working day; term N — the N-th.
+  // Term 0 after closing (or on a day off) — the nearest working day; term
+  // N — the N-th. It ends: some day of the week works (the horizon has a
+  // working day) and the closed dates are finitely many.
   let remaining = Math.max(leadDays, 1);
   let date = confirmedOn;
-  let daysWithoutWork = 0;
   for (;;) {
     date = nextDate(date);
-    if (!isWorking(date)) {
-      daysWithoutWork += 1;
-      if (daysWithoutWork >= RECEIPT_DATE_HORIZON_DAYS) {
-        return { ok: false, reason: "no_working_day", confirmedOn };
+    if (isWorking(date)) {
+      remaining -= 1;
+      if (remaining === 0) {
+        return { ok: true, date, confirmedOn };
       }
-      continue;
-    }
-    daysWithoutWork = 0;
-    remaining -= 1;
-    if (remaining === 0) {
-      return { ok: true, date, confirmedOn };
     }
   }
 }

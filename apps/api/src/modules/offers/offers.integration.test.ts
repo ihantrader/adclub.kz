@@ -22,7 +22,13 @@ import {
   type ErrorCode,
   type SupplierOffer,
 } from "@adclub/contracts";
-import { kzBinCheckDigit, receiptDate } from "@adclub/domain";
+import {
+  kzBinCheckDigit,
+  localDateTime,
+  nextDate,
+  RECEIPT_DATE_HORIZON_DAYS,
+  receiptDate,
+} from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { and, inArray } from "drizzle-orm";
@@ -84,6 +90,21 @@ const WEEK: DayHours[] = [1, 2, 3, 4, 5, 6, 7].map((day) => ({
 }));
 
 const phoneOf = (n: number) => `+7705${String(n).padStart(7, "0")}`;
+
+/**
+ * Closed dates from today in Almaty over the whole horizon of the receipt
+ * date — and a day more, so that a midnight passing during the test still
+ * leaves every day of the horizon closed (TASK-020.A).
+ */
+function closedHorizon(): { date: string; note: string }[] {
+  const dates: { date: string; note: string }[] = [];
+  let date = localDateTime(new Date(), "Asia/Almaty").date;
+  for (let day = 0; day <= RECEIPT_DATE_HORIZON_DAYS + 1; day += 1) {
+    dates.push({ date, note: "Инвентаризация" });
+    date = nextDate(date);
+  }
+  return dates;
+}
 
 describe("offers of suppliers (PostgreSQL + Redis)", () => {
   let postgres: StartedPostgreSqlContainer;
@@ -303,7 +324,11 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
   /** A supplier with its point (with an address unless `address: null`), hours Mon–Fri 9–18, and a signed-in employee. */
   async function company(
     name = "Автомаркет",
-    options: { address?: string | null; hours?: DayHours[] | null } = {},
+    options: {
+      address?: string | null;
+      hours?: DayHours[] | null;
+      closedDates?: { date: string; note: string }[];
+    } = {},
   ): Promise<Company> {
     const phone = phoneOf(++phoneCounter);
     rememberCode(phone);
@@ -326,7 +351,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
         asAdmin("put", `/admin/suppliers/${created.supplier.id}/schedule`, {
           expectedVersion: created.supplier.version,
           weeklyHours: hours,
-          closedDates: [],
+          closedDates: options.closedDates ?? [],
         }),
         (body) => body,
       );
@@ -662,6 +687,72 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       expectError(slow, 400, "VALIDATION_ERROR");
       expect(JSON.stringify(slow.body.details)).toContain("leadDays");
       expect(await db.query("SELECT 1 FROM offer")).toMatchObject({ rowCount: 0 });
+    });
+
+    it("keeps contacts out of the warranty text: a phone, a link, an e-mail are refused (TASK-020.A)", async () => {
+      const own = await company();
+      const pads = await itemBy(PADS);
+      for (const [text, found] of [
+        ["Автомаркет, +7 705 555 01 01", ["phone"]],
+        ["звоните 8 (705) 555-01-01", ["phone"]],
+        ["подробнее на automarket.kz", ["link"]],
+        ["инстаграм @automarket_kz", ["link"]],
+        ["пишите info@automarket.kz", ["email"]],
+      ] as const) {
+        const refused = await own.as("post", "/supplier/offers", {
+          ...inStock(pads.id),
+          warrantyText: text,
+        });
+        expectError(refused, 400, "OFFER_WARRANTY_CONTACTS");
+        expect(refused.body.details).toEqual({ found });
+        expect(refused.body.message).toContain("order is accepted");
+        // The error names what was found, never the text itself.
+        expect(JSON.stringify(refused.body)).not.toContain(text);
+      }
+      const { rows: none } = await db.query("SELECT id FROM offer");
+      expect(none).toEqual([]);
+
+      const created = await put(own, pads.id, { warrantyText: "12 месяцев по чеку" });
+      expect(created.warrantyText).toBe("12 месяцев по чеку");
+      const changed = await own.as("patch", `/supplier/offers/${created.id}`, {
+        expectedVersion: 1,
+        warrantyText: "Автомаркет 87055550101",
+      });
+      expectError(changed, 400, "OFFER_WARRANTY_CONTACTS");
+      expect(changed.body.details).toEqual({ found: ["phone"] });
+
+      // A text saved before the check: the offer stays as it is and on
+      // sale, but its next save — whatever field it changes — is refused
+      // until the text is cleaned.
+      await db.query("UPDATE offer SET warranty_text = $1 WHERE id = $2", [
+        "Автомаркет, +7 705 555 01 01",
+        created.id,
+      ]);
+      const price = await own.as("patch", `/supplier/offers/${created.id}`, {
+        expectedVersion: 1,
+        price: 13_000,
+      });
+      expectError(price, 400, "OFFER_WARRANTY_CONTACTS");
+      const { rows } = await db.query<{ price: number; version: number }>(
+        "SELECT price, version FROM offer WHERE id = $1",
+        [created.id],
+      );
+      expect(rows[0]).toEqual({ price: 12_500, version: 1 });
+      const cleaned = await ok(
+        own.as("patch", `/supplier/offers/${created.id}`, {
+          expectedVersion: 1,
+          price: 13_000,
+          warrantyText: null,
+          warrantyMonths: 12,
+        }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+      );
+      expect(cleaned).toMatchObject({
+        price: 13_000,
+        warrantyText: null,
+        warrantyMonths: 12,
+        version: 2,
+      });
     });
 
     it("takes pickup only with the point's address; delivery alone works without it", async () => {
@@ -1111,6 +1202,30 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       });
     });
 
+    it("closed dates over the whole horizon hide the offer with its reason; opening a day shows it", async () => {
+      const own = await company("Инвентаризация", { closedDates: closedHorizon() });
+      const created = await put(own, (await itemBy(PADS)).id);
+      expect(created.showcase).toEqual({ visible: false, reasons: ["no_working_day"] });
+      expect(created.receipt).toMatchObject({ date: null, unavailable: "no_working_day" });
+      const reopened = closedHorizon().filter((_, index) => index !== 21);
+      await ok(
+        asAdmin("put", `/admin/suppliers/${own.supplierId}/schedule`, {
+          expectedVersion: await supplierVersion(own.supplierId),
+          weeklyHours: [1, 2, 3, 4, 5, 6, 7].map((day) => ({
+            day,
+            intervals: [{ from: "09:00", to: "18:00" }],
+          })),
+          closedDates: reopened,
+        }),
+        (body) => body,
+      );
+      const shown = await ok(own.as("get", `/supplier/offers/${created.id}`), (body) =>
+        supplierOfferResponseSchema.parse(body),
+      );
+      expect(shown.offer.showcase).toEqual({ visible: true, reasons: [] });
+      expect(shown.offer.receipt.date).toBe(closedHorizon()[21]!.date);
+    });
+
     it("the SQL condition agrees with the rule on every offer", async () => {
       const own = await company();
       const paused = await company("На паузе");
@@ -1123,6 +1238,8 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       const closed = await company("Закрыто", {
         hours: WEEK.map((day) => ({ day: day.day, intervals: [] })),
       });
+      // TASK-020.A: closed dates close the whole horizon.
+      const inventory = await company("Инвентаризация", { closedDates: closedHorizon() });
       const offers = [
         await put(own, pads.id),
         await put(own, items[0]!.id),
@@ -1130,6 +1247,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
         await put(paused, pads.id),
         await put(noHours, pads.id),
         await put(closed, pads.id),
+        await put(inventory, pads.id),
       ];
       await ok(
         own.as("post", `/supplier/offers/${offers[1]!.id}/withdraw`, { expectedVersion: 1 }),
@@ -1164,6 +1282,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       expect(shown.map((row) => row.id)).toEqual([offers[0]!.id]);
       expect(rule.get(offers[4]!.id)).toEqual({ visible: false, reasons: ["hours_not_set"] });
       expect(rule.get(offers[5]!.id)).toEqual({ visible: false, reasons: ["no_working_day"] });
+      expect(rule.get(offers[6]!.id)).toEqual({ visible: false, reasons: ["no_working_day"] });
     });
   });
 

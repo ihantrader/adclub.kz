@@ -13,10 +13,13 @@ import { supplierLocation } from "../suppliers";
  * the supplier is a verified partner — and the receipt date for an order
  * confirmed now. Which offers: only the showcase rule of TASK-018
  * (`shownOffers`, the SQL twin of `offerVisibility`, with the point's
- * hours since D-060). The date: only `receiptDate` of `@adclub/domain`,
- * by the point's schedule (`receiptSchedules`). An offer whose date still
- * can't be calculated (every day of 60 closed by dates) isn't shown either:
- * a user always sees a date (D-060).
+ * schedule since D-060) at the same moment the dates are calculated for.
+ * The date: only `receiptDate` of `@adclub/domain`, by the point's
+ * schedule (`receiptSchedules`). The rule already leaves out every offer
+ * whose date can't be had — the one reason is `scheduleFact`, which both
+ * take (TASK-020.A) — so the check below never drops a shown offer; it
+ * stays so that a user never sees an offer without a date whatever
+ * happens (D-060).
  *
  * One statement for the offers of a whole subcategory (or of a set of
  * items) and one for the schedules of their points, whatever their number;
@@ -46,6 +49,22 @@ export interface VisibleOffer {
 }
 
 export type OfferScope = { categoryId: string } | { itemIds: readonly string[] };
+
+/**
+ * The offers a user can get of an item of this kind in the chosen city:
+ * a product from anywhere; a service only in the chosen city, and none
+ * without a city (PRODUCT 6.3, D-031). The one place of the rule — the
+ * list, the card and its analogs (TASK-020.A).
+ */
+export function offersInReach(
+  kind: "goods" | "services",
+  offers: readonly VisibleOffer[],
+  cityId: string | null,
+): VisibleOffer[] {
+  return kind === "services"
+    ? offers.filter((entry) => cityId !== null && entry.cityId === cityId)
+    : [...offers];
+}
 
 export async function visibleOffers(
   executor: DbExecutor,
@@ -79,7 +98,7 @@ export async function visibleOffers(
     .innerJoin(catalogItem, eq(catalogItem.id, offer.itemId))
     .innerJoin(supplierLocation, eq(supplierLocation.id, offer.locationId))
     .innerJoin(supplier, eq(supplier.id, offer.supplierId))
-    .where(and(where, shownOffers()));
+    .where(and(where, shownOffers(now)));
   if (rows.length === 0) {
     return [];
   }

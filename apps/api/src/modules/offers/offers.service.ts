@@ -12,7 +12,7 @@ import {
   type SupplierOffer,
   type UpdateOfferBody,
 } from "@adclub/contracts";
-import { normalizeArticle } from "@adclub/domain";
+import { normalizeArticle, warrantyTextContacts } from "@adclub/domain";
 import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog, type AuditActorRecord } from "../audit";
@@ -38,6 +38,7 @@ import {
   pickupNeedsAddress,
   validationError,
   versionConflict,
+  warrantyContacts,
 } from "./offer-errors";
 import { describeOfferItems } from "./offer-items";
 import { describeReceipt, receiptSchedules } from "./offer-receipt";
@@ -91,6 +92,15 @@ function checkTerms(terms: Terms, changed: (field: string) => boolean): void {
       changed("warrantyText") ? "warrantyText" : "warrantyMonths",
       "The warranty is given in months or as a text, not both",
     );
+  }
+  // No contacts in the warranty (TASK-020.A, D-026): checked on the offer
+  // as it would be saved, so a text saved before the check is refused on
+  // the next save of the offer, whatever field that save changes.
+  if (terms.warrantyText !== null) {
+    const found = warrantyTextContacts(terms.warrantyText);
+    if (found.length > 0) {
+      throw warrantyContacts(found);
+    }
   }
 }
 
@@ -473,6 +483,7 @@ export class OffersService {
       offerShowcase(
         executor,
         rows.map((row) => row.id),
+        now,
       ),
       receiptSchedules(
         executor,

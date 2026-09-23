@@ -65,3 +65,19 @@ export { warrantyTextContacts } from "./offer/warranty-text";
 export type { WarrantyContactKind } from "./offer/warranty-text";
 export { daysBetween, recommendedScore } from "./offer/offer-ranking";
 export type { RankedOfferFacts, RecommendedWeights } from "./offer/offer-ranking";
+export {
+  activeOrderStatuses,
+  isActiveOrderStatus,
+  orderActionActor,
+  orderActions,
+  orderActionSources,
+  orderStatuses,
+  orderTransition,
+} from "./order/order-machine";
+export type { ActiveOrderStatus, OrderAction, OrderStatus } from "./order/order-machine";
+export {
+  acceptedReserveEnd,
+  readyReserveEnd,
+  reserveWarningAt,
+  startOfLocalDate,
+} from "./order/order-reserve";

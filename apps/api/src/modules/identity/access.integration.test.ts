@@ -1845,6 +1845,8 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "GET /admin/cities",
         "GET /admin/club-access/grants",
         "GET /admin/compatibility-proposals",
+        "GET /admin/orders",
+        "GET /admin/orders/{orderId}",
         "GET /admin/settings",
         "GET /admin/settings/{key}/history",
         "GET /admin/supplier-leads",

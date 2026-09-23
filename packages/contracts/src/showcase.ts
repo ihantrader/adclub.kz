@@ -345,8 +345,15 @@ export const showcaseOfferSchema = z.object({
   pickup: z.boolean(),
   delivery: z.boolean(),
   receipt: showcaseReceiptSchema,
+  /** The warranty in months, for every viewer. */
   warrantyMonths: z.number().int().nullable(),
-  warrantyText: z.string().nullable(),
+  /**
+   * The supplier's own words on the warranty — only with club access, as
+   * the supplier's name (TASK-020.A, D-005): a free text could name the
+   * supplier to anyone else. Without club access the field is absent;
+   * with it, `null` — no text.
+   */
+  warrantyText: z.string().nullable().optional(),
   /** The city of the pickup point. */
   city: showcaseCitySchema,
   /** The offer is in the chosen city («В вашем городе»). */

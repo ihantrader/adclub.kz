@@ -201,6 +201,10 @@ import { clientPlatformSchema } from "./client";
  * - `OFFER_NOT_APPLICABLE` (409): offers on services come with TASK-019.
  * - `OFFER_ITEM_UNAVAILABLE` (409): the item is no longer active in the
  *   catalog; the offer stays, but can't be returned to sale.
+ * - `OFFER_WARRANTY_CONTACTS` (400, TASK-020.A): the warranty text of the
+ *   offer as it would be saved gives a phone, a link or an e-mail — the
+ *   company's contacts don't go in the warranty, a user sees them once
+ *   the order is accepted; `details` is `OfferWarrantyContactsDetails`.
  *
  * Club access (TASK-020, ARCHITECTURE 4.29, D-059):
  * - `CLUB_ACCESS_NOT_GRANTED` (409): there is no current manual grant of
@@ -323,6 +327,7 @@ export const errorCodeSchema = z.enum([
   "OFFER_PICKUP_NEEDS_ADDRESS",
   "OFFER_NOT_APPLICABLE",
   "OFFER_ITEM_UNAVAILABLE",
+  "OFFER_WARRANTY_CONTACTS",
   // Club access (TASK-020, ARCHITECTURE 4.29).
   "CLUB_ACCESS_NOT_GRANTED",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).

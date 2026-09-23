@@ -8985,6 +8985,11 @@
         "x-access-contexts": [
           "user"
         ],
+        "x-rate-limit": {
+          "limit": "catalog_read_per_ip",
+          "perAccount": "catalog_read_per_account",
+          "whenUnavailable": "allow"
+        },
         "responses": {
           "200": {
             "description": "A page of items",
@@ -9203,6 +9208,11 @@
         "x-access-contexts": [
           "user"
         ],
+        "x-rate-limit": {
+          "limit": "catalog_read_per_ip",
+          "perAccount": "catalog_read_per_account",
+          "whenUnavailable": "allow"
+        },
         "responses": {
           "200": {
             "description": "The item and its offers",
@@ -17604,6 +17614,7 @@
           "OFFER_PICKUP_NEEDS_ADDRESS",
           "OFFER_NOT_APPLICABLE",
           "OFFER_ITEM_UNAVAILABLE",
+          "OFFER_WARRANTY_CONTACTS",
           "CLUB_ACCESS_NOT_GRANTED",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
@@ -18775,6 +18786,26 @@
           "currentVersion"
         ]
       },
+      "OfferWarrantyContactsDetails": {
+        "type": "object",
+        "properties": {
+          "found": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "phone",
+                "link",
+                "email"
+              ]
+            }
+          }
+        },
+        "required": [
+          "found"
+        ]
+      },
       "OfferWithdrawnReason": {
         "type": "string",
         "enum": [
@@ -18888,6 +18919,8 @@
           "compatibility_proposals_per_supplier",
           "supplier_lead_per_ip",
           "compatibility_check_per_ip",
+          "catalog_read_per_ip",
+          "catalog_read_per_account",
           "supplier_lead_per_phone",
           "supplier_invitation_resend",
           "supplier_members_added_per_supplier",
@@ -21051,7 +21084,6 @@
           "delivery",
           "receipt",
           "warrantyMonths",
-          "warrantyText",
           "city",
           "inCity",
           "verifiedPartner",

@@ -401,6 +401,18 @@ export const offerStateDetailsSchema = z.object({ status: offerStatusSchema });
 
 export type OfferStateDetails = z.infer<typeof offerStateDetailsSchema>;
 
+/**
+ * `details` of `OFFER_WARRANTY_CONTACTS` (TASK-020.A): what the warranty
+ * text gives away — a phone, a link (a site, a handle) or an e-mail. The
+ * cabinet explains the rule: the company's name and contacts don't go in
+ * the warranty, a user sees them once the order is accepted.
+ */
+export const offerWarrantyContactsDetailsSchema = z.object({
+  found: z.array(z.enum(["phone", "link", "email"])).min(1),
+});
+
+export type OfferWarrantyContactsDetails = z.infer<typeof offerWarrantyContactsDetailsSchema>;
+
 // ---------------------------------------------------------------- snapshot
 
 /**

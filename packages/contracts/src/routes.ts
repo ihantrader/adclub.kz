@@ -389,9 +389,15 @@ export interface ApiRouteDefinition {
    * can't be counted (Redis down) — `refuse` (503 `SERVICE_UNAVAILABLE`,
    * for anything that writes) or `allow` (a read is served). The server
    * refuses to bind such a route without the guard that counts it.
+   *
+   * `perAccount` (TASK-020.A, a route with `auth: "optional"` only): a
+   * request with a session is counted by its account under this limit
+   * instead of by its address — people behind one address of a mobile
+   * operator don't share a limit; a guest is counted by address.
    */
   rateLimit?: {
     limit: RateLimitName;
+    perAccount?: RateLimitName;
     whenUnavailable: "refuse" | "allow";
   };
   responses: Readonly<Record<number, ApiResponseDefinition>>;
@@ -400,6 +406,9 @@ export interface ApiRouteDefinition {
 function defineRoute<const Route extends ApiRouteDefinition>(route: Route): Route {
   if (route.requestBody && route.upload) {
     throw new Error(`${route.operationId}: a route takes either a JSON body or a file, not both`);
+  }
+  if (route.rateLimit?.perAccount && route.auth !== "optional") {
+    throw new Error(`${route.operationId}: a limit per account needs auth: "optional"`);
   }
   return route;
 }
@@ -2955,6 +2964,11 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "optional",
     contexts: ["user"],
+    rateLimit: {
+      limit: "catalog_read_per_ip",
+      perAccount: "catalog_read_per_account",
+      whenUnavailable: "allow",
+    },
     pathParams: showcaseCategoryPathSchema,
     query: showcaseListQuerySchema,
     responses: {
@@ -2971,6 +2985,11 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "optional",
     contexts: ["user"],
+    rateLimit: {
+      limit: "catalog_read_per_ip",
+      perAccount: "catalog_read_per_account",
+      whenUnavailable: "allow",
+    },
     pathParams: showcaseItemPathSchema,
     query: showcaseItemQuerySchema,
     responses: {

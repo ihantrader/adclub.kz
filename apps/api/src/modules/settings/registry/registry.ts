@@ -129,6 +129,29 @@ const orders = group({
       description:
         "Через сколько дней заявка с доставкой без движения попадает к администратору как сигнал.",
     }),
+    // TASK-021 (ARCHITECTURE 4.31).
+    order_max_quantity: define.integer({
+      unit: "count",
+      min: 1,
+      max: 999,
+      default: 50,
+      description: "Наибольшее количество товара в одной заявке.",
+    }),
+    order_create_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 20,
+      description:
+        "Сколько заявок один пользователь может создать за окно; сверх — отказ с временем ожидания (защита от спама). Повтор той же заявки двойным нажатием не считается.",
+    }),
+    order_create_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно лимита создания заявок одним пользователем.",
+    }),
   },
 });
 

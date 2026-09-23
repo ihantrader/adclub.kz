@@ -16,6 +16,7 @@ import { CompatibilityModule } from "./modules/compatibility";
 import { SuppliersModule } from "./modules/suppliers";
 import { OffersModule } from "./modules/offers";
 import { ClubAccessModule } from "./modules/club-access";
+import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
@@ -45,6 +46,8 @@ export class AppModule implements NestModule {
     // One of each: the client catalog reads through these very instances.
     const compatibility = CompatibilityModule.forRoot({ http: true });
     const clubAccess = ClubAccessModule.forRoot({ http: true });
+    // One offers module: orders take the snapshot through this very instance.
+    const offers = OffersModule.forRoot({ http: true, catalog });
     return {
       module: AppModule,
       imports: [
@@ -75,9 +78,10 @@ export class AppModule implements NestModule {
         VehiclesModule.forRoot({ http: true }),
         compatibility,
         SuppliersModule.forRoot({ http: true, devOutbox: config.loginCode.devOutbox }),
-        OffersModule.forRoot({ http: true, catalog }),
+        offers,
         clubAccess,
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
+        OrdersModule.forRoot({ http: true, offers, clubAccess }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

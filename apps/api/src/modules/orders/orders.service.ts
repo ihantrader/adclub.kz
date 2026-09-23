@@ -1,0 +1,669 @@
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  type AdminOrder,
+  type AdminOrderListQuery,
+  type AdminOrderPage,
+  type CatalogLanguage,
+  type CreateOrderInput,
+  type CreateOrderResponse,
+  type DeclineOrderBody,
+  type DeclineOrderResponse,
+  type OrderStatusValue,
+  type SupplierOrder,
+  type SupplierOrderListQuery,
+  type SupplierOrderPage,
+  type UserOrder,
+  type UserOrderListQuery,
+  type UserOrderPage,
+} from "@adclub/contracts";
+import { activeOrderStatuses } from "@adclub/domain";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  lt,
+  ne,
+  notInArray,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
+import { rateLimitedException } from "../../common/errors";
+import { DatabaseService, type DbExecutor } from "../../database";
+import { Metrics } from "../../observability";
+import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
+import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
+import { ClubAccess } from "../club-access";
+import { supplierMember } from "../identity";
+import { offer, offerShowcase, OfferSnapshots } from "../offers";
+import { AppSettings } from "../settings";
+import { newConfirmationCode, newQrToken } from "./order-code";
+import {
+  duplicateActive,
+  fulfillmentUnavailable,
+  idempotencyMismatch,
+  kindNotSupported,
+  notFound,
+  offerUnavailable,
+  priceChanged,
+  stateConflict,
+  subscriptionRequired,
+  validationError,
+} from "./order-errors";
+import {
+  OrderTransitions,
+  respondByOf,
+  type MoveOutcome,
+  type MoveRequest,
+  type OrderActorRef,
+  type PersonAction,
+} from "./order-transitions";
+import {
+  adminOrderView,
+  adminSummaries,
+  lastActionOf,
+  supplierOrderView,
+  supplierSummaries,
+  userOrderView,
+  userSummaries,
+} from "./order-views";
+import { customerOrder, type OrderRow } from "./schema";
+
+/** An employee acting for the company of the session. */
+export type OrderSupplierActor = Extract<OrderActorRef, { type: "supplier_member" }>;
+
+/** How often creations served without a working limiter are reported (not every request). */
+const UNAVAILABLE_WARNING_INTERVAL_MS = 60_000;
+/** Draws of a confirmation code before giving up (a clash among active orders is rare). */
+const CODE_ATTEMPTS = 20;
+
+const ACTIVE = [...activeOrderStatuses] as OrderStatusValue[];
+
+/** A time column to the microsecond: the position of a row in a list. */
+function positionOf(column: PgColumn): SQL<string> {
+  return sql<string>`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
+
+function cursorAt(cursor: string | undefined): { position: string; id: string } | null {
+  if (!cursor) {
+    return null;
+  }
+  const parsed = decodeCursor(cursor);
+  if (!TIME_POSITION.test(parsed.position)) {
+    throw validationError("cursor", "Use the nextCursor of the previous page");
+  }
+  return parsed;
+}
+
+/**
+ * Orders on items in stock (TASK-021; ARCHITECTURE 4.31; SCREENS
+ * M-ORD-01…03, S-ORD-01…03, A-ORD-01…02): a user with club access orders
+ * from an offer users see; the order keeps the offer's snapshot, a
+ * confirmation code and a QR; the supplier's employees accept, mark ready
+ * or decline it; the user cancels it; deadlines expire it
+ * (`OrderDeadlines`). Every move goes through `OrderTransitions`; what each
+ * side sees is `order-views.ts`.
+ */
+@Injectable()
+export class OrdersService {
+  private readonly logger = new Logger("Orders");
+  private lastUnavailableWarning = 0;
+
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(AppSettings) private readonly settings: AppSettings,
+    @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
+    @Inject(OfferSnapshots) private readonly snapshots: OfferSnapshots,
+    @Inject(OrderTransitions) private readonly transitions: OrderTransitions,
+    @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
+    @Inject(Metrics) private readonly metrics: Metrics,
+  ) {}
+
+  // ---------------------------------------------------------------- create
+
+  async create(
+    input: CreateOrderInput,
+    accountId: string,
+    lang: CatalogLanguage,
+  ): Promise<CreateOrderResponse> {
+    const maxQuantity = await this.settings.get("order_max_quantity");
+    if (input.quantity > maxQuantity) {
+      throw validationError("quantity", `At most ${String(maxQuantity)} items in one order`);
+    }
+    // The same order sent again (a double tap, a repeat after a lost
+    // answer) finds the first one: no second order, no second count.
+    const replay = await this.byKey(this.database.db, accountId, input.idempotencyKey);
+    if (replay) {
+      return this.replayed(replay, input, lang);
+    }
+    if (!(await this.clubAccess.has(accountId))) {
+      throw subscriptionRequired();
+    }
+    const limitKey = await this.countCreation(accountId);
+    let outcome: { row: OrderRow; created: boolean };
+    try {
+      outcome = await this.database.db.transaction((tx) => this.insert(tx, input, accountId));
+    } catch (error) {
+      // A refused order doesn't use up the limit.
+      if (limitKey) {
+        await this.limiter.refund(limitKey).catch(() => undefined);
+      }
+      throw error;
+    }
+    if (!outcome.created) {
+      // Sent twice at once: the other request made the order, and this one
+      // doesn't count against the limit either.
+      if (limitKey) {
+        await this.limiter.refund(limitKey).catch(() => undefined);
+      }
+      return this.replayed(outcome.row, input, lang);
+    }
+    this.logger.log(
+      `Order created order=${outcome.row.id} number=${String(outcome.row.number)} supplier=${outcome.row.supplierId} test=${String(outcome.row.isTest)}`,
+    );
+    return { order: await userOrderView(this.database.db, outcome.row, lang), created: true };
+  }
+
+  private async insert(
+    tx: DbExecutor,
+    input: CreateOrderInput,
+    accountId: string,
+  ): Promise<{ row: OrderRow; created: boolean }> {
+    const at = new Date();
+    // The same key sent at the same moment: the other request may have
+    // made the order since the check before the transaction.
+    const made = await this.byKey(tx, accountId, input.idempotencyKey);
+    if (made) {
+      return { row: made, created: false };
+    }
+    // Held until the order is written: a change of the offer waits, so the
+    // order gets its terms whole, before or after the change (4.28 I279).
+    const [current] = await tx
+      .select({
+        id: offer.id,
+        supplierId: offer.supplierId,
+        locationId: offer.locationId,
+        itemId: offer.itemId,
+        price: offer.price,
+        availability: offer.availability,
+        pickup: offer.pickup,
+        delivery: offer.delivery,
+      })
+      .from(offer)
+      .where(eq(offer.id, input.offerId))
+      .for("share");
+    // Missing or not on the showcase — the same answer: offer ids reveal nothing.
+    if (!current || !(await offerShowcase(tx, [current.id], at)).get(current.id)?.visible) {
+      throw offerUnavailable();
+    }
+    if (current.availability !== "in_stock") {
+      throw kindNotSupported();
+    }
+    if (!(input.fulfillment === "pickup" ? current.pickup : current.delivery)) {
+      throw fulfillmentUnavailable();
+    }
+    if (current.price !== input.expectedPrice) {
+      throw priceChanged(input.expectedPrice, current.price);
+    }
+    if (!input.allowAnotherActive) {
+      const [active] = await tx
+        .select({ id: customerOrder.id, number: customerOrder.number })
+        .from(customerOrder)
+        .where(
+          and(
+            eq(customerOrder.userAccountId, accountId),
+            eq(customerOrder.offerId, current.id),
+            inArray(customerOrder.status, ACTIVE),
+            // Not the order this very key made (the request sent twice at once).
+            ne(customerOrder.idempotencyKey, input.idempotencyKey),
+          ),
+        )
+        .orderBy(desc(customerOrder.createdAt))
+        .limit(1);
+      if (active) {
+        throw duplicateActive(active.id, active.number);
+      }
+    }
+    const snapshot = await this.snapshots.take(tx, current.id, at);
+    // An employee ordering from their own company: a test order (PRODUCT 12.6).
+    const [membership] = await tx
+      .select({ id: supplierMember.id })
+      .from(supplierMember)
+      .where(
+        and(
+          eq(supplierMember.accountId, accountId),
+          eq(supplierMember.supplierId, current.supplierId),
+          eq(supplierMember.status, "active"),
+        ),
+      );
+    const respondBy = respondByOf(at, await this.settings.get("supplier_response_hours"));
+    for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
+      const [row] = await tx
+        .insert(customerOrder)
+        .values({
+          userAccountId: accountId,
+          supplierId: current.supplierId,
+          locationId: current.locationId,
+          offerId: current.id,
+          itemId: current.itemId,
+          offerSnapshot: snapshot,
+          unitPrice: snapshot.price,
+          quantity: input.quantity,
+          total: snapshot.price * input.quantity,
+          fulfillment: input.fulfillment,
+          comment: input.comment ?? null,
+          isTest: membership !== undefined,
+          confirmationCode: newConfirmationCode(),
+          qrToken: newQrToken(),
+          idempotencyKey: input.idempotencyKey,
+          respondBy,
+          createdAt: at,
+          updatedAt: at,
+        })
+        // A clash: the same key sent at the same moment (it waited for the
+        // other request and finds its order below), or a code already
+        // taken by an active order (drawn again).
+        .onConflictDoNothing()
+        .returning();
+      if (row) {
+        await this.transitions.record(
+          tx,
+          row,
+          "create",
+          null,
+          "created",
+          { type: "user", accountId },
+          "app",
+          at,
+          { quantity: row.quantity, total: row.total, fulfillment: row.fulfillment },
+        );
+        return { row, created: true };
+      }
+      const same = await this.byKey(tx, accountId, input.idempotencyKey);
+      if (same) {
+        return { row: same, created: false };
+      }
+    }
+    throw new Error("No free confirmation code after many draws");
+  }
+
+  private async byKey(
+    executor: DbExecutor,
+    accountId: string,
+    key: string,
+  ): Promise<OrderRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(customerOrder)
+      .where(
+        and(eq(customerOrder.userAccountId, accountId), eq(customerOrder.idempotencyKey, key)),
+      );
+    return row;
+  }
+
+  private async replayed(
+    row: OrderRow,
+    input: CreateOrderInput,
+    lang: CatalogLanguage,
+  ): Promise<CreateOrderResponse> {
+    if (
+      row.offerId !== input.offerId ||
+      row.quantity !== input.quantity ||
+      row.fulfillment !== input.fulfillment
+    ) {
+      throw idempotencyMismatch();
+    }
+    return { order: await userOrderView(this.database.db, row, lang), created: false };
+  }
+
+  /**
+   * One creation of the user against the limit; the key to refund, or
+   * `null` when Redis is down — then the order is created anyway (an order
+   * isn't lost because of Redis) and the outage is reported once a minute.
+   */
+  private async countCreation(accountId: string): Promise<string | null> {
+    const [max, windowSeconds] = await Promise.all([
+      this.settings.get("order_create_per_account"),
+      this.settings.get("order_create_per_account_window_seconds"),
+    ]);
+    const key = `order-create:${accountId}`;
+    let hit;
+    try {
+      hit = await this.limiter.hit(key, { max, windowSeconds });
+    } catch (error) {
+      if (!(error instanceof RateLimiterUnavailableError)) {
+        throw error;
+      }
+      const now = Date.now();
+      if (now - this.lastUnavailableWarning >= UNAVAILABLE_WARNING_INTERVAL_MS) {
+        this.lastUnavailableWarning = now;
+        this.logger.warn(`Order created without the limit: ${error.message}`);
+      }
+      return null;
+    }
+    if (!hit.allowed) {
+      this.metrics.countRateLimitHit("order_create_per_account");
+      this.logger.warn(`Rate limit hit limit=order_create_per_account account=${accountId}`);
+      throw rateLimitedException("order_create_per_account", hit.retryAfterSeconds);
+    }
+    return key;
+  }
+
+  // ------------------------------------------------------------------ user
+
+  async userPage(
+    accountId: string,
+    query: UserOrderListQuery,
+    lang: CatalogLanguage,
+  ): Promise<UserOrderPage> {
+    const statuses =
+      query.tab === "active"
+        ? inArray(customerOrder.status, ACTIVE)
+        : notInArray(customerOrder.status, ACTIVE);
+    const { rows, nextCursor } = await this.newestFirst(
+      and(eq(customerOrder.userAccountId, accountId), statuses)!,
+      query,
+    );
+    return {
+      language: lang,
+      orders: await userSummaries(this.database.db, rows, lang),
+      nextCursor,
+    };
+  }
+
+  async userOrder(accountId: string, orderId: string, lang: CatalogLanguage): Promise<UserOrder> {
+    const row = await this.userRow(this.database.db, accountId, orderId);
+    return userOrderView(this.database.db, row, lang);
+  }
+
+  /** Cancelling: any time before the order is given out (PRODUCT 10.2), accepted ones too. */
+  async cancel(accountId: string, orderId: string, lang: CatalogLanguage): Promise<UserOrder> {
+    const row = await this.run({
+      scope: (tx) => this.userRow(tx, accountId, orderId),
+      request: {
+        orderId,
+        action: "cancel",
+        actor: { type: "user", accountId },
+        channel: "app",
+      },
+      forUser: true,
+    });
+    return userOrderView(this.database.db, row, lang);
+  }
+
+  private async userRow(executor: DbExecutor, accountId: string, orderId: string) {
+    const [row] = await executor
+      .select()
+      .from(customerOrder)
+      .where(and(eq(customerOrder.id, orderId), eq(customerOrder.userAccountId, accountId)));
+    if (!row) {
+      throw notFound();
+    }
+    return row;
+  }
+
+  // -------------------------------------------------------------- supplier
+
+  async supplierPage(
+    supplierId: string,
+    query: SupplierOrderListQuery,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrderPage> {
+    const own = eq(customerOrder.supplierId, supplierId);
+    let page: { rows: OrderRow[]; nextCursor: string | null };
+    if (query.tab === "new") {
+      page = await this.soonestAnswerFirst(and(own, eq(customerOrder.status, "created"))!, query);
+    } else {
+      const statuses =
+        query.tab === "in_progress"
+          ? inArray(customerOrder.status, ["accepted", "ready"])
+          : notInArray(customerOrder.status, ACTIVE);
+      page = await this.newestFirst(and(own, statuses)!, query);
+    }
+    const [counts] = await this.database.db
+      .select({
+        created: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} = 'created')::int`,
+        inProgress: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} IN ('accepted', 'ready'))::int`,
+        finished: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} NOT IN ('created', 'accepted', 'ready'))::int`,
+      })
+      .from(customerOrder)
+      .where(own);
+    return {
+      language: lang,
+      orders: await supplierSummaries(this.database.db, page.rows, lang),
+      counts: {
+        new: counts?.created ?? 0,
+        inProgress: counts?.inProgress ?? 0,
+        finished: counts?.finished ?? 0,
+      },
+      nextCursor: page.nextCursor,
+    };
+  }
+
+  async supplierOrder(
+    supplierId: string,
+    orderId: string,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    const row = await this.supplierRow(this.database.db, supplierId, orderId);
+    return supplierOrderView(this.database.db, row, lang);
+  }
+
+  async accept(
+    actor: OrderSupplierActor,
+    orderId: string,
+    expectedVersion: number,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    return this.supplierMove(actor, orderId, "accept", expectedVersion, lang);
+  }
+
+  async markReady(
+    actor: OrderSupplierActor,
+    orderId: string,
+    expectedVersion: number,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    return this.supplierMove(actor, orderId, "mark_ready", expectedVersion, lang);
+  }
+
+  /**
+   * Declining, before or after accepting (S-ORD-03). With «Нет в наличии»
+   * and the offer still on sale, the answer offers to take it off sale —
+   * the employee decides; declining never withdraws the offer by itself.
+   */
+  async decline(
+    actor: OrderSupplierActor,
+    orderId: string,
+    body: DeclineOrderBody,
+    lang: CatalogLanguage,
+  ): Promise<DeclineOrderResponse> {
+    const row = await this.run({
+      scope: (tx) => this.supplierRow(tx, actor.supplierId, orderId),
+      request: {
+        orderId,
+        action: "decline",
+        actor,
+        channel: "supplier_web",
+        expectedVersion: body.expectedVersion,
+        decline: { reason: body.reason ?? null, note: body.note ?? null },
+      },
+      forUser: false,
+    });
+    let withdrawOffer: DeclineOrderResponse["withdrawOffer"] = null;
+    if (row.declineReason === "out_of_stock") {
+      const [current] = await this.database.db
+        .select({ id: offer.id, version: offer.version, status: offer.status })
+        .from(offer)
+        .where(and(eq(offer.id, row.offerId), eq(offer.supplierId, actor.supplierId)));
+      if (current?.status === "active") {
+        withdrawOffer = { offerId: current.id, version: current.version };
+      }
+    }
+    return { order: await supplierOrderView(this.database.db, row, lang), withdrawOffer };
+  }
+
+  private async supplierMove(
+    actor: OrderSupplierActor,
+    orderId: string,
+    action: Extract<PersonAction, "accept" | "mark_ready">,
+    expectedVersion: number,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    const row = await this.run({
+      scope: (tx) => this.supplierRow(tx, actor.supplierId, orderId),
+      request: { orderId, action, actor, channel: "supplier_web", expectedVersion },
+      forUser: false,
+    });
+    return supplierOrderView(this.database.db, row, lang);
+  }
+
+  private async supplierRow(executor: DbExecutor, supplierId: string, orderId: string) {
+    const [row] = await executor
+      .select()
+      .from(customerOrder)
+      .where(and(eq(customerOrder.id, orderId), eq(customerOrder.supplierId, supplierId)));
+    if (!row) {
+      throw notFound();
+    }
+    return row;
+  }
+
+  /**
+   * One move in its own transaction; a conflict is answered after the
+   * transaction is committed — what it did (an expiry reached on the way,
+   * the ignored press of an employee) stays.
+   */
+  private async run(options: {
+    scope: (tx: DbExecutor) => Promise<OrderRow>;
+    request: MoveRequest;
+    forUser: boolean;
+  }): Promise<OrderRow> {
+    const outcome: MoveOutcome = await this.database.db.transaction(async (tx) => {
+      await options.scope(tx);
+      return this.transitions.move(tx, options.request);
+    });
+    if (outcome.kind === "conflict") {
+      throw stateConflict({
+        currentStatus: outcome.order.status,
+        version: outcome.order.version,
+        // The user never learns who acted on the supplier's side.
+        ...(options.forUser
+          ? {}
+          : { lastAction: await lastActionOf(this.database.db, outcome.last) }),
+      });
+    }
+    return outcome.order;
+  }
+
+  // ----------------------------------------------------------------- admin
+
+  async adminPage(query: AdminOrderListQuery, lang: CatalogLanguage): Promise<AdminOrderPage> {
+    const conditions: SQL[] = [];
+    if (query.status) {
+      conditions.push(eq(customerOrder.status, query.status));
+    }
+    if (query.supplierId) {
+      conditions.push(eq(customerOrder.supplierId, query.supplierId));
+    }
+    if (query.from) {
+      conditions.push(gte(customerOrder.createdAt, new Date(query.from)));
+    }
+    if (query.to) {
+      conditions.push(lt(customerOrder.createdAt, new Date(query.to)));
+    }
+    if (query.number !== undefined) {
+      conditions.push(eq(customerOrder.number, query.number));
+    }
+    if (query.test !== "include") {
+      conditions.push(eq(customerOrder.isTest, query.test === "only"));
+    }
+    const filter = conditions.length > 0 ? and(...conditions)! : sql`true`;
+    const [{ rows, nextCursor }, [total]] = await Promise.all([
+      this.newestFirst(filter, query),
+      this.database.db.select({ value: count() }).from(customerOrder).where(filter),
+    ]);
+    return {
+      language: lang,
+      orders: await adminSummaries(this.database.db, rows, lang),
+      total: total?.value ?? 0,
+      nextCursor,
+    };
+  }
+
+  async adminOrder(orderId: string, lang: CatalogLanguage): Promise<AdminOrder> {
+    const [row] = await this.database.db
+      .select()
+      .from(customerOrder)
+      .where(eq(customerOrder.id, orderId));
+    if (!row) {
+      throw notFound();
+    }
+    return adminOrderView(this.database.db, row, lang);
+  }
+
+  // ---------------------------------------------------------------- pages
+
+  /** Newest first, to the microsecond, then by id; `cursor` — the last row shown. */
+  private async newestFirst(
+    filter: SQL,
+    query: { limit: number; cursor?: string | undefined },
+  ): Promise<{ rows: OrderRow[]; nextCursor: string | null }> {
+    const after = cursorAt(query.cursor);
+    const position = positionOf(customerOrder.createdAt);
+    const found = await this.database.db
+      .select({ order: customerOrder, position })
+      .from(customerOrder)
+      .where(
+        and(
+          filter,
+          after
+            ? sql`(${customerOrder.createdAt}, ${customerOrder.id}) < (${after.position}::timestamptz, ${after.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(customerOrder.createdAt), desc(customerOrder.id))
+      .limit(query.limit + 1);
+    return this.paged(found, query.limit);
+  }
+
+  /** «Новые» of the cabinet: the nearest answer deadline first. */
+  private async soonestAnswerFirst(
+    filter: SQL,
+    query: { limit: number; cursor?: string | undefined },
+  ): Promise<{ rows: OrderRow[]; nextCursor: string | null }> {
+    const after = cursorAt(query.cursor);
+    const position = positionOf(customerOrder.respondBy);
+    const found = await this.database.db
+      .select({ order: customerOrder, position })
+      .from(customerOrder)
+      .where(
+        and(
+          filter,
+          after
+            ? sql`(${customerOrder.respondBy}, ${customerOrder.id}) > (${after.position}::timestamptz, ${after.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(asc(customerOrder.respondBy), asc(customerOrder.id))
+      .limit(query.limit + 1);
+    return this.paged(found, query.limit);
+  }
+
+  private paged(
+    found: { order: OrderRow; position: string }[],
+    limit: number,
+  ): { rows: OrderRow[]; nextCursor: string | null } {
+    const page = found.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      rows: page.map((entry) => entry.order),
+      nextCursor: found.length > limit && last ? encodeCursor(last.position, last.order.id) : null,
+    };
+  }
+}

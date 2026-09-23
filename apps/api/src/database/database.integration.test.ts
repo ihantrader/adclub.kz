@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -113,7 +114,159 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790250000000_supplier-members",
       "1790300000000_create-offers",
       "1790350000000_create-club-access",
+      "1790400000000_create-orders",
     ]);
+  });
+
+  it("holds the rules of orders and their journal in the database and rolls back keeping the offers (orders)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000077') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('orders-city', 'Город заявок') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Заявки', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const location = await client.query<{ id: string }>(
+      "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+      [supplierId, city.rows[0]!.id],
+    );
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('orders_node', 'goods', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('orders_sub', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+      [subcategory.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const itemId = item.rows[0]!.id;
+    const offer = await client.query<{ id: string }>(
+      "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery) VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, true) RETURNING id",
+      [supplierId, location.rows[0]!.id, itemId],
+    );
+    const offerId = offer.rows[0]!.id;
+    let codeCounter = 100_000;
+    const insert = (values: Record<string, unknown>) => {
+      codeCounter += 1;
+      const row = {
+        user_account_id: accountId,
+        supplier_id: supplierId,
+        location_id: location.rows[0]!.id,
+        offer_id: offerId,
+        item_id: itemId,
+        offer_snapshot: "{}",
+        unit_price: 1000,
+        quantity: 2,
+        total: 2000,
+        fulfillment: "pickup",
+        confirmation_code: String(codeCounter),
+        qr_token: `qr-${String(codeCounter)}`,
+        idempotency_key: randomUUID(),
+        respond_by: new Date(Date.now() + 3_600_000),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string; number: string }>(
+        `INSERT INTO customer_order (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id, number`,
+        Object.values(row),
+      );
+    };
+    await expect(insert({ total: 1999 })).rejects.toThrow(/customer_order_money_check/);
+    await expect(insert({ quantity: 0, total: 0 })).rejects.toThrow(/customer_order_money_check/);
+    await expect(insert({ confirmation_code: "12a456" })).rejects.toThrow(
+      /customer_order_code_check/,
+    );
+    await expect(insert({ status: "accepted" })).rejects.toThrow(/customer_order_accepted_check/);
+    await expect(
+      insert({ fulfillment: "delivery", expires_at: new Date(), reserve_warn_at: new Date() }),
+    ).rejects.toThrow(/customer_order_reserve_check/);
+    await expect(insert({ expires_at: new Date() })).rejects.toThrow(
+      /customer_order_reserve_check/,
+    );
+    await expect(insert({ status: "cancelled_by_user" })).rejects.toThrow(
+      /customer_order_finished_check/,
+    );
+    await expect(insert({ decline_reason: "out_of_stock" })).rejects.toThrow(
+      /customer_order_decline_check/,
+    );
+    const first = await insert({ confirmation_code: "482915" });
+    const second = await insert({});
+    expect(Number(second.rows[0]!.number)).toBe(Number(first.rows[0]!.number) + 1);
+    // One code among active orders; a final one frees it.
+    await expect(insert({ confirmation_code: "482915" })).rejects.toThrow(
+      /customer_order_active_code_key/,
+    );
+    await client.query(
+      "UPDATE customer_order SET status = 'cancelled_by_user', finished_at = now() WHERE id = $1",
+      [first.rows[0]!.id],
+    );
+    await insert({ confirmation_code: "482915" });
+    const key = randomUUID();
+    await insert({ idempotency_key: key });
+    await expect(insert({ idempotency_key: key })).rejects.toThrow(
+      /customer_order_idempotency_key/,
+    );
+
+    // The journal: consistent entries, append-only.
+    const event = (values: Record<string, unknown>) => {
+      const row = {
+        order_id: first.rows[0]!.id,
+        action: "create",
+        to_status: "created",
+        actor_type: "user",
+        actor_account_id: accountId,
+        channel: "app",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO order_event (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    await expect(event({ actor_type: "system" })).rejects.toThrow(/order_event_actor_check/);
+    await expect(event({ actor_type: "supplier_member" })).rejects.toThrow(
+      /order_event_actor_check/,
+    );
+    await expect(event({ action: "accept", from_status: null })).rejects.toThrow(
+      /order_event_move_check/,
+    );
+    await expect(event({ action: "reserve_expiring" })).rejects.toThrow(/order_event_move_check/);
+    await event({});
+    await event({ action: "cancel", from_status: "created", to_status: "cancelled_by_user" });
+    await expect(client.query("UPDATE order_event SET channel = 'admin'")).rejects.toThrow(
+      /append-only/,
+    );
+    await expect(client.query("DELETE FROM order_event")).rejects.toThrow(/append-only/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "customer_order")).toBe(false);
+    expect(await tableExists(client, "order_event")).toBe(false);
+    const { rows: sequences } = await client.query(
+      "SELECT 1 FROM pg_class WHERE relname = 'customer_order_number_seq'",
+    );
+    expect(sequences).toEqual([]);
+    expect(await count("offer", "id = $1", [offerId])).toBe(1);
+    expect(await count("account", "id = $1", [accountId])).toBe(1);
+    await client.query("DELETE FROM offer WHERE id = $1", [offerId]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [itemId]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brand.rows[0]!.id]);
+    await client.query("DELETE FROM category WHERE code IN ('orders_sub')");
+    await client.query("DELETE FROM category WHERE code IN ('orders_node')");
+    await client.query("DELETE FROM supplier_location WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
   });
 
   it("holds the rules of club access grants and rolls back keeping the accounts (club access)", async () => {

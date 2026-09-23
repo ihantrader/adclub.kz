@@ -7,6 +7,7 @@ import { clubAccessTables } from "./modules/club-access";
 import { compatibilityTables } from "./modules/compatibility";
 import { identityTables } from "./modules/identity";
 import { offerTables } from "./modules/offers";
+import { orderTables } from "./modules/orders";
 import { settingsTables } from "./modules/settings";
 import { supplierTables } from "./modules/suppliers";
 import { vehicleTables } from "./modules/vehicles";
@@ -28,5 +29,6 @@ export const ormTables: readonly PgTable[] = [
   ...supplierTables,
   ...offerTables,
   ...clubAccessTables,
+  ...orderTables,
   ...jobsTables,
 ];

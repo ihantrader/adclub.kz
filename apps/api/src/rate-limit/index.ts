@@ -1,5 +1,5 @@
 export {
-  PublicRateLimitGuard,
-  publicRateLimitSettingKeys,
+  rateLimitSettingKeys,
   RateLimitedRoute,
-} from "./public-rate-limit.guard";
+  RouteRateLimitGuard,
+} from "./route-rate-limit.guard";

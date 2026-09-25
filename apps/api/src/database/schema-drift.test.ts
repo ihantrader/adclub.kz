@@ -132,6 +132,8 @@ describe("ormTables", () => {
         "club_access_grant",
         "customer_order",
         "order_event",
+        "user_discipline_event",
+        "admin_signal",
         "vehicle_option",
         "vehicle_make",
         "vehicle_make_spelling",

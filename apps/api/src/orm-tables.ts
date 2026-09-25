@@ -9,6 +9,7 @@ import { identityTables } from "./modules/identity";
 import { offerTables } from "./modules/offers";
 import { orderTables } from "./modules/orders";
 import { settingsTables } from "./modules/settings";
+import { signalTables } from "./modules/signals";
 import { supplierTables } from "./modules/suppliers";
 import { vehicleTables } from "./modules/vehicles";
 
@@ -30,5 +31,6 @@ export const ormTables: readonly PgTable[] = [
   ...offerTables,
   ...clubAccessTables,
   ...orderTables,
+  ...signalTables,
   ...jobsTables,
 ];

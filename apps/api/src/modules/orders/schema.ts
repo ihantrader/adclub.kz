@@ -1,5 +1,7 @@
 import type {
+  DisciplineKind,
   OfferSnapshot,
+  OrderCloseMethod,
   OrderDeclineReason,
   OrderEventAction,
   OrderFulfillment,
@@ -53,7 +55,14 @@ export const customerOrder = pgTable("customer_order", {
   isTest: boolean("is_test").notNull().default(false),
   confirmationCode: text("confirmation_code").notNull(),
   qrToken: text("qr_token").notNull(),
-  idempotencyKey: uuid("idempotency_key").notNull(),
+  /**
+   * The code of this order is its own while this is `null`: the unique
+   * index stands on it, so no other order is given the same digits while
+   * this one can still be closed (TASK-022).
+   */
+  codeReleasedAt: timestamp("code_released_at", { withTimezone: true }),
+  /** Cleared by the cleanup job once no repeat of the creation can arrive. */
+  idempotencyKey: uuid("idempotency_key"),
   respondBy: timestamp("respond_by", { withTimezone: true }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   reserveWarnAt: timestamp("reserve_warn_at", { withTimezone: true }),
@@ -67,6 +76,16 @@ export const customerOrder = pgTable("customer_order", {
   handledAt: timestamp("handled_at", { withTimezone: true }),
   declineReason: text("decline_reason").$type<OrderDeclineReason>(),
   declineNote: text("decline_note"),
+  /** How the order was given out (TASK-022): the code, the QR or the administrator. */
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closeMethod: text("close_method").$type<OrderCloseMethod>(),
+  closedByMemberId: uuid("closed_by_member_id"),
+  closedByAdminId: uuid("closed_by_admin_id").references(() => adminUser.id),
+  closedLate: boolean("closed_late").notNull().default(false),
+  /** Why the administrator closed it without a code; their view only (D-043). */
+  closeReason: text("close_reason"),
+  /** Until when an expired pickup reserve may still be given out (PRODUCT 10.7). */
+  lateCloseUntil: timestamp("late_close_until", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -97,5 +116,35 @@ export const orderEvent = pgTable("order_event", {
 
 export type OrderEventRow = typeof orderEvent.$inferSelect;
 
+/**
+ * The club's own discipline statistics of a user (PRODUCT 10.5;
+ * ARCHITECTURE 5.7, 4.32; TASK-022): the pickup reserve of an order the
+ * supplier had accepted ran out and nobody came. A mark is never deleted —
+ * a late close, a close by the administrator or the administrator's own
+ * hand mark it as lifted, and A-USR-02 shows those too. The user is shown
+ * none of this anywhere and the supplier's rating never feels it.
+ */
+export const userDisciplineEvent = pgTable("user_discipline_event", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userAccountId: uuid("user_account_id")
+    .notNull()
+    .references(() => account.id),
+  orderId: uuid("order_id")
+    .notNull()
+    .references(() => customerOrder.id),
+  supplierId: uuid("supplier_id")
+    .notNull()
+    .references(() => supplier.id),
+  kind: text("kind").$type<DisciplineKind>().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedBy: text("revoked_by").$type<"late_close" | "admin_close" | "admin">(),
+  revokedNote: text("revoked_note"),
+  revokedByAdminId: uuid("revoked_by_admin_id").references(() => adminUser.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DisciplineRow = typeof userDisciplineEvent.$inferSelect;
+
 /** Every table this module owns — checked against the migrated database. */
-export const orderTables = [customerOrder, orderEvent];
+export const orderTables = [customerOrder, orderEvent, userDisciplineEvent];

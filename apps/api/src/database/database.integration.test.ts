@@ -52,7 +52,7 @@ describe("PostgreSQL: migrations and readiness", () => {
    * migration too — this keeps that from shifting the ones that follow.
    */
   async function walkDownPast(stillThere: () => Promise<boolean>): Promise<void> {
-    for (let step = 0; step < 10; step += 1) {
+    for (let step = 0; step < 20; step += 1) {
       runMigrate("down", container.getConnectionUri());
       if (!(await stillThere())) {
         return;
@@ -115,7 +115,259 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790300000000_create-offers",
       "1790350000000_create-club-access",
       "1790400000000_create-orders",
+      "1790450000000_close-orders",
     ]);
+  });
+
+  it("holds the rules of giving an order out and rolls back keeping the orders (close orders)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000078') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const admin = await client.query<{ id: string }>(
+      "INSERT INTO admin_user (account_id) VALUES ($1) RETURNING id",
+      [accountId],
+    );
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('close-city', 'Город выдачи') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Выдача', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const location = await client.query<{ id: string }>(
+      "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+      [supplierId, city.rows[0]!.id],
+    );
+    const member = await client.query<{ id: string }>(
+      "INSERT INTO supplier_member (supplier_id, account_id, added_by, display_name) VALUES ($1, $2, 'admin', 'Айгерим') RETURNING id",
+      [supplierId, accountId],
+    );
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('close_node', 'goods', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('close_sub', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+      [subcategory.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const itemId = item.rows[0]!.id;
+    const offer = await client.query<{ id: string }>(
+      "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery) VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, true) RETURNING id",
+      [supplierId, location.rows[0]!.id, itemId],
+    );
+    let codeCounter = 300_000;
+    const insert = (values: Record<string, unknown>) => {
+      codeCounter += 1;
+      const row: Record<string, unknown> = {
+        user_account_id: accountId,
+        supplier_id: supplierId,
+        location_id: location.rows[0]!.id,
+        offer_id: offer.rows[0]!.id,
+        item_id: itemId,
+        offer_snapshot: "{}",
+        unit_price: 1000,
+        quantity: 1,
+        total: 1000,
+        fulfillment: "pickup",
+        confirmation_code: String(codeCounter),
+        qr_token: `qr-close-${String(codeCounter)}`,
+        idempotency_key: randomUUID(),
+        respond_by: new Date(Date.now() + 3_600_000),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO customer_order (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    const given = {
+      status: "completed",
+      accepted_at: new Date(),
+      phone_revealed_at: new Date(),
+      finished_at: new Date(),
+      closed_at: new Date(),
+      code_released_at: new Date(),
+    };
+    // «Выдана» always says when, how and by whom.
+    await expect(insert({ ...given, close_method: null })).rejects.toThrow(
+      /customer_order_close_check/,
+    );
+    await expect(insert({ ...given, close_method: "code" })).rejects.toThrow(
+      /customer_order_close_check/,
+    );
+    await expect(
+      insert({ ...given, close_method: "code", closed_by_admin_id: admin.rows[0]!.id }),
+    ).rejects.toThrow(/customer_order_close_check/);
+    // A close without a code always says why, and only that one does.
+    await expect(
+      insert({ ...given, close_method: "admin", closed_by_admin_id: admin.rows[0]!.id }),
+    ).rejects.toThrow(/customer_order_close_check/);
+    await expect(
+      insert({
+        ...given,
+        close_method: "code",
+        closed_by_member_id: member.rows[0]!.id,
+        close_reason: "нельзя",
+      }),
+    ).rejects.toThrow(/customer_order_close_check/);
+    // The close belongs to an employee of this very company.
+    const otherSupplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Чужая', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const otherMember = await client.query<{ id: string }>(
+      "INSERT INTO supplier_member (supplier_id, account_id, added_by, display_name) VALUES ($1, $2, 'admin', 'Чужой') RETURNING id",
+      [otherSupplier.rows[0]!.id, accountId],
+    );
+    await expect(
+      insert({ ...given, close_method: "code", closed_by_member_id: otherMember.rows[0]!.id }),
+    ).rejects.toThrow(/customer_order_closed_by_fkey/);
+    // An expired reserve always knows how long it may still be closed.
+    await expect(
+      insert({
+        status: "reserve_expired",
+        accepted_at: new Date(),
+        phone_revealed_at: new Date(),
+        finished_at: new Date(),
+      }),
+    ).rejects.toThrow(/customer_order_late_close_check/);
+    // An order still going on never lets go of its code.
+    await expect(insert({ code_released_at: new Date() })).rejects.toThrow(
+      /customer_order_code_held_check/,
+    );
+    // An administrator may close an order the supplier never answered: such
+    // an order is «Выдана» without ever having opened the phone.
+    const byAdmin = await insert({
+      status: "completed",
+      finished_at: new Date(),
+      closed_at: new Date(),
+      close_method: "admin",
+      closed_by_admin_id: admin.rows[0]!.id,
+      close_reason: "Разбор",
+      code_released_at: new Date(),
+    });
+    // …but no other way to «Выдана» skips the accepting.
+    await expect(
+      insert({
+        status: "completed",
+        finished_at: new Date(),
+        closed_at: new Date(),
+        close_method: "code",
+        closed_by_member_id: member.rows[0]!.id,
+        code_released_at: new Date(),
+      }),
+    ).rejects.toThrow(/customer_order_accepted_check/);
+
+    // The code of an order that can still be closed late is nobody else's.
+    const expired = await insert({
+      status: "reserve_expired",
+      accepted_at: new Date(),
+      phone_revealed_at: new Date(),
+      finished_at: new Date(),
+      late_close_until: new Date(Date.now() + 3_600_000),
+      confirmation_code: "482915",
+    });
+    await expect(insert({ confirmation_code: "482915" })).rejects.toThrow(
+      /customer_order_held_code_key/,
+    );
+    await client.query("UPDATE customer_order SET code_released_at = now() WHERE id = $1", [
+      expired.rows[0]!.id,
+    ]);
+    await insert({ confirmation_code: "482915" });
+
+    // The discipline of users and the signals to the administrator.
+    const mark = await client.query<{ id: string }>(
+      `INSERT INTO user_discipline_event (user_account_id, order_id, supplier_id, kind, occurred_at)
+       VALUES ($1, $2, $3, 'pickup_no_show', now()) RETURNING id`,
+      [accountId, expired.rows[0]!.id, supplierId],
+    );
+    await expect(
+      client.query(
+        `INSERT INTO user_discipline_event (user_account_id, order_id, supplier_id, kind, occurred_at)
+         VALUES ($1, $2, $3, 'pickup_no_show', now())`,
+        [accountId, expired.rows[0]!.id, supplierId],
+      ),
+    ).rejects.toThrow(/user_discipline_event_order_key/);
+    // A lifting says when and by what; only an administrator's says why.
+    await expect(
+      client.query("UPDATE user_discipline_event SET revoked_at = now() WHERE id = $1", [
+        mark.rows[0]!.id,
+      ]),
+    ).rejects.toThrow(/user_discipline_event_revoked_check/);
+    await expect(
+      client.query(
+        "UPDATE user_discipline_event SET revoked_at = now(), revoked_by = 'admin' WHERE id = $1",
+        [mark.rows[0]!.id],
+      ),
+    ).rejects.toThrow(/user_discipline_event_revoked_check/);
+    await client.query(
+      "UPDATE user_discipline_event SET revoked_at = now(), revoked_by = 'late_close' WHERE id = $1",
+      [mark.rows[0]!.id],
+    );
+    await client.query(
+      "INSERT INTO admin_signal (kind, subject_type, subject_id) VALUES ('frequent_admin_closes', 'supplier', $1)",
+      [supplierId],
+    );
+    // One open signal of a kind per subject.
+    await expect(
+      client.query(
+        "INSERT INTO admin_signal (kind, subject_type, subject_id) VALUES ('frequent_admin_closes', 'supplier', $1)",
+        [supplierId],
+      ),
+    ).rejects.toThrow(/admin_signal_open_key/);
+    await expect(
+      client.query(
+        "INSERT INTO admin_signal (kind, subject_type, subject_id, status) VALUES ('frequent_admin_closes', 'account', $1, 'open')",
+        [supplierId],
+      ),
+    ).rejects.toThrow(/admin_signal_subject_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // The discipline and the signals are gone with their tables; the orders
+    // stay, and the one an administrator had closed without the supplier's
+    // answer is back where it was before such a close was possible.
+    expect(await tableExists(client, "user_discipline_event")).toBe(false);
+    expect(await tableExists(client, "admin_signal")).toBe(false);
+    expect(await columnExists(client, "customer_order", "close_method")).toBe(false);
+    expect(await columnExists(client, "customer_order", "late_close_until")).toBe(false);
+    const orders = await client.query<{ status: string }>(
+      "SELECT status FROM customer_order WHERE id = $1",
+      [byAdmin.rows[0]!.id],
+    );
+    expect(orders.rows).toEqual([{ status: "created" }]);
+    const { rows: keys } = await client.query<{ missing: string }>(
+      "SELECT count(*)::text AS missing FROM customer_order WHERE idempotency_key IS NULL",
+    );
+    expect(keys[0]!.missing).toBe("0");
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "admin_signal")).toBe(true);
+    await client.query("DELETE FROM user_discipline_event");
+    await client.query("DELETE FROM admin_signal");
+    await client.query("DELETE FROM order_event");
+    await client.query("DELETE FROM customer_order");
+    await client.query("DELETE FROM offer");
+    await client.query("DELETE FROM catalog_item");
+    await client.query("DELETE FROM brand");
+    await client.query("DELETE FROM category WHERE code IN ('close_sub')");
+    await client.query("DELETE FROM category WHERE code IN ('close_node')");
+    await client.query("DELETE FROM supplier_member");
+    await client.query("DELETE FROM admin_user");
+    await client.query("DELETE FROM supplier_location");
+    await client.query("DELETE FROM supplier");
+    await client.query("DELETE FROM city");
+    await client.query("DELETE FROM account");
+    await walkDownPast(() => tableExists(client, "admin_signal"));
   });
 
   it("holds the rules of orders and their journal in the database and rolls back keeping the offers (orders)", async () => {
@@ -202,7 +454,10 @@ describe("PostgreSQL: migrations and readiness", () => {
     const first = await insert({ confirmation_code: "482915" });
     const second = await insert({});
     expect(Number(second.rows[0]!.number)).toBe(Number(first.rows[0]!.number) + 1);
-    // One code among active orders; a final one frees it.
+    // One code among active orders; a final one frees it. (TASK-022 widens
+    // this rule to «while the order can still be closed» — that migration
+    // is already rolled back by the time this test runs, and its own test
+    // above checks the wider index.)
     await expect(insert({ confirmation_code: "482915" })).rejects.toThrow(
       /customer_order_active_code_key/,
     );

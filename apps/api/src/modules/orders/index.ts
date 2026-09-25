@@ -12,5 +12,11 @@ export {
   orderJobCatalog,
 } from "./order-deadlines";
 export { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
-export { customerOrder, orderEvent, orderTables, userDisciplineEvent } from "./schema";
+export {
+  customerOrder,
+  inSupplierStatistics,
+  orderEvent,
+  orderTables,
+  userDisciplineEvent,
+} from "./schema";
 export type { OrderRow, OrderEventRow, DisciplineRow } from "./schema";

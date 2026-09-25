@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   activeOrderStatuses,
+  awaitingReceiptOrderStatuses,
   isActiveOrderStatus,
   orderActionActor,
   orderActions,
   orderActionSources,
+  orderAwaitsReceipt,
   orderStatuses,
   orderTransition,
   type OrderAction,
@@ -97,5 +99,19 @@ describe("orderTransition", () => {
     expect([...activeOrderStatuses]).toEqual(["created", "accepted", "ready"]);
     expect(isActiveOrderStatus("ready")).toBe(true);
     expect(isActiveOrderStatus("reserve_expired")).toBe(false);
+  });
+
+  it("marks apart the active orders awaiting a receipt (PRODUCT 6.7)", () => {
+    expect([...awaitingReceiptOrderStatuses]).toEqual(["accepted", "ready"]);
+    // A subset of the active ones, never a second definition of «active».
+    for (const status of awaitingReceiptOrderStatuses) {
+      expect(isActiveOrderStatus(status), status).toBe(true);
+    }
+    expect(orderAwaitsReceipt("created")).toBe(false);
+    expect(orderAwaitsReceipt("accepted")).toBe(true);
+    expect(orderAwaitsReceipt("completed")).toBe(false);
+    for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
+      expect(orderAwaitsReceipt(status), status).toBe(false);
+    }
   });
 });

@@ -9,6 +9,7 @@ import {
   type AdminDisciplineUsersQuery,
   type DisciplineMark,
 } from "@adclub/contracts";
+import { countsInStatistics } from "@adclub/domain";
 import {
   and,
   count,
@@ -59,8 +60,9 @@ export class Discipline {
 
   /** The no-show of an order whose pickup reserve has just run out. */
   async mark(tx: DbExecutor, order: OrderRow, at: Date): Promise<void> {
-    if (order.isTest) {
-      // An employee's own order is out of every statistic (PRODUCT 12.6).
+    if (!countsInStatistics(order)) {
+      // An employee's own order is out of every statistic (PRODUCT 12.6):
+      // the one place that decides it is `countsInStatistics` (4.33).
       return;
     }
     await tx

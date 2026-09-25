@@ -24,7 +24,7 @@ import {
 } from "@adclub/contracts";
 import { pickLanguage } from "@adclub/i18n";
 import { ZodValidationPipe } from "../../common/validation";
-import { RateLimitedRoute } from "../../public-rate-limit";
+import { RateLimitedRoute } from "../../rate-limit";
 import { adminActor } from "../catalog";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
 import { SupplierLeadForm } from "./supplier-lead-form.service";

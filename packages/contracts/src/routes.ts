@@ -172,6 +172,7 @@ import {
   revokeClubAccessBodySchema,
 } from "./club-access";
 import {
+  activeOrdersResponseSchema,
   adminCloseOrderBodySchema,
   adminDisciplineListQuerySchema,
   adminDisciplineMarkResponseSchema,
@@ -191,10 +192,13 @@ import {
   orderCredentialSchema,
   orderLookupResponseSchema,
   orderPathSchema,
+  repeatOrderResponseSchema,
   revokeDisciplineBodySchema,
   supplierOrderListQuerySchema,
   supplierOrderPageSchema,
   supplierOrderResponseSchema,
+  userOrderHistoryPageSchema,
+  userOrderHistoryQuerySchema,
   userOrderListQuerySchema,
   userOrderPageSchema,
   userOrderResponseSchema,
@@ -411,22 +415,30 @@ export interface ApiRouteDefinition {
   /** A file upload instead of a JSON body; never both (TASK-013). */
   upload?: ApiUploadBodyDefinition;
   /**
-   * A route open without signing in, limited per client address (TASK-016,
-   * ARCHITECTURE 4.26): `limit` names the limit (its settings
-   * `<limit>` and `<limit>_window_seconds`); over it — 429 `RATE_LIMITED`
+   * How often the route may be called (TASK-016, ARCHITECTURE 4.26, 4.33).
+   * Each name is a limit whose settings are `<limit>` (how many) and
+   * `<limit>_window_seconds` (per how long); over it — 429 `RATE_LIMITED`
    * with `Retry-After`. `whenUnavailable`: what happens when the limit
    * can't be counted (Redis down) — `refuse` (503 `SERVICE_UNAVAILABLE`,
    * for anything that writes) or `allow` (a read is served). The server
    * refuses to bind such a route without the guard that counts it.
    *
-   * `perAccount` (TASK-020.A, a route with `auth: "optional"` only): a
-   * request with a session is counted by its account under this limit
-   * instead of by its address — people behind one address of a mobile
-   * operator don't share a limit; a guest is counted by address.
+   * Whose bucket a request falls into:
+   *
+   * - `limit` — the client address (an IPv6 address by its /64 network),
+   *   for a route open without signing in;
+   * - `perAccount` — the account of the session. On a route with
+   *   `auth: "optional"` (TASK-020.A) a request with a session is counted
+   *   by its account and a guest by address; on a route with
+   *   `auth: "session"` (TASK-023) there is no guest, so `perAccount` is
+   *   the whole limit and `limit` is left out;
+   * - `perMember` — the employee of a cabinet session (TASK-023), for the
+   *   routes of the supplier's own work.
    */
   rateLimit?: {
-    limit: RateLimitName;
+    limit?: RateLimitName;
     perAccount?: RateLimitName;
+    perMember?: RateLimitName;
     whenUnavailable: "refuse" | "allow";
   };
   responses: Readonly<Record<number, ApiResponseDefinition>>;
@@ -436,8 +448,30 @@ function defineRoute<const Route extends ApiRouteDefinition>(route: Route): Rout
   if (route.requestBody && route.upload) {
     throw new Error(`${route.operationId}: a route takes either a JSON body or a file, not both`);
   }
-  if (route.rateLimit?.perAccount && route.auth !== "optional") {
-    throw new Error(`${route.operationId}: a limit per account needs auth: "optional"`);
+  const spec = route.rateLimit;
+  if (spec) {
+    const where = `${route.operationId}: a rate limit`;
+    if (route.auth === "session") {
+      if (spec.limit) {
+        throw new Error(`${where} of a session route is never counted per address`);
+      }
+      if ((spec.perAccount ? 1 : 0) + (spec.perMember ? 1 : 0) !== 1) {
+        throw new Error(`${where} of a session route is counted per account or per member`);
+      }
+      if (spec.perMember && !route.contexts?.includes("supplier")) {
+        throw new Error(`${where} per member needs the context "supplier"`);
+      }
+    } else {
+      if (!spec.limit) {
+        throw new Error(`${where} of a route open to guests is counted per address`);
+      }
+      if (spec.perMember) {
+        throw new Error(`${where} per member needs auth: "session"`);
+      }
+      if (spec.perAccount && route.auth !== "optional") {
+        throw new Error(`${where} per account needs auth: "optional" or "session"`);
+      }
+    }
   }
   return route;
 }
@@ -2855,6 +2889,7 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["supplier"],
+    rateLimit: { perMember: "offer_item_search_per_member", whenUnavailable: "allow" },
     query: offerItemSearchQuerySchema,
     responses: {
       200: { description: "The items found", schema: offerItemSearchResponseSchema },
@@ -3116,6 +3151,52 @@ export const apiRoutes = {
       200: { description: "The order", schema: userOrderResponseSchema },
     },
   }),
+  // ---------------------- the saved copy, the history and «Повторить» (TASK-023)
+  getActiveOrders: defineRoute({
+    operationId: "getActiveOrders",
+    method: "GET",
+    path: "/active-orders",
+    summary:
+      "Every active order of the user in one answer, to keep on the device and read without a network (PRODUCT 6.7, «Сохранённая копия»): the code and the QR, the item and the sum, the supplier and — once accepted — the address, the hours and the phone (D-026), the main date and the time of the server for «Обновлено в {время}». No cursors and no filters: the answer replaces the copy whole; a user with more active orders than the setting gets the nearest deadlines",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    rateLimit: { perAccount: "active_orders_per_account", whenUnavailable: "allow" },
+    responses: {
+      200: { description: "The active orders", schema: activeOrdersResponseSchema },
+    },
+  }),
+  getOrderHistory: defineRoute({
+    operationId: "getOrderHistory",
+    method: "GET",
+    path: "/order-history",
+    summary:
+      "Finished orders of the user in months of the club's time zone (M-ORD-02 «История»), newest first, in pages: the status, the date, the item, the sum, the supplier and whether «Повторить» and «Оценить» belong under it",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    query: userOrderHistoryQuerySchema,
+    responses: {
+      200: { description: "The history", schema: userOrderHistoryPageSchema },
+    },
+  }),
+  getOrderRepeat: defineRoute({
+    operationId: "getOrderRepeat",
+    method: "GET",
+    path: "/orders/{orderId}/repeat",
+    summary:
+      "What «Повторить заказ» can do with a finished order (M-ORD-02, M-ORD-03): the same offer of the same supplier with its price as it is today, the card of the item in the catalog, or a plain reason — the offer was withdrawn, the supplier isn't taking orders, the item left the catalog, there is no club access. The order itself is placed by `POST /orders`",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "What the repeat can do", schema: repeatOrderResponseSchema },
+    },
+  }),
   cancelUserOrder: defineRoute({
     operationId: "cancelUserOrder",
     method: "POST",
@@ -3171,6 +3252,7 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["supplier"],
+    rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
     pathParams: orderPathSchema,
     requestBody: { description: "The version seen", schema: orderActionBodySchema },
     responses: {
@@ -3187,6 +3269,7 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["supplier"],
+    rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
     pathParams: orderPathSchema,
     requestBody: { description: "The version seen", schema: orderActionBodySchema },
     responses: {
@@ -3203,6 +3286,7 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["supplier"],
+    rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
     pathParams: orderPathSchema,
     requestBody: { description: "The version seen and the reason", schema: declineOrderBodySchema },
     responses: {

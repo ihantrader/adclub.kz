@@ -14,6 +14,7 @@ describe("buildOpenApiDocument", () => {
   it("produces an OpenAPI 3.1 document with every contract route", () => {
     expect(document.openapi).toBe("3.1.0");
     expect(Object.keys(document.paths).sort()).toEqual([
+      "/active-orders",
       "/admin/administrators",
       "/admin/administrators/{adminId}/totp-reset",
       "/admin/audit-log",
@@ -138,9 +139,11 @@ describe("buildOpenApiDocument", () => {
       "/cities",
       "/health",
       "/meta/client-policy",
+      "/order-history",
       "/orders",
       "/orders/{orderId}",
       "/orders/{orderId}/cancel",
+      "/orders/{orderId}/repeat",
       "/ready",
       "/supplier-leads",
       "/supplier/catalog/items/search",

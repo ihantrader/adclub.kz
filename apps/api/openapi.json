@@ -40,6 +40,53 @@
     }
   ],
   "paths": {
+    "/active-orders": {
+      "get": {
+        "operationId": "getActiveOrders",
+        "summary": "Every active order of the user in one answer, to keep on the device and read without a network (PRODUCT 6.7, «Сохранённая копия»): the code and the QR, the item and the sum, the supplier and — once accepted — the address, the hours and the phone (D-026), the main date and the time of the server for «Обновлено в {время}». No cursors and no filters: the answer replaces the copy whole; a user with more active orders than the setting gets the nearest deadlines",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "x-rate-limit": {
+          "perAccount": "active_orders_per_account",
+          "whenUnavailable": "allow"
+        },
+        "responses": {
+          "200": {
+            "description": "The active orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveOrdersResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/administrators": {
       "get": {
         "operationId": "listAdministrators",
@@ -9990,6 +10037,70 @@
         }
       }
     },
+    "/order-history": {
+      "get": {
+        "operationId": "getOrderHistory",
+        "summary": "Finished orders of the user in months of the club's time zone (M-ORD-02 «История»), newest first, in pages: the status, the date, the item, the sum, the supplier and whether «Повторить» and «Оценить» belong under it",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOrderHistoryPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/orders": {
       "get": {
         "operationId": "listUserOrders",
@@ -10225,6 +10336,59 @@
         }
       }
     },
+    "/orders/{orderId}/repeat": {
+      "get": {
+        "operationId": "getOrderRepeat",
+        "summary": "What «Повторить заказ» can do with a finished order (M-ORD-02, M-ORD-03): the same offer of the same supplier with its price as it is today, the card of the item in the catalog, or a plain reason — the offer was withdrawn, the supplier isn't taking orders, the item left the catalog, there is no club access. The order itself is placed by `POST /orders`",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "What the repeat can do",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepeatOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/ready": {
       "get": {
         "operationId": "getReadiness",
@@ -10439,6 +10603,10 @@
         "x-access-contexts": [
           "supplier"
         ],
+        "x-rate-limit": {
+          "perMember": "offer_item_search_per_member",
+          "whenUnavailable": "allow"
+        },
         "responses": {
           "200": {
             "description": "The items found",
@@ -11730,6 +11898,10 @@
         "x-access-contexts": [
           "supplier"
         ],
+        "x-rate-limit": {
+          "perMember": "order_actions_per_member",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The version seen",
           "required": true,
@@ -11794,6 +11966,10 @@
         "x-access-contexts": [
           "supplier"
         ],
+        "x-rate-limit": {
+          "perMember": "order_actions_per_member",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The version seen and the reason",
           "required": true,
@@ -11858,6 +12034,10 @@
         "x-access-contexts": [
           "supplier"
         ],
+        "x-rate-limit": {
+          "perMember": "order_actions_per_member",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The version seen",
           "required": true,
@@ -12188,6 +12368,186 @@
           "user",
           "supplier",
           "admin"
+        ]
+      },
+      "ActiveOrder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OrderKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "fulfillment": {
+            "$ref": "#/components/schemas/OrderFulfillment"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "unitPrice": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "currency": {
+            "type": "string",
+            "const": "KZT"
+          },
+          "item": {
+            "$ref": "#/components/schemas/OrderItem"
+          },
+          "supplier": {
+            "$ref": "#/components/schemas/UserOrderSupplier"
+          },
+          "pickupPoint": {
+            "$ref": "#/components/schemas/UserOrderPickupPoint"
+          },
+          "confirmation": {
+            "$ref": "#/components/schemas/OrderConfirmation"
+          },
+          "mainDate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActiveOrderMainDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "awaitsReceipt": {
+            "type": "boolean"
+          },
+          "needsAnswer": {
+            "type": "boolean"
+          },
+          "respondBy": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "reserveUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "kind",
+          "status",
+          "fulfillment",
+          "quantity",
+          "unitPrice",
+          "total",
+          "currency",
+          "item",
+          "supplier",
+          "confirmation",
+          "mainDate",
+          "awaitsReceipt",
+          "needsAnswer",
+          "respondBy",
+          "reserveUntil",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "ActiveOrderMainDate": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "respond_by",
+              "reserve_until"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "kind",
+          "at"
+        ]
+      },
+      "ActiveOrdersResponse": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "$ref": "#/components/schemas/CatalogLanguage"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveOrder"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "language",
+          "serverTime",
+          "orders",
+          "total",
+          "limit",
+          "truncated"
         ]
       },
       "AddSupplierLeadNoteBody": {
@@ -22450,7 +22810,8 @@
           "order_lookup_per_member",
           "order_lookup_failures_per_member",
           "order_lookup_failures_per_supplier",
-          "order_actions_per_member"
+          "order_actions_per_member",
+          "active_orders_per_account"
         ]
       },
       "RateLimitedDetails": {
@@ -22704,6 +23065,174 @@
         },
         "required": [
           "photoIds"
+        ]
+      },
+      "RepeatBlockedReason": {
+        "type": "string",
+        "enum": [
+          "offer_withdrawn",
+          "supplier_unavailable"
+        ]
+      },
+      "RepeatOffer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "availability": {
+            "$ref": "#/components/schemas/OfferAvailability"
+          },
+          "leadDays": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "pickup": {
+            "type": "boolean"
+          },
+          "delivery": {
+            "type": "boolean"
+          },
+          "warrantyMonths": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warrantyText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supplier": {
+            "$ref": "#/components/schemas/UserOrderSupplier"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/OfferReceipt"
+          }
+        },
+        "required": [
+          "id",
+          "price",
+          "availability",
+          "leadDays",
+          "pickup",
+          "delivery",
+          "warrantyMonths",
+          "warrantyText",
+          "supplier",
+          "receipt"
+        ]
+      },
+      "RepeatOrderResponse": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "result": {
+                "type": "string",
+                "const": "offer"
+              },
+              "item": {
+                "$ref": "#/components/schemas/OrderItem"
+              },
+              "offer": {
+                "$ref": "#/components/schemas/RepeatOffer"
+              },
+              "previous": {
+                "type": "object",
+                "properties": {
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "fulfillment": {
+                    "$ref": "#/components/schemas/OrderFulfillment"
+                  },
+                  "unitPrice": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "quantity",
+                  "fulfillment",
+                  "unitPrice"
+                ]
+              },
+              "priceChanged": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "result",
+              "item",
+              "offer",
+              "previous",
+              "priceChanged"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "result": {
+                "type": "string",
+                "const": "catalog"
+              },
+              "item": {
+                "$ref": "#/components/schemas/OrderItem"
+              },
+              "reason": {
+                "$ref": "#/components/schemas/RepeatBlockedReason"
+              }
+            },
+            "required": [
+              "result",
+              "item",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "result": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "reason": {
+                "$ref": "#/components/schemas/RepeatUnavailableReason"
+              }
+            },
+            "required": [
+              "result",
+              "reason"
+            ]
+          }
+        ]
+      },
+      "RepeatUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "item_unavailable",
+          "club_access_required",
+          "kind_not_supported"
         ]
       },
       "RequestLoginCodeBody": {
@@ -28253,6 +28782,122 @@
           }
         }
       },
+      "UserHistoryMonth": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}$"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserHistoryOrder"
+            }
+          }
+        },
+        "required": [
+          "month",
+          "orders"
+        ]
+      },
+      "UserHistoryOrder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OrderKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "fulfillment": {
+            "$ref": "#/components/schemas/OrderFulfillment"
+          },
+          "isTest": {
+            "type": "boolean"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "unitPrice": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "currency": {
+            "type": "string",
+            "const": "KZT"
+          },
+          "item": {
+            "$ref": "#/components/schemas/OrderItem"
+          },
+          "supplier": {
+            "$ref": "#/components/schemas/UserOrderSupplier"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "givenOut": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderGivenOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canRepeat": {
+            "type": "boolean"
+          },
+          "canReview": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "kind",
+          "status",
+          "fulfillment",
+          "isTest",
+          "quantity",
+          "unitPrice",
+          "total",
+          "currency",
+          "item",
+          "supplier",
+          "finishedAt",
+          "givenOut",
+          "canRepeat",
+          "canReview",
+          "createdAt"
+        ]
+      },
       "UserOrder": {
         "type": "object",
         "properties": {
@@ -28401,6 +29046,60 @@
           "comment",
           "givenOut",
           "history"
+        ]
+      },
+      "UserOrderHistoryPage": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "$ref": "#/components/schemas/CatalogLanguage"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserHistoryMonth"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "language",
+          "timeZone",
+          "months",
+          "total",
+          "nextCursor"
+        ]
+      },
+      "UserOrderHistoryQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "default": 30,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "limit"
         ]
       },
       "UserOrderListQuery": {

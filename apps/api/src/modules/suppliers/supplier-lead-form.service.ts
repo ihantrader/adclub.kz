@@ -25,7 +25,7 @@ const RECEIVED = { status: "received" } as const;
  * the same answer — suppliers and earlier requests with its БИН are never
  * looked at before the answer is decided — and the number and the БИН
  * never reach the application log in full. The limit per client address
- * is the route's (`PublicRateLimitGuard`); the limit per number, the trap
+ * is the route's (`RouteRateLimitGuard`); the limit per number, the trap
  * field and the repeat of the same request are here. Served by the API
  * process only (it needs Redis).
  */

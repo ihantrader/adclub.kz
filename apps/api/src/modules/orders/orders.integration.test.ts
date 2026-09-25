@@ -5,6 +5,7 @@ import type { INestApplication, INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
+  activeOrdersResponseSchema,
   adminCityResponseSchema,
   adminDisciplineMarkResponseSchema,
   adminDisciplinePageSchema,
@@ -21,6 +22,8 @@ import {
   ORDER_QR_PREFIX,
   orderLookupResponseSchema,
   orderStateConflictDetailsSchema,
+  rateLimitedDetailsSchema,
+  repeatOrderResponseSchema,
   supplierMemberAddedResponseSchema,
   supplierOfferResponseSchema,
   supplierOnboardedResponseSchema,
@@ -29,6 +32,7 @@ import {
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
   totpStepRequiredDetailsSchema,
+  userOrderHistoryPageSchema,
   userOrderPageSchema,
   userOrderResponseSchema,
   type DayHours,
@@ -552,6 +556,34 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         201,
       );
     }
+    return {
+      phone,
+      accountId: await idOf("SELECT id FROM account WHERE phone = $1", [phone]),
+      as: (method, path, body) => call(bearer, IOS, method, path, body),
+    };
+  }
+
+  /**
+   * An employee of a company as a user of the app, with club access: their
+   * orders with their own company are test ones (PRODUCT 12.6).
+   */
+  async function employeeCustomer(of: Company): Promise<Customer> {
+    const phone = (
+      await db.query<{ phone: string }>(
+        "SELECT a.phone FROM supplier_member m JOIN account a ON a.id = m.account_id WHERE m.id = $1",
+        [of.first.memberId],
+      )
+    ).rows[0]!.phone;
+    const bearer = await sessionToken(phone, IOS);
+    await ok(
+      asAdmin("post", "/admin/club-access/grants", {
+        phone,
+        validUntil: new Date(Date.now() + 30 * 24 * HOUR).toISOString(),
+        reason: "Тест",
+      }),
+      (body) => body,
+      201,
+    );
     return {
       phone,
       accountId: await idOf("SELECT id FROM account WHERE phone = $1", [phone]),
@@ -3245,6 +3277,531 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         expectError(await asAdmin("post", path, { code: codeOf(order) }), 403, "FORBIDDEN");
       }
       expect((await closeRow(order.id)).status).toBe("accepted");
+    });
+  });
+
+  // ------------------------------- the saved copy, the history, «Повторить»
+
+  /** The copy of every active order the app keeps on the device. */
+  async function copyOf(who: Customer) {
+    const answer = await ok(who.as("get", "/active-orders"), (raw) =>
+      checked(activeOrdersResponseSchema)(raw),
+    );
+    for (const entry of answer.orders) {
+      rememberCode(entry.confirmation.code);
+      rememberSecret(entry.confirmation.qrPayload.slice(ORDER_QR_PREFIX.length));
+    }
+    return answer;
+  }
+
+  async function historyOf(who: Customer, query = "") {
+    return ok(who.as("get", `/order-history${query}`), (raw) =>
+      checked(userOrderHistoryPageSchema)(raw),
+    );
+  }
+
+  async function repeatOf(who: Customer, orderId: string) {
+    return ok(who.as("get", `/orders/${orderId}/repeat`), (raw) =>
+      checked(repeatOrderResponseSchema)(raw),
+    );
+  }
+
+  /** The moment an order finished, as the history counts months by it. */
+  async function finishedAt(orderId: string, iso: string): Promise<void> {
+    await db.query("UPDATE customer_order SET finished_at = $2 WHERE id = $1", [orderId, iso]);
+  }
+
+  describe("the saved copy of active orders (PRODUCT 6.7)", () => {
+    it("holds every active order with the code, the QR and the way to the supplier, and the time of the server", async () => {
+      const shop = await company("Копия");
+      const card = await ok(
+        asAdmin("get", `/admin/suppliers/${shop.supplierId}`),
+        (body) => adminSupplierResponseSchema.parse(body).supplier,
+      );
+      await ok(
+        asAdmin("put", `/admin/suppliers/${shop.supplierId}/schedule`, {
+          expectedVersion: card.version,
+          weeklyHours: ALWAYS,
+          closedDates: [{ date: "2026-12-31", note: "Новый год" }],
+        }),
+        (body) => adminSupplierResponseSchema.parse(body),
+      );
+      const offer = await put(shop, padsId, { price: 6_500 });
+      const buyer = await customer();
+      const order = await place(buyer, offer, { quantity: 2 });
+
+      const before = await copyOf(buyer);
+      expect(before.total).toBe(1);
+      expect(before.truncated).toBe(false);
+      expect(before.limit).toBeGreaterThan(0);
+      expect(Math.abs(Date.parse(before.serverTime) - Date.now())).toBeLessThan(60_000);
+      const waiting = before.orders[0]!;
+      expect(waiting).toMatchObject({
+        id: order.id,
+        number: order.number,
+        status: "created",
+        quantity: 2,
+        unitPrice: 6_500,
+        total: 13_000,
+        currency: "KZT",
+        fulfillment: "pickup",
+        awaitsReceipt: false,
+        needsAnswer: false,
+        mainDate: { kind: "respond_by", at: order.respondBy },
+        supplier: { name: shop.name, district: shop.district },
+        confirmation: { code: codeOf(order), qrPayload: qrOf(order) },
+      });
+      // Before accepting there is nowhere to go yet (D-026), and nothing of
+      // the catalog is ever in the copy.
+      expect(waiting).not.toHaveProperty("pickupPoint");
+      for (const key of ["terms", "history", "version", "comment", "givenOut"]) {
+        expect(waiting, key).not.toHaveProperty(key);
+      }
+
+      await accept(shop, order.id);
+      const after = await copyOf(buyer);
+      const ready = after.orders[0]!;
+      expect(ready.status).toBe("accepted");
+      expect(ready.awaitsReceipt).toBe(true);
+      expect(ready.mainDate?.kind).toBe("reserve_until");
+      expect(ready.reserveUntil).not.toBeNull();
+      expect(ready.pickupPoint).toMatchObject({
+        address: shop.address,
+        district: shop.district,
+        phone: shop.contactPhone,
+        cityName: "Алматы",
+        timeZone: "Asia/Almaty",
+        closedDates: [{ date: "2026-12-31", note: "Новый год" }],
+      });
+      expect(ready.pickupPoint?.weeklyHours).toHaveLength(7);
+      // The copy is the answer to «Обновлено в {время}»: no cache may keep it.
+      const raw = await buyer.as("get", "/active-orders");
+      expect(raw.headers["cache-control"]).toBe("private, no-store");
+
+      // Given out — out of the copy, into the history.
+      await closeByCode(shop, { code: codeOf(order) });
+      expect((await copyOf(buyer)).orders).toEqual([]);
+      const history = await historyOf(buyer);
+      expect(history.total).toBe(1);
+      expect(history.months).toHaveLength(1);
+      expect(history.months[0]!.orders[0]).toMatchObject({
+        id: order.id,
+        status: "completed",
+        total: 13_000,
+        supplier: { name: shop.name },
+        canRepeat: true,
+        canReview: true,
+      });
+      // The history carries no code and no QR: the order is over.
+      expect(JSON.stringify(history)).not.toContain(ORDER_QR_PREFIX);
+      expect(JSON.stringify(history)).not.toContain(codeOf(order));
+    });
+
+    it("leaves out an order whose deadline has just passed, before the sweeper comes", async () => {
+      const shop = await company("Истёкшая");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await db.query(
+        "UPDATE customer_order SET respond_by = now() - interval '1 minute' WHERE id = $1",
+        [order.id],
+      );
+      const copy = await copyOf(buyer);
+      expect(copy.orders).toEqual([]);
+      expect(copy.total).toBe(0);
+      // The read applied the deadline itself, exactly as the sweeper would.
+      expect((await row(order.id)).status).toBe("response_expired");
+      expect((await events(order.id)).map((entry) => entry.action)).toContain("expire_no_response");
+    });
+
+    it("gives at most the setting's worth of orders, the nearest deadlines first", async () => {
+      await settings.set({ active_orders_copy_limit: 2 });
+      const shop = await company("Предел копии");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const placed: string[] = [];
+      for (let index = 0; index < 4; index += 1) {
+        const order = await place(buyer, offer, { allowAnotherActive: true });
+        placed.push(order.id);
+        await db.query(
+          `UPDATE customer_order SET respond_by = now() + interval '${String(index + 1)} hours' WHERE id = $1`,
+          [order.id],
+        );
+      }
+      const copy = await copyOf(buyer);
+      expect(copy.limit).toBe(2);
+      expect(copy.total).toBe(4);
+      expect(copy.truncated).toBe(true);
+      expect(copy.orders.map((entry) => entry.id)).toEqual([placed[0], placed[1]]);
+    });
+
+    it("puts «Можно забирать» before the others, then the nearest date", async () => {
+      const shop = await company("Порядок копии");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const soon = await place(buyer, offer, { allowAnotherActive: true });
+      const later = await place(buyer, offer, { allowAnotherActive: true });
+      const takeable = await place(buyer, offer, { allowAnotherActive: true });
+      await db.query(
+        "UPDATE customer_order SET respond_by = now() + interval '30 minutes' WHERE id = $1",
+        [soon.id],
+      );
+      await db.query(
+        "UPDATE customer_order SET respond_by = now() + interval '5 hours' WHERE id = $1",
+        [later.id],
+      );
+      const accepted = await accept(shop, takeable.id);
+      await ok(
+        shop.as("post", `/supplier/orders/${takeable.id}/ready`, {
+          expectedVersion: accepted.version,
+        }),
+        (body) => checked(supplierOrderResponseSchema)(body),
+      );
+      expect((await copyOf(buyer)).orders.map((entry) => entry.id)).toEqual([
+        takeable.id,
+        soon.id,
+        later.id,
+      ]);
+    });
+
+    it("keeps the copy to its owner, and keeps it for a user whose club access ended", async () => {
+      const shop = await company("Чужая копия");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const stranger = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+
+      expectError(await http().get("/active-orders").set("X-Client", IOS), 401, "AUTH_REQUIRED");
+      expectError(await http().get("/order-history").set("X-Client", IOS), 401, "AUTH_REQUIRED");
+      expectError(await shop.as("get", "/active-orders"), 403, "FORBIDDEN");
+      expectError(await asAdmin("get", "/active-orders"), 403, "FORBIDDEN");
+      expectError(await shop.as("get", "/order-history"), 403, "FORBIDDEN");
+      expectError(await shop.as("get", `/orders/${order.id}/repeat`), 403, "FORBIDDEN");
+      expect((await copyOf(stranger)).orders).toEqual([]);
+      expectError(await stranger.as("get", `/orders/${order.id}/repeat`), 404, "NOT_FOUND");
+
+      // The club access ended, the order stands: the code is how the item
+      // is collected (PRODUCT 10.6, edge case 17.5).
+      await ok(
+        asAdmin("post", "/admin/club-access/revoke", {
+          phone: buyer.phone,
+          reason: "Проверка",
+        }),
+        (body) => body,
+      );
+      const copy = await copyOf(buyer);
+      expect(copy.orders).toHaveLength(1);
+      expect(copy.orders[0]!.confirmation.code).toBe(codeOf(order));
+      expect(copy.orders[0]!.pickupPoint?.address).toBe(shop.address);
+    });
+
+    it("limits how often the copy is asked for, and is served without Redis", async () => {
+      await settings.set({
+        active_orders_per_account: 2,
+        active_orders_per_account_window_seconds: 60,
+      });
+      const buyer = await customer();
+      const other = await customer();
+      await copyOf(buyer);
+      await copyOf(buyer);
+      const refused = await buyer.as("get", "/active-orders");
+      expectError(refused, 429, "RATE_LIMITED");
+      expect(rateLimitedDetailsSchema.parse(refused.body.details).limit).toBe(
+        "active_orders_per_account",
+      );
+      expect(Number(refused.headers["retry-after"])).toBeGreaterThan(0);
+      // Another account has its own count.
+      await copyOf(other);
+      // Without Redis the copy is still served: a person at a counter must
+      // not lose their code because of a cache.
+      await redisProxy.stop();
+      try {
+        expect((await buyer.as("get", "/active-orders")).status).toBe(200);
+      } finally {
+        await redisProxy.start();
+      }
+    });
+  });
+
+  describe("the history by months (M-ORD-02)", () => {
+    it("groups by months of Almaty time, over a year's edge and just after midnight", async () => {
+      const shop = await company("История");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const december = await place(buyer, offer, { allowAnotherActive: true });
+      const january = await place(buyer, offer, { allowAnotherActive: true });
+      const midnight = await place(buyer, offer, { allowAnotherActive: true });
+      for (const order of [december, january, midnight]) {
+        await ok(buyer.as("post", `/orders/${order.id}/cancel`), (body) => body);
+      }
+      // 23:30 of 31 December and 02:00 of 1 January, Almaty (UTC+5).
+      await finishedAt(december.id, "2025-12-31T18:30:00Z");
+      await finishedAt(january.id, "2025-12-31T21:00:00Z");
+      // 00:30 of 15 January in Almaty is still 15 January there.
+      await finishedAt(midnight.id, "2026-01-14T19:30:00Z");
+
+      const history = await historyOf(buyer);
+      expect(history.timeZone).toBe("Asia/Almaty");
+      expect(history.total).toBe(3);
+      expect(history.months.map((month) => month.month)).toEqual(["2026-01", "2025-12"]);
+      expect(history.months[0]!.orders.map((entry) => entry.id)).toEqual([midnight.id, january.id]);
+      expect(history.months[1]!.orders.map((entry) => entry.id)).toEqual([december.id]);
+      // A cancelled order has nothing to repeat a review of.
+      expect(history.months[1]!.orders[0]).toMatchObject({
+        status: "cancelled_by_user",
+        givenOut: null,
+        canReview: false,
+        canRepeat: true,
+      });
+    });
+
+    it("pages without losing or repeating a record when another order finishes meanwhile", async () => {
+      const shop = await company("Страницы истории");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const finished: string[] = [];
+      for (let index = 0; index < 5; index += 1) {
+        const order = await place(buyer, offer, { allowAnotherActive: true });
+        await ok(buyer.as("post", `/orders/${order.id}/cancel`), (body) => body);
+        await finishedAt(order.id, `2026-03-0${String(index + 1)}T10:00:00Z`);
+        finished.push(order.id);
+      }
+      const newest = [...finished].reverse();
+      const later = await place(buyer, offer, { allowAnotherActive: true });
+
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      let pages = 0;
+      for (;;) {
+        const page = await historyOf(
+          buyer,
+          `?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        );
+        seen.push(...page.months.flatMap((month) => month.orders.map((entry) => entry.id)));
+        pages += 1;
+        if (pages === 1) {
+          // One more order finishes between the pages: it belongs above the
+          // cursor, so it neither pushes anything out nor comes twice.
+          await ok(buyer.as("post", `/orders/${later.id}/cancel`), (body) => body);
+          await finishedAt(later.id, "2026-03-09T10:00:00Z");
+        }
+        cursor = page.nextCursor;
+        if (!cursor) {
+          break;
+        }
+      }
+      expect(seen).toEqual(newest);
+      expect(new Set(seen).size).toBe(seen.length);
+      // A new list sees it.
+      expect((await historyOf(buyer)).months[0]!.orders[0]!.id).toBe(later.id);
+      expectError(await buyer.as("get", "/order-history?cursor=broken"), 400, "VALIDATION_ERROR");
+    });
+
+    it("tells an empty history apart, and offers no review of a test order", async () => {
+      const shop = await company("Пустая история");
+      const offer = await put(shop, padsId);
+      const fresh = await customer();
+      const empty = await historyOf(fresh);
+      expect(empty).toMatchObject({ total: 0, months: [], nextCursor: null });
+
+      // An employee ordering from their own company: a test order.
+      const staff = await employeeCustomer(shop);
+      const own = await place(staff, offer);
+      await accept(shop, own.id);
+      await closeByCode(shop, { code: codeOf(own) });
+      const history = await historyOf(staff);
+      expect(history.months[0]!.orders[0]).toMatchObject({
+        isTest: true,
+        status: "completed",
+        canReview: false,
+        canRepeat: true,
+      });
+    });
+  });
+
+  describe("repeating a finished order (F1x)", () => {
+    it("answers with the price of today, and the order goes through POST /orders", async () => {
+      const shop = await company("Повтор");
+      const offer = await put(shop, padsId, { price: 6_500 });
+      const buyer = await customer();
+      const order = await place(buyer, offer, { quantity: 2 });
+      await accept(shop, order.id);
+      await closeByCode(shop, { code: codeOf(order) });
+
+      const same = await repeatOf(buyer, order.id);
+      expect(same).toMatchObject({
+        result: "offer",
+        item: { id: padsId },
+        offer: { id: offer.id, price: 6_500, supplier: { name: shop.name } },
+        previous: { quantity: 2, fulfillment: "pickup", unitPrice: 6_500 },
+        priceChanged: false,
+      });
+      expect(same.result === "offer" && same.offer.receipt.date).toBeTruthy();
+      // No code or QR ever comes back with a repeat.
+      expect(JSON.stringify(same)).not.toContain(ORDER_QR_PREFIX);
+      expect(JSON.stringify(same)).not.toContain(codeOf(order));
+
+      await ok(
+        shop.as("patch", `/supplier/offers/${offer.id}`, {
+          expectedVersion: offer.version,
+          price: 7_100,
+        }),
+        (body) => checked(supplierOfferResponseSchema)(body),
+      );
+      const changed = await repeatOf(buyer, order.id);
+      expect(changed).toMatchObject({
+        result: "offer",
+        offer: { price: 7_100 },
+        priceChanged: true,
+      });
+      // The price the button showed is the one the checkout takes.
+      const again = await ok(
+        buyer.as("post", "/orders", {
+          offerId: offer.id,
+          quantity: 1,
+          fulfillment: "pickup",
+          expectedPrice: 7_100,
+          idempotencyKey: randomUUID(),
+        }),
+        (body) => note(checked(createOrderResponseSchema)(body).order),
+        201,
+      );
+      expect(again.unitPrice).toBe(7_100);
+    });
+
+    it("sends to the catalog when the offer is gone, and refuses when the item is", async () => {
+      const shop = await company("Повтор нельзя");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await ok(buyer.as("post", `/orders/${order.id}/cancel`), (body) => body);
+
+      const withdrawn = await ok(
+        shop.as("post", `/supplier/offers/${offer.id}/withdraw`, {
+          expectedVersion: offer.version,
+        }),
+        (body) => checked(supplierOfferResponseSchema)(body).offer,
+      );
+      expect(await repeatOf(buyer, order.id)).toEqual({
+        result: "catalog",
+        item: expect.objectContaining({ id: padsId }),
+        reason: "offer_withdrawn",
+      });
+
+      await ok(
+        shop.as("post", `/supplier/offers/${offer.id}/return`, {
+          expectedVersion: withdrawn.version,
+        }),
+        (body) => body,
+      );
+      const supplierRow = await ok(
+        asAdmin("get", `/admin/suppliers/${shop.supplierId}`),
+        (body) => adminSupplierResponseSchema.parse(body).supplier,
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${shop.supplierId}/pause`, {
+          expectedVersion: supplierRow.version,
+          paused: true,
+          reason: "admin",
+          note: "Проверка",
+        }),
+        (body) => body,
+      );
+      expect(await repeatOf(buyer, order.id)).toMatchObject({
+        result: "catalog",
+        reason: "supplier_unavailable",
+      });
+      const paused = await ok(
+        asAdmin("get", `/admin/suppliers/${shop.supplierId}`),
+        (body) => adminSupplierResponseSchema.parse(body).supplier,
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${shop.supplierId}/pause`, {
+          expectedVersion: paused.version,
+          paused: false,
+          note: "Проверка окончена",
+        }),
+        (body) => body,
+      );
+
+      // The item itself left the catalog: there is no card to open either.
+      const item = await ok(
+        asAdmin("get", `/admin/catalog/items/${padsId}`),
+        (body) => body as { item: { version: number } },
+      );
+      await ok(
+        asAdmin("post", `/admin/catalog/items/${padsId}/status`, {
+          expectedVersion: item.item.version,
+          status: "archived",
+        }),
+        (body) => body,
+      );
+      expect(await repeatOf(buyer, order.id)).toEqual({
+        result: "unavailable",
+        reason: "item_unavailable",
+      });
+    });
+
+    it("asks for club access before anything else", async () => {
+      const shop = await company("Повтор без доступа");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await ok(buyer.as("post", `/orders/${order.id}/cancel`), (body) => body);
+      await ok(
+        asAdmin("post", "/admin/club-access/revoke", { phone: buyer.phone, reason: "Проверка" }),
+        (body) => body,
+      );
+      expect(await repeatOf(buyer, order.id)).toEqual({
+        result: "unavailable",
+        reason: "club_access_required",
+      });
+    });
+  });
+
+  describe("what counts in a supplier's statistics (PRODUCT 12.6)", () => {
+    it("leaves test orders out of the signal about closes by the administrator", async () => {
+      await settings.set({ admin_close_signal_count: 2, admin_close_signal_days: 30 });
+      const shop = await company("Статистика");
+      const offer = await put(shop, padsId);
+      const staff = await employeeCustomer(shop);
+      const buyer = await customer();
+
+      // Two test orders of an employee, both closed by the administrator:
+      // they judge nobody, so no signal.
+      for (let index = 0; index < 2; index += 1) {
+        const test = await place(staff, offer, { allowAnotherActive: true });
+        expect(test.isTest).toBe(true);
+        await ok(
+          asAdmin("post", `/admin/orders/${test.id}/close`, {
+            expectedVersion: 1,
+            reason: "Спор",
+          }),
+          (body) => checked(adminOrderResponseSchema)(body),
+        );
+      }
+      expect((await signalsOf("frequent_admin_closes")).signals).toEqual([]);
+
+      // Two ordinary ones reach the threshold.
+      for (let index = 0; index < 2; index += 1) {
+        const real = await place(buyer, offer, { allowAnotherActive: true });
+        await ok(
+          asAdmin("post", `/admin/orders/${real.id}/close`, {
+            expectedVersion: 1,
+            reason: "Спор",
+          }),
+          (body) => checked(adminOrderResponseSchema)(body),
+        );
+      }
+      const signals = await signalsOf("frequent_admin_closes");
+      expect(signals.signals).toHaveLength(1);
+      expect(signals.signals[0]!.payload).toMatchObject({ closes: 2 });
+      // The cabinet's own work queue still counts every order it must answer.
+      const tabs = await ok(shop.as("get", "/supplier/orders?tab=finished"), (body) =>
+        checked(supplierOrderPageSchema)(body),
+      );
+      expect(tabs.counts.finished).toBe(4);
     });
   });
 });

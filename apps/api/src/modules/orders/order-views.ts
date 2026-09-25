@@ -1,4 +1,6 @@
 import type {
+  ActiveOrder,
+  ActiveOrderMainDate,
   AdminOrder,
   AdminOrderSummary,
   CatalogLanguage,
@@ -15,12 +17,13 @@ import type {
   SupplierOrder,
   SupplierOrderSummary,
   SupplierScanOrder,
+  UserHistoryMonth,
   UserOrder,
   UserOrderStep,
   UserOrderSummary,
 } from "@adclub/contracts";
-import { isActiveOrderStatus, localDateTime } from "@adclub/domain";
-import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { isActiveOrderStatus, localDateTime, orderAwaitsReceipt } from "@adclub/domain";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { account, supplier, supplierMember } from "../identity";
 import { city, supplierClosedDate, supplierLocation } from "../suppliers";
@@ -48,6 +51,13 @@ import { orderEvent, type OrderEventRow, type OrderRow } from "./schema";
  * A field a side mustn't have is absent from its answer, not empty, and
  * each variant is built field by field here — nothing spreads a row into
  * an answer, so a new column never leaks by itself.
+ *
+ * TASK-023 adds two more views of the user's own orders, built by the
+ * same hand: the saved copy of the active ones (`activeCopyEntries` — the
+ * code, the QR and the way to the supplier, and nothing of the catalog)
+ * and the history in months (`historyMonths` — the sum, the supplier and
+ * what the buttons under a finished order may do, never how it was
+ * closed).
  */
 
 // ------------------------------------------------------------------ parts
@@ -63,7 +73,7 @@ function localizedName(
   return { text: names.ru ?? names.kk ?? names.en ?? "", isFallback: true };
 }
 
-function itemOf(row: OrderRow, lang: CatalogLanguage): OrderItem {
+export function itemOf(row: OrderRow, lang: CatalogLanguage): OrderItem {
   const item = row.offerSnapshot.item;
   return {
     id: item.id,
@@ -314,12 +324,24 @@ function showsPickupPoint(row: OrderRow): boolean {
   return row.status === "accepted" || row.status === "ready" || row.status === "completed";
 }
 
-async function pickupPointOf(
+/**
+ * The points of several orders at once (the saved copy asks for all of
+ * them): the address, the hours, the closed dates from today on in the
+ * point's own time zone, and the phone — the current values, not the
+ * snapshot's, because this is where to go today.
+ */
+async function pickupPointsOf(
   executor: DbExecutor,
-  row: OrderRow,
-): Promise<UserOrder["pickupPoint"]> {
-  const [point] = await executor
+  locationIds: readonly string[],
+): Promise<Map<string, NonNullable<UserOrder["pickupPoint"]>>> {
+  const points = new Map<string, NonNullable<UserOrder["pickupPoint"]>>();
+  const ids = [...new Set(locationIds)];
+  if (ids.length === 0) {
+    return points;
+  }
+  const rows = await executor
     .select({
+      id: supplierLocation.id,
       address: supplierLocation.address,
       district: supplierLocation.district,
       weeklyHours: supplierLocation.weeklyHours,
@@ -330,30 +352,45 @@ async function pickupPointOf(
     .from(supplierLocation)
     .innerJoin(supplier, eq(supplier.id, supplierLocation.supplierId))
     .innerJoin(city, eq(city.id, supplierLocation.cityId))
-    .where(eq(supplierLocation.id, row.locationId));
-  if (!point) {
-    return undefined;
-  }
-  const today = localDateTime(new Date(), point.timeZone).date;
+    .where(inArray(supplierLocation.id, ids));
   const closed = await executor
-    .select({ date: supplierClosedDate.closedOn, note: supplierClosedDate.note })
+    .select({
+      locationId: supplierClosedDate.locationId,
+      date: supplierClosedDate.closedOn,
+      note: supplierClosedDate.note,
+    })
     .from(supplierClosedDate)
+    // Two days back covers every time zone; the exact «from today» is cut
+    // below, in the zone of each point.
     .where(
       and(
-        eq(supplierClosedDate.locationId, row.locationId),
-        gte(supplierClosedDate.closedOn, today),
+        inArray(supplierClosedDate.locationId, ids),
+        sql`${supplierClosedDate.closedOn} >= current_date - 2`,
       ),
     )
     .orderBy(asc(supplierClosedDate.closedOn));
-  return {
-    address: point.address,
-    district: point.district,
-    cityName: point.cityName,
-    timeZone: point.timeZone,
-    weeklyHours: (point.weeklyHours as DayHours[] | null) ?? null,
-    closedDates: closed.map((entry) => ({ date: String(entry.date), note: entry.note })),
-    phone: point.phone,
-  };
+  for (const point of rows) {
+    const today = localDateTime(new Date(), point.timeZone).date;
+    points.set(point.id, {
+      address: point.address,
+      district: point.district,
+      cityName: point.cityName,
+      timeZone: point.timeZone,
+      weeklyHours: (point.weeklyHours as DayHours[] | null) ?? null,
+      closedDates: closed
+        .filter((entry) => entry.locationId === point.id && String(entry.date) >= today)
+        .map((entry) => ({ date: String(entry.date), note: entry.note })),
+      phone: point.phone,
+    });
+  }
+  return points;
+}
+
+async function pickupPointOf(
+  executor: DbExecutor,
+  row: OrderRow,
+): Promise<UserOrder["pickupPoint"]> {
+  return (await pickupPointsOf(executor, [row.locationId])).get(row.locationId);
 }
 
 export async function userSummaries(
@@ -396,6 +433,144 @@ export async function userOrderView(
     givenOut: givenOutOf(row),
     history: events.map(stepOf).filter((step): step is UserOrderStep => step !== null),
   };
+}
+
+// ----------------------------------------- the saved copy (TASK-023)
+
+/**
+ * The date the card of an active order leads with (SCREENS M-ORD-02): the
+ * end of the pickup reserve once there is one, the supplier's answer
+ * deadline while there isn't. Delivery has no reserve at all (PRODUCT
+ * 10.4: it lives until it is handed over), so an accepted delivery order
+ * leads with nothing.
+ */
+function mainDateOf(row: OrderRow): ActiveOrderMainDate | null {
+  if (row.expiresAt) {
+    return { kind: "reserve_until", at: iso(row.expiresAt) };
+  }
+  return row.status === "created" ? { kind: "respond_by", at: iso(row.respondBy) } : null;
+}
+
+/**
+ * The user's active orders as the copy on the device holds them (PRODUCT
+ * 6.7; SCREENS «Сохранённая копия», M-ORD-02…04): the code and the QR, the
+ * item and the sum, the supplier, and — once accepted — where to go
+ * (D-026). Nothing of the catalog, no prices of today, no course of the
+ * order: the copy must never show a stale price, and offline the user only
+ * has to find the supplier and show the code.
+ *
+ * The pickup points of every order are read in one query, not one per
+ * order: the copy is asked for often.
+ */
+export async function activeCopyEntries(
+  executor: DbExecutor,
+  rows: readonly OrderRow[],
+  lang: CatalogLanguage,
+): Promise<ActiveOrder[]> {
+  const names = await supplierNames(
+    executor,
+    rows.map((row) => row.supplierId),
+  );
+  const points = await pickupPointsOf(
+    executor,
+    rows.filter(showsPickupPoint).map((row) => row.locationId),
+  );
+  return rows.map((row) => {
+    const point = showsPickupPoint(row) ? points.get(row.locationId) : undefined;
+    return {
+      id: row.id,
+      number: row.number,
+      kind: row.kind,
+      status: row.status,
+      fulfillment: row.fulfillment,
+      quantity: row.quantity,
+      unitPrice: row.unitPrice,
+      total: row.total,
+      currency: row.currency,
+      item: itemOf(row, lang),
+      supplier: {
+        name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
+        cityName: row.offerSnapshot.location.cityName,
+        district: row.offerSnapshot.location.district,
+      },
+      ...(point ? { pickupPoint: point } : {}),
+      confirmation: { code: row.confirmationCode, qrPayload: qrPayload(row.qrToken) },
+      mainDate: mainDateOf(row),
+      awaitsReceipt: orderAwaitsReceipt(row.status),
+      // An order in stock never waits for the user's word; EPIC-13 (another
+      // term, another time for a service) does.
+      needsAnswer: false,
+      respondBy: iso(row.respondBy),
+      reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
+      createdAt: iso(row.createdAt),
+      updatedAt: iso(row.updatedAt),
+    };
+  });
+}
+
+// -------------------------------------------- the history (TASK-023)
+
+/** Whether «Оценить» belongs under a finished order (the review itself — TASK-049). */
+function reviewable(row: OrderRow): boolean {
+  // A test order of an employee is never reviewed (M-ORD-05); TASK-049
+  // will also take away the orders that already have one.
+  return row.status === "completed" && !row.isTest;
+}
+
+/**
+ * The finished orders of the user in months of the club's time zone
+ * (SCREENS M-ORD-02 «История»). The rows come newest first by the moment
+ * they finished, so the months follow one another and a month split over
+ * two pages is joined by its name on the client.
+ */
+export async function historyMonths(
+  executor: DbExecutor,
+  rows: readonly OrderRow[],
+  lang: CatalogLanguage,
+  timeZone: string,
+): Promise<UserHistoryMonth[]> {
+  const names = await supplierNames(
+    executor,
+    rows.map((row) => row.supplierId),
+  );
+  const months: UserHistoryMonth[] = [];
+  for (const row of rows) {
+    // Every finished order has the moment it finished (the database keeps
+    // `finished_at` ⇔ a final status); `updatedAt` only guards the type.
+    const finishedAt = row.finishedAt ?? row.updatedAt;
+    const month = localDateTime(finishedAt, timeZone).date.slice(0, 7);
+    if (months.at(-1)?.month !== month) {
+      months.push({ month, orders: [] });
+    }
+    months.at(-1)!.orders.push({
+      id: row.id,
+      number: row.number,
+      kind: row.kind,
+      status: row.status,
+      fulfillment: row.fulfillment,
+      isTest: row.isTest,
+      quantity: row.quantity,
+      unitPrice: row.unitPrice,
+      total: row.total,
+      currency: row.currency,
+      item: itemOf(row, lang),
+      supplier: {
+        name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
+        cityName: row.offerSnapshot.location.cityName,
+        district: row.offerSnapshot.location.district,
+      },
+      finishedAt: iso(finishedAt),
+      // «Получено {дата}» and nothing else: how it was given out — in
+      // time, late or by the administrator — is not the user's business
+      // (SCREENS M-ORD-03 «Правила», D-043).
+      givenOut: givenOutOf(row),
+      // Whether the same offer can be had right now is `GET /orders/{id}/repeat`.
+      canRepeat: row.kind === "stock",
+      canReview: reviewable(row),
+      createdAt: iso(row.createdAt),
+    });
+  }
+  return months;
 }
 
 // -------------------------------------------------------------- supplier

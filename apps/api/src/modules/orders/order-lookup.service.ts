@@ -21,7 +21,7 @@ import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { AuditLog } from "../audit";
 import { supplier, supplierMember } from "../identity";
-import { publicRateLimitSettingKeys } from "../../public-rate-limit";
+import { rateLimitSettingKeys } from "../../rate-limit";
 import { AppSettings } from "../settings";
 import { readCredential, type OrderCredentialRef } from "./order-code";
 import { closureOf, scanOrderView, supplierOrderView } from "./order-views";
@@ -329,7 +329,7 @@ export class OrderLookup {
   }
 
   private async count(limit: RateLimitName, key: string, actor: OrderSupplierActor): Promise<void> {
-    const [maxKey, windowKey] = publicRateLimitSettingKeys(limit);
+    const [maxKey, windowKey] = rateLimitSettingKeys(limit);
     const [max, windowSeconds] = (await Promise.all([
       this.settings.get(maxKey),
       this.settings.get(windowKey),

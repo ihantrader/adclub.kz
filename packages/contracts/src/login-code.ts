@@ -153,6 +153,12 @@ export const rateLimitNameSchema = z.enum([
   "order_lookup_failures_per_supplier",
   /** Actions of one employee on orders: accept, ready, decline (TASK-022). */
   "order_actions_per_member",
+  /**
+   * The saved copy of the user's active orders (TASK-023): the app asks
+   * for it whenever it opens, whenever the list opens and on every push,
+   * so the limit is a generous one against a loop, not against a person.
+   */
+  "active_orders_per_account",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

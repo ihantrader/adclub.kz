@@ -26,6 +26,7 @@ import {
 import { pickLanguage } from "@adclub/i18n";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
+import { RateLimitedRoute } from "../../rate-limit";
 import { OfferItemSearch } from "./offer-item-search.service";
 import { OffersService, type OfferActor } from "./offers.service";
 
@@ -54,7 +55,7 @@ export class OffersCabinetController {
     @Inject(OfferItemSearch) private readonly search: OfferItemSearch,
   ) {}
 
-  @SessionRoute(apiRoutes.searchOfferItems)
+  @RateLimitedRoute(apiRoutes.searchOfferItems)
   find(
     @Query(new ZodValidationPipe(offerItemSearchQuerySchema)) query: OfferItemSearchQuery,
     @Headers("accept-language") acceptLanguage: string | undefined,

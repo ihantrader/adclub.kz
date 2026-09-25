@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Param, Query } from "@nestjs/common";
+import { Body, Controller, Headers, Inject, Param, Query, Res } from "@nestjs/common";
 import {
   adminCloseOrderBodySchema,
   adminDisciplineListQuerySchema,
@@ -13,7 +13,9 @@ import {
   orderPathSchema,
   revokeDisciplineBodySchema,
   supplierOrderListQuerySchema,
+  userOrderHistoryQuerySchema,
   userOrderListQuerySchema,
+  type ActiveOrdersResponse,
   type AdminCloseOrderBody,
   type AdminDisciplineListQuery,
   type AdminDisciplineMarkResponse,
@@ -33,16 +35,21 @@ import {
   type OrderCredential,
   type OrderLookupResponse,
   type OrderPath,
+  type RepeatOrderResponse,
   type RevokeDisciplineBody,
   type SupplierOrderListQuery,
   type SupplierOrderPage,
   type SupplierOrderResponse,
+  type UserOrderHistoryPage,
+  type UserOrderHistoryQuery,
   type UserOrderListQuery,
   type UserOrderPage,
   type UserOrderResponse,
 } from "@adclub/contracts";
 import { pickLanguage } from "@adclub/i18n";
+import type { Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
+import { RateLimitedRoute } from "../../rate-limit";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
 import { Discipline } from "./order-discipline";
 import { OrderLookup } from "./order-lookup.service";
@@ -85,6 +92,39 @@ export class UserOrdersController {
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<UserOrderPage> {
     return this.orders.userPage(session.accountId, query, pickLanguage(acceptLanguage));
+  }
+
+  /**
+   * The copy of every active order the app keeps on the device (PRODUCT
+   * 6.7; SCREENS «Сохранённая копия»). It carries the confirmation codes
+   * and the QRs, so it is never stored by anything on the way.
+   */
+  @RateLimitedRoute(apiRoutes.getActiveOrders)
+  async active(
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ActiveOrdersResponse> {
+    response.setHeader("Cache-Control", "private, no-store");
+    return this.orders.activeCopy(session.accountId, pickLanguage(acceptLanguage));
+  }
+
+  @SessionRoute(apiRoutes.getOrderHistory)
+  history(
+    @Query(new ZodValidationPipe(userOrderHistoryQuerySchema)) query: UserOrderHistoryQuery,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<UserOrderHistoryPage> {
+    return this.orders.historyPage(session.accountId, query, pickLanguage(acceptLanguage));
+  }
+
+  @SessionRoute(apiRoutes.getOrderRepeat)
+  repeat(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<RepeatOrderResponse> {
+    return this.orders.repeat(session.accountId, params.orderId, pickLanguage(acceptLanguage));
   }
 
   @SessionRoute(apiRoutes.getUserOrder)
@@ -157,7 +197,7 @@ export class SupplierOrdersController {
     };
   }
 
-  @SessionRoute(apiRoutes.acceptSupplierOrder)
+  @RateLimitedRoute(apiRoutes.acceptSupplierOrder)
   async accept(
     @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
     @Body(new ZodValidationPipe(orderActionBodySchema)) body: OrderActionBody,
@@ -174,7 +214,7 @@ export class SupplierOrdersController {
     };
   }
 
-  @SessionRoute(apiRoutes.markSupplierOrderReady)
+  @RateLimitedRoute(apiRoutes.markSupplierOrderReady)
   async ready(
     @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
     @Body(new ZodValidationPipe(orderActionBodySchema)) body: OrderActionBody,
@@ -191,7 +231,7 @@ export class SupplierOrdersController {
     };
   }
 
-  @SessionRoute(apiRoutes.declineSupplierOrder)
+  @RateLimitedRoute(apiRoutes.declineSupplierOrder)
   decline(
     @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
     @Body(new ZodValidationPipe(declineOrderBodySchema)) body: DeclineOrderBody,

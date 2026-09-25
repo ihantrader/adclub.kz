@@ -67,10 +67,12 @@ export { daysBetween, recommendedScore } from "./offer/offer-ranking";
 export type { RankedOfferFacts, RecommendedWeights } from "./offer/offer-ranking";
 export {
   activeOrderStatuses,
+  awaitingReceiptOrderStatuses,
   isActiveOrderStatus,
   orderActionActor,
   orderActions,
   orderActionSources,
+  orderAwaitsReceipt,
   orderCloseActions,
   orderStatuses,
   orderTransition,
@@ -81,6 +83,15 @@ export type {
   OrderCloseAction,
   OrderStatus,
 } from "./order/order-machine";
+export { countsInStatistics } from "./order/order-statistics";
+export type { OrderStatisticsFacts } from "./order/order-statistics";
+export { orderRepeatDecision } from "./order/order-repeat";
+export type {
+  OrderRepeatBlocked,
+  OrderRepeatDecision,
+  OrderRepeatFacts,
+  OrderRepeatImpossible,
+} from "./order/order-repeat";
 export { lateCloseUntil, orderCloseVerdict } from "./order/order-close";
 export type { OrderCloseFacts, OrderCloseRefusal, OrderCloseVerdict } from "./order/order-close";
 export {

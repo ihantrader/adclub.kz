@@ -215,6 +215,30 @@ const orders = group({
       default: 60,
       description: "Окно предела действий сотрудника по заявкам.",
     }),
+    // TASK-023 (ARCHITECTURE 4.33).
+    active_orders_copy_limit: define.integer({
+      unit: "count",
+      min: 1,
+      max: 500,
+      default: 50,
+      description:
+        "Сколько активных заявок приложение получает в сохранённую копию за раз. Если у пользователя их больше, отдаются ближайшие по сроку — те, с которыми он сейчас пойдёт к поставщику.",
+    }),
+    active_orders_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 60,
+      description:
+        "Сколько раз за окно один пользователь может обновить сохранённую копию активных заявок (приложение обновляет её при каждом открытии и по уведомлению, поэтому предел щедрый).",
+    }),
+    active_orders_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: DAY,
+      default: 60,
+      description: "Окно предела обновлений сохранённой копии активных заявок.",
+    }),
     admin_close_signal_count: define.integer({
       unit: "count",
       min: 1,

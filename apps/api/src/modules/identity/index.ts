@@ -20,6 +20,7 @@ export type {
   IssuedSession,
 } from "./session/session.service";
 export {
+  authenticatedSessionOf,
   CurrentSession,
   OptionalSession,
   OptionalSessionGuard,

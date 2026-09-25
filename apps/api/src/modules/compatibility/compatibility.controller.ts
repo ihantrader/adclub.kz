@@ -38,7 +38,7 @@ import {
   type SupplierCompatibilityProposalResponse,
   type UpdateCompatibilityRecordBody,
 } from "@adclub/contracts";
-import { RateLimitedRoute } from "../../public-rate-limit";
+import { RateLimitedRoute } from "../../rate-limit";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
 import { CompatibilityEvaluator } from "./compatibility-evaluator";

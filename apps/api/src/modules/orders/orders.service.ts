@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
+  type ActiveOrdersResponse,
   type AdminCloseOrderBody,
   type AdminOrder,
   type AdminOrderListQuery,
@@ -10,14 +11,17 @@ import {
   type DeclineOrderBody,
   type DeclineOrderResponse,
   type OrderStatusValue,
+  type RepeatOrderResponse,
   type SupplierOrder,
   type SupplierOrderListQuery,
   type SupplierOrderPage,
   type UserOrder,
+  type UserOrderHistoryPage,
+  type UserOrderHistoryQuery,
   type UserOrderListQuery,
   type UserOrderPage,
 } from "@adclub/contracts";
-import { activeOrderStatuses } from "@adclub/domain";
+import { activeOrderStatuses, isActiveOrderStatus } from "@adclub/domain";
 import {
   and,
   asc,
@@ -35,6 +39,7 @@ import {
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { rateLimitedException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
+import { ALMATY_TIME_ZONE } from "../../jobs";
 import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
@@ -56,6 +61,7 @@ import {
   validationError,
 } from "./order-errors";
 import { Discipline } from "./order-discipline";
+import { repeatView } from "./order-repeat";
 import {
   databaseNow,
   dueDeadline,
@@ -67,8 +73,10 @@ import {
   type PersonAction,
 } from "./order-transitions";
 import {
+  activeCopyEntries,
   adminOrderView,
   adminSummaries,
+  historyMonths,
   lastActionOf,
   supplierOrderView,
   supplierSummaries,
@@ -86,6 +94,35 @@ const UNAVAILABLE_WARNING_INTERVAL_MS = 60_000;
 const CODE_ATTEMPTS = 20;
 
 const ACTIVE = [...activeOrderStatuses] as OrderStatusValue[];
+
+/**
+ * The deadline of an active order: the end of its pickup reserve once
+ * there is one, the supplier's answer deadline while there isn't. The
+ * saved copy is cut by it — a user with more active orders than fit gets
+ * the ones that run out first (TASK-023 requirement 1).
+ */
+const DEADLINE_AT = sql`coalesce(${customerOrder.expiresAt}, ${customerOrder.respondBy})`;
+
+/**
+ * How many orders above the limit are read for the copy: some of them may
+ * turn out to be past their deadline and drop out, and the copy should
+ * still be full.
+ */
+const EXPIRY_HEADROOM = 11;
+
+/**
+ * The order of the cards of M-ORD-02: «Нужен ваш ответ» first (EPIC-13
+ * brings the orders that ask for one), then «Можно забирать», then by
+ * date — the nearest deadline first, the id settling a tie so two
+ * refreshes never disagree.
+ */
+function inCardOrder(rows: readonly OrderRow[]): OrderRow[] {
+  const rank = (row: OrderRow) => (row.status === "ready" ? 0 : 1);
+  const deadline = (row: OrderRow) => (row.expiresAt ?? row.respondBy).getTime();
+  return [...rows].sort(
+    (a, b) => rank(a) - rank(b) || deadline(a) - deadline(b) || (a.id < b.id ? -1 : 1),
+  );
+}
 
 /** A time column to the microsecond: the position of a row in a list. */
 function positionOf(column: PgColumn): SQL<string> {
@@ -390,6 +427,132 @@ export class OrdersService {
     return userOrderView(this.database.db, row, lang);
   }
 
+  /**
+   * Every active order of the user in one answer, for the copy the app
+   * keeps on the device (PRODUCT 6.7; SCREENS «Сохранённая копия»;
+   * TASK-023 requirement 1). No cursor and no filter: the answer replaces
+   * the copy whole, so it must be of a size that can be predicted —
+   * `active_orders_copy_limit` orders at most, and if the user has more,
+   * the ones whose deadline is nearest, because those are the ones to be
+   * at a counter with.
+   *
+   * A deadline is its time, not the sweeper's delay (TASK-022, debt 5):
+   * an order already past its own is expired here, before the copy is
+   * built, so nothing that has run out is saved on a device as active.
+   * The clock is the database's (debt 6) — the app shows «Обновлено в
+   * {время}» by it, not by the device's.
+   */
+  async activeCopy(accountId: string, lang: CatalogLanguage): Promise<ActiveOrdersResponse> {
+    const limit = await this.settings.get("active_orders_copy_limit");
+    const serverTime = await databaseNow(this.database.db);
+    const mine = and(
+      eq(customerOrder.userAccountId, accountId),
+      inArray(customerOrder.status, ACTIVE),
+    )!;
+    // A few more than the limit are read, so that the orders dropped for
+    // having run out don't leave the copy short.
+    const candidates = await this.database.db
+      .select()
+      .from(customerOrder)
+      .where(mine)
+      .orderBy(asc(DEADLINE_AT), asc(customerOrder.id))
+      .limit(limit + EXPIRY_HEADROOM);
+    const fresh = await this.freshMany(candidates, serverTime);
+    const [counted] = await this.database.db
+      .select({ value: count() })
+      .from(customerOrder)
+      .where(mine);
+    const total = counted?.value ?? 0;
+    const shown = fresh.slice(0, limit);
+    return {
+      language: lang,
+      serverTime: serverTime.toISOString(),
+      orders: await activeCopyEntries(this.database.db, inCardOrder(shown), lang),
+      total,
+      limit,
+      truncated: total > shown.length,
+    };
+  }
+
+  /**
+   * The finished orders of the user in months of the club's time zone
+   * (SCREENS M-ORD-02 «История»; TASK-023 requirement 2). The page walks
+   * by the moment an order finished, newest first: an order that finishes
+   * while the user is paging lands above the cursor, so nothing already
+   * shown is lost or shown twice, and the months of the pages follow one
+   * another (a month split over two pages is joined by its name).
+   */
+  async historyPage(
+    accountId: string,
+    query: UserOrderHistoryQuery,
+    lang: CatalogLanguage,
+  ): Promise<UserOrderHistoryPage> {
+    const mine = and(
+      eq(customerOrder.userAccountId, accountId),
+      notInArray(customerOrder.status, ACTIVE),
+    )!;
+    const after = cursorAt(query.cursor);
+    const position = positionOf(customerOrder.finishedAt);
+    const found = await this.database.db
+      .select({ order: customerOrder, position })
+      .from(customerOrder)
+      .where(
+        and(
+          mine,
+          after
+            ? sql`(${customerOrder.finishedAt}, ${customerOrder.id}) < (${after.position}::timestamptz, ${after.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(customerOrder.finishedAt), desc(customerOrder.id))
+      .limit(query.limit + 1);
+    const { rows, nextCursor } = this.paged(found, query.limit);
+    const [counted] = await this.database.db
+      .select({ value: count() })
+      .from(customerOrder)
+      .where(mine);
+    return {
+      language: lang,
+      timeZone: ALMATY_TIME_ZONE,
+      months: await historyMonths(this.database.db, rows, lang, ALMATY_TIME_ZONE),
+      total: counted?.value ?? 0,
+      nextCursor,
+    };
+  }
+
+  /** «Повторить заказ» (TASK-023 requirement 3): what the button can do now. */
+  async repeat(
+    accountId: string,
+    orderId: string,
+    lang: CatalogLanguage,
+  ): Promise<RepeatOrderResponse> {
+    const row = await this.userRow(this.database.db, accountId, orderId);
+    return repeatView(
+      this.database.db,
+      row,
+      await this.clubAccess.has(accountId),
+      lang,
+      await databaseNow(this.database.db),
+    );
+  }
+
+  /**
+   * The rows of a list with every deadline that has passed applied, as the
+   * card of one order does (TASK-022, debt 5): the orders that are no
+   * longer active drop out. Only the rows that are actually past a
+   * deadline cost a transaction, so an ordinary copy costs none.
+   */
+  private async freshMany(rows: readonly OrderRow[], at: Date): Promise<OrderRow[]> {
+    const result: OrderRow[] = [];
+    for (const row of rows) {
+      const current = dueDeadline(row, at) === null ? row : await this.fresh(row);
+      if (isActiveOrderStatus(current.status)) {
+        result.push(current);
+      }
+    }
+    return result;
+  }
+
   /** Cancelling: any time before the order is given out (PRODUCT 10.2), accepted ones too. */
   async cancel(accountId: string, orderId: string, lang: CatalogLanguage): Promise<UserOrder> {
     const row = await this.run({
@@ -517,7 +680,6 @@ export class OrdersService {
     body: DeclineOrderBody,
     lang: CatalogLanguage,
   ): Promise<DeclineOrderResponse> {
-    await this.countAction(actor);
     const row = await this.run({
       scope: (tx) => this.supplierRow(tx, actor.supplierId, orderId),
       request: {
@@ -550,47 +712,12 @@ export class OrdersService {
     expectedVersion: number,
     lang: CatalogLanguage,
   ): Promise<SupplierOrder> {
-    await this.countAction(actor);
     const row = await this.run({
       scope: (tx) => this.supplierRow(tx, actor.supplierId, orderId),
       request: { orderId, action, actor, channel: "supplier_web", expectedVersion },
       forUser: false,
     });
     return supplierOrderView(this.database.db, row, lang);
-  }
-
-  /**
-   * One action of an employee on orders against `order_actions_per_member`
-   * (TASK-022, debt 1 of TASK-021): without it a script could press
-   * «Принять» on a handled order for ever and fill its journal. Redis down
-   * — the action is served (it is guarded by the status and the version
-   * anyway, and refusing it would stop a shop from working) and the outage
-   * is reported once a minute.
-   */
-  private async countAction(actor: OrderSupplierActor): Promise<void> {
-    const [max, windowSeconds] = await Promise.all([
-      this.settings.get("order_actions_per_member"),
-      this.settings.get("order_actions_per_member_window_seconds"),
-    ]);
-    let hit;
-    try {
-      hit = await this.limiter.hit(`order-action:${actor.memberId}`, { max, windowSeconds });
-    } catch (error) {
-      if (!(error instanceof RateLimiterUnavailableError)) {
-        throw error;
-      }
-      const now = Date.now();
-      if (now - this.lastUnavailableWarning >= UNAVAILABLE_WARNING_INTERVAL_MS) {
-        this.lastUnavailableWarning = now;
-        this.logger.warn(`Order action served without the limit: ${error.message}`);
-      }
-      return;
-    }
-    if (!hit.allowed) {
-      this.metrics.countRateLimitHit("order_actions_per_member");
-      this.logger.warn(`Rate limit hit limit=order_actions_per_member member=${actor.memberId}`);
-      throw rateLimitedException("order_actions_per_member", hit.retryAfterSeconds);
-    }
   }
 
   private async supplierRow(executor: DbExecutor, supplierId: string, orderId: string) {

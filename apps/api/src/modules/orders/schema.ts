@@ -19,7 +19,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { account, adminUser, supplier, supplierMember } from "../identity";
 
 /**
@@ -145,6 +145,20 @@ export const userDisciplineEvent = pgTable("user_discipline_event", {
 });
 
 export type DisciplineRow = typeof userDisciplineEvent.$inferSelect;
+
+/**
+ * The SQL twin of `countsInStatistics` (`@adclub/domain`, ARCHITECTURE
+ * 4.33): the orders a supplier is judged by. An employee's own order with
+ * their company is a test one and counts nowhere (PRODUCT 12.6). Every
+ * counter that judges a supplier — the signal of D-043, the rating of
+ * TASK-050, the dashboard of TASK-034 — stands on this condition or on
+ * the function, never on a rule written again. The counters of the
+ * cabinet's tabs are not such a counter: they are the company's own work
+ * queue, and a test order still needs an answer.
+ */
+export function inSupplierStatistics(): SQL {
+  return sql`${customerOrder.isTest} = false`;
+}
 
 /** Every table this module owns — checked against the migrated database. */
 export const orderTables = [customerOrder, orderEvent, userDisciplineEvent];

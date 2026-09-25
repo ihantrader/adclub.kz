@@ -129,6 +129,15 @@ export function SessionRoute(route: ApiRouteDefinition): MethodDecorator {
   return ApiRoute(route, { guards: [SessionGuard] });
 }
 
+/**
+ * The session `SessionGuard` authenticated for this request; `null` — it
+ * hasn't run for it. For guards that run after it (the limits per account
+ * and per employee of session routes, TASK-023).
+ */
+export function authenticatedSessionOf(request: Request): AuthenticatedSession | null {
+  return authenticatedSessions.get(request) ?? null;
+}
+
 /** The session `SessionGuard` authenticated for this request. */
 export const CurrentSession = createParamDecorator(
   (_data: unknown, context: ExecutionContext): AuthenticatedSession => {

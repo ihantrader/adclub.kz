@@ -34,7 +34,7 @@ const RATE_LIMIT_GUARD = Symbol("RATE_LIMIT_GUARD");
 
 /**
  * Marks the guard that counts the `rateLimit` of an open route
- * (`PublicRateLimitGuard`, TASK-016). A route whose contract declares a
+ * (`RouteRateLimitGuard`, TASK-016). A route whose contract declares a
  * limit is bound only together with it, so a limited route can't be
  * served without its limit.
  */

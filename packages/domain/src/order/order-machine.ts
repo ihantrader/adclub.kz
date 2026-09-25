@@ -30,7 +30,15 @@ export const orderStatuses = [
 
 export type OrderStatus = (typeof orderStatuses)[number];
 
-/** The statuses an order is still going through; the code of an order is unique among these. */
+/**
+ * The statuses an order is still going through — **the one definition of
+ * «активная заявка»** (TASK-023 requirement 1): it is active until it
+ * reaches a final status. M-ORD-02 «Активные» shows exactly these («все
+ * незавершённые»), the confirmation code is unique among these, and the
+ * saved copy of the app holds these (a `created` order is in the copy too:
+ * offline the user still sees «Ждём ответа поставщика», and D-026 gives
+ * that card the district but not the address).
+ */
 export const activeOrderStatuses = [
   "created",
   "accepted",
@@ -41,6 +49,27 @@ export type ActiveOrderStatus = (typeof activeOrderStatuses)[number];
 
 export function isActiveOrderStatus(status: OrderStatus): status is ActiveOrderStatus {
   return (activeOrderStatuses as readonly OrderStatus[]).includes(status);
+}
+
+/**
+ * The narrower set PRODUCT 6.7 names — the orders «по которым предстоит
+ * получение»: the supplier has taken them on and the item is waiting for
+ * the user, so the confirmation code and the way to the pickup point
+ * matter offline. For an item in stock that is «принята» and «готова к
+ * выдаче»; EPIC-13 adds «срок подтверждён» (under order) and «время
+ * подтверждено» (a service) here, not to `activeOrderStatuses`.
+ *
+ * It is a subset of `activeOrderStatuses`, not a second definition of
+ * «active»: the saved copy carries every active order and marks these
+ * apart (`awaitsReceipt`), because M-ORD-02 shows all of them offline.
+ */
+export const awaitingReceiptOrderStatuses = [
+  "accepted",
+  "ready",
+] as const satisfies readonly ActiveOrderStatus[];
+
+export function orderAwaitsReceipt(status: OrderStatus): boolean {
+  return (awaitingReceiptOrderStatuses as readonly OrderStatus[]).includes(status);
 }
 
 /**

@@ -16,7 +16,7 @@ import {
 import { pickLanguage } from "@adclub/i18n";
 import type { Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
-import { RateLimitedRoute } from "../../public-rate-limit";
+import { RateLimitedRoute } from "../../rate-limit";
 import { OptionalSession, type AuthenticatedSession } from "../identity";
 import { ShowcaseService } from "./showcase.service";
 

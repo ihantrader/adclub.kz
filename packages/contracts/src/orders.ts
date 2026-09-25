@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { catalogLanguageSchema, localizedTextSchema } from "./catalog";
-import { OFFER_PRICE_LIMIT, offerAvailabilitySchema } from "./offers";
+import { OFFER_PRICE_LIMIT, offerAvailabilitySchema, offerReceiptSchema } from "./offers";
 import { dayHoursSchema } from "./suppliers";
 
 /**
@@ -24,6 +24,14 @@ import { dayHoursSchema } from "./suppliers";
  * the no-show of the customer is kept as the club's own discipline mark
  * and lifted when the order is closed late after all. Orders under order
  * and for services — EPIC-13.
+ *
+ * TASK-023 (PRODUCT 6.5, 6.7, 10.1, 12.6; SCREENS M-ORD-02, M-ORD-03,
+ * M-ORD-04, «Сохранённая копия»; ARCHITECTURE 4.33; D-026, D-059) adds the
+ * three answers the app's own screens of orders need: every active order
+ * in one answer, to keep on the device and read without a network; the
+ * finished ones in months of the club's time zone, with what the buttons
+ * under them may do; and what «Повторить» can do right now — the same
+ * offer at the price it has today, or a plain reason why not.
  */
 
 /** Upper bounds of the contract; the working bound of the quantity is the setting `order_max_quantity`. */
@@ -480,6 +488,240 @@ export const userOrderPageSchema = z.object({
 });
 
 export type UserOrderPage = z.infer<typeof userOrderPageSchema>;
+
+// ------------------------------------------- the saved copy (TASK-023)
+
+/**
+ * The date the card of an active order leads with (SCREENS M-ORD-02
+ * «главная дата»): `respond_by` — «Ответит до {время}» while the supplier
+ * hasn't answered; `reserve_until` — «Резерв до 15:00, 15 марта» once the
+ * order is accepted or ready for pickup. `null` — there is no date to
+ * lead with (delivery, which lives until it is handed over — PRODUCT
+ * 10.4). EPIC-13 adds a kind for the time of a service and the term of an
+ * order under order.
+ */
+export const activeOrderMainDateSchema = z.object({
+  kind: z.enum(["respond_by", "reserve_until"]),
+  at: z.iso.datetime(),
+});
+
+export type ActiveOrderMainDate = z.infer<typeof activeOrderMainDateSchema>;
+
+/**
+ * One active order in the copy the app keeps on the device (PRODUCT 6.7;
+ * SCREENS «Сохранённая копия», M-ORD-02, M-ORD-03, M-ORD-04) — everything
+ * needed without a network and nothing else: no prices of the catalog, no
+ * availability, no garage, no history, no course of the order.
+ *
+ * - `confirmation` — the code and the QR the user shows: the reason the
+ *   copy exists at all (every order here is active, so it always has
+ *   them);
+ * - `supplier` — the name, the city and the district, from the first
+ *   moment (the order was placed with club access; D-026);
+ * - `pickupPoint` — the address, the hours, the closed dates and the
+ *   phone, **only once the supplier accepted** (D-026): that is when the
+ *   user has somewhere to go;
+ * - `awaitsReceipt` — PRODUCT 6.7 «предстоит получение»: the supplier has
+ *   taken the order on and the item waits;
+ * - `needsAnswer` — SCREENS M-ORD-02 «Нужен ваш ответ»: an order in stock
+ *   never asks for one; EPIC-13 (another term, another time) does.
+ */
+export const activeOrderSchema = z.object({
+  id: z.uuid(),
+  number: z.number().int(),
+  kind: orderKindSchema,
+  status: orderStatusSchema,
+  fulfillment: orderFulfillmentSchema,
+  ...moneyFields,
+  item: orderItemSchema,
+  supplier: userOrderSupplierSchema,
+  pickupPoint: userOrderPickupPointSchema.optional(),
+  confirmation: orderConfirmationSchema,
+  mainDate: activeOrderMainDateSchema.nullable(),
+  awaitsReceipt: z.boolean(),
+  needsAnswer: z.boolean(),
+  respondBy: z.iso.datetime(),
+  reserveUntil: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  /** The order last changed then: the app merges a copy by it. */
+  updatedAt: z.iso.datetime(),
+});
+
+export type ActiveOrder = z.infer<typeof activeOrderSchema>;
+
+/**
+ * `GET /active-orders` (SCREENS «Сохранённая копия»): every active order
+ * of the user in one answer, meant to replace the copy on the device
+ * whole — no cursors, no filters. The order is the one M-ORD-02 shows:
+ * «Нужен ваш ответ», then «Можно забирать», then by date.
+ *
+ * `serverTime` is the clock of the server, so the app can show «Обновлено
+ * в {время}» by a time that isn't the device's. `limit` is the setting
+ * `active_orders_copy_limit`: a user with more active orders than that
+ * gets the ones whose deadline is nearest (`truncated: true`), because
+ * those are the ones to be at a counter with.
+ */
+export const activeOrdersResponseSchema = z.object({
+  language: catalogLanguageSchema,
+  serverTime: z.iso.datetime(),
+  orders: z.array(activeOrderSchema),
+  /** How many active orders the user has in all. */
+  total: z.number().int(),
+  /** At most this many are in the answer. */
+  limit: z.number().int(),
+  /** `total` is above `limit`: the nearest deadlines are here, the rest aren't. */
+  truncated: z.boolean(),
+});
+
+export type ActiveOrdersResponse = z.infer<typeof activeOrdersResponseSchema>;
+
+// ------------------------------------------------- the history (TASK-023)
+
+/**
+ * One finished order in «История» (SCREENS M-ORD-02): the status, the
+ * date, the item, the sum and the supplier, and what the buttons under it
+ * may do.
+ *
+ * - `canRepeat` — «Повторить» is worth showing; whether the same offer can
+ *   be ordered right now is answered by `GET /orders/{orderId}/repeat`,
+ *   which also gives the price as it is today;
+ * - `canReview` — «Оценить»: the order was given out and no review has
+ *   been left. Reviews themselves are TASK-049; a test order of an
+ *   employee is never reviewed (M-ORD-05).
+ *
+ * How an order was given out — by an employee in time, late, or by the
+ * administrator — is not here: the user sees the ordinary «Получено»
+ * (SCREENS M-ORD-03 «Правила», D-043). `givenOut.late` is the only mark,
+ * and it carries no reason.
+ */
+export const userHistoryOrderSchema = z.object({
+  id: z.uuid(),
+  number: z.number().int(),
+  kind: orderKindSchema,
+  status: orderStatusSchema,
+  fulfillment: orderFulfillmentSchema,
+  isTest: z.boolean(),
+  ...moneyFields,
+  item: orderItemSchema,
+  supplier: userOrderSupplierSchema,
+  /** When the order reached its final status — the date the month groups by. */
+  finishedAt: z.iso.datetime(),
+  givenOut: orderGivenOutSchema.nullable(),
+  canRepeat: z.boolean(),
+  canReview: z.boolean(),
+  createdAt: z.iso.datetime(),
+});
+
+export type UserHistoryOrder = z.infer<typeof userHistoryOrderSchema>;
+
+/**
+ * A month of the history, `YYYY-MM` in the club's time zone. A month may
+ * be split over two pages — the app joins the groups by `month`.
+ */
+export const userHistoryMonthSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, { message: "Must be YYYY-MM" }),
+  orders: z.array(userHistoryOrderSchema),
+});
+
+export type UserHistoryMonth = z.infer<typeof userHistoryMonthSchema>;
+
+export const userOrderHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
+  cursor: z.string().min(1).max(200).optional(),
+});
+
+export type UserOrderHistoryQuery = z.infer<typeof userOrderHistoryQuerySchema>;
+
+/**
+ * `GET /order-history` (M-ORD-02 «История»): finished orders newest first,
+ * in groups of months. `timeZone` is the zone the months are counted in —
+ * the club's, so an order finished at 00:30 in Almaty belongs to that day
+ * wherever the user is. `total: 0` is the empty state «Здесь появятся
+ * выполненные заявки».
+ */
+export const userOrderHistoryPageSchema = z.object({
+  language: catalogLanguageSchema,
+  timeZone: z.string(),
+  months: z.array(userHistoryMonthSchema),
+  /** Every finished order of the user, whatever this page holds. */
+  total: z.number().int(),
+  nextCursor: z.string().nullable(),
+});
+
+export type UserOrderHistoryPage = z.infer<typeof userOrderHistoryPageSchema>;
+
+// ------------------------------------------- repeating an order (TASK-023)
+
+/** The offer to order again, with its price as it is now — never the snapshot's. */
+export const repeatOfferSchema = z.object({
+  id: z.uuid(),
+  price: z.number().int(),
+  availability: offerAvailabilitySchema,
+  leadDays: z.number().int(),
+  pickup: z.boolean(),
+  delivery: z.boolean(),
+  warrantyMonths: z.number().int().nullable(),
+  warrantyText: z.string().nullable(),
+  supplier: userOrderSupplierSchema,
+  /** When the user would get the item if the order were confirmed now. */
+  receipt: offerReceiptSchema,
+});
+
+export type RepeatOffer = z.infer<typeof repeatOfferSchema>;
+
+/** The same offer can't be ordered, but the item is still in the catalog. */
+export const repeatBlockedReasonSchema = z.enum([
+  /** «Поставщик снял это предложение» (M-ORD-01). */
+  "offer_withdrawn",
+  /** Paused, blocked, or its point can't give a receipt date now. */
+  "supplier_unavailable",
+]);
+
+export type RepeatBlockedReason = z.infer<typeof repeatBlockedReasonSchema>;
+
+/** There is nothing to repeat at all. */
+export const repeatUnavailableReasonSchema = z.enum([
+  /** The item left the catalog (archived, or its category hidden). */
+  "item_unavailable",
+  /** No club access to order with (D-059): the app shows the subscription. */
+  "club_access_required",
+  /** Services and orders under order — EPIC-13. */
+  "kind_not_supported",
+]);
+
+export type RepeatUnavailableReason = z.infer<typeof repeatUnavailableReasonSchema>;
+
+/**
+ * `GET /orders/{orderId}/repeat` (SCREENS M-ORD-02, M-ORD-03 «Повторить
+ * заказ», F1x): what «Повторить» can do right now. The order itself is
+ * then placed by the ordinary `POST /orders` with `offer.id` and
+ * `offer.price` as `expectedPrice` — repeating is no second way to create
+ * an order.
+ */
+export const repeatOrderResponseSchema = z.discriminatedUnion("result", [
+  z.object({
+    result: z.literal("offer"),
+    item: orderItemSchema,
+    offer: repeatOfferSchema,
+    /** What the finished order was, to fill the checkout in with. */
+    previous: z.object({
+      quantity: z.number().int(),
+      fulfillment: orderFulfillmentSchema,
+      unitPrice: z.number().int(),
+    }),
+    /** The price is not the one of the finished order («Цена изменилась»). */
+    priceChanged: z.boolean(),
+  }),
+  /** Open the item's card in the catalog: somebody else may have it. */
+  z.object({
+    result: z.literal("catalog"),
+    item: orderItemSchema,
+    reason: repeatBlockedReasonSchema,
+  }),
+  z.object({ result: z.literal("unavailable"), reason: repeatUnavailableReasonSchema }),
+]);
+
+export type RepeatOrderResponse = z.infer<typeof repeatOrderResponseSchema>;
 
 // -------------------------------------------------------------- the supplier
 

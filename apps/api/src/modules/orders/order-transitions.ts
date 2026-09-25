@@ -26,6 +26,7 @@ import { AdminSignals } from "../signals";
 import { Discipline } from "./order-discipline";
 import {
   customerOrder,
+  inSupplierStatistics,
   orderEvent,
   type OrderEventChannel,
   type OrderEventRow,
@@ -693,6 +694,9 @@ export class OrderTransitions {
           eq(customerOrder.supplierId, order.supplierId),
           eq(customerOrder.closeMethod, "admin"),
           gte(customerOrder.closedAt, since),
+          // The one place that decides what a supplier is judged by
+          // (4.33): a test order of an employee never raises a signal.
+          inSupplierStatistics(),
         ),
       );
     const closes = counted?.value ?? 0;

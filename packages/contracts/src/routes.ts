@@ -172,15 +172,26 @@ import {
   revokeClubAccessBodySchema,
 } from "./club-access";
 import {
+  adminCloseOrderBodySchema,
+  adminDisciplineListQuerySchema,
+  adminDisciplineMarkResponseSchema,
+  adminDisciplinePageSchema,
+  adminDisciplineUsersPageSchema,
+  adminDisciplineUsersQuerySchema,
   adminOrderListQuerySchema,
   adminOrderPageSchema,
   adminOrderResponseSchema,
+  closeOrderResponseSchema,
   createOrderBodySchema,
   createOrderResponseSchema,
   declineOrderBodySchema,
   declineOrderResponseSchema,
+  disciplinePathSchema,
   orderActionBodySchema,
+  orderCredentialSchema,
+  orderLookupResponseSchema,
   orderPathSchema,
+  revokeDisciplineBodySchema,
   supplierOrderListQuerySchema,
   supplierOrderPageSchema,
   supplierOrderResponseSchema,
@@ -188,6 +199,7 @@ import {
   userOrderPageSchema,
   userOrderResponseSchema,
 } from "./orders";
+import { adminSignalListQuerySchema, adminSignalPageSchema } from "./signals";
 import {
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
@@ -3225,6 +3237,116 @@ export const apiRoutes = {
     pathParams: orderPathSchema,
     responses: {
       200: { description: "The order", schema: adminOrderResponseSchema },
+    },
+  }),
+  // --------------------------------- giving an order out (TASK-022)
+  lookupSupplierOrder: defineRoute({
+    operationId: "lookupSupplierOrder",
+    method: "POST",
+    path: "/supplier/orders/lookup",
+    summary:
+      "Find an order of the company by the code the customer says or by the content of their QR (S-SCAN-02, S-SCAN-03): the item, the quantity, the sum and whether it may be given out now or late. Another company's order says only that; a code that points nowhere says only that. The credential goes in the body, never in the path",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "The code or the QR", schema: orderCredentialSchema },
+    responses: {
+      200: { description: "What the scanner found", schema: orderLookupResponseSchema },
+    },
+  }),
+  closeSupplierOrder: defineRoute({
+    operationId: "closeSupplierOrder",
+    method: "POST",
+    path: "/supplier/orders/close",
+    summary:
+      "Give an order of the company out against the code or the QR — the only way to «Выдана» besides the administrator's close (S-SCAN-04). Works from «Принята» and «Готова» (D-040) and, inside the late close window, on an order whose pickup reserve expired (PRODUCT 10.7); an order already given out answers so without a second entry in its journal",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "The code or the QR", schema: orderCredentialSchema },
+    responses: {
+      200: { description: "The order given out, or why not", schema: closeOrderResponseSchema },
+    },
+  }),
+  closeAdminOrder: defineRoute({
+    operationId: "closeAdminOrder",
+    method: "POST",
+    path: "/admin/orders/{orderId}/close",
+    summary:
+      "Close a disputed order without a code, with a reason (A-ORD-02, D-043): it becomes «Выдана», marked «Закрыта администратором» for the supplier and the administrator, and the customer's discipline mark for it is lifted. A cancelled, a declined or an already given out order can't be closed this way",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: orderPathSchema,
+    requestBody: {
+      description: "The version seen and the reason",
+      schema: adminCloseOrderBodySchema,
+    },
+    responses: {
+      200: { description: "The closed order", schema: adminOrderResponseSchema },
+    },
+  }),
+  listAdminDiscipline: defineRoute({
+    operationId: "listAdminDiscipline",
+    method: "GET",
+    path: "/admin/discipline",
+    summary:
+      "The club's discipline marks of users (A-USR-02): by account, order or supplier, standing or lifted, in a period. The user is never shown these anywhere",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminDisciplineListQuerySchema,
+    responses: {
+      200: { description: "The marks", schema: adminDisciplinePageSchema },
+    },
+  }),
+  listAdminDisciplineUsers: defineRoute({
+    operationId: "listAdminDisciplineUsers",
+    method: "GET",
+    path: "/admin/discipline/users",
+    summary: "Users with no-shows in a period, how many and the last one (A-USR-03)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminDisciplineUsersQuerySchema,
+    responses: {
+      200: { description: "The users", schema: adminDisciplineUsersPageSchema },
+    },
+  }),
+  revokeAdminDiscipline: defineRoute({
+    operationId: "revokeAdminDiscipline",
+    method: "POST",
+    path: "/admin/discipline/{markId}/revoke",
+    summary:
+      "Lift a discipline mark by hand, only with a reason (A-ORD-02 «Снять дисциплинарную отметку»); the mark is kept as lifted and the action goes to the action journal",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: disciplinePathSchema,
+    requestBody: { description: "Why", schema: revokeDisciplineBodySchema },
+    responses: {
+      200: { description: "The lifted mark", schema: adminDisciplineMarkResponseSchema },
+    },
+  }),
+  listAdminSignals: defineRoute({
+    operationId: "listAdminSignals",
+    method: "GET",
+    path: "/admin/signals",
+    summary:
+      "Signals for a person to look at (A-HOME): a second order on the same item after a late close, too many closes by an administrator at one supplier",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminSignalListQuerySchema,
+    responses: {
+      200: { description: "The signals", schema: adminSignalPageSchema },
     },
   }),
 } as const;

@@ -13,15 +13,25 @@ import { dayHoursSchema } from "./suppliers";
  * an employee — seen by the supplier and the administrator, never by the
  * user. The confirmation code and the QR go to the user only: no answer
  * to the supplier or the administrator has them. The user's phone number
- * reaches the supplier only once that order is accepted. Closing by the
- * code or the QR — TASK-022; orders under order and for services —
- * EPIC-13.
+ * reaches the supplier only once that order is accepted.
+ *
+ * TASK-022 (PRODUCT 10.1, 10.5, 10.7; SCREENS S-SCAN-01…04, A-ORD-01,
+ * A-ORD-02, A-USR-01…03; ARCHITECTURE 6.5, 4.32; D-043) adds the end of
+ * the order: an employee of the company finds it by the code the customer
+ * says or by the content of the QR and gives it out — the only way to
+ * «Выдана» besides the administrator's close with a reason. An order whose
+ * pickup reserve expired is still given out inside the late close window;
+ * the no-show of the customer is kept as the club's own discipline mark
+ * and lifted when the order is closed late after all. Orders under order
+ * and for services — EPIC-13.
  */
 
 /** Upper bounds of the contract; the working bound of the quantity is the setting `order_max_quantity`. */
 export const ORDER_QUANTITY_LIMIT = 999;
 export const ORDER_COMMENT_MAX_LENGTH = 500;
 export const ORDER_DECLINE_NOTE_MAX_LENGTH = 300;
+/** Why the administrator closed an order without a code, or lifted a discipline mark. */
+export const ORDER_REASON_MAX_LENGTH = 300;
 export const ORDER_PAGE_MAX_SIZE = 100;
 export const ORDER_PAGE_DEFAULT_SIZE = 30;
 /** The confirmation code: this many digits (spoken and typed on a keypad at a counter). */
@@ -55,7 +65,8 @@ const expectedVersionSchema = z.number().int().min(1);
  * `created` — waits for the supplier's answer (until `respondBy`);
  * `accepted` — the supplier accepted it (the user's phone is open to it);
  * `ready` — ready to be given out (optional, D-040); `completed` — given
- * out by the code or the QR (TASK-022); `cancelled_by_user`;
+ * out by the code or the QR, or closed by the administrator with a reason;
+ * `cancelled_by_user`;
  * `declined_by_supplier`; `response_expired` — the supplier didn't answer
  * in time; `reserve_expired` — the user didn't come for it in time
  * (pickup). The last five are final.
@@ -92,7 +103,9 @@ export type OrderDeclineReason = z.infer<typeof orderDeclineReasonSchema>;
 
 /**
  * Entries of the order's journal: the moves of the state machine
- * (`create`, `accept`, `decline`, `mark_ready`, `close`, `cancel`,
+ * (`create`, `accept`, `decline`, `mark_ready`, `close`, `close_late` —
+ * given out inside the late close window (PRODUCT 10.7), `admin_close` —
+ * closed by the administrator without a code (D-043), `cancel`,
  * `expire_no_response` — «нет ответа», `expire_reserve`) and two notes
  * that move nothing: `reserve_expiring` — the reserve ends in
  * `reserve_warning_hours` (the notification — EPIC-09), and
@@ -105,6 +118,8 @@ export const orderEventActionSchema = z.enum([
   "decline",
   "mark_ready",
   "close",
+  "close_late",
+  "admin_close",
   "cancel",
   "expire_no_response",
   "expire_reserve",
@@ -115,9 +130,27 @@ export const orderEventActionSchema = z.enum([
 export type OrderEventAction = z.infer<typeof orderEventActionSchema>;
 
 /** The actions a person can try on an order (named in `late_action_ignored`). */
-export const orderAttemptedActionSchema = z.enum(["accept", "decline", "mark_ready", "cancel"]);
+export const orderAttemptedActionSchema = z.enum([
+  "accept",
+  "decline",
+  "mark_ready",
+  "close",
+  "close_late",
+  "admin_close",
+  "cancel",
+]);
 
 export type OrderAttemptedAction = z.infer<typeof orderAttemptedActionSchema>;
+
+/**
+ * How an order was given out: `qr` — an employee scanned the customer's QR,
+ * `code` — typed the six digits the customer said, `admin` — the
+ * administrator closed a disputed order without a code, with a reason
+ * (D-043). There is no fourth way to «Выдана».
+ */
+export const orderCloseMethodSchema = z.enum(["qr", "code", "admin"]);
+
+export type OrderCloseMethod = z.infer<typeof orderCloseMethodSchema>;
 
 // ------------------------------------------------------------------- parts
 
@@ -179,6 +212,8 @@ export const orderEventDetailsSchema = z.object({
   receiptOn: dateSchema.optional(),
   /** `late_action_ignored`: what the employee tried. */
   attemptedAction: orderAttemptedActionSchema.optional(),
+  /** `close`, `close_late`, `admin_close`: how the order was given out. */
+  closeMethod: orderCloseMethodSchema.optional(),
 });
 
 export type OrderEventDetails = z.infer<typeof orderEventDetailsSchema>;
@@ -203,6 +238,77 @@ export const orderEventSchema = z.object({
 });
 
 export type OrderEvent = z.infer<typeof orderEventSchema>;
+
+/**
+ * How the order was given out, for the supplier and the administrator
+ * (S-ORD-02, A-ORD-02): when, by which of the three ways, which employee
+ * (`admin` — the administrator, `late` — closed inside the late close
+ * window after the reserve had expired). The reason of an administrator's
+ * close is internal: only their own view carries it.
+ */
+export const orderClosureSchema = z.object({
+  at: z.iso.datetime(),
+  method: orderCloseMethodSchema,
+  by: orderActorSchema,
+  late: z.boolean(),
+});
+
+export type OrderClosure = z.infer<typeof orderClosureSchema>;
+
+/** The same, with the reason the administrator had to give (A-ORD-02). */
+export const adminOrderClosureSchema = orderClosureSchema.extend({
+  reason: z.string().nullable(),
+});
+
+export type AdminOrderClosure = z.infer<typeof adminOrderClosureSchema>;
+
+/**
+ * What the user learns about the end of their order (M-ORD-05): that it
+ * was given out, when, and whether it was closed after its time had run
+ * out. Never which employee did it, never the way and never a reason.
+ */
+export const orderGivenOutSchema = z.object({ at: z.iso.datetime(), late: z.boolean() });
+
+export type OrderGivenOut = z.infer<typeof orderGivenOutSchema>;
+
+/**
+ * The club's own discipline statistics of a user (PRODUCT 10.5; SCREENS
+ * A-USR-02, A-USR-03): `pickup_no_show` — the pickup reserve of an order
+ * the supplier had accepted ran out and nobody came for the item. It is
+ * the administrator's to see: the user is never shown it, it has no effect
+ * on the supplier's rating, and there is no public rating of a user.
+ */
+export const disciplineKindSchema = z.enum(["pickup_no_show"]);
+
+export type DisciplineKind = z.infer<typeof disciplineKindSchema>;
+
+/**
+ * Why a mark no longer counts: `late_close` — the supplier gave the order
+ * out inside the late close window after all, so the customer had come
+ * (PRODUCT 10.7); `admin_close` — the administrator closed the order;
+ * `admin` — the administrator lifted the mark by hand, with a reason.
+ */
+export const disciplineRevocationSchema = z.object({
+  at: z.iso.datetime(),
+  by: z.enum(["late_close", "admin_close", "admin"]),
+  /** The administrator's words; the two automatic reasons have none. */
+  note: z.string().nullable(),
+  adminId: z.uuid().nullable(),
+});
+
+export type DisciplineRevocation = z.infer<typeof disciplineRevocationSchema>;
+
+/** One discipline mark; `revocation` — lifted, and why (A-USR-02: «неявки, в том числе снятые»). */
+export const disciplineMarkSchema = z.object({
+  id: z.uuid(),
+  kind: disciplineKindSchema,
+  at: z.iso.datetime(),
+  order: z.object({ id: z.uuid(), number: z.number().int() }),
+  supplier: z.object({ id: z.uuid(), name: z.string() }),
+  revocation: disciplineRevocationSchema.nullable(),
+});
+
+export type DisciplineMark = z.infer<typeof disciplineMarkSchema>;
 
 /**
  * The course of the order as the user sees it (M-ORD-03 «Ход заявки»):
@@ -311,6 +417,8 @@ export const userOrderSchema = userOrderSummarySchema.extend({
   comment: z.string().nullable(),
   pickupPoint: userOrderPickupPointSchema.optional(),
   confirmation: orderConfirmationSchema.optional(),
+  /** The order was given out: when, and whether after its time (PRODUCT 10.7). */
+  givenOut: orderGivenOutSchema.nullable(),
   history: z.array(userOrderStepSchema),
 });
 
@@ -393,6 +501,8 @@ const supplierSideFields = {
   /** Who accepted or declined the order, and when; `null` — no one yet. */
   handledBy: orderActorSchema.nullable(),
   handledAt: z.iso.datetime().nullable(),
+  /** How it was given out — «Закрыта поздно», «Закрыта администратором»; `null` — not given out. */
+  closure: orderClosureSchema.nullable(),
 };
 
 /** An order in the cabinet's list (S-ORD-01): no customer data, no code. */
@@ -480,12 +590,151 @@ export const supplierOrderPageSchema = z.object({
 
 export type SupplierOrderPage = z.infer<typeof supplierOrderPageSchema>;
 
+// ------------------------------------------------- giving an order out (TASK-022)
+
+/**
+ * What the customer shows at the counter (S-SCAN-01, S-SCAN-02): exactly
+ * one of
+ *
+ * - `code` — the six digits the customer says or reads off their screen,
+ *   with or without the spaces they are shown in («482 915» = «482915»);
+ * - `qr` — the content of the scanned QR code, `ADCLUB-ORDER:<токен>`.
+ *   Anything else is `ORDER_QR_UNKNOWN` («Это не QR заявки клуба»).
+ *
+ * The credential travels in the body, never in a path or a query: it is
+ * the one secret of the order and belongs in no URL, no log and no cache.
+ */
+export const orderCredentialSchema = z
+  .object({
+    code: z.string().min(1).max(32).optional(),
+    qr: z.string().min(1).max(300).optional(),
+  })
+  .refine((body) => (body.code === undefined) !== (body.qr === undefined), {
+    message: "Send either a code or the content of a QR",
+  });
+
+export type OrderCredential = z.infer<typeof orderCredentialSchema>;
+
+/**
+ * The order on the scanner's screen (S-SCAN-03): the item and the
+ * quantity, the sum of the order, its status and the way it is to be
+ * received. No confirmation code, no QR token, no phone number of the
+ * customer — the phone opens in the card of the order once it is accepted
+ * (`GET /supplier/orders/{orderId}`), not on a screen reached by typing
+ * six digits.
+ */
+export const supplierScanOrderSchema = z.object({
+  id: z.uuid(),
+  number: z.number().int(),
+  status: orderStatusSchema,
+  version: z.number().int(),
+  isTest: z.boolean(),
+  ...moneyFields,
+  fulfillment: orderFulfillmentSchema,
+  item: orderItemSchema,
+  receiptOn: dateSchema.nullable(),
+  createdAt: z.iso.datetime(),
+});
+
+export type SupplierScanOrder = z.infer<typeof supplierScanOrderSchema>;
+
+/** Why an order this credential does point at can't be given out (S-SCAN-04). */
+export const orderCloseRefusalSchema = z.enum([
+  /** Still waiting for the company's answer: accept it first. */
+  "not_accepted",
+  /** «Клиент отменил заявку {когда}. Клубная цена по ней не действует». */
+  "cancelled_by_user",
+  /** The company declined it. */
+  "declined_by_supplier",
+  /** «Заявка истекла без ответа — закрыть её нельзя» (PRODUCT 10.7). */
+  "response_expired",
+  /** «Закрыть нельзя: прошло больше {N} часов после истечения». */
+  "late_window_passed",
+]);
+
+export type OrderCloseRefusalReason = z.infer<typeof orderCloseRefusalSchema>;
+
+/** The cases that are the same whether the employee looked up or closed. */
+const settledOutcomes = [
+  /** «Заявка уже выдана {at}, закрыл(а) {сотрудник}» — and nothing else. */
+  z.object({
+    result: z.literal("closed"),
+    at: z.iso.datetime(),
+    by: orderActorSchema,
+    late: z.boolean(),
+  }),
+  /**
+   * Found, and this is not the end of it. `lateCloseHours` — the window of
+   * the late close that has passed, for «прошло больше {N} часов».
+   */
+  z.object({
+    result: z.literal("refused"),
+    reason: orderCloseRefusalSchema,
+    /** When it came to that; `null` — it is simply not accepted yet. */
+    at: z.iso.datetime().nullable(),
+    lateCloseHours: z.number().int().optional(),
+  }),
+  /**
+   * «Эта заявка оформлена у другого поставщика» — nothing of the order,
+   * the customer, the item or the sum. The company is named only when the
+   * employee belongs to it too, so the screen can offer to switch.
+   */
+  z.object({
+    result: z.literal("other_supplier"),
+    supplier: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+  }),
+  /** «Код не найден. Проверьте цифры» — and not a word more. */
+  z.object({ result: z.literal("not_found") }),
+] as const;
+
+/** `POST /supplier/orders/lookup` (S-SCAN-03, S-SCAN-04). */
+export const orderLookupResponseSchema = z.discriminatedUnion("result", [
+  /** Found, and it may be given out now: «Выдать». */
+  z.object({ result: z.literal("ready"), order: supplierScanOrderSchema }),
+  /**
+   * Found, its pickup reserve expired, and the late close window is still
+   * open: «Срок заявки истёк {expiredAt}. Если клиент был у вас вовремя,
+   * заявку можно закрыть» (PRODUCT 10.7).
+   */
+  z.object({
+    result: z.literal("late"),
+    order: supplierScanOrderSchema,
+    expiredAt: z.iso.datetime(),
+    /** The window closes then; after that nobody but the administrator closes it. */
+    until: z.iso.datetime(),
+  }),
+  ...settledOutcomes,
+]);
+
+export type OrderLookupResponse = z.infer<typeof orderLookupResponseSchema>;
+
+/**
+ * `POST /supplier/orders/close` (S-SCAN-04): the order is given out —
+ * `given_out` with its card — or the same answer the lookup would give, so
+ * one screen shows one message. Giving out an order already given out by
+ * this company is no error: the answer is `closed`, and the journal keeps
+ * one entry.
+ */
+export const closeOrderResponseSchema = z.discriminatedUnion("result", [
+  z.object({
+    result: z.literal("given_out"),
+    order: supplierOrderSchema,
+    /** Closed inside the late close window (PRODUCT 10.7). */
+    late: z.boolean(),
+  }),
+  ...settledOutcomes,
+]);
+
+export type CloseOrderResponse = z.infer<typeof closeOrderResponseSchema>;
+
 // ------------------------------------------------------------ administrator
 
 const adminSideFields = {
   supplier: z.object({ id: z.uuid(), name: z.string() }),
   /** The customer's account and phone number (A-ORD-02 «Клиент»). */
   customer: z.object({ accountId: z.uuid(), phone: z.string() }),
+  /** As the supplier's, with the reason an administrator's close carries. */
+  closure: adminOrderClosureSchema.nullable(),
 };
 
 /** An order in the admin list (A-ORD-01): never the code or the QR. */
@@ -508,10 +757,27 @@ export const adminOrderSchema = adminOrderSummarySchema.extend({
   decline: z
     .object({ reason: orderDeclineReasonSchema.nullable(), note: z.string().nullable() })
     .nullable(),
+  /** The discipline marks of this order, lifted ones too (A-ORD-02). */
+  discipline: z.array(disciplineMarkSchema),
   events: z.array(orderEventSchema),
 });
 
 export type AdminOrder = z.infer<typeof adminOrderSchema>;
+
+/**
+ * `POST /admin/orders/{orderId}/close` (A-ORD-02 «Закрыть без кода»,
+ * D-043): a disputed order is closed without a code, and only with a
+ * reason. It becomes «Выдана», marked «Закрыта администратором» for the
+ * supplier and the administrator; the discipline mark of the customer, if
+ * any, is lifted. A cancelled, a declined or an already given out order
+ * can't be closed this way.
+ */
+export const adminCloseOrderBodySchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  reason: freeText(ORDER_REASON_MAX_LENGTH),
+});
+
+export type AdminCloseOrderBody = z.infer<typeof adminCloseOrderBodySchema>;
 
 export const adminOrderResponseSchema = z.object({ order: adminOrderSchema });
 
@@ -519,7 +785,8 @@ export type AdminOrderResponse = z.infer<typeof adminOrderResponseSchema>;
 
 /**
  * A-ORD-01: by status, supplier, period of creation (`from` inclusive,
- * `to` exclusive), number; test orders are left out by default
+ * `to` exclusive), number, «Закрыта поздно» (`closedLate`) and «Закрыта
+ * администратором» (`closedByAdmin`); test orders are left out by default
  * (`test=exclude`), shown alone (`only`) or with the others (`include`).
  * Newest first.
  */
@@ -530,6 +797,8 @@ export const adminOrderListQuerySchema = z.object({
   to: z.iso.datetime({ offset: true }).optional(),
   number: z.coerce.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
   test: z.enum(["exclude", "only", "include"]).default("exclude"),
+  closedLate: z.enum(["true", "false"]).optional(),
+  closedByAdmin: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });
@@ -545,6 +814,86 @@ export const adminOrderPageSchema = z.object({
 });
 
 export type AdminOrderPage = z.infer<typeof adminOrderPageSchema>;
+
+// ------------------------------------------------- discipline (administrator)
+
+/** A-USR-02: the marks of one user or of one order, lifted ones included. */
+export const adminDisciplineListQuerySchema = z.object({
+  accountId: z.uuid().optional(),
+  orderId: z.uuid().optional(),
+  supplierId: z.uuid().optional(),
+  /** Leave out to see the lifted ones too. */
+  state: z.enum(["all", "standing", "revoked"]).default("all"),
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
+  cursor: z.string().min(1).max(200).optional(),
+});
+
+export type AdminDisciplineListQuery = z.infer<typeof adminDisciplineListQuerySchema>;
+
+export const adminDisciplineMarkSchema = disciplineMarkSchema.extend({
+  /** Whose mark it is: the account and its phone number (A-USR-02). */
+  customer: z.object({ accountId: z.uuid(), phone: z.string() }),
+});
+
+export type AdminDisciplineMark = z.infer<typeof adminDisciplineMarkSchema>;
+
+export const adminDisciplinePageSchema = z.object({
+  marks: z.array(adminDisciplineMarkSchema),
+  total: z.number().int(),
+  nextCursor: z.string().nullable(),
+});
+
+export type AdminDisciplinePage = z.infer<typeof adminDisciplinePageSchema>;
+
+/**
+ * A-USR-03 «Неявки»: the users with marks that still stand in the period,
+ * the number of them and the last one; most marks first.
+ */
+export const adminDisciplineUsersQuerySchema = z.object({
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
+  offset: z.coerce.number().int().min(0).max(10_000).default(0),
+});
+
+export type AdminDisciplineUsersQuery = z.infer<typeof adminDisciplineUsersQuerySchema>;
+
+export const adminDisciplineUserSchema = z.object({
+  accountId: z.uuid(),
+  phone: z.string(),
+  /** Marks that still stand in the period. */
+  count: z.number().int(),
+  /** Marks lifted in the period (they are kept, not deleted). */
+  revokedCount: z.number().int(),
+  lastAt: z.iso.datetime(),
+});
+
+export type AdminDisciplineUser = z.infer<typeof adminDisciplineUserSchema>;
+
+export const adminDisciplineUsersPageSchema = z.object({
+  users: z.array(adminDisciplineUserSchema),
+  total: z.number().int(),
+  nextOffset: z.number().int().nullable(),
+});
+
+export type AdminDisciplineUsersPage = z.infer<typeof adminDisciplineUsersPageSchema>;
+
+export const disciplinePathSchema = z.object({ markId: z.uuid() });
+
+export type DisciplinePath = z.infer<typeof disciplinePathSchema>;
+
+/** A-ORD-02 «Снять дисциплинарную отметку»: only with a reason, and it leaves a trace. */
+export const revokeDisciplineBodySchema = z.object({
+  reason: freeText(ORDER_REASON_MAX_LENGTH),
+});
+
+export type RevokeDisciplineBody = z.infer<typeof revokeDisciplineBodySchema>;
+
+export const adminDisciplineMarkResponseSchema = z.object({ mark: adminDisciplineMarkSchema });
+
+export type AdminDisciplineMarkResponse = z.infer<typeof adminDisciplineMarkResponseSchema>;
 
 // ------------------------------------------------------------------ errors
 
@@ -572,6 +921,15 @@ export const orderPriceChangedDetailsSchema = z.object({
 });
 
 export type OrderPriceChangedDetails = z.infer<typeof orderPriceChangedDetailsSchema>;
+
+/**
+ * `details` of `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR
+ * of a club order («Это не QR заявки клуба»). The string itself is never
+ * echoed back.
+ */
+export const orderQrUnknownDetailsSchema = z.object({ prefix: z.literal(ORDER_QR_PREFIX) });
+
+export type OrderQrUnknownDetails = z.infer<typeof orderQrUnknownDetailsSchema>;
 
 /** `details` of `ORDER_DUPLICATE_ACTIVE` (409): the user's active order on this offer. */
 export const orderDuplicateActiveDetailsSchema = z.object({

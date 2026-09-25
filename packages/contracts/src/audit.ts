@@ -231,6 +231,25 @@ export const auditActions = {
    * has the order's number, never the phone.
    */
   orderPhoneRevealed: "order.phone_revealed",
+  /**
+   * TASK-022 (D-043): an administrator closed a disputed order without a
+   * code. `reason` — the words they had to give, `after` — the order's
+   * number and status.
+   */
+  orderClosedByAdmin: "order.closed_by_admin",
+  /**
+   * A discipline mark of a user was lifted by hand (A-ORD-02); `reason` —
+   * why. The two automatic liftings (a late close, an administrator's
+   * close) live in the mark itself and in the order's journal.
+   */
+  disciplineRevoked: "user_discipline_event.revoked",
+  /**
+   * TASK-022: too many lookups of an employee found nothing or another
+   * company's order, and the company was cut off from looking codes up for
+   * a while. Written once per window, `after` — the limit, the employee and
+   * how many failures; never a code.
+   */
+  orderLookupBlocked: "order.lookup_blocked",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -267,6 +286,8 @@ export const auditEntities = {
   clubAccessGrant: "club_access_grant",
   /** An order of a user (TASK-021). */
   order: "order",
+  /** A discipline mark of a user (TASK-022). */
+  disciplineEvent: "user_discipline_event",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

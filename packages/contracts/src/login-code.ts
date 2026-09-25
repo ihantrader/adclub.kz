@@ -142,6 +142,17 @@ export const rateLimitNameSchema = z.enum([
   "supplier_members_added_per_supplier",
   // The search of catalog items in the cabinet, per employee (TASK-018).
   "offer_item_search_per_member",
+  /**
+   * Giving orders out (TASK-022): how often an employee looks a code up at
+   * all, and — much tighter — how many lookups of theirs and of the whole
+   * company find nothing or another company's order. Six digits are a
+   * million values, so guessing them has to run into a wall.
+   */
+  "order_lookup_per_member",
+  "order_lookup_failures_per_member",
+  "order_lookup_failures_per_supplier",
+  /** Actions of one employee on orders: accept, ready, decline (TASK-022). */
+  "order_actions_per_member",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

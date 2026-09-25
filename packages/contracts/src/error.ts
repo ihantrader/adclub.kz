@@ -230,6 +230,15 @@ import { clientPlatformSchema } from "./client";
  * - `ORDER_STATE_CONFLICT` (409): the order is no longer where the action
  *   expected it (someone acted first, a deadline passed, the order is
  *   final); nothing changed. `details` is `OrderStateConflictDetails`.
+ *   Repeating one's own action is no error — but repeating a decline with
+ *   another reason is this conflict, because the reason is not changed
+ *   (TASK-022, ARCHITECTURE 4.32).
+ *
+ * Giving an order out (TASK-022, ARCHITECTURE 4.32):
+ * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
+ *   order — «Это не QR заявки клуба»; `details` is `OrderQrUnknownDetails`.
+ * - `DISCIPLINE_ALREADY_REVOKED` (409): the discipline mark has already
+ *   been lifted; nothing changed.
  *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
@@ -359,6 +368,9 @@ export const errorCodeSchema = z.enum([
   "ORDER_DUPLICATE_ACTIVE",
   "ORDER_IDEMPOTENCY_MISMATCH",
   "ORDER_STATE_CONFLICT",
+  // Giving an order out (TASK-022, ARCHITECTURE 4.32).
+  "ORDER_QR_UNKNOWN",
+  "DISCIPLINE_ALREADY_REVOKED",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

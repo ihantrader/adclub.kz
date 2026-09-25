@@ -1,6 +1,7 @@
 import {
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -141,10 +142,26 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
       // (`quay.io/minio/minio`, `minio/minio`) stopped serving anonymous
       // pulls, and CI has no account for them. This image starts the server
       // itself, so it takes no command.
+      //
+      // `MINIO_SKIP_CLIENT` makes it start the server exactly once
+      // (ARCHITECTURE 4.34 I351). Left to itself the image starts MinIO,
+      // uses it to configure `mc` and create `MINIO_DEFAULT_BUCKETS`,
+      // **stops it** and starts it again — and for those few seconds the
+      // port is closed, so an upload in flight dies with «socket hang up»
+      // and the API answers 503. The bucket this suite needs is created
+      // below, so nothing here wants that client phase.
+      //
+      // `/minio/health/cluster` answers 200 only once the object layer can
+      // take reads and writes; `/minio/health/live` answers as soon as the
+      // process listens.
       new GenericContainer("bitnamilegacy/minio:2025.7.23-debian-12-r5")
-        .withEnvironment({ MINIO_ROOT_USER: MINIO_USER, MINIO_ROOT_PASSWORD: MINIO_PASSWORD })
+        .withEnvironment({
+          MINIO_ROOT_USER: MINIO_USER,
+          MINIO_ROOT_PASSWORD: MINIO_PASSWORD,
+          MINIO_SKIP_CLIENT: "yes",
+        })
         .withExposedPorts(9000)
-        .withWaitStrategy(Wait.forHttp("/minio/health/live", 9000))
+        .withWaitStrategy(Wait.forHttp("/minio/health/cluster", 9000))
         .start(),
     ]);
     storageProxy = new TcpProxy(minio.getHost(), minio.getMappedPort(9000));
@@ -243,22 +260,44 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
     }
   }
 
+  /**
+   * The bucket, and the proof that the storage really takes objects before
+   * the first test runs (ARCHITECTURE 4.34 I351): the bucket is created and
+   * then one object is written, read back and removed. A wait strategy says
+   * the server answers; only a round trip says it serves. The attempts are
+   * for the seconds a freshly started server needs, not for an outage — a
+   * storage that cannot do this fails the file loudly instead of turning
+   * into a 503 halfway through some test.
+   */
   async function createBucket(): Promise<void> {
-    // MinIO answers 200 on /minio/health/live a moment before it takes
-    // bucket calls; a few attempts cover that.
-    const { CreateBucketCommand } = await import("@aws-sdk/client-s3");
+    const { CreateBucketCommand, DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+    // Outside the catalog's own prefix, so no test and no cleanup job ever
+    // meets it.
+    const probe = "storage-ready-check/probe.bin";
+    let last: unknown;
     for (let attempt = 0; attempt < 30; attempt++) {
       try {
-        await s3.send(new CreateBucketCommand({ Bucket: BUCKET }));
+        await s3
+          .send(new CreateBucketCommand({ Bucket: BUCKET }))
+          .catch((error: { name?: string }) => {
+            if (error.name !== "BucketAlreadyOwnedByYou") {
+              throw error;
+            }
+          });
+        await s3.send(
+          new PutObjectCommand({ Bucket: BUCKET, Key: probe, Body: Buffer.from("ready") }),
+        );
+        await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: probe }));
+        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: probe }));
         return;
       } catch (error) {
-        if ((error as { name?: string }).name === "BucketAlreadyOwnedByYou") {
-          return;
-        }
+        last = error;
         await sleep(300);
       }
     }
-    throw new Error("The test bucket could not be created");
+    throw new Error(
+      `The storage did not take an object before the tests: ${String((last as Error)?.message ?? last)}`,
+    );
   }
 
   const http = () => request(app.getHttpServer());
@@ -470,6 +509,37 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Waits until the storage's own timestamp on an object is in the past by
+   * this process's clock. The cleanup of files no record points at
+   * compares `LastModified`, which the storage writes, with `now` in the
+   * API — and a container clock that runs ahead of the host (Docker
+   * Desktop does, by half a second and more) makes a freshly written
+   * object look like the future, so a retention of zero hours spares it.
+   * Real deployments keep both clocks on NTP and the retention is hours,
+   * not zero; this is the test bench's business, and it waits for the fact
+   * it needs instead of assuming it.
+   *
+   * The timestamp is read the way the job reads it — by listing. A `HEAD`
+   * would answer the same moment truncated to the second (its header has
+   * no milliseconds), which can look past while the listing still calls it
+   * future.
+   */
+  async function inThePast(key: string): Promise<void> {
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      const page = await s3.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: key }));
+      const stored = page.Contents?.[0]?.LastModified?.getTime() ?? 0;
+      if (stored > 0 && stored < Date.now()) {
+        return;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`The storage kept ${key} stamped in the future`);
+      }
+      await sleep(100);
     }
   }
 
@@ -1018,6 +1088,7 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
       expect(await objectExists(orphan)).toBe(true);
 
       await settings.set({ photo_orphan_retention_hours: 0 });
+      await inThePast(orphan);
       await runJob("catalog.cleanup-photo-files");
       expect(await objectExists(orphan)).toBe(false);
       for (const key of stored) {

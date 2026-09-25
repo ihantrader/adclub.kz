@@ -64,21 +64,45 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-adclub}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-adclub-dev-secret}
+      # Start the server once (ARCHITECTURE 4.34 I351). Left to itself this
+      # image starts MinIO, uses it to configure `mc` and to create
+      # MINIO_DEFAULT_BUCKETS, *stops* it and starts it again — and while it
+      # is down the port is closed, so a request in flight dies with «socket
+      # hang up» and an upload answers 503. The bucket is created by the
+      # command below instead, beside the running server.
+      MINIO_SKIP_CLIENT: "yes"
       # The bucket the API stores files in (TASK-013): MinIO starts with
       # none, and an upload to a bucket that isn't there fails with an error
-      # that explains nothing. This image creates it at start, so the
-      # separate one-off container that used to do it is gone.
-      MINIO_DEFAULT_BUCKETS: ${S3_BUCKET:-adclub-dev}
+      # that explains nothing. The command below creates it.
+      S3_BUCKET: ${S3_BUCKET:-adclub-dev}
+    # Runs the server the image's own way, and beside it — once the server
+    # really serves — configures `mc` and creates the bucket. Both are the
+    # one process tree this image starts, so the server is never stopped
+    # and started again.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        (
+          until curl -fsS http://127.0.0.1:9000/minio/health/cluster >/dev/null 2>&1; do sleep 1; done
+          mc alias set local http://127.0.0.1:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+          mc mb --ignore-existing "local/$$S3_BUCKET"
+        ) &
+        exec /opt/bitnami/scripts/minio/run.sh
     ports:
       - "${S3_PORT:-9000}:9000"
       - "${S3_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/bitnami/minio/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Healthy means the storage takes object calls *and* the bucket is
+      # there — the two things an upload needs. `/minio/health/live`, which
+      # only says the process listens, answered even while the image was
+      # restarting the server (ARCHITECTURE 4.34 I351).
+      test: ["CMD-SHELL", 'mc ls "local/$$S3_BUCKET" >/dev/null']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
 volumes:
   postgres-data:

@@ -137,8 +137,11 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
     [postgres, redisContainer, minio] = await Promise.all([
       new PostgreSqlContainer("postgres:16").start(),
       new RedisContainer("redis:7").start(),
-      new GenericContainer("quay.io/minio/minio:RELEASE.2025-04-08T15-41-24Z")
-        .withCommand(["server", "/data"])
+      // The same MinIO server packaged by Bitnami: MinIO's own images
+      // (`quay.io/minio/minio`, `minio/minio`) stopped serving anonymous
+      // pulls, and CI has no account for them. This image starts the server
+      // itself, so it takes no command.
+      new GenericContainer("bitnamilegacy/minio:2025.7.23-debian-12-r5")
         .withEnvironment({ MINIO_ROOT_USER: MINIO_USER, MINIO_ROOT_PASSWORD: MINIO_PASSWORD })
         .withExposedPorts(9000)
         .withWaitStrategy(Wait.forHttp("/minio/health/live", 9000))

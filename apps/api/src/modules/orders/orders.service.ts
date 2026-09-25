@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
+  type AdminCloseOrderBody,
   type AdminOrder,
   type AdminOrderListQuery,
   type AdminOrderPage,
@@ -54,7 +55,10 @@ import {
   subscriptionRequired,
   validationError,
 } from "./order-errors";
+import { Discipline } from "./order-discipline";
 import {
+  databaseNow,
+  dueDeadline,
   OrderTransitions,
   respondByOf,
   type MoveOutcome,
@@ -120,6 +124,7 @@ export class OrdersService {
     @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
     @Inject(OfferSnapshots) private readonly snapshots: OfferSnapshots,
     @Inject(OrderTransitions) private readonly transitions: OrderTransitions,
+    @Inject(Discipline) private readonly discipline: Discipline,
     @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
     @Inject(Metrics) private readonly metrics: Metrics,
   ) {}
@@ -174,7 +179,11 @@ export class OrdersService {
     input: CreateOrderInput,
     accountId: string,
   ): Promise<{ row: OrderRow; created: boolean }> {
-    const at = new Date();
+    // The clock of the database, as every decision about time (TASK-022,
+    // debt 6 of TASK-021): the order's own time is compared with deadlines
+    // and with other orders' times, and the API's clock may drift from the
+    // database's.
+    const at = await databaseNow(tx);
     // The same key sent at the same moment: the other request may have
     // made the order since the check before the transaction.
     const made = await this.byKey(tx, accountId, input.idempotencyKey);
@@ -377,7 +386,7 @@ export class OrdersService {
   }
 
   async userOrder(accountId: string, orderId: string, lang: CatalogLanguage): Promise<UserOrder> {
-    const row = await this.userRow(this.database.db, accountId, orderId);
+    const row = await this.fresh(await this.userRow(this.database.db, accountId, orderId));
     return userOrderView(this.database.db, row, lang);
   }
 
@@ -450,8 +459,33 @@ export class OrdersService {
     orderId: string,
     lang: CatalogLanguage,
   ): Promise<SupplierOrder> {
-    const row = await this.supplierRow(this.database.db, supplierId, orderId);
+    const row = await this.fresh(await this.supplierRow(this.database.db, supplierId, orderId));
     return supplierOrderView(this.database.db, row, lang);
+  }
+
+  /**
+   * The card of an order shows its deadline as its time, not as the
+   * sweeper's delay: an order past its deadline is expired here and now,
+   * exactly as the sweeper would, so nobody presses «Выдать» on an order the
+   * server is about to refuse (TASK-022, debt 5 of TASK-021). The cheap
+   * check uses this process's clock only to decide whether it is worth a
+   * transaction; the decision itself is made by the database's clock inside.
+   */
+  private async fresh(row: OrderRow): Promise<OrderRow> {
+    if (dueDeadline(row, new Date()) === null) {
+      return row;
+    }
+    const outcome = await this.database.db.transaction((tx) =>
+      this.transitions.applyDue(tx, row.id),
+    );
+    if (outcome === null) {
+      return row;
+    }
+    const [updated] = await this.database.db
+      .select()
+      .from(customerOrder)
+      .where(eq(customerOrder.id, row.id));
+    return updated ?? row;
   }
 
   async accept(
@@ -483,6 +517,7 @@ export class OrdersService {
     body: DeclineOrderBody,
     lang: CatalogLanguage,
   ): Promise<DeclineOrderResponse> {
+    await this.countAction(actor);
     const row = await this.run({
       scope: (tx) => this.supplierRow(tx, actor.supplierId, orderId),
       request: {
@@ -515,12 +550,47 @@ export class OrdersService {
     expectedVersion: number,
     lang: CatalogLanguage,
   ): Promise<SupplierOrder> {
+    await this.countAction(actor);
     const row = await this.run({
       scope: (tx) => this.supplierRow(tx, actor.supplierId, orderId),
       request: { orderId, action, actor, channel: "supplier_web", expectedVersion },
       forUser: false,
     });
     return supplierOrderView(this.database.db, row, lang);
+  }
+
+  /**
+   * One action of an employee on orders against `order_actions_per_member`
+   * (TASK-022, debt 1 of TASK-021): without it a script could press
+   * «Принять» on a handled order for ever and fill its journal. Redis down
+   * — the action is served (it is guarded by the status and the version
+   * anyway, and refusing it would stop a shop from working) and the outage
+   * is reported once a minute.
+   */
+  private async countAction(actor: OrderSupplierActor): Promise<void> {
+    const [max, windowSeconds] = await Promise.all([
+      this.settings.get("order_actions_per_member"),
+      this.settings.get("order_actions_per_member_window_seconds"),
+    ]);
+    let hit;
+    try {
+      hit = await this.limiter.hit(`order-action:${actor.memberId}`, { max, windowSeconds });
+    } catch (error) {
+      if (!(error instanceof RateLimiterUnavailableError)) {
+        throw error;
+      }
+      const now = Date.now();
+      if (now - this.lastUnavailableWarning >= UNAVAILABLE_WARNING_INTERVAL_MS) {
+        this.lastUnavailableWarning = now;
+        this.logger.warn(`Order action served without the limit: ${error.message}`);
+      }
+      return;
+    }
+    if (!hit.allowed) {
+      this.metrics.countRateLimitHit("order_actions_per_member");
+      this.logger.warn(`Rate limit hit limit=order_actions_per_member member=${actor.memberId}`);
+      throw rateLimitedException("order_actions_per_member", hit.retryAfterSeconds);
+    }
   }
 
   private async supplierRow(executor: DbExecutor, supplierId: string, orderId: string) {
@@ -583,6 +653,16 @@ export class OrdersService {
     if (query.test !== "include") {
       conditions.push(eq(customerOrder.isTest, query.test === "only"));
     }
+    if (query.closedLate) {
+      conditions.push(eq(customerOrder.closedLate, query.closedLate === "true"));
+    }
+    if (query.closedByAdmin) {
+      conditions.push(
+        query.closedByAdmin === "true"
+          ? eq(customerOrder.closeMethod, "admin")
+          : sql`${customerOrder.closeMethod} IS DISTINCT FROM 'admin'`,
+      );
+    }
     const filter = conditions.length > 0 ? and(...conditions)! : sql`true`;
     const [{ rows, nextCursor }, [total]] = await Promise.all([
       this.newestFirst(filter, query),
@@ -597,14 +677,54 @@ export class OrdersService {
   }
 
   async adminOrder(orderId: string, lang: CatalogLanguage): Promise<AdminOrder> {
-    const [row] = await this.database.db
+    const [found] = await this.database.db
       .select()
       .from(customerOrder)
       .where(eq(customerOrder.id, orderId));
-    if (!row) {
+    if (!found) {
       throw notFound();
     }
-    return adminOrderView(this.database.db, row, lang);
+    const row = await this.fresh(found);
+    return adminOrderView(this.database.db, row, lang, await this.marksOf(row.id));
+  }
+
+  /**
+   * A-ORD-02 «Закрыть без кода» (D-043): the administrator settles a
+   * dispute. The reason is required by the contract; the close is written
+   * in the order's journal and in the action journal, the order is marked
+   * «Закрыта администратором» for the supplier and the administrator, and
+   * the customer's discipline mark for this order — if there was one — is
+   * lifted, because the reason for it has gone.
+   */
+  async adminClose(
+    admin: { accountId: string; adminId: string },
+    orderId: string,
+    body: AdminCloseOrderBody,
+    lang: CatalogLanguage,
+  ): Promise<AdminOrder> {
+    const row = await this.run({
+      scope: async (tx) => {
+        const [found] = await tx.select().from(customerOrder).where(eq(customerOrder.id, orderId));
+        if (!found) {
+          throw notFound();
+        }
+        return found;
+      },
+      request: {
+        orderId,
+        action: "admin_close",
+        actor: { type: "admin", ...admin },
+        channel: "admin",
+        expectedVersion: body.expectedVersion,
+        close: { method: "admin", reason: body.reason },
+      },
+      forUser: false,
+    });
+    return adminOrderView(this.database.db, row, lang, await this.marksOf(row.id));
+  }
+
+  private async marksOf(orderId: string) {
+    return (await this.discipline.marksOfOrders(this.database.db, [orderId])).get(orderId) ?? [];
   }
 
   // ---------------------------------------------------------------- pages

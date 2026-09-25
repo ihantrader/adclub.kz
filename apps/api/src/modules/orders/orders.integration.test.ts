@@ -6,13 +6,20 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
   adminCityResponseSchema,
+  adminDisciplineMarkResponseSchema,
+  adminDisciplinePageSchema,
+  adminDisciplineUsersPageSchema,
   adminOrderPageSchema,
   adminOrderResponseSchema,
+  adminSignalPageSchema,
   adminSupplierResponseSchema,
   apiErrorResponseSchema,
+  auditLogPageSchema,
+  closeOrderResponseSchema,
   createOrderResponseSchema,
   declineOrderResponseSchema,
   ORDER_QR_PREFIX,
+  orderLookupResponseSchema,
   orderStateConflictDetailsSchema,
   supplierMemberAddedResponseSchema,
   supplierOfferResponseSchema,
@@ -57,8 +64,10 @@ import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
 import { DevCatalogSeed } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
+import { AppSettings } from "../settings";
+import { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
 import { OrderDeadlineSweeper, orderDeadlinesJob } from "./order-deadlines";
-import { OrderTransitions } from "./order-transitions";
+import { databaseNow, OrderTransitions } from "./order-transitions";
 
 /**
  * TASK-021 end to end on a real PostgreSQL and Redis (behind TCP proxies,
@@ -73,6 +82,17 @@ import { OrderTransitions } from "./order-transitions";
  * administrator only; test orders of employees; the access matrix; and
  * the code and the QR in no answer to the supplier or the administrator,
  * no journal, no log line and no monitoring event.
+ *
+ * TASK-022 on the same world: the scanner of the cabinet (a lookup by the
+ * code with and without spaces and by the content of the QR, the cases of
+ * S-SCAN-04, the wall against guessing six digits and what it leaves for an
+ * administrator to see), giving an order out from «accepted» and from
+ * «ready» and while the offer is withdrawn and the supplier paused, the
+ * late close window (its edge, a setting changed while an order waited, the
+ * code held by the order that can still be closed, the orders that may
+ * never be closed late), the discipline marks of users and their lifting,
+ * the administrator's close without a code with its reason and its marks,
+ * the two signals, and the seven acceptance notes of TASK-021.
  */
 
 const ADMIN_PHONE = "+77011234567";
@@ -1340,8 +1360,9 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       );
       const readyAt = Date.now();
       const until = new Date(ready.reserveUntil!).getTime();
-      expect(until).toBeGreaterThan(readyAt + 3 * HOUR - 5_000);
-      expect(until).toBeLessThanOrEqual(readyAt + 3 * HOUR);
+      // The deadline is counted from the database's clock (TASK-022, debt 6),
+      // which may be a little ahead of this process's — hence both sides.
+      expect(Math.abs(until - (readyAt + 3 * HOUR))).toBeLessThan(5_000);
       expect(until).toBeGreaterThan(new Date(accepted.reserveUntil!).getTime() - 3 * HOUR);
       // A new end — a new warning to come.
       expect((await row(order.id)).reserve_warned_at).toBeNull();
@@ -1880,6 +1901,1350 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       expect(await db.query("SELECT 1 FROM customer_order")).toMatchObject({ rowCount: 0 });
       // The failed order didn't use up the limit.
       await place(buyer, offer);
+    });
+  });
+
+  // ------------------------------------------------- giving an order out
+
+  /** The scanner: one lookup of a code or of the content of a QR. */
+  async function lookup(by: Employee | Company, body: { code?: string; qr?: string }) {
+    return ok(by.as("post", "/supplier/orders/lookup", body), (raw) =>
+      checked(orderLookupResponseSchema)(raw),
+    );
+  }
+
+  /** The scanner: giving the order out against what the customer showed. */
+  async function closeByCode(by: Employee | Company, body: { code?: string; qr?: string }) {
+    return ok(by.as("post", "/supplier/orders/close", body), (raw) =>
+      checked(closeOrderResponseSchema)(raw),
+    );
+  }
+
+  const codeOf = (order: UserOrder) => order.confirmation!.code;
+  const qrOf = (order: UserOrder) => order.confirmation!.qrPayload;
+
+  /** Lets the pickup reserve of an accepted order run out, as the sweeper would. */
+  async function expireReserve(orderId: string): Promise<void> {
+    await db.query(
+      "UPDATE customer_order SET expires_at = now() - interval '1 minute' WHERE id = $1",
+      [orderId],
+    );
+    expect((await sweep()).processed).toBeGreaterThan(0);
+  }
+
+  async function expireResponse(orderId: string): Promise<void> {
+    await db.query(
+      "UPDATE customer_order SET respond_by = now() - interval '1 minute' WHERE id = $1",
+      [orderId],
+    );
+    expect((await sweep()).processed).toBeGreaterThan(0);
+  }
+
+  async function marksOf(accountId: string) {
+    return ok(asAdmin("get", `/admin/discipline?accountId=${accountId}`), (raw) =>
+      checked(adminDisciplinePageSchema)(raw),
+    );
+  }
+
+  async function signalsOf(kind: string) {
+    return ok(asAdmin("get", `/admin/signals?kind=${kind}`), (raw) =>
+      checked(adminSignalPageSchema)(raw),
+    );
+  }
+
+  async function auditOf(query: string) {
+    return ok(asAdmin("get", `/admin/audit-log?${query}`), (raw) => auditLogPageSchema.parse(raw));
+  }
+
+  /** The row of the order, with the columns this task added. */
+  async function closeRow(orderId: string) {
+    const { rows } = await db.query<{
+      status: string;
+      closed_at: Date | null;
+      close_method: string | null;
+      closed_by_member_id: string | null;
+      closed_by_admin_id: string | null;
+      closed_late: boolean;
+      close_reason: string | null;
+      late_close_until: Date | null;
+      code_released_at: Date | null;
+      idempotency_key: string | null;
+    }>("SELECT * FROM customer_order WHERE id = $1", [orderId]);
+    return rows[0]!;
+  }
+
+  async function disciplineRows(orderId: string) {
+    const { rows } = await db.query<{
+      id: string;
+      kind: string;
+      revoked_at: Date | null;
+      revoked_by: string | null;
+      revoked_note: string | null;
+    }>("SELECT * FROM user_discipline_event WHERE order_id = $1", [orderId]);
+    return rows;
+  }
+
+  describe("giving an order out against the code or the QR", () => {
+    it("closes an order from «accepted» and from «ready», by the code and by the QR", async () => {
+      const shop = await company("Выдача", { firstName: "Айгерим" });
+      const marat = await colleague(shop, "Марат");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+
+      // From «accepted» straight away (D-040).
+      const first = await place(buyer, offer, { quantity: 2 });
+      await accept(shop, first.id);
+      const found = await lookup(marat, {
+        code: `${codeOf(first).slice(0, 3)} ${codeOf(first).slice(3)}`,
+      });
+      expect(found).toMatchObject({
+        result: "ready",
+        order: {
+          id: first.id,
+          number: first.number,
+          status: "accepted",
+          quantity: 2,
+          total: 2 * offer.price,
+          item: { id: padsId, article: PADS },
+        },
+      });
+      // Nothing of the customer, the code or the QR on that screen.
+      const text = JSON.stringify(found);
+      expect(text).not.toContain(codeOf(first));
+      expect(text).not.toContain(buyer.phone);
+      expect(text).not.toContain(ORDER_QR_PREFIX);
+
+      const given = await closeByCode(marat, { code: codeOf(first) });
+      expect(given).toMatchObject({
+        result: "given_out",
+        late: false,
+        order: {
+          id: first.id,
+          status: "completed",
+          closure: { method: "code", late: false, by: { kind: "member", name: "Марат" } },
+        },
+      });
+      const row = await closeRow(first.id);
+      expect(row).toMatchObject({ status: "completed", close_method: "code", closed_late: false });
+      expect(row.closed_at).not.toBeNull();
+      expect(row.closed_by_member_id).toBe(marat.memberId);
+      expect(row.code_released_at).not.toBeNull();
+      const journal = await events(first.id);
+      expect(journal.map((entry) => entry.action)).toEqual(["create", "accept", "close"]);
+      expect(journal.at(-1)).toMatchObject({
+        to_status: "completed",
+        actor_member_id: marat.memberId,
+        payload: { closeMethod: "code" },
+      });
+
+      // The user sees it was given out, when — and nothing about who.
+      const mine = await userOrder(buyer, first.id);
+      expect(mine).toMatchObject({ status: "completed", givenOut: { late: false } });
+      expect(mine).not.toHaveProperty("confirmation");
+      expect(JSON.stringify(mine)).not.toContain("Марат");
+
+      // «Завершённые» of the cabinet and the history of the user.
+      const finished = await ok(shop.as("get", "/supplier/orders?tab=finished"), (raw) =>
+        checked(supplierOrderPageSchema)(raw),
+      );
+      expect(finished.orders.map((entry) => entry.id)).toContain(first.id);
+      expect(finished.counts.finished).toBe(1);
+      const history = await ok(buyer.as("get", "/orders?tab=history"), (raw) =>
+        checked(userOrderPageSchema)(raw),
+      );
+      expect(history.orders.map((entry) => entry.id)).toContain(first.id);
+
+      // The same code again: «уже выдана», and no second entry.
+      const again = await closeByCode(marat, { code: codeOf(first) });
+      expect(again).toMatchObject({
+        result: "closed",
+        late: false,
+        by: { kind: "member", memberId: marat.memberId, name: "Марат" },
+      });
+      expect((await events(first.id)).length).toBe(3);
+      expect(await lookup(shop.first, { code: codeOf(first) })).toMatchObject({
+        result: "closed",
+        by: { kind: "member", name: "Марат" },
+      });
+
+      // From «ready», by the QR.
+      const second = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, second.id);
+      await ok(
+        shop.as("post", `/supplier/orders/${second.id}/ready`, { expectedVersion: 2 }),
+        (raw) => raw,
+      );
+      expect(await lookup(shop.first, { qr: qrOf(second) })).toMatchObject({
+        result: "ready",
+        order: { status: "ready" },
+      });
+      const byQr = await closeByCode(shop.first, { qr: qrOf(second) });
+      expect(byQr).toMatchObject({
+        result: "given_out",
+        order: { status: "completed", closure: { method: "qr", late: false } },
+      });
+      expect((await closeRow(second.id)).close_method).toBe("qr");
+      // Its QR doesn't work twice either.
+      expect(await closeByCode(shop.first, { qr: qrOf(second) })).toMatchObject({
+        result: "closed",
+      });
+    });
+
+    it("closes an order even when the offer is withdrawn and the supplier paused (PRODUCT 10.6)", async () => {
+      const shop = await company("Обязательство");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await ok(
+        shop.as("post", `/supplier/offers/${offer.id}/withdraw`, {
+          expectedVersion: offer.version,
+        }),
+        (raw) => raw,
+      );
+      const paused = await ok(
+        asAdmin("get", `/admin/suppliers/${shop.supplierId}`),
+        (raw) => adminSupplierResponseSchema.parse(raw).supplier,
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${shop.supplierId}/pause`, {
+          expectedVersion: paused.version,
+          paused: true,
+          reason: "admin",
+          note: "Проверка",
+        }),
+        (raw) => raw,
+      );
+      expect(await closeByCode(shop, { code: codeOf(order) })).toMatchObject({
+        result: "given_out",
+      });
+    });
+
+    it("tells apart another company, nothing found and a broken QR, and gives nothing away", async () => {
+      const shop = await company("Своя");
+      const other = await company("Чужая");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+
+      // Another company: the fact alone, no name, nothing of the order.
+      const strangerSees = await lookup(other, { code: codeOf(order) });
+      expect(strangerSees).toEqual({ result: "other_supplier", supplier: null });
+      const strangerText = JSON.stringify(strangerSees);
+      for (const secret of [codeOf(order), buyer.phone, PADS, String(order.total), order.id]) {
+        expect(strangerText, secret).not.toContain(secret);
+      }
+      // …and the same by the QR.
+      expect(await lookup(other, { qr: qrOf(order) })).toEqual({
+        result: "other_supplier",
+        supplier: null,
+      });
+
+      // An employee of both companies is offered to switch.
+      const shared = phoneOf(++phoneCounter);
+      rememberCode(shared);
+      await ok(
+        other.as("post", "/supplier/members", { name: "Двойной", phone: shared }),
+        (raw) => supplierMemberAddedResponseSchema.parse(raw),
+        201,
+      );
+      // Signed in while they belong to one company; then added to the other.
+      const bothBearer = await sessionToken(shared, SUPPLIER_WEB);
+      await ok(
+        asAdmin("post", `/admin/suppliers/${shop.supplierId}/members`, {
+          name: "Двойной",
+          phone: shared,
+        }),
+        (raw) => raw,
+        201,
+      );
+      const inBoth = await ok(
+        call(bothBearer, SUPPLIER_WEB, "post", "/supplier/orders/lookup", {
+          code: codeOf(order),
+        }),
+        (raw) => checked(orderLookupResponseSchema)(raw),
+      );
+      expect(inBoth).toMatchObject({
+        result: "other_supplier",
+        supplier: { id: shop.supplierId, name: "Своя" },
+      });
+      // Still nothing of the order itself.
+      expect(JSON.stringify(inBoth)).not.toContain(codeOf(order));
+
+      // Nothing found, and a string that isn't our QR at all.
+      expect(await lookup(shop, { code: "000000" })).toEqual({ result: "not_found" });
+      expectError(
+        await shop.as("post", "/supplier/orders/lookup", { qr: "https://example.com/pay/1" }),
+        400,
+        "ORDER_QR_UNKNOWN",
+      );
+      expectError(
+        await shop.as("post", "/supplier/orders/lookup", { qr: `${ORDER_QR_PREFIX}short` }),
+        400,
+        "ORDER_QR_UNKNOWN",
+      );
+      // Not six digits, and neither field: the request itself is refused.
+      for (const body of [{ code: "12345" }, { code: "12345a" }, {}, { code: "1", qr: "x" }]) {
+        expectError(
+          await shop.as("post", "/supplier/orders/lookup", body),
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+    });
+
+    it("makes guessing a six-digit code run into a wall, and an administrator sees it", async () => {
+      await settings.set({
+        order_lookup_per_member: 1000,
+        order_lookup_failures_per_member: 3,
+        order_lookup_failures_per_supplier: 5,
+      });
+      const shop = await company("Перебор", { firstName: "Айгерим" });
+      const marat = await colleague(shop, "Марат");
+      const tries = ["100001", "100002", "100003"];
+      for (const code of tries) {
+        expect(await lookup(shop.first, { code })).toEqual({ result: "not_found" });
+      }
+      const blocked = await shop.first.as("post", "/supplier/orders/lookup", { code: "100004" });
+      expectError(blocked, 429, "RATE_LIMITED");
+      expect(blocked.body.details).toMatchObject({ limit: "order_lookup_failures_per_member" });
+      expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+
+      // The company's own limit stops the second employee too.
+      expect(await lookup(marat, { code: "100005" })).toEqual({ result: "not_found" });
+      expect(await lookup(marat, { code: "100006" })).toEqual({ result: "not_found" });
+      const company429 = await marat.as("post", "/supplier/orders/lookup", { code: "100007" });
+      expectError(company429, 429, "RATE_LIMITED");
+      expect(company429.body.details).toMatchObject({
+        limit: "order_lookup_failures_per_supplier",
+      });
+
+      // One entry per limit and window in the action journal.
+      const journal = await auditOf("action=order.lookup_blocked");
+      expect(journal.entries.length).toBe(2);
+      expect(journal.entries.map((entry) => entry.entityId)).toEqual([
+        shop.supplierId,
+        shop.supplierId,
+      ]);
+      expect(JSON.stringify(journal.entries)).not.toContain("100004");
+
+      // Two hundred tries in a row: only the first few are even answered.
+      await settings.set({
+        order_lookup_failures_per_member: 10,
+        order_lookup_failures_per_supplier: 10_000,
+      });
+      const fresh = await company("Двести");
+      let answered = 0;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const response = await fresh.as("post", "/supplier/orders/lookup", {
+          code: String(200_000 + attempt),
+        });
+        if (response.status === 200) {
+          answered += 1;
+        } else {
+          expectError(response, 429, "RATE_LIMITED");
+        }
+      }
+      expect(answered).toBe(10);
+    });
+
+    it("refuses to look a code up at all when Redis can't count the tries", async () => {
+      const shop = await company("Без Redis");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await redisProxy.stop();
+      try {
+        expectError(
+          await shop.as("post", "/supplier/orders/lookup", { code: codeOf(order) }),
+          503,
+          "SERVICE_UNAVAILABLE",
+        );
+        expectError(
+          await shop.as("post", "/supplier/orders/close", { code: codeOf(order) }),
+          503,
+          "SERVICE_UNAVAILABLE",
+        );
+      } finally {
+        await redisProxy.start();
+      }
+      expect((await closeRow(order.id)).status).toBe("accepted");
+      // Redis back: the order is given out (and could have been closed late).
+      let back: Response | undefined;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        back = await shop.as("post", "/supplier/orders/close", { code: codeOf(order) });
+        if (back.status === 200) {
+          break;
+        }
+        await sleep(200);
+      }
+      expect(checked(closeOrderResponseSchema)(back!.body)).toMatchObject({
+        result: "given_out",
+      });
+    });
+
+    it("lets exactly one of two employees give the same order out", async () => {
+      const shop = await company("Гонка", { firstName: "Айгерим" });
+      const marat = await colleague(shop, "Марат");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      for (let round = 0; round < 6; round += 1) {
+        const order = await place(buyer, offer, { allowAnotherActive: true });
+        await accept(shop, order.id);
+        const [one, two] = await Promise.all([
+          shop.first.as("post", "/supplier/orders/close", { code: codeOf(order) }),
+          marat.as("post", "/supplier/orders/close", { code: codeOf(order) }),
+        ]);
+        expect([one.status, two.status], `round ${String(round)}`).toEqual([200, 200]);
+        const results = [one.body, two.body].map(
+          (body) => checked(closeOrderResponseSchema)(body).result,
+        );
+        expect([...results].sort(), `round ${String(round)}`).toEqual(["closed", "given_out"]);
+        const journal = await events(order.id);
+        expect(journal.filter((entry) => entry.action === "close")).toHaveLength(1);
+        expect((await closeRow(order.id)).status).toBe("completed");
+      }
+    });
+  });
+
+  describe("the late close window (PRODUCT 10.7)", () => {
+    it("gives out an expired reserve inside the window, marks it late and lifts the no-show", async () => {
+      const shop = await company("Позднее");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await expireReserve(order.id);
+
+      // The no-show of the user is the club's own statistics (PRODUCT 10.5).
+      const marked = await marksOf(buyer.accountId);
+      expect(marked.marks).toMatchObject([
+        {
+          kind: "pickup_no_show",
+          order: { id: order.id, number: order.number },
+          supplier: { id: shop.supplierId, name: "Позднее" },
+          customer: { accountId: buyer.accountId, phone: buyer.phone },
+          revocation: null,
+        },
+      ]);
+      const expiredRow = await closeRow(order.id);
+      expect(expiredRow.status).toBe("reserve_expired");
+      expect(expiredRow.late_close_until).not.toBeNull();
+      // The code is still this order's own while it can be closed.
+      expect(expiredRow.code_released_at).toBeNull();
+
+      const offered = await lookup(shop, { code: codeOf(order) });
+      expect(offered).toMatchObject({ result: "late", order: { id: order.id } });
+      if (offered.result === "late") {
+        expect(new Date(offered.until).getTime() - new Date(offered.expiredAt).getTime()).toBe(
+          48 * HOUR,
+        );
+      }
+      const given = await closeByCode(shop, { code: codeOf(order) });
+      expect(given).toMatchObject({
+        result: "given_out",
+        late: true,
+        order: { status: "completed", closure: { late: true, method: "code" } },
+      });
+      expect((await closeRow(order.id)).closed_late).toBe(true);
+      expect((await events(order.id)).map((entry) => entry.action)).toEqual([
+        "create",
+        "accept",
+        "expire_reserve",
+        "close_late",
+      ]);
+      // The user sees «выдана», later than its time; the mark is lifted.
+      expect(await userOrder(buyer, order.id)).toMatchObject({
+        status: "completed",
+        givenOut: { late: true },
+      });
+      expect(await disciplineRows(order.id)).toMatchObject([
+        { revoked_by: "late_close", revoked_note: null },
+      ]);
+      expect((await marksOf(buyer.accountId)).marks[0]?.revocation).toMatchObject({
+        by: "late_close",
+        note: null,
+      });
+    });
+
+    it("never closes late an order without the supplier's answer, a cancelled or a declined one", async () => {
+      const shop = await company("Нельзя");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+
+      const silent = await place(buyer, offer, { allowAnotherActive: true });
+      await expireResponse(silent.id);
+      expect(await lookup(shop, { code: codeOf(silent) })).toMatchObject({
+        result: "refused",
+        reason: "response_expired",
+      });
+      expect(await closeByCode(shop, { code: codeOf(silent) })).toMatchObject({
+        result: "refused",
+        reason: "response_expired",
+      });
+      expect((await closeRow(silent.id)).status).toBe("response_expired");
+      // No no-show of the user: it wasn't the user who didn't come.
+      expect(await disciplineRows(silent.id)).toEqual([]);
+
+      const cancelled = await place(buyer, offer, { allowAnotherActive: true });
+      await ok(buyer.as("post", `/orders/${cancelled.id}/cancel`), (raw) => raw);
+      expect(await closeByCode(shop, { code: codeOf(cancelled) })).toMatchObject({
+        result: "refused",
+        reason: "cancelled_by_user",
+      });
+      expect(await disciplineRows(cancelled.id)).toEqual([]);
+
+      const declined = await place(buyer, offer, { allowAnotherActive: true });
+      await ok(
+        shop.as("post", `/supplier/orders/${declined.id}/decline`, { expectedVersion: 1 }),
+        (raw) => raw,
+      );
+      expect(await closeByCode(shop, { code: codeOf(declined) })).toMatchObject({
+        result: "refused",
+        reason: "declined_by_supplier",
+      });
+      expect(await disciplineRows(declined.id)).toEqual([]);
+
+      const waiting = await place(buyer, offer, { allowAnotherActive: true });
+      expect(await lookup(shop, { code: codeOf(waiting) })).toMatchObject({
+        result: "refused",
+        reason: "not_accepted",
+      });
+      expect((await closeRow(waiting.id)).status).toBe("created");
+    });
+
+    it("closes the window at its edge, and a change of the setting doesn't move an order already expired", async () => {
+      const shop = await company("Окно");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+
+      const edge = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, edge.id);
+      await expireReserve(edge.id);
+      // Exactly at the end of the window it is over.
+      await db.query("UPDATE customer_order SET late_close_until = now() WHERE id = $1", [edge.id]);
+      const refused = await closeByCode(shop, { code: codeOf(edge) });
+      expect(refused).toMatchObject({
+        result: "refused",
+        reason: "late_window_passed",
+        lateCloseHours: 48,
+      });
+      expect((await closeRow(edge.id)).status).toBe("reserve_expired");
+      // Reading it was enough to let the code go: the window is over.
+      expect((await closeRow(edge.id)).code_released_at).not.toBeNull();
+
+      // The sweeper does the same for an order nobody looks at…
+      const untouched = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, untouched.id);
+      await expireReserve(untouched.id);
+      expect((await closeRow(untouched.id)).code_released_at).toBeNull();
+      await db.query(
+        "UPDATE customer_order SET late_close_until = now() - interval '1 minute' WHERE id = $1",
+        [untouched.id],
+      );
+      expect((await sweep()).processed).toBe(1);
+      expect((await closeRow(untouched.id)).code_released_at).not.toBeNull();
+      // …and the second run does nothing.
+      expect((await sweep()).processed).toBe(0);
+
+      // A window shortened by a setting doesn't shorten an order that is waiting.
+      const waiting = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, waiting.id);
+      await expireReserve(waiting.id);
+      const until = (await closeRow(waiting.id)).late_close_until;
+      await settings.set({ order_late_close_hours: 1 });
+      expect((await closeRow(waiting.id)).late_close_until?.toISOString()).toBe(
+        until?.toISOString(),
+      );
+      expect(await closeByCode(shop, { code: codeOf(waiting) })).toMatchObject({
+        result: "given_out",
+        late: true,
+      });
+      // The next order to expire gets the new window.
+      const shorter = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, shorter.id);
+      await expireReserve(shorter.id);
+      const { rows } = await db.query<{ hours: number }>(
+        "SELECT EXTRACT(EPOCH FROM (late_close_until - finished_at)) / 3600 AS hours FROM customer_order WHERE id = $1",
+        [shorter.id],
+      );
+      expect(Number(rows[0]!.hours)).toBe(1);
+    });
+
+    it("never gives the code of an order that can still be closed late to another order", async () => {
+      const shop = await company("Код держится");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await expireReserve(order.id);
+      const code = codeOf(order);
+
+      // The database itself refuses a second order on that code.
+      const insert = () =>
+        db.query(
+          `INSERT INTO customer_order (user_account_id, supplier_id, location_id, offer_id, item_id,
+             offer_snapshot, unit_price, quantity, total, fulfillment, confirmation_code, qr_token,
+             idempotency_key, respond_by)
+           SELECT user_account_id, supplier_id, location_id, offer_id, item_id, offer_snapshot,
+             unit_price, 1, unit_price, fulfillment, $2, md5(random()::text), gen_random_uuid(),
+             now() + interval '1 hour'
+           FROM customer_order WHERE id = $1`,
+          [order.id, code],
+        );
+      await expect(insert()).rejects.toThrow(/customer_order_held_code_key/);
+
+      // Once the window has passed and the sweeper let the code go, it is free.
+      await db.query(
+        "UPDATE customer_order SET late_close_until = now() - interval '1 minute' WHERE id = $1",
+        [order.id],
+      );
+      await sweep();
+      await insert();
+      // The digits now point at the newer order; the old one is only found
+      // by its own company, and only as «the window has passed».
+      expect(await lookup(shop, { code })).toMatchObject({ result: "refused" });
+    });
+
+    it("signals the administrator when the user ordered the same item again meanwhile", async () => {
+      const shop = await company("Дубль");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const first = await place(buyer, offer);
+      await accept(shop, first.id);
+      await expireReserve(first.id);
+      // The user waited, then ordered the same item again.
+      const second = await place(buyer, offer, { allowAnotherActive: true });
+      await closeByCode(shop, { code: codeOf(first) });
+
+      const raised = await signalsOf("duplicate_after_late_close");
+      expect(raised.signals).toMatchObject([
+        {
+          kind: "duplicate_after_late_close",
+          subjectType: "order",
+          subjectId: first.id,
+          status: "open",
+          times: 1,
+          payload: {
+            orderId: first.id,
+            orderNumber: first.number,
+            otherOrderId: second.id,
+            otherOrderNumber: second.number,
+            itemId: padsId,
+          },
+        },
+      ]);
+      // Both orders stay valid.
+      expect((await closeRow(first.id)).status).toBe("completed");
+      expect((await closeRow(second.id)).status).toBe("created");
+    });
+
+    it("keeps no no-show and no signal for a test order of an employee", async () => {
+      const shop = await company("Тестовая");
+      const offer = await put(shop, padsId);
+      const phone = phoneOf(++phoneCounter);
+      rememberCode(phone);
+      await ok(shop.as("post", "/supplier/members", { name: "Сам", phone }), (raw) => raw, 201);
+      const bearer = await sessionToken(phone, IOS);
+      await ok(
+        asAdmin("post", "/admin/club-access/grants", {
+          phone,
+          validUntil: new Date(Date.now() + 30 * 24 * HOUR).toISOString(),
+          reason: "Тест",
+        }),
+        (raw) => raw,
+        201,
+      );
+      const own = await ok(
+        call(bearer, IOS, "post", "/orders", orderBody(offer)),
+        (raw) => note(checked(createOrderResponseSchema)(raw).order),
+        201,
+      );
+      expect(own.isTest).toBe(true);
+      await accept(shop, own.id);
+      await expireReserve(own.id);
+      expect(await disciplineRows(own.id)).toEqual([]);
+      // Closing it late is still possible; there is simply nothing to lift.
+      expect(await closeByCode(shop, { code: codeOf(own) })).toMatchObject({
+        result: "given_out",
+        late: true,
+      });
+    });
+
+    it("keeps no no-show for delivery (there is no reserve at all)", async () => {
+      const shop = await company("Доставка");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer, { fulfillment: "delivery" });
+      await accept(shop, order.id);
+      expect((await closeRow(order.id)).late_close_until).toBeNull();
+      expect((await sweep()).processed).toBe(0);
+      expect(await disciplineRows(order.id)).toEqual([]);
+      expect(await closeByCode(shop, { code: codeOf(order) })).toMatchObject({
+        result: "given_out",
+        late: false,
+      });
+    });
+  });
+
+  describe("the discipline of users (PRODUCT 10.5)", () => {
+    it("lets an administrator lift a mark only with a reason, keeps it as lifted and logs it", async () => {
+      const shop = await company("Дисциплина");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await expireReserve(order.id);
+      const mark = (await marksOf(buyer.accountId)).marks[0]!;
+
+      expectError(
+        await asAdmin("post", `/admin/discipline/${mark.id}/revoke`, {}),
+        400,
+        "VALIDATION_ERROR",
+      );
+      const lifted = await ok(
+        asAdmin("post", `/admin/discipline/${mark.id}/revoke`, { reason: "Снята по обращению" }),
+        (raw) => checked(adminDisciplineMarkResponseSchema)(raw),
+      );
+      expect(lifted.mark.revocation).toMatchObject({
+        by: "admin",
+        note: "Снята по обращению",
+      });
+      expect(lifted.mark.revocation?.adminId).not.toBeNull();
+      // Twice — nothing changed.
+      expectError(
+        await asAdmin("post", `/admin/discipline/${mark.id}/revoke`, { reason: "Ещё раз" }),
+        409,
+        "DISCIPLINE_ALREADY_REVOKED",
+      );
+      const journal = await auditOf("entityType=user_discipline_event");
+      expect(journal.entries).toMatchObject([
+        {
+          action: "user_discipline_event.revoked",
+          entityId: mark.id,
+          reason: "Снята по обращению",
+          actor: { role: "admin" },
+        },
+      ]);
+
+      // The list of users with no-shows: this one has none standing now.
+      expect(
+        (
+          await ok(asAdmin("get", "/admin/discipline/users"), (raw) =>
+            checked(adminDisciplineUsersPageSchema)(raw),
+          )
+        ).users,
+      ).toEqual([]);
+      // A second order brings the user back into the list, with both counted.
+      const second = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, second.id);
+      await expireReserve(second.id);
+      const users = await ok(asAdmin("get", "/admin/discipline/users"), (raw) =>
+        checked(adminDisciplineUsersPageSchema)(raw),
+      );
+      expect(users).toMatchObject({
+        total: 1,
+        users: [{ accountId: buyer.accountId, phone: buyer.phone, count: 1, revokedCount: 1 }],
+      });
+      expect(
+        (
+          await ok(asAdmin("get", "/admin/discipline?state=revoked"), (raw) =>
+            checked(adminDisciplinePageSchema)(raw),
+          )
+        ).marks,
+      ).toHaveLength(1);
+      expect(
+        (
+          await ok(asAdmin("get", "/admin/discipline?state=standing"), (raw) =>
+            checked(adminDisciplinePageSchema)(raw),
+          )
+        ).marks,
+      ).toHaveLength(1);
+    });
+
+    it("shows the discipline to nobody but the administrator", async () => {
+      const shop = await company("Скрытая");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await expireReserve(order.id);
+      const mark = (await marksOf(buyer.accountId)).marks[0]!;
+
+      const mine = await userOrder(buyer, order.id);
+      const list = await ok(buyer.as("get", "/orders?tab=history"), (raw) =>
+        checked(userOrderPageSchema)(raw),
+      );
+      const supplierCard = await supplierOrder(shop, order.id);
+      for (const body of [mine, list, supplierCard]) {
+        const text = JSON.stringify(body);
+        expect(text).not.toContain(mark.id);
+        expect(text).not.toContain("pickup_no_show");
+        expect(text).not.toContain("discipline");
+      }
+      // The routes themselves are the administrator's alone.
+      expectError(await buyer.as("get", "/admin/discipline"), 403, "FORBIDDEN");
+      expectError(await shop.as("get", "/admin/discipline"), 403, "FORBIDDEN");
+      expectError(await shop.as("get", "/admin/discipline/users"), 403, "FORBIDDEN");
+      expectError(
+        await shop.as("post", `/admin/discipline/${mark.id}/revoke`, { reason: "нет" }),
+        403,
+        "FORBIDDEN",
+      );
+      // The administrator sees it in the card of the order.
+      expect((await adminOrder(order.id)).discipline).toMatchObject([
+        { id: mark.id, kind: "pickup_no_show", revocation: null },
+      ]);
+    });
+  });
+
+  describe("closing by the administrator without a code (D-043)", () => {
+    it("closes a disputed order with a reason, marks it and logs it", async () => {
+      const shop = await company("Спор", { firstName: "Айгерим" });
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      const accepted = await accept(shop, order.id);
+      await expireReserve(order.id);
+
+      expectError(
+        await asAdmin("post", `/admin/orders/${order.id}/close`, {
+          expectedVersion: accepted.version + 1,
+        }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      const closed = await ok(
+        asAdmin("post", `/admin/orders/${order.id}/close`, {
+          expectedVersion: accepted.version + 1,
+          reason: "Клиент подтвердил получение",
+        }),
+        (raw) => checked(adminOrderResponseSchema)(raw).order,
+      );
+      expect(closed).toMatchObject({
+        status: "completed",
+        closure: {
+          method: "admin",
+          late: false,
+          reason: "Клиент подтвердил получение",
+          by: { kind: "admin" },
+        },
+      });
+      // The supplier sees «Закрыта администратором», never the reason.
+      const bySupplier = await supplierOrder(shop, order.id);
+      expect(bySupplier.closure).toMatchObject({ method: "admin", by: { kind: "admin" } });
+      expect(JSON.stringify(bySupplier)).not.toContain("Клиент подтвердил получение");
+      // The user sees only that it was given out.
+      expect(await userOrder(buyer, order.id)).toMatchObject({
+        status: "completed",
+        givenOut: { late: false },
+      });
+      expect(JSON.stringify(await userOrder(buyer, order.id))).not.toContain(
+        "Клиент подтвердил получение",
+      );
+      // Both journals.
+      expect((await events(order.id)).map((entry) => [entry.action, entry.actor_type])).toEqual([
+        ["create", "user"],
+        ["accept", "supplier_member"],
+        ["expire_reserve", "system"],
+        ["admin_close", "admin"],
+      ]);
+      expect((await auditOf("action=order.closed_by_admin")).entries).toMatchObject([
+        {
+          entityId: order.id,
+          reason: "Клиент подтвердил получение",
+          actor: { role: "admin" },
+          after: { number: order.number, status: "completed" },
+        },
+      ]);
+      // The no-show has no reason to stand any more.
+      expect(await disciplineRows(order.id)).toMatchObject([{ revoked_by: "admin_close" }]);
+      // The scanner now says the order is closed, by the administrator.
+      expect(await lookup(shop, { code: codeOf(order) })).toMatchObject({
+        result: "closed",
+        by: { kind: "admin" },
+      });
+    });
+
+    it("closes an order the supplier never answered, and never a cancelled, declined or closed one", async () => {
+      const shop = await company("Разбор");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+
+      const silent = await place(buyer, offer, { allowAnotherActive: true });
+      await expireResponse(silent.id);
+      const closed = await ok(
+        asAdmin("post", `/admin/orders/${silent.id}/close`, {
+          expectedVersion: 2,
+          reason: "Поставщик не ответил, но товар выдал",
+        }),
+        (raw) => checked(adminOrderResponseSchema)(raw).order,
+      );
+      expect(closed.status).toBe("completed");
+      // The phone was never opened to the supplier by such a close.
+      expect(closed.phoneRevealedAt).toBeNull();
+      expect((await supplierOrder(shop, silent.id)).customer).toEqual({
+        kind: "hidden",
+        reason: "not_accepted",
+      });
+
+      const cancelled = await place(buyer, offer, { allowAnotherActive: true });
+      await ok(buyer.as("post", `/orders/${cancelled.id}/cancel`), (raw) => raw);
+      expectError(
+        await asAdmin("post", `/admin/orders/${cancelled.id}/close`, {
+          expectedVersion: 2,
+          reason: "нельзя",
+        }),
+        409,
+        "ORDER_STATE_CONFLICT",
+      );
+      const declined = await place(buyer, offer, { allowAnotherActive: true });
+      await ok(
+        shop.as("post", `/supplier/orders/${declined.id}/decline`, { expectedVersion: 1 }),
+        (raw) => raw,
+      );
+      expectError(
+        await asAdmin("post", `/admin/orders/${declined.id}/close`, {
+          expectedVersion: 2,
+          reason: "нельзя",
+        }),
+        409,
+        "ORDER_STATE_CONFLICT",
+      );
+      // An order already given out is not closed a second time.
+      expectError(
+        await asAdmin("post", `/admin/orders/${silent.id}/close`, {
+          expectedVersion: 3,
+          reason: "ещё раз",
+        }),
+        409,
+        "ORDER_STATE_CONFLICT",
+      );
+      // Neither the supplier nor the user reaches this route.
+      expectError(
+        await shop.as("post", `/admin/orders/${silent.id}/close`, {
+          expectedVersion: 3,
+          reason: "нет",
+        }),
+        403,
+        "FORBIDDEN",
+      );
+      expectError(
+        await buyer.as("post", `/admin/orders/${silent.id}/close`, {
+          expectedVersion: 3,
+          reason: "нет",
+        }),
+        403,
+        "FORBIDDEN",
+      );
+    });
+
+    it("signals the administrator about a supplier whose orders are closed without a code too often", async () => {
+      await settings.set({ admin_close_signal_count: 2 });
+      const shop = await company("Часто");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      for (let index = 0; index < 2; index += 1) {
+        const order = await place(buyer, offer, { allowAnotherActive: true });
+        await accept(shop, order.id);
+        await ok(
+          asAdmin("post", `/admin/orders/${order.id}/close`, {
+            expectedVersion: 2,
+            reason: `Разбор ${String(index)}`,
+          }),
+          (raw) => raw,
+        );
+      }
+      const raised = await signalsOf("frequent_admin_closes");
+      expect(raised.signals).toMatchObject([
+        {
+          kind: "frequent_admin_closes",
+          subjectType: "supplier",
+          subjectId: shop.supplierId,
+          payload: { closes: 2, threshold: 2, days: 30 },
+          times: 1,
+        },
+      ]);
+      // A third one counts up the same row instead of adding another.
+      const third = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, third.id);
+      await ok(
+        asAdmin("post", `/admin/orders/${third.id}/close`, {
+          expectedVersion: 2,
+          reason: "Разбор 3",
+        }),
+        (raw) => raw,
+      );
+      const again = await signalsOf("frequent_admin_closes");
+      expect(again.signals).toHaveLength(1);
+      expect(again.signals[0]).toMatchObject({ times: 2, payload: { closes: 3 } });
+      expectError(await shop.as("get", "/admin/signals"), 403, "FORBIDDEN");
+    });
+
+    it("gives exactly one outcome when an employee and an administrator close at once", async () => {
+      const shop = await company("Одновременно");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      for (let round = 0; round < 4; round += 1) {
+        const order = await place(buyer, offer, { allowAnotherActive: true });
+        await accept(shop, order.id);
+        const [byCode, byAdmin] = await Promise.all([
+          shop.as("post", "/supplier/orders/close", { code: codeOf(order) }),
+          asAdmin("post", `/admin/orders/${order.id}/close`, {
+            expectedVersion: 2,
+            reason: "Спор",
+          }),
+        ]);
+        const row = await closeRow(order.id);
+        expect(row.status, `round ${String(round)}`).toBe("completed");
+        const closes = (await events(order.id)).filter((entry) =>
+          ["close", "close_late", "admin_close"].includes(entry.action),
+        );
+        expect(closes, `round ${String(round)}`).toHaveLength(1);
+        if (byAdmin.status === 200) {
+          expect(row.close_method).toBe("admin");
+          expect(checked(closeOrderResponseSchema)(byCode.body).result).toBe("closed");
+        } else {
+          expectError(byAdmin, 409, "ORDER_STATE_CONFLICT");
+          expect(row.close_method).toBe("code");
+        }
+      }
+    });
+
+    it("filters the admin list by «closed late» and «closed by an administrator»", async () => {
+      const shop = await company("Отборы");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const late = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, late.id);
+      await expireReserve(late.id);
+      await closeByCode(shop, { code: codeOf(late) });
+      const byAdmin = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, byAdmin.id);
+      await ok(
+        asAdmin("post", `/admin/orders/${byAdmin.id}/close`, {
+          expectedVersion: 2,
+          reason: "Разбор",
+        }),
+        (raw) => raw,
+      );
+      const plain = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, plain.id);
+      await closeByCode(shop, { code: codeOf(plain) });
+
+      const list = async (query: string) =>
+        (
+          await ok(asAdmin("get", `/admin/orders?${query}`), (raw) =>
+            checked(adminOrderPageSchema)(raw),
+          )
+        ).orders.map((entry) => entry.id);
+      expect(await list("closedLate=true")).toEqual([late.id]);
+      expect(await list("closedByAdmin=true")).toEqual([byAdmin.id]);
+      expect(await list("closedByAdmin=false&status=completed")).toEqual([plain.id, late.id]);
+    });
+  });
+
+  describe("the acceptance notes of TASK-021", () => {
+    it("limits how often one employee acts on orders", async () => {
+      await settings.set({ order_actions_per_member: 2 });
+      const shop = await company("Лимит действий");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const first = await place(buyer, offer, { allowAnotherActive: true });
+      const second = await place(buyer, offer, { allowAnotherActive: true });
+      const third = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, first.id);
+      await accept(shop, second.id);
+      const over = await shop.as("post", `/supplier/orders/${third.id}/accept`, {
+        expectedVersion: 1,
+      });
+      expectError(over, 429, "RATE_LIMITED");
+      expect(over.body.details).toMatchObject({ limit: "order_actions_per_member" });
+      expect((await closeRow(third.id)).status).toBe("created");
+    });
+
+    it("keeps the same employee from filling the journal with ignored presses", async () => {
+      const shop = await company("Журнал", { firstName: "Айгерим" });
+      const marat = await colleague(shop, "Марат");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(marat, order.id);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        expectError(
+          await shop.first.as("post", `/supplier/orders/${order.id}/accept`, {
+            expectedVersion: 1,
+          }),
+          409,
+          "ORDER_STATE_CONFLICT",
+        );
+      }
+      const ignored = (await events(order.id)).filter(
+        (entry) => entry.action === "late_action_ignored",
+      );
+      expect(ignored).toHaveLength(1);
+      // Another intention of the same employee is still recorded once.
+      expectError(
+        await shop.first.as("post", `/supplier/orders/${order.id}/ready`, { expectedVersion: 1 }),
+        409,
+        "ORDER_STATE_CONFLICT",
+      );
+      expect(
+        (await events(order.id)).filter((entry) => entry.action === "late_action_ignored"),
+      ).toHaveLength(2);
+    });
+
+    it("names in a conflict only what somebody did to the order, never the customer's own creation", async () => {
+      const shop = await company("Конфликт", { firstName: "Айгерим" });
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      // A stale version on an untouched order: nobody has acted yet.
+      const stale = await shop.as("post", `/supplier/orders/${order.id}/accept`, {
+        expectedVersion: 7,
+      });
+      expectError(stale, 409, "ORDER_STATE_CONFLICT");
+      expect(orderStateConflictDetailsSchema.parse(stale.body.details)).toEqual({
+        currentStatus: "created",
+        version: 1,
+      });
+      expect(stale.body.details).not.toHaveProperty("lastAction");
+      // Once somebody has acted, the conflict names them to a colleague
+      // (pressing one's own button again is the harmless repeat of I311).
+      const marat = await colleague(shop, "Марат");
+      await accept(shop, order.id);
+      const late = await marat.as("post", `/supplier/orders/${order.id}/accept`, {
+        expectedVersion: 1,
+      });
+      expectError(late, 409, "ORDER_STATE_CONFLICT");
+      expect(late.body.details).toMatchObject({
+        lastAction: { action: "accept", actor: { kind: "member", name: "Айгерим" } },
+      });
+    });
+
+    it("never changes the reason of a decline behind the employee's back", async () => {
+      const shop = await company("Причина");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await ok(
+        shop.as("post", `/supplier/orders/${order.id}/decline`, {
+          expectedVersion: 1,
+          reason: "out_of_stock",
+          note: "Нет на складе",
+        }),
+        (raw) => raw,
+      );
+      // The very same request again: a double tap, 200, nothing written.
+      const repeat = await ok(
+        shop.as("post", `/supplier/orders/${order.id}/decline`, {
+          expectedVersion: 1,
+          reason: "out_of_stock",
+          note: "Нет на складе",
+        }),
+        (raw) => checked(declineOrderResponseSchema)(raw),
+      );
+      expect(repeat.order.decline).toEqual({ reason: "out_of_stock", note: "Нет на складе" });
+      // Another reason is not silently dropped: the employee is told.
+      const changed = await shop.as("post", `/supplier/orders/${order.id}/decline`, {
+        expectedVersion: 1,
+        reason: "other",
+        note: "Передумали",
+      });
+      expectError(changed, 409, "ORDER_STATE_CONFLICT");
+      expect(changed.body.details).toMatchObject({ lastAction: { action: "decline" } });
+      const { rows } = await db.query<{ decline_reason: string; decline_note: string }>(
+        "SELECT decline_reason, decline_note FROM customer_order WHERE id = $1",
+        [order.id],
+      );
+      expect(rows[0]).toEqual({ decline_reason: "out_of_stock", decline_note: "Нет на складе" });
+    });
+
+    it("counts a deadline as passed when reading the card, before the sweeper comes", async () => {
+      const shop = await company("Ленивое");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await db.query(
+        "UPDATE customer_order SET expires_at = now() - interval '1 minute' WHERE id = $1",
+        [order.id],
+      );
+      // No sweep: the card of every side already says so.
+      expect((await supplierOrder(shop, order.id)).status).toBe("reserve_expired");
+      expect((await userOrder(buyer, order.id)).status).toBe("reserve_expired");
+      expect((await adminOrder(order.id)).status).toBe("reserve_expired");
+      // …and the scanner offers a late close instead of «Выдать».
+      expect(await lookup(shop, { code: codeOf(order) })).toMatchObject({ result: "late" });
+      expect((await events(order.id)).map((entry) => entry.action)).toEqual([
+        "create",
+        "accept",
+        "expire_reserve",
+      ]);
+    });
+
+    it("decides deadlines by the clock of the database", async () => {
+      const shop = await company("Часы");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      const dbTime = await databaseNow(app.get(DatabaseService).db);
+      const { rows } = await db.query<{ at: Date }>("SELECT now() AS at");
+      expect(Math.abs(dbTime.getTime() - rows[0]!.at.getTime())).toBeLessThan(2000);
+      // The expiry is stamped with the database's transaction time, the one
+      // every process shares — the row and its journal entry agree exactly.
+      await expireResponse(order.id);
+      const { rows: stamped } = await db.query<{ same: boolean }>(
+        `SELECT o.updated_at = e.created_at AS same
+         FROM customer_order o JOIN order_event e ON e.order_id = o.id
+         WHERE o.id = $1 AND e.action = 'expire_no_response'`,
+        [order.id],
+      );
+      expect(stamped[0]?.same).toBe(true);
+    });
+
+    it("clears the idempotency key of an order long finished, keeping the order", async () => {
+      await settings.set({ cleanup_order_idempotency_retention_days: 1 });
+      const shop = await company("Ключи");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const finished = await place(buyer, offer, { allowAnotherActive: true });
+      await ok(buyer.as("post", `/orders/${finished.id}/cancel`), (raw) => raw);
+      const active = await place(buyer, offer, { allowAnotherActive: true });
+      await db.query(
+        "UPDATE customer_order SET finished_at = now() - interval '2 days' WHERE id = $1",
+        [finished.id],
+      );
+      const cleanup = new OrderIdempotencyCleanup(
+        { sweep: () => undefined } as unknown as JobRegistry,
+        app.get(AppSettings),
+      );
+      const result = await new SweepRunner(app.get(DatabaseService)).run(
+        orderIdempotencyCleanupJob,
+        cleanup,
+        { signal: new AbortController().signal },
+      );
+      expect(result.processed).toBe(1);
+      expect((await closeRow(finished.id)).idempotency_key).toBeNull();
+      // The order itself, its journal and the active order's key are untouched.
+      expect((await closeRow(finished.id)).status).toBe("cancelled_by_user");
+      expect((await events(finished.id)).length).toBeGreaterThan(0);
+      expect((await closeRow(active.id)).idempotency_key).not.toBeNull();
+    });
+  });
+
+  describe("the code and the QR after TASK-022", () => {
+    it("reaches no answer of the scanner, of the administrator, no journal and no log", async () => {
+      const shop = await company("Тайна", { firstName: "Айгерим" });
+      const other = await company("Другая");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const answers: unknown[] = [];
+      const keep = async (test: PromiseLike<Response>) => {
+        const response = await test;
+        answers.push(response.body);
+        return response;
+      };
+      const given = await place(buyer, offer, { allowAnotherActive: true });
+      const lateOne = await place(buyer, offer, { allowAnotherActive: true });
+      const byAdmin = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, given.id);
+      await accept(shop, lateOne.id);
+      await accept(shop, byAdmin.id);
+      await expireReserve(lateOne.id);
+      for (const order of [given, lateOne]) {
+        await keep(shop.as("post", "/supplier/orders/lookup", { code: codeOf(order) }));
+        await keep(shop.as("post", "/supplier/orders/lookup", { qr: qrOf(order) }));
+        await keep(other.as("post", "/supplier/orders/lookup", { code: codeOf(order) }));
+        await keep(shop.as("post", "/supplier/orders/close", { code: codeOf(order) }));
+        await keep(shop.as("post", "/supplier/orders/close", { code: codeOf(order) }));
+        await keep(shop.as("get", `/supplier/orders/${order.id}`));
+        await keep(asAdmin("get", `/admin/orders/${order.id}`));
+      }
+      await keep(
+        asAdmin("post", `/admin/orders/${byAdmin.id}/close`, {
+          expectedVersion: 2,
+          reason: "Разбор",
+        }),
+      );
+      await keep(asAdmin("get", "/admin/orders?status=completed"));
+      await keep(asAdmin("get", "/supplier/orders?tab=finished"));
+      await keep(asAdmin("get", "/admin/discipline"));
+      await keep(asAdmin("get", "/admin/signals"));
+      await keep(asAdmin("get", "/admin/audit-log?entityType=order"));
+
+      const { rows: journal } = await db.query<{ text: string }>(
+        "SELECT payload::text AS text FROM order_event UNION ALL SELECT concat(before::text, after::text, reason) FROM audit_log",
+      );
+      const stored = journal.map((entry) => entry.text).join("\n");
+      const seen = JSON.stringify(answers);
+      const logged = appLogText(output.text());
+      for (const order of [given, lateOne, byAdmin]) {
+        const code = codeOf(order);
+        const qr = qrOf(order).slice(ORDER_QR_PREFIX.length);
+        const word = new RegExp(`(?<![0-9A-Za-z])${code}(?![0-9A-Za-z])`);
+        expect(seen, "an answer of the scanner or the administrator").not.toMatch(word);
+        expect(seen).not.toContain(qr);
+        expect(stored, "the journals").not.toMatch(word);
+        expect(stored).not.toContain(qr);
+        expect(logged, "the log").not.toMatch(word);
+        expect(output.text()).not.toContain(qr);
+      }
+      expect(seen).not.toContain(ORDER_QR_PREFIX);
+    });
+
+    it("keeps the QR out of the monitoring when a write fails with the whole row", async () => {
+      const shop = await company("Сбой QR");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      const qr = qrOf(order).slice(ORDER_QR_PREFIX.length);
+      receiver.bodies.length = 0;
+      // A check the close breaks: PostgreSQL then puts the whole row — the
+      // code and the QR token among it — into the error's detail.
+      await db.query(
+        "ALTER TABLE customer_order ADD CONSTRAINT leak_probe_close CHECK (close_method IS NULL) NOT VALID",
+      );
+      try {
+        const failed = await shop.as("post", "/supplier/orders/close", { code: codeOf(order) });
+        expect(failed.status).toBe(500);
+        for (let attempt = 0; attempt < 50 && receiver.bodies.length === 0; attempt += 1) {
+          await sleep(100);
+        }
+      } finally {
+        await db.query("ALTER TABLE customer_order DROP CONSTRAINT leak_probe_close");
+      }
+      expect(receiver.bodies.length).toBeGreaterThan(0);
+      const sent = receiver.text();
+      expect(sent).toContain("leak_probe_close");
+      expect(sent).not.toContain(qr);
+      expect(sent).not.toContain(codeOf(order));
+      expect(output.text()).not.toContain(qr);
+      expect((await closeRow(order.id)).status).toBe("accepted");
+    });
+
+    it("keeps the scanner's routes in their own context", async () => {
+      const shop = await company("Контексты");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      for (const path of ["/supplier/orders/lookup", "/supplier/orders/close"]) {
+        expectError(
+          await http()
+            .post(path)
+            .set("X-Client", SUPPLIER_WEB)
+            .send({ code: codeOf(order) }),
+          401,
+          "AUTH_REQUIRED",
+        );
+        expectError(await buyer.as("post", path, { code: codeOf(order) }), 403, "FORBIDDEN");
+        expectError(await asAdmin("post", path, { code: codeOf(order) }), 403, "FORBIDDEN");
+      }
+      expect((await closeRow(order.id)).status).toBe("accepted");
     });
   });
 });

@@ -60,6 +60,9 @@ const SENSITIVE_KEY = [
   /cookies?$/i,
   /^otp|otp$/i,
   /(^|_)code(s)?$|Code(s)?$/i,
+  // The QR of an order is its second credential: `qrPayload`, `qr_payload`,
+  // `qrToken`, `qr` (TASK-022; `qrToken` also matches /token/ above).
+  /(^|_)qr(_|$)|qr_?(payload|token|content|data|text|image)/i,
   /(^|_)pin$/i,
   // `apiKey`, `api_key`, `x-api-key`, `signing-key`, …
   /(api|secret|private|public|encryption|signing|hash|access)[_-]?key/i,
@@ -90,6 +93,8 @@ const TOKEN_LIKE = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}(?:\.[A-Za-z0-9_-]+)?/g,
   // Refresh token `rt1.<session>.<generation>.<secret>` and sign-in step `st1.<id>.<secret>`.
   /\b[a-z]{2}\d\.[0-9a-fA-F-]{36}\.[A-Za-z0-9_.-]{6,}/g,
+  // The content of an order's QR, wherever it appears in text (TASK-022).
+  /ADCLUB-ORDER:[A-Za-z0-9_-]+/g,
   // The authenticator app URI carries the TOTP secret.
   /otpauth:\/\/\S+/g,
   // A bearer credential wherever it appears in text.

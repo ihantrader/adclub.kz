@@ -105,13 +105,15 @@ const orders = group({
       description:
         "Отмена услуги позже чем за столько часов до времени записывается в дисциплину пользователя.",
     }),
-    late_close_window_hours: define.duration({
+    // TASK-022 (ARCHITECTURE 4.32): раньше ключ назывался
+    // `late_close_window_hours` и ничем не читался.
+    order_late_close_hours: define.duration({
       unit: "hours",
       min: 0,
       max: 336,
       default: 48,
       description:
-        "Сколько часов после истечения заявки поставщик ещё может закрыть её кодом (позднее закрытие).",
+        "Сколько часов после истечения резерва сотрудник поставщика ещё может закрыть заявку кодом или QR (позднее закрытие). Окно фиксируется в заявке при истечении: изменение настройки не меняет уже истёкшие заявки.",
     }),
     deadline_extension_max_hours: define.duration({
       unit: "hours",
@@ -151,6 +153,82 @@ const orders = group({
       max: DAY,
       default: HOUR,
       description: "Окно лимита создания заявок одним пользователем.",
+    }),
+    // TASK-022 (ARCHITECTURE 4.32).
+    order_lookup_per_member: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 60,
+      description:
+        "Сколько раз один сотрудник может искать заявку по коду или QR за окно (общий предел, успешные поиски тоже).",
+    }),
+    order_lookup_per_member_window_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: DAY,
+      default: 60,
+      description: "Окно общего предела поиска заявки по коду.",
+    }),
+    order_lookup_failures_per_member: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 10,
+      description:
+        "Сколько неудачных поисков (код не найден или заявка другого поставщика) допускается одному сотруднику за окно; сверх — отказ с временем ожидания. Защита от перебора шестизначного кода.",
+    }),
+    order_lookup_failures_per_member_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела неудачных поисков одного сотрудника.",
+    }),
+    order_lookup_failures_per_supplier: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 30,
+      description:
+        "Сколько неудачных поисков допускается всей компании за окно; сверх — отказ всей компании (перебор с нескольких учётных записей).",
+    }),
+    order_lookup_failures_per_supplier_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела неудачных поисков одной компании.",
+    }),
+    order_actions_per_member: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 120,
+      description:
+        "Сколько действий по заявкам (принять, готово, отказать) один сотрудник может сделать за окно.",
+    }),
+    order_actions_per_member_window_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: DAY,
+      default: 60,
+      description: "Окно предела действий сотрудника по заявкам.",
+    }),
+    admin_close_signal_count: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 3,
+      description:
+        "Сколько закрытий заявок администратором без кода у одного поставщика за период дают сигнал администратору (D-043).",
+    }),
+    admin_close_signal_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description: "Период, за который считаются закрытия администратором для сигнала.",
     }),
   },
 });
@@ -943,6 +1021,15 @@ const cleanup = group({
       default: 30,
       description:
         "Через сколько дней после выхода или истечения удаляются сессии (нужны, чтобы разобраться в сообщении о чужом входе).",
+    }),
+    // TASK-022 (ARCHITECTURE 4.32).
+    cleanup_order_idempotency_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Через сколько дней после завершения заявки у неё очищается ключ повторной отправки (сама заявка и её журнал остаются).",
     }),
   },
 });

@@ -1,8 +1,12 @@
 import { Module, type DynamicModule } from "@nestjs/common";
+import { Discipline } from "./order-discipline";
+import { OrderLookup } from "./order-lookup.service";
 import { OrderTransitions } from "./order-transitions";
 import {
+  AdminDisciplineController,
   AdminOrdersController,
   SupplierOrdersController,
+  SupplierScanController,
   UserOrdersController,
 } from "./orders.controller";
 import { OrdersService } from "./orders.service";
@@ -17,23 +21,33 @@ export interface OrdersModuleOptions {
   offers: DynamicModule;
   /** The club access module of the application, the very same instance. */
   clubAccess: DynamicModule;
+  /** The signals module of the application, the very same instance. */
+  signals: DynamicModule;
 }
 
 /**
- * Orders on items in stock (ARCHITECTURE 5.7, 6.1, 4.31; TASK-021): the
- * state machine (`OrderTransitions`), creation, the views of each side and
- * the routes. The deadlines are applied by the worker (`OrderJobsModule`).
+ * Orders on items in stock (ARCHITECTURE 5.7, 6.1, 6.5, 4.31, 4.32;
+ * TASK-021, TASK-022): the state machine (`OrderTransitions`), creation,
+ * giving an order out against the code or the QR (`OrderLookup`), the
+ * discipline marks of users (`Discipline`), the views of each side and the
+ * routes. The deadlines are applied by the worker (`OrderJobsModule`).
  */
 @Module({})
 export class OrdersModule {
   static forRoot(options: OrdersModuleOptions): DynamicModule {
     return {
       module: OrdersModule,
-      imports: [options.offers, options.clubAccess],
+      imports: [options.offers, options.clubAccess, options.signals],
       controllers: options.http
-        ? [UserOrdersController, SupplierOrdersController, AdminOrdersController]
+        ? [
+            UserOrdersController,
+            SupplierOrdersController,
+            SupplierScanController,
+            AdminOrdersController,
+            AdminDisciplineController,
+          ]
         : [],
-      providers: [OrderTransitions, OrdersService],
+      providers: [Discipline, OrderTransitions, OrderLookup, OrdersService],
       exports: [OrdersService],
     };
   }

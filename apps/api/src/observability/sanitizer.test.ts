@@ -146,6 +146,24 @@ describe("sanitizeValue: objects, arrays and keys", () => {
     expect(json(result)).not.toContain("483920");
   });
 
+  it("removes the QR of an order, by its key and inside any text (TASK-022)", () => {
+    const token = "Xy7-_Ab9CdEfGhIjKlMn";
+    const result = sanitizeValue({
+      qrPayload: `ADCLUB-ORDER:${token}`,
+      qr_payload: `ADCLUB-ORDER:${token}`,
+      qrToken: token,
+      qr: token,
+      confirmation: { code: "482915", qrPayload: `ADCLUB-ORDER:${token}` },
+      message: `scanned ADCLUB-ORDER:${token} at the counter`,
+    }) as Record<string, unknown>;
+    for (const key of ["qrPayload", "qr_payload", "qrToken", "qr", "message"]) {
+      expect(result[key], key).toBe(REDACTED);
+    }
+    expect(json(result)).not.toContain(token);
+    expect(json(result)).not.toContain("ADCLUB-ORDER");
+    expect(json(result)).not.toContain("482915");
+  });
+
   it("keeps identifiers, technical names and safe counters", () => {
     const value = {
       accountId: "550e8400-e29b-41d4-a716-446655440000",

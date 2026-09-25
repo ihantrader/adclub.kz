@@ -2,15 +2,21 @@ import { Inject, Injectable, Logger, Module, type OnModuleInit } from "@nestjs/c
 import { sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { defineSweeperJob, JobRegistry, type Sweeper, type SweepResult } from "../../jobs";
+import { AdminSignals } from "../signals";
+import { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
+import { Discipline } from "./order-discipline";
 import { OrderTransitions, type DeadlineOutcome } from "./order-transitions";
 
 /**
  * The deadlines of orders (ARCHITECTURE 13.1, 13.2, 6.1, 4.31; TASK-021
  * requirement 3): every minute one sweeper takes the orders past a
  * deadline — no answer by `respond_by` (→ `response_expired`, the journal
- * says «нет ответа»), the end of the pickup reserve (→ `reserve_expired`),
- * the time to warn that the reserve ends — in batches, and applies the move
- * through the same state machine as people (`OrderTransitions.applyDue`).
+ * says «нет ответа»), the end of the pickup reserve (→ `reserve_expired`,
+ * with the discipline mark of the user and the late close window),
+ * the time to warn that the reserve ends, and the end of the late close
+ * window, after which the order lets go of its confirmation code
+ * (TASK-022) — in batches, and applies the move through the same state
+ * machine as people (`OrderTransitions.applyDue`).
  *
  * The deadlines live in the orders, not in the queue: a worker that was
  * down for hours finds everything that fell due and applies it once
@@ -22,7 +28,7 @@ import { OrderTransitions, type DeadlineOutcome } from "./order-transitions";
 
 export const orderDeadlinesJob = defineSweeperJob({ name: "orders.apply-deadlines" });
 
-export const orderJobCatalog = [orderDeadlinesJob];
+export const orderJobCatalog = [orderDeadlinesJob, orderIdempotencyCleanupJob];
 
 @Injectable()
 export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
@@ -48,7 +54,8 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
     _context: void,
     batch: { limit: number; excludeIds: string[] },
   ): Promise<string[]> {
-    const now = new Date().toISOString();
+    // The clock of the database, one for every process (TASK-022, debt 6).
+    const now = sql`now()`;
     const excluded =
       batch.excludeIds.length > 0
         ? sql`AND o.id NOT IN (${sql.join(
@@ -61,21 +68,29 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
       SELECT o.id FROM customer_order o
       WHERE o.id IN (
           SELECT id FROM customer_order
-          WHERE status = 'created' AND respond_by <= ${now}::timestamptz
+          WHERE status = 'created' AND respond_by <= ${now}
           UNION ALL
           SELECT id FROM customer_order
           WHERE status IN ('accepted', 'ready') AND expires_at IS NOT NULL
-            AND expires_at <= ${now}::timestamptz
+            AND expires_at <= ${now}
           UNION ALL
           SELECT id FROM customer_order
           WHERE status IN ('accepted', 'ready') AND reserve_warned_at IS NULL
-            AND reserve_warn_at <= ${now}::timestamptz
+            AND reserve_warn_at <= ${now}
+          UNION ALL
+          -- The late close window has passed: the code belongs to nobody
+          -- any more and may be drawn for another order (TASK-022).
+          SELECT id FROM customer_order
+          WHERE status = 'reserve_expired' AND code_released_at IS NULL
+            AND late_close_until <= ${now}
         )
         ${excluded}
       ORDER BY least(
         CASE WHEN o.status = 'created' THEN o.respond_by END,
-        CASE WHEN o.status <> 'created' THEN o.expires_at END,
-        CASE WHEN o.status <> 'created' AND o.reserve_warned_at IS NULL THEN o.reserve_warn_at END
+        CASE WHEN o.status IN ('accepted', 'ready') THEN o.expires_at END,
+        CASE WHEN o.status IN ('accepted', 'ready') AND o.reserve_warned_at IS NULL
+          THEN o.reserve_warn_at END,
+        CASE WHEN o.status = 'reserve_expired' THEN o.late_close_until END
       ), o.id
       LIMIT ${batch.limit}
       FOR UPDATE OF o SKIP LOCKED
@@ -99,5 +114,13 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
 }
 
 /** The orders module's background jobs, for the worker process. */
-@Module({ providers: [OrderTransitions, OrderDeadlineSweeper] })
+@Module({
+  providers: [
+    Discipline,
+    AdminSignals,
+    OrderTransitions,
+    OrderDeadlineSweeper,
+    OrderIdempotencyCleanup,
+  ],
+})
 export class OrderJobsModule {}

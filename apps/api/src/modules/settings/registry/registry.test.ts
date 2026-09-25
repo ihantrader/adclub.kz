@@ -69,7 +69,7 @@ describe("settings registry", () => {
     ]);
     for (const key of [
       "supplier_response_hours",
-      "late_close_window_hours",
+      "order_late_close_hours",
       "max_notified_members",
       "whatsapp_fallback_minutes",
       "guest_limits",

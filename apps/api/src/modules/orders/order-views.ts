@@ -3,14 +3,18 @@ import type {
   AdminOrderSummary,
   CatalogLanguage,
   DayHours,
+  DisciplineMark,
   LocalizedText,
   OrderActor,
+  OrderClosure,
   OrderEvent,
   OrderEventDetails,
+  OrderGivenOut,
   OrderItem,
   OrderTerms,
   SupplierOrder,
   SupplierOrderSummary,
+  SupplierScanOrder,
   UserOrder,
   UserOrderStep,
   UserOrderSummary,
@@ -119,6 +123,7 @@ function detailsOf(payload: Record<string, unknown>): OrderEventDetails {
     "reserveUntil",
     "receiptOn",
     "attemptedAction",
+    "closeMethod",
   ] as const) {
     if (payload[key] !== undefined && payload[key] !== null) {
       details[key] = payload[key];
@@ -190,6 +195,35 @@ function handledOf(row: OrderRow, members: Map<string, MemberName>) {
     handledBy: row.handledByMemberId ? memberActor(row.handledByMemberId, members) : null,
     handledAt: row.handledAt ? iso(row.handledAt) : null,
   };
+}
+
+/**
+ * How the order was given out, for the supplier and the administrator
+ * («Закрыта поздно», «Закрыта администратором»); `null` — not given out.
+ * The reason of an administrator's close is left out here — only their own
+ * view adds it.
+ */
+function closureFrom(row: OrderRow, members: Map<string, MemberName>): OrderClosure | null {
+  if (!row.closedAt || !row.closeMethod) {
+    return null;
+  }
+  const by: OrderActor = row.closedByMemberId
+    ? memberActor(row.closedByMemberId, members)
+    : row.closedByAdminId
+      ? { kind: "admin", adminId: row.closedByAdminId }
+      : { kind: "system" };
+  return { at: iso(row.closedAt), method: row.closeMethod, by, late: row.closedLate };
+}
+
+/** The same, loading the employee's name on its own (the scanner's answers). */
+export async function closureOf(executor: DbExecutor, row: OrderRow): Promise<OrderClosure | null> {
+  const members = await memberNames(executor, [row.closedByMemberId]);
+  return closureFrom(row, members);
+}
+
+/** What the user learns about the end of their order (never who or how). */
+function givenOutOf(row: OrderRow): OrderGivenOut | null {
+  return row.closedAt ? { at: iso(row.closedAt), late: row.closedLate } : null;
 }
 
 function declineOf(row: OrderRow) {
@@ -359,6 +393,7 @@ export async function userOrderView(
     ...(isActiveOrderStatus(row.status)
       ? { confirmation: { code: row.confirmationCode, qrPayload: qrPayload(row.qrToken) } }
       : {}),
+    givenOut: givenOutOf(row),
     history: events.map(stepOf).filter((step): step is UserOrderStep => step !== null),
   };
 }
@@ -370,11 +405,15 @@ export async function supplierSummaries(
   rows: readonly OrderRow[],
   lang: CatalogLanguage,
 ): Promise<SupplierOrderSummary[]> {
-  const members = await memberNames(
-    executor,
-    rows.map((row) => row.handledByMemberId),
-  );
-  return rows.map((row) => ({ ...baseOf(row, lang), ...handledOf(row, members) }));
+  const members = await memberNames(executor, [
+    ...rows.map((row) => row.handledByMemberId),
+    ...rows.map((row) => row.closedByMemberId),
+  ]);
+  return rows.map((row) => ({
+    ...baseOf(row, lang),
+    ...handledOf(row, members),
+    closure: closureFrom(row, members),
+  }));
 }
 
 export async function supplierOrderView(
@@ -385,6 +424,7 @@ export async function supplierOrderView(
   const events = (await eventsOf(executor, [row.id])).get(row.id) ?? [];
   const members = await memberNames(executor, [
     row.handledByMemberId,
+    row.closedByMemberId,
     ...events.map((event) => event.actorMemberId),
   ]);
   // The phone is read only for an order this supplier accepted.
@@ -395,6 +435,7 @@ export async function supplierOrderView(
   return {
     ...baseOf(row, lang),
     ...handledOf(row, members),
+    closure: closureFrom(row, members),
     version: row.version,
     updatedAt: iso(row.updatedAt),
     terms: termsOf(row),
@@ -416,10 +457,10 @@ export async function adminSummaries(
   lang: CatalogLanguage,
 ): Promise<AdminOrderSummary[]> {
   const [members, names, phones] = await Promise.all([
-    memberNames(
-      executor,
-      rows.map((row) => row.handledByMemberId),
-    ),
+    memberNames(executor, [
+      ...rows.map((row) => row.handledByMemberId),
+      ...rows.map((row) => row.closedByMemberId),
+    ]),
     supplierNames(
       executor,
       rows.map((row) => row.supplierId),
@@ -429,23 +470,30 @@ export async function adminSummaries(
       rows.map((row) => row.userAccountId),
     ),
   ]);
-  return rows.map((row) => ({
-    ...baseOf(row, lang),
-    ...handledOf(row, members),
-    supplier: { id: row.supplierId, name: names.get(row.supplierId) ?? "" },
-    customer: { accountId: row.userAccountId, phone: phones.get(row.userAccountId) ?? "" },
-  }));
+  return rows.map((row) => {
+    const closure = closureFrom(row, members);
+    return {
+      ...baseOf(row, lang),
+      ...handledOf(row, members),
+      supplier: { id: row.supplierId, name: names.get(row.supplierId) ?? "" },
+      customer: { accountId: row.userAccountId, phone: phones.get(row.userAccountId) ?? "" },
+      // Only the administrator sees why an order was closed without a code.
+      closure: closure ? { ...closure, reason: row.closeReason } : null,
+    };
+  });
 }
 
 export async function adminOrderView(
   executor: DbExecutor,
   row: OrderRow,
   lang: CatalogLanguage,
+  discipline: DisciplineMark[] = [],
 ): Promise<AdminOrder> {
   const [summary] = await adminSummaries(executor, [row], lang);
   const events = (await eventsOf(executor, [row.id])).get(row.id) ?? [];
   const members = await memberNames(executor, [
     row.handledByMemberId,
+    row.closedByMemberId,
     ...events.map((event) => event.actorMemberId),
   ]);
   const [cityRow] = await executor
@@ -462,7 +510,32 @@ export async function adminOrderView(
     cityName: cityRow?.name ?? row.offerSnapshot.location.cityName,
     phoneRevealedAt: row.phoneRevealedAt ? iso(row.phoneRevealedAt) : null,
     decline: declineOf(row),
+    discipline,
     events: events.map((event) => eventOf(event, members)),
+  };
+}
+
+/**
+ * The order on the scanner's screen (S-SCAN-03): the item, the quantity and
+ * the sum — never the code, the QR or the customer's phone number. The
+ * phone belongs to the card of an accepted order, not to a screen anyone
+ * reaches by typing six digits.
+ */
+export function scanOrderView(row: OrderRow, lang: CatalogLanguage): SupplierScanOrder {
+  return {
+    id: row.id,
+    number: row.number,
+    status: row.status,
+    version: row.version,
+    isTest: row.isTest,
+    quantity: row.quantity,
+    unitPrice: row.unitPrice,
+    total: row.total,
+    currency: row.currency,
+    fulfillment: row.fulfillment,
+    item: itemOf(row, lang),
+    receiptOn: row.receiptOn,
+    createdAt: iso(row.createdAt),
   };
 }
 

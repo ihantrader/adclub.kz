@@ -1,22 +1,39 @@
 import { Body, Controller, Headers, Inject, Param, Query } from "@nestjs/common";
 import {
+  adminCloseOrderBodySchema,
+  adminDisciplineListQuerySchema,
+  adminDisciplineUsersQuerySchema,
   adminOrderListQuerySchema,
   apiRoutes,
   createOrderBodySchema,
   declineOrderBodySchema,
+  disciplinePathSchema,
   orderActionBodySchema,
+  orderCredentialSchema,
   orderPathSchema,
+  revokeDisciplineBodySchema,
   supplierOrderListQuerySchema,
   userOrderListQuerySchema,
+  type AdminCloseOrderBody,
+  type AdminDisciplineListQuery,
+  type AdminDisciplineMarkResponse,
+  type AdminDisciplinePage,
+  type AdminDisciplineUsersPage,
+  type AdminDisciplineUsersQuery,
   type AdminOrderListQuery,
   type AdminOrderPage,
   type AdminOrderResponse,
+  type CloseOrderResponse,
   type CreateOrderInput,
   type CreateOrderResponse,
   type DeclineOrderBody,
   type DeclineOrderResponse,
+  type DisciplinePath,
   type OrderActionBody,
+  type OrderCredential,
+  type OrderLookupResponse,
   type OrderPath,
+  type RevokeDisciplineBody,
   type SupplierOrderListQuery,
   type SupplierOrderPage,
   type SupplierOrderResponse,
@@ -27,6 +44,8 @@ import {
 import { pickLanguage } from "@adclub/i18n";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
+import { Discipline } from "./order-discipline";
+import { OrderLookup } from "./order-lookup.service";
 import { OrdersService, type OrderSupplierActor } from "./orders.service";
 
 function supplierActor(session: AuthenticatedSession): OrderSupplierActor {
@@ -188,7 +207,49 @@ export class SupplierOrdersController {
   }
 }
 
-/** Any order for the administrator, read only (context `admin`; A-ORD-01, A-ORD-02). */
+/**
+ * The scanner of the cabinet (context `supplier`; SCREENS S-SCAN-01…04):
+ * the employee finds an order of their company by the code the customer
+ * says or by the content of their QR, and gives it out. The credential is
+ * sent in the body — never in a path or a query, where it would end up in
+ * logs and caches.
+ */
+@Controller()
+export class SupplierScanController {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(OrderLookup) private readonly lookup: OrderLookup) {}
+
+  @SessionRoute(apiRoutes.lookupSupplierOrder)
+  find(
+    @Body(new ZodValidationPipe(orderCredentialSchema)) body: OrderCredential,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<OrderLookupResponse> {
+    return this.lookup.lookup(supplierActor(session), body, pickLanguage(acceptLanguage));
+  }
+
+  @SessionRoute(apiRoutes.closeSupplierOrder)
+  close(
+    @Body(new ZodValidationPipe(orderCredentialSchema)) body: OrderCredential,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<CloseOrderResponse> {
+    return this.lookup.close(supplierActor(session), body, pickLanguage(acceptLanguage));
+  }
+}
+
+function adminActor(session: AuthenticatedSession): { accountId: string; adminId: string } {
+  if (!session.adminUserId) {
+    throw new Error("An admin route reached without an administrator");
+  }
+  return { accountId: session.accountId, adminId: session.adminUserId };
+}
+
+/**
+ * Any order for the administrator (context `admin`; A-ORD-01, A-ORD-02):
+ * reading, and the one manual action of this task — closing a disputed
+ * order without a code, with a reason (D-043).
+ */
 @Controller()
 export class AdminOrdersController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
@@ -208,5 +269,58 @@ export class AdminOrdersController {
     @Headers("accept-language") acceptLanguage: string | undefined,
   ): Promise<AdminOrderResponse> {
     return { order: await this.orders.adminOrder(params.orderId, pickLanguage(acceptLanguage)) };
+  }
+
+  @SessionRoute(apiRoutes.closeAdminOrder)
+  async close(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(adminCloseOrderBodySchema)) body: AdminCloseOrderBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminOrderResponse> {
+    return {
+      order: await this.orders.adminClose(
+        adminActor(session),
+        params.orderId,
+        body,
+        pickLanguage(acceptLanguage),
+      ),
+    };
+  }
+}
+
+/**
+ * The club's own discipline statistics of users (context `admin`; A-USR-02,
+ * A-USR-03, A-ORD-02). Nothing of this is ever shown to a user, and no
+ * route outside the admin context reads it.
+ */
+@Controller()
+export class AdminDisciplineController {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(Discipline) private readonly discipline: Discipline) {}
+
+  @SessionRoute(apiRoutes.listAdminDiscipline)
+  list(
+    @Query(new ZodValidationPipe(adminDisciplineListQuerySchema)) query: AdminDisciplineListQuery,
+  ): Promise<AdminDisciplinePage> {
+    return this.discipline.page(query);
+  }
+
+  @SessionRoute(apiRoutes.listAdminDisciplineUsers)
+  users(
+    @Query(new ZodValidationPipe(adminDisciplineUsersQuerySchema)) query: AdminDisciplineUsersQuery,
+  ): Promise<AdminDisciplineUsersPage> {
+    return this.discipline.users(query);
+  }
+
+  @SessionRoute(apiRoutes.revokeAdminDiscipline)
+  async revoke(
+    @Param(new ZodValidationPipe(disciplinePathSchema)) params: DisciplinePath,
+    @Body(new ZodValidationPipe(revokeDisciplineBodySchema)) body: RevokeDisciplineBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminDisciplineMarkResponse> {
+    return {
+      mark: await this.discipline.revokeByAdmin(params.markId, adminActor(session), body.reason),
+    };
   }
 }

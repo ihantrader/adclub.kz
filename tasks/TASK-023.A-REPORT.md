@@ -92,7 +92,7 @@ COMPLETED
   ```
   (`npx vitest run --config vitest.integration.config.ts src/modules/catalog/catalog-photos.integration.test.ts`, пять раз подряд, с включённым выводом приложения.)
 
-- **AC-4 — CI зелёный с первой попытки — PASS** (для коммита с отчётом — см. «Прогоны CI»). Прогон **36180185583** на `main` (коммит `6e3b2a8`, вершина задачи без отчёта): `conclusion: success`, все шаги успешны, включая `Integration test`, `Build`, `OpenAPI document is up to date`, `API contract is backward compatible` и `Verify API and worker shut down gracefully on SIGTERM`. Перезапусков не было.
+- **AC-4 — CI зелёный с первой попытки, включая коммит с отчётом — PASS.** Прогон **36180185583** на `main` (коммит `6e3b2a8`, вершина задачи без отчёта): `conclusion: success`, все шаги успешны, включая `Integration test`, `Build`, `OpenAPI document is up to date`, `API contract is backward compatible` и `Verify API and worker shut down gracefully on SIGTERM`. Прогон **36181349339** (коммит `44bd84c` — отчёт): `conclusion: success`. Перезапусков не было ни у одного.
 
 - **AC-5 — состояние T-8 названо честно — PASS.** Долг **остаётся**. Проверено в день задачи: `docker manifest inspect minio/minio:RELEASE.2025-07-23T15-54-02Z` → `unauthorized: authentication required`; `quay.io/minio/minio` нужной версии → `no such manifest`; `bitnamilegacy/minio:2025.7.23-debian-12-r5` отдаётся без учётной записи. Репозиторий `bitnamilegacy` — замороженный архив (образ сам пишет об этом при старте), новых версий не будет, поэтому постоянным источником он не является. Сделано, чтобы прогоны не падали: устранена настоящая причина отказов, которая к источнику образа отношения не имела. ARCHITECTURE 4.34 I353.
 
@@ -134,7 +134,7 @@ None.
 | `de0caf9` — правки Product Owner (план, состояние, файл задачи) | — | пуш одним разом с коммитами задачи, отдельного прогона нет |
 | `45d6c2c` — запуск хранилища один раз и настоящая проверка готовности | — | то же |
 | `6e3b2a8` — ARCHITECTURE 0.37, раздел 4.34 | **36180185583** | **success** с первой попытки, все шаги |
-| коммит с отчётом | заполняется ниже | — |
+| `44bd84c` — отчёт | **36181349339** | **success** с первой попытки |
 
 Состав коммитов (D-024, только явно перечисленные файлы):
 

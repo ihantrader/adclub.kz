@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   DeleteObjectsCommand,
   GetObjectCommand,
@@ -59,13 +59,17 @@ export function storageUnavailable(): ApiException {
 
 @Injectable()
 export class PhotoStorage {
+  private readonly logger = new Logger("CatalogPhotos");
+
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(StorageService) private readonly storage: StorageService) {}
 
   /**
    * Stores one object. A failure of the storage becomes a 503 the client
    * can repeat — never a 500 and never a half-written photo: the database
-   * row is written only after every object is in place.
+   * row is written only after every object is in place. What the storage
+   * actually said goes to the log: «временно недоступно» without a cause
+   * leaves nothing to act on, and the key names no person.
    */
   async put(key: string, bytes: Buffer, contentType: string): Promise<void> {
     try {
@@ -80,7 +84,9 @@ export class PhotoStorage {
           CacheControl: "private, max-age=31536000",
         }),
       );
-    } catch {
+    } catch (error) {
+      const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      this.logger.warn(`Photo upload refused by the storage key=${key} cause=${cause}`);
       throw storageUnavailable();
     }
   }

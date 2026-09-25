@@ -71,10 +71,18 @@ export {
   orderActionActor,
   orderActions,
   orderActionSources,
+  orderCloseActions,
   orderStatuses,
   orderTransition,
 } from "./order/order-machine";
-export type { ActiveOrderStatus, OrderAction, OrderStatus } from "./order/order-machine";
+export type {
+  ActiveOrderStatus,
+  OrderAction,
+  OrderCloseAction,
+  OrderStatus,
+} from "./order/order-machine";
+export { lateCloseUntil, orderCloseVerdict } from "./order/order-close";
+export type { OrderCloseFacts, OrderCloseRefusal, OrderCloseVerdict } from "./order/order-close";
 export {
   acceptedReserveEnd,
   readyReserveEnd,

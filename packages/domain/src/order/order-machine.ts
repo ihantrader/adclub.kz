@@ -9,9 +9,12 @@
  * `created → accepted → ready → completed`; besides — cancelled by the
  * user, declined by the supplier, expired without an answer, expired
  * reserve. «Ready» is optional: an accepted order is closed by its code
- * straight away (D-040). Every final status is final: nothing moves an
- * order out of it (the late close of an expired reserve — TASK-022 — is a
- * move of its own, not in this table yet).
+ * straight away (D-040). Every final status is final but one: an order
+ * whose pickup reserve expired is still given out by its code inside the
+ * late close window (`close_late`, PRODUCT 10.7, ARCHITECTURE 6.5) — a
+ * move of its own, so «the user came in time» never turns into «anything
+ * may be closed afterwards». The administrator closes a disputed order
+ * without a code (`admin_close`, D-043).
  */
 
 export const orderStatuses = [
@@ -41,15 +44,19 @@ export function isActiveOrderStatus(status: OrderStatus): status is ActiveOrderS
 }
 
 /**
- * The moves. `accept`, `decline`, `mark_ready`, `close` — an employee of
- * the supplier (`close` by the code or QR — TASK-022); `cancel` — the user;
- * `expire_no_response`, `expire_reserve` — the deadline sweeper.
+ * The moves. `accept`, `decline`, `mark_ready`, `close`, `close_late` — an
+ * employee of the supplier (`close` and `close_late` only by the code or
+ * the QR); `cancel` — the user; `admin_close` — the administrator, with a
+ * reason (D-043); `expire_no_response`, `expire_reserve` — the deadline
+ * sweeper.
  */
 export const orderActions = [
   "accept",
   "decline",
   "mark_ready",
   "close",
+  "close_late",
+  "admin_close",
   "cancel",
   "expire_no_response",
   "expire_reserve",
@@ -63,10 +70,12 @@ export const orderActionActor = {
   decline: "supplier",
   mark_ready: "supplier",
   close: "supplier",
+  close_late: "supplier",
+  admin_close: "admin",
   cancel: "user",
   expire_no_response: "system",
   expire_reserve: "system",
-} as const satisfies Record<OrderAction, "supplier" | "user" | "system">;
+} as const satisfies Record<OrderAction, "supplier" | "user" | "admin" | "system">;
 
 const moves: Record<OrderAction, { from: readonly OrderStatus[]; to: OrderStatus }> = {
   accept: { from: ["created"], to: "accepted" },
@@ -75,12 +84,26 @@ const moves: Record<OrderAction, { from: readonly OrderStatus[]; to: OrderStatus
   mark_ready: { from: ["accepted"], to: "ready" },
   // D-040: straight from «accepted» too.
   close: { from: ["accepted", "ready"], to: "completed" },
+  // PRODUCT 10.7: only an expired reserve, and only inside the window —
+  // an order the supplier never answered can't be closed late at all.
+  close_late: { from: ["reserve_expired"], to: "completed" },
+  // D-043: a disputed order, going on or expired; never a cancelled, a
+  // declined or an already given out one.
+  admin_close: {
+    from: ["created", "accepted", "ready", "response_expired", "reserve_expired"],
+    to: "completed",
+  },
   // Until the order is given out, after accepting too.
   cancel: { from: ["created", "accepted", "ready"], to: "cancelled_by_user" },
   expire_no_response: { from: ["created"], to: "response_expired" },
   // Pickup only: the server never sets a reserve for delivery.
   expire_reserve: { from: ["accepted", "ready"], to: "reserve_expired" },
 };
+
+/** The two moves that give an order out by its code or its QR. */
+export const orderCloseActions = ["close", "close_late"] as const satisfies readonly OrderAction[];
+
+export type OrderCloseAction = (typeof orderCloseActions)[number];
 
 /** The statuses an action starts from. */
 export function orderActionSources(action: OrderAction): readonly OrderStatus[] {

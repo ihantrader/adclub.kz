@@ -11,6 +11,7 @@ import {
   Sheet,
   SkeletonList,
   Text,
+  useAfterDismiss,
 } from "../design-system";
 import { detectCity } from "../services/geolocation";
 import { useCities } from "../services/use-cities";
@@ -23,6 +24,10 @@ import { useT } from "../state/language";
  * cities of `/cities` in the interface language, the current one marked.
  * The same list is what the first run opens (M-START-04) — one screen for
  * one job, used from two places.
+ *
+ * A choice is applied when the sheet has gone: it closes, and then the city
+ * changes on the screen behind it (and the first run goes on to its next
+ * step) — not both at once, and not under a sheet that is still sliding away.
  */
 export function CitySheet({
   visible,
@@ -31,12 +36,13 @@ export function CitySheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  /** Called after a choice (the first run continues, a sheet just closes). */
+  /** Called after a choice, once the sheet has gone (the first run continues, a sheet just closes). */
   onChosen?: () => void;
 }) {
   const t = useT();
   const { selection, choose, reconcile } = useCity();
   const cities = useCities();
+  const dismissed = useAfterDismiss(visible);
   const [query, setQuery] = useState("");
   const [detection, setDetection] = useState<
     "idle" | "detecting" | "denied" | "unknown" | "failed"
@@ -44,6 +50,11 @@ export function CitySheet({
 
   const visibleCities = useMemo(() => filterCities(cities.cities, query), [cities.cities, query]);
   const ready = cities.status === "ready" && cities.cities.length > 0;
+  // The list keeps one height while the person types, from the whole list and
+  // not from what is left of it: the sheet is anchored at the bottom, so a
+  // list that shrank with every letter would move its top edge, its title
+  // and the very field being typed in.
+  const listHeight = Math.min(MAX_LIST_HEIGHT, (cities.cities.length + 1) * ROW_HEIGHT);
 
   // A renamed city takes its new name, an archived one falls back to "Весь
   // Казахстан" — as soon as a fresh list arrives.
@@ -53,11 +64,13 @@ export function CitySheet({
 
   const pick = useCallback(
     (city: ClientCity | null, detected?: boolean) => {
-      choose(city, detected === undefined ? undefined : { detected });
-      onChosen?.();
+      dismissed.after(() => {
+        choose(city, detected === undefined ? undefined : { detected });
+        onChosen?.();
+      });
       onClose();
     },
-    [choose, onChosen, onClose],
+    [choose, dismissed, onChosen, onClose],
   );
 
   // The system location prompt happens here and nowhere else: after a press.
@@ -91,6 +104,7 @@ export function CitySheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={dismissed.onDismissed}
       title={t("city.title")}
       closeLabel={t("common.close")}
     >
@@ -158,7 +172,7 @@ export function CitySheet({
           }}
           empty={{ icon: "mapPin", title: t("city.listEmpty") }}
         >
-          <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ height: listHeight }} keyboardShouldPersistTaps="handled">
             {query === "" && (
               <ListRow
                 first
@@ -198,9 +212,12 @@ export function CitySheet({
   );
 }
 
+/** A row of a list is at least this tall (`ListRow`, DESIGN 7.7). */
+const ROW_HEIGHT = 56;
+const MAX_LIST_HEIGHT = 320;
+
 const styles = StyleSheet.create({
   body: { gap: 8, paddingBottom: 8 },
-  list: { maxHeight: 320 },
   note: { gap: 4 },
   searchEmpty: { paddingVertical: layout.cardPadding, textAlign: "center" },
 });

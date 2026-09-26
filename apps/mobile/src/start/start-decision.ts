@@ -19,7 +19,7 @@ export type StartScreen =
   | "language"
   /** M-START-04 — the first run: the city. */
   | "first-run-city"
-  /** M-START-05 — the first run: the car (TASK-028). */
+  /** M-START-05 — the first run: the car (TASK-028; no «Пропустить», D-062). */
   | "first-run-car"
   /** M-CAT-01 — the catalog. */
   | "catalog"
@@ -58,6 +58,12 @@ export interface StartInput {
   /** The device language when it is kk/ru/en, otherwise `null`. */
   systemLanguage: Lang | null;
   firstRun: { completed: boolean; step: FirstRunStep };
+  /**
+   * Whether the garage holds at least one car. The first run ends when a car
+   * is added (D-062, SCREENS M-START-05), so this settles the car step by
+   * itself even when the flag «completed» was not written in time.
+   */
+  hasCar: boolean;
   session: SessionState;
   online: boolean;
   /** Whether the device holds a copy of active orders (TASK-030). */
@@ -114,8 +120,12 @@ export function decideStart(input: StartInput): StartDecision {
 /** Rules 3–7, once the interface language is settled. */
 function continueAfterLanguage(input: StartInput): StartDecision {
   // 3. The first run is not finished — its first step, or the step the user
-  //    stopped at.
-  if (!input.firstRun.completed) {
+  //    stopped at. It is finished when a car has been added: there is no
+  //    «Пропустить» on the car step (D-062), so a device that closed the app
+  //    there comes back to the same step, and a car in the garage is enough
+  //    even if the app was closed between saving it and writing the flag.
+  const carSettled = input.firstRun.step === "car" && input.hasCar;
+  if (!input.firstRun.completed && !carSettled) {
     return { screen: input.firstRun.step === "car" ? "first-run-car" : "first-run-city" };
   }
 

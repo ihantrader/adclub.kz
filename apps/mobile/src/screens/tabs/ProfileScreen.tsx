@@ -153,7 +153,9 @@ export function ProfileScreen() {
       </Sheet>
 
       {ShowcaseScreen && showcase && (
-        <Modal visible animationType="slide" onRequestClose={() => setShowcase(false)}>
+        // A fade, not the platform's slide of the whole window: with «Уменьшить
+        // движение» only opacity may change (DESIGN 7.6). Development only.
+        <Modal visible animationType="fade" onRequestClose={() => setShowcase(false)}>
           <Suspense fallback={null}>
             <ShowcaseScreen onClose={() => setShowcase(false)} />
           </Suspense>

@@ -10,6 +10,11 @@ import type { GarageCar } from "../garage/garage";
  * the server's single evaluator. Nothing about the car is stored on the
  * server for a guest — it travels with each request (ARCHITECTURE 8.4).
  *
+ * There is always a car: the catalog opens only with one (D-062,
+ * `catalogEntry`), so the app never asks the server for the catalog without
+ * it — the type says so, and the server's own rule for a request without a
+ * car is left to the administrator's console and to checks.
+ *
  * When the chosen levels named exactly one modification, that id is sent on
  * its own: the server derives the generation, the model and the make from
  * it, and sending the same levels again could only disagree with it. The
@@ -29,8 +34,7 @@ export type VehicleQuery = Pick<
   | "vehicleYear"
 >;
 
-export function vehicleQuery(car: GarageCar | null): VehicleQuery {
-  if (!car) return {};
+export function vehicleQuery(car: GarageCar): VehicleQuery {
   const year = car.year === null ? {} : { vehicleYear: car.year };
   if (car.modificationId) {
     return { vehicleModificationId: car.modificationId, ...year };
@@ -48,8 +52,6 @@ export function vehicleQuery(car: GarageCar | null): VehicleQuery {
 }
 
 /** The same car in the query of an item's card (M-CAT-07). */
-export function vehicleItemQuery(
-  car: GarageCar | null,
-): Pick<ShowcaseItemQuery, keyof VehicleQuery> {
+export function vehicleItemQuery(car: GarageCar): Pick<ShowcaseItemQuery, keyof VehicleQuery> {
   return vehicleQuery(car);
 }

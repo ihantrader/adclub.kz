@@ -1,0 +1,37 @@
+import { StyleSheet, View } from "react-native";
+import { Button, EmptyState, Screen } from "../../design-system";
+import { useT } from "../../state/language";
+
+/**
+ * The whole catalog tab while the garage has no car (D-062, SCREENS
+ * M-CAT-01): «Добавьте автомобиль», one line of why, one button into the
+ * step-by-step choice. No categories, no search, no services, no city — the
+ * catalog does not exist for a person without a car, and a screen that
+ * showed a piece of it would be a way to look without one.
+ *
+ * Registration is not asked for: a guest adds a car and uses the catalog for
+ * it; signing in is for an order (PRODUCT 6.6).
+ */
+export function NeedsCarScreen({ onAddCar }: { onAddCar: () => void }) {
+  const t = useT();
+  return (
+    <Screen title={t("tabs.catalog")} root scroll={false}>
+      <View style={styles.content}>
+        <EmptyState
+          icon="car"
+          title={t("catalog.needCarTitle")}
+          text={t("catalog.needCarText")}
+          action={
+            <Button icon="plus" onPress={onAddCar}>
+              {t("garage.add")}
+            </Button>
+          }
+        />
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { flex: 1, justifyContent: "center" },
+});

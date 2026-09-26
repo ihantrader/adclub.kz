@@ -7,12 +7,13 @@ import {
   type StartInput,
 } from "./start-decision";
 
-/** A returning user: language chosen, first run done, guest, online, no push. */
+/** A returning user: language chosen, first run done, a car, guest, online, no push. */
 const RETURNING: StartInput = {
   policy: "supported",
   storedLanguage: "ru",
   systemLanguage: "ru",
-  firstRun: { completed: true, step: "city" },
+  firstRun: { completed: true, step: "car" },
+  hasCar: true,
   session: "none",
   online: true,
   savedActiveOrders: false,
@@ -23,6 +24,7 @@ const FIRST_LAUNCH: StartInput = {
   ...RETURNING,
   storedLanguage: null,
   firstRun: { completed: false, step: "city" },
+  hasCar: false,
 };
 
 describe("decideStart — the order of SCREENS 5.1", () => {
@@ -76,9 +78,45 @@ describe("decideStart — the order of SCREENS 5.1", () => {
   });
 
   it("3. the app closed mid-way through the first run returns to the step it stopped at", () => {
-    expect(decideStart({ ...RETURNING, firstRun: { completed: false, step: "car" } })).toEqual({
+    // Closed on the car step means the car was not added yet (D-062).
+    expect(
+      decideStart({ ...RETURNING, firstRun: { completed: false, step: "car" }, hasCar: false }),
+    ).toEqual({
       screen: "first-run-car",
     });
+  });
+
+  it("3. the car step has no way out without a car: no car — the same step, whatever else is true", () => {
+    // D-062: «Пропустить» is gone, so the run cannot be finished by leaving.
+    const stopped: StartInput = {
+      ...RETURNING,
+      firstRun: { completed: false, step: "car" },
+      hasCar: false,
+    };
+    expect(decideStart(stopped)).toEqual({ screen: "first-run-car" });
+    expect(decideStart({ ...stopped, online: false })).toEqual({ screen: "first-run-car" });
+  });
+
+  it("3. a car in the garage settles the car step even if the flag was not written", () => {
+    // The app was closed between saving the car and writing «completed».
+    expect(
+      decideStart({
+        ...RETURNING,
+        firstRun: { completed: false, step: "car" },
+        hasCar: true,
+      }),
+    ).toEqual({ screen: "catalog" });
+  });
+
+  it("3. a car does not settle the city step: the city is still to be chosen", () => {
+    expect(
+      decideStart({ ...RETURNING, firstRun: { completed: false, step: "city" }, hasCar: true }),
+    ).toEqual({ screen: "first-run-city" });
+  });
+
+  it("3. a finished first run without a car opens the catalog, which asks for the car itself", () => {
+    // A device that skipped the car step before D-062, or deleted its last car.
+    expect(decideStart({ ...RETURNING, hasCar: false })).toEqual({ screen: "catalog" });
   });
 
   it("3. an unfinished first run beats a revoked session, being offline and a push", () => {

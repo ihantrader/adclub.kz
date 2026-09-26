@@ -32,10 +32,9 @@ function car(overrides: Partial<GarageCar> = {}): GarageCar {
 }
 
 describe("the car in a catalog request", () => {
-  it("sends nothing when no car is chosen", () => {
-    expect(vehicleQuery(null)).toEqual({});
-  });
-
+  // «Sends nothing when no car is chosen» is gone with the case itself: the
+  // catalog opens only with a car (D-062), `vehicleQuery` takes one, and the
+  // type — not a test — says there is no request without it.
   it("sends the known levels of a car without a single modification", () => {
     expect(vehicleQuery(car())).toEqual({
       vehicleMakeId: "make-1",

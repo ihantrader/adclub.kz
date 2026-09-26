@@ -1,14 +1,14 @@
-import { layout } from "@adclub/ui-core";
 import { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Icon, OfflineBanner, Text, useTheme } from "../design-system";
+import { Button, OfflineBanner, Text } from "../design-system";
 import { detectCity } from "../services/geolocation";
 import { useOnline } from "../services/use-network";
 import { useCities } from "../services/use-cities";
 import { useCity } from "../state/city-provider";
 import { useT } from "../state/language";
 import { CitySheet } from "./CitySheet";
+import { FirstRunLayout } from "./FirstRunLayout";
+
+const centered = { textAlign: "center" } as const;
 
 /**
  * M-START-04, the first run: "Где вы находитесь?", "Определить
@@ -19,7 +19,6 @@ import { CitySheet } from "./CitySheet";
  */
 export function FirstRunCityScreen({ onDone }: { onDone: () => void }) {
   const t = useT();
-  const { theme } = useTheme();
   const online = useOnline();
   const cities = useCities();
   const { choose } = useCity();
@@ -41,67 +40,53 @@ export function FirstRunCityScreen({ onDone }: { onDone: () => void }) {
   }, [cities.cities, choose, onDone]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
-      {!online && <OfflineBanner label={t("state.offline")} />}
-      <View style={styles.content}>
-        <Icon name="mapPin" size={48} color="accent" />
-        <Text variant="titleL" accessibilityRole="header" style={styles.center}>
-          {t("city.firstRunTitle")}
-        </Text>
-        <Text color="textMuted" style={styles.center}>
-          {t("city.firstRunText")}
-        </Text>
-        {note !== null && (
-          <Text variant="bodyS" color="textMuted" style={styles.center}>
+    <FirstRunLayout
+      banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
+      icon="mapPin"
+      title={t("city.firstRunTitle")}
+      text={t("city.firstRunText")}
+      note={
+        note !== null ? (
+          <Text variant="bodyS" color="textMuted" style={centered}>
             {t(note === "unknown" ? "city.detectUnknown" : "city.detectFailed")}
           </Text>
-        )}
-      </View>
-      <View style={styles.actions}>
-        <Button icon="myLocation" disabled={cities.status !== "ready"} onPress={detect}>
-          {t("city.detect")}
-        </Button>
-        <Text variant="caption" color="textMuted" style={styles.center}>
-          {t("city.detectHint")}
-        </Text>
-        <Button variant="secondary" onPress={() => setSheet(true)}>
-          {t("city.chooseFromList")}
-        </Button>
-        {cities.status === "error" && (
-          // The list could not be loaded: retry, or go on with "Весь Казахстан".
-          <>
-            <Text variant="bodyS" color="textMuted" style={styles.center}>
-              {online ? t("city.loadError") : t("state.offlineText")}
-            </Text>
-            <Button variant="text" icon="refresh" onPress={cities.reload}>
-              {t("common.retry")}
-            </Button>
-            <Button
-              variant="text"
-              onPress={() => {
-                choose(null);
-                onDone();
-              }}
-            >
-              {t("city.continueWithAll")}
-            </Button>
-          </>
-        )}
-      </View>
+        ) : null
+      }
+      actions={
+        <>
+          <Button icon="myLocation" disabled={cities.status !== "ready"} onPress={detect}>
+            {t("city.detect")}
+          </Button>
+          <Text variant="caption" color="textMuted" style={centered}>
+            {t("city.detectHint")}
+          </Text>
+          <Button variant="secondary" onPress={() => setSheet(true)}>
+            {t("city.chooseFromList")}
+          </Button>
+          {cities.status === "error" && (
+            // The list could not be loaded: retry, or go on with "Весь Казахстан".
+            <>
+              <Text variant="bodyS" color="textMuted" style={centered}>
+                {online ? t("city.loadError") : t("state.offlineText")}
+              </Text>
+              <Button variant="text" icon="refresh" onPress={cities.reload}>
+                {t("common.retry")}
+              </Button>
+              <Button
+                variant="text"
+                onPress={() => {
+                  choose(null);
+                  onDone();
+                }}
+              >
+                {t("city.continueWithAll")}
+              </Button>
+            </>
+          )}
+        </>
+      }
+    >
       <CitySheet visible={sheet} onClose={() => setSheet(false)} onChosen={onDone} />
-    </SafeAreaView>
+    </FirstRunLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: layout.screenPadding,
-    gap: 12,
-  },
-  center: { textAlign: "center" },
-  actions: { paddingHorizontal: layout.screenPadding, paddingBottom: 16, gap: 8 },
-});

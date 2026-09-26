@@ -1,6 +1,5 @@
 import type { CategoryNode } from "@adclub/contracts";
 import { layout, radius } from "@adclub/ui-core";
-import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   Banner,
@@ -15,6 +14,7 @@ import {
   useTheme,
 } from "../../design-system";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
+import type { GarageCar } from "../../garage/garage";
 import { useCategoryTree } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { useT } from "../../state/language";
@@ -24,13 +24,15 @@ export interface CatalogHomeScreenProps {
   onOpenNode: (node: CategoryNode) => void;
   onAddCar: () => void;
   /** «Уточните двигатель» opens the car at that step. */
-  onCompleteEngine: (carId: string) => void;
+  onCompleteEngine: (car: GarageCar) => void;
 }
 
 /**
  * M-CAT-01 — the main screen of the catalog: the car and the city in the
- * header, one hint card by priority, and the top-level categories of goods
- * as tiles. Services are stage C; there is no advertising anywhere.
+ * header, one hint card, and the top-level categories of goods as tiles.
+ * Services are stage C; there is no advertising anywhere. The catalog is
+ * for a car (D-062), so the card that used to ask for one is gone — the only
+ * hint left is to say which engine it has.
  */
 export function CatalogHomeScreen({
   onOpenNode,
@@ -40,7 +42,7 @@ export function CatalogHomeScreen({
   const t = useT();
   const online = useOnline();
   const tree = useCategoryTree();
-  const { car, filterOff } = useCatalogCar();
+  const { car } = useCatalogCar();
 
   const nodes = (tree.data?.categories ?? []).filter((node) => node.kind === "goods");
 
@@ -55,39 +57,20 @@ export function CatalogHomeScreen({
             ? "empty"
             : "ready";
 
-  const hint = useCallback(() => {
-    // One card, by the priority of M-CAT-01.
-    if (!car) {
-      if (filterOff) return null;
-      return (
-        <Banner
-          icon="car"
-          action={
-            <Button variant="text" size="m" onPress={onAddCar}>
-              {t("garage.add")}
-            </Button>
-          }
-        >
-          {t("catalog.hintAddCar")}
-        </Banner>
-      );
-    }
-    if (car.engine === null) {
-      return (
-        <Banner
-          tone="warning"
-          action={
-            <Button variant="text" size="m" onPress={() => onCompleteEngine(car.id)}>
-              {t("compat.completeCar")}
-            </Button>
-          }
-        >
-          {t("catalog.hintRefineEngine")}
-        </Banner>
-      );
-    }
-    return null;
-  }, [car, filterOff, onAddCar, onCompleteEngine, t]);
+  // One card (M-CAT-01): the engine the compatibility depends on.
+  const hint =
+    car.engine === null ? (
+      <Banner
+        tone="warning"
+        action={
+          <Button variant="text" size="m" onPress={() => onCompleteEngine(car)}>
+            {t("compat.completeCar")}
+          </Button>
+        }
+      >
+        {t("catalog.hintRefineEngine")}
+      </Banner>
+    ) : null;
 
   return (
     <Screen
@@ -99,7 +82,7 @@ export function CatalogHomeScreen({
       header={<CatalogHeader onAddCar={onAddCar} />}
     >
       <View style={styles.content}>
-        {hint()}
+        {hint}
         <DataState
           status={status}
           skeleton={<SkeletonList rows={4} label={t("common.loading")} />}

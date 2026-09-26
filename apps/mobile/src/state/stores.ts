@@ -53,14 +53,34 @@ export const garageStore: DeviceStore<GarageState> = createDeviceStore(storage, 
   parse: parseGarage,
 });
 
+/** Resolves once every store of the device has really been read, however long it takes. */
+export const devicePreferencesLoaded: Promise<void> = Promise.all([
+  languageStore.ready,
+  cityStore.ready,
+  firstRunStore.ready,
+  garageStore.ready,
+]).then(() => undefined);
+
+let preferencesRead = false;
+void devicePreferencesLoaded.then(() => {
+  preferencesRead = true;
+});
+
+/**
+ * Whether every store has been read by now. The app opens without waiting for
+ * a slow storage (`devicePreferencesReady`), on the defaults — a first run
+ * that is not started, an empty garage — and the root of the app must know
+ * whether it was opened on those or on what the device really holds
+ * (`AppStart`: the navigator is opened again, once, when the real values
+ * arrive late).
+ */
+export function devicePreferencesWereRead(): boolean {
+  return preferencesRead;
+}
+
 /**
  * Resolves once everything the first frame depends on has been read — and
  * after a second in any case: a stuck storage must not hold the splash
  * (the same rule as the theme, ARCHITECTURE 4.10 I91).
  */
-export const devicePreferencesReady: Promise<void> = readyWithin(
-  Promise.all([languageStore.ready, cityStore.ready, firstRunStore.ready, garageStore.ready]).then(
-    () => undefined,
-  ),
-  1000,
-);
+export const devicePreferencesReady: Promise<void> = readyWithin(devicePreferencesLoaded, 1000);

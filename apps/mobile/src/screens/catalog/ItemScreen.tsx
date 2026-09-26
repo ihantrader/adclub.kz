@@ -10,7 +10,6 @@ import { useCallback, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   Badge,
-  Button,
   CategoryIcon,
   DataState,
   Icon,
@@ -20,6 +19,7 @@ import {
   Screen,
   Section,
   Sheet,
+  useAfterDismiss,
   SkeletonList,
   Text,
   useTheme,
@@ -28,7 +28,7 @@ import {
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { formatTenge } from "../../catalog/format";
 import { vehicleQuery } from "../../catalog/vehicle-query";
-import { carTitle } from "../../garage/garage";
+import { carTitle, type GarageCar } from "../../garage/garage";
 import { useShowcaseItem } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
@@ -46,9 +46,12 @@ const SORT_TEXT = {
 
 export interface ItemScreenProps {
   itemId: string;
-  onOpenItem: (itemId: string) => void;
-  onAddCar: () => void;
-  onCompleteCar: (carId: string) => void;
+  /** The name the previous screen already showed: the top bar has it before the data does. */
+  title?: string;
+  /** An analog opens the same screen; its name is passed on for the top bar. */
+  onOpenItem: (item: { id: string; name: string }) => void;
+  /** «Дополнить автомобиль»: the steps of choosing a car, at the engine. */
+  onCompleteCar: (car: GarageCar) => void;
   onBack: () => void;
 }
 
@@ -61,13 +64,7 @@ export interface ItemScreenProps {
  * address at all, only `kind: "hidden"`, and the card says «Поставщик
  * клуба». The app never tries to work the name out from anything else.
  */
-export function ItemScreen({
-  itemId,
-  onOpenItem,
-  onAddCar,
-  onCompleteCar,
-  onBack,
-}: ItemScreenProps) {
+export function ItemScreen({ itemId, title, onOpenItem, onCompleteCar, onBack }: ItemScreenProps) {
   const { t } = useLanguage();
   const online = useOnline();
   const toast = useToast();
@@ -75,6 +72,8 @@ export function ItemScreen({
   const { car } = useCatalogCar();
   const [sort, setSort] = useState<ShowcaseOfferSort>("recommended");
   const [sortSheet, setSortSheet] = useState(false);
+  // The offers reorder once the sheet has gone, not while it is closing.
+  const sortDismissed = useAfterDismiss(sortSheet);
   const [showFitsFor, setShowFitsFor] = useState(false);
 
   const cityId = cityIdOf(selection);
@@ -92,7 +91,7 @@ export function ItemScreen({
   );
 
   const data = request.data;
-  const carName = car ? carTitle(car) : null;
+  const carName = carTitle(car);
 
   const status =
     !online && data === null
@@ -112,7 +111,7 @@ export function ItemScreen({
 
   return (
     <Screen
-      title={data?.item.name.text ?? t("tabs.catalog")}
+      title={data?.item.name.text ?? title ?? t("tabs.catalog")}
       back={{ label: t("common.back"), onPress: onBack }}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={request.refreshing}
@@ -174,13 +173,8 @@ export function ItemScreen({
                 result={data.compatibility}
                 carName={carName}
                 variant="card"
-                onComplete={() => (car ? onCompleteCar(car.id) : onAddCar())}
+                onComplete={() => onCompleteCar(car)}
               />
-              {!car && (
-                <Button variant="text" size="m" onPress={onAddCar} style={styles.inlineButton}>
-                  {t("compat.checkForCar")}
-                </Button>
-              )}
             </View>
 
             {data.fitsFor.length > 0 && (
@@ -260,7 +254,7 @@ export function ItemScreen({
                         .filter((part): part is string => Boolean(part))
                         .join(" · ")}
                       navigates
-                      onPress={() => onOpenItem(analog.id)}
+                      onPress={() => onOpenItem({ id: analog.id, name: analog.name.text })}
                       trailing={<Text variant="priceS">{formatTenge(analog.offers.minPrice)}</Text>}
                     />
                   ))}
@@ -274,6 +268,7 @@ export function ItemScreen({
       <Sheet
         visible={sortSheet}
         onClose={() => setSortSheet(false)}
+        onDismissed={sortDismissed.onDismissed}
         title={t("catalog.sort")}
         closeLabel={t("common.close")}
       >
@@ -283,7 +278,7 @@ export function ItemScreen({
             first={index === 0}
             title={t(SORT_TEXT[value])}
             onPress={() => {
-              setSort(value);
+              sortDismissed.after(() => setSort(value));
               setSortSheet(false);
             }}
             trailing={value === sort ? <Icon name="check" color="accent" /> : null}
@@ -436,7 +431,6 @@ const styles = StyleSheet.create({
   head: { gap: 6 },
   grow: { flex: 1 },
   article: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: size.touchTarget },
-  inlineButton: { alignSelf: "flex-start", paddingHorizontal: 0 },
   collapsible: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: size.touchTarget },
   photo: { borderRadius: radius.m },
   photoPlaceholder: {

@@ -1,7 +1,16 @@
 import { layout } from "@adclub/ui-core";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Badge, Button, Dialog, ListRow, Screen, Text, useToast } from "../../design-system";
+import {
+  Badge,
+  Button,
+  Dialog,
+  ListRow,
+  Screen,
+  Text,
+  useAfterDismiss,
+  useToast,
+} from "../../design-system";
 import type { CarStep } from "../../garage/car-picker";
 import { CAR_LEVELS, carTitle, type CarLevel, type GarageCar } from "../../garage/garage";
 import { useGarage } from "../../state/garage-provider";
@@ -41,6 +50,9 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
   const toast = useToast();
   const { state, makePrimary, remove } = useGarage();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The deletion happens once the dialog has gone: it fades out first, then
+  // the card leaves — not both at once.
+  const dismissed = useAfterDismiss(confirmDelete);
   const primary = car.id === state.primaryId;
 
   return (
@@ -91,6 +103,7 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
       <Dialog
         visible={confirmDelete}
         onClose={() => setConfirmDelete(false)}
+        onDismissed={dismissed.onDismissed}
         title={t("garage.deleteTitle")}
         actions={
           <>
@@ -98,9 +111,14 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
               variant="danger"
               onPress={() => {
                 setConfirmDelete(false);
-                remove(car.id);
-                toast.show(t("garage.deleted"));
-                onDeleted();
+                dismissed.after(() => {
+                  // The card starts to leave first and the car goes with it: the
+                  // screen keeps showing the car while it slides away
+                  // (`GarageCarScreen`), so it never turns into «Гараж пуст».
+                  onDeleted();
+                  remove(car.id);
+                  toast.show(t("garage.deleted"));
+                });
               }}
             >
               {t("garage.delete")}

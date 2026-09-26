@@ -1,7 +1,7 @@
 import type { ShowcaseListSort } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
+import { layout, size } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
 import {
   Button,
@@ -33,7 +33,10 @@ import { ItemRow } from "./parts";
 
 export interface ItemListScreenProps {
   categoryId: string;
-  onOpenItem: (itemId: string) => void;
+  /** The name the previous screen already showed: the top bar has it before the data does. */
+  title?: string;
+  /** The name is passed on so the card's top bar has it while the card loads. */
+  onOpenItem: (item: { id: string; name: string }) => void;
   onAddCar: () => void;
   /** «Проверить параметры автомобиля» opens the car of the garage. */
   onCheckCar: (carId: string) => void;
@@ -45,9 +48,15 @@ export interface ItemListScreenProps {
  * server's answer: which items a car may see (D-029), their marks, their
  * prices and their receipt dates. Paging is the server's cursor, so the
  * list neither loses nor repeats an item while offers change underneath.
+ *
+ * The list does not jump. Changing the sort or the filters keeps the rows
+ * on screen under the refresh line until the new ones arrive, and only then
+ * — a reason: the order is new — goes back to the top; a reload of the same
+ * list, one more page, opening the filters, none of them moves the reader.
  */
 export function ItemListScreen({
   categoryId,
+  title,
   onOpenItem,
   onAddCar,
   onCheckCar,
@@ -57,7 +66,7 @@ export function ItemListScreen({
   const { theme } = useTheme();
   const online = useOnline();
   const { selection } = useCity();
-  const { car, showWithoutCar } = useCatalogCar();
+  const { car } = useCatalogCar();
   const [sort, setSort] = useState<ShowcaseListSort>("recommended");
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   // The filters being edited live here, not in the sheet: opening the sheet
@@ -89,9 +98,16 @@ export function ItemListScreen({
     }, []),
   );
 
+  // A new list took the place of the old one: back to its first row, in the
+  // same frame as the swap. Nothing else scrolls the list (see `generation`).
+  const listRef = useRef<FlatList>(null);
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [list.generation]);
+
   const page = list.page;
   const count = filterCount(filters);
-  const carName = car ? carTitle(car) : null;
+  const carName = carTitle(car);
   const cityName = page?.city?.name.text ?? null;
 
   const status =
@@ -107,7 +123,7 @@ export function ItemListScreen({
 
   return (
     <Screen
-      title={page?.category.name.text ?? t("tabs.catalog")}
+      title={page?.category.name.text ?? title ?? t("tabs.catalog")}
       back={{ label: t("common.back"), onPress: onBack }}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={list.refreshing}
@@ -157,6 +173,7 @@ export function ItemListScreen({
         empty={emptyState()}
       >
         <FlatList
+          ref={listRef}
           data={list.items}
           keyExtractor={(item) => item.id}
           onEndReachedThreshold={0.4}
@@ -179,7 +196,7 @@ export function ItemListScreen({
               carName={carName}
               offers={item.offers}
               cityName={cityName}
-              onPress={() => onOpenItem(item.id)}
+              onPress={() => onOpenItem({ id: item.id, name: item.name.text })}
             />
           )}
         />
@@ -210,11 +227,12 @@ export function ItemListScreen({
     }
     if (list.failure === "vehicle") {
       // The car no longer makes sense to the server (an entry of the vehicle
-      // catalog was removed): showing everything is better than a dead end.
+      // catalog was removed). There is no catalog without a car (D-062), so the
+      // way out is the car itself: its card, where it can be completed again.
       return {
         title: t("state.errorTitle"),
         text: t("catalog.emptyVehicleText"),
-        retry: { label: t("catalog.showAll"), onRetry: showWithoutCar },
+        retry: { label: t("catalog.checkCar"), onRetry: () => onCheckCar(car.id) },
       };
     }
     return {
@@ -227,21 +245,18 @@ export function ItemListScreen({
   function emptyState() {
     switch (page?.empty) {
       case "vehicle":
+        // Nothing fits this car yet. There is no way to look at what does not
+        // (D-062); the useful things are to check the car's parameters — an
+        // engine or a generation that was left out narrows the list — or to
+        // pick another car with the switch at the top of this same screen.
         return {
           icon: "car" as const,
-          title: t("catalog.emptyVehicle", { car: carName ?? "" }),
+          title: t("catalog.emptyVehicle", { car: carName }),
           text: t("catalog.emptyVehicleText"),
           action: (
-            <View style={styles.emptyActions}>
-              <Button variant="secondary" size="m" onPress={showWithoutCar}>
-                {t("catalog.showAll")}
-              </Button>
-              {car && (
-                <Button variant="text" size="m" onPress={() => onCheckCar(car.id)}>
-                  {t("catalog.checkCar")}
-                </Button>
-              )}
-            </View>
+            <Button variant="secondary" size="m" onPress={() => onCheckCar(car.id)}>
+              {t("catalog.checkCar")}
+            </Button>
           ),
         };
       case "filters":
@@ -272,7 +287,8 @@ export function ItemListScreen({
 
 const styles = StyleSheet.create({
   controls: { gap: 8, paddingHorizontal: layout.screenPadding, paddingBottom: 8 },
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // The height of the tallest thing that can be in the row («Сбросить»), so
+  // applying the first filter or resetting the last does not move the list.
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: size.button.m },
   more: { paddingVertical: layout.cardPadding },
-  emptyActions: { gap: 4, alignItems: "center" },
 });

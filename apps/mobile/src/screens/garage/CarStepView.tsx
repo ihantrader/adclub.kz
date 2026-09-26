@@ -11,22 +11,23 @@ import {
   SearchField,
   SkeletonList,
   Text,
+  useAfterDismiss,
   useToast,
 } from "../../design-system";
 import {
   applyOption,
   canSaveDraft,
-  carToDraft,
   chosenLevels,
-  clearFrom,
   draftToCar,
-  EMPTY_DRAFT,
   EMPTY_PICKER_DATA,
   filterOptions,
+  firstUnsetLevel,
+  jumpToLevel,
   levelsClearedBy,
   resolveStage,
   type CarDraft,
   type CarStep,
+  type LevelJump,
   type PickerData,
   type PickerOption,
 } from "../../garage/car-picker";
@@ -64,35 +65,63 @@ const LEVEL_TEXT = {
   drive: "car.level.drive",
 } as const satisfies Record<CarLevel, string>;
 
-export interface CarPickerViewProps {
-  /** Filling in or editing a car the garage already holds. */
+export interface CarStepViewProps {
+  /** What had been decided when this screen opened — all of its state. */
+  draft: CarDraft;
+  /** The car of the garage being completed or edited. */
   car?: GarageCar;
-  /** The step «Дополнить» asks for: it and everything below start empty. */
-  startStep?: CarStep;
+  /**
+   * The drafts of every screen of the choice, bottom to top — read when a
+   * chosen value is tapped, to find the screen that asked for it.
+   */
+  screenDrafts: () => CarDraft[];
+  /** Opens the next step: the draft with the chosen value added. */
+  onNext: (draft: CarDraft) => void;
+  /** Goes back to the screen that asked for a tapped value (and resets what it began from, when needed). */
+  onJump: (jump: LevelJump) => void;
   onSaved: (car: GarageCar) => void;
-  onCancel: () => void;
+  onBack: () => void;
+  /**
+   * Whether this screen is the one on top. A tap that arrives after the screen
+   * has started to leave — a second tap on the same option, on «Сохранить
+   * так» — is ignored, so a step is not opened twice and a car is not saved
+   * twice.
+   */
+  isActive: () => boolean;
 }
 
 /**
- * M-GAR-03 — the step-by-step choice of a car. The screen owns no rules:
- * `pickerStage` says which step is next and what is on it, and every option
- * comes from `/vehicles/…`. Used both from the garage and from the first run
- * (M-START-05), so it is a plain component with callbacks, not a route.
+ * One step of M-GAR-03, the step-by-step choice of a car. The screen owns no
+ * rules: `resolveStage` says which step is next and what is on it, and every
+ * option comes from `/vehicles/…`. Each step is a screen of the stack
+ * (ARCHITECTURE 4.39), so it moves in and out like every other screen of the
+ * app and the system «назад» returns to the previous step.
+ *
+ * It asks for the first level its draft lacks. What the data settles by
+ * itself — a make with one model — is taken on this screen and never gets a
+ * screen of its own; a step no data exists for is skipped.
  */
-export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerViewProps) {
+export function CarStepView({
+  draft,
+  car,
+  screenDrafts,
+  onNext,
+  onJump,
+  onSaved,
+  onBack,
+  isActive,
+}: CarStepViewProps) {
   const t = useT();
   const toast = useToast();
   const online = useOnline();
   const garage = useGarage();
 
-  const [draft, setDraft] = useState<CarDraft>(() => {
-    if (!car) return EMPTY_DRAFT;
-    const base = carToDraft(car);
-    return startStep ? clearFrom(base, startStep) : base;
-  });
   const [query, setQuery] = useState("");
   const [confirmReset, setConfirmReset] = useState<CarLevel | null>(null);
   const [duplicate, setDuplicate] = useState<GarageCar | null>(null);
+  // A dialog that closes and then something happens (the car is saved, the
+  // steps go back): the action waits until the dialog has gone.
+  const afterDialog = useAfterDismiss(confirmReset !== null || duplicate !== null);
 
   // A step with a single option is taken by itself (M-GAR-03), and that is
   // a pure consequence of the data — not something an effect has to
@@ -100,20 +129,31 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
   // arrives, and the next request is made for the level it settled: the
   // only make is taken, so its models are asked for, and so on down to the
   // modifications. `resolved` is the draft with all of that filled in.
+  //
+  // Only what this screen still needs is asked for: a screen that opens with
+  // the make and the model already chosen never asks for makes, and an answer
+  // an earlier step already loaded is served from the short memory of the
+  // flow (`use-vehicles.ts`) — a step opens with its options, not a skeleton.
   const currentYear = new Date().getFullYear();
   const stillMade = t("car.stillMade");
   const resolve = (from: CarDraft, data: PickerData) =>
     resolveStage({ draft: from, data, currentYear, stillMade });
 
-  const makes = useVehicleMakes();
+  const makes = useVehicleMakes(draft.make === null);
   const afterMakes: PickerData = { ...EMPTY_PICKER_DATA, makes: makes.data?.makes ?? null };
   const withMake = resolve(draft, afterMakes).draft;
 
-  const models = useVehicleModels(withMake.make?.id ?? null);
+  const models = useVehicleModels(
+    withMake.make && withMake.model === null ? withMake.make.id : null,
+  );
   const afterModels: PickerData = { ...afterMakes, models: models.data?.models ?? null };
   const withModel = resolve(withMake, afterModels).draft;
 
-  const generations = useVehicleGenerations(withModel.model?.id ?? null);
+  const generations = useVehicleGenerations(
+    withModel.model && (withModel.year === null || withModel.generation === null)
+      ? withModel.model.id
+      : null,
+  );
   const afterGenerations: PickerData = {
     ...afterModels,
     generations: generations.data?.generations ?? null,
@@ -136,38 +176,55 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
   const pending = stage.kind === "load" ? requests[stage.data] : undefined;
 
   const choose = (step: CarStep, option: PickerOption) => {
-    setQuery("");
-    setDraft(applyOption(resolved, step, option));
+    if (!isActive()) return;
+    onNext(applyOption(resolved, step, option));
   };
 
+  // A tapped value goes back to the screen that asked for it. Nothing to do
+  // when this very screen took the value by itself; a warning first when the
+  // values below it would be lost (M-GAR-03).
   const editLevel = (level: CarLevel) => {
+    if (!isActive()) return;
+    const jump = jumpToLevel(screenDrafts(), level);
+    if (jump.pop === 0 && jump.reset === null) return;
     if (levelsClearedBy(resolved, level).length > 0) {
       setConfirmReset(level);
       return;
     }
-    setQuery("");
-    setDraft(clearFrom(resolved, level));
+    onJump(jump);
   };
 
-  const save = (force: boolean) => {
-    const built = draftToCar(resolved, {
+  const commit = (built: GarageCar) => {
+    if (!isActive()) return;
+    if (car) garage.update(built);
+    else garage.add(built);
+    toast.show(t("garage.added"));
+    onSaved(built);
+  };
+
+  const build = () =>
+    draftToCar(resolved, {
       id: car?.id ?? garage.nextId(),
       addedAt: car?.addedAt ?? new Date().toISOString(),
       modifications: data.modifications ?? [],
     });
+
+  const save = () => {
+    if (!isActive()) return;
+    const built = build();
     if (!built) return;
-    if (!force) {
-      const existing = garage.duplicateOf(built);
-      if (existing) {
-        setDuplicate(existing);
-        return;
-      }
+    const existing = garage.duplicateOf(built);
+    if (existing) {
+      setDuplicate(existing);
+      return;
     }
-    if (car) garage.update(built);
-    else garage.add(built);
+    commit(built);
+  };
+
+  const saveAnyway = () => {
+    const built = build();
     setDuplicate(null);
-    toast.show(t("garage.added"));
-    onSaved(built);
+    if (built) afterDialog.after(() => commit(built));
   };
 
   const status =
@@ -189,11 +246,22 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
         : stage.options
       : [];
 
+  // The title names the step while its data still loads: the level this
+  // screen is about does not have to wait for the server to be read out.
+  const provisional = firstUnsetLevel(resolved);
+  const title =
+    stage.kind === "choose"
+      ? t(STEP_TEXT[stage.step])
+      : stage.kind === "load" && provisional
+        ? t(STEP_TEXT[provisional])
+        : t("car.title");
+
   return (
     <Screen
-      title={stage.kind === "choose" ? t(STEP_TEXT[stage.step]) : t("car.title")}
-      back={{ label: t("common.back"), onPress: onCancel }}
+      title={title}
+      back={{ label: t("common.back"), onPress: onBack }}
       scroll={false}
+      bottomInset
       header={
         chosen.length > 0 ? (
           <View style={styles.chosen}>
@@ -207,7 +275,7 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
       }
       footer={
         canSave ? (
-          <Button onPress={() => save(false)}>
+          <Button onPress={save}>
             {stage.kind === "done" ? t("common.done") : t("car.saveAsIs")}
           </Button>
         ) : null
@@ -281,6 +349,7 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
       <Dialog
         visible={confirmReset !== null}
         onClose={() => setConfirmReset(null)}
+        onDismissed={afterDialog.onDismissed}
         title={t("car.resetTitle")}
         actions={
           <>
@@ -288,8 +357,7 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
               onPress={() => {
                 const level = confirmReset;
                 setConfirmReset(null);
-                setQuery("");
-                if (level) setDraft(clearFrom(resolved, level));
+                if (level) afterDialog.after(() => onJump(jumpToLevel(screenDrafts(), level)));
               }}
             >
               {t("common.continue")}
@@ -310,10 +378,11 @@ export function CarPickerView({ car, startStep, onSaved, onCancel }: CarPickerVi
       <Dialog
         visible={duplicate !== null}
         onClose={() => setDuplicate(null)}
+        onDismissed={afterDialog.onDismissed}
         title={t("car.duplicateTitle")}
         actions={
           <>
-            <Button onPress={() => save(true)}>{t("car.duplicateAdd")}</Button>
+            <Button onPress={saveAnyway}>{t("car.duplicateAdd")}</Button>
             <Button variant="secondary" onPress={() => setDuplicate(null)}>
               {t("common.cancel")}
             </Button>

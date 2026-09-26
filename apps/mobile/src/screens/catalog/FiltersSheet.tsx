@@ -2,7 +2,7 @@ import type { CategoryAttribute } from "@adclub/contracts";
 import { layout } from "@adclub/ui-core";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Button, Chip, Sheet, Text, TextField } from "../../design-system";
+import { Button, Chip, Sheet, Text, TextField, useAfterDismiss } from "../../design-system";
 import type { VehicleQuery } from "../../catalog/vehicle-query";
 import {
   EMPTY_FILTERS,
@@ -52,6 +52,10 @@ export function FiltersSheet({
   onApply,
 }: FiltersSheetProps) {
   const { t, tn } = useLanguage();
+  // The filters are applied when the sheet has gone: it closes, and then the
+  // list changes and goes back to its top — not both under a sheet that is
+  // still sliding away.
+  const dismissed = useAfterDismiss(visible);
 
   const filterable = useMemo(
     () =>
@@ -74,6 +78,7 @@ export function FiltersSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={dismissed.onDismissed}
       title={t("catalog.filters")}
       closeLabel={t("common.close")}
     >
@@ -164,7 +169,7 @@ export function FiltersSheet({
       <View style={styles.actions}>
         <Button
           onPress={() => {
-            onApply(draft);
+            dismissed.after(() => onApply(draft));
             onClose();
           }}
         >

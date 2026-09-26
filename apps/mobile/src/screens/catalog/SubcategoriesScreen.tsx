@@ -16,6 +16,8 @@ import { useT } from "../../state/language";
 
 export interface SubcategoriesScreenProps {
   categoryId: string;
+  /** The name the previous screen already showed: the top bar has it before the data does. */
+  title?: string;
   onOpen: (subcategory: CategorySubcategory) => void;
   onBack: () => void;
 }
@@ -25,7 +27,12 @@ export interface SubcategoriesScreenProps {
  * in the list of items (M-CAT-02), so this screen shows every subcategory
  * the server has.
  */
-export function SubcategoriesScreen({ categoryId, onOpen, onBack }: SubcategoriesScreenProps) {
+export function SubcategoriesScreen({
+  categoryId,
+  title,
+  onOpen,
+  onBack,
+}: SubcategoriesScreenProps) {
   const t = useT();
   const online = useOnline();
   const tree = useCategoryTree();
@@ -45,7 +52,7 @@ export function SubcategoriesScreen({ categoryId, onOpen, onBack }: Subcategorie
 
   return (
     <Screen
-      title={node?.name.text ?? t("tabs.catalog")}
+      title={node?.name.text ?? title ?? t("tabs.catalog")}
       back={{ label: t("common.back"), onPress: onBack }}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={tree.refreshing}

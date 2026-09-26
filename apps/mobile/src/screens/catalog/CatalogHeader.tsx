@@ -11,20 +11,21 @@ import { CitySheet } from "../CitySheet";
 import { CarSheet } from "./CarSheet";
 
 /**
- * The header of the catalog (M-CAT-01, M-CAT-02): the car switch with
- * «Показать без фильтра» and the city switch. One component, so both
- * screens switch the same way.
+ * The header of the catalog (M-CAT-01, M-CAT-02): the car switch — the cars
+ * of the garage and «Добавить автомобиль» — and the city switch. One
+ * component, so both screens switch the same way. There is always a car: the
+ * catalog does not open without one (D-062).
  */
 export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
   const t = useT();
   const { selection } = useCity();
-  const { car, filterOff, showWithoutCar, chooseCar } = useCatalogCar();
+  const { car, chooseCar } = useCatalogCar();
   const [sheet, setSheet] = useState<"car" | "city" | null>(null);
 
   return (
     <View style={styles.header}>
       <Chip icon="car" onPress={() => setSheet("car")}>
-        {car ? carTitle(car) : filterOff ? t("catalog.carFilterOff") : t("catalog.noCar")}
+        {carTitle(car)}
       </Chip>
       <Chip icon="mapPin" onPress={() => setSheet("city")}>
         {cityLabel(selection, t("city.all"))}
@@ -33,8 +34,6 @@ export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
       <CarSheet
         visible={sheet === "car"}
         onClose={() => setSheet(null)}
-        filterOff={filterOff}
-        onFilterOff={showWithoutCar}
         onPickCar={chooseCar}
         onAddCar={onAddCar}
       />

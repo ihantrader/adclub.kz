@@ -65,6 +65,7 @@ export {
   quantityControls,
   sanitizeOrderCode,
   selectAiPilotState,
+  sheetMotion,
   shouldAiPilotBlink,
   splitOrderCode,
   toneColors,
@@ -76,6 +77,7 @@ export {
   type IconName,
   type OrderStatusGroup,
   type PressGuard,
+  type SheetMotion,
   type Tone,
   type ToneColors,
 } from "./logic";

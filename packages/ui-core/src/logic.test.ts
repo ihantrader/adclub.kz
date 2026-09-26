@@ -11,8 +11,10 @@ import {
   orderStatusGroups,
   qrPath,
   quantityControls,
+  motion,
   sanitizeOrderCode,
   selectAiPilotState,
+  sheetMotion,
   shouldAiPilotBlink,
   splitOrderCode,
   toneColors,
@@ -184,5 +186,24 @@ describe("QR", () => {
     ]);
     expect(viewBoxSize).toBe(10);
     expect(d).toBe("M4 4h1v1h-1zM4 5h2v1h-2z");
+  });
+});
+
+describe("sheet motion (DESIGN 7.6, 7.7)", () => {
+  it("fades the scrim and slides the sheet over 250 ms", () => {
+    expect(sheetMotion(false)).toEqual({
+      durationMs: motion.slow,
+      scrimFades: true,
+      sheetSlides: true,
+      sheetFades: false,
+    });
+  });
+
+  it("moves nothing when the system asks for reduced motion", () => {
+    const reduced = sheetMotion(true);
+    expect(reduced.sheetSlides).toBe(false);
+    expect(reduced.sheetFades).toBe(true);
+    // The scrim is a layer under the sheet: it never travels with it.
+    expect(reduced.scrimFades).toBe(true);
   });
 });

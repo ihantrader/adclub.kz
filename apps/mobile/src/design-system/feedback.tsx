@@ -3,6 +3,7 @@ import {
   floatShadow,
   motion,
   radius,
+  sheetMotion,
   size,
   type BannerTone,
   type IconName,
@@ -20,12 +21,15 @@ import {
 import {
   AccessibilityInfo,
   Animated,
+  Dimensions,
+  Easing,
   Modal,
   PanResponder,
   Pressable,
   StyleSheet,
   View,
   type DimensionValue,
+  type LayoutChangeEvent,
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -264,11 +268,66 @@ export interface SheetProps {
   children: ReactNode;
 }
 
-/** Bottom sheet: surface, radius 12 on top, handle 36 × 4, padding 16, scrim below (7.7). */
+/**
+ * Bottom sheet: surface, radius 12 on top, handle 36 × 4, padding 16, scrim
+ * below (DESIGN 7.7).
+ *
+ * The motion is the component's own (`sheetMotion`, DESIGN 7.6) and not the
+ * platform's: `Modal animationType="slide"` moves the **whole** window, so
+ * the scrim travelled up from the bottom edge together with the sheet. Here
+ * the scrim is what it is meant to be — a layer under the sheet that only
+ * changes opacity — while the sheet slides up over 250 ms with deceleration
+ * at the end. With "reduce motion" nothing moves: both only fade. Closing
+ * plays the same animation backwards, and the modal stays mounted until it
+ * has finished, so there is no jump.
+ */
 export function Sheet({ visible, onClose, title, closeLabel, required, children }: SheetProps) {
   const { theme, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
+  const plan = sheetMotion(reduceMotion);
+  // 0 — closed, 1 — open: the scrim's opacity and how far the sheet has travelled.
+  const [progress] = useState(() => new Animated.Value(0));
   const [drag] = useState(() => new Animated.Value(0));
+  /** The sheet's own height: that is all it has to travel. */
+  const [height, setHeight] = useState(0);
+  /**
+   * Keeps the modal on screen for one more animation after `visible` has
+   * gone false, so closing is not a jump. It is raised on the frame after
+   * the sheet is asked for and lowered when the closing animation ends. The
+   * modal's own `visible` is `visible || held`, so a sheet can never end up
+   * refusing to open: opening never waits for this flag.
+   */
+  const [held, setHeld] = useState(false);
+
+  useEffect(() => {
+    drag.setValue(0);
+    let animation: ReturnType<typeof Animated.timing> | null = null;
+    /*
+     * A frame later, not right now: the modal mounts its content after this
+     * effect, and the views the value was attached to before are detached
+     * then — and detaching an animated value stops whatever is driving it
+     * (`AnimatedValue.__detach`). Started in the same tick, the opening
+     * animation was killed a few frames in and the sheet stayed off screen.
+     */
+    const frame = requestAnimationFrame(() => {
+      if (visible) setHeld(true);
+      animation = Animated.timing(progress, {
+        toValue: visible ? 1 : 0,
+        duration: plan.durationMs,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      });
+      animation.start(({ finished }) => {
+        // Unmount only after the closing animation has played to the end.
+        if (finished && !visible) setHeld(false);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      animation?.stop();
+    };
+  }, [visible, progress, drag, plan.durationMs]);
+
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -277,6 +336,7 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
         onPanResponderRelease: (_, gesture) => {
           if (gesture.dy > 80 || gesture.vy > 0.8) {
             onClose();
+            return;
           }
           Animated.timing(drag, {
             toValue: 0,
@@ -288,32 +348,44 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
     [drag, onClose, required],
   );
 
+  // Until the sheet is measured the window height keeps it off screen, so
+  // nothing flashes on the first frame.
+  const travel = height > 0 ? height : Dimensions.get("window").height;
+  const slide = progress.interpolate({ inputRange: [0, 1], outputRange: [travel, 0] });
+  const onLayout = (event: LayoutChangeEvent) => setHeight(event.nativeEvent.layout.height);
+
   return (
     <Modal
-      visible={visible}
+      visible={visible || held}
       transparent
-      animationType={reduceMotion ? "fade" : "slide"}
+      animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={required ? () => undefined : onClose}
     >
       <View style={styles.modalRoot}>
-        <Pressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.scrim }]}
-          accessibilityRole="button"
-          accessibilityLabel={closeLabel}
-          accessible={!required}
-          onPress={required ? undefined : onClose}
-        />
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
+          <Pressable
+            style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.scrim }]}
+            accessibilityRole="button"
+            accessibilityLabel={closeLabel}
+            accessible={!required}
+            onPress={required ? undefined : onClose}
+          />
+        </Animated.View>
         <Animated.View
           {...pan.panHandlers}
           accessibilityViewIsModal
+          onLayout={onLayout}
           style={[
             styles.sheet,
             {
               backgroundColor: theme.colors.surface,
               paddingBottom: insets.bottom + 16,
-              transform: [{ translateY: drag }],
+              opacity: plan.sheetFades ? progress : 1,
+              transform: plan.sheetSlides
+                ? [{ translateY: Animated.add(slide, drag) }]
+                : [{ translateY: drag }],
             },
             floatStyle(theme.name),
           ]}

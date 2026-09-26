@@ -193,6 +193,35 @@ export const compatibilityMarks: Record<Compatibility, { color: ColorToken; icon
   unknown: { color: "textMuted", icon: "helpCircle" },
 };
 
+/**
+ * How a bottom sheet appears and disappears (DESIGN 7.6, 7.7): the scrim is
+ * a layer **under** the sheet, so it only changes opacity — it never travels
+ * with it — while the sheet itself slides up from the bottom over
+ * `motion.slow` with "deceleration at the end". With the system "reduce
+ * motion" on, nothing moves: both the scrim and the sheet only fade.
+ *
+ * One rule for every sheet of every client, so a platform's own modal
+ * animation (which moves the whole window, scrim included) is never used.
+ */
+export interface SheetMotion {
+  durationMs: number;
+  /** The scrim always appears and disappears by opacity alone. */
+  scrimFades: boolean;
+  /** Whether the sheet travels from the bottom edge. */
+  sheetSlides: boolean;
+  /** The sheet fades instead of sliding when motion is reduced. */
+  sheetFades: boolean;
+}
+
+export function sheetMotion(reduceMotion: boolean): SheetMotion {
+  return {
+    durationMs: motion.slow,
+    scrimFades: true,
+    sheetSlides: !reduceMotion,
+    sheetFades: reduceMotion,
+  };
+}
+
 export type BannerTone = "neutral" | "warning" | "danger";
 
 export const bannerTones: Record<BannerTone, { background: ColorToken; icon: ColorToken }> = {

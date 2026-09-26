@@ -1,6 +1,7 @@
 import { isApiError } from "@adclub/api-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
+import type { RequestCache } from "./request-cache";
 
 /**
  * One request of one screen (TASK-028): the loading state, the error told
@@ -41,6 +42,23 @@ export interface RequestState<T> {
 export interface RequestOptions {
   /** How long an answer may be shown before it is loaded afresh. */
   staleAfterMs?: number;
+  /**
+   * A short memory shared by the screens of one flow. A screen that opens
+   * while the memory holds the answer starts with it — no skeleton, no
+   * request — and every answer that arrives is written to it. «Повторить»
+   * and a refresh still ask the server.
+   */
+  cache?: RequestCache;
+  /**
+   * What the answer is *about*, coarser than `key`: the card of one item, the
+   * count of one category. While a new key of the same scope is loading — the
+   * offers in another order, the count under other filters — the previous
+   * answer stays on screen and the load is reported as a refresh (SCREENS 2.1:
+   * «старое содержимое остаётся, сверху индикатор»), instead of the whole
+   * screen turning into a skeleton, losing its title and the reader's place.
+   * A new scope, or a failed new key, starts from nothing.
+   */
+  scope?: string;
 }
 
 export function failureOf(error: unknown): RequestFailure {
@@ -60,7 +78,7 @@ export function failureOf(error: unknown): RequestFailure {
 export function useRequest<T>(
   key: string | null,
   load: (signal: AbortSignal) => Promise<T>,
-  { staleAfterMs }: RequestOptions = {},
+  { staleAfterMs, cache, scope }: RequestOptions = {},
 ): RequestState<T> {
   // The loader is read from a ref so a screen may build it inline without
   // restarting the request on every render. It is updated in an effect
@@ -71,13 +89,30 @@ export function useRequest<T>(
     loader.current = load;
   });
 
+  // What the memory of the flow already holds for this key when the screen
+  // opens: the screen starts with it instead of a skeleton and does not ask
+  // again. Read once, at the first frame — a screen whose key changes later
+  // asks the server as always.
+  const [seeded] = useState<{ key: string; data: T; at: number } | null>(() => {
+    const kept = key !== null && cache ? cache.read<T>(key) : undefined;
+    return key !== null && kept !== undefined ? { key, data: kept.value, at: kept.at } : null;
+  });
+  /** The request the memory has already answered; taken at the first effect. */
+  const answered = useRef<string | null>(seeded ? `${seeded.key}#0` : null);
+
   const [attempt, setAttempt] = useState(0);
-  const [settled, setSettled] = useState<string | null>(null);
+  const [settled, setSettled] = useState<string | null>(seeded ? `${seeded.key}#0` : null);
   const [result, setResult] = useState<{
     key: string;
+    /** The scope the answer was asked in (see `RequestOptions.scope`). */
+    scope: string | undefined;
     data: T | null;
     failure: RequestFailure | null;
-  }>({ key: "", data: null, failure: null });
+  }>(
+    seeded
+      ? { key: seeded.key, scope, data: seeded.data, failure: null }
+      : { key: "", scope: undefined, data: null, failure: null },
+  );
   const loadedAt = useRef(0);
 
   // The attempt is part of the request but not of the identity of the data:
@@ -87,13 +122,25 @@ export function useRequest<T>(
 
   useEffect(() => {
     if (request === null || key === null) return;
+    // The first request of a screen that started with an answer of the
+    // memory is already answered — once: the same key asked for again later
+    // (a retry, coming back to it) goes to the server as always.
+    const alreadyAnswered = answered.current === request;
+    answered.current = null;
+    if (alreadyAnswered) {
+      // As old as the memory says, not as old as the screen: an answer of the
+      // memory that is 59 s old is 59 s old, whenever the screen opened.
+      loadedAt.current = seeded?.at ?? Date.now();
+      return;
+    }
     const controller = new AbortController();
     loader
       .current(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         loadedAt.current = Date.now();
-        setResult({ key, data, failure: null });
+        cache?.write(key, data);
+        setResult({ key, scope, data, failure: null });
         setSettled(request);
       })
       .catch((error: unknown) => {
@@ -101,8 +148,10 @@ export function useRequest<T>(
         loadedAt.current = Date.now();
         setResult((previous) => ({
           key,
+          scope,
           // The old data stays on screen while a refresh fails (SCREENS 2.1);
-          // a new request starts with nothing to show.
+          // a new request — even one of the same scope, whose answer would
+          // no longer match what was asked — starts with nothing to show.
           data: previous.key === key ? previous.data : null,
           failure: failureOf(error),
         }));
@@ -130,7 +179,9 @@ export function useRequest<T>(
   }, [reloadIfStale, staleAfterMs]);
 
   const fresh = key !== null && result.key === key;
-  const data = fresh ? result.data : null;
+  // An older answer to the same question stays until the new one arrives.
+  const carried = !fresh && scope !== undefined && result.scope === scope;
+  const data = fresh || carried ? result.data : null;
   const failure = fresh ? result.failure : null;
   const pending = request !== null && settled !== request;
 

@@ -15,7 +15,9 @@ import {
   EMPTY_DRAFT,
   EMPTY_PICKER_DATA,
   filterOptions,
+  firstUnsetLevel,
   generationsForYear,
+  jumpToLevel,
   levelsClearedBy,
   narrowModifications,
   pickerStage,
@@ -378,6 +380,101 @@ describe("taking every single option at once", () => {
     );
     expect(resolved.stage).toEqual({ kind: "done" });
     expect(resolved.draft.year).toBeNull();
+  });
+});
+
+describe("every step is a screen of its own (ARCHITECTURE 4.39)", () => {
+  // The drafts the screens were opened with, bottom to top: each one holds
+  // what had been decided by then.
+  const start: CarDraft = EMPTY_DRAFT;
+  const withMake: CarDraft = { ...start, make: pick(GEELY) };
+  const withModel: CarDraft = { ...withMake, model: pick(ATLAS) };
+  const withYear: CarDraft = { ...withModel, year: 2024 };
+
+  it("names the step a screen is about while its data still loads", () => {
+    expect(firstUnsetLevel(start)).toBe("make");
+    expect(firstUnsetLevel(withMake)).toBe("model");
+    expect(firstUnsetLevel(withYear)).toBe("generation");
+    expect(
+      firstUnsetLevel({
+        ...withYear,
+        generation: { id: "gen-2", label: "II" },
+        body: { id: "b", label: "SUV" },
+        engine: { id: "e", label: "E" },
+        transmission: { id: "t", label: "AT" },
+        drive: { id: "d", label: "AWD" },
+      }),
+    ).toBeNull();
+  });
+
+  it("takes a tapped value back to the screen that asked for it", () => {
+    const stack = [start, withMake, withModel, withYear];
+    // Make asked on the first screen, model on the second, year on the third.
+    expect(jumpToLevel(stack, "make")).toEqual({ pop: 3, reset: null });
+    expect(jumpToLevel(stack, "model")).toEqual({ pop: 2, reset: null });
+    expect(jumpToLevel(stack, "year")).toEqual({ pop: 1, reset: null });
+  });
+
+  it("is the same as one «назад» for the value chosen on the previous screen", () => {
+    const stack = [start, withMake, withModel];
+    expect(jumpToLevel(stack, "model")).toEqual({ pop: 1, reset: null });
+  });
+
+  it("lands on the screen after a value the data chose by itself", () => {
+    // The make has one model: the second screen took it without asking and
+    // asked for the year, so the third screen opens with the model set.
+    const stack = [start, withMake, { ...withModel, year: 2024 }];
+    expect(jumpToLevel(stack, "model")).toEqual({ pop: 1, reset: null });
+    // The screen it lands on takes that model again, and clears what was below.
+    expect(jumpToLevel(stack, "make")).toEqual({ pop: 2, reset: null });
+  });
+
+  it("stays on the screen that took the tapped value by itself", () => {
+    // One model: this screen already took it and is asking for the year.
+    expect(jumpToLevel([start, withMake], "model")).toEqual({ pop: 0, reset: null });
+  });
+
+  it("starts the bottom screen again when the car it began from already had the value", () => {
+    // «Дополнить» on a saved car: the first screen asks for the engine.
+    const saved: CarDraft = {
+      ...withYear,
+      generation: { id: "gen-2", label: "II" },
+      body: { id: "b", label: "SUV" },
+      engine: null,
+      transmission: null,
+      drive: null,
+    };
+    const withEngine: CarDraft = { ...saved, engine: { id: "e", label: "E" } };
+
+    // The engine was asked on the first screen: back to it, nothing to reset.
+    expect(jumpToLevel([saved, withEngine], "engine")).toEqual({ pop: 1, reset: null });
+
+    // The body was chosen before this screen opened: the first screen is
+    // reset to ask for it, and everything below it is cleared.
+    const body = jumpToLevel([saved, withEngine], "body");
+    expect(body.pop).toBe(1);
+    expect(body.reset).toEqual(clearFrom(saved, "body"));
+    expect(body.reset?.body).toBeNull();
+    expect(body.reset?.generation?.label).toBe("II");
+
+    // With a single screen there is nothing to close, only to reset.
+    expect(jumpToLevel([saved], "make")).toEqual({ pop: 0, reset: EMPTY_DRAFT });
+  });
+
+  it("agrees with the warning: what the jump clears is what the warning names", () => {
+    const full: CarDraft = {
+      ...withYear,
+      generation: { id: "gen-2", label: "II" },
+      body: { id: "b", label: "SUV" },
+      engine: { id: "e", label: "E" },
+      transmission: { id: "t", label: "AT" },
+      drive: { id: "d", label: "AWD" },
+    };
+    const cleared = levelsClearedBy(full, "model");
+    const after = clearFrom(full, "model");
+    for (const level of cleared) {
+      expect(level === "year" ? after.year : after[level]).toBeNull();
+    }
   });
 });
 

@@ -324,6 +324,61 @@ export function clearFrom(draft: CarDraft, step: CarStep): CarDraft {
   return next;
 }
 
+/** Whether a level holds a value in the draft. */
+export function levelSet(draft: CarDraft, level: CarLevel): boolean {
+  return level === "year" ? draft.year !== null : draft[level] !== null;
+}
+
+/**
+ * The first level the draft has no value for: what the next screen is about
+ * while its data still loads, so the title of a step does not have to wait
+ * for the server (a step the data then skips is the rare case).
+ */
+export function firstUnsetLevel(draft: CarDraft): CarLevel | null {
+  return CAR_LEVELS.find((level) => !levelSet(draft, level)) ?? null;
+}
+
+/** Where tapping a chosen value takes the steps back to. */
+export interface LevelJump {
+  /** How many step screens to close, counted from the top of the steps. */
+  pop: number;
+  /**
+   * The draft to give the screen that is left on top, when no screen of the
+   * steps asked for this level (a car being completed already had it): that
+   * screen starts again from the level.
+   */
+  reset: CarDraft | null;
+}
+
+/**
+ * Each step of the choice is a screen of its own (ARCHITECTURE 4.39), so a
+ * chosen value shown above a step returns to the screen that asked for it —
+ * the system «назад» does the same one screen at a time.
+ *
+ * `routeDrafts` are the drafts the screens were opened with, bottom to top:
+ * what had been decided when each of them appeared. A screen asks for the
+ * first level its draft lacks, so the screen that asked for `level` is the
+ * topmost one whose draft still had it empty. A level that was taken
+ * automatically (a make with one model) was never asked on a screen of its
+ * own, and the same rule lands on the screen that asked the level after it —
+ * everything below the tapped level is cleared either way. When no screen
+ * lacked the level, the completed car it started from had it, and the
+ * bottom screen starts again from there.
+ */
+export function jumpToLevel(routeDrafts: readonly CarDraft[], level: CarLevel): LevelJump {
+  for (let index = routeDrafts.length - 1; index >= 0; index -= 1) {
+    const draft = routeDrafts[index];
+    if (draft && !levelSet(draft, level)) {
+      return { pop: routeDrafts.length - 1 - index, reset: null };
+    }
+  }
+  const bottom = routeDrafts[0];
+  return {
+    pop: Math.max(0, routeDrafts.length - 1),
+    reset: bottom ? clearFrom(bottom, level) : null,
+  };
+}
+
 /** The chosen values shown above a step; tapping one returns to that step. */
 export function chosenLevels(draft: CarDraft): { level: CarLevel; label: string }[] {
   const chosen: { level: CarLevel; label: string }[] = [];

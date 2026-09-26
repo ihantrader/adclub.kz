@@ -65,7 +65,6 @@ export {
   quantityControls,
   sanitizeOrderCode,
   selectAiPilotState,
-  sheetMotion,
   shouldAiPilotBlink,
   splitOrderCode,
   toneColors,
@@ -77,8 +76,16 @@ export {
   type IconName,
   type OrderStatusGroup,
   type PressGuard,
-  type SheetMotion,
   type Tone,
   type ToneColors,
 } from "./logic";
+export {
+  motionPlan,
+  screenTransition,
+  sheetMotion,
+  type MotionPlan,
+  type MotionRole,
+  type ScreenTransition,
+  type SheetMotion,
+} from "./motion";
 export { aiPilotSvg, brandSvg, type BrandSvgName } from "./brand/brand-svg";

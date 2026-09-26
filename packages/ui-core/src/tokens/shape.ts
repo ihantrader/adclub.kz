@@ -40,6 +40,12 @@ export const motion = {
   slow: 250,
   /** "Deceleration at the end". */
   easing: "cubic-bezier(0, 0, 0.2, 1)",
+  /**
+   * The same curve as numbers, for the clients that cannot read a CSS string
+   * (React Native's `Easing.bezier`). A test keeps the two in step, so there
+   * is one curve for the web and for the app.
+   */
+  bezier: [0, 0, 0.2, 1] as const,
   /** Skeleton shimmer period. */
   skeleton: 1200,
   /** Toast lifetime. */

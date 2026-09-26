@@ -11,6 +11,7 @@ import {
 } from "./src/design-system";
 import { AppStart } from "./src/start/AppStart";
 import { CityProvider } from "./src/state/city-provider";
+import { GarageProvider } from "./src/state/garage-provider";
 import { LanguageProvider } from "./src/state/language";
 import { readyWithin } from "./src/state/device-store";
 import { devicePreferencesReady } from "./src/state/stores";
@@ -57,9 +58,11 @@ export default function App() {
       <ThemeProvider>
         <LanguageProvider>
           <CityProvider>
-            <ToastProvider>
-              <Root />
-            </ToastProvider>
+            <GarageProvider>
+              <ToastProvider>
+                <Root />
+              </ToastProvider>
+            </GarageProvider>
           </CityProvider>
         </LanguageProvider>
       </ThemeProvider>

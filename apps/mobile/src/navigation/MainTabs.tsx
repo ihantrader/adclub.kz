@@ -3,15 +3,16 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { NavigationContainer, type Theme as NavigationTheme } from "@react-navigation/native";
 import { useMemo } from "react";
+import { CatalogCarProvider } from "../catalog/catalog-car-provider";
 import { BottomTabs, useTheme, type TabItem } from "../design-system";
-import { CatalogScreen } from "../screens/tabs/CatalogScreen";
-import { GarageScreen } from "../screens/tabs/GarageScreen";
 import { OrdersScreen } from "../screens/tabs/OrdersScreen";
 import { ProfileScreen } from "../screens/tabs/ProfileScreen";
 import { useT } from "../state/language";
+import { CatalogStack } from "./CatalogStack";
+import { GarageStack } from "./GarageStack";
+import type { TabName, TabParams } from "./routes";
 
-/** The four tabs of stages B–C (SCREENS 3.1); AI Pilot joins the middle in stage D. */
-export type TabName = "catalog" | "orders" | "garage" | "profile";
+export type { TabName } from "./routes";
 
 const TAB_ICONS: Record<TabName, IconName> = {
   catalog: "category",
@@ -20,7 +21,7 @@ const TAB_ICONS: Record<TabName, IconName> = {
   profile: "user",
 };
 
-const Tabs = createBottomTabNavigator();
+const Tabs = createBottomTabNavigator<TabParams>();
 
 /**
  * The tab bar is the design system's own (DESIGN 7.7): the navigator only
@@ -77,16 +78,19 @@ export function MainTabs({ initialTab = "catalog" }: MainTabsProps) {
 
   return (
     <NavigationContainer theme={navigationTheme}>
-      <Tabs.Navigator
-        initialRouteName={initialTab}
-        tabBar={(props) => <AppTabBar {...props} />}
-        screenOptions={{ headerShown: false, animation: "none" }}
-      >
-        <Tabs.Screen name="catalog" component={CatalogScreen} />
-        <Tabs.Screen name="orders" component={OrdersScreen} />
-        <Tabs.Screen name="garage" component={GarageScreen} />
-        <Tabs.Screen name="profile" component={ProfileScreen} />
-      </Tabs.Navigator>
+      {/* «Показать без фильтра» is a state of the catalog, not of the garage. */}
+      <CatalogCarProvider>
+        <Tabs.Navigator
+          initialRouteName={initialTab}
+          tabBar={(props) => <AppTabBar {...props} />}
+          screenOptions={{ headerShown: false, animation: "none" }}
+        >
+          <Tabs.Screen name="catalog" component={CatalogStack} />
+          <Tabs.Screen name="orders" component={OrdersScreen} />
+          <Tabs.Screen name="garage" component={GarageStack} />
+          <Tabs.Screen name="profile" component={ProfileScreen} />
+        </Tabs.Navigator>
+      </CatalogCarProvider>
     </NavigationContainer>
   );
 }

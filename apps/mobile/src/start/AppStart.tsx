@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { MainTabs, type TabName } from "../navigation/MainTabs";
+import { FirstRunCarScreen } from "../screens/FirstRunCarScreen";
 import { FirstRunCityScreen } from "../screens/FirstRunCityScreen";
 import { LanguageScreen } from "../screens/LanguageScreen";
 import { SplashScreen } from "../screens/SplashScreen";
@@ -84,19 +85,15 @@ export function AppStart() {
 
     case "first-run-city":
       return (
-        <FirstRunCityScreen
-          onDone={() => {
-            // M-START-05 (the car) is TASK-028: until it exists the run is
-            // finished here. Then this becomes `{ completed: false, step: "car" }`.
-            firstRunStore.set({ completed: true, step: "car" });
-          }}
-        />
+        <FirstRunCityScreen onDone={() => firstRunStore.set({ completed: false, step: "car" })} />
       );
 
-    // M-START-05 — TASK-028. The decision already knows the step; until the
-    // screen exists the app opens the catalog instead of a dead end.
+    // M-START-05: the run is finished after this screen whatever the user
+    // chose — a car, or «Пропустить» (TASK-028).
     case "first-run-car":
-      return <MainTabs initialTab="catalog" />;
+      return (
+        <FirstRunCarScreen onDone={() => firstRunStore.set({ completed: true, step: "car" })} />
+      );
 
     case "orders-offline":
       return <MainTabs initialTab="orders" />;

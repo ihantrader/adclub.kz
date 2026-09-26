@@ -1,5 +1,6 @@
 import { isLang, type Lang } from "@adclub/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { INITIAL_GARAGE, parseGarage, type GarageState } from "../garage/garage";
 import { INITIAL_FIRST_RUN, parseFirstRun, type FirstRunState } from "../start/first-run";
 import { INITIAL_CITY_STATE, parseCityState, type CityState } from "./city";
 import {
@@ -41,11 +42,25 @@ export const firstRunStore: DeviceStore<FirstRunState> = createDeviceStore(stora
 });
 
 /**
+ * The cars of a guest (TASK-028). Kept on the device so the garage works
+ * without an account and without a network (PRODUCT 6.6, SCREENS 2.4);
+ * TASK-029 merges it into the account on sign-in and this stays the copy of
+ * the device.
+ */
+export const garageStore: DeviceStore<GarageState> = createDeviceStore(storage, {
+  key: "adclub.mobile.garage",
+  initial: INITIAL_GARAGE,
+  parse: parseGarage,
+});
+
+/**
  * Resolves once everything the first frame depends on has been read — and
  * after a second in any case: a stuck storage must not hold the splash
  * (the same rule as the theme, ARCHITECTURE 4.10 I91).
  */
 export const devicePreferencesReady: Promise<void> = readyWithin(
-  Promise.all([languageStore.ready, cityStore.ready, firstRunStore.ready]).then(() => undefined),
+  Promise.all([languageStore.ready, cityStore.ready, firstRunStore.ready, garageStore.ready]).then(
+    () => undefined,
+  ),
   1000,
 );

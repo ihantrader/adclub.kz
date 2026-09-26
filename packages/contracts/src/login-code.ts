@@ -159,6 +159,13 @@ export const rateLimitNameSchema = z.enum([
    * so the limit is a generous one against a loop, not against a person.
    */
   "active_orders_per_account",
+  /**
+   * The provider's webhook (TASK-024): an open route nobody of ours calls,
+   * limited by the address the request comes from. Counted by the same
+   * guard as every other limit, even though the route is outside the
+   * client contract (ARCHITECTURE 4.35).
+   */
+  "whatsapp_webhook_per_ip",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

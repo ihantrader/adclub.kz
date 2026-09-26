@@ -909,6 +909,82 @@ const publicLimits = group({
       default: 60,
       description: "Окно лимита запросов каталога одной учётной записью.",
     }),
+    whatsapp_webhook_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000_000,
+      default: 600,
+      description:
+        "Сколько вебхуков провайдера сообщений принимается с одного адреса за окно; сверх — отказ с временем ожидания. Щедро: провайдер присылает события пачками и повторяет их, а настоящая защита маршрута — проверка подписи.",
+    }),
+    whatsapp_webhook_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита вебхуков провайдера сообщений с одного адреса.",
+    }),
+  },
+});
+
+/**
+ * Messages to suppliers through the gateway (TASK-024, ARCHITECTURE 4.35).
+ * The templates themselves are a registry of code, not settings: a text
+ * changed here would no longer be the one Meta approved (SCREENS 8.5).
+ */
+const messages = group({
+  id: "messages",
+  title: "Сообщения поставщикам",
+  editableBy: "admin",
+  settings: {
+    message_send_attempts: define.integer({
+      unit: "count",
+      min: 1,
+      max: 20,
+      default: 5,
+      description:
+        "Сколько раз сообщение поставщику пробуют отправить, если провайдер отвечает временной ошибкой; после этого сообщение попадает в мёртвую очередь и видно оператору. Постоянный отказ (шаблон не одобрен, номера нет в WhatsApp) не повторяется вовсе.",
+    }),
+    message_retry_delay_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: HOUR,
+      default: 60,
+      description:
+        "Пауза перед повторной попыткой отправки; каждая следующая вдвое дольше (механизм очереди).",
+    }),
+    message_send_claim_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: 600,
+      default: 120,
+      description:
+        "На сколько сообщение закрепляется за попыткой отправки: пока срок не прошёл, второй worker его не берёт. Попытка, прерванная остановкой процесса, после срока не отправляется повторно — сообщение помечается «неизвестно, ушло ли» и ждёт решения оператора.",
+    }),
+    message_body_max_length: define.integer({
+      unit: "count",
+      min: 100,
+      max: 1024,
+      default: 1024,
+      description:
+        "Предел длины текста шаблонного сообщения (у WhatsApp — 1024 символа). Сообщение, которое с подстановками длиннее, не отправляется: это видно оператору, а не обрезается молча.",
+    }),
+    message_variables_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 90,
+      default: 7,
+      description:
+        "Сколько дней подстановки сообщения (в них бывают имя и телефон клиента) хранятся у сообщения, которое не удалось отправить: столько времени оператор может повторить отправку, потом остаётся только запросить событие заново. У отправленного сообщения подстановки стираются сразу.",
+    }),
+    webhook_event_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Сколько дней хранятся записи о принятых вебхуках провайдера после обработки; тело события стирается сразу после применения.",
+    }),
   },
 });
 
@@ -1320,6 +1396,7 @@ export const settingGroups = [
   offers,
   showcase,
   publicLimits,
+  messages,
   billing,
   clients,
   cleanup,
@@ -1344,6 +1421,7 @@ export const settingDefinitions = {
   ...offers.settings,
   ...showcase.settings,
   ...publicLimits.settings,
+  ...messages.settings,
   ...billing.settings,
   ...clients.settings,
   ...cleanup.settings,

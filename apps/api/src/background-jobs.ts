@@ -2,6 +2,7 @@ import type { AppConfig } from "./config";
 import { devJobCatalog, type JobDefinition } from "./jobs";
 import { catalogJobCatalog, photoJobCatalog } from "./modules/catalog";
 import { identityJobCatalog } from "./modules/identity";
+import { messagingJobCatalog } from "./modules/messaging";
 import { orderJobCatalog } from "./modules/orders";
 import { supplierJobCatalog } from "./modules/suppliers";
 import { vehicleJobCatalog } from "./modules/vehicles";
@@ -19,6 +20,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
     ...catalogJobCatalog,
     ...photoJobCatalog,
     ...vehicleJobCatalog,
+    ...messagingJobCatalog,
     ...supplierJobCatalog,
     ...orderJobCatalog,
     ...(hasDevJobs(config) ? devJobCatalog : []),

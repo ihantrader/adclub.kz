@@ -22811,7 +22811,8 @@
           "order_lookup_failures_per_member",
           "order_lookup_failures_per_supplier",
           "order_actions_per_member",
-          "active_orders_per_account"
+          "active_orders_per_account",
+          "whatsapp_webhook_per_ip"
         ]
       },
       "RateLimitedDetails": {

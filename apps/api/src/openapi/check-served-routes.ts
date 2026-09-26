@@ -1,19 +1,23 @@
 import type { ApiRouteDefinition } from "@adclub/contracts";
 import { toNestPath, type ServedRoute } from "../common/contract";
+import { WHATSAPP_WEBHOOK_PATH } from "../common/http";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
-import { DEV_SUPPLIER_INVITATIONS_PATH } from "../modules/suppliers";
+import { DEV_MESSAGES_PATH } from "../modules/messaging";
 import { METRICS_PATH } from "../observability";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
 
 /**
  * Routes that are deliberately not part of the client contract:
- * development helpers, and the metrics endpoint the collector scrapes
- * (Prometheus text, not JSON — ARCHITECTURE 15.3).
+ * development helpers, the metrics endpoint the collector scrapes
+ * (Prometheus text, not JSON — ARCHITECTURE 15.3), and the message
+ * provider's webhook (no client of ours calls it, and its subscription
+ * check answers a plain-text challenge — ARCHITECTURE 4.35).
  */
 const NON_CONTRACT_PATHS: readonly string[] = [
   ...DEV_ONLY_PATHS,
   DEV_LOGIN_CODE_OUTBOX_PATH,
-  DEV_SUPPLIER_INVITATIONS_PATH,
+  DEV_MESSAGES_PATH,
+  WHATSAPP_WEBHOOK_PATH,
   METRICS_PATH,
 ];
 

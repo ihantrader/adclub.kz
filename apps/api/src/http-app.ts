@@ -1,6 +1,7 @@
+import type { IncomingMessage } from "node:http";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { bodyParserException } from "./common/errors";
-import { corsOptions } from "./common/http";
+import { contractPathOf, corsOptions, mediaTypeOf, uploadRouteFor } from "./common/http";
 import type { AppConfig } from "./config";
 
 /**
@@ -15,6 +16,21 @@ export function configureHttpApp(app: NestExpressApplication, config: AppConfig)
   // Only the web clients' origins (TASK-005); requests from other sites are
   // refused by OriginPolicyMiddleware (AppModule).
   app.enableCors(corsOptions(config));
+  // The JSON parser Nest registers by default reads every `application/json`
+  // body to its end before any middleware of a module runs — the body of a
+  // route that reads its own bytes (the provider's webhook, whose signature is
+  // over exactly those bytes, TASK-024) would already be gone, and the reader
+  // would wait for data that never comes. So the parser is registered here,
+  // with everything it did before (`application/json`, the same limit) and
+  // one exception: a route that takes its body as bytes is not its business.
+  app.useBodyParser("json", {
+    type: (request: IncomingMessage & { originalUrl?: string }) =>
+      mediaTypeOf(String(request.headers["content-type"] ?? "")) === "application/json" &&
+      uploadRouteFor(
+        request.method ?? "GET",
+        contractPathOf({ originalUrl: request.originalUrl, url: request.url ?? "/" }),
+      ) === null,
+  });
   // A body the parser refused (not JSON, too large, a foreign encoding)
   // becomes its contract error where Nest takes over errors of Express
   // middleware — before it turns a JSON syntax error into a plain 400 that

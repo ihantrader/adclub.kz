@@ -1,14 +1,14 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { auditActions, auditEntities, type SupplierInvitation } from "@adclub/contracts";
-import { maskPhone } from "@adclub/domain";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { rateLimitedException } from "../../common/errors";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import { DatabaseService, type DbExecutor } from "../../database";
-import { defineJob, JobQueue, type JobHandler, type JobRunContext } from "../../jobs";
+import { defineJob, JobQueue, type JobHandler } from "../../jobs";
 import { AuditLog } from "../audit";
 import { account, supplier, supplierMember } from "../identity";
+import { Messaging, MessageSubjects, type MessageOutcome, type MessageSubject } from "../messaging";
 import { AppSettings } from "../settings";
 import { supplierInvitation, type SupplierInvitationRow } from "./schema";
 import {
@@ -20,9 +20,22 @@ import {
 } from "./supplier-common";
 
 /**
- * Sends one invitation (SCREENS W-08) through the message channel.
- * Idempotent: an invitation already sent is not sent again.
+ * Inviting an employee to the cabinet (W-08) — the first real user of the
+ * message gateway (TASK-024 requirement 5). What this module owns is the
+ * invitation: who asked for it, how often it may be asked again, and that
+ * it is cancelled when the employee is removed. **How a message leaves the
+ * platform is not its business any more**: it hands the gateway a template
+ * key, the employee's language and the values, and the gateway does the
+ * queue, the provider, the retries and the delivery (`Messaging`).
+ *
+ * What replaced `SupplierMessages` of TASK-016: nothing here knows what a
+ * channel is. The one thing that stayed is the job — it is the step that
+ * reads the employee, decides the language and asks for the message; the
+ * sending itself is the gateway's own job, and so the provider is no longer
+ * called while this module holds a row (the complaint of TASK-017).
  */
+
+/** Writes the message of one invitation and hands it to the gateway. */
 export const sendInvitationJob = defineJob({
   name: "suppliers.send-invitation",
   payload: z.object({ invitationId: z.uuid() }),
@@ -33,68 +46,8 @@ export const sendInvitationJob = defineJob({
 
 export const supplierJobCatalog = [sendInvitationJob];
 
-/** A message to a supplier's employee. */
-export interface SupplierMessage {
-  /** E.164. */
-  phone: string;
-  text: string;
-}
-
-/**
- * A channel could not deliver. `reason` is a short token safe to log — it
- * never holds the phone number or the text.
- */
-export class SupplierMessageDeliveryError extends Error {
-  constructor(readonly reason: string) {
-    super(`Supplier message delivery failed: ${reason}`);
-    this.name = "SupplierMessageDeliveryError";
-  }
-}
-
-/**
- * Delivery of messages to suppliers' employees (ARCHITECTURE 9.1).
- * **Replacement point**: TASK-026 puts the WhatsApp template (and the SMS
- * fallback) behind this interface; the invitation logic doesn't change.
- */
-export abstract class SupplierMessages {
-  abstract send(message: SupplierMessage): Promise<{ channel: "test" | "whatsapp" | "sms" }>;
-}
-
-/**
- * The stand-in of development and tests (refused in production, like the
- * test login code channels): nothing leaves the process. What was "sent"
- * is kept on the invitation row, and development shows it at
- * `GET /dev/supplier-invitations`, whatever process sent it.
- */
-export class TestSupplierMessages extends SupplierMessages {
-  /** Every accepted message of this process, newest last (tests read it). */
-  readonly sent: SupplierMessage[] = [];
-  /** Tests: make the channel fail. */
-  failing = false;
-
-  send(message: SupplierMessage): Promise<{ channel: "test" }> {
-    if (this.failing) {
-      return Promise.reject(new SupplierMessageDeliveryError("test_channel_configured_to_fail"));
-    }
-    this.sent.push(message);
-    return Promise.resolve({ channel: "test" });
-  }
-}
-
-/** The text of W-08: «{Имя}, вас добавили в кабинет поставщика {компания}. Войти: {ссылка}». */
-export function invitationText(input: {
-  memberName: string;
-  companyName: string;
-  link: string | null;
-}): string {
-  const enter = input.link ? ` Войти: ${input.link}` : "";
-  return `${input.memberName}, вас добавили в кабинет поставщика «${input.companyName}».${enter}`;
-}
-
-/** The link of an invitation: the cabinet's address (the first configured origin). */
-export function cabinetLink(config: AppConfig): string | null {
-  return config.http.webOrigins.supplierWeb[0] ?? null;
-}
+/** What a message about an invitation is about (`MessageSubjects`). */
+export const INVITATION_SUBJECT = "supplier_invitation";
 
 export function describeInvitation(row: SupplierInvitationRow): SupplierInvitation {
   return {
@@ -106,11 +59,18 @@ export function describeInvitation(row: SupplierInvitationRow): SupplierInvitati
   };
 }
 
-/** What an invitation needs to be written: the employee, the company, the number. */
+/** The link of an invitation: the cabinet's address (the first configured origin). */
+export function cabinetLink(config: AppConfig): string | null {
+  return config.http.webOrigins.supplierWeb[0] ?? null;
+}
+
+/** What the invitation message needs: the employee, the company, the number, the language. */
 interface InvitationTarget {
   memberName: string;
   companyName: string;
   phone: string;
+  lang: "kk" | "ru";
+  memberStatus: string;
 }
 
 async function targetOf(
@@ -122,6 +82,8 @@ async function targetOf(
       memberName: supplierMember.displayName,
       companyName: supplier.name,
       phone: account.phone,
+      lang: supplierMember.notificationLanguage,
+      memberStatus: supplierMember.status,
     })
     .from(supplierMember)
     .innerJoin(supplier, eq(supplier.id, supplierMember.supplierId))
@@ -286,7 +248,12 @@ export class SupplierInvitations {
   }
 }
 
-/** The worker's side: sends a queued invitation. */
+/**
+ * The worker's side: turns a queued invitation into a message of the
+ * gateway. No provider is called here and no row is held while one is: the
+ * gateway's own job does the sending, and this transaction only reads the
+ * employee and writes the message (TASK-024 requirement 3).
+ */
 @Injectable()
 export class InvitationSender implements JobHandler<{ invitationId: string }> {
   private readonly logger = new Logger("SupplierInvitation");
@@ -294,34 +261,13 @@ export class InvitationSender implements JobHandler<{ invitationId: string }> {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(SupplierMessages) private readonly messages: SupplierMessages,
+    @Inject(Messaging) private readonly messaging: Messaging,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  /**
-   * Sends in a transaction that share-locks the employee's row for the
-   * send (TASK-017): a removal (which updates that row and cancels the
-   * queued invitations in its own transaction) either commits first — the
-   * invitation is `cancelled` or the employee `removed`, nothing is sent —
-   * or waits until the message is out. The lock order, employee then
-   * invitation, is the removal's too.
-   */
-  async run({ invitationId }: { invitationId: string }, context: JobRunContext): Promise<void> {
-    const db = this.database.db;
-    const [peek] = await db
-      .select({ memberId: supplierInvitation.memberId })
-      .from(supplierInvitation)
-      .where(eq(supplierInvitation.id, invitationId));
-    if (!peek) {
-      return;
-    }
-    let failure: string | undefined;
-    await db.transaction(async (tx) => {
-      const [member] = await tx
-        .select({ status: supplierMember.status })
-        .from(supplierMember)
-        .where(eq(supplierMember.id, peek.memberId))
-        .for("share");
+  async run({ invitationId }: { invitationId: string }): Promise<void> {
+    const link = cabinetLink(this.config);
+    await this.database.db.transaction(async (tx) => {
       const [row] = await tx
         .select()
         .from(supplierInvitation)
@@ -330,7 +276,11 @@ export class InvitationSender implements JobHandler<{ invitationId: string }> {
       if (!row || row.status !== "queued") {
         return;
       }
-      if (member?.status !== "active") {
+      const target = await targetOf(tx, row.memberId);
+      if (!target) {
+        return;
+      }
+      if (target.memberStatus !== "active") {
         await tx
           .update(supplierInvitation)
           .set({ status: "cancelled", updatedAt: new Date() })
@@ -340,101 +290,169 @@ export class InvitationSender implements JobHandler<{ invitationId: string }> {
         );
         return;
       }
-      const target = await targetOf(tx, row.memberId);
-      if (!target) {
-        return;
-      }
-      const text = invitationText({ ...target, link: cabinetLink(this.config) });
-      try {
-        const { channel } = await this.messages.send({ phone: target.phone, text });
+      if (!link) {
+        // An invitation without the cabinet's address is of no use to
+        // anybody; better a failure the operator sees than a message that
+        // tells a person nothing (`SUPPLIER_WEB_ORIGINS`).
         await tx
           .update(supplierInvitation)
           .set({
-            status: "sent",
-            channel,
-            sentAt: new Date(),
+            status: "failed",
             attempts: sql`${supplierInvitation.attempts} + 1`,
-            lastError: null,
+            lastError: "cabinet_link_not_configured",
             updatedAt: new Date(),
           })
           .where(eq(supplierInvitation.id, row.id));
-        this.logger.log(
-          `Invitation sent invitation=${row.id} member=${row.memberId} channel=${channel} phone=${maskPhone(target.phone)}`,
+        this.logger.warn(
+          `Invitation not sent invitation=${row.id}: no cabinet address is configured (SUPPLIER_WEB_ORIGINS)`,
         );
-      } catch (error) {
-        failure = error instanceof SupplierMessageDeliveryError ? error.reason : "unexpected_error";
+        return;
       }
+      // The message, in the employee's own language (PRODUCT 12.6).
+      await this.messaging.enqueue(tx, {
+        template: "supplier_invitation",
+        phone: target.phone,
+        lang: target.lang,
+        variables: {
+          memberName: target.memberName,
+          companyName: target.companyName,
+          link,
+        },
+        subject: { type: INVITATION_SUBJECT, id: row.id },
+        // One invitation, one message: asking again writes a new invitation
+        // row, and so a new message.
+        dedupeKey: `${INVITATION_SUBJECT}:${row.id}`,
+      });
     });
-    if (failure !== undefined) {
-      await this.recordFailure(invitationId, failure, context);
-    }
-  }
-
-  private async recordFailure(
-    invitationId: string,
-    reason: string,
-    context: JobRunContext,
-  ): Promise<never> {
-    const db = this.database.db;
-    const [row] = await db
-      .select()
-      .from(supplierInvitation)
-      .where(eq(supplierInvitation.id, invitationId));
-    if (row) {
-      // The last run of the job: the invitation failed for good (unless
-      // a removal cancelled it meanwhile).
-      const final = context.attempt > sendInvitationJob.retry.limit;
-      await db
-        .update(supplierInvitation)
-        .set({
-          status: final ? "failed" : row.status,
-          attempts: sql`${supplierInvitation.attempts} + 1`,
-          lastError: reason,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(supplierInvitation.id, row.id), eq(supplierInvitation.status, "queued")));
-      this.logger.warn(
-        `Invitation not delivered invitation=${row.id} member=${row.memberId} reason=${reason} attempt=${context.attempt}`,
-      );
-    }
-    throw new SupplierMessageDeliveryError(reason);
   }
 }
 
 /**
- * Development only: the latest invitations the test channel "sent", with
- * their text, read from the database (the worker sends them, the API
- * shows them).
+ * What messaging asks this module about an invitation (`MessageSubjects`):
+ * whether it may still go out, and what to keep when it is settled. Both
+ * run inside messaging's own short transactions, so the invitation and the
+ * message can never disagree — and the provider is called between them,
+ * with nothing locked.
  */
 @Injectable()
-export class DevInvitationOutbox {
-  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(
-    @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(APP_CONFIG) private readonly config: AppConfig,
-  ) {}
+export class SupplierInvitationMessages implements MessageSubject, OnModuleInit {
+  private readonly logger = new Logger("SupplierInvitation");
 
-  async latest(): Promise<
-    { sentAt: string | null; status: string; channel: string | null; phone: string; text: string }[]
-  > {
-    const rows = await this.database.db
-      .select()
-      .from(supplierInvitation)
-      .orderBy(desc(supplierInvitation.createdAt))
-      .limit(20);
-    const result = [];
-    for (const row of rows) {
-      const target = await targetOf(this.database.db, row.memberId);
-      if (target) {
-        result.push({
-          sentAt: iso(row.sentAt),
-          status: row.status,
-          channel: row.channel,
-          phone: target.phone,
-          text: invitationText({ ...target, link: cabinetLink(this.config) }),
-        });
-      }
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(MessageSubjects) private readonly subjects: MessageSubjects) {}
+
+  onModuleInit(): void {
+    this.subjects.register(INVITATION_SUBJECT, this);
+  }
+
+  /**
+   * An invitation goes out only while it is still asked for and the
+   * employee is still there. "Still asked for" is `queued` — and `failed`:
+   * an invitation that failed is one the operator may bring back
+   * (`messages:retry`, `jobs:retry`), and the invitation follows its message
+   * rather than cancelling it. Only `cancelled` and `sent` end it. Removing an
+   * employee cancels the invitations that are still `queued`, in its own
+   * transaction, and this share lock on the employee is what makes the two
+   * orders agree — the removal either commits first (and nothing is sent) or
+   * waits for this short transaction, which holds no provider call. A `failed`
+   * invitation is not touched by the removal: it is decided when it is brought
+   * back — the employee is removed by then and it is cancelled, or was
+   * restored and it goes out.
+   */
+  async stillSend(tx: DbExecutor, subjectId: string | null): Promise<boolean> {
+    if (!subjectId) {
+      return false;
     }
-    return result;
+    const [row] = await tx
+      .select({ status: supplierInvitation.status, memberId: supplierInvitation.memberId })
+      .from(supplierInvitation)
+      .where(eq(supplierInvitation.id, subjectId));
+    if (!row || (row.status !== "queued" && row.status !== "failed")) {
+      return false;
+    }
+    const [member] = await tx
+      .select({ status: supplierMember.status })
+      .from(supplierMember)
+      .where(eq(supplierMember.id, row.memberId))
+      .for("share");
+    return member?.status === "active";
+  }
+
+  async onResult(tx: DbExecutor, subjectId: string | null, outcome: MessageOutcome): Promise<void> {
+    if (!subjectId) {
+      return;
+    }
+    const now = new Date();
+    // What is still open: `queued`, and `failed` while its message is brought
+    // back. A sent or cancelled invitation is never changed by a late outcome.
+    const open = and(
+      eq(supplierInvitation.id, subjectId),
+      inArray(supplierInvitation.status, ["queued", "failed"]),
+    );
+    switch (outcome.kind) {
+      case "sent":
+        await tx
+          .update(supplierInvitation)
+          .set({
+            status: "sent",
+            channel: outcome.channel,
+            sentAt: now,
+            attempts: sql`${supplierInvitation.attempts} + 1`,
+            lastError: null,
+            updatedAt: now,
+          })
+          .where(open);
+        this.logger.log(`Invitation sent invitation=${subjectId} channel=${outcome.channel}`);
+        return;
+      case "retrying":
+        // A failed attempt that will be tried again: what the invitation always
+        // showed while it waited — the attempts so far and why the last failed.
+        await tx
+          .update(supplierInvitation)
+          .set({
+            attempts: sql`${supplierInvitation.attempts} + 1`,
+            lastError: outcome.failure,
+            updatedAt: now,
+          })
+          .where(
+            and(eq(supplierInvitation.id, subjectId), eq(supplierInvitation.status, "queued")),
+          );
+        return;
+      case "failed":
+        await tx
+          .update(supplierInvitation)
+          .set({
+            status: "failed",
+            attempts: sql`${supplierInvitation.attempts} + 1`,
+            lastError: outcome.failure,
+            updatedAt: now,
+          })
+          .where(open);
+        this.logger.warn(
+          `Invitation not delivered invitation=${subjectId} reason=${outcome.failure}`,
+        );
+        return;
+      case "cancelled":
+        await tx
+          .update(supplierInvitation)
+          .set({ status: "cancelled", updatedAt: now })
+          .where(open);
+        return;
+      case "unknown":
+        // Nobody can say whether it went out: not "sent", and not left looking
+        // as if it were still on its way. `failed` says a person has to look,
+        // and the operator's retry brings it back the same way as any other.
+        await tx
+          .update(supplierInvitation)
+          .set({
+            status: "failed",
+            attempts: sql`${supplierInvitation.attempts} + 1`,
+            lastError: "outcome_unknown",
+            updatedAt: now,
+          })
+          .where(open);
+        this.logger.warn(`Invitation left in an unknown state invitation=${subjectId}`);
+        return;
+    }
   }
 }

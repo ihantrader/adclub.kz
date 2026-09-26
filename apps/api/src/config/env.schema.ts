@@ -22,6 +22,13 @@ const urlWithProtocol = (protocols: string[]) =>
       { message: `Must be a URL with protocol ${protocols.join(" or ")}` },
     );
 
+/** An unset variable and one set to whitespace mean the same: not configured. */
+const blankAsUndefined = <Schema extends z.ZodType>(schema: Schema) =>
+  z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    schema.optional(),
+  );
+
 export const logLevels = ["error", "warn", "log", "debug", "verbose"] as const;
 export type LogLevel = (typeof logLevels)[number];
 
@@ -96,6 +103,57 @@ export type AiProviderName = (typeof aiProviders)[number];
  * call cost; `empty`, `too_long`, `control_characters`, `wrong_language` —
  * answers with a text the checks refuse.
  */
+/**
+ * Where messages to suppliers are sent from (TASK-024, ARCHITECTURE 9.1,
+ * 4.35). `whatsapp_cloud` is Meta's WhatsApp Cloud API and needs the
+ * access token, the phone number id and the app secret; `test` is an
+ * in-process stand-in that sends nothing (development, tests and CI) and
+ * is refused in production, where nobody would get a message.
+ */
+export const messageProviders = ["test", "whatsapp_cloud"] as const;
+export type MessageProviderName = (typeof messageProviders)[number];
+
+/**
+ * What the test message channel does with a request (`MESSAGE_TEST_MODE`,
+ * development and tests): `ok` — accepts it and keeps it for
+ * `GET /dev/messages`; `unavailable` — fails like an unreachable provider
+ * (retried); `rate_limited` — like a 429 with `Retry-After` (retried);
+ * `rejected` — refuses for good; `template_not_approved` — the template is
+ * not approved for this language (for good); `no_whatsapp` — the number is
+ * not on WhatsApp (for good, PRODUCT 15: no SMS fallback for
+ * notifications); `outcome_unknown` — the request may have reached the
+ * provider and nobody can tell (not retried by itself: the message is
+ * `unknown` and a person decides); `slow` — answers after a delay.
+ */
+export const messageTestModes = [
+  "ok",
+  "unavailable",
+  "rate_limited",
+  "rejected",
+  "template_not_approved",
+  "no_whatsapp",
+  "outcome_unknown",
+  "slow",
+] as const;
+export type MessageTestMode = (typeof messageTestModes)[number];
+
+/** The Cloud API version the real channel calls (Meta keeps versions ~2 years). */
+export const WHATSAPP_API_VERSION = "v21.0";
+/** Where the Cloud API is; only development points this elsewhere. */
+export const WHATSAPP_PUBLIC_URL = "https://graph.facebook.com";
+
+/**
+ * Signs and checks the provider's webhook in development and tests only, so
+ * a signed webhook can be tried without a Meta account. It is a constant
+ * anybody can read in this repository, so it is never the secret of a
+ * deployed environment: elsewhere an unset `WHATSAPP_APP_SECRET` means no
+ * webhook is accepted at all (`appSecret` is `undefined`).
+ */
+const DEV_WHATSAPP_APP_SECRET = "adclub-dev-only-whatsapp-app-secret";
+
+/** The token Meta echoes when the webhook subscription is confirmed (development default). */
+const DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN = "adclub-dev-only-webhook-verify-token";
+
 export const aiTestModes = [
   "ok",
   "unavailable",
@@ -253,6 +311,34 @@ export const envSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.enum(aiTestModes).default("ok"),
   ),
+  // Messages to suppliers (ARCHITECTURE 9.1, 4.35; TASK-024). Unset
+  // provider: `whatsapp_cloud` when the channel is fully configured,
+  // `test` otherwise. An empty variable counts as unset.
+  MESSAGE_PROVIDER: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(messageProviders).optional(),
+  ),
+  MESSAGE_TEST_MODE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(messageTestModes).default("ok"),
+  ),
+  // The permanent access token of the system user of the WhatsApp Business
+  // account; the id of the sending phone number.
+  WHATSAPP_ACCESS_TOKEN: blankAsUndefined(z.string().trim().min(20)),
+  WHATSAPP_PHONE_NUMBER_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^\d{5,25}$/),
+  ),
+  // The Meta app secret: the webhook signature (`X-Hub-Signature-256`) is
+  // checked with it, so without it no provider event is ever applied.
+  WHATSAPP_APP_SECRET: blankAsUndefined(z.string().trim().min(16)),
+  // The token echoed back when Meta confirms the webhook subscription.
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: blankAsUndefined(z.string().trim().min(16)),
+  // Where the Cloud API is; development only (an address nothing answers
+  // at, to watch retries and the dead letter queue without the network).
+  WHATSAPP_API_BASE_URL: blankAsUndefined(z.url()),
 });
 
 export interface RateLimitSettings {
@@ -326,6 +412,30 @@ export type AppConfig = {
     /** What the test provider does (ignored by `claude`). */
     testMode: AiTestMode;
   };
+  messaging: {
+    provider: MessageProviderName;
+    /** What the test channel does (ignored by the real one). */
+    testMode: MessageTestMode;
+    whatsapp: {
+      /** `undefined` without one (then only the test channel runs). */
+      accessToken: string | undefined;
+      phoneNumberId: string | undefined;
+      /**
+       * Checks the webhook signature. Development and tests use a fixed
+       * value so a signed webhook can be tried without a Meta account;
+       * anywhere else it is set or nothing is accepted: `undefined` refuses
+       * every webhook (the real channel cannot start without it).
+       */
+      appSecret: string | undefined;
+      /**
+       * Echoed back when Meta confirms the webhook subscription. `undefined`
+       * — the subscription cannot be confirmed.
+       */
+      webhookVerifyToken: string | undefined;
+      /** Where the Cloud API is, with the version (`…/v21.0`). */
+      baseUrl: string;
+    };
+  };
   /**
    * Variables present in the environment that used to hold what are
    * settings now, or belong to something the project no longer has; they
@@ -394,6 +504,38 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.NODE_ENV === "production" && aiProvider === "test") {
     environmentIssues.push(
       "AI_PROVIDER: the test AI provider is not allowed when NODE_ENV=production (set OPENROUTER_API_KEY)",
+    );
+  }
+  // Messages to suppliers (TASK-024): the real channel needs all three —
+  // the token and the number to send with, the app secret to believe an
+  // event of the provider. Without them the test channel does the work,
+  // which production refuses (nobody would get a message).
+  const whatsappConfigured =
+    parsed.WHATSAPP_ACCESS_TOKEN !== undefined &&
+    parsed.WHATSAPP_PHONE_NUMBER_ID !== undefined &&
+    parsed.WHATSAPP_APP_SECRET !== undefined;
+  const messageProvider: MessageProviderName =
+    parsed.MESSAGE_PROVIDER ?? (whatsappConfigured ? "whatsapp_cloud" : "test");
+  if (messageProvider === "whatsapp_cloud") {
+    for (const name of [
+      "WHATSAPP_ACCESS_TOKEN",
+      "WHATSAPP_PHONE_NUMBER_ID",
+      "WHATSAPP_APP_SECRET",
+      "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+    ] as const) {
+      if (!parsed[name]) {
+        environmentIssues.push(`${name}: required when MESSAGE_PROVIDER=whatsapp_cloud`);
+      }
+    }
+  }
+  if (parsed.NODE_ENV === "production" && messageProvider === "test") {
+    environmentIssues.push(
+      "MESSAGE_PROVIDER: the test message channel is not allowed when NODE_ENV=production (configure WHATSAPP_*)",
+    );
+  }
+  if (parsed.WHATSAPP_API_BASE_URL && !isLocal) {
+    environmentIssues.push(
+      `WHATSAPP_API_BASE_URL: not allowed when NODE_ENV=${parsed.NODE_ENV} (messages would leave for another address)`,
     );
   }
   let monitoringTarget: MonitoringTarget | undefined;
@@ -473,6 +615,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       openRouterApiKey: parsed.OPENROUTER_API_KEY,
       openRouterBaseUrl: parsed.OPENROUTER_BASE_URL ?? OPENROUTER_PUBLIC_URL,
       testMode: parsed.AI_TEST_MODE,
+    },
+    messaging: {
+      provider: messageProvider,
+      testMode: parsed.MESSAGE_TEST_MODE,
+      whatsapp: {
+        accessToken: parsed.WHATSAPP_ACCESS_TOKEN,
+        phoneNumberId: parsed.WHATSAPP_PHONE_NUMBER_ID,
+        appSecret: parsed.WHATSAPP_APP_SECRET ?? (isLocal ? DEV_WHATSAPP_APP_SECRET : undefined),
+        webhookVerifyToken:
+          parsed.WHATSAPP_WEBHOOK_VERIFY_TOKEN ??
+          (isLocal ? DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN : undefined),
+        baseUrl: `${parsed.WHATSAPP_API_BASE_URL ?? WHATSAPP_PUBLIC_URL}/${WHATSAPP_API_VERSION}`,
+      },
     },
     ignoredVariables: Object.keys(env)
       .filter((name) =>

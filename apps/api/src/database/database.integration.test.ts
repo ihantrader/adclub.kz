@@ -116,7 +116,184 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790350000000_create-club-access",
       "1790400000000_create-orders",
       "1790450000000_close-orders",
+      "1790500000000_create-messaging",
     ]);
+  });
+
+  it("holds the rules of the message gateway in the database and rolls back keeping the suppliers (messaging)", async () => {
+    const message = (values: Record<string, unknown> = {}) => {
+      const row: Record<string, unknown> = {
+        dedupe_key: `event:${randomUUID()}`,
+        template: "admin_message",
+        lang: "ru",
+        phone: "+77055550101",
+        subject_type: "test_subject",
+        variables: JSON.stringify({ text: "Проверка" }),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO outbound_message (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    const took = {
+      status: "sent",
+      provider: "whatsapp_cloud",
+      provider_message_id: "wamid.A",
+      sent_at: new Date(),
+      settled_at: new Date(),
+      variables: null,
+    };
+
+    await message();
+    // The shape of a message.
+    // (Settled, so that this is the one rule broken: a violated check is
+    // reported by name, and the rule about waiting messages comes first.)
+    await expect(
+      message({ status: "shipped", settled_at: new Date(), variables: null }),
+    ).rejects.toThrow(/outbound_message_status_check/);
+    await expect(message({ lang: "en" })).rejects.toThrow(/outbound_message_lang_check/);
+    await expect(message({ phone: "87055550101" })).rejects.toThrow(/outbound_message_phone_check/);
+    await expect(message({ provider: "carrier_pigeon" })).rejects.toThrow(
+      /outbound_message_provider_check/,
+    );
+    await expect(message({ max_attempts: 0 })).rejects.toThrow(/outbound_message_attempts_check/);
+    // One event, one recipient, one message — whatever the queue does.
+    await message({ dedupe_key: "event:once" });
+    await expect(message({ dedupe_key: "event:once" })).rejects.toThrow(
+      /outbound_message_dedupe_key/,
+    );
+    // What the provider took is known by its id, and the id names one message.
+    await message(took);
+    await expect(message(took)).rejects.toThrow(/outbound_message_provider_id_key/);
+    await expect(message({ ...took, provider_message_id: null })).rejects.toThrow(
+      /outbound_message_provider_id_check/,
+    );
+    await expect(
+      message({ ...took, provider_message_id: "wamid.B", sent_at: null }),
+    ).rejects.toThrow(/outbound_message_sent_check/);
+    await expect(
+      message({ ...took, provider_message_id: "wamid.C", status: "delivered" }),
+    ).rejects.toThrow(/outbound_message_delivered_check/);
+    await expect(
+      message({
+        ...took,
+        provider_message_id: "wamid.D",
+        status: "read",
+        delivered_at: new Date(),
+      }),
+    ).rejects.toThrow(/outbound_message_read_check/);
+    // Settled means nothing more is owed, and nothing waiting is settled.
+    await expect(
+      message({ status: "queued", settled_at: new Date(), variables: null }),
+    ).rejects.toThrow(/outbound_message_settled_check/);
+    await expect(message({ status: "failed", settled_at: new Date() })).rejects.toThrow(
+      /outbound_message_failure_check/,
+    );
+    // The values of a message — a customer's name and number — do not outlive
+    // the sending: a real channel's settled message cannot keep them...
+    await expect(
+      message({
+        ...took,
+        provider_message_id: "wamid.E",
+        variables: JSON.stringify({ text: "x" }),
+      }),
+    ).rejects.toThrow(/outbound_message_variables_check/);
+    // ...while the test channel (which sent nothing anywhere), a refused message
+    // and one nobody can know the outcome of keep them for what they are kept for.
+    await message({
+      ...took,
+      provider: "test",
+      provider_message_id: "wamid.F",
+      variables: JSON.stringify({ text: "x" }),
+    });
+    await message({
+      status: "failed",
+      failure_kind: "rejected",
+      provider: "whatsapp_cloud",
+      settled_at: new Date(),
+    });
+    await message({ status: "unknown", settled_at: new Date() });
+
+    // The deliveries of the provider's webhook: one row per body, and a body
+    // is gone once it has been applied.
+    const delivery = (values: Record<string, unknown>) => {
+      const row: Record<string, unknown> = {
+        provider: "whatsapp",
+        external_id: `sha256:${randomUUID()}`,
+        payload: JSON.stringify({ entry: [] }),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO inbound_webhook_event (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    const first = await delivery({ external_id: "sha256:same" });
+    await expect(delivery({ external_id: "sha256:same" })).rejects.toThrow(
+      /inbound_webhook_event_external_key/,
+    );
+    await expect(delivery({ provider: "stripe" })).rejects.toThrow(
+      /inbound_webhook_event_provider_check/,
+    );
+    await expect(delivery({ result: "applied", payload: null })).rejects.toThrow(
+      /inbound_webhook_event_processed_check/,
+    );
+    await expect(delivery({ processed_at: new Date(), payload: null })).rejects.toThrow(
+      /inbound_webhook_event_processed_check/,
+    );
+    await expect(
+      delivery({ result: "weird", processed_at: new Date(), payload: null }),
+    ).rejects.toThrow(/inbound_webhook_event_result_check/);
+    await expect(delivery({ result: "applied", processed_at: new Date() })).rejects.toThrow(
+      /inbound_webhook_event_payload_check/,
+    );
+    // A failed one keeps its body: the retry needs it.
+    await delivery({ result: "failed", processed_at: new Date(), error: "hiccup" });
+    await delivery({ result: "applied", processed_at: new Date(), payload: null });
+
+    // A pressed button belongs to its delivery, and one press is stored once.
+    const press = (values: Record<string, unknown> = {}) => {
+      const row: Record<string, unknown> = {
+        event_id: first.rows[0]!.id,
+        provider_message_id: `wamid.IN${randomUUID()}`,
+        from_phone: "+77055550101",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO message_button_press (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    await press({ provider_message_id: "wamid.IN-ONCE" });
+    await expect(press({ provider_message_id: "wamid.IN-ONCE" })).rejects.toThrow(
+      /message_button_press_provider_id_key/,
+    );
+    await expect(press({ from_phone: "not a number" })).rejects.toThrow(
+      /message_button_press_phone_check/,
+    );
+    await client.query("DELETE FROM inbound_webhook_event WHERE id = $1", [first.rows[0]!.id]);
+    expect((await client.query("SELECT 1 FROM message_button_press")).rowCount).toBe(0);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // The gateway's tables are gone; everything the invitation of an employee
+    // needs stays (it keeps its own table and its own states).
+    for (const table of ["outbound_message", "inbound_webhook_event", "message_button_press"]) {
+      expect(await tableExists(client, table)).toBe(false);
+    }
+    expect(await tableExists(client, "supplier_invitation")).toBe(true);
+    expect(await tableExists(client, "supplier")).toBe(true);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "outbound_message")).toBe(true);
+    await client.query("DELETE FROM message_button_press");
+    await client.query("DELETE FROM inbound_webhook_event");
+    await client.query("DELETE FROM outbound_message");
+    await walkDownPast(() => tableExists(client, "outbound_message"));
   });
 
   it("holds the rules of giving an order out and rolls back keeping the orders (close orders)", async () => {

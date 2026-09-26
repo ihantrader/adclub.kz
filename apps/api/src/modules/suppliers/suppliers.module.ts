@@ -1,5 +1,4 @@
 import { Inject, Module, type DynamicModule, type OnModuleInit } from "@nestjs/common";
-import { APP_CONFIG, type AppConfig } from "../../config";
 import { JobRegistry } from "../../jobs";
 import {
   AccountStore,
@@ -10,15 +9,12 @@ import {
 } from "../identity";
 import { CitiesController } from "./cities.controller";
 import { CitiesService } from "./cities.service";
-import { DevSupplierInvitationsController } from "./dev-supplier-invitations.controller";
 import { DevSupplierSeed } from "./dev-supplier-seed";
 import {
-  DevInvitationOutbox,
   InvitationSender,
   sendInvitationJob,
+  SupplierInvitationMessages,
   SupplierInvitations,
-  SupplierMessages,
-  TestSupplierMessages,
 } from "./supplier-invitations";
 import {
   SupplierMembersAdminController,
@@ -34,8 +30,6 @@ import { SuppliersService } from "./suppliers.service";
 export interface SuppliersModuleOptions {
   /** Serve the routes (the API process only; the public form needs Redis). */
   http: boolean;
-  /** Serve `GET /dev/supplier-invitations` (the switch of the login code dev outbox). */
-  devOutbox?: boolean;
 }
 
 /**
@@ -77,40 +71,21 @@ export class SuppliersModule {
             SupplierCabinetController,
             SupplierMembersCabinetController,
             SupplierMembersAdminController,
-            ...(options.devOutbox ? [DevSupplierInvitationsController] : []),
           ]
         : [],
-      providers: [
-        ...sharedProviders,
-        ...(options.http ? [SupplierLeadForm] : []),
-        ...(options.http && options.devOutbox ? [DevInvitationOutbox] : []),
-      ],
+      providers: [...sharedProviders, ...(options.http ? [SupplierLeadForm] : [])],
       exports: [CitiesService, SuppliersService, SupplierLeadsService, DevSupplierSeed],
     };
   }
 }
 
-function createSupplierMessages(config: AppConfig): SupplierMessages {
-  // The same switch as the login code channels: only test channels exist
-  // until TASK-026, and production refuses them at start.
-  switch (config.loginCode.channels) {
-    case "test":
-      return new TestSupplierMessages();
-  }
-}
-
-/** The suppliers' background jobs, for the worker process. */
-@Module({
-  providers: [
-    {
-      provide: SupplierMessages,
-      useFactory: createSupplierMessages,
-      inject: [APP_CONFIG],
-    },
-    InvitationSender,
-  ],
-  exports: [SupplierMessages],
-})
+/**
+ * The suppliers' background jobs, for the worker process. The invitation
+ * of an employee (W-08) goes out through the message gateway (TASK-024):
+ * this module turns a queued invitation into a message and answers the
+ * gateway's two questions about it (`SupplierInvitationMessages`).
+ */
+@Module({ providers: [InvitationSender, SupplierInvitationMessages] })
 export class SupplierJobsModule implements OnModuleInit {
   constructor(
     @Inject(JobRegistry) private readonly registry: JobRegistry,

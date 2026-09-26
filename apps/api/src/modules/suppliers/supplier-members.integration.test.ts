@@ -44,7 +44,8 @@ import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
-import { InvitationSender, SupplierMessages, type TestSupplierMessages } from ".";
+import { MessageChannel, MessageSender, type TestMessageChannel } from "../messaging";
+import { InvitationSender } from ".";
 
 /**
  * TASK-017 end to end on a real PostgreSQL and Redis with a real worker
@@ -112,7 +113,7 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
   let worker: INestApplicationContext;
   let settings: TestSettings;
   let channels: TestLoginCodeChannels;
-  let messages: TestSupplierMessages;
+  let messages: TestMessageChannel;
   let output: ReturnType<typeof captureOutput>;
   let ipCounter = 0;
   let binCounter = 0;
@@ -157,7 +158,7 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
     );
     worker.useLogger(worker.get(JsonLoggerService));
     worker.flushLogs();
-    messages = worker.get(SupplierMessages) as TestSupplierMessages;
+    messages = worker.get(MessageChannel) as TestMessageChannel;
     settings = new TestSettings(app);
   }, 300_000);
 
@@ -172,7 +173,7 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
   beforeEach(async () => {
     channels.sent.length = 0;
     messages.sent.length = 0;
-    messages.failing = false;
+    messages.mode = "ok";
     lastSteps.clear();
     stepCookies.clear();
     for (let attempt = 0; ; attempt++) {
@@ -212,6 +213,25 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
 
   const http = () => request(app.getHttpServer());
   const nextIp = () => `198.51.100.${String((ipCounter++ % 250) + 1)}`;
+
+  /**
+   * Sending is the gateway's own job now (TASK-024): the invitation's job
+   * only writes the message. Runs the messages this test left queued,
+   * exactly as the worker would.
+   */
+  async function sendQueuedMessages(): Promise<void> {
+    const { rows } = await db.query<{ id: string }>(
+      "SELECT id FROM outbound_message WHERE status = 'queued' ORDER BY created_at",
+    );
+    for (const row of rows) {
+      await worker
+        .get(MessageSender)
+        .run(
+          { messageId: row.id },
+          { jobId: "test", attempt: 1, signal: new AbortController().signal },
+        );
+    }
+  }
 
   function remember(body: unknown): void {
     const text = JSON.stringify(body ?? {});
@@ -1251,12 +1271,16 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
       );
       const me = await cabinet(first);
       // The channel fails: the invitation stays queued, waiting for a retry.
-      messages.failing = true;
+      messages.mode = "unavailable";
       const colleague = phoneOf(162);
       const added = await addColleague(me.token, colleague, "Марат");
       await waitFor("a failed attempt", async () =>
-        (await count("supplier_invitation", "member_id = $1 AND attempts > 0", [added.member.id])) >
-        0
+        (await count(
+          "outbound_message",
+          "subject_type = 'supplier_invitation' AND attempts > 0 AND status = 'queued'\n" +
+            " AND subject_id IN (SELECT id FROM supplier_invitation WHERE member_id = $1)",
+          [added.member.id],
+        )) > 0
           ? true
           : undefined,
       );
@@ -1269,13 +1293,9 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
       );
       expect(rows.map((row) => row.status)).toEqual(["cancelled"]);
       // The retry comes: nothing is sent.
-      messages.failing = false;
-      await worker
-        .get(InvitationSender)
-        .run(
-          { invitationId: rows[0]!.id },
-          { jobId: "test", attempt: 2, signal: new AbortController().signal },
-        );
+      messages.mode = "ok";
+      await worker.get(InvitationSender).run({ invitationId: rows[0]!.id });
+      await sendQueuedMessages();
       expect(messages.sent.filter((message) => message.phone === colleague)).toEqual([]);
 
       // An invitation still queued when the employee is removed some other
@@ -1293,12 +1313,8 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
         [supplierId, second.member.id],
       );
       messages.sent.length = 0;
-      await worker
-        .get(InvitationSender)
-        .run(
-          { invitationId: queued[0]!.id },
-          { jobId: "test", attempt: 1, signal: new AbortController().signal },
-        );
+      await worker.get(InvitationSender).run({ invitationId: queued[0]!.id });
+      await sendQueuedMessages();
       expect(messages.sent).toEqual([]);
       expect(
         (

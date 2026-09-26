@@ -60,6 +60,7 @@ describe("settings registry", () => {
       "offers",
       "showcase",
       "public_limits",
+      "messages",
       "billing",
       "clients",
       "cleanup",

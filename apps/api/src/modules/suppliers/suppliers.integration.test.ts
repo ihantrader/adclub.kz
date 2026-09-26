@@ -44,14 +44,8 @@ import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
 import { DevCatalogSeed } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
-import {
-  devCities,
-  devNewLead,
-  devOnboardedLead,
-  DevSupplierSeed,
-  SupplierMessages,
-  type TestSupplierMessages,
-} from ".";
+import { MessageChannel, type TestMessageChannel } from "../messaging";
+import { devCities, devNewLead, devOnboardedLead, DevSupplierSeed } from ".";
 
 /**
  * TASK-016 end to end on a real PostgreSQL, with Redis behind a TCP proxy
@@ -152,7 +146,7 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
   let worker: INestApplicationContext;
   let settings: TestSettings;
   let channels: TestLoginCodeChannels;
-  let messages: TestSupplierMessages;
+  let messages: TestMessageChannel;
   let output: ReturnType<typeof captureOutput>;
   let ipCounter = 0;
   const lastSteps = new Map<string, number>();
@@ -197,7 +191,7 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
     );
     worker.useLogger(worker.get(JsonLoggerService));
     worker.flushLogs();
-    messages = worker.get(SupplierMessages) as TestSupplierMessages;
+    messages = worker.get(MessageChannel) as TestMessageChannel;
     settings = new TestSettings(app);
   }, 300_000);
 
@@ -213,7 +207,7 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
   beforeEach(async () => {
     channels.sent.length = 0;
     messages.sent.length = 0;
-    messages.failing = false;
+    messages.mode = "ok";
     lastSteps.clear();
     stepCookies.clear();
     await truncateAll();
@@ -1126,14 +1120,24 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
       });
       expect(sent.channel).toBe("test");
       // (The worker also sends the invitation of the development seed.)
-      expect(messages.sent.filter((message) => message.phone === phone)).toEqual([
-        {
-          phone,
-          text: "Айгерим, вас добавили в кабинет поставщика «Автосервис Плюс». Войти: http://localhost:5175",
-        },
-      ]);
-      const outbox = await http().get("/dev/supplier-invitations");
-      expect(outbox.body.messages[0]).toMatchObject({ phone, status: "sent", channel: "test" });
+      const delivered = messages.sent.filter((message) => message.phone === phone);
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]).toMatchObject({
+        phone,
+        template: "supplier_invitation",
+        providerTemplateName: "adclub_supplier_invitation",
+        lang: "ru",
+        text: "Айгерим, вас добавили в кабинет поставщика «Автосервис Плюс». Войти: http://localhost:5175",
+      });
+      const outbox = await http().get("/dev/messages");
+      expect(outbox.body.messages[0]).toMatchObject({
+        phone,
+        status: "sent",
+        provider: "test",
+        template: "supplier_invitation",
+        screen: "W-08",
+        lang: "ru",
+      });
       expect(outbox.body.messages[0].text).toContain("Автосервис Плюс");
 
       // The employee signs in to the cabinet with a code and sees the card.

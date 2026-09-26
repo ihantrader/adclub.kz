@@ -55,6 +55,18 @@ describe("loadConfig", () => {
         openRouterBaseUrl: "https://openrouter.ai/api/v1",
         testMode: "ok",
       },
+      messaging: {
+        provider: "test",
+        testMode: "ok",
+        whatsapp: {
+          accessToken: undefined,
+          phoneNumberId: undefined,
+          // The development values only: nothing deployed ever has them.
+          appSecret: expect.any(String),
+          webhookVerifyToken: expect.any(String),
+          baseUrl: "https://graph.facebook.com/v21.0",
+        },
+      },
       ignoredVariables: [],
     });
   });
@@ -327,6 +339,170 @@ describe("loadConfig", () => {
       } catch (error) {
         expect((error as Error).message).not.toMatch(/AI_PROVIDER|OPENROUTER_API_KEY/);
       }
+    });
+  });
+
+  describe("messages to suppliers (TASK-024, ARCHITECTURE 4.35)", () => {
+    const TOKEN = "EAAG-a-secret-access-token-of-the-system-user";
+    const APP_SECRET = "a-meta-app-secret-of-32-chars-yes!";
+    const VERIFY = "the-verify-token-we-chose-16+";
+    const WHATSAPP = {
+      MESSAGE_PROVIDER: "whatsapp_cloud",
+      WHATSAPP_ACCESS_TOKEN: TOKEN,
+      WHATSAPP_PHONE_NUMBER_ID: "1234567890",
+      WHATSAPP_APP_SECRET: APP_SECRET,
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: VERIFY,
+    };
+    const DEPLOYED = {
+      ...VALID_ENV,
+      LOGIN_CODE_HASH_SECRET: "a-deployed-secret-of-at-least-32-chars",
+      SESSION_TOKEN_SECRET: "a-deployed-session-secret-of-32-chars",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-deployed-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+    };
+    const STAGING = { ...DEPLOYED, NODE_ENV: "staging" };
+    const PRODUCTION = { ...DEPLOYED, NODE_ENV: "production" };
+
+    /** What loadConfig says about it, or `undefined` when it accepts the environment. */
+    function refusal(env: Record<string, string>): string | undefined {
+      try {
+        loadConfig(env);
+        return undefined;
+      } catch (error) {
+        return (error as Error).message;
+      }
+    }
+
+    it("runs the test channel by default, with the development secrets only in development and tests", () => {
+      expect(loadConfig(VALID_ENV).messaging).toEqual({
+        provider: "test",
+        testMode: "ok",
+        whatsapp: {
+          accessToken: undefined,
+          phoneNumberId: undefined,
+          appSecret: expect.any(String),
+          webhookVerifyToken: expect.any(String),
+          baseUrl: "https://graph.facebook.com/v21.0",
+        },
+      });
+      expect(loadConfig({ ...VALID_ENV, NODE_ENV: "test" }).messaging.whatsapp.appSecret).toEqual(
+        expect.any(String),
+      );
+    });
+
+    it("has no webhook secret at all outside development and tests unless one is configured", () => {
+      // The development value is public in the repository: it must never be
+      // what a deployed environment checks a signature with.
+      const staging = loadConfig(STAGING).messaging;
+      expect(staging.provider).toBe("test");
+      expect(staging.whatsapp.appSecret).toBeUndefined();
+      expect(staging.whatsapp.webhookVerifyToken).toBeUndefined();
+      const configured = loadConfig({
+        ...STAGING,
+        WHATSAPP_APP_SECRET: APP_SECRET,
+        WHATSAPP_WEBHOOK_VERIFY_TOKEN: VERIFY,
+      }).messaging;
+      expect(configured.whatsapp.appSecret).toBe(APP_SECRET);
+      expect(configured.whatsapp.webhookVerifyToken).toBe(VERIFY);
+    });
+
+    it("switches to the real channel when it is fully configured, and only then", () => {
+      const { MESSAGE_PROVIDER: _provider, ...withoutChoice } = WHATSAPP;
+      expect(loadConfig({ ...VALID_ENV, ...withoutChoice }).messaging.provider).toBe(
+        "whatsapp_cloud",
+      );
+      const real = loadConfig({ ...VALID_ENV, ...WHATSAPP }).messaging.whatsapp;
+      expect(real).toMatchObject({
+        accessToken: TOKEN,
+        phoneNumberId: "1234567890",
+        appSecret: APP_SECRET,
+        webhookVerifyToken: VERIFY,
+      });
+      // A part of the configuration is not a channel: the test one keeps working.
+      const { WHATSAPP_APP_SECRET: _secret, ...partial } = withoutChoice;
+      expect(loadConfig({ ...VALID_ENV, ...partial }).messaging.provider).toBe("test");
+    });
+
+    it("refuses the real channel without what it needs, naming variables and never values", () => {
+      const message = refusal({ ...VALID_ENV, MESSAGE_PROVIDER: "whatsapp_cloud" })!;
+      for (const name of [
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_APP_SECRET",
+        "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+      ]) {
+        expect(message).toContain(`${name}: required when MESSAGE_PROVIDER=whatsapp_cloud`);
+      }
+      const { WHATSAPP_WEBHOOK_VERIFY_TOKEN: _verify, ...withoutVerify } = WHATSAPP;
+      const one = refusal({ ...VALID_ENV, ...withoutVerify })!;
+      expect(one).toContain("WHATSAPP_WEBHOOK_VERIFY_TOKEN");
+      for (const secret of [TOKEN, APP_SECRET]) {
+        expect(one).not.toContain(secret);
+      }
+    });
+
+    it("refuses production on the test channel (nobody would get a message)", () => {
+      expect(refusal(PRODUCTION)).toContain(
+        "MESSAGE_PROVIDER: the test message channel is not allowed when NODE_ENV=production",
+      );
+      expect(refusal({ ...PRODUCTION, MESSAGE_PROVIDER: "test" })).toContain("MESSAGE_PROVIDER");
+      // Configured, production has no complaint about messages (the rest of
+      // this environment is refused for the login code channels, TASK-026).
+      expect(refusal({ ...PRODUCTION, ...WHATSAPP }) ?? "").not.toMatch(
+        /MESSAGE_PROVIDER|WHATSAPP_/,
+      );
+    });
+
+    it("lets staging run the test channel, as it may run the test AI provider", () => {
+      expect(refusal(STAGING) ?? "").not.toMatch(/MESSAGE_PROVIDER|WHATSAPP_/);
+    });
+
+    it("takes the mode of the test channel and refuses an unknown one; blank means unset", () => {
+      expect(
+        loadConfig({ ...VALID_ENV, MESSAGE_TEST_MODE: "no_whatsapp" }).messaging.testMode,
+      ).toBe("no_whatsapp");
+      expect(() => loadConfig({ ...VALID_ENV, MESSAGE_TEST_MODE: "broken" })).toThrow(
+        /MESSAGE_TEST_MODE/,
+      );
+      const blank = loadConfig({
+        ...VALID_ENV,
+        MESSAGE_PROVIDER: "",
+        MESSAGE_TEST_MODE: "",
+        WHATSAPP_ACCESS_TOKEN: "  ",
+        WHATSAPP_PHONE_NUMBER_ID: "",
+        WHATSAPP_APP_SECRET: "",
+        WHATSAPP_WEBHOOK_VERIFY_TOKEN: "",
+        WHATSAPP_API_BASE_URL: "",
+      }).messaging;
+      expect(blank.provider).toBe("test");
+      expect(blank.testMode).toBe("ok");
+      expect(blank.whatsapp.accessToken).toBeUndefined();
+    });
+
+    it("moves the Cloud API elsewhere in development and tests only", () => {
+      expect(
+        loadConfig({ ...VALID_ENV, WHATSAPP_API_BASE_URL: "http://127.0.0.1:9" }).messaging.whatsapp
+          .baseUrl,
+      ).toBe("http://127.0.0.1:9/v21.0");
+      // Elsewhere it would send real messages to another address.
+      for (const env of [STAGING, PRODUCTION]) {
+        expect(refusal({ ...env, WHATSAPP_API_BASE_URL: "http://127.0.0.1:9" })).toContain(
+          "WHATSAPP_API_BASE_URL: not allowed when NODE_ENV=",
+        );
+      }
+    });
+
+    it("refuses a malformed variable by its name, without printing what was given", () => {
+      const secretish = "short";
+      const message = refusal({ ...VALID_ENV, WHATSAPP_ACCESS_TOKEN: secretish })!;
+      expect(message).toContain("WHATSAPP_ACCESS_TOKEN");
+      expect(message).not.toContain(secretish);
+      expect(refusal({ ...VALID_ENV, WHATSAPP_PHONE_NUMBER_ID: "not-a-number" })).toContain(
+        "WHATSAPP_PHONE_NUMBER_ID",
+      );
+      expect(refusal({ ...VALID_ENV, WHATSAPP_APP_SECRET: "tiny" })).toContain(
+        "WHATSAPP_APP_SECRET",
+      );
     });
   });
 

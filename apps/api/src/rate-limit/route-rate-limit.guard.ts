@@ -1,7 +1,10 @@
 import {
+  applyDecorators,
   Inject,
   Injectable,
   Logger,
+  SetMetadata,
+  UseGuards,
   type CanActivate,
   type ExecutionContext,
 } from "@nestjs/common";
@@ -83,7 +86,12 @@ export class RouteRateLimitGuard implements CanActivate {
       API_ROUTE_METADATA,
       context.getHandler(),
     );
-    const spec = route?.rateLimit;
+    const spec =
+      route?.rateLimit ??
+      this.reflector.get<NonContractRateLimit | undefined>(
+        NON_CONTRACT_RATE_LIMIT,
+        context.getHandler(),
+      );
     if (!spec) {
       return true;
     }
@@ -116,7 +124,9 @@ export class RouteRateLimitGuard implements CanActivate {
     if (!allowed) {
       this.metrics.countRateLimitHit(counted.limit);
       // No address, account or employee in the line: the limit and the route say enough.
-      this.logger.warn(`Rate limit hit limit=${counted.limit} route=${route.operationId}`);
+      this.logger.warn(
+        `Rate limit hit limit=${counted.limit} route=${route?.operationId ?? request.path}`,
+      );
       throw rateLimitedException(counted.limit, retryAfterSeconds);
     }
     return true;
@@ -124,7 +134,7 @@ export class RouteRateLimitGuard implements CanActivate {
 
   /** Which limit counts this request, and whose bucket. */
   private countedAs(
-    route: ApiRouteDefinition,
+    route: ApiRouteDefinition | undefined,
     spec: NonNullable<ApiRouteDefinition["rateLimit"]>,
     request: Request,
   ): { limit: RateLimitName; subject: string } {
@@ -137,7 +147,7 @@ export class RouteRateLimitGuard implements CanActivate {
       return { limit: spec.perMember, subject: `member:${memberId}` };
     }
     if (spec.perAccount) {
-      const session = route.auth === "session" ? this.session(request) : this.optional(request);
+      const session = route?.auth === "session" ? this.session(request) : this.optional(request);
       if (session) {
         return { limit: spec.perAccount, subject: `account:${session.accountId}` };
       }
@@ -199,4 +209,28 @@ export function RateLimitedRoute(route: ApiRouteDefinition): MethodDecorator {
     return ApiRoute(route, { guards: [OptionalSessionGuard, RouteRateLimitGuard] });
   }
   return ApiRoute(route, { guards: [RouteRateLimitGuard] });
+}
+
+/** The limit of a route that is deliberately outside the client contract. */
+export const NON_CONTRACT_RATE_LIMIT = Symbol("NON_CONTRACT_RATE_LIMIT");
+
+export type NonContractRateLimit = NonNullable<ApiRouteDefinition["rateLimit"]>;
+
+/**
+ * Binds a handler of a route outside the client contract to the same limit
+ * mechanism (TASK-024): the provider's webhook is not part of the contract
+ * (`/metrics` is not either), but there is still only one guard, one pair of
+ * settings and one way of counting. Only a limit by address is possible
+ * here: a route outside the contract has no session.
+ */
+export function RateLimitedNonContractRoute(spec: {
+  limit: RateLimitName;
+  whenUnavailable: "refuse" | "allow";
+}): MethodDecorator {
+  // Both settings must exist, or the limit would silently not be counted.
+  rateLimitSettingKeys(spec.limit);
+  return applyDecorators(
+    SetMetadata(NON_CONTRACT_RATE_LIMIT, spec satisfies NonContractRateLimit),
+    UseGuards(RouteRateLimitGuard),
+  );
 }

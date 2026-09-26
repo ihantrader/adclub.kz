@@ -70,6 +70,22 @@ export class Metrics {
     "adclub_translation_tasks",
     "Automatic translations waiting (pending) or refused for good (failed), by state",
   );
+  private readonly messagesByTemplate = this.registry.gauge(
+    "adclub_messages_by_template",
+    "Messages to suppliers by template and state, all of them on record (from outbound_message)",
+  );
+  private readonly messageQueue = this.registry.gauge(
+    "adclub_message_queue_depth",
+    "Messages to suppliers by state (queued, sending, sent, delivered, read, failed, cancelled, unknown)",
+  );
+  private readonly webhookEvents = this.registry.counter(
+    "adclub_webhook_events_total",
+    "Deliveries of the message provider's webhook the API took or refused, by kind (received, repeated, bad_signature, subscription_refused, empty, not_configured)",
+  );
+  private readonly webhookEventKinds = this.registry.gauge(
+    "adclub_webhook_event_kinds",
+    "What the retained webhook deliveries held, by kind (statuses, button presses, unknown shapes), from inbound_webhook_event",
+  );
   private readonly dependencyUp = this.registry.gauge(
     "adclub_dependency_up",
     "1 when a dependency answered the last /ready check, 0 when it did not",
@@ -125,6 +141,29 @@ export class Metrics {
     this.aiCalls.set({ kind, status }, count);
   }
 
+  setMessagesByTemplate(template: string, status: string, count: number): void {
+    this.messagesByTemplate.set({ template, status }, count);
+  }
+
+  setMessageQueueDepth(state: string, count: number): void {
+    this.messageQueue.set({ state }, count);
+  }
+
+  /**
+   * A delivery of the provider's webhook the API took or refused. Counted
+   * where the request is (the API serves the scrape); what the worker later
+   * finds in a delivery is sampled from the database instead
+   * (`setWebhookEventKind`), because the worker's own memory is never
+   * scraped. Nothing about a delivery's content is a label.
+   */
+  countWebhookEvent(kind: string): void {
+    this.webhookEvents.increment({ kind });
+  }
+
+  setWebhookEventKind(kind: string, count: number): void {
+    this.webhookEventKinds.set({ kind }, count);
+  }
+
   setTranslationTasks(state: string, count: number): void {
     this.translationTasks.set({ state }, count);
   }
@@ -167,6 +206,15 @@ export class Metrics {
   /** The automatic translation queue, sampled like the AI spend. */
   collectTranslation(collector: MetricCollector): void {
     this.registry.collect("translation", collector, [this.translationTasks]);
+  }
+
+  /** The depth of the message queue, sampled like the others (the worker sends). */
+  collectMessages(collector: MetricCollector): void {
+    this.registry.collect("messages", collector, [
+      this.messageQueue,
+      this.messagesByTemplate,
+      this.webhookEventKinds,
+    ]);
   }
 
   render(): Promise<string> {

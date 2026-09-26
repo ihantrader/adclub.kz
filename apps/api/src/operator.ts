@@ -20,6 +20,7 @@ import {
   OperatorService,
 } from "./modules/identity";
 import { AiModule, AiService } from "./modules/ai";
+import { MessagingAdmin, MessagingCommandError, MessagingModule } from "./modules/messaging";
 import { AuditModule } from "./modules/audit";
 import {
   CatalogModule,
@@ -103,6 +104,19 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                are in the file): nothing is called and nothing is
  *                                spent, and a sharper check applies to past runs too
  *
+ * Messages to suppliers (ARCHITECTURE 4.35) — never the values of the
+ * placeholders, and never a whole number:
+ *   messages:list [--limit <n>] [--status <status>] [--template <key>]
+ *                                the latest messages: template, language, masked
+ *                                number, status, attempts, the provider's id and
+ *                                the last error, plus the counts by status
+ *   messages:retry <messageId>   put a message that failed or was interrupted back
+ *                                on the queue (only while it still has the values
+ *                                it would be built from)
+ *   messages:webhooks [--limit <n>]
+ *                                the latest webhook deliveries of the provider and
+ *                                what each of them held
+ *
  * Development and tests only (the real flows arrive with TASK-016/017):
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
@@ -116,6 +130,12 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   dev:suppliers:seed           the cities of Kazakhstan and an example supplier
  *                                worked through the funnel, plus a new request
  *                                (TASK-016); idempotent
+ *   dev:messages:webhook --message <id> [--status delivered|read|sent|failed]
+ *                        [--button <payload>] [--twice] [--bad-signature]
+ *                                send this deployment a webhook of the provider,
+ *                                signed with the configured app secret, to its own
+ *                                address: the signature check, the receipt, the
+ *                                queue and the applying, without Meta
  *   dev:jobs:fail [--note <text>] [--on-query]
  *                                put a job that always fails on the queue;
  *                                with --on-query it fails on a real SQL query
@@ -141,6 +161,7 @@ class OperatorModule {
         AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false }),
         AiModule.forRoot(config),
+        MessagingModule.forRoot(config, { http: false }),
         CatalogModule.forRoot({ http: false }),
         VehiclesModule.forRoot({ http: false }),
         CompatibilityModule.forRoot({ http: false }),
@@ -174,6 +195,9 @@ const USAGE = `Usage: operator <command> [arguments]
   jobs:retry <deadJobId>
   jobs:delete <deadJobId>
   jobs:run <name>
+  messages:list [--limit <n>] [--status <status>] [--template <key>]
+  messages:retry <messageId>
+  messages:webhooks [--limit <n>]
   ai:status
   translations:status
   translations:queue-missing
@@ -188,6 +212,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:vehicles:seed
   dev:compatibility:seed
   dev:suppliers:seed
+  dev:messages:webhook --message <id> [--status <status>] [--button <payload>] [--twice] [--bad-signature]
   dev:jobs:fail [--note <text>] [--on-query]`;
 
 function required(value: string | undefined, what: string): string {
@@ -204,6 +229,17 @@ function settingValue(text: string): unknown {
   } catch {
     return text;
   }
+}
+
+/** `--limit`: a whole number, or nothing at all. */
+function countOption(text: string | undefined, flag: string): number | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  if (!/^\d+$/.test(text)) {
+    throw new OperatorCommandError(`${flag} must be a whole number`);
+  }
+  return Number(text);
 }
 
 function expectedVersion(text: string | undefined): number | undefined {
@@ -235,6 +271,7 @@ function grantEnd(text: string): Date {
 
 interface Services {
   operator: OperatorService;
+  messaging: MessagingAdmin;
   settings: SettingsChangeService;
   jobs: JobAdmin;
   queue: JobQueue;
@@ -253,6 +290,7 @@ interface Services {
 async function run(
   {
     operator,
+    messaging,
     settings,
     jobs,
     queue,
@@ -286,6 +324,14 @@ async function run(
       "batch-size": { type: "string" },
       glossary: { type: "boolean" },
       label: { type: "string" },
+      limit: { type: "string" },
+      status: { type: "string" },
+      template: { type: "string" },
+      message: { type: "string" },
+      "provider-message-id": { type: "string" },
+      button: { type: "string" },
+      twice: { type: "boolean" },
+      "bad-signature": { type: "boolean" },
     },
   });
   const [command, first, second] = positionals;
@@ -331,6 +377,33 @@ async function run(
       return jobs.deleteDead(required(first, "<deadJobId>"));
     case "jobs:run":
       return jobs.runNow(required(first, "<name>"));
+    case "messages:list":
+      return messaging.list({
+        limit: countOption(values.limit, "--limit"),
+        ...(values.status === undefined ? {} : { status: values.status }),
+        ...(values.template === undefined ? {} : { template: values.template }),
+      });
+    case "messages:retry":
+      return messaging.retry(required(first, "<messageId>"));
+    case "messages:webhooks":
+      return messaging.webhooks(countOption(values.limit, "--limit") ?? 20);
+    case "dev:messages:webhook": {
+      if (!devCommands) {
+        throw new MessagingCommandError(
+          "dev:messages:webhook is available in development and tests only",
+        );
+      }
+      return messaging.devWebhook({
+        ...(values.message === undefined ? {} : { messageId: values.message }),
+        ...(values["provider-message-id"] === undefined
+          ? {}
+          : { providerMessageId: values["provider-message-id"] }),
+        ...(values.status === undefined ? {} : { status: values.status }),
+        ...(values.button === undefined ? {} : { button: values.button }),
+        twice: values.twice === true,
+        badSignature: values["bad-signature"] === true,
+      });
+    }
     case "ai:status":
       return ai.status();
     case "translations:status":
@@ -487,6 +560,7 @@ async function main(): Promise<void> {
     const result = await run(
       {
         operator: app.get(OperatorService),
+        messaging: app.get(MessagingAdmin),
         settings: app.get(SettingsChangeService),
         jobs: app.get(JobAdmin),
         queue: app.get(JobQueue),
@@ -517,7 +591,8 @@ main().catch((error: unknown) => {
     error instanceof DevVehicleSeedError ||
     error instanceof DevCompatibilitySeedError ||
     error instanceof DevSupplierSeedError ||
-    error instanceof JobAdminError
+    error instanceof JobAdminError ||
+    error instanceof MessagingCommandError
   ) {
     console.error(error.message);
   } else if (error instanceof ApiException) {

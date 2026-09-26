@@ -9,6 +9,7 @@ import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
 import { AiModule } from "./modules/ai";
+import { MessagingModule } from "./modules/messaging";
 import { AuditModule } from "./modules/audit";
 import { CatalogModule } from "./modules/catalog";
 import { VehiclesModule } from "./modules/vehicles";
@@ -63,6 +64,11 @@ export class AppModule implements NestModule {
         AuditModule.forRoot({ http: true }),
         SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
         AiModule.forRoot(config, { metrics: config.metrics.enabled }),
+        MessagingModule.forRoot(config, {
+          http: true,
+          metrics: config.metrics.enabled,
+          devOutbox: config.loginCode.devOutbox,
+        }),
         // The API puts jobs on the queue; the worker runs them.
         JobsModule.forRoot({
           role: "producer",
@@ -80,7 +86,7 @@ export class AppModule implements NestModule {
         catalog,
         VehiclesModule.forRoot({ http: true }),
         compatibility,
-        SuppliersModule.forRoot({ http: true, devOutbox: config.loginCode.devOutbox }),
+        SuppliersModule.forRoot({ http: true }),
         offers,
         clubAccess,
         signals,

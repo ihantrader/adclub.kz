@@ -67,6 +67,18 @@ function incomplete(): ApiException {
  * the API that isn't JSON — there is nothing to parse.
  */
 function readBody(request: Request, upload: ApiUploadBodyDefinition): Promise<Buffer> {
+  // Something before this middleware read the body already (a parser that was
+  // not told to leave this route alone): waiting for `data` and `end` events
+  // that have come and gone would hang the request for good. Refuse it.
+  if (request.readableEnded || (request.complete && !request.readable)) {
+    return Promise.reject(
+      new ApiException(
+        500,
+        "INTERNAL_ERROR",
+        "The body of this route was read before it reached its reader",
+      ),
+    );
+  }
   const declared = Number(request.headers["content-length"]);
   if (Number.isFinite(declared) && declared > upload.maxBytes) {
     return Promise.reject(tooLarge(upload));

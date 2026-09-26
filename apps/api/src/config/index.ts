@@ -7,6 +7,10 @@ export {
   loginCodeChannelProviders,
   aiProviders,
   aiTestModes,
+  messageProviders,
+  messageTestModes,
+  WHATSAPP_API_VERSION,
+  WHATSAPP_PUBLIC_URL,
 } from "./env.schema";
 export type {
   AiProviderName,
@@ -14,6 +18,8 @@ export type {
   AppConfig,
   LogLevel,
   LoginCodeChannelProvider,
+  MessageProviderName,
+  MessageTestMode,
   NodeEnv,
   RateLimitSettings,
 } from "./env.schema";

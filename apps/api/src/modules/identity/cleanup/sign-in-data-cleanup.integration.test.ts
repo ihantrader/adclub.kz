@@ -362,6 +362,12 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       { name: "identity.cleanup-login-codes", cron: "* * * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-sessions", cron: "* * * * *", timezone: "Asia/Almaty" },
       { name: "identity.cleanup-sign-in-steps", cron: "* * * * *", timezone: "Asia/Almaty" },
+      // Webhook deliveries of the message provider once applied and old (TASK-024).
+      { name: "messaging.cleanup-webhook-events", cron: "* * * * *", timezone: "Asia/Almaty" },
+      // The values of settled messages once their retention has passed (TASK-024).
+      { name: "messaging.clear-stale-variables", cron: "* * * * *", timezone: "Asia/Almaty" },
+      // Messages whose sending was interrupted and whose job will not come back (TASK-024).
+      { name: "messaging.recover-interrupted", cron: "* * * * *", timezone: "Asia/Almaty" },
       // Deadlines of orders: no answer, the end of a reserve, its warning (TASK-021).
       { name: "orders.apply-deadlines", cron: "* * * * *", timezone: "Asia/Almaty" },
       // Keys of creation requests of orders long finished (TASK-022).
@@ -419,6 +425,11 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "vehicles.analyze-import",
       "vehicles.apply-import",
       "vehicles.expire-imports",
+      "messaging.send",
+      "messaging.apply-webhook-event",
+      "messaging.cleanup-webhook-events",
+      "messaging.clear-stale-variables",
+      "messaging.recover-interrupted",
       "suppliers.send-invitation",
       "orders.apply-deadlines",
       "orders.cleanup-idempotency-keys",

@@ -5,6 +5,7 @@ import type {
   AdminSignalListQuery,
   AdminSignalPage,
   AdminSignalPayload,
+  AdminSignalSubject,
 } from "@adclub/contracts";
 import { and, count, desc, eq, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
@@ -32,7 +33,7 @@ export class AdminSignals {
     tx: DbExecutor,
     signal: {
       kind: AdminSignalKind;
-      subjectType: "order" | "supplier";
+      subjectType: AdminSignalSubject;
       subjectId: string;
       payload: AdminSignalPayload;
       at: Date;
@@ -59,6 +60,83 @@ export class AdminSignals {
         },
       });
     this.logger.log(`Signal raised kind=${signal.kind} subject=${signal.subjectId}`);
+  }
+
+  /** The open signal of a kind about a subject, if there is one. */
+  async openOf(
+    executor: DbExecutor,
+    kind: AdminSignalKind,
+    subjectType: AdminSignalSubject,
+    subjectId: string,
+  ): Promise<AdminSignalRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(adminSignal)
+      .where(
+        and(
+          eq(adminSignal.kind, kind),
+          eq(adminSignal.subjectType, subjectType),
+          eq(adminSignal.subjectId, subjectId),
+          eq(adminSignal.status, "open"),
+        ),
+      );
+    return row;
+  }
+
+  /** The latest closed signal of a kind about a subject, if there is one. */
+  async lastClosedOf(
+    executor: DbExecutor,
+    kind: AdminSignalKind,
+    subjectType: AdminSignalSubject,
+    subjectId: string,
+  ): Promise<AdminSignalRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(adminSignal)
+      .where(
+        and(
+          eq(adminSignal.kind, kind),
+          eq(adminSignal.subjectType, subjectType),
+          eq(adminSignal.subjectId, subjectId),
+          eq(adminSignal.status, "closed"),
+        ),
+      )
+      .orderBy(desc(adminSignal.closedAt))
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * Closes the open signal of a kind about a subject — the fact is over
+   * (TASK-025: the channel delivers again). The row stays as history with
+   * its last payload; a later fact of the same kind opens a new one.
+   */
+  async close(
+    tx: DbExecutor,
+    signal: {
+      kind: AdminSignalKind;
+      subjectType: AdminSignalSubject;
+      subjectId: string;
+      payload: AdminSignalPayload;
+      at: Date;
+    },
+  ): Promise<boolean> {
+    const closed = await tx
+      .update(adminSignal)
+      .set({ status: "closed", closedAt: signal.at, payload: signal.payload })
+      .where(
+        and(
+          eq(adminSignal.kind, signal.kind),
+          eq(adminSignal.subjectType, signal.subjectType),
+          eq(adminSignal.subjectId, signal.subjectId),
+          eq(adminSignal.status, "open"),
+        ),
+      )
+      .returning({ id: adminSignal.id });
+    if (closed.length > 0) {
+      this.logger.log(`Signal closed kind=${signal.kind} subject=${signal.subjectId}`);
+    }
+    return closed.length > 0;
   }
 
   async page(query: AdminSignalListQuery): Promise<AdminSignalPage> {
@@ -103,5 +181,6 @@ function view(row: AdminSignalRow): AdminSignal {
     times: row.times,
     firstSeenAt: row.firstSeenAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
+    closedAt: row.closedAt?.toISOString() ?? null,
   };
 }

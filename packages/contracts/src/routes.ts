@@ -174,6 +174,11 @@ import {
 import {
   activeOrdersResponseSchema,
   adminCloseOrderBodySchema,
+  adminExtendOrderDeadlineBodySchema,
+  adminExtendOrdersBodySchema,
+  adminExtendOrdersResponseSchema,
+  adminExtensionCandidatesPageSchema,
+  adminExtensionCandidatesQuerySchema,
   adminDisciplineListQuerySchema,
   adminDisciplineMarkResponseSchema,
   adminDisciplinePageSchema,
@@ -3373,6 +3378,61 @@ export const apiRoutes = {
       200: { description: "The closed order", schema: adminOrderResponseSchema },
     },
   }),
+  extendAdminOrderDeadline: defineRoute({
+    operationId: "extendAdminOrderDeadline",
+    method: "POST",
+    path: "/admin/orders/{orderId}/extend-deadline",
+    summary:
+      "Extend the supplier's answer deadline or the pickup reserve of one order by N minutes, only with a reason (A-ORD-02; PRODUCT 10.4 — a timer is never extended by itself). Only while the order still waits on that deadline; a passed deadline can't be extended. Extending the answer deadline sends the notice of the new order to the supplier again",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: orderPathSchema,
+    requestBody: {
+      description: "The version seen, which deadline, by how many minutes, and why",
+      schema: adminExtendOrderDeadlineBodySchema,
+    },
+    responses: {
+      200: { description: "The order with its new deadline", schema: adminOrderResponseSchema },
+    },
+  }),
+  listAdminExtensionCandidates: defineRoute({
+    operationId: "listAdminExtensionCandidates",
+    method: "GET",
+    path: "/admin/order-extension-candidates",
+    summary:
+      "The orders created in a window (the outage of the notice channel, from its signal) that still wait for the supplier's answer, the nearest deadline first, with what became of their notices; the ones nobody was notified of are marked (A-ORD-03)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminExtensionCandidatesQuerySchema,
+    responses: {
+      200: { description: "The orders", schema: adminExtensionCandidatesPageSchema },
+    },
+  }),
+  extendAdminOrderDeadlines: defineRoute({
+    operationId: "extendAdminOrderDeadlines",
+    method: "POST",
+    path: "/admin/order-extensions",
+    summary:
+      "Extend the answer deadline of many orders by N minutes with one reason (A-ORD-03 «Продлить на N минут»): each order by the version the administrator saw; an order that changed meanwhile is skipped, and the answer says which were extended and which were not, and why. The notices of the extended orders are sent to their suppliers again",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: {
+      description: "The orders with the versions seen, the minutes and the reason",
+      schema: adminExtendOrdersBodySchema,
+    },
+    responses: {
+      200: {
+        description: "What was extended and what was skipped",
+        schema: adminExtendOrdersResponseSchema,
+      },
+    },
+  }),
   listAdminDiscipline: defineRoute({
     operationId: "listAdminDiscipline",
     method: "GET",
@@ -3423,7 +3483,7 @@ export const apiRoutes = {
     method: "GET",
     path: "/admin/signals",
     summary:
-      "Signals for a person to look at (A-HOME): a second order on the same item after a late close, too many closes by an administrator at one supplier",
+      "Signals for a person to look at (A-HOME): a second order on the same item after a late close, too many closes by an administrator at one supplier, an outage of the WhatsApp notices to suppliers",
     tag: "admin",
     clientVersionCheck: "enforced",
     auth: "session",

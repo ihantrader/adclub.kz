@@ -2,6 +2,11 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   type ActiveOrdersResponse,
   type AdminCloseOrderBody,
+  type AdminExtendOrderDeadlineBody,
+  type AdminExtendOrdersBody,
+  type AdminExtendOrdersResponse,
+  type AdminExtensionCandidatesPage,
+  type AdminExtensionCandidatesQuery,
   type AdminOrder,
   type AdminOrderListQuery,
   type AdminOrderPage,
@@ -44,7 +49,7 @@ import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
-import { supplierMember } from "../identity";
+import { supplier, supplierMember } from "../identity";
 import { offer, offerShowcase, OfferSnapshots } from "../offers";
 import { AppSettings } from "../settings";
 import { newConfirmationCode, newQrToken } from "./order-code";
@@ -61,6 +66,8 @@ import {
   validationError,
 } from "./order-errors";
 import { Discipline } from "./order-discipline";
+import { noticeStatesOf } from "./order-notice-channel";
+import { OrderNotices } from "./order-notices";
 import { repeatView } from "./order-repeat";
 import {
   databaseNow,
@@ -164,6 +171,7 @@ export class OrdersService {
     @Inject(Discipline) private readonly discipline: Discipline,
     @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
     @Inject(Metrics) private readonly metrics: Metrics,
+    @Inject(OrderNotices) private readonly notices: OrderNotices,
   ) {}
 
   // ---------------------------------------------------------------- create
@@ -328,6 +336,9 @@ export class OrdersService {
           at,
           { quantity: row.quantity, total: row.total, fulfillment: row.fulfillment },
         );
+        // W-01 to the supplier's employees, in the transaction of the order
+        // itself: the notices exist if and only if the order does (TASK-025).
+        await this.notices.newOrder(tx, row, at);
         return { row, created: true };
       }
       const same = await this.byKey(tx, accountId, input.idempotencyKey);
@@ -848,6 +859,162 @@ export class OrdersService {
       forUser: false,
     });
     return adminOrderView(this.database.db, row, lang, await this.marksOf(row.id));
+  }
+
+  /**
+   * A-ORD-02 «Продлить срок ответа» / «Продлить резерв» (TASK-025): one
+   * deadline of one order, by minutes, with a reason — through the state
+   * machine (`OrderTransitions.extend`). A deadline that passed, an order
+   * that no longer waits on it or that changed since the administrator saw
+   * it — 409 with what happened to it last.
+   */
+  async adminExtend(
+    admin: { accountId: string; adminId: string },
+    orderId: string,
+    body: AdminExtendOrderDeadlineBody,
+    lang: CatalogLanguage,
+  ): Promise<AdminOrder> {
+    await this.checkExtension(body.minutes);
+    const outcome = await this.database.db.transaction((tx) =>
+      this.transitions.extend(tx, {
+        orderId,
+        deadline: body.deadline,
+        minutes: body.minutes,
+        reason: body.reason,
+        admin,
+        expectedVersion: body.expectedVersion,
+      }),
+    );
+    if (outcome.kind === "refused") {
+      if (!outcome.order) {
+        throw notFound();
+      }
+      throw stateConflict({
+        currentStatus: outcome.order.status,
+        version: outcome.order.version,
+        lastAction: await lastActionOf(
+          this.database.db,
+          await this.transitions.lastMove(this.database.db, orderId),
+        ),
+      });
+    }
+    return adminOrderView(this.database.db, outcome.order, lang, await this.marksOf(orderId));
+  }
+
+  /**
+   * A-ORD-03 «Продлить на N минут»: the answer deadline of each order, each
+   * in its own transaction, so an order that changed meanwhile (accepted in
+   * the cabinet at that very moment) is skipped and the rest go on.
+   */
+  async adminExtendMany(
+    admin: { accountId: string; adminId: string },
+    body: AdminExtendOrdersBody,
+  ): Promise<AdminExtendOrdersResponse> {
+    await this.checkExtension(body.minutes);
+    const result: AdminExtendOrdersResponse = { extended: [], skipped: [] };
+    for (const entry of body.orders) {
+      const outcome = await this.database.db.transaction((tx) =>
+        this.transitions.extend(tx, {
+          orderId: entry.orderId,
+          deadline: "response",
+          minutes: body.minutes,
+          reason: body.reason,
+          admin,
+          expectedVersion: entry.expectedVersion,
+        }),
+      );
+      if (outcome.kind === "extended") {
+        result.extended.push({
+          orderId: outcome.order.id,
+          number: outcome.order.number,
+          version: outcome.order.version,
+          respondBy: outcome.order.respondBy.toISOString(),
+        });
+      } else {
+        result.skipped.push({
+          orderId: entry.orderId,
+          number: outcome.order?.number ?? null,
+          status: outcome.order?.status ?? null,
+          reason: outcome.reason,
+        });
+      }
+    }
+    this.logger.log(
+      `Order deadlines extended by an administrator extended=${String(result.extended.length)} skipped=${String(result.skipped.length)} minutes=${String(body.minutes)}`,
+    );
+    return result;
+  }
+
+  /**
+   * A-ORD-03: the orders created in the window that still wait for the
+   * supplier's answer (and whose deadline has not passed), the nearest
+   * deadline first, with what became of their notices — `unnotified`, when
+   * not one of them reached anybody.
+   */
+  async extensionCandidates(
+    query: AdminExtensionCandidatesQuery,
+  ): Promise<AdminExtensionCandidatesPage> {
+    const now = await databaseNow(this.database.db);
+    const from = new Date(query.from);
+    const to = query.to ? new Date(query.to) : now;
+    const waiting = and(
+      eq(customerOrder.status, "created"),
+      gte(customerOrder.createdAt, from),
+      lt(customerOrder.createdAt, to),
+      sql`${customerOrder.respondBy} > ${now.toISOString()}::timestamptz`,
+    )!;
+    const [rows, [counted]] = await Promise.all([
+      this.database.db
+        .select({ order: customerOrder, supplierName: supplier.name })
+        .from(customerOrder)
+        .innerJoin(supplier, eq(supplier.id, customerOrder.supplierId))
+        .where(waiting)
+        .orderBy(asc(customerOrder.respondBy), asc(customerOrder.id))
+        .limit(query.limit),
+      this.database.db.select({ value: count() }).from(customerOrder).where(waiting),
+    ]);
+    const timeout = await this.settings.get("whatsapp_outage_delivery_timeout_minutes");
+    const notices = await noticeStatesOf(
+      this.database.db,
+      rows.map((row) => row.order.id),
+      timeout,
+    );
+    const total = counted?.value ?? 0;
+    return {
+      window: { from: from.toISOString(), to: to.toISOString() },
+      orders: rows.map(({ order, supplierName }) => {
+        const notice = notices.get(order.id) ?? {
+          recipients: 0,
+          delivered: 0,
+          failed: 0,
+          pending: 0,
+        };
+        return {
+          id: order.id,
+          number: order.number,
+          version: order.version,
+          isTest: order.isTest,
+          supplier: { id: order.supplierId, name: supplierName },
+          createdAt: order.createdAt.toISOString(),
+          respondBy: order.respondBy.toISOString(),
+          notice,
+          unnotified: notice.delivered === 0,
+        };
+      }),
+      total,
+      truncated: total > rows.length,
+    };
+  }
+
+  /** The working bound of one extension: `deadline_extension_max_hours`. */
+  private async checkExtension(minutes: number): Promise<void> {
+    const hours = await this.settings.get("deadline_extension_max_hours");
+    if (minutes > hours * 60) {
+      throw validationError(
+        "minutes",
+        `At most ${String(hours * 60)} minutes at once (deadline_extension_max_hours)`,
+      );
+    }
   }
 
   private async marksOf(orderId: string) {

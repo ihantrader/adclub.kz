@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { Discipline } from "./order-discipline";
 import { OrderLookup } from "./order-lookup.service";
+import { OrderNotices } from "./order-notices";
 import { OrderTransitions } from "./order-transitions";
 import {
   AdminDisciplineController,
@@ -47,7 +48,7 @@ export class OrdersModule {
             AdminDisciplineController,
           ]
         : [],
-      providers: [Discipline, OrderTransitions, OrderLookup, OrdersService],
+      providers: [Discipline, OrderNotices, OrderTransitions, OrderLookup, OrdersService],
       exports: [OrdersService],
     };
   }

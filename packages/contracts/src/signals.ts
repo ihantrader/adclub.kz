@@ -16,25 +16,41 @@ import { z } from "zod";
  *   administrator without a code more often than the threshold allows
  *   (D-043): either the scanner isn't being used or the orders aren't real.
  *
- * Later tasks add the others (a low rating, the WhatsApp outage of 6.6, a
- * spike of complaints, a failed payment).
+ * TASK-025 adds `whatsapp_outage` (ARCHITECTURE 6.6; PRODUCT 10.4; SCREENS
+ * A-HOME, A-ORD-03): the notices of orders to suppliers stopped reaching
+ * them — refused, lost (`unknown`) or not delivered in time — above the
+ * thresholds of the settings. The subject is the channel itself, so there
+ * is one such signal at a time; it closes by itself when the channel
+ * delivers again. The deadlines of orders are never touched by it — the
+ * administrator extends them by hand.
+ *
+ * Later tasks add the others (a low rating, a spike of complaints, a failed
+ * payment).
  */
 
 export const adminSignalKindSchema = z.enum([
   "duplicate_after_late_close",
   "frequent_admin_closes",
+  "whatsapp_outage",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
 
-/** What the signal is about: an order or a supplier. */
-export const adminSignalSubjectSchema = z.enum(["order", "supplier"]);
+/** What the signal is about: an order, a supplier, or the channel of notices itself. */
+export const adminSignalSubjectSchema = z.enum(["order", "supplier", "channel"]);
 
 export type AdminSignalSubject = z.infer<typeof adminSignalSubjectSchema>;
 
 /**
+ * The subject id of the WhatsApp channel of notices to suppliers: one
+ * channel, one id, so one open signal about it at a time.
+ */
+export const WHATSAPP_CHANNEL_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a1";
+
+/**
  * `open` — waiting for a person; `acknowledged` — seen; `closed` — dealt
- * with or gone by itself. Only `open` is raised by this task.
+ * with or gone by itself (the outage of the channel closes itself when the
+ * channel delivers again, TASK-025).
  */
 export const adminSignalStatusSchema = z.enum(["open", "acknowledged", "closed"]);
 
@@ -54,6 +70,22 @@ export const adminSignalPayloadSchema = z.object({
   closes: z.number().int().optional(),
   days: z.number().int().optional(),
   threshold: z.number().int().optional(),
+  /**
+   * `whatsapp_outage`: when the first notice that did not arrive failed
+   * (`since` — where A-ORD-03 starts its list), the latest such failure,
+   * how many notices failed since then and of how many judged in the
+   * window, of which orders and suppliers, what the failures were, and —
+   * once the channel delivers again — when it did (`endedAt`).
+   */
+  since: z.iso.datetime().optional(),
+  lastFailureAt: z.iso.datetime().optional(),
+  endedAt: z.iso.datetime().optional(),
+  failedMessages: z.number().int().optional(),
+  judgedMessages: z.number().int().optional(),
+  affectedOrders: z.number().int().optional(),
+  supplierIds: z.array(z.uuid()).optional(),
+  failureKinds: z.record(z.string(), z.number().int()).optional(),
+  windowMinutes: z.number().int().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;
@@ -69,6 +101,8 @@ export const adminSignalSchema = z.object({
   times: z.number().int(),
   firstSeenAt: z.iso.datetime(),
   lastSeenAt: z.iso.datetime(),
+  /** When the signal was closed; `null` — it is not. */
+  closedAt: z.iso.datetime().nullable(),
 });
 
 export type AdminSignal = z.infer<typeof adminSignalSchema>;

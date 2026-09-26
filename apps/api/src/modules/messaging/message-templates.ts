@@ -102,7 +102,7 @@ const SAMPLE = {
   quantity: "2",
   total: "24 500",
   fulfillment: "самовывоз",
-  respondBy: "18:30",
+  respondBy: "27.09 18:30",
   term: "14 марта",
   service: "Замена масла двигателя с промывкой",
   model: "Geely Atlas Pro 1.5 TD",
@@ -112,7 +112,7 @@ const SAMPLE = {
   customerPhone: "+7 701 123 45 67",
   memberName: "Айгерим",
   companyName: "Автомаркет Алматы на Райымбека",
-  state: "принята: Марат, 12:40",
+  state: "принята: Айгерим Сериккызы, 27.09 12:40",
   added: "18",
   rejected: "3",
   text: "Просим обновить цены до конца недели: часть позиций устарела.",
@@ -153,7 +153,7 @@ export const messageTemplates = {
       kk: "№ {number} жаңа өтінім: {item} × {quantity}, {total} ₸, {fulfillment}. {respondBy} дейін жауап беріңіз",
     },
     sample: pick("number", "item", "quantity", "total", "fulfillment", "respondBy"),
-    sentBy: null,
+    sentBy: "orders (OrderNotices.newOrder)",
   },
   /** W-01a — a new order for an item to order. */
   order_new_on_order: {
@@ -203,7 +203,7 @@ export const messageTemplates = {
       kk: "№ {number} өтінім қабылданды. Клиент: {customerName}, {customerPhone}. Дайындығын кабинетте белгілеңіз: {link}",
     },
     sample: pick("number", "customerName", "customerPhone", "link"),
-    sentBy: null,
+    sentBy: "orders (OrderNotices.accepted)",
   },
   /** W-03 — the answer to a button pressed on an order that has moved on. */
   order_already_handled: {
@@ -217,7 +217,7 @@ export const messageTemplates = {
       kk: "№ {number} өтінім қазір {state}. Мәртебесі өзгермеді",
     },
     sample: pick("number", "state"),
-    sentBy: null,
+    sentBy: "orders (OrderNotices.stateReply)",
   },
   /** W-04 — the user cancelled. */
   order_cancelled_by_user: {
@@ -231,7 +231,7 @@ export const messageTemplates = {
       kk: "Клиент № {number} өтінімнен бас тартты: {item}",
     },
     sample: pick("number", "item"),
-    sentBy: null,
+    sentBy: "orders (OrderNotices.cancelled)",
   },
   /** W-05 — a subscription payment did not go through. */
   payment_failed: {

@@ -5,6 +5,9 @@ import { defineSweeperJob, JobRegistry, type Sweeper, type SweepResult } from ".
 import { AdminSignals } from "../signals";
 import { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
 import { Discipline } from "./order-discipline";
+import { OrderButtonPresses } from "./order-button-presses";
+import { NoticeChannelWatch, noticeChannelWatchJob } from "./order-notice-channel";
+import { OrderMessages, OrderNotices } from "./order-notices";
 import { OrderTransitions, type DeadlineOutcome } from "./order-transitions";
 
 /**
@@ -28,7 +31,11 @@ import { OrderTransitions, type DeadlineOutcome } from "./order-transitions";
 
 export const orderDeadlinesJob = defineSweeperJob({ name: "orders.apply-deadlines" });
 
-export const orderJobCatalog = [orderDeadlinesJob, orderIdempotencyCleanupJob];
+export const orderJobCatalog = [
+  orderDeadlinesJob,
+  orderIdempotencyCleanupJob,
+  noticeChannelWatchJob,
+];
 
 @Injectable()
 export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
@@ -113,14 +120,23 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
   }
 }
 
-/** The orders module's background jobs, for the worker process. */
+/**
+ * The orders module's background jobs, for the worker process: the
+ * deadlines, the cleanup of creation keys, and (TASK-025) what the gateway
+ * asks about a message of an order, the presses of its buttons and the
+ * detector of an outage of the channel.
+ */
 @Module({
   providers: [
     Discipline,
     AdminSignals,
+    OrderNotices,
     OrderTransitions,
     OrderDeadlineSweeper,
     OrderIdempotencyCleanup,
+    OrderMessages,
+    OrderButtonPresses,
+    NoticeChannelWatch,
   ],
 })
 export class OrderJobsModule {}

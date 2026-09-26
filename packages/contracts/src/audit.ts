@@ -250,6 +250,13 @@ export const auditActions = {
    * how many failures; never a code.
    */
   orderLookupBlocked: "order.lookup_blocked",
+  /**
+   * TASK-025 (A-ORD-02, A-ORD-03; PRODUCT 10.4): an administrator extended
+   * the answer deadline or the pickup reserve of an order. `reason` — why,
+   * `before`/`after` — which deadline and its two values, the order's
+   * number. The order's own journal has the same as `deadline_extended`.
+   */
+  orderDeadlineExtended: "order.deadline_extended",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];

@@ -25,6 +25,8 @@ interface DevMessage {
   lastError: string | null;
   /** The text as the test channel would send it; `null` once the values are gone. */
   text: string | null;
+  /** The payload of each quick reply (TASK-025): what a press of it sends back. */
+  buttons: Record<string, string> | null;
 }
 
 /**
@@ -63,6 +65,7 @@ export class DevMessageOutbox {
       fromPhone: string;
       receivedAt: string;
       appliedAt: string | null;
+      outcome: string | null;
     }[];
   }> {
     const rows = await this.database.db
@@ -96,6 +99,7 @@ export class DevMessageOutbox {
         failureKind: row.failureKind,
         lastError: row.lastError,
         text,
+        buttons: row.buttonPayloads,
       };
     });
     const webhooks = (
@@ -126,6 +130,7 @@ export class DevMessageOutbox {
       fromPhone: row.fromPhone,
       receivedAt: row.receivedAt.toISOString(),
       appliedAt: row.appliedAt?.toISOString() ?? null,
+      outcome: row.outcome,
     }));
     return { messages, webhooks, buttonPresses };
   }

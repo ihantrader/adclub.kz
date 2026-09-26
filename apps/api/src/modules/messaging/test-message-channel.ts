@@ -27,8 +27,16 @@ export class TestMessageChannel extends MessageChannel {
   delayMs = 5_000;
   /** Every accepted message, newest last (tests read it). */
   readonly sent: MessageSendRequest[] = [];
+  /**
+   * Numbers refused as not on WhatsApp whatever the mode (tests: one
+   * recipient of several fails, TASK-025).
+   */
+  readonly refusedPhones = new Set<string>();
 
   async send(request: MessageSendRequest, signal: AbortSignal): Promise<MessageSendResult> {
+    if (this.refusedPhones.has(request.phone)) {
+      throw new MessageDeliveryError("no_whatsapp", "The number is not on WhatsApp");
+    }
     switch (this.mode) {
       case "unavailable":
         throw new MessageDeliveryError("unavailable", "The test message channel is unavailable");

@@ -6,7 +6,9 @@ import {
   type OrderCloseMethod,
   type OrderDeclineReason,
   type OrderEventAction,
+  type OrderDeadlineKind,
   type OrderEventDetails,
+  type OrderStatusValue,
 } from "@adclub/contracts";
 import {
   acceptedReserveEnd,
@@ -24,6 +26,7 @@ import { receiptSchedules } from "../offers";
 import { AppSettings } from "../settings";
 import { AdminSignals } from "../signals";
 import { Discipline } from "./order-discipline";
+import { OrderNotices } from "./order-notices";
 import {
   customerOrder,
   inSupplierStatistics,
@@ -77,9 +80,16 @@ export interface MoveRequest {
   orderId: string;
   action: PersonAction;
   actor: Exclude<OrderActorRef, { type: "system" }>;
-  channel: Extract<OrderEventChannel, "app" | "supplier_web" | "admin">;
+  channel: Extract<OrderEventChannel, "app" | "supplier_web" | "admin" | "whatsapp">;
   /** The version the person saw; left out, the move applies to whatever state allows it. */
   expectedVersion?: number;
+  /**
+   * The statuses the move is meant for, when the person acted on something
+   * narrower than the order (TASK-025): a button of the notice of a new order
+   * means «this new order» — pressed on an accepted one it is not a decline
+   * after accepting, it is a press on a notice that has moved on.
+   */
+  onlyFrom?: readonly OrderStatusValue[];
   /**
    * The move to make instead when `action` isn't possible from the status
    * the order turns out to be in: the code of an order whose reserve has
@@ -97,6 +107,30 @@ export type MoveOutcome =
   | { kind: "repeated"; order: OrderRow }
   /** Someone else moved the order first, or it can't make this move any more. */
   | { kind: "conflict"; order: OrderRow; last: OrderEventRow | null };
+
+/** An administrator's extension of one deadline of one order (A-ORD-02, A-ORD-03). */
+export interface ExtensionRequest {
+  orderId: string;
+  deadline: OrderDeadlineKind;
+  minutes: number;
+  reason: string;
+  admin: { accountId: string; adminId: string };
+  /** The version the administrator saw: an order that changed meanwhile is not extended over. */
+  expectedVersion: number;
+}
+
+export type ExtensionOutcome =
+  | { kind: "extended"; order: OrderRow; previous: Date }
+  | {
+      kind: "refused";
+      order: OrderRow | null;
+      /**
+       * `changed` — another version than the one seen; `not_waiting` — the
+       * order no longer waits on that deadline; `expired` — the deadline
+       * passed and the order expired; `not_found` — there is no such order.
+       */
+      reason: "changed" | "not_waiting" | "expired" | "not_found";
+    };
 
 type DeadlineAction = "expire_no_response" | "expire_reserve";
 
@@ -200,6 +234,7 @@ export class OrderTransitions {
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(Discipline) private readonly discipline: Discipline,
     @Inject(AdminSignals) private readonly signals: AdminSignals,
+    @Inject(OrderNotices) private readonly notices: OrderNotices,
   ) {}
 
   /** A person's move on an order (the caller has checked the order is theirs). */
@@ -213,7 +248,8 @@ export class OrderTransitions {
         continue;
       }
       const stale =
-        request.expectedVersion !== undefined && row.version !== request.expectedVersion;
+        (request.expectedVersion !== undefined && row.version !== request.expectedVersion) ||
+        (request.onlyFrom !== undefined && !request.onlyFrom.includes(row.status));
       const action = this.wanted(row, request);
       if (stale || orderTransition(row.status, action) === null) {
         return this.refuse(tx, row, request, at);
@@ -265,6 +301,123 @@ export class OrderTransitions {
       return (await this.releaseCode(tx, row, at)) ? "code_released" : null;
     }
     return null;
+  }
+
+  /**
+   * An administrator extends a deadline of an order by hand (TASK-025;
+   * PRODUCT 10.4; SCREENS A-ORD-02, A-ORD-03; ARCHITECTURE 6.6) — the same
+   * way every change of an order is made here: the passed deadline applied
+   * first (an order past its deadline has expired, and nothing extends an
+   * expired order), a conditional update on the status, the version and the
+   * deadline itself, the note `deadline_extended` in the order's journal and
+   * the entry in the action journal, all in one transaction. A new answer
+   * deadline sends W-01 to the supplier again, with the new time and buttons
+   * signed anew — the notice a failing channel may never have delivered.
+   *
+   * **A deadline is never extended by anything else**: not by a failed
+   * notice, not by the detector of an outage (PRODUCT 10.4).
+   */
+  async extend(tx: DbExecutor, request: ExtensionRequest): Promise<ExtensionOutcome> {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const at = await databaseNow(tx);
+      const [row] = await tx
+        .select()
+        .from(customerOrder)
+        .where(eq(customerOrder.id, request.orderId));
+      if (!row) {
+        return { kind: "refused", order: null, reason: "not_found" };
+      }
+      const due = dueDeadline(row, at);
+      if (due === "expire_no_response" || due === "expire_reserve") {
+        await this.apply(tx, row, due, { type: "system" }, "timer", at);
+        continue;
+      }
+      const current = request.deadline === "response" ? row.respondBy : row.expiresAt;
+      const waiting =
+        request.deadline === "response"
+          ? row.status === "created"
+          : (row.status === "accepted" || row.status === "ready") && row.expiresAt !== null;
+      if (!waiting || current === null) {
+        const expired = row.status === "response_expired" || row.status === "reserve_expired";
+        return { kind: "refused", order: row, reason: expired ? "expired" : "not_waiting" };
+      }
+      if (row.version !== request.expectedVersion) {
+        return { kind: "refused", order: row, reason: "changed" };
+      }
+      const until = new Date(current.getTime() + request.minutes * 60_000);
+      const set: Partial<typeof customerOrder.$inferInsert> = {
+        version: row.version + 1,
+        updatedAt: at,
+      };
+      if (request.deadline === "response") {
+        set.respondBy = until;
+      } else {
+        const warningHours = await this.settings.get("reserve_warning_hours");
+        Object.assign(set, {
+          expiresAt: until,
+          // A new end of the reserve is warned about anew (4.31 I315).
+          reserveWarnAt: reserveWarningAt(until, warningHours, at),
+          reserveWarnedAt: null,
+        });
+      }
+      const [updated] = await tx
+        .update(customerOrder)
+        .set(set)
+        .where(
+          and(
+            eq(customerOrder.id, row.id),
+            eq(customerOrder.status, row.status),
+            eq(customerOrder.version, row.version),
+            // The deadline being extended has not passed in the meantime.
+            this.deadlineGuard("accept", at),
+          ),
+        )
+        .returning();
+      if (!updated) {
+        continue;
+      }
+      const actor: OrderActorRef = { type: "admin", ...request.admin };
+      await this.record(tx, updated, "deadline_extended", null, null, actor, "admin", at, {
+        extendedDeadline: request.deadline,
+        previousDeadline: current.toISOString(),
+        deadline: until.toISOString(),
+        minutes: request.minutes,
+        adminNote: request.reason,
+      });
+      await this.audit.record(
+        {
+          action: auditActions.orderDeadlineExtended,
+          actor: {
+            role: "admin",
+            accountId: request.admin.accountId,
+            adminId: request.admin.adminId,
+          },
+          entityType: auditEntities.order,
+          entityId: updated.id,
+          before: { deadline: request.deadline, until: current.toISOString() },
+          after: {
+            number: updated.number,
+            deadline: request.deadline,
+            until: until.toISOString(),
+            minutes: request.minutes,
+          },
+          reason: request.reason,
+        },
+        tx,
+      );
+      if (request.deadline === "response") {
+        await this.notices.newOrder(tx, updated, at);
+      }
+      this.logger.log(
+        `Order deadline extended order=${updated.id} deadline=${request.deadline} minutes=${String(request.minutes)} version=${String(updated.version)}`,
+      );
+      return { kind: "extended", order: updated, previous: current };
+    }
+    const [row] = await tx
+      .select()
+      .from(customerOrder)
+      .where(eq(customerOrder.id, request.orderId));
+    return { kind: "refused", order: row ?? null, reason: "changed" };
   }
 
   /**
@@ -527,6 +680,10 @@ export class OrderTransitions {
       return null;
     }
     await this.record(tx, updated, action, row.status, to, actor, channel, at, details);
+    if (action === "cancel") {
+      // W-04 to the supplier's employees, in this very transaction (TASK-025).
+      await this.notices.cancelled(tx, updated);
+    }
     if (action === "expire_reserve") {
       // Nobody came for an item the supplier had put aside: the club's own
       // discipline statistics of the user (PRODUCT 10.5).

@@ -1511,6 +1511,9 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
           fulfillment: "самовывоз",
           respondBy: "18:30",
         },
+        // A template with quick replies is queued with a payload for each
+        // (TASK-025); these are not signed, so a press on them is refused.
+        buttons: { confirm: "confirm:test", decline: "decline:test" },
       });
       const sent = await waitFor("the message to be sent", async () => {
         const row = await message(id);
@@ -1955,20 +1958,26 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
     });
 
     describe("a button pressed", () => {
-      it("is stored and linked to the message it answers, and nothing is done about an order", async () => {
+      it("is stored and linked to the message it answers, and a payload the server never signed moves nothing", async () => {
         const { id, wamid } = await providerMessage();
         const before = await db.query("SELECT * FROM outbound_message ORDER BY id");
         const answer = await signedPost(buttonEvent(wamid, "confirm:order-1042:sig"));
         expect(answer.status).toBe(200);
         await processedEvents(1);
-        const { rows } = await db.query<{
-          message_id: string | null;
-          button_name: string | null;
-          payload: string;
-          from_phone: string;
-          context_provider_message_id: string;
-          applied_at: Date | null;
-        }>("SELECT * FROM message_button_press");
+        // Decided out of the webhook's way (TASK-025): the module that owns
+        // the button refuses a payload that is not one it signed.
+        const rows = await waitFor("the press to be decided", async () => {
+          const found = await db.query<{
+            message_id: string | null;
+            button_name: string | null;
+            payload: string;
+            from_phone: string;
+            context_provider_message_id: string;
+            applied_at: Date | null;
+            outcome: string | null;
+          }>("SELECT * FROM message_button_press");
+          return found.rows[0]?.applied_at ? found.rows : undefined;
+        });
         expect(rows).toHaveLength(1);
         expect(rows[0]).toMatchObject({
           message_id: id,
@@ -1976,8 +1985,7 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
           payload: "confirm:order-1042:sig",
           from_phone: "+77055550101",
           context_provider_message_id: wamid,
-          // Acting on it is TASK-025: nothing has touched it.
-          applied_at: null,
+          outcome: "invalid_payload",
         });
         // The message is as it was: a press is not a delivery status.
         expect((await db.query("SELECT * FROM outbound_message ORDER BY id")).rows).toEqual(

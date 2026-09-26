@@ -7,7 +7,12 @@ import { sanitizeForLog } from "../../observability";
 import { AppSettings } from "../settings";
 import { sendMessageJob } from "./message-jobs";
 import { failureKindOfCode } from "./whatsapp-cloud-channel";
-import { renderMessageText, type MessageLang, type MessageTemplateKey } from "./message-templates";
+import {
+  messageTemplate,
+  renderMessageText,
+  type MessageLang,
+  type MessageTemplateKey,
+} from "./message-templates";
 import { outboundMessage, type MessageStatus, type OutboundMessageRow } from "./schema";
 
 /**
@@ -30,6 +35,12 @@ export interface QueueMessageInput {
   lang: MessageLang;
   /** The template's placeholders by name; every declared one is required. */
   variables: Readonly<Record<string, string>>;
+  /**
+   * The payload of each quick reply of the template, by the button's name
+   * (`ButtonPayloads.sign`): a template with quick replies needs one for
+   * every one of them, a template without has none (TASK-025).
+   */
+  buttons?: Readonly<Record<string, string>>;
   /** What the message is about (`MessageSubjects`). */
   subject: { type: string; id: string | null };
   /**
@@ -135,6 +146,7 @@ export class Messaging {
     // Renders only to check: the text itself is built again when the
     // message is sent, from the values stored with it.
     renderMessageText(input.template, input.lang, input.variables, maxLength);
+    checkButtonPayloads(input.template, input.buttons);
     const [created] = await tx
       .insert(outboundMessage)
       .values({
@@ -145,6 +157,7 @@ export class Messaging {
         subjectType: input.subject.type,
         subjectId: input.subject.id,
         variables: { ...input.variables },
+        buttonPayloads: input.buttons ? { ...input.buttons } : null,
         maxAttempts: attempts,
       })
       .onConflictDoNothing({ target: outboundMessage.dedupeKey })
@@ -386,6 +399,30 @@ export class Messaging {
         ),
       )
       .orderBy(desc(outboundMessage.createdAt));
+  }
+}
+
+/**
+ * A template's quick replies and the payloads given for them must match
+ * one for one: a quick reply sent without its payload is a button that
+ * tells the server nothing when pressed, and a payload for a button the
+ * template doesn't have would never be sent. Checked when the message is
+ * queued, where the mistake is.
+ */
+function checkButtonPayloads(
+  key: MessageTemplateKey,
+  buttons: Readonly<Record<string, string>> | undefined,
+): void {
+  const quickReplies = messageTemplate(key)
+    .buttons.filter((button) => button.kind === "quick_reply")
+    .map((button) => button.name);
+  const given = Object.keys(buttons ?? {});
+  const missing = quickReplies.filter((name) => !buttons?.[name]);
+  const unknown = given.filter((name) => !quickReplies.includes(name));
+  if (missing.length > 0 || unknown.length > 0) {
+    throw new Error(
+      `The buttons of ${key} do not match its quick replies: missing [${missing.join(", ")}], unknown [${unknown.join(", ")}]`,
+    );
   }
 }
 

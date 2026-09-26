@@ -134,6 +134,10 @@ function detailsOf(payload: Record<string, unknown>): OrderEventDetails {
     "receiptOn",
     "attemptedAction",
     "closeMethod",
+    "extendedDeadline",
+    "previousDeadline",
+    "minutes",
+    "adminNote",
   ] as const) {
     if (payload[key] !== undefined && payload[key] !== null) {
       details[key] = payload[key];
@@ -170,7 +174,21 @@ function actorOf(event: OrderEventRow, members: Map<string, MemberName>): OrderA
   }
 }
 
-function eventOf(event: OrderEventRow, members: Map<string, MemberName>): OrderEvent {
+/**
+ * One entry of the journal. The reason an administrator gave for extending
+ * a deadline (`adminNote`, TASK-025) is theirs: the supplier sees that the
+ * deadline moved and until when, never the words (as the reason of a close
+ * without a code, 4.32 I329).
+ */
+function eventOf(
+  event: OrderEventRow,
+  members: Map<string, MemberName>,
+  side: "supplier" | "admin",
+): OrderEvent {
+  const details = detailsOf(event.payload);
+  if (side !== "admin") {
+    delete details.adminNote;
+  }
   return {
     id: event.id,
     action: event.action,
@@ -179,7 +197,7 @@ function eventOf(event: OrderEventRow, members: Map<string, MemberName>): OrderE
     at: iso(event.createdAt),
     actor: actorOf(event, members),
     channel: event.channel,
-    details: detailsOf(event.payload),
+    details,
   };
 }
 
@@ -620,7 +638,7 @@ export async function supplierOrderView(
         ? { kind: "revealed", phone }
         : { kind: "hidden", reason: "not_accepted" },
     decline: declineOf(row),
-    events: events.map((event) => eventOf(event, members)),
+    events: events.map((event) => eventOf(event, members, "supplier")),
   };
 }
 
@@ -686,7 +704,7 @@ export async function adminOrderView(
     phoneRevealedAt: row.phoneRevealedAt ? iso(row.phoneRevealedAt) : null,
     decline: declineOf(row),
     discipline,
-    events: events.map((event) => eventOf(event, members)),
+    events: events.map((event) => eventOf(event, members, "admin")),
   };
 }
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineJob, defineSweeperJob } from "../../jobs";
+import { applyButtonPressJob } from "./button-presses";
 
 /**
  * The background jobs of messaging (ARCHITECTURE 4.12, 4.35). Nothing is
@@ -64,6 +65,7 @@ export const messageRecoveryJob = defineSweeperJob({ name: "messaging.recover-in
 export const messagingJobCatalog = [
   sendMessageJob,
   applyWebhookEventJob,
+  applyButtonPressJob,
   webhookEventCleanupJob,
   messageVariablesCleanupJob,
   messageRecoveryJob,

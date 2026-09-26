@@ -49,6 +49,12 @@ export const outboundMessage = pgTable("outbound_message", {
    * delivery log (ARCHITECTURE 4.35).
    */
   variables: jsonb("variables").$type<Record<string, string>>(),
+  /**
+   * The payload of each quick reply, by the button's name (TASK-025): our
+   * own signed tokens — an order, an employee, an expiry — sent with the
+   * message so that a press tells the server exactly what it answers.
+   */
+  buttonPayloads: jsonb("button_payloads").$type<Record<string, string>>(),
   status: text("status").$type<MessageStatus>().notNull().default("queued"),
   attempts: integer("attempts").notNull().default(0),
   /**
@@ -107,9 +113,31 @@ export const inboundWebhookEvent = pgTable("inbound_webhook_event", {
 export type InboundWebhookEventRow = typeof inboundWebhookEvent.$inferSelect;
 
 /**
+ * What was decided about a press (TASK-025): `accepted`, `declined` — the
+ * order moved; `repeated` — the same employee had already made that move;
+ * `conflict` — the order had moved on, nothing changed; `member_removed` —
+ * the employee is no longer one; `invalid_payload`, `expired`,
+ * `phone_mismatch`, `foreign_message` — the press is not authentic enough
+ * to act on; `no_handler` — no module acts on this button.
+ */
+export type ButtonPressOutcome =
+  | "accepted"
+  | "declined"
+  | "repeated"
+  | "conflict"
+  | "member_removed"
+  | "invalid_payload"
+  | "expired"
+  | "phone_mismatch"
+  | "foreign_message"
+  | "no_handler";
+
+/**
  * `message_button_press` — a recipient tapped a button of a template
- * message. Stored and linked to the message; **nothing is done about the
- * order here** — acting on a press is TASK-025, which reads `applied_at`.
+ * message. Stored and linked to the message by the webhook (TASK-024), then
+ * dealt with by the worker (`messaging.apply-button-press`, TASK-025): the
+ * module that owns the button decides, and `applied_at` with `outcome`
+ * say when and how. Messaging itself never acts on an order.
  */
 export const messageButtonPress = pgTable("message_button_press", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -128,8 +156,10 @@ export const messageButtonPress = pgTable("message_button_press", {
   payload: text("payload"),
   fromPhone: text("from_phone").notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
-  /** When something was done about it (TASK-025); `null` — nothing yet. */
+  /** When it was dealt with (TASK-025); `null` — not yet. */
   appliedAt: timestamp("applied_at", { withTimezone: true }),
+  /** How it was dealt with (TASK-025): applied, or why not — set together with `applied_at`. */
+  outcome: text("outcome").$type<ButtonPressOutcome>(),
 });
 
 export type MessageButtonPressRow = typeof messageButtonPress.$inferSelect;

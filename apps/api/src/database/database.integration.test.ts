@@ -117,7 +117,98 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790400000000_create-orders",
       "1790450000000_close-orders",
       "1790500000000_create-messaging",
+      "1790550000000_order-notices",
     ]);
+  });
+
+  it("holds the rules of the notices of orders, their presses and the channel signal, and rolls back keeping the messages (order notices)", async () => {
+    const event = await client.query<{ id: string }>(
+      "INSERT INTO inbound_webhook_event (provider, external_id, payload) VALUES ('whatsapp', $1, '{}') RETURNING id",
+      [randomUUID()],
+    );
+    const press = (values: Record<string, unknown>) => {
+      const row: Record<string, unknown> = {
+        event_id: event.rows[0]!.id,
+        provider_message_id: `wamid.${randomUUID()}`,
+        from_phone: "+77055550101",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO message_button_press (${columns.join(", ")}) VALUES (${columns.map((_, i) => `$${String(i + 1)}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    // A press is decided with its outcome, or not at all; the outcome is one of ours.
+    await press({});
+    await press({ applied_at: new Date(), outcome: "phone_mismatch" });
+    await expect(press({ applied_at: new Date() })).rejects.toThrow(
+      /message_button_press_applied_check/,
+    );
+    await expect(press({ outcome: "accepted" })).rejects.toThrow(
+      /message_button_press_applied_check/,
+    );
+    await expect(press({ applied_at: new Date(), outcome: "maybe" })).rejects.toThrow(
+      /message_button_press_outcome_check/,
+    );
+    // The payloads of the buttons live with the message.
+    await client.query(
+      `INSERT INTO outbound_message (dedupe_key, template, lang, phone, subject_type, variables, button_payloads)
+       VALUES ('order_new:x', 'order_new', 'ru', '+77055550101', 'order', '{}', '{"confirm":"c","decline":"d"}')`,
+    );
+    // A signal can be about the channel, and a closed one says when.
+    const channel = "00000000-0000-4000-8000-00000000c4a1";
+    await client.query(
+      "INSERT INTO admin_signal (kind, subject_type, subject_id) VALUES ('whatsapp_outage', 'channel', $1)",
+      [channel],
+    );
+    await expect(
+      client.query("UPDATE admin_signal SET status = 'closed' WHERE subject_id = $1", [channel]),
+    ).rejects.toThrow(/admin_signal_closed_check/);
+    await client.query(
+      "UPDATE admin_signal SET status = 'closed', closed_at = now() WHERE subject_id = $1",
+      [channel],
+    );
+    const actions = await client.query<{ definition: string }>(
+      "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conname = 'order_event_action_check'",
+    );
+    expect(actions.rows[0]!.definition).toContain("deadline_extended");
+    const moves = await client.query<{ definition: string }>(
+      "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conname = 'order_event_move_check'",
+    );
+    // A note of an extension moves nothing: it names no status.
+    expect(moves.rows[0]!.definition).toMatch(/late_action_ignored'::text, 'deadline_extended/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // The new columns and the channel's signals are gone; the messages and the presses stay.
+    expect(await columnExists(client, "outbound_message", "button_payloads")).toBe(false);
+    expect(await columnExists(client, "message_button_press", "outcome")).toBe(false);
+    expect(await columnExists(client, "admin_signal", "closed_at")).toBe(false);
+    expect((await client.query("SELECT 1 FROM outbound_message")).rowCount).toBe(1);
+    expect((await client.query("SELECT 1 FROM message_button_press")).rowCount).toBe(2);
+    expect((await client.query("SELECT 1 FROM admin_signal")).rowCount).toBe(0);
+    await expect(
+      client.query(
+        "INSERT INTO admin_signal (kind, subject_type, subject_id) VALUES ('whatsapp_outage', 'channel', $1)",
+        [channel],
+      ),
+    ).rejects.toThrow(/admin_signal_subject_check/);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await columnExists(client, "outbound_message", "button_payloads")).toBe(true);
+    // A press stored without a signed payload can never be applied: it is decided as such.
+    const presses = await client.query<{ outcome: string; applied: boolean }>(
+      "SELECT outcome, applied_at IS NOT NULL AS applied FROM message_button_press",
+    );
+    expect(presses.rows).toEqual([
+      { outcome: "invalid_payload", applied: true },
+      { outcome: "invalid_payload", applied: true },
+    ]);
+    await client.query("DELETE FROM message_button_press");
+    await client.query("DELETE FROM inbound_webhook_event");
+    await client.query("DELETE FROM outbound_message");
+    await walkDownPast(() => columnExists(client, "outbound_message", "button_payloads"));
   });
 
   it("holds the rules of the message gateway in the database and rolls back keeping the suppliers (messaging)", async () => {

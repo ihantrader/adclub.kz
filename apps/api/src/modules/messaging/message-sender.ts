@@ -277,7 +277,7 @@ export class MessageSender implements JobHandler<{ messageId: string }> {
       // The module that owns the subject decides whether it may still go.
       // Inside this transaction on purpose: it may lock what it needs, and
       // the provider is called only after the transaction has committed.
-      if (!(await this.subjects.stillSend(tx, row.subjectType, row.subjectId))) {
+      if (!(await this.subjects.stillSend(tx, row.subjectType, row.subjectId, row))) {
         await this.write(tx, row, {
           status: "cancelled",
           settledAt: new Date(),
@@ -300,9 +300,12 @@ export class MessageSender implements JobHandler<{ messageId: string }> {
           providerTemplateName: template.providerName,
           lang: row.lang,
           variables: orderedVariables(row.template, variables),
-          // No quick reply carries a payload yet: acting on a press is
-          // TASK-025, which fills them.
-          buttons: template.buttons.map((button) => ({ button })),
+          // Each quick reply goes with the payload the module signed for it
+          // (TASK-025): a press comes back with exactly that payload.
+          buttons: template.buttons.map((button) => ({
+            button,
+            payload: button.kind === "quick_reply" ? row.buttonPayloads?.[button.name] : undefined,
+          })),
           text: renderMessageText(row.template, row.lang, variables, maxLength),
         };
       } catch (error) {

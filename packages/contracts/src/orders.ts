@@ -116,9 +116,12 @@ export type OrderDeclineReason = z.infer<typeof orderDeclineReasonSchema>;
  * closed by the administrator without a code (D-043), `cancel`,
  * `expire_no_response` — «нет ответа», `expire_reserve`) and two notes
  * that move nothing: `reserve_expiring` — the reserve ends in
- * `reserve_warning_hours` (the notification — EPIC-09), and
+ * `reserve_warning_hours` (the notification — EPIC-09),
  * `late_action_ignored` — an employee acted on an order someone had
- * already dealt with; nothing changed.
+ * already dealt with; nothing changed — and (TASK-025) `deadline_extended`:
+ * an administrator moved the answer deadline or the end of the reserve,
+ * with a reason (A-ORD-02, A-ORD-03; PRODUCT 10.4 — a timer is never
+ * extended by itself).
  */
 export const orderEventActionSchema = z.enum([
   "create",
@@ -133,6 +136,7 @@ export const orderEventActionSchema = z.enum([
   "expire_reserve",
   "reserve_expiring",
   "late_action_ignored",
+  "deadline_extended",
 ]);
 
 export type OrderEventAction = z.infer<typeof orderEventActionSchema>;
@@ -212,7 +216,10 @@ export const orderEventDetailsSchema = z.object({
   /** The decline: the reason and the employee's note. */
   reason: orderDeclineReasonSchema.optional(),
   note: z.string().optional(),
-  /** The deadline that passed (`expire_*`) or is near (`reserve_expiring`). */
+  /**
+   * The deadline that passed (`expire_*`), is near (`reserve_expiring`) or
+   * was set by an administrator (`deadline_extended`).
+   */
   deadline: z.iso.datetime().optional(),
   /** The end of the reserve set by this move (`accept`, `mark_ready`). */
   reserveUntil: z.iso.datetime().optional(),
@@ -222,6 +229,20 @@ export const orderEventDetailsSchema = z.object({
   attemptedAction: orderAttemptedActionSchema.optional(),
   /** `close`, `close_late`, `admin_close`: how the order was given out. */
   closeMethod: orderCloseMethodSchema.optional(),
+  /**
+   * `deadline_extended` (TASK-025): which deadline — `response` (the
+   * supplier's answer) or `reserve` (the pickup reserve) — from when
+   * (`previousDeadline`) to when (`deadline`) and by how many minutes.
+   */
+  extendedDeadline: z.enum(["response", "reserve"]).optional(),
+  previousDeadline: z.iso.datetime().optional(),
+  minutes: z.number().int().optional(),
+  /**
+   * `deadline_extended`: why the administrator extended it (A-ORD-02 — every
+   * manual action has a reason). **The administrator's view only**: the
+   * supplier sees that and until when, never the words.
+   */
+  adminNote: z.string().optional(),
 });
 
 export type OrderEventDetails = z.infer<typeof orderEventDetailsSchema>;
@@ -1024,6 +1045,146 @@ export type AdminCloseOrderBody = z.infer<typeof adminCloseOrderBodySchema>;
 export const adminOrderResponseSchema = z.object({ order: adminOrderSchema });
 
 export type AdminOrderResponse = z.infer<typeof adminOrderResponseSchema>;
+
+// ------------------------------------ extending deadlines by hand (TASK-025)
+
+/** The most minutes of one extension the contract takes; the working bound is `deadline_extension_max_hours`. */
+export const ORDER_EXTENSION_MINUTES_LIMIT = 7 * 24 * 60;
+/** How many orders one extension «Продлить все» takes at once (A-ORD-03). */
+export const ORDER_EXTENSION_BATCH_LIMIT = 500;
+
+/** `response` — the supplier's answer deadline; `reserve` — the end of the pickup reserve. */
+export const orderDeadlineKindSchema = z.enum(["response", "reserve"]);
+
+export type OrderDeadlineKind = z.infer<typeof orderDeadlineKindSchema>;
+
+const extensionMinutesSchema = z.number().int().min(1).max(ORDER_EXTENSION_MINUTES_LIMIT);
+
+/**
+ * `POST /admin/orders/{orderId}/extend-deadline` (A-ORD-02 «Продлить срок
+ * ответа» / «Продлить резерв»): the deadline moves by `minutes` from where it
+ * is, only with a reason, only while the order still waits on it (the answer
+ * — «Создана»; the reserve — «Принята» or «Готова» with pickup). A deadline
+ * that has already passed can't be extended: the order has expired
+ * (PRODUCT 10.4 — nothing brings it back but the administrator's own
+ * decision about the dispute).
+ */
+export const adminExtendOrderDeadlineBodySchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  deadline: orderDeadlineKindSchema,
+  minutes: extensionMinutesSchema,
+  reason: freeText(ORDER_REASON_MAX_LENGTH),
+});
+
+export type AdminExtendOrderDeadlineBody = z.infer<typeof adminExtendOrderDeadlineBodySchema>;
+
+/**
+ * A-ORD-03: the orders created in a window (from the signal of an outage —
+ * its `since`) that still wait for the supplier's answer. `to` — now, when
+ * left out. The nearest deadline first.
+ */
+export const adminExtensionCandidatesQuerySchema = z.object({
+  from: z.iso.datetime({ offset: true }),
+  to: z.iso.datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(ORDER_EXTENSION_BATCH_LIMIT).default(200),
+});
+
+export type AdminExtensionCandidatesQuery = z.infer<typeof adminExtensionCandidatesQuerySchema>;
+
+/**
+ * What became of the notices of a new order (W-01) to its supplier's
+ * employees: `delivered` — the provider reported them delivered (the test
+ * channel: sent); `failed` — refused, lost or not delivered in time;
+ * `pending` — still on their way.
+ */
+export const orderNoticeStateSchema = z.object({
+  recipients: z.number().int(),
+  delivered: z.number().int(),
+  failed: z.number().int(),
+  pending: z.number().int(),
+});
+
+export type OrderNoticeState = z.infer<typeof orderNoticeStateSchema>;
+
+export const adminExtensionCandidateSchema = z.object({
+  id: z.uuid(),
+  number: z.number().int(),
+  version: z.number().int(),
+  isTest: z.boolean(),
+  supplier: z.object({ id: z.uuid(), name: z.string() }),
+  createdAt: z.iso.datetime(),
+  respondBy: z.iso.datetime(),
+  notice: orderNoticeStateSchema,
+  /** Not one notice of it reached anybody: the orders A-ORD-03 marks. */
+  unnotified: z.boolean(),
+});
+
+export type AdminExtensionCandidate = z.infer<typeof adminExtensionCandidateSchema>;
+
+export const adminExtensionCandidatesPageSchema = z.object({
+  window: z.object({ from: z.iso.datetime(), to: z.iso.datetime() }),
+  orders: z.array(adminExtensionCandidateSchema),
+  /** Orders in the window that wait for an answer; `truncated` — more than `limit`. */
+  total: z.number().int(),
+  truncated: z.boolean(),
+});
+
+export type AdminExtensionCandidatesPage = z.infer<typeof adminExtensionCandidatesPageSchema>;
+
+/**
+ * `POST /admin/order-extensions` (A-ORD-03 «Продлить на N минут»):
+ * the answer deadline of each order moves by `minutes`, with one reason for
+ * all. Each order carries the version the administrator saw: an order that
+ * changed meanwhile (accepted in the cabinet, cancelled, expired) is
+ * skipped, not extended over.
+ */
+export const adminExtendOrdersBodySchema = z.object({
+  orders: z
+    .array(z.object({ orderId: z.uuid(), expectedVersion: expectedVersionSchema }))
+    .min(1)
+    .max(ORDER_EXTENSION_BATCH_LIMIT)
+    .refine((orders) => new Set(orders.map((order) => order.orderId)).size === orders.length, {
+      message: "Each order once",
+    }),
+  minutes: extensionMinutesSchema,
+  reason: freeText(ORDER_REASON_MAX_LENGTH),
+});
+
+export type AdminExtendOrdersBody = z.infer<typeof adminExtendOrdersBodySchema>;
+
+/**
+ * Why an order of «Продлить все» was left as it was: `changed` — its
+ * version is not the one seen; `not_waiting` — it no longer waits for an
+ * answer (accepted, declined, cancelled); `expired` — its deadline had
+ * passed; `not_found` — there is no such order.
+ */
+export const orderExtensionSkipReasonSchema = z.enum([
+  "changed",
+  "not_waiting",
+  "expired",
+  "not_found",
+]);
+
+export const adminExtendOrdersResponseSchema = z.object({
+  extended: z.array(
+    z.object({
+      orderId: z.uuid(),
+      number: z.number().int(),
+      version: z.number().int(),
+      respondBy: z.iso.datetime(),
+    }),
+  ),
+  skipped: z.array(
+    z.object({
+      orderId: z.uuid(),
+      number: z.number().int().nullable(),
+      status: orderStatusSchema.nullable(),
+      reason: orderExtensionSkipReasonSchema,
+    }),
+  ),
+});
+
+export type AdminExtendOrdersResponse = z.infer<typeof adminExtendOrdersResponseSchema>;
 
 /**
  * A-ORD-01: by status, supplier, period of creation (`from` inclusive,

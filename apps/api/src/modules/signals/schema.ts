@@ -1,4 +1,9 @@
-import type { AdminSignalKind, AdminSignalPayload, AdminSignalStatus } from "@adclub/contracts";
+import type {
+  AdminSignalKind,
+  AdminSignalPayload,
+  AdminSignalStatus,
+  AdminSignalSubject,
+} from "@adclub/contracts";
 import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
@@ -11,13 +16,15 @@ import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-c
 export const adminSignal = pgTable("admin_signal", {
   id: uuid("id").primaryKey().defaultRandom(),
   kind: text("kind").$type<AdminSignalKind>().notNull(),
-  subjectType: text("subject_type").$type<"order" | "supplier">().notNull(),
+  subjectType: text("subject_type").$type<AdminSignalSubject>().notNull(),
   subjectId: uuid("subject_id").notNull(),
   status: text("status").$type<AdminSignalStatus>().notNull().default("open"),
   payload: jsonb("payload").$type<AdminSignalPayload>().notNull().default({}),
   times: integer("times").notNull().default(1),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  /** When it was closed (TASK-025: the outage of the channel closes itself); `null` — it is not. */
+  closedAt: timestamp("closed_at", { withTimezone: true }),
 });
 
 export type AdminSignalRow = typeof adminSignal.$inferSelect;

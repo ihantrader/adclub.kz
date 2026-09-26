@@ -335,6 +335,30 @@ const notifications = group({
       description:
         "Доля ошибок доставки WhatsApp в окне, при которой администратор получает сигнал о сбое.",
     }),
+    whatsapp_outage_min_failures: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 3,
+      description:
+        "Сколько недошедших уведомлений о заявках в окне нужно, чтобы доля ошибок считалась сбоем канала: одна-две неудачи ещё не сбой.",
+    }),
+    whatsapp_outage_delivery_timeout_minutes: define.duration({
+      unit: "minutes",
+      min: 1,
+      max: 1440,
+      default: 10,
+      description:
+        "Через сколько минут уведомление о заявке, которое всё ещё в очереди или отправлено, но не подтверждено как доставленное, считается недошедшим (детектор сбоя).",
+    }),
+    order_button_valid_hours: define.duration({
+      unit: "hours",
+      min: 1,
+      max: 720,
+      default: 72,
+      description:
+        "Сколько часов после отправки действуют кнопки «Подтвердить» и «Отказать» уведомления о заявке; позже нажатие не применяется.",
+    }),
     moderation_digest_hour: define.integer({
       unit: "hour_of_day",
       min: 0,

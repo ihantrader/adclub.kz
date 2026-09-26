@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { DbExecutor } from "../../database";
 import type { MessageFailureKind } from "./message-channel";
+import type { MessageTemplateKey } from "./message-templates";
 
 /**
  * What a module tells messaging about the thing its messages are about
@@ -28,12 +29,23 @@ export type MessageOutcome =
   | { kind: "cancelled" }
   | { kind: "unknown"; reason: string };
 
+/** What a subject is told about the message it is asked about. */
+export interface MessageFacts {
+  template: MessageTemplateKey;
+  /** The recipient, E.164. */
+  phone: string;
+  /** The key the owning module built from its event (`Messaging.enqueue`). */
+  dedupeKey: string;
+}
+
 export interface MessageSubject {
   /**
    * `false` — the message is cancelled and nothing is sent. Called with the
-   * subject's id; `null` when the message names no subject row.
+   * subject's id (`null` when the message names no subject row) and the
+   * message's template and recipient: one subject (an order) has messages of
+   * several kinds to several people (TASK-025).
    */
-  stillSend(tx: DbExecutor, subjectId: string | null): Promise<boolean>;
+  stillSend(tx: DbExecutor, subjectId: string | null, message: MessageFacts): Promise<boolean>;
   onResult(tx: DbExecutor, subjectId: string | null, outcome: MessageOutcome): Promise<void>;
 }
 
@@ -58,9 +70,14 @@ export class MessageSubjects {
     return this.subjects.get(type);
   }
 
-  async stillSend(tx: DbExecutor, type: string, subjectId: string | null): Promise<boolean> {
+  async stillSend(
+    tx: DbExecutor,
+    type: string,
+    subjectId: string | null,
+    message: MessageFacts,
+  ): Promise<boolean> {
     const subject = this.subjects.get(type);
-    return subject ? subject.stillSend(tx, subjectId) : true;
+    return subject ? subject.stillSend(tx, subjectId, message) : true;
   }
 
   async onResult(

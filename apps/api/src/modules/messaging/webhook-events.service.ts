@@ -6,6 +6,7 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue, type Sweeper, type SweepResult } from "../../jobs";
 import { Metrics, sanitizeForLog } from "../../observability";
 import { AppSettings } from "../settings";
+import { applyButtonPressJob } from "./button-presses";
 import { applyWebhookEventJob } from "./message-jobs";
 import { Messaging, type DeliveryStatus } from "./messaging.service";
 import { messageTemplates } from "./message-templates";
@@ -376,8 +377,10 @@ export class WebhookEvents {
       count("button:repeated");
       return false;
     }
-    // Stored and linked; **nothing is done about the order** — that is
-    // TASK-025, which reads the presses that have no `applied_at`.
+    // Stored and linked; what it means is decided out of this transaction's
+    // way, by the module that owns the button (`ButtonPressApplier`,
+    // TASK-025). Queued here, so a press exists if and only if its job does.
+    await this.queue.enqueue(applyButtonPressJob, { pressId: stored.id }, { tx });
     this.logger.log(
       `Button press stored press=${stored.id} message=${related?.id ?? "unknown"} from=${maskPhone(fromPhone)}`,
     );
@@ -387,9 +390,9 @@ export class WebhookEvents {
 }
 
 /**
- * The name of the button a payload names. Payloads of TASK-025 carry the
- * action first (`confirm:<order>:<signature>`); a payload we cannot read is
- * stored with no name rather than guessed at.
+ * The name of the button a payload names. Signed payloads carry the button
+ * first (`confirm:<order>:<employee>:<expiry>:<signature>`, `ButtonPayloads`);
+ * a payload we cannot read is stored with no name rather than guessed at.
  */
 function buttonNameOf(payload: string): string | null {
   const head = payload.split(":")[0] ?? "";

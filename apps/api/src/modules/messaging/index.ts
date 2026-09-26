@@ -32,8 +32,12 @@ export type {
 export { deliveryTransition, MessageNotFoundError, Messaging } from "./messaging.service";
 export type { DeliveryStatus, QueuedMessage, QueueMessageInput } from "./messaging.service";
 export { MessageSubjects } from "./message-subjects";
-export type { MessageOutcome, MessageSubject } from "./message-subjects";
+export type { MessageFacts, MessageOutcome, MessageSubject } from "./message-subjects";
 export { MessageSender } from "./message-sender";
+export { BUTTON_PAYLOAD_MAX_LENGTH, ButtonPayloads } from "./button-payloads";
+export type { ButtonPayloadReading } from "./button-payloads";
+export { applyButtonPressJob, ButtonPressApplier, ButtonPressHandlers } from "./button-presses";
+export type { ButtonPressContext, ButtonPressHandler } from "./button-presses";
 export {
   applyWebhookEventJob,
   messageRecoveryJob,
@@ -54,5 +58,10 @@ export {
   webhookSignatureHeader,
 } from "./webhook-signature";
 export { DEV_MESSAGES_PATH } from "./dev-messages.controller";
-export { messagingTables, outboundMessage } from "./schema";
-export type { MessageStatus, OutboundMessageRow } from "./schema";
+export { messageButtonPress, messagingTables, outboundMessage } from "./schema";
+export type {
+  ButtonPressOutcome,
+  MessageButtonPressRow,
+  MessageStatus,
+  OutboundMessageRow,
+} from "./schema";

@@ -10,6 +10,8 @@ import { DatabaseService } from "../../database";
 import { JobRegistry } from "../../jobs";
 import { Metrics } from "../../observability";
 import { AppSettings } from "../settings";
+import { ButtonPayloads } from "./button-payloads";
+import { applyButtonPressJob, ButtonPressApplier, ButtonPressHandlers } from "./button-presses";
 import { DevMessageOutbox, DevMessagesController } from "./dev-messages.controller";
 import { MessageChannel } from "./message-channel";
 import {
@@ -113,6 +115,8 @@ export class MessagingModule {
       providers: [
         ...channelProviders(config),
         MessageSubjects,
+        ButtonPressHandlers,
+        ButtonPayloads,
         Messaging,
         MessagingAdmin,
         WebhookEvents,
@@ -120,7 +124,15 @@ export class MessagingModule {
         ...(options.metrics ? [MessageMetrics] : []),
         ...(options.http && devPage ? [DevMessageOutbox] : []),
       ],
-      exports: [Messaging, MessageSubjects, MessageChannel, MessagingAdmin, WebhookEvents],
+      exports: [
+        Messaging,
+        MessageSubjects,
+        ButtonPressHandlers,
+        ButtonPayloads,
+        MessageChannel,
+        MessagingAdmin,
+        WebhookEvents,
+      ],
     };
   }
 }
@@ -164,12 +176,13 @@ function channelProviders(config: AppConfig) {
 }
 
 /** The messaging jobs, for the worker process. */
-@Module({ providers: [MessageSender, WebhookEventApplier] })
+@Module({ providers: [MessageSender, WebhookEventApplier, ButtonPressApplier] })
 export class MessagingJobsModule implements OnModuleInit {
   constructor(
     @Inject(JobRegistry) private readonly registry: JobRegistry,
     @Inject(MessageSender) private readonly sender: MessageSender,
     @Inject(WebhookEventApplier) private readonly applier: WebhookEventApplier,
+    @Inject(ButtonPressApplier) private readonly presses: ButtonPressApplier,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(MessageSubjects) private readonly subjects: MessageSubjects,
@@ -178,6 +191,7 @@ export class MessagingJobsModule implements OnModuleInit {
   onModuleInit(): void {
     this.registry.handle(sendMessageJob, this.sender);
     this.registry.handle(applyWebhookEventJob, this.applier);
+    this.registry.handle(applyButtonPressJob, this.presses);
     this.registry.sweep(
       webhookEventCleanupJob,
       new WebhookEventCleanup(this.database, this.settings),

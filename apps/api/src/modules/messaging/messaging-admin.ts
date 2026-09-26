@@ -117,7 +117,14 @@ export class MessagingAdmin {
     messageId?: string;
     providerMessageId?: string;
     status?: string;
+    /**
+     * A press: the name of a quick reply of the message (`confirm`,
+     * `decline`) — the payload the message was sent with and, as the sender,
+     * the number it was sent to; or a raw payload (anything with a `:`).
+     */
     button?: string;
+    /** The sender of the press instead of the recipient (a press from another number). */
+    from?: string;
     twice?: boolean;
     badSignature?: boolean;
   }): Promise<unknown> {
@@ -125,8 +132,9 @@ export class MessagingAdmin {
       throw new MessagingCommandError("dev:messages:webhook runs in development and test only");
     }
     let providerMessageId = input.providerMessageId;
-    if (!providerMessageId && input.messageId) {
-      const row = await this.messaging.byId(input.messageId);
+    let row: Awaited<ReturnType<Messaging["byId"]>>;
+    if (input.messageId) {
+      row = await this.messaging.byId(input.messageId);
       if (!row) {
         throw new MessagingCommandError(`There is no message ${input.messageId}`);
       }
@@ -135,22 +143,33 @@ export class MessagingAdmin {
           `The message ${input.messageId} has no provider id yet (it is ${row.status})`,
         );
       }
-      providerMessageId = row.providerMessageId;
+      providerMessageId ??= row.providerMessageId;
     }
     if (!providerMessageId) {
       throw new MessagingCommandError("Give --message <id> or --provider-message-id <wamid>");
     }
+    let payload = input.button;
+    if (payload !== undefined && !payload.includes(":")) {
+      const signed = row?.buttonPayloads?.[payload];
+      if (!signed) {
+        throw new MessagingCommandError(
+          `The message has no button ${payload}; give a raw payload (with a ":") instead`,
+        );
+      }
+      payload = signed;
+    }
+    const from = (input.from ?? row?.phone ?? "+77055550101").replace(/^\+/, "");
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const value = input.button
+    const value = payload
       ? {
           messaging_product: "whatsapp",
           messages: [
             {
-              id: `wamid.DEVBUTTON${String(Date.now())}`,
-              from: "77055550101",
+              id: `wamid.DEVBUTTON${String(Date.now())}${String(Math.random()).slice(2, 8)}`,
+              from,
               type: "button",
               timestamp,
-              button: { payload: input.button, text: input.button },
+              button: { payload, text: input.button },
               context: { id: providerMessageId },
             },
           ],

@@ -131,7 +131,8 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                worked through the funnel, plus a new request
  *                                (TASK-016); idempotent
  *   dev:messages:webhook --message <id> [--status delivered|read|sent|failed]
- *                        [--button <payload>] [--twice] [--bad-signature]
+ *                        [--button confirm|decline|<payload>] [--from <phone>]
+ *                        [--twice] [--bad-signature]
  *                                send this deployment a webhook of the provider,
  *                                signed with the configured app secret, to its own
  *                                address: the signature check, the receipt, the
@@ -212,7 +213,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:vehicles:seed
   dev:compatibility:seed
   dev:suppliers:seed
-  dev:messages:webhook --message <id> [--status <status>] [--button <payload>] [--twice] [--bad-signature]
+  dev:messages:webhook --message <id> [--status <status>] [--button confirm|decline|<payload>] [--from <phone>] [--twice] [--bad-signature]
   dev:jobs:fail [--note <text>] [--on-query]`;
 
 function required(value: string | undefined, what: string): string {
@@ -330,6 +331,7 @@ async function run(
       message: { type: "string" },
       "provider-message-id": { type: "string" },
       button: { type: "string" },
+      from: { type: "string" },
       twice: { type: "boolean" },
       "bad-signature": { type: "boolean" },
     },
@@ -400,6 +402,7 @@ async function run(
           : { providerMessageId: values["provider-message-id"] }),
         ...(values.status === undefined ? {} : { status: values.status }),
         ...(values.button === undefined ? {} : { button: values.button }),
+        ...(values.from === undefined ? {} : { from: values.from }),
         twice: values.twice === true,
         badSignature: values["bad-signature"] === true,
       });

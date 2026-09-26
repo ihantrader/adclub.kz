@@ -1,6 +1,9 @@
 import { Body, Controller, Headers, Inject, Param, Query, Res } from "@nestjs/common";
 import {
   adminCloseOrderBodySchema,
+  adminExtendOrderDeadlineBodySchema,
+  adminExtendOrdersBodySchema,
+  adminExtensionCandidatesQuerySchema,
   adminDisciplineListQuerySchema,
   adminDisciplineUsersQuerySchema,
   adminOrderListQuerySchema,
@@ -17,6 +20,11 @@ import {
   userOrderListQuerySchema,
   type ActiveOrdersResponse,
   type AdminCloseOrderBody,
+  type AdminExtendOrderDeadlineBody,
+  type AdminExtendOrdersBody,
+  type AdminExtendOrdersResponse,
+  type AdminExtensionCandidatesPage,
+  type AdminExtensionCandidatesQuery,
   type AdminDisciplineListQuery,
   type AdminDisciplineMarkResponse,
   type AdminDisciplinePage,
@@ -287,8 +295,9 @@ function adminActor(session: AuthenticatedSession): { accountId: string; adminId
 
 /**
  * Any order for the administrator (context `admin`; A-ORD-01, A-ORD-02):
- * reading, and the one manual action of this task — closing a disputed
- * order without a code, with a reason (D-043).
+ * reading, closing a disputed order without a code, with a reason (D-043),
+ * and (TASK-025) extending the deadlines of orders by hand, one or many,
+ * with a reason (A-ORD-02, A-ORD-03).
  */
 @Controller()
 export class AdminOrdersController {
@@ -326,6 +335,40 @@ export class AdminOrdersController {
         pickLanguage(acceptLanguage),
       ),
     };
+  }
+
+  @SessionRoute(apiRoutes.extendAdminOrderDeadline)
+  async extend(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(adminExtendOrderDeadlineBodySchema))
+    body: AdminExtendOrderDeadlineBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminOrderResponse> {
+    return {
+      order: await this.orders.adminExtend(
+        adminActor(session),
+        params.orderId,
+        body,
+        pickLanguage(acceptLanguage),
+      ),
+    };
+  }
+
+  @SessionRoute(apiRoutes.listAdminExtensionCandidates)
+  candidates(
+    @Query(new ZodValidationPipe(adminExtensionCandidatesQuerySchema))
+    query: AdminExtensionCandidatesQuery,
+  ): Promise<AdminExtensionCandidatesPage> {
+    return this.orders.extensionCandidates(query);
+  }
+
+  @SessionRoute(apiRoutes.extendAdminOrderDeadlines)
+  extendMany(
+    @Body(new ZodValidationPipe(adminExtendOrdersBodySchema)) body: AdminExtendOrdersBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminExtendOrdersResponse> {
+    return this.orders.adminExtendMany(adminActor(session), body);
   }
 }
 

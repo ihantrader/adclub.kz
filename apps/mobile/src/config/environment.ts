@@ -1,11 +1,14 @@
 import type { ClientInfo } from "@adclub/contracts";
-import { pickLanguage, type Lang } from "@adclub/i18n";
+import type { Lang } from "@adclub/i18n";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { supportedSystemLanguage } from "../start/start-decision";
 import { resolveApiUrl } from "./api-url";
 
 /** Store version from app.json — what the minimum-version policy compares against. */
 const appVersion = Constants.expoConfig?.version ?? "0.0.0";
+
+export const appInfo = { version: appVersion } as const;
 
 /**
  * The app targets iOS and Android only; `expo start --web` (a dev
@@ -29,5 +32,9 @@ function deviceLocale(): string | undefined {
   }
 }
 
-/** Interface language: the device locale if it's kk/ru/en, otherwise Russian. */
-export const language: Lang = pickLanguage(deviceLocale());
+/**
+ * The device language when it is one of ours (kk/ru/en), otherwise `null` —
+ * then the app asks (M-START-02). The choice itself lives in
+ * `languageStore`; this is only what the system says.
+ */
+export const systemLanguage: Lang | null = supportedSystemLanguage(deviceLocale());

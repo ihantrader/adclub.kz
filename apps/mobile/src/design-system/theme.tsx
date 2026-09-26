@@ -73,7 +73,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const reduceMotion = useReduceMotion();
 
   useEffect(() => {
-    Appearance.setColorScheme(mode === "system" ? "unspecified" : mode);
+    // Not every runtime has it (`expo start --web`, used to look at screens
+    // on this machine, does not) — there the OS scheme simply stays.
+    Appearance.setColorScheme?.(mode === "system" ? "unspecified" : mode);
   }, [mode]);
 
   useEffect(() => {

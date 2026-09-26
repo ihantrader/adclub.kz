@@ -1,0 +1,67 @@
+{
+  "$about": "Қазақша. ВНИМАНИЕ: перевод сделан coding-agent'ом и НЕ ПОДТВЕРЖДЁН НОСИТЕЛЕМ ЯЗЫКА (TASK-027, как и казахские тексты прошлых задач). Проверка носителем — отдельной задачей; до неё тексты считаются черновыми.",
+
+  "common.retry": "Қайталау",
+  "common.close": "Жабу",
+  "common.back": "Артқа",
+  "common.change": "Өзгерту",
+  "common.loading": "Жүктелуде",
+
+  "tabs.catalog": "Каталог",
+  "tabs.orders": "Өтінімдер",
+  "tabs.garage": "Гараж",
+  "tabs.profile": "Профиль",
+
+  "start.chooseLanguage": "Тілді таңдаңыз · Выберите язык · Choose language",
+  "language.kk": "Қазақша",
+  "language.ru": "Русский",
+  "language.en": "English",
+
+  "state.offline": "Желі жоқ",
+  "state.offlineText": "Қосылымды тексеріңіз — сосын бәрін жүктеп береміз",
+  "state.offlineOrders": "Менің белсенді өтінімдерім",
+  "state.errorTitle": "Жүктеу мүмкін болмады",
+  "state.errorText": "Қайтадан көріңіз",
+
+  "update.title": "Қолданбаны жаңарту қажет",
+  "update.fallbackMessage": "Бұл нұсқа бұдан былай қолдау көрсетілмейді. App Store немесе Google Play дүкенін ашып, қолданбаны жаңартыңыз",
+  "update.openIos": "App Store дүкенін ашыңыз",
+  "update.openAndroid": "Google Play дүкенін ашыңыз",
+  "update.checkAgain": "Қайта тексеру",
+  "update.activeOrders": "Белсенді өтінімдерді көрсету",
+
+  "city.firstRunTitle": "Қай жерде тұрасыз?",
+  "city.firstRunText": "Жақын жердегі жеткізушілер мен қызметтерді көрсетеміз. Тауарлар Қазақстанның барлық аумағында қолжетімді",
+  "city.detect": "Автоматты анықтау",
+  "city.detectHint": "Қалаңыздағы жеткізушілер мен қызметтерді көрсету үшін",
+  "city.detecting": "Қала анықталуда",
+  "city.chooseFromList": "Тізімнен таңдау",
+  "city.title": "Қаланы таңдаңыз",
+  "city.all": "Бүкіл Қазақстан",
+  "city.searchLabel": "Қаланы іздеу",
+  "city.searchEmpty": "Қала табылмады",
+  "city.servicesNote": "Қызметтер тек таңдалған қала бойынша көрсетіледі",
+  "city.detectFailed": "Қаланы анықтау мүмкін болмады. Оны тізімнен таңдаңыз",
+  "city.detectUnknown": "Сіздің қала тізімде әзірге жоқ. «Бүкіл Қазақстан» таңдалды",
+  "city.openSettings": "Параметрлерді ашу",
+  "city.loadError": "Қалалар тізімін жүктеу мүмкін болмады",
+  "city.listEmpty": "Қалалар тізімі әзірге бос",
+  "city.continueWithAll": "«Бүкіл Қазақстан» таңдап жалғастыру",
+
+  "catalog.emptyTitle": "Каталог жақында ашылады",
+  "catalog.emptyText": "Мұнда жеткізушілердің клубтық бағалары көрсетіледі — қалаңыз бен автомобиліңіз бойынша",
+
+  "orders.guestEmptyTitle": "Мұнда сіздің өтінімдеріңіз және тауар алу кодтары болады",
+
+  "garage.emptyTitle": "Автомобиль қосыңыз — каталог тек сәйкес келетінін көрсетеді",
+
+  "profile.guestTitle": "Кіріңіз немесе тіркеліңіз",
+  "profile.guestText": "Телефон нөмірі бойынша, парольсіз. Автомобильдеріңіз сақталады",
+  "profile.city": "Қала",
+  "profile.language": "Интерфейс тілі",
+  "profile.appearance": "Безендіру",
+  "profile.appearanceDark": "Қараңғы",
+  "profile.appearanceLight": "Ашық",
+  "profile.appearanceSystem": "Жүйе бойынша",
+  "profile.version": "Қолданба нұсқасы"
+}

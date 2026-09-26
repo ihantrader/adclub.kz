@@ -1,0 +1,67 @@
+{
+  "$about": "Тексты экранов мобильного приложения (TASK-027). Русский — рабочие формулировки SCREENS.md 5.1, 5.6, 8.1–8.3 и раздела 2; где SCREENS.md текста не задаёт (пустые состояния каркасов, ошибки загрузки городов), текст рабочий и утверждается вместе с экраном.",
+
+  "common.retry": "Повторить",
+  "common.close": "Закрыть",
+  "common.back": "Назад",
+  "common.change": "Изменить",
+  "common.loading": "Загружаем",
+
+  "tabs.catalog": "Каталог",
+  "tabs.orders": "Заявки",
+  "tabs.garage": "Гараж",
+  "tabs.profile": "Профиль",
+
+  "start.chooseLanguage": "Тілді таңдаңыз · Выберите язык · Choose language",
+  "language.kk": "Қазақша",
+  "language.ru": "Русский",
+  "language.en": "English",
+
+  "state.offline": "Нет сети",
+  "state.offlineText": "Проверьте подключение — и мы всё загрузим",
+  "state.offlineOrders": "Мои активные заявки",
+  "state.errorTitle": "Не удалось загрузить",
+  "state.errorText": "Попробуйте ещё раз",
+
+  "update.title": "Нужно обновить приложение",
+  "update.fallbackMessage": "Эта версия больше не поддерживается. Откройте App Store или Google Play и обновите приложение",
+  "update.openIos": "Откройте App Store",
+  "update.openAndroid": "Откройте Google Play",
+  "update.checkAgain": "Проверить снова",
+  "update.activeOrders": "Показать активные заявки",
+
+  "city.firstRunTitle": "Где вы находитесь?",
+  "city.firstRunText": "Покажем поставщиков и услуги рядом. Товары доступны по всему Казахстану",
+  "city.detect": "Определить автоматически",
+  "city.detectHint": "Чтобы показать поставщиков и услуги в вашем городе",
+  "city.detecting": "Определяем город",
+  "city.chooseFromList": "Выбрать из списка",
+  "city.title": "Выберите город",
+  "city.all": "Весь Казахстан",
+  "city.searchLabel": "Поиск города",
+  "city.searchEmpty": "Город не найден",
+  "city.servicesNote": "Услуги показываются только по выбранному городу",
+  "city.detectFailed": "Не удалось определить город. Выберите его из списка",
+  "city.detectUnknown": "Вашего города пока нет в списке. Выбран «Весь Казахстан»",
+  "city.openSettings": "Открыть настройки",
+  "city.loadError": "Не удалось загрузить список городов",
+  "city.listEmpty": "Список городов пока пуст",
+  "city.continueWithAll": "Продолжить с «Весь Казахстан»",
+
+  "catalog.emptyTitle": "Каталог скоро откроется",
+  "catalog.emptyText": "Здесь появятся клубные цены поставщиков — по вашему городу и вашему автомобилю",
+
+  "orders.guestEmptyTitle": "Здесь будут ваши заявки и коды для получения",
+
+  "garage.emptyTitle": "Добавьте автомобиль — каталог покажет только подходящее",
+
+  "profile.guestTitle": "Войдите или зарегистрируйтесь",
+  "profile.guestText": "По номеру телефона, без пароля. Ваши автомобили сохранятся",
+  "profile.city": "Город",
+  "profile.language": "Язык интерфейса",
+  "profile.appearance": "Оформление",
+  "profile.appearanceDark": "Тёмная",
+  "profile.appearanceLight": "Светлая",
+  "profile.appearanceSystem": "Как в системе",
+  "profile.version": "Версия приложения"
+}

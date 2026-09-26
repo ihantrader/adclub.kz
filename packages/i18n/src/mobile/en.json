@@ -1,0 +1,67 @@
+{
+  "$about": "English. Translated by the coding agent from the Russian working texts (TASK-027); not reviewed by a native speaker.",
+
+  "common.retry": "Retry",
+  "common.close": "Close",
+  "common.back": "Back",
+  "common.change": "Change",
+  "common.loading": "Loading",
+
+  "tabs.catalog": "Catalog",
+  "tabs.orders": "Orders",
+  "tabs.garage": "Garage",
+  "tabs.profile": "Profile",
+
+  "start.chooseLanguage": "Тілді таңдаңыз · Выберите язык · Choose language",
+  "language.kk": "Қазақша",
+  "language.ru": "Русский",
+  "language.en": "English",
+
+  "state.offline": "No connection",
+  "state.offlineText": "Check your connection and we'll load everything",
+  "state.offlineOrders": "My active orders",
+  "state.errorTitle": "Could not load this",
+  "state.errorText": "Please try again",
+
+  "update.title": "The app needs an update",
+  "update.fallbackMessage": "This version is no longer supported. Open the App Store or Google Play and update the app",
+  "update.openIos": "Open the App Store",
+  "update.openAndroid": "Open Google Play",
+  "update.checkAgain": "Check again",
+  "update.activeOrders": "Show active orders",
+
+  "city.firstRunTitle": "Where are you?",
+  "city.firstRunText": "We'll show suppliers and services nearby. Goods are available across Kazakhstan",
+  "city.detect": "Detect automatically",
+  "city.detectHint": "So we can show suppliers and services in your city",
+  "city.detecting": "Detecting your city",
+  "city.chooseFromList": "Choose from the list",
+  "city.title": "Choose your city",
+  "city.all": "All Kazakhstan",
+  "city.searchLabel": "Search for a city",
+  "city.searchEmpty": "No city found",
+  "city.servicesNote": "Services are shown for the selected city only",
+  "city.detectFailed": "We could not detect your city. Please choose it from the list",
+  "city.detectUnknown": "Your city is not on the list yet. “All Kazakhstan” is selected",
+  "city.openSettings": "Open settings",
+  "city.loadError": "Could not load the list of cities",
+  "city.listEmpty": "The list of cities is empty for now",
+  "city.continueWithAll": "Continue with “All Kazakhstan”",
+
+  "catalog.emptyTitle": "The catalog opens soon",
+  "catalog.emptyText": "Club prices from suppliers will appear here — for your city and your car",
+
+  "orders.guestEmptyTitle": "Your orders and pickup codes will be here",
+
+  "garage.emptyTitle": "Add a car and the catalog will show only what fits",
+
+  "profile.guestTitle": "Sign in or sign up",
+  "profile.guestText": "By phone number, no password. Your cars will be kept",
+  "profile.city": "City",
+  "profile.language": "Interface language",
+  "profile.appearance": "Appearance",
+  "profile.appearanceDark": "Dark",
+  "profile.appearanceLight": "Light",
+  "profile.appearanceSystem": "Match system",
+  "profile.version": "App version"
+}

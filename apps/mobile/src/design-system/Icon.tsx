@@ -7,18 +7,23 @@ import IconCar from "@tabler/icons-react-native/IconCar";
 import IconCategory from "@tabler/icons-react-native/IconCategory";
 import IconCheck from "@tabler/icons-react-native/IconCheck";
 import IconChecklist from "@tabler/icons-react-native/IconChecklist";
+import IconChevronDown from "@tabler/icons-react-native/IconChevronDown";
 import IconChevronRight from "@tabler/icons-react-native/IconChevronRight";
 import IconCircleCheck from "@tabler/icons-react-native/IconCircleCheck";
 import IconCircleX from "@tabler/icons-react-native/IconCircleX";
 import IconClock from "@tabler/icons-react-native/IconClock";
+import IconContrast from "@tabler/icons-react-native/IconContrast";
 import IconCopy from "@tabler/icons-react-native/IconCopy";
 import IconDots from "@tabler/icons-react-native/IconDots";
 import IconFileSpreadsheet from "@tabler/icons-react-native/IconFileSpreadsheet";
 import IconHelpCircle from "@tabler/icons-react-native/IconHelpCircle";
 import IconInfoCircle from "@tabler/icons-react-native/IconInfoCircle";
+import IconLanguage from "@tabler/icons-react-native/IconLanguage";
 import IconLock from "@tabler/icons-react-native/IconLock";
+import IconMapPin from "@tabler/icons-react-native/IconMapPin";
 import IconMinus from "@tabler/icons-react-native/IconMinus";
 import IconMoon from "@tabler/icons-react-native/IconMoon";
+import IconCurrentLocation from "@tabler/icons-react-native/IconCurrentLocation";
 import IconPackage from "@tabler/icons-react-native/IconPackage";
 import IconPlus from "@tabler/icons-react-native/IconPlus";
 import IconProgressCheck from "@tabler/icons-react-native/IconProgressCheck";
@@ -48,18 +53,23 @@ export const icons = {
   category: IconCategory,
   check: IconCheck,
   checklist: IconChecklist,
+  chevronDown: IconChevronDown,
   chevronRight: IconChevronRight,
   circleCheck: IconCircleCheck,
   circleX: IconCircleX,
   clock: IconClock,
+  contrast: IconContrast,
   copy: IconCopy,
   dots: IconDots,
   fileSpreadsheet: IconFileSpreadsheet,
   helpCircle: IconHelpCircle,
   info: IconInfoCircle,
+  language: IconLanguage,
   lock: IconLock,
+  mapPin: IconMapPin,
   minus: IconMinus,
   moon: IconMoon,
+  myLocation: IconCurrentLocation,
   package: IconPackage,
   plus: IconPlus,
   progressCheck: IconProgressCheck,

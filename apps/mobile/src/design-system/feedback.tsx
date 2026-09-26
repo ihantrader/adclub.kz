@@ -10,6 +10,7 @@ import {
 } from "@adclub/ui-core";
 import {
   createContext,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -22,7 +23,6 @@ import {
   AccessibilityInfo,
   Animated,
   Dimensions,
-  Easing,
   Modal,
   PanResponder,
   Pressable,
@@ -35,6 +35,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import { animateTo, useMotionPlan, useOverlayTransition } from "./motion";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -88,41 +89,71 @@ function floatStyle(name: "dark" | "light"): ViewStyle {
   return { boxShadow: shadow.css };
 }
 
+/**
+ * Keeps showing what an overlay showed while it was open, for as long as it
+ * is going away. What is behind a closing sheet or dialog is usually the
+ * state that closed it — the language just chosen, the level just cleared —
+ * and an overlay that redrew itself with it would change under the eyes
+ * while it slides or fades out. Only the props are held: a component inside
+ * still follows its own context.
+ */
+const Held = memo(
+  function Held({ children }: { children: ReactNode; hold: boolean }) {
+    return <>{children}</>;
+  },
+  (_previous, next) => next.hold,
+);
+
 /** Confirmations only ("Код скопирован"), 4 s; errors stay in the screen (7.7). */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; visible: boolean }>({
+    text: "",
+    visible: false,
+  });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const show = useCallback((text: string) => {
     clearTimeout(timer.current);
-    setMessage(text);
+    setToast({ text, visible: true });
     AccessibilityInfo.announceForAccessibility(text);
-    timer.current = setTimeout(() => setMessage(null), motion.toast);
+    // The text stays while the toast fades out: only `visible` goes down.
+    timer.current = setTimeout(
+      () => setToast((current) => ({ ...current, visible: false })),
+      motion.toast,
+    );
   }, []);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   return (
     <ToastContext.Provider value={{ show }}>
       {children}
-      {message !== null && (
-        <View
-          pointerEvents="none"
-          accessibilityLiveRegion="polite"
-          style={[
-            styles.toast,
-            { bottom: insets.bottom + 96, backgroundColor: theme.colors.toast },
-            floatStyle(theme.name),
-          ]}
-        >
-          <Icon name="circleCheck" size={20} colorValue={theme.colors.onToast} />
-          <Text variant="bodyS" style={[styles.flex, { color: theme.colors.onToast }]}>
-            {message}
-          </Text>
-        </View>
-      )}
+      <ToastView text={toast.text} visible={toast.visible} />
     </ToastContext.Provider>
+  );
+}
+
+/** The toast itself: it fades in and out over 150 ms (DESIGN 7.6) — opacity alone, so also with reduced motion. */
+function ToastView({ text, visible }: { text: string; visible: boolean }) {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const plan = useMotionPlan("appear");
+  const { progress, mounted } = useOverlayTransition(visible, plan);
+  if (!mounted) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      style={[
+        styles.toast,
+        { bottom: insets.bottom + 96, backgroundColor: theme.colors.toast, opacity: progress },
+        floatStyle(theme.name),
+      ]}
+    >
+      <Icon name="circleCheck" size={20} colorValue={theme.colors.onToast} />
+      <Text variant="bodyS" style={[styles.flex, { color: theme.colors.onToast }]}>
+        {text}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -265,6 +296,13 @@ export interface SheetProps {
   closeLabel: string;
   /** A required action: no closing by swipe or tapping the scrim. */
   required?: boolean;
+  /**
+   * Called once when the sheet has finished going away. An action that
+   * belongs to closing it — going to another screen, deleting what was
+   * chosen — waits for this (`useAfterDismiss`) instead of running while the
+   * sheet is still sliding down.
+   */
+  onDismissed?: () => void;
   children: ReactNode;
 }
 
@@ -272,61 +310,42 @@ export interface SheetProps {
  * Bottom sheet: surface, radius 12 on top, handle 36 × 4, padding 16, scrim
  * below (DESIGN 7.7).
  *
- * The motion is the component's own (`sheetMotion`, DESIGN 7.6) and not the
+ * The motion is the rule's (`sheetMotion`, DESIGN 7.6) and not the
  * platform's: `Modal animationType="slide"` moves the **whole** window, so
  * the scrim travelled up from the bottom edge together with the sheet. Here
  * the scrim is what it is meant to be — a layer under the sheet that only
  * changes opacity — while the sheet slides up over 250 ms with deceleration
  * at the end. With "reduce motion" nothing moves: both only fade. Closing
  * plays the same animation backwards, and the modal stays mounted until it
- * has finished, so there is no jump.
+ * has finished, so there is no jump; what the sheet shows stays as it was
+ * while it goes (`Held`), and a swipe down continues from where the finger
+ * let go.
  */
-export function Sheet({ visible, onClose, title, closeLabel, required, children }: SheetProps) {
+export function Sheet({
+  visible,
+  onClose,
+  onDismissed,
+  title,
+  closeLabel,
+  required,
+  children,
+}: SheetProps) {
   const { theme, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
-  const plan = sheetMotion(reduceMotion);
+  const rule = sheetMotion(reduceMotion);
+  const plan = useMotionPlan("sheet");
   // 0 — closed, 1 — open: the scrim's opacity and how far the sheet has travelled.
-  const [progress] = useState(() => new Animated.Value(0));
+  const { progress, mounted } = useOverlayTransition(visible, plan, onDismissed);
   const [drag] = useState(() => new Animated.Value(0));
   /** The sheet's own height: that is all it has to travel. */
   const [height, setHeight] = useState(0);
-  /**
-   * Keeps the modal on screen for one more animation after `visible` has
-   * gone false, so closing is not a jump. It is raised on the frame after
-   * the sheet is asked for and lowered when the closing animation ends. The
-   * modal's own `visible` is `visible || held`, so a sheet can never end up
-   * refusing to open: opening never waits for this flag.
-   */
-  const [held, setHeld] = useState(false);
 
+  // A sheet that opens starts where it belongs. Only opening resets it: on
+  // closing the sheet may have been swiped down, and putting it back before
+  // it leaves would be a jump up in front of the finger.
   useEffect(() => {
-    drag.setValue(0);
-    let animation: ReturnType<typeof Animated.timing> | null = null;
-    /*
-     * A frame later, not right now: the modal mounts its content after this
-     * effect, and the views the value was attached to before are detached
-     * then — and detaching an animated value stops whatever is driving it
-     * (`AnimatedValue.__detach`). Started in the same tick, the opening
-     * animation was killed a few frames in and the sheet stayed off screen.
-     */
-    const frame = requestAnimationFrame(() => {
-      if (visible) setHeld(true);
-      animation = Animated.timing(progress, {
-        toValue: visible ? 1 : 0,
-        duration: plan.durationMs,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      });
-      animation.start(({ finished }) => {
-        // Unmount only after the closing animation has played to the end.
-        if (finished && !visible) setHeld(false);
-      });
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      animation?.stop();
-    };
-  }, [visible, progress, drag, plan.durationMs]);
+    if (visible) drag.setValue(0);
+  }, [visible, drag]);
 
   const pan = useMemo(
     () =>
@@ -338,14 +357,13 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
             onClose();
             return;
           }
-          Animated.timing(drag, {
-            toValue: 0,
-            duration: motion.fast,
-            useNativeDriver: true,
-          }).start();
+          // Not far enough to close: back to its place — the same movement
+          // as the sheet's own, and nothing that slides when motion is reduced.
+          if (plan.moves) animateTo(drag, 0, plan).start();
+          else drag.setValue(0);
         },
       }),
-    [drag, onClose, required],
+    [drag, onClose, required, plan],
   );
 
   // Until the sheet is measured the window height keeps it off screen, so
@@ -356,14 +374,14 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
 
   return (
     <Modal
-      visible={visible || held}
+      visible={mounted}
       transparent
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={required ? () => undefined : onClose}
     >
-      <View style={styles.modalRoot}>
+      <View style={[styles.modalRoot, !visible && styles.leaving]}>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
           <Pressable
             style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.scrim }]}
@@ -382,8 +400,8 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
             {
               backgroundColor: theme.colors.surface,
               paddingBottom: insets.bottom + 16,
-              opacity: plan.sheetFades ? progress : 1,
-              transform: plan.sheetSlides
+              opacity: rule.sheetFades ? progress : 1,
+              transform: rule.sheetSlides
                 ? [{ translateY: Animated.add(slide, drag) }]
                 : [{ translateY: drag }],
             },
@@ -391,12 +409,14 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
           ]}
         >
           <View style={[styles.handle, { backgroundColor: theme.colors.borderField }]} />
-          {title && (
-            <Text variant="title" accessibilityRole="header" style={styles.sheetTitle}>
-              {title}
-            </Text>
-          )}
-          {children}
+          <Held hold={!visible}>
+            {title && (
+              <Text variant="title" accessibilityRole="header" style={styles.sheetTitle}>
+                {title}
+              </Text>
+            )}
+            {children}
+          </Held>
         </Animated.View>
       </View>
     </Modal>
@@ -406,34 +426,58 @@ export function Sheet({ visible, onClose, title, closeLabel, required, children 
 export interface DialogProps {
   visible: boolean;
   onClose: () => void;
+  /** Called once when the dialog has finished going away (see `SheetProps`). */
+  onDismissed?: () => void;
   title: ReactNode;
   children?: ReactNode;
   /** Buttons name the action ("Отменить заявку"), stacked (long Kazakh labels). */
   actions: ReactNode;
 }
 
-/** Confirmation of irreversible actions: surface, radius 12, width up to 320. */
-export function Dialog({ visible, onClose, title, children, actions }: DialogProps) {
+/**
+ * Confirmation of irreversible actions: surface, radius 12, width up to 320.
+ *
+ * It fades in and out over 150 ms by the rule (`dialog`): the scrim is a
+ * layer of its own and the dialog does not travel — so it is the same with
+ * reduced motion, and never the platform's uncontrolled fade of the whole
+ * window. Like a sheet it keeps showing what it showed while it goes.
+ */
+export function Dialog({ visible, onClose, onDismissed, title, children, actions }: DialogProps) {
   const { theme } = useTheme();
+  const plan = useMotionPlan("dialog");
+  const { progress, mounted } = useOverlayTransition(visible, plan, onDismissed);
   return (
     <Modal
-      visible={visible}
+      visible={mounted}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.dialogRoot, { backgroundColor: theme.colors.scrim }]}>
-        <View
+      <View style={[styles.dialogRoot, !visible && styles.leaving]}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: theme.colors.scrim, opacity: progress },
+          ]}
+        />
+        <Animated.View
           accessibilityViewIsModal
-          style={[styles.dialog, { backgroundColor: theme.colors.surface }, floatStyle(theme.name)]}
+          style={[
+            styles.dialog,
+            { backgroundColor: theme.colors.surface, opacity: progress },
+            floatStyle(theme.name),
+          ]}
         >
-          <Text variant="title" accessibilityRole="header">
-            {title}
-          </Text>
-          {children && <Text color="textMuted">{children}</Text>}
-          <View style={styles.dialogActions}>{actions}</View>
-        </View>
+          <Held hold={!visible}>
+            <Text variant="title" accessibilityRole="header">
+              {title}
+            </Text>
+            {children && <Text color="textMuted">{children}</Text>}
+            <View style={styles.dialogActions}>{actions}</View>
+          </Held>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -467,6 +511,10 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 32 },
   emptyAction: { marginTop: 8, alignSelf: "stretch", alignItems: "center" },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
+  // A sheet or a dialog that is going away no longer takes taps: what it still
+  // shows is what it showed when it was closed, and a tap on that could start
+  // an action nobody asks for any more («Отмена», then «Удалить» in the fade).
+  leaving: { pointerEvents: "none" },
   sheet: {
     borderTopLeftRadius: radius.l,
     borderTopRightRadius: radius.l,

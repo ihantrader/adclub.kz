@@ -2,7 +2,6 @@ import {
   clampQuantity,
   fontFamily,
   line,
-  motion,
   quantityControls,
   radius,
   size,
@@ -11,6 +10,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { Icon } from "./Icon";
+import { animateTo, useMotionPlan } from "./motion";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -153,21 +153,23 @@ export interface ToggleProps {
 
 /** Switch 52 × 32: on — `primary`; off — `fill` with a `borderField` border. */
 export function Switch({ label, description, checked, onChange, disabled }: ToggleProps) {
-  const { theme, reduceMotion } = useTheme();
+  const { theme } = useTheme();
   const { colors } = theme;
+  // The thumb travels by the rule of a change of state (150 ms, deceleration
+  // at the end); when motion is reduced it does not slide, it is in its new
+  // place at once and the colours say what changed.
+  const plan = useMotionPlan("state");
   const [position] = useState(() => new Animated.Value(checked ? 1 : 0));
   useEffect(() => {
     const target = checked ? 1 : 0;
-    if (reduceMotion) {
+    if (!plan.moves) {
       position.setValue(target);
       return;
     }
-    Animated.timing(position, {
-      toValue: target,
-      duration: motion.fast,
-      useNativeDriver: true,
-    }).start();
-  }, [checked, position, reduceMotion]);
+    const animation = animateTo(position, target, plan);
+    animation.start();
+    return () => animation.stop();
+  }, [checked, position, plan]);
 
   return (
     <ToggleRow

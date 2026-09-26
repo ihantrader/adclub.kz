@@ -45,7 +45,10 @@ export interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function useReduceMotion(): boolean {
-  const [reduceMotion, setReduceMotion] = useState(false);
+  // Until the system has answered — a few milliseconds — motion is off: a
+  // person who asked for less of it must not see a shimmer or a slide in the
+  // first frames, and everyone else cannot tell the difference.
+  const [reduceMotion, setReduceMotion] = useState(true);
   useEffect(() => {
     let active = true;
     void AccessibilityInfo.isReduceMotionEnabled().then((value) => {

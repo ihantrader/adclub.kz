@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { Animated, View } from "react-native";
 import { SvgXml } from "react-native-svg";
+import { animateTo, useMotionPlan } from "./motion";
 import { useTheme } from "./theme";
 
 export interface AiPilotProps {
@@ -69,11 +70,16 @@ export function AiPilot({
     };
   }, [blinks]);
 
+  // The fade between states is a change of state: the rule's 150 ms and curve
+  // (DESIGN.md 6 keeps it off altogether with «Уменьшить движение»).
+  const plan = useMotionPlan("state");
   useEffect(() => {
     if (reduceMotion) return;
     opacity.setValue(0.4);
-    Animated.timing(opacity, { toValue: 1, duration: motion.fast, useNativeDriver: true }).start();
-  }, [state, opacity, reduceMotion]);
+    const animation = animateTo(opacity, 1, plan);
+    animation.start();
+    return () => animation.stop();
+  }, [state, opacity, reduceMotion, plan]);
 
   return (
     <View

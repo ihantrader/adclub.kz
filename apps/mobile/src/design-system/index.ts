@@ -34,6 +34,7 @@ export {
 } from "./states";
 export { Icon, icons, type IconProps } from "./Icon";
 export { AiBadge, Badge, CompatibilityMark, Rating, StatusBadge } from "./marks";
+export { useAfterDismiss, useMotionPlan } from "./motion";
 export { BottomTabs, ListRow, TopBar, type TabItem } from "./navigation";
 export { fontAssets, Text, textStyles, useAppFonts, type TextProps } from "./text";
 export { ThemeProvider, themeModeStore, useTheme, type ThemeContextValue } from "./theme";

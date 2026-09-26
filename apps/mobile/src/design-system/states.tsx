@@ -1,6 +1,13 @@
 import { layout, motion, type IconName } from "@adclub/ui-core";
 import { useEffect, useState, type ReactNode } from "react";
-import { Animated, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  ScrollView,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Banner, EmptyState, ScreenError, type EmptyStateProps } from "./feedback";
 import { TopBar } from "./navigation";
@@ -33,6 +40,13 @@ export interface ScreenProps {
   refreshingLabel?: string;
   /** `false` for a screen that lays out its own list. */
   scroll?: boolean;
+  /**
+   * Keeps the content clear of the bottom edge (the home indicator, the
+   * system buttons). A screen inside the tabs does not need it — the tab bar
+   * takes the inset — but the steps of choosing a car and the first run have
+   * no tab bar under them, and their buttons must not sit in the gesture area.
+   */
+  bottomInset?: boolean;
   children: ReactNode;
 }
 
@@ -48,6 +62,7 @@ export function Screen({
   refreshing = false,
   refreshingLabel,
   scroll = true,
+  bottomInset = false,
   children,
 }: ScreenProps) {
   const { theme } = useTheme();
@@ -68,12 +83,16 @@ export function Screen({
   );
 
   return (
-    <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.colors.bg }]}>
+    <SafeAreaView
+      edges={bottomInset ? ["top", "bottom"] : ["top"]}
+      style={[styles.flex, { backgroundColor: theme.colors.bg }]}
+    >
       {title !== undefined && (
         <TopBar title={title} root={root} back={back} actions={actions} scrolled={scrolled} />
       )}
       {banner}
-      {refreshing && <RefreshLine label={refreshingLabel} />}
+      {/* The slot is always there, so a refresh does not push the screen down 2 px and back. */}
+      <RefreshLine label={refreshingLabel} active={refreshing} />
       {header}
       {content}
       {footer && <View style={styles.footer}>{footer}</View>}
@@ -81,50 +100,70 @@ export function Screen({
   );
 }
 
+/** The bar of the refresh line: 120 wide, sweeping from the left edge to the right one. */
+const REFRESH_BAR = 120;
+
 /**
  * Refresh indicator over content that stays on screen (SCREENS 2.1): a thin
  * accent line, still without motion when "Уменьшить движение" is on.
+ *
+ * Its 2 px are always in the layout — an empty track while nothing refreshes
+ * — so a refresh that starts and ends does not push the whole screen down and
+ * back up. The bar sweeps the width the track really has, not a number that
+ * only suits one phone.
  */
-export function RefreshLine({ label }: { label?: string }) {
+export function RefreshLine({ label, active = true }: { label?: string; active?: boolean }) {
   const { theme, reduceMotion } = useTheme();
   const [progress] = useState(() => new Animated.Value(0));
+  const [width, setWidth] = useState(0);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || !active) return;
+    // The track outlives the refresh, so its value must start from the left
+    // edge each time: a native loop begins from where the value was left, and
+    // a second refresh would sweep only what remained of the first.
+    progress.setValue(0);
     const loop = Animated.loop(
       Animated.timing(progress, {
         toValue: 1,
         duration: motion.skeleton,
+        // A sweep that repeats runs at one speed: slowing it at the end of
+        // each pass would show as the bar stopping at the edge.
+        easing: Easing.linear,
         useNativeDriver: true,
       }),
     );
     loop.start();
     return () => loop.stop();
-  }, [progress, reduceMotion]);
+  }, [progress, reduceMotion, active]);
 
   return (
     <View
-      accessible
-      accessibilityLabel={label}
-      accessibilityState={{ busy: true }}
-      style={[styles.refreshTrack, { backgroundColor: theme.colors.fill }]}
+      // Only a line that is refreshing says anything to a screen reader.
+      {...(active
+        ? { accessible: true, accessibilityLabel: label, accessibilityState: { busy: true } }
+        : {})}
+      onLayout={(event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width)}
+      style={[styles.refreshTrack, { backgroundColor: active ? theme.colors.fill : "transparent" }]}
     >
-      <Animated.View
-        style={[
-          styles.refreshBar,
-          { backgroundColor: theme.colors.accent },
-          !reduceMotion && {
-            transform: [
-              {
-                translateX: progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-120, 320],
-                }),
-              },
-            ],
-          },
-        ]}
-      />
+      {active && (
+        <Animated.View
+          style={[
+            styles.refreshBar,
+            { backgroundColor: theme.colors.accent },
+            !reduceMotion && {
+              transform: [
+                {
+                  translateX: progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-REFRESH_BAR, width],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      )}
     </View>
   );
 }
@@ -223,6 +262,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   refreshTrack: { height: 2, overflow: "hidden" },
-  refreshBar: { width: 120, height: 2 },
+  refreshBar: { width: REFRESH_BAR, height: 2 },
   section: { gap: 12, paddingTop: layout.blockGap },
 });

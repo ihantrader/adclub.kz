@@ -21,12 +21,14 @@ import IconCircleX from "@tabler/icons-react-native/IconCircleX";
 import IconClock from "@tabler/icons-react-native/IconClock";
 import IconContrast from "@tabler/icons-react-native/IconContrast";
 import IconCopy from "@tabler/icons-react-native/IconCopy";
+import IconDevices from "@tabler/icons-react-native/IconDevices";
 import IconDots from "@tabler/icons-react-native/IconDots";
 import IconFileSpreadsheet from "@tabler/icons-react-native/IconFileSpreadsheet";
 import IconHelpCircle from "@tabler/icons-react-native/IconHelpCircle";
 import IconInfoCircle from "@tabler/icons-react-native/IconInfoCircle";
 import IconLanguage from "@tabler/icons-react-native/IconLanguage";
 import IconLock from "@tabler/icons-react-native/IconLock";
+import IconLogout from "@tabler/icons-react-native/IconLogout";
 import IconMapPin from "@tabler/icons-react-native/IconMapPin";
 import IconMinus from "@tabler/icons-react-native/IconMinus";
 import IconMoon from "@tabler/icons-react-native/IconMoon";
@@ -67,12 +69,14 @@ export const icons = {
   clock: IconClock,
   contrast: IconContrast,
   copy: IconCopy,
+  devices: IconDevices,
   dots: IconDots,
   fileSpreadsheet: IconFileSpreadsheet,
   helpCircle: IconHelpCircle,
   info: IconInfoCircle,
   language: IconLanguage,
   lock: IconLock,
+  logout: IconLogout,
   mapPin: IconMapPin,
   minus: IconMinus,
   moon: IconMoon,

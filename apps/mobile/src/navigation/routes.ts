@@ -34,11 +34,20 @@ export type GarageStackParams = {
   "garage-car": { carId: string };
 };
 
+export type ProfileStackParams = {
+  /** M-PRO-01. */
+  "profile-home": undefined;
+  /** M-PRO-02. */
+  "profile-my-data": undefined;
+  /** M-PRO-03. */
+  "profile-devices": undefined;
+};
+
 export type TabParams = {
   catalog: NavigatorScreenParams<CatalogStackParams> | undefined;
   orders: undefined;
   garage: NavigatorScreenParams<GarageStackParams> | undefined;
-  profile: undefined;
+  profile: NavigatorScreenParams<ProfileStackParams> | undefined;
 };
 
 export type TabName = keyof TabParams;
@@ -76,6 +85,30 @@ export interface CarSummaryParams {
   color: CarColorId | null;
 }
 
+/**
+ * The sign-in flow (TASK-029, SCREENS M-AUTH-01…03), pushed above whichever
+ * tab asked for it (`use-sign-in.ts`), exactly like the steps of choosing a
+ * car — «назад» from the first screen and finishing both return to it.
+ */
+export type AuthStackParams = {
+  /** M-AUTH-01. */
+  "auth-phone": undefined;
+  /**
+   * M-AUTH-02. `channel` — which one the code was actually sent by (WhatsApp
+   * unavailable falls back to SMS, T-AUTH-02); the rest is `requestLoginCode`'s
+   * answer, so the screen doesn't send a second code just to learn them.
+   */
+  "auth-code": {
+    phone: string;
+    channel: "whatsapp" | "sms";
+    codeLength: number;
+    expiresAt: string;
+    resendAvailableAt: string;
+  };
+  /** M-AUTH-03: the account exists (the code is verified) but has no name yet. */
+  "auth-register": undefined;
+};
+
 export type RootParams = {
   /** M-START-04. */
   "first-run-city": undefined;
@@ -86,7 +119,7 @@ export type RootParams = {
   "car-step": CarStepParams;
   /** M-GAR-03, final step. */
   "car-summary": CarSummaryParams;
-};
+} & AuthStackParams;
 
 /** The id of the root navigator: `navigation.getParent(ROOT_NAVIGATOR)` finds it from any screen. */
 export const ROOT_NAVIGATOR = "root";

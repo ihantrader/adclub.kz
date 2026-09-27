@@ -29,6 +29,7 @@ import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { formatTenge } from "../../catalog/format";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle, type GarageCar } from "../../garage/garage";
+import { SignInSheet } from "../auth/SignInSheet";
 import { useShowcaseItem } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
@@ -360,6 +361,11 @@ function OfferCard({ offer }: { offer: ShowcaseOffer }) {
   const { theme } = useTheme();
   const receiptText = useReceiptText();
   const date = receiptText(offer.receipt, "withDate");
+  const [signInSheet, setSignInSheet] = useState(false);
+  // A guest taps «Поставщик клуба» to sign in (T-GATE-02, SCREENS M-AUTH-00);
+  // a signed-in user without club access sees the same line, but nothing
+  // here can get them access yet (a subscription — EPIC-14), so it stays inert.
+  const opensSignIn = offer.supplier.kind === "hidden" && offer.supplier.reason === "auth_required";
 
   return (
     <View
@@ -379,7 +385,12 @@ function OfferCard({ offer }: { offer: ShowcaseOffer }) {
       {date && offer.delivery && <Text variant="bodyS">{t("item.deliveryDate", { date })}</Text>}
 
       {/* D-005: without club access there is no name in the answer at all. */}
-      <View style={styles.supplierLine}>
+      <Pressable
+        disabled={!opensSignIn}
+        accessibilityRole={opensSignIn ? "button" : undefined}
+        onPress={() => setSignInSheet(true)}
+        style={styles.supplierLine}
+      >
         {offer.supplier.kind === "hidden" ? (
           <>
             <Icon name="lock" size={16} color="textMuted" />
@@ -390,7 +401,14 @@ function OfferCard({ offer }: { offer: ShowcaseOffer }) {
         ) : (
           <Text variant="bodyStrong">{offer.supplier.name}</Text>
         )}
-      </View>
+      </Pressable>
+      {opensSignIn && (
+        <SignInSheet
+          visible={signInSheet}
+          onClose={() => setSignInSheet(false)}
+          reason={t("auth.gateSupplierName")}
+        />
+      )}
       {offer.supplier.kind === "visible" && (offer.supplier.district ?? offer.supplier.address) && (
         <Text variant="bodyS" color="textMuted">
           {offer.supplier.district ?? offer.supplier.address}

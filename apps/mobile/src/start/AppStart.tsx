@@ -8,21 +8,19 @@ import { updateGate } from "../services/api";
 import { useOnline } from "../services/use-network";
 import { useGarage } from "../state/garage-provider";
 import { useLanguage } from "../state/language";
-import { devicePreferencesLoaded, devicePreferencesWereRead, firstRunStore } from "../state/stores";
+import {
+  devicePreferencesLoaded,
+  devicePreferencesWereRead,
+  firstRunStore,
+  sessionStore,
+} from "../state/stores";
 import { useUpdateGateState, type UpdateGateState } from "../update-gate";
 import { rootStart } from "./root-start";
-import {
-  decideStart,
-  type PolicyState,
-  type SessionState,
-  type StartInput,
-} from "./start-decision";
+import { decideStart, type PolicyState, type StartInput } from "./start-decision";
 
 /** How long the splash may wait for the client policy before going on (SCREENS 5.1). */
 const POLICY_WAIT_MS = 2_500;
 
-/** What TASK-029 will provide; until then the app has no session at all. */
-const SESSION: SessionState = "none";
 /** What TASK-030 will provide: the saved copy of active orders. */
 const SAVED_ACTIVE_ORDERS = false;
 /** What TASK-031 will provide: the push the app was opened from. */
@@ -47,6 +45,11 @@ export function AppStart() {
   const firstRun = useSyncExternalStore(firstRunStore.subscribe, firstRunStore.get);
   const { cars } = useGarage();
   const preferencesRead = usePreferencesRead();
+  // TASK-029: a stored session is "active"; a guest (never signed in, or
+  // signed out) is "none". Distinguishing "none" from a session that was
+  // revoked while the app was closed (rule 4's "Вы вышли из аккаунта" sheet)
+  // needs state this store doesn't keep — a documented gap (TASK-029 report).
+  const session = useSyncExternalStore(sessionStore.subscribe, sessionStore.get);
 
   // The policy is asked at start-up and again whenever the app comes back
   // from the background: a minimum raised meanwhile shows the screen, and a
@@ -65,7 +68,7 @@ export function AppStart() {
     systemLanguage: system,
     firstRun,
     hasCar: cars.length > 0,
-    session: SESSION,
+    session: session.status === "signed_in" ? "active" : "none",
     online,
     savedActiveOrders: SAVED_ACTIVE_ORDERS,
     push: PUSH,

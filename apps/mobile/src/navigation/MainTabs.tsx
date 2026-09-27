@@ -3,10 +3,10 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BottomTabs, type TabItem } from "../design-system";
 import { OrdersScreen } from "../screens/tabs/OrdersScreen";
-import { ProfileScreen } from "../screens/tabs/ProfileScreen";
 import { useT } from "../state/language";
 import { CatalogTab } from "./CatalogStack";
 import { GarageStack } from "./GarageStack";
+import { ProfileStack } from "./ProfileStack";
 import type { TabName, TabParams } from "./routes";
 
 export type { TabName } from "./routes";
@@ -73,7 +73,7 @@ export function MainTabs() {
       <Tabs.Screen name="catalog" component={CatalogTab} />
       <Tabs.Screen name="orders" component={OrdersScreen} />
       <Tabs.Screen name="garage" component={GarageStack} />
-      <Tabs.Screen name="profile" component={ProfileScreen} />
+      <Tabs.Screen name="profile" component={ProfileStack} />
     </Tabs.Navigator>
   );
 }

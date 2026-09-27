@@ -4,6 +4,9 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
 import { useTheme } from "../design-system";
 import { EMPTY_DRAFT } from "../garage/car-picker";
+import { CodeScreen } from "../screens/auth/CodeScreen";
+import { PhoneScreen } from "../screens/auth/PhoneScreen";
+import { RegisterScreen } from "../screens/auth/RegisterScreen";
 import { FirstRunCarScreen } from "../screens/FirstRunCarScreen";
 import { FirstRunCityScreen } from "../screens/FirstRunCityScreen";
 import { CarStepScreen } from "../screens/garage/CarStepScreen";
@@ -78,6 +81,13 @@ export function RootNavigator({ start }: { start: RootStart }) {
         />
         <Stack.Screen name="car-step" component={CarStepScreen} />
         <Stack.Screen name="car-summary" component={CarSummaryScreen} />
+        {/* Sign-in (TASK-029, SCREENS M-AUTH-01…03): pushed above whichever tab asked for it (`useSignIn`). */}
+        <Stack.Screen name="auth-phone" component={PhoneScreen} />
+        <Stack.Screen name="auth-code" component={CodeScreen} />
+        {/* No visible back arrow (no `back` prop on its `Screen`) but the
+            system "назад" still works — leaving it incomplete is allowed
+            (SCREENS M-AUTH-03: a gated action simply returns here later). */}
+        <Stack.Screen name="auth-register" component={RegisterScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

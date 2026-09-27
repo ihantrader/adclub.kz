@@ -13,6 +13,7 @@ import { AppStart } from "./src/start/AppStart";
 import { CityProvider } from "./src/state/city-provider";
 import { GarageProvider } from "./src/state/garage-provider";
 import { LanguageProvider } from "./src/state/language";
+import { SessionProvider } from "./src/state/session-provider";
 import { readyWithin } from "./src/state/device-store";
 import { devicePreferencesReady } from "./src/state/stores";
 
@@ -60,7 +61,9 @@ export default function App() {
           <CityProvider>
             <GarageProvider>
               <ToastProvider>
-                <Root />
+                <SessionProvider>
+                  <Root />
+                </SessionProvider>
               </ToastProvider>
             </GarageProvider>
           </CityProvider>

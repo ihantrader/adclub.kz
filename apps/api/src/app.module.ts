@@ -8,6 +8,7 @@ import { HealthModule } from "./health/health.module";
 import { ClientPolicyModule } from "./client-policy";
 import { OpenApiModule } from "./openapi";
 import { IdentityModule } from "./modules/identity";
+import { GarageModule } from "./modules/garage";
 import { AiModule } from "./modules/ai";
 import { MessagingModule } from "./modules/messaging";
 import { AuditModule } from "./modules/audit";
@@ -83,6 +84,7 @@ export class AppModule implements NestModule {
         // contract routes alone.
         ...(config.nodeEnv === "production" ? [] : [OpenApiModule]),
         IdentityModule.forRoot(config),
+        GarageModule.forRoot({ http: true }),
         catalog,
         VehiclesModule.forRoot({ http: true }),
         compatibility,

@@ -713,6 +713,22 @@ const vehicles = group({
   },
 });
 
+const garage = group({
+  id: "garage",
+  title: "Гараж",
+  editableBy: "admin",
+  settings: {
+    garage_max_cars: define.integer({
+      unit: "count",
+      min: 1,
+      max: 500,
+      default: 30,
+      description:
+        "Наибольшее число автомобилей в гараже учётной записи (TASK-029); щедрый предел от случайного переполнения, не от обычного использования.",
+    }),
+  },
+});
+
 const compatibility = group({
   id: "compatibility",
   title: "Совместимость",
@@ -1416,6 +1432,7 @@ export const settingGroups = [
   photos,
   vehicles,
   compatibility,
+  garage,
   suppliers,
   offers,
   showcase,
@@ -1441,6 +1458,7 @@ export const settingDefinitions = {
   ...photos.settings,
   ...vehicles.settings,
   ...compatibility.settings,
+  ...garage.settings,
   ...suppliers.settings,
   ...offers.settings,
   ...showcase.settings,

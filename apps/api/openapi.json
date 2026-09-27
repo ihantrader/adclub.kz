@@ -40,6 +40,101 @@
     }
   ],
   "paths": {
+    "/account/profile": {
+      "get": {
+        "operationId": "getAccountProfile",
+        "summary": "The signed-in member's profile (SCREENS M-PRO-02 «Мои данные»)",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProfile"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateAccountProfile",
+        "summary": "Change the name, e-mail, its newsletter consent, city or interface language; the phone number can't be sent here",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "Only the fields to change",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountProfileBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProfile"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/active-orders": {
       "get": {
         "operationId": "getActiveOrders",
@@ -8883,6 +8978,60 @@
         }
       }
     },
+    "/auth/complete-registration": {
+      "post": {
+        "operationId": "completeRegistration",
+        "summary": "Finish registration: give a name and the consent to share the phone number with a supplier (SCREENS M-AUTH-03)",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The member's name and the mandatory consent",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteRegistrationBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Registration is complete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProfile"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/auth/login-code": {
       "post": {
         "operationId": "requestLoginCode",
@@ -10153,6 +10302,323 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CityListResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/garage/cars": {
+      "get": {
+        "operationId": "listGarageCars",
+        "summary": "Every car of the signed-in account (SCREENS M-GAR-01)",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The account's cars",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarageCarsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addGarageCar",
+        "summary": "Add a car to the account's garage (SCREENS M-GAR-03); the first one becomes primary",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The levels and the colour",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGarageCarBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The car was added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCar"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/garage/cars/{carId}": {
+      "delete": {
+        "operationId": "removeGarageCar",
+        "summary": "Remove a car; someone else's car answers like a missing one (404)",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "carId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarageCarRemovedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateGarageCar",
+        "summary": "Replace a car's levels and colour (SCREENS M-GAR-06 «Дополнить»); someone else's car answers like a missing one (404)",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "carId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The levels and the colour",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGarageCarBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated car",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCar"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/garage/cars/{carId}/primary": {
+      "post": {
+        "operationId": "setPrimaryGarageCar",
+        "summary": "Make a car the primary one (M-GAR-01 «Сделать основным»)",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "carId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The car is now primary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCar"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/garage/transfer": {
+      "post": {
+        "operationId": "transferGarage",
+        "summary": "Merge the device's guest garage into the account's own, without duplicates (SCREENS \"Перенос гостевого гаража\"); idempotent",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "Every car of the device's guest garage",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferGarageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The account's garage after the merge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferGarageResponse"
                 }
               }
             }
@@ -12563,6 +13029,203 @@
           "admin"
         ]
       },
+      "AccountCar": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "make": {
+            "$ref": "#/components/schemas/CarLevelValue"
+          },
+          "model": {
+            "$ref": "#/components/schemas/CarLevelValue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1950,
+                "maximum": 2100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transmission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "drive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modificationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarColorId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isPrimary": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "make",
+          "model",
+          "year",
+          "generation",
+          "body",
+          "engine",
+          "transmission",
+          "drive",
+          "modificationId",
+          "color",
+          "isPrimary",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "AccountProfile": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "emailNewsConsent": {
+            "type": "boolean"
+          },
+          "cityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogLanguage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "registrationCompleted": {
+            "type": "boolean"
+          },
+          "phoneShareConsent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneShareConsent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "email",
+          "emailNewsConsent",
+          "cityId",
+          "language",
+          "registrationCompleted",
+          "phoneShareConsent"
+        ]
+      },
       "ActiveOrder": {
         "type": "object",
         "properties": {
@@ -14939,11 +15602,18 @@
               },
               "phone": {
                 "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "accountId",
-              "phone"
+              "phone",
+              "name"
             ]
           },
           "version": {
@@ -15342,11 +16012,18 @@
               },
               "phone": {
                 "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "accountId",
-              "phone"
+              "phone",
+              "name"
             ]
           }
         },
@@ -17739,6 +18416,126 @@
           "backupCodes"
         ]
       },
+      "CarColorId": {
+        "type": "string",
+        "enum": [
+          "white",
+          "black",
+          "gray",
+          "silver",
+          "blue",
+          "darkBlue",
+          "red",
+          "green",
+          "brown",
+          "beige",
+          "orange",
+          "yellow",
+          "burgundy"
+        ]
+      },
+      "CarLevelValue": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      },
+      "CarLevels": {
+        "type": "object",
+        "properties": {
+          "make": {
+            "$ref": "#/components/schemas/CarLevelValue"
+          },
+          "model": {
+            "$ref": "#/components/schemas/CarLevelValue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1950,
+                "maximum": 2100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transmission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "drive": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarLevelValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "make",
+          "model",
+          "year",
+          "generation",
+          "body",
+          "engine",
+          "transmission",
+          "drive"
+        ]
+      },
       "CatalogAnalogInvalidDetails": {
         "type": "object",
         "properties": {
@@ -19866,6 +20663,31 @@
           "currentVersion"
         ]
       },
+      "CompleteRegistrationBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[\\p{L}][\\p{L}\\s'’-]*$"
+          },
+          "phoneShareConsent": {
+            "type": "boolean",
+            "const": true
+          },
+          "phoneShareConsentVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "name",
+          "phoneShareConsent",
+          "phoneShareConsentVersion"
+        ]
+      },
       "CopyCompatibilityBody": {
         "type": "object",
         "properties": {
@@ -20927,12 +21749,47 @@
                 "type": "string",
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cityId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "language": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CatalogLanguage"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "registrationCompleted": {
+                "type": "boolean"
               }
             },
             "required": [
               "id",
               "phone",
-              "createdAt"
+              "createdAt",
+              "name",
+              "cityId",
+              "language",
+              "registrationCompleted"
             ]
           },
           "session": {
@@ -21331,6 +22188,8 @@
           "ORDER_STATE_CONFLICT",
           "ORDER_QR_UNKNOWN",
           "DISCIPLINE_ALREADY_REVOKED",
+          "REGISTRATION_INCOMPLETE",
+          "GARAGE_LIMIT_REACHED",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -21376,6 +22235,32 @@
         "required": [
           "changedCells",
           "rows"
+        ]
+      },
+      "GarageCarRemovedResponse": {
+        "type": "object",
+        "properties": {
+          "removed": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "removed"
+        ]
+      },
+      "GarageCarsResponse": {
+        "type": "object",
+        "properties": {
+          "cars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountCar"
+            }
+          }
+        },
+        "required": [
+          "cars"
         ]
       },
       "GrantClubAccessBody": {
@@ -22798,11 +23683,18 @@
               },
               "phone": {
                 "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
               "kind",
-              "phone"
+              "phone",
+              "name"
             ]
           }
         ]
@@ -23391,6 +24283,25 @@
           "delivery",
           "warrantyMonths",
           "warrantyText"
+        ]
+      },
+      "PhoneShareConsent": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "version",
+          "at"
         ]
       },
       "PhotoDisplayMode": {
@@ -24093,6 +25004,28 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "SaveGarageCarBody": {
+        "type": "object",
+        "properties": {
+          "levels": {
+            "$ref": "#/components/schemas/CarLevels"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarColorId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "levels",
+          "color"
         ]
       },
       "SelectSupplierBody": {
@@ -28112,6 +29045,64 @@
           "signInStep"
         ]
       },
+      "TransferGarageBody": {
+        "type": "object",
+        "properties": {
+          "cars": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "levels": {
+                  "$ref": "#/components/schemas/CarLevels"
+                },
+                "color": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CarColorId"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "levels",
+                "color",
+                "isPrimary"
+              ]
+            }
+          }
+        },
+        "required": [
+          "cars"
+        ]
+      },
+      "TransferGarageResponse": {
+        "type": "object",
+        "properties": {
+          "cars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountCar"
+            }
+          },
+          "transferred": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "cars",
+          "transferred"
+        ]
+      },
       "TranslationEntityType": {
         "type": "string",
         "enum": [
@@ -28420,6 +29411,48 @@
           "aiModel",
           "updatedAt"
         ]
+      },
+      "UpdateAccountProfileBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[\\p{L}][\\p{L}\\s'’-]*$"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "emailNewsConsent": {
+            "type": "boolean"
+          },
+          "cityId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "$ref": "#/components/schemas/CatalogLanguage"
+          }
+        }
       },
       "UpdateAttributeBody": {
         "type": "object",

@@ -331,6 +331,24 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         rememberSecret(refresh[1]!);
       }
     }
+    // TASK-029: placing an order now needs a finished profile (name +
+    // phone-share consent, `REGISTRATION_INCOMPLETE` otherwise) — every
+    // mobile-app customer this whole file signs in is meant to be a ready
+    // club member, so this one place finishes it for all of them rather
+    // than touching each of this file's many call sites. Harmless to call
+    // again for a phone this file already signed in earlier (it just
+    // re-affirms the same name and consent, `AccountProfileService.complete`).
+    if (client === IOS && response.status === 200) {
+      const token = (response.body as { session?: { accessToken?: string } }).session?.accessToken;
+      if (token) {
+        const completed = await http()
+          .post("/auth/complete-registration")
+          .set("X-Client", client)
+          .send({ name: "Тест Тестов", phoneShareConsent: true, phoneShareConsentVersion: "test" })
+          .set("Authorization", `Bearer ${token}`);
+        expect(completed.status, JSON.stringify(completed.body)).toBe(200);
+      }
+    }
     return response;
   }
 

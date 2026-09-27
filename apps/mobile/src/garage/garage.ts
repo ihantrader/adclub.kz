@@ -1,3 +1,5 @@
+import { isCarColorId, type CarColorId } from "./car-color";
+
 /**
  * The garage kept on the device (PRODUCT 6.6, SCREENS M-GAR-01, M-GAR-06;
  * TASK-028). A guest adds cars without an account, so the garage lives next
@@ -20,6 +22,11 @@
  *   duplicate question here and by the merge without duplicates later;
  * - `version` lets a later format be recognised instead of silently
  *   mis-parsed.
+ *
+ * `color` (D-063, TASK-028.B) was added after `version: 1` shipped: it is
+ * read as `null` from a car stored before it existed (`parseCar` below), and
+ * it plays no part in `sameCar` — two cars are the same car whatever their
+ * paint, and a colour is never part of what the server is asked to match.
  */
 
 /** The levels of a car, in the order they are asked for (M-GAR-03). */
@@ -56,6 +63,8 @@ export interface GarageCar {
   drive: CarLevelValue | null;
   /** Known only when the levels named exactly one modification. */
   modificationId: string | null;
+  /** `null` — not chosen; a car stored before D-063 reads back this way. */
+  color: CarColorId | null;
   /** ISO 8601; the order the guest added cars in. */
   addedAt: string;
 }
@@ -98,6 +107,9 @@ function parseCar(raw: unknown): GarageCar | null {
     transmission: parseLevelValue(value.transmission),
     drive: parseLevelValue(value.drive),
     modificationId: typeof value.modificationId === "string" ? value.modificationId : null,
+    // Absent in a garage stored before D-063, or a value a later app no
+    // longer lists: either way, "не указан" — never a reason to drop the car.
+    color: isCarColorId(value.color) ? value.color : null,
     addedAt: typeof value.addedAt === "string" ? value.addedAt : new Date(0).toISOString(),
   };
   return car;

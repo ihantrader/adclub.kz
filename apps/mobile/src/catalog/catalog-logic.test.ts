@@ -26,6 +26,7 @@ function car(overrides: Partial<GarageCar> = {}): GarageCar {
     transmission: { id: "tr-1", label: "Автомат" },
     drive: { id: "drive-1", label: "Полный" },
     modificationId: null,
+    color: null,
     addedAt: "2026-09-26T10:00:00.000Z",
     ...overrides,
   };

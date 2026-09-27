@@ -28,6 +28,7 @@ function car(overrides: Partial<GarageCar> = {}): GarageCar {
     transmission: { id: "tr-at", label: "Автомат" },
     drive: { id: "drive-awd", label: "Полный" },
     modificationId: "mod-1",
+    color: "blue",
     addedAt: "2026-09-26T10:00:00.000Z",
     ...overrides,
   };
@@ -46,6 +47,11 @@ describe("the same car", () => {
 
   it("ignores the modification id — it is derived, not chosen", () => {
     expect(sameCar(car(), car({ modificationId: null }))).toBe(true);
+  });
+
+  it("ignores the colour (D-063) — a repaint is not a different car", () => {
+    expect(sameCar(car(), car({ color: "red" }))).toBe(true);
+    expect(sameCar(car({ color: "red" }), car({ color: null }))).toBe(true);
   });
 
   it("finds the duplicate a garage already holds, never the car itself", () => {
@@ -128,5 +134,18 @@ describe("what a device may have stored", () => {
     expect(parsed?.cars).toHaveLength(1);
     // The main car pointed at the dropped one: the surviving car takes over.
     expect(parsed?.primaryId).toBe("car-1");
+  });
+
+  it("reads a garage saved before D-063 as cars without a colour", () => {
+    const stored = JSON.parse(JSON.stringify(car())) as Record<string, unknown>;
+    delete stored.color;
+    const parsed = parseGarage({ version: 1, cars: [stored], primaryId: "car-1" });
+    expect(parsed?.cars[0]?.color).toBeNull();
+  });
+
+  it("drops a colour the app no longer lists instead of keeping a stale one", () => {
+    const stored = { ...JSON.parse(JSON.stringify(car())), color: "chartreuse" };
+    const parsed = parseGarage({ version: 1, cars: [stored], primaryId: "car-1" });
+    expect(parsed?.cars[0]?.color).toBeNull();
   });
 });

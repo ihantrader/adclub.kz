@@ -21,6 +21,7 @@ function car(id: string, model = "Atlas"): GarageCar {
     transmission: null,
     drive: null,
     modificationId: null,
+    color: null,
     addedAt: "2026-09-26T10:00:00.000Z",
   };
 }

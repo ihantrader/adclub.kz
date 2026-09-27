@@ -47,6 +47,12 @@ export type { SignInDataRetention } from "./cleanup/sign-in-data-cleanup";
 export { account, adminUser, supplier, supplierCityName, supplierMember } from "./schema";
 export type { MembershipStatus, SupplierStatus } from "./schema";
 export { AccountStore } from "./account/account.store";
+export type {
+  AccountProfileRow,
+  RegistrationFactsRow,
+  UpdateAccountProfileInput,
+} from "./account/account.store";
+export { AccountProfileService } from "./account/account-profile.service";
 export { AdminUserStore } from "./admin/admin-user.store";
 export { SupplierMembershipStore } from "./supplier/supplier-membership.store";
 export { SessionStore } from "./session/session.store";

@@ -1,5 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import type { AppConfig } from "../../config";
+import { AccountProfileController } from "./account/account-profile.controller";
+import { AccountProfileService } from "./account/account-profile.service";
 import { AccountStore } from "./account/account.store";
 import { AdminAccessRevoker } from "./admin/admin-access-revoker";
 import { AdminAuthService } from "./admin/admin-auth.service";
@@ -73,9 +75,11 @@ export class IdentityModule {
         SignInStepController,
         SupplierContextController,
         AdminController,
+        AccountProfileController,
         ...(devOutbox ? [DevLoginCodeOutboxController] : []),
       ],
       providers: [
+        AccountProfileService,
         ...(devOutbox ? [{ provide: DevLoginCodeOutbox, useValue: new DevLoginCodeOutbox() }] : []),
         // Replacement point for the real WhatsApp and SMS providers (TASK-026).
         {

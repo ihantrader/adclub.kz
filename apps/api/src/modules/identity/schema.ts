@@ -31,6 +31,15 @@ export const account = pgTable("account", {
   status: text("status").notNull().default("active"),
   consentPhoneShareAt: timestamp("consent_phone_share_at", { withTimezone: true }),
   consentVersion: text("consent_version"),
+  // Profile (TASK-029, ARCHITECTURE 4.41): required to act as a club
+  // member (`name`); the city and the language move here from the device
+  // once someone is signed in; `cityId` has no `.references()` here for the
+  // same cross-module reason as `supplier.cityId` above — the real foreign
+  // key to `city` is in the migration.
+  name: text("name"),
+  cityId: uuid("city_id"),
+  language: text("language").$type<"kk" | "ru" | "en">(),
+  emailNewsConsent: boolean("email_news_consent").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

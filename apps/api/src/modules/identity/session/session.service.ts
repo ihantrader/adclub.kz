@@ -15,6 +15,7 @@ import {
 } from "@adclub/contracts";
 import {
   decideAccess,
+  isRegistrationComplete,
   maskPhone,
   type AccessPrincipal,
   type ContextLossReason,
@@ -503,6 +504,13 @@ export class SessionService {
         id: row.account.id,
         phone: row.account.phone,
         createdAt: row.account.createdAt.toISOString(),
+        // Additive (TASK-029, ARCHITECTURE 4.41): the full profile — e-mail,
+        // the consents with their dates — is `GET /account/profile`; this is
+        // only what decides whether M-AUTH-03 should open.
+        name: row.account.name,
+        cityId: row.account.cityId,
+        language: row.account.language,
+        registrationCompleted: isRegistrationComplete(row.account),
       },
       session: toSummary(row, auth.sessionId),
       access: this.accessOf(auth, row),

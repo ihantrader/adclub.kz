@@ -403,7 +403,15 @@ export class SessionStore {
 
   async findSummary(sessionId: string): Promise<
     | (SessionSummaryRow & {
-        account: { id: string; phone: string; createdAt: Date };
+        account: {
+          id: string;
+          phone: string;
+          createdAt: Date;
+          name: string | null;
+          cityId: string | null;
+          language: "kk" | "ru" | "en" | null;
+          consentPhoneShareAt: Date | null;
+        };
         memberName: string | null;
       })
     | undefined
@@ -411,7 +419,18 @@ export class SessionStore {
     const [row] = await this.database.db
       .select({
         ...summaryColumns,
-        account: { id: account.id, phone: account.phone, createdAt: account.createdAt },
+        account: {
+          id: account.id,
+          phone: account.phone,
+          createdAt: account.createdAt,
+          // Additive fields of `GET /auth/me` (TASK-029, ARCHITECTURE 4.41):
+          // the gate the app opens M-AUTH-03 on is `registrationCompleted`,
+          // built from `name` and `consentPhoneShareAt` by `SessionService`.
+          name: account.name,
+          cityId: account.cityId,
+          language: account.language,
+          consentPhoneShareAt: account.consentPhoneShareAt,
+        },
         memberName: supplierMember.displayName,
       })
       .from(session)

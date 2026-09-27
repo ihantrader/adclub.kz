@@ -26,4 +26,21 @@ export class AccountDirectory {
       .where(inArray(account.id, ids));
     return new Map(rows.map((row) => [row.id, maskPhone(row.phone)]));
   }
+
+  /**
+   * The name each account gave at registration (TASK-029), by account id;
+   * `null` for one that hasn't finished registering. Unknown ids are left
+   * out, same as `maskedPhones` — the caller decides what an absent id means.
+   */
+  async names(accountIds: readonly string[]): Promise<Map<string, string | null>> {
+    const ids = [...new Set(accountIds)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.database.db
+      .select({ id: account.id, name: account.name })
+      .from(account)
+      .where(inArray(account.id, ids));
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
 }

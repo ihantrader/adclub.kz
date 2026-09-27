@@ -488,6 +488,8 @@ export * from "./club-access";
 export * from "./orders";
 export * from "./signals";
 export * from "./showcase";
+export * from "./account";
+export * from "./garage";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

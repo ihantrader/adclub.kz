@@ -749,12 +749,13 @@ export type RepeatOrderResponse = z.infer<typeof repeatOrderResponseSchema>;
 /**
  * The customer as the supplier sees them: `hidden` until this order is
  * accepted («Телефон откроется после принятия заявки»); `revealed` — the
- * phone number, from accepting on. Only in the card of one order, never in
- * a list. The user's name isn't kept yet (the profile — EPIC-10).
+ * phone number and the name, from accepting on. Only in the card of one
+ * order, never in a list. `name` is `null` for an order placed before the
+ * profile existed (TASK-029) — the club member never went back to add one.
  */
 export const orderCustomerSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("hidden"), reason: z.literal("not_accepted") }),
-  z.object({ kind: z.literal("revealed"), phone: z.string() }),
+  z.object({ kind: z.literal("revealed"), phone: z.string(), name: z.string().nullable() }),
 ]);
 
 export type OrderCustomer = z.infer<typeof orderCustomerSchema>;
@@ -994,8 +995,8 @@ export type CloseOrderResponse = z.infer<typeof closeOrderResponseSchema>;
 
 const adminSideFields = {
   supplier: z.object({ id: z.uuid(), name: z.string() }),
-  /** The customer's account and phone number (A-ORD-02 «Клиент»). */
-  customer: z.object({ accountId: z.uuid(), phone: z.string() }),
+  /** The customer's account, phone number and name (A-ORD-02 «Клиент»); `name` — `null` before TASK-029. */
+  customer: z.object({ accountId: z.uuid(), phone: z.string(), name: z.string().nullable() }),
   /** As the supplier's, with the reason an administrator's close carries. */
   closure: adminOrderClosureSchema.nullable(),
 };

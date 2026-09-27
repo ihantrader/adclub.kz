@@ -11,6 +11,11 @@ import {
   totpResetResponseSchema,
   type AccessContext,
 } from "./access";
+import {
+  accountProfileSchema,
+  completeRegistrationBodySchema,
+  updateAccountProfileBodySchema,
+} from "./account";
 import { auditLogPageSchema, auditLogQuerySchema } from "./audit";
 import {
   adminAttributeListResponseSchema,
@@ -171,6 +176,15 @@ import {
   grantClubAccessBodySchema,
   revokeClubAccessBodySchema,
 } from "./club-access";
+import {
+  garageCarIdPathSchema,
+  garageCarRemovedResponseSchema,
+  garageCarsResponseSchema,
+  accountCarSchema,
+  saveGarageCarBodySchema,
+  transferGarageBodySchema,
+  transferGarageResponseSchema,
+} from "./garage";
 import {
   activeOrdersResponseSchema,
   adminCloseOrderBodySchema,
@@ -718,6 +732,144 @@ export const apiRoutes = {
     contexts: anyContext,
     responses: {
       200: { description: "The current session is ended", schema: sessionsEndedResponseSchema },
+    },
+  }),
+  // Profile (TASK-029, ARCHITECTURE 4.41): the account exists from the
+  // moment the login code is verified; these three routes finish it (a
+  // name and the consent to share the phone number) and read/change it
+  // afterward. Mobile only — a supplier or admin session has no use for it.
+  completeRegistration: defineRoute({
+    operationId: "completeRegistration",
+    method: "POST",
+    path: "/auth/complete-registration",
+    summary:
+      "Finish registration: give a name and the consent to share the phone number with a supplier (SCREENS M-AUTH-03)",
+    tag: "account",
+    clientVersionCheck: "enforced_except_admin_web",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: {
+      description: "The member's name and the mandatory consent",
+      schema: completeRegistrationBodySchema,
+    },
+    responses: {
+      200: { description: "Registration is complete", schema: accountProfileSchema },
+    },
+  }),
+  getAccountProfile: defineRoute({
+    operationId: "getAccountProfile",
+    method: "GET",
+    path: "/account/profile",
+    summary: "The signed-in member's profile (SCREENS M-PRO-02 «Мои данные»)",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    responses: {
+      200: { description: "The profile", schema: accountProfileSchema },
+    },
+  }),
+  updateAccountProfile: defineRoute({
+    operationId: "updateAccountProfile",
+    method: "PATCH",
+    path: "/account/profile",
+    summary:
+      "Change the name, e-mail, its newsletter consent, city or interface language; the phone number can't be sent here",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: { description: "Only the fields to change", schema: updateAccountProfileBodySchema },
+    responses: {
+      200: { description: "The updated profile", schema: accountProfileSchema },
+    },
+  }),
+  // The account's own garage (TASK-029, ARCHITECTURE 4.41): once signed in,
+  // the account is the source of truth for the member's cars (PRODUCT 6.4).
+  listGarageCars: defineRoute({
+    operationId: "listGarageCars",
+    method: "GET",
+    path: "/garage/cars",
+    summary: "Every car of the signed-in account (SCREENS M-GAR-01)",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    responses: {
+      200: { description: "The account's cars", schema: garageCarsResponseSchema },
+    },
+  }),
+  addGarageCar: defineRoute({
+    operationId: "addGarageCar",
+    method: "POST",
+    path: "/garage/cars",
+    summary: "Add a car to the account's garage (SCREENS M-GAR-03); the first one becomes primary",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: { description: "The levels and the colour", schema: saveGarageCarBodySchema },
+    responses: {
+      201: { description: "The car was added", schema: accountCarSchema },
+    },
+  }),
+  updateGarageCar: defineRoute({
+    operationId: "updateGarageCar",
+    method: "PATCH",
+    path: "/garage/cars/{carId}",
+    summary:
+      "Replace a car's levels and colour (SCREENS M-GAR-06 «Дополнить»); someone else's car answers like a missing one (404)",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageCarIdPathSchema,
+    requestBody: { description: "The levels and the colour", schema: saveGarageCarBodySchema },
+    responses: {
+      200: { description: "The updated car", schema: accountCarSchema },
+    },
+  }),
+  removeGarageCar: defineRoute({
+    operationId: "removeGarageCar",
+    method: "DELETE",
+    path: "/garage/cars/{carId}",
+    summary: "Remove a car; someone else's car answers like a missing one (404)",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageCarIdPathSchema,
+    responses: {
+      200: { description: "Removed", schema: garageCarRemovedResponseSchema },
+    },
+  }),
+  setPrimaryGarageCar: defineRoute({
+    operationId: "setPrimaryGarageCar",
+    method: "POST",
+    path: "/garage/cars/{carId}/primary",
+    summary: "Make a car the primary one (M-GAR-01 «Сделать основным»)",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageCarIdPathSchema,
+    responses: {
+      200: { description: "The car is now primary", schema: accountCarSchema },
+    },
+  }),
+  transferGarage: defineRoute({
+    operationId: "transferGarage",
+    method: "POST",
+    path: "/garage/transfer",
+    summary:
+      "Merge the device's guest garage into the account's own, without duplicates (SCREENS \"Перенос гостевого гаража\"); idempotent",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: { description: "Every car of the device's guest garage", schema: transferGarageBodySchema },
+    responses: {
+      200: { description: "The account's garage after the merge", schema: transferGarageResponseSchema },
     },
   }),
   listMySuppliers: defineRoute({

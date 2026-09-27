@@ -240,6 +240,13 @@ import { clientPlatformSchema } from "./client";
  * - `DISCIPLINE_ALREADY_REVOKED` (409): the discipline mark has already
  *   been lifted; nothing changed.
  *
+ * Profile and the account's own garage (TASK-029, ARCHITECTURE 4.41):
+ * - `REGISTRATION_INCOMPLETE` (403): the account has no name and consent yet
+ *   (SCREENS M-AUTH-03) — this route needs a finished club member; open the
+ *   registration completion screen and retry after it.
+ * - `GARAGE_LIMIT_REACHED` (409): the account already has as many cars as
+ *   `garage_max_cars` allows.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -371,6 +378,9 @@ export const errorCodeSchema = z.enum([
   // Giving an order out (TASK-022, ARCHITECTURE 4.32).
   "ORDER_QR_UNKNOWN",
   "DISCIPLINE_ALREADY_REVOKED",
+  // Profile and the account's own garage (TASK-029, ARCHITECTURE 4.41).
+  "REGISTRATION_INCOMPLETE",
+  "GARAGE_LIMIT_REACHED",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sessionAccessSchema, supplierSummarySchema } from "./access";
+import { catalogLanguageSchema } from "./catalog";
 import { clientPlatformSchema } from "./client";
 
 /**
@@ -95,6 +96,16 @@ export const currentAccountResponseSchema = z.object({
     /** E.164. */
     phone: z.string(),
     createdAt: z.iso.datetime(),
+    /**
+     * Added by TASK-029 (ARCHITECTURE 4.41), additively: `null` — the name
+     * has not been given yet (`registrationCompleted` says so too). The
+     * full profile (e-mail, consents) is `GET /account/profile`; this is
+     * only what tells the app whether the club-member gate should open.
+     */
+    name: z.string().nullable(),
+    cityId: z.uuid().nullable(),
+    language: catalogLanguageSchema.nullable(),
+    registrationCompleted: z.boolean(),
   }),
   session: sessionSummarySchema,
   /** What this session may act as — only its own context, never the account's other roles. */

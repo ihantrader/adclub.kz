@@ -1,4 +1,21 @@
 import { z } from "zod";
+import {
+  accountProfileSchema,
+  completeRegistrationBodySchema,
+  phoneShareConsentSchema,
+  updateAccountProfileBodySchema,
+} from "./account";
+import {
+  accountCarSchema,
+  carColorIdSchema,
+  carLevelsSchema,
+  carLevelValueSchema,
+  garageCarRemovedResponseSchema,
+  garageCarsResponseSchema,
+  saveGarageCarBodySchema,
+  transferGarageBodySchema,
+  transferGarageResponseSchema,
+} from "./garage";
 import * as compatibilityContract from "./compatibility";
 import * as supplierContract from "./suppliers";
 import * as offerContract from "./offers";
@@ -388,6 +405,20 @@ const componentSchemas: Record<string, z.ZodType> = {
   TranslationTargetLanguage: translationTargetLanguageSchema,
   TranslationTask: translationTaskSchema,
   TranslationText: translationTextSchema,
+  // Profile and the account's own garage (TASK-029, ARCHITECTURE 4.41).
+  AccountProfile: accountProfileSchema,
+  CompleteRegistrationBody: completeRegistrationBodySchema,
+  PhoneShareConsent: phoneShareConsentSchema,
+  UpdateAccountProfileBody: updateAccountProfileBodySchema,
+  AccountCar: accountCarSchema,
+  CarColorId: carColorIdSchema,
+  CarLevels: carLevelsSchema,
+  CarLevelValue: carLevelValueSchema,
+  GarageCarRemovedResponse: garageCarRemovedResponseSchema,
+  GarageCarsResponse: garageCarsResponseSchema,
+  SaveGarageCarBody: saveGarageCarBodySchema,
+  TransferGarageBody: transferGarageBodySchema,
+  TransferGarageResponse: transferGarageResponseSchema,
 };
 
 type JsonObject = Record<string, unknown>;

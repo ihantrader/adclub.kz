@@ -1,5 +1,6 @@
 import { isLang, type Lang } from "@adclub/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import { INITIAL_GARAGE, parseGarage, type GarageState } from "../garage/garage";
 import { INITIAL_FIRST_RUN, parseFirstRun, type FirstRunState } from "../start/first-run";
 import { INITIAL_CITY_STATE, parseCityState, type CityState } from "./city";
@@ -9,11 +10,37 @@ import {
   type DeviceStorage,
   type DeviceStore,
 } from "./device-store";
+import { createSessionStore, SIGNED_OUT, type SessionState } from "./session-store";
 
 const storage: DeviceStorage = {
   read: (key) => AsyncStorage.getItem(key),
   write: (key, value) => AsyncStorage.setItem(key, value),
 };
+
+/**
+ * The signed-in session is a secret (an access and a refresh token): it
+ * lives in the platform's secure storage, not in `AsyncStorage` with the
+ * rest of the device's preferences (TASK-029). `SecureStore` rejects keys
+ * with characters outside `[A-Za-z0-9._-]`, unlike the `adclub.mobile.*`
+ * keys above — its own key is named accordingly, not reusing that pattern.
+ */
+const secureStorage: DeviceStorage = {
+  read: (key) => SecureStore.getItemAsync(key),
+  write: (key, value) => SecureStore.setItemAsync(key, value),
+};
+
+/**
+ * The signed-in session (TASK-029): `null` — a guest. Set at sign-in,
+ * cleared at sign-out and on `SESSION_ENDED` — always together with the
+ * sessions this store's own key protects, never left behind.
+ */
+export const sessionStore: DeviceStore<SessionState> = createSessionStore(secureStorage);
+
+/** Clears the session and the secure key itself (sign-out, `SESSION_ENDED`, PRODUCT 6.7). */
+export function clearSession(): void {
+  sessionStore.set(SIGNED_OUT);
+  void SecureStore.deleteItemAsync("adclub.mobile.session").catch(() => undefined);
+}
 
 /**
  * The interface language chosen on this device; `null` — never chosen, so
@@ -59,6 +86,7 @@ export const devicePreferencesLoaded: Promise<void> = Promise.all([
   cityStore.ready,
   firstRunStore.ready,
   garageStore.ready,
+  sessionStore.ready,
 ]).then(() => undefined);
 
 let preferencesRead = false;

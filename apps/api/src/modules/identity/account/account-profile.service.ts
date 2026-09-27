@@ -10,11 +10,26 @@ import { DatabaseService } from "../../../database";
 import { ActionJournal } from "../action-journal";
 import { AccountStore, type AccountProfileRow } from "./account.store";
 
-/** A Postgres foreign-key violation (`city_id` naming a city that doesn't exist). */
+/**
+ * A Postgres foreign-key violation (`city_id` naming a city that doesn't
+ * exist), however deep a wrapper buried the driver's own error: Drizzle
+ * throws `DrizzleQueryError` with the real `pg` error (and its `code`) only
+ * on `.cause`, and `withoutQueryParameters` (`database/database-error.ts`)
+ * wraps even that a level further for logging — checking `error.code` alone
+ * missed both (found live-testing `PATCH /account/profile` with a
+ * non-existent `cityId`, TASK-029 report, "Errors & Fixes"; the garage
+ * module's `isVehicleReferenceViolation` had the identical bug).
+ */
 function isForeignKeyViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && (error as { code?: string }).code === "23503"
-  );
+  let current = error;
+  for (let depth = 0; depth < 3 && typeof current === "object" && current !== null; depth += 1) {
+    const candidate = current as { code?: string; cause?: unknown };
+    if (typeof candidate.code === "string") {
+      return candidate.code === "23503";
+    }
+    current = candidate.cause;
+  }
+  return false;
 }
 
 function validationError(path: string, message: string): ApiException {

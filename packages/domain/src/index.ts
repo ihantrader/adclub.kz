@@ -100,3 +100,5 @@ export {
   reserveWarningAt,
   startOfLocalDate,
 } from "./order/order-reserve";
+export { isRegistrationComplete } from "./account/registration";
+export type { RegistrationFacts } from "./account/registration";

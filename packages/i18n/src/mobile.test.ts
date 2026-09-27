@@ -48,8 +48,15 @@ describe("mobile texts", () => {
     expect(mobileText("ru", "city.detectHint")).toBe(
       "Чтобы показать поставщиков и услуги в вашем городе",
     );
-    expect(mobileText("ru", "garage.emptyTitle")).toBe(
-      "Добавьте автомобиль — каталог покажет только подходящее",
+    // T-GAR-01's fixed phrase was one sentence combining the two; TASK-028.B
+    // (D-063) unifies the garage's empty state with the catalog's «Добавьте
+    // автомобиль» (heading + explanation, one component for both screens),
+    // so the garage now uses the same two texts instead of its own sentence.
+    // The exact SCREENS.md wording is superseded by this instruction and is
+    // for the Product Owner to fold back into SCREENS.md (see the report).
+    expect(mobileText("ru", "car.needCarTitle")).toBe("Добавьте автомобиль");
+    expect(mobileText("ru", "car.needCarText")).toBe(
+      "Каталог покажет только то, что подходит вашему автомобилю. Регистрация не нужна",
     );
     expect(mobileText("ru", "orders.guestEmptyTitle")).toBe(
       "Здесь будут ваши заявки и коды для получения",

@@ -41,6 +41,13 @@ export interface ScreenProps {
   /** `false` for a screen that lays out its own list. */
   scroll?: boolean;
   /**
+   * Centers the content vertically while it fits the screen, and still
+   * scrolls when it does not (a bigger system font, a long Kazakh word) — a
+   * single state that is the whole of the screen, such as «Добавьте
+   * автомобиль» (TASK-028.B), rather than a list that starts at the top.
+   */
+  centerContent?: boolean;
+  /**
    * Keeps the content clear of the bottom edge (the home indicator, the
    * system buttons). A screen inside the tabs does not need it — the tab bar
    * takes the inset — but the steps of choosing a car and the first run have
@@ -62,6 +69,7 @@ export function Screen({
   refreshing = false,
   refreshingLabel,
   scroll = true,
+  centerContent = false,
   bottomInset = false,
   children,
 }: ScreenProps) {
@@ -71,7 +79,7 @@ export function Screen({
   const content = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, centerContent && styles.centeredContent]}
       keyboardShouldPersistTaps="handled"
       onScroll={(event) => setScrolled(event.nativeEvent.contentOffset.y > 4)}
       scrollEventThrottle={32}
@@ -79,7 +87,7 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={styles.flex}>{children}</View>
+    <View style={[styles.flex, centerContent && styles.centeredContent]}>{children}</View>
   );
 
   return (
@@ -255,6 +263,7 @@ export function Section({ title, children }: SectionProps) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { paddingBottom: layout.blockGap },
+  centeredContent: { flexGrow: 1, justifyContent: "center" },
   footer: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: 12,

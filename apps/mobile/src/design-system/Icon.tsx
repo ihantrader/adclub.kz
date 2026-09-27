@@ -3,7 +3,14 @@ import IconAlertTriangle from "@tabler/icons-react-native/IconAlertTriangle";
 import IconArchive from "@tabler/icons-react-native/IconArchive";
 import IconArrowLeft from "@tabler/icons-react-native/IconArrowLeft";
 import IconBackspace from "@tabler/icons-react-native/IconBackspace";
-import IconCar from "@tabler/icons-react-native/IconCar";
+// The car glyph (TASK-028.B, requirement 2): an SUV silhouette reads as more
+// distinctive than the generic `IconCar` used until this task, and it fits
+// the club's own cars (Geely Atlas, Monjaro — SUVs). Two more candidates
+// (`IconCar4wd`, `IconSteeringWheel`) sit next to this one in the dev
+// showcase ("Значок автомобиля") for the Product Owner to compare; swapping
+// the pick is exactly this one import and the one line below it, because
+// every place that shows "the car icon" asks for it by the same name, `car`.
+import IconCar from "@tabler/icons-react-native/IconCarSuv";
 import IconCategory from "@tabler/icons-react-native/IconCategory";
 import IconCheck from "@tabler/icons-react-native/IconCheck";
 import IconChecklist from "@tabler/icons-react-native/IconChecklist";

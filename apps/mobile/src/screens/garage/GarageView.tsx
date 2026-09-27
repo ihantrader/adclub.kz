@@ -1,8 +1,10 @@
 import { layout, radius } from "@adclub/ui-core";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Badge, Button, EmptyState, Icon, OfflineBanner, Screen, Text } from "../../design-system";
+import { Badge, Button, Icon, OfflineBanner, Screen, Text } from "../../design-system";
+import { findCarColor } from "../../garage/car-color";
 import { carParameters, carTitle, type GarageCar } from "../../garage/garage";
 import { useOnline } from "../../services/use-network";
+import { NoCarContent } from "../NoCarState";
 import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
 import { useTheme } from "../../design-system";
@@ -27,6 +29,7 @@ export function GarageView({ onAdd, onOpen }: GarageViewProps) {
     <Screen
       title={t("tabs.garage")}
       root
+      centerContent={cars.length === 0}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       footer={
         cars.length > 0 ? (
@@ -36,17 +39,9 @@ export function GarageView({ onAdd, onOpen }: GarageViewProps) {
         ) : null
       }
     >
-      <View style={styles.content}>
+      <View style={cars.length === 0 ? undefined : styles.content}>
         {cars.length === 0 ? (
-          <EmptyState
-            icon="car"
-            title={t("garage.emptyTitle")}
-            action={
-              <Button icon="plus" onPress={onAdd}>
-                {t("garage.add")}
-              </Button>
-            }
-          />
+          <NoCarContent onAdd={onAdd} />
         ) : (
           <View style={styles.list}>
             {cars.map((car) => (
@@ -112,6 +107,22 @@ function CarCard({
           {t("garage.engineMissing")}
         </Text>
       )}
+      {car.color !== null && (
+        <View style={styles.colorRow}>
+          <View
+            style={[
+              styles.swatch,
+              {
+                backgroundColor: findCarColor(car.color)?.swatch,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          />
+          <Text variant="bodyS" color="textMuted">
+            {t(`car.color.${car.color}`)}
+          </Text>
+        </View>
+      )}
       {primary ? (
         <Badge tone="accent" icon="check">
           {t("garage.primary")}
@@ -136,6 +147,8 @@ const styles = StyleSheet.create({
   },
   cardHead: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   grow: { flex: 1 },
+  colorRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  swatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1 },
   primaryButton: { alignSelf: "flex-start", paddingHorizontal: 0 },
   note: { paddingTop: 8 },
 });

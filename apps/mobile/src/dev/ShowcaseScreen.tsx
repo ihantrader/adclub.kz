@@ -1,6 +1,7 @@
 import {
   aiPilotStates,
   compatibilityMarks,
+  icon as iconTokens,
   orderStatusGroups,
   typography,
   type AiPilotState,
@@ -11,9 +12,19 @@ import {
   type ThemeMode,
   type TypographyToken,
 } from "@adclub/ui-core";
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+// Only for the "Значок автомобиля" comparison below (TASK-028.B, AC-2): the
+// app itself never imports a Tabler module directly, only the shared `Icon`
+// component by its semantic name (`design-system/Icon.tsx`). This file is
+// development-only and never reaches the production bundle (TASK-027 checks
+// that by scanning the built bytes), so importing three extra glyphs here to
+// show side by side costs it nothing.
+import IconCarBaseline from "@tabler/icons-react-native/IconCar";
+import IconCarSuv from "@tabler/icons-react-native/IconCarSuv";
+import IconCar4wd from "@tabler/icons-react-native/IconCar4wd";
+import IconSteeringWheel from "@tabler/icons-react-native/IconSteeringWheel";
 import {
   AiBadge,
   AiPilot,
@@ -82,6 +93,44 @@ function Caption({ children }: { children: ReactNode }) {
     <Text variant="caption" color="textMuted">
       {children}
     </Text>
+  );
+}
+
+/**
+ * One candidate of "Значок автомобиля" (TASK-028.B, AC-2): the glyph at the
+ * size and colour `EmptyState` really uses it at (DESIGN 7.7: 48, muted), on
+ * an accent-tinted circle for the "premium" look the task asks to try —
+ * shown here only for comparison, not applied to every empty state (see the
+ * report's Future Improvements).
+ */
+function CarIconCandidate({
+  label,
+  Component,
+  current,
+}: {
+  label: string;
+  Component: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+  current?: boolean;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View style={styles.carIconCell}>
+      <View
+        style={[
+          styles.carIconBadge,
+          { backgroundColor: current ? theme.colors.accentTint : theme.colors.fill },
+        ]}
+      >
+        <Component
+          size={32}
+          color={current ? theme.colors.accent : theme.colors.textMuted}
+          strokeWidth={iconTokens.strokeWidth}
+        />
+      </View>
+      <Text variant="captionStrong" style={styles.carIconLabel}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -253,6 +302,16 @@ function Content({
           <IconButton icon="arrowLeft" label={t.back} onPress={() => undefined} />
           <IconButton icon="x" label={t.close} onPress={() => undefined} />
           <IconButton icon="search" label={t.search} onPress={() => undefined} />
+        </View>
+      </Section>
+
+      <Section title={t.sections.carIcon}>
+        <Caption>{t.carIconNote}</Caption>
+        <View style={styles.wrap}>
+          <CarIconCandidate label={t.carIconWas} Component={IconCarBaseline} />
+          <CarIconCandidate label={t.carIconNow} Component={IconCarSuv} current />
+          <CarIconCandidate label={t.carIconOptionA} Component={IconCar4wd} />
+          <CarIconCandidate label={t.carIconOptionB} Component={IconSteeringWheel} />
         </View>
       </Section>
 
@@ -605,4 +664,13 @@ const styles = StyleSheet.create({
   avatar: { width: 32, height: 32, borderRadius: 16, overflow: "hidden" },
   list: { borderWidth: 1, borderRadius: 6, overflow: "hidden" },
   tabsPreview: { borderWidth: 1, borderRadius: 6, overflow: "hidden" },
+  carIconCell: { alignItems: "center", gap: 6, width: 84 },
+  carIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  carIconLabel: { textAlign: "center" },
 });

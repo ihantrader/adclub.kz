@@ -1,5 +1,5 @@
-import { StyleSheet, View } from "react-native";
-import { Button, EmptyState, Screen } from "../../design-system";
+import { Screen } from "../../design-system";
+import { NoCarContent } from "../NoCarState";
 import { useT } from "../../state/language";
 
 /**
@@ -9,29 +9,18 @@ import { useT } from "../../state/language";
  * catalog does not exist for a person without a car, and a screen that
  * showed a piece of it would be a way to look without one.
  *
+ * The content itself — icon, heading, explanation, button — is
+ * `NoCarContent` (TASK-028.B): the empty garage (`GarageView`) shows exactly
+ * the same one, so the two screens that name this state agree on its words.
+ *
  * Registration is not asked for: a guest adds a car and uses the catalog for
  * it; signing in is for an order (PRODUCT 6.6).
  */
 export function NeedsCarScreen({ onAddCar }: { onAddCar: () => void }) {
   const t = useT();
   return (
-    <Screen title={t("tabs.catalog")} root scroll={false}>
-      <View style={styles.content}>
-        <EmptyState
-          icon="car"
-          title={t("catalog.needCarTitle")}
-          text={t("catalog.needCarText")}
-          action={
-            <Button icon="plus" onPress={onAddCar}>
-              {t("garage.add")}
-            </Button>
-          }
-        />
-      </View>
+    <Screen title={t("tabs.catalog")} root centerContent>
+      <NoCarContent onAdd={onAddCar} />
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { flex: 1, justifyContent: "center" },
-});

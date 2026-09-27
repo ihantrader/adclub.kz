@@ -53,7 +53,8 @@ describe("the catalog exists only for a car (D-062)", () => {
 
   it("asks for a car with its own words", () => {
     const ru = JSON.parse(readFileSync(join(i18n, "ru.json"), "utf8")) as Record<string, string>;
-    expect(ru["catalog.needCarTitle"]).toBe("Добавьте автомобиль");
+    // TASK-028.B: the catalog tab and the empty garage share this one text.
+    expect(ru["car.needCarTitle"]).toBe("Добавьте автомобиль");
     expect(ru["garage.add"]).toBe("Добавить автомобиль");
   });
 });

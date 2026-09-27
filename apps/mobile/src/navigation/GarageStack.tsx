@@ -1,10 +1,11 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { EmptyState, Screen } from "../design-system";
+import { Screen } from "../design-system";
 import type { GarageCar } from "../garage/garage";
 import { CarCardView } from "../screens/garage/CarCardView";
 import { GarageView } from "../screens/garage/GarageView";
+import { NoCarContent } from "../screens/NoCarState";
 import { useGarage } from "../state/garage-provider";
 import { useT } from "../state/language";
 import { useCarPicker } from "./car-picker";
@@ -64,8 +65,9 @@ function GarageCarScreen({
       <Screen
         title={t("tabs.garage")}
         back={{ label: t("common.back"), onPress: navigation.goBack }}
+        centerContent
       >
-        <EmptyState icon="car" title={t("garage.emptyTitle")} />
+        <NoCarContent onAdd={carPicker.add} />
       </Screen>
     );
   }

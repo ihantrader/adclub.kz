@@ -335,6 +335,27 @@ async function phonesOf(executor: DbExecutor, accountIds: readonly string[]) {
   return phones;
 }
 
+/**
+ * The customer's name (TASK-029, ARCHITECTURE 4.41, closing the debt of
+ * 4.31 I317): `null` for an order placed by an account that never finished
+ * registration — a club member never went back to add one, not an error.
+ */
+async function namesOf(executor: DbExecutor, accountIds: readonly string[]) {
+  const ids = [...new Set(accountIds)];
+  const names = new Map<string, string | null>();
+  if (ids.length === 0) {
+    return names;
+  }
+  const rows = await executor
+    .select({ id: account.id, name: account.name })
+    .from(account)
+    .where(inArray(account.id, ids));
+  for (const row of rows) {
+    names.set(row.id, row.name);
+  }
+  return names;
+}
+
 // ------------------------------------------------------------------ user
 
 /** The user sees where to go once the supplier accepted, while that still matters. */
@@ -620,11 +641,15 @@ export async function supplierOrderView(
     row.closedByMemberId,
     ...events.map((event) => event.actorMemberId),
   ]);
-  // The phone is read only for an order this supplier accepted.
+  // The phone and the name are read only for an order this supplier accepted.
   const phone =
     row.phoneRevealedAt !== null
       ? (await phonesOf(executor, [row.userAccountId])).get(row.userAccountId)
       : undefined;
+  const name =
+    row.phoneRevealedAt !== null
+      ? ((await namesOf(executor, [row.userAccountId])).get(row.userAccountId) ?? null)
+      : null;
   return {
     ...baseOf(row, lang),
     ...handledOf(row, members),
@@ -635,7 +660,7 @@ export async function supplierOrderView(
     comment: row.comment,
     customer:
       phone !== undefined
-        ? { kind: "revealed", phone }
+        ? { kind: "revealed", phone, name }
         : { kind: "hidden", reason: "not_accepted" },
     decline: declineOf(row),
     events: events.map((event) => eventOf(event, members, "supplier")),
@@ -649,7 +674,7 @@ export async function adminSummaries(
   rows: readonly OrderRow[],
   lang: CatalogLanguage,
 ): Promise<AdminOrderSummary[]> {
-  const [members, names, phones] = await Promise.all([
+  const [members, supplierNamesById, phones, customerNames] = await Promise.all([
     memberNames(executor, [
       ...rows.map((row) => row.handledByMemberId),
       ...rows.map((row) => row.closedByMemberId),
@@ -662,14 +687,22 @@ export async function adminSummaries(
       executor,
       rows.map((row) => row.userAccountId),
     ),
+    namesOf(
+      executor,
+      rows.map((row) => row.userAccountId),
+    ),
   ]);
   return rows.map((row) => {
     const closure = closureFrom(row, members);
     return {
       ...baseOf(row, lang),
       ...handledOf(row, members),
-      supplier: { id: row.supplierId, name: names.get(row.supplierId) ?? "" },
-      customer: { accountId: row.userAccountId, phone: phones.get(row.userAccountId) ?? "" },
+      supplier: { id: row.supplierId, name: supplierNamesById.get(row.supplierId) ?? "" },
+      customer: {
+        accountId: row.userAccountId,
+        phone: phones.get(row.userAccountId) ?? "",
+        name: customerNames.get(row.userAccountId) ?? null,
+      },
       // Only the administrator sees why an order was closed without a code.
       closure: closure ? { ...closure, reason: row.closeReason } : null,
     };

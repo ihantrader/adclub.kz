@@ -22,6 +22,7 @@ import {
   itemText,
   momentText,
   moneyText,
+  oneLine,
   orderStateText,
   phoneText,
   type NoticeLang,
@@ -210,16 +211,22 @@ export class OrderNotices {
       return false;
     }
     const [customer] = await tx
-      .select({ phone: account.phone })
+      .select({ phone: account.phone, name: account.name })
       .from(account)
       .where(eq(account.id, order.userAccountId));
+    // TASK-029 closes the debt of 4.31 I317: a member who finished
+    // registration has a name by the time any order is accepted; one placed
+    // before that (or by an account that skipped ahead) still falls back.
+    const customerName = customer?.name
+      ? oneLine(customer.name).slice(0, 120) || CUSTOMER_NAME_UNKNOWN[member.lang]
+      : CUSTOMER_NAME_UNKNOWN[member.lang];
     await this.messaging.enqueue(tx, {
       template: "order_accepted",
       phone: member.phone,
       lang: member.lang,
       variables: {
         number: String(order.number),
-        customerName: CUSTOMER_NAME_UNKNOWN[member.lang],
+        customerName,
         customerPhone: phoneText(customer?.phone ?? ""),
         link: `${origin}/orders/${order.id}`,
       },

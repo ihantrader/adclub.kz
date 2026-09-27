@@ -27,6 +27,20 @@ export function subscriptionRequired(): ApiException {
   );
 }
 
+/**
+ * 403 `REGISTRATION_INCOMPLETE` (TASK-029, ARCHITECTURE 4.41): the account
+ * has no name and consent yet (SCREENS M-AUTH-03) — checked before club
+ * access, since a name is more fundamental than a subscription: without one
+ * the account isn't a club member at all, whatever its subscription is.
+ */
+export function registrationIncomplete(): ApiException {
+  return new ApiException(
+    403,
+    "REGISTRATION_INCOMPLETE",
+    "Finish registration (a name and the phone-share consent) before ordering",
+  );
+}
+
 export function offerUnavailable(): ApiException {
   return new ApiException(
     409,

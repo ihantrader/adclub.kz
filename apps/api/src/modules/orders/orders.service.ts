@@ -26,7 +26,7 @@ import {
   type UserOrderListQuery,
   type UserOrderPage,
 } from "@adclub/contracts";
-import { activeOrderStatuses, isActiveOrderStatus } from "@adclub/domain";
+import { activeOrderStatuses, isActiveOrderStatus, isRegistrationComplete } from "@adclub/domain";
 import {
   and,
   asc,
@@ -49,7 +49,7 @@ import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
-import { supplier, supplierMember } from "../identity";
+import { AccountStore, supplier, supplierMember } from "../identity";
 import { offer, offerShowcase, OfferSnapshots } from "../offers";
 import { AppSettings } from "../settings";
 import { newConfirmationCode, newQrToken } from "./order-code";
@@ -61,6 +61,7 @@ import {
   notFound,
   offerUnavailable,
   priceChanged,
+  registrationIncomplete,
   stateConflict,
   subscriptionRequired,
   validationError,
@@ -165,6 +166,7 @@ export class OrdersService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AppSettings) private readonly settings: AppSettings,
+    @Inject(AccountStore) private readonly accounts: AccountStore,
     @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
     @Inject(OfferSnapshots) private readonly snapshots: OfferSnapshots,
     @Inject(OrderTransitions) private readonly transitions: OrderTransitions,
@@ -190,6 +192,13 @@ export class OrdersService {
     const replay = await this.byKey(this.database.db, accountId, input.idempotencyKey);
     if (replay) {
       return this.replayed(replay, input, lang);
+    }
+    // TASK-029 requirement 1: a name is more fundamental than a
+    // subscription — checked first, so an unfinished registration never
+    // shows "no subscription" when the real reason is "not a member yet".
+    const registration = await this.accounts.registrationFacts(accountId);
+    if (!registration || !isRegistrationComplete(registration)) {
+      throw registrationIncomplete();
     }
     if (!(await this.clubAccess.has(accountId))) {
       throw subscriptionRequired();

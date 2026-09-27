@@ -23,6 +23,7 @@ import {
   pickerStage,
   resetBelow,
   resolveStage,
+  summaryRows,
   type CarDraft,
   type PickerData,
 } from "./car-picker";
@@ -489,6 +490,43 @@ describe("saving as it is", () => {
         { id: "car-1", addedAt: "2026-09-26T10:00:00.000Z", modifications: [] },
       ),
     ).toMatchObject({ year: null, engine: null, modificationId: null });
+  });
+});
+
+describe("the final step shows the whole car (TASK-028.B)", () => {
+  it("lists every level in order, set or not — not only what is chosen and not only what is missing", () => {
+    const draft: CarDraft = {
+      ...EMPTY_DRAFT,
+      make: pick(GEELY),
+      model: pick(ATLAS),
+      year: 2023,
+    };
+    expect(summaryRows(draft)).toEqual([
+      { level: "make", label: "Geely" },
+      { level: "model", label: "Atlas" },
+      { level: "year", label: "2023" },
+      { level: "generation", label: null },
+      { level: "body", label: null },
+      { level: "engine", label: null },
+      { level: "transmission", label: null },
+      { level: "drive", label: null },
+    ]);
+  });
+
+  it("shows a level auto-selected from a single option exactly like one a person chose", () => {
+    const draft: CarDraft = {
+      make: pick(GEELY),
+      model: pick(ATLAS),
+      year: 2024,
+      generation: { id: "gen-2", label: "II" },
+      body: { id: "body-suv", label: "Внедорожник" },
+      engine: null,
+      transmission: null,
+      drive: null,
+    };
+    const rows = summaryRows(draft);
+    expect(rows.find((row) => row.level === "body")?.label).toBe("Внедорожник");
+    expect(rows.find((row) => row.level === "engine")?.label).toBeNull();
   });
 });
 

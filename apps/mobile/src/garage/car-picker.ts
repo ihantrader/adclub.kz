@@ -3,6 +3,7 @@ import type {
   VehicleModificationView,
   VehicleNamed,
 } from "@adclub/contracts";
+import type { CarColorId } from "./car-color";
 import { CAR_LEVELS, type CarLevel, type CarLevelValue, type GarageCar } from "./garage";
 
 /**
@@ -393,6 +394,32 @@ export function chosenLevels(draft: CarDraft): { level: CarLevel; label: string 
   return chosen;
 }
 
+/** One row of the final step: a level and its label, or `null` when it has none. */
+export interface SummaryRow {
+  level: CarLevel;
+  label: string | null;
+}
+
+/**
+ * Every vehicle level, in order, whether it was chosen by hand, taken
+ * automatically because the data offered only one option, or never asked at
+ * all (the requirement of TASK-028.B: the final step shows the whole car, not
+ * only what is missing or only what a person picked themselves — there is no
+ * way to tell those apart once they are in the draft, and none is needed).
+ * Colour has no level here: it is not part of `CarDraft` (`draftToCar`'s doc).
+ */
+export function summaryRows(draft: CarDraft): SummaryRow[] {
+  return CAR_LEVELS.map((level) => ({
+    level,
+    label:
+      level === "year"
+        ? draft.year === null
+          ? null
+          : String(draft.year)
+        : (draft[level]?.label ?? null),
+  }));
+}
+
 /** «Сохранить так» appears once make and model are known (from the year step). */
 export function canSaveDraft(draft: CarDraft): boolean {
   return draft.make !== null && draft.model !== null;
@@ -401,11 +428,18 @@ export function canSaveDraft(draft: CarDraft): boolean {
 /**
  * The car to store. `modificationId` is set only when the chosen levels
  * name exactly one modification — then the catalog can send the whole
- * modification instead of the separate levels.
+ * modification instead of the separate levels. `color` (D-063) is never part
+ * of the vehicle-catalog draft: it is asked and shown on the final step
+ * (`summaryRows`, `CarSummaryView`) and passed in here separately.
  */
 export function draftToCar(
   draft: CarDraft,
-  options: { id: string; addedAt: string; modifications: readonly VehicleModificationView[] },
+  options: {
+    id: string;
+    addedAt: string;
+    modifications: readonly VehicleModificationView[];
+    color?: CarColorId | null;
+  },
 ): GarageCar | null {
   if (!draft.make || !draft.model) return null;
   const rows = narrowModifications(options.modifications, draft);
@@ -425,6 +459,7 @@ export function draftToCar(
     transmission: draft.transmission,
     drive: draft.drive,
     modificationId: single?.id ?? null,
+    color: options.color ?? null,
     addedAt: options.addedAt,
   };
 }

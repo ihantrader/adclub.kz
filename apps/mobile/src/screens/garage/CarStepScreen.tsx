@@ -1,9 +1,8 @@
 import { CommonActions, StackActions } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { CarStepParams, RootParams } from "../../navigation/routes";
-import type { LevelJump } from "../../garage/car-picker";
+import type { CarDraft, LevelJump } from "../../garage/car-picker";
 import { useGarage } from "../../state/garage-provider";
-import { firstRunStore } from "../../state/stores";
 import { CarStepView } from "./CarStepView";
 
 /**
@@ -12,10 +11,13 @@ import { CarStepView } from "./CarStepView";
  * The screen's whole state is `route.params.draft`, so the stack is the
  * history: opening the next step is a `push` of this route with the chosen
  * value added, and going back — the arrow, the edge swipe, the Android
- * button — is the route underneath, still showing the step it was. Saving
- * closes every step at once and returns where the choice began: the app, to
- * the tab it came from; the first run, to the tabs — which is the end of the
- * first run, because it ends when a car has been added (D-062).
+ * button — is the route underneath, still showing the step it was.
+ *
+ * Nothing here saves a car any more (TASK-028.B): every path that used to
+ * finish the choice now opens the final step (`car-summary`) instead, which
+ * is the only place a car is built, checked for a duplicate and written to
+ * the garage (requirement 3 — a person always sees the whole car, including
+ * what was picked for them, before it is saved).
  */
 export function CarStepScreen({
   route,
@@ -29,6 +31,13 @@ export function CarStepScreen({
   const stepRoutes = () => navigation.getState().routes.filter((item) => item.name === "car-step");
   const screenDrafts = () => stepRoutes().map((item) => (item.params as CarStepParams).draft);
 
+  const openSummary = (resolved: CarDraft) => ({
+    origin,
+    ...(carId ? { carId } : {}),
+    draft: resolved,
+    color: car?.color ?? null,
+  });
+
   return (
     <CarStepView
       // A screen that takes another draft in place (a chosen value tapped on
@@ -36,7 +45,6 @@ export function CarStepScreen({
       // its search field and whatever else it held belong to the step it left.
       key={JSON.stringify(draft)}
       draft={draft}
-      {...(car ? { car } : {})}
       screenDrafts={screenDrafts}
       isActive={() => navigation.isFocused()}
       onNext={(next) =>
@@ -55,20 +63,14 @@ export function CarStepScreen({
         }
         if (jump.pop > 0) navigation.dispatch(StackActions.pop(jump.pop));
       }}
-      onSaved={() => {
-        if (origin === "first-run") {
-          // The car is in the garage: the first run is over. The tabs replace
-          // the whole first run in one forward transition, so «назад» from
-          // the catalog cannot lead back into it.
-          firstRunStore.set({ completed: true, step: "car" });
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "tabs", params: { screen: "catalog" } }],
-          });
-          return;
-        }
-        navigation.dispatch(StackActions.popToTop());
-      }}
+      // «Готово» / «Сохранить так»: the user is looking at this screen, so
+      // «назад» from the summary must return to it — a `push`, on top of it.
+      onSummary={(resolved) => navigation.push("car-summary", openSummary(resolved))}
+      // Every level settled without asking: this screen never showed a step
+      // of its own, so it must not stay in the stack as a silent one either —
+      // «назад» from the summary has to land on the step that really is the
+      // last one (or, with none at all, on whatever opened the choice).
+      onAutoSummary={(resolved) => navigation.replace("car-summary", openSummary(resolved))}
       // One step back per press: a press on a screen that is already leaving
       // (a second tap on the arrow) must not close the step under it as well.
       onBack={() => {

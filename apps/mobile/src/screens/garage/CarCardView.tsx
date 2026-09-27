@@ -15,6 +15,7 @@ import type { CarStep } from "../../garage/car-picker";
 import { CAR_LEVELS, carTitle, type CarLevel, type GarageCar } from "../../garage/garage";
 import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
+import { ColorSheet } from "./ColorSheet";
 
 const LEVEL_STEP_TEXT = {
   make: "car.step.make",
@@ -48,8 +49,9 @@ export interface CarCardViewProps {
 export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps) {
   const t = useT();
   const toast = useToast();
-  const { state, makePrimary, remove } = useGarage();
+  const { state, makePrimary, remove, update } = useGarage();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [colorSheet, setColorSheet] = useState(false);
   // The deletion happens once the dialog has gone: it fades out first, then
   // the card leaves — not both at once.
   const dismissed = useAfterDismiss(confirmDelete);
@@ -87,6 +89,21 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
               />
             );
           })}
+          {/* Colour (D-063): not a level of the vehicle catalog, so it is
+              picked from its own sheet, not by opening a step — nothing
+              below it in the list depends on it. */}
+          <ListRow
+            title={t("car.step.color")}
+            subtitle={car.color === null ? t("common.notSet") : t(`car.color.${car.color}`)}
+            trailing={
+              car.color === null ? (
+                <Text variant="bodyS" color="accent">
+                  {t("garage.complete")}
+                </Text>
+              ) : null
+            }
+            onPress={() => setColorSheet(true)}
+          />
         </View>
 
         {!primary && (
@@ -131,6 +148,13 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
       >
         {t("garage.deleteText", { car: carTitle(car) })}
       </Dialog>
+
+      <ColorSheet
+        visible={colorSheet}
+        onClose={() => setColorSheet(false)}
+        value={car.color}
+        onPick={(color) => update({ ...car, color })}
+      />
     </Screen>
   );
 }

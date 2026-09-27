@@ -1,4 +1,5 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
+import type { CarColorId } from "../garage/car-color";
 import type { CarDraft } from "../garage/car-picker";
 
 /**
@@ -60,6 +61,21 @@ export interface CarStepParams {
   draft: CarDraft;
 }
 
+/**
+ * The final step (TASK-028.B, requirement 3): every level of `draft`, set or
+ * not, plus the colour (D-063) — never itself a level of `CarDraft`, since it
+ * is not part of the vehicle catalog and does not gate anything below it.
+ * The screen this opens does not know whether a value here was chosen by
+ * hand, taken automatically, or (TASK-057, later) read off a photographed
+ * техпаспорт — it only shows what it is given and lets any of it be changed.
+ */
+export interface CarSummaryParams {
+  origin: "first-run" | "app";
+  carId?: string;
+  draft: CarDraft;
+  color: CarColorId | null;
+}
+
 export type RootParams = {
   /** M-START-04. */
   "first-run-city": undefined;
@@ -68,6 +84,8 @@ export type RootParams = {
   tabs: NavigatorScreenParams<TabParams> | undefined;
   /** M-GAR-03. */
   "car-step": CarStepParams;
+  /** M-GAR-03, final step. */
+  "car-summary": CarSummaryParams;
 };
 
 /** The id of the root navigator: `navigation.getParent(ROOT_NAVIGATOR)` finds it from any screen. */

@@ -7,6 +7,7 @@ import { EMPTY_DRAFT } from "../garage/car-picker";
 import { FirstRunCarScreen } from "../screens/FirstRunCarScreen";
 import { FirstRunCityScreen } from "../screens/FirstRunCityScreen";
 import { CarStepScreen } from "../screens/garage/CarStepScreen";
+import { CarSummaryScreen } from "../screens/garage/CarSummaryScreen";
 import type { RootStart } from "../start/root-start";
 import { firstRunStore } from "../state/stores";
 import { MainTabs } from "./MainTabs";
@@ -76,6 +77,7 @@ export function RootNavigator({ start }: { start: RootStart }) {
           options={{ gestureEnabled: false, animationTypeForReplace: "push" }}
         />
         <Stack.Screen name="car-step" component={CarStepScreen} />
+        <Stack.Screen name="car-summary" component={CarSummaryScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

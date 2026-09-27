@@ -95,7 +95,9 @@ async function bodyCode(response: Response): Promise<string | undefined> {
     .clone()
     .json()
     .catch(() => undefined);
-  return typeof body === "object" && body !== null && typeof (body as { code?: unknown }).code === "string"
+  return typeof body === "object" &&
+    body !== null &&
+    typeof (body as { code?: unknown }).code === "string"
     ? (body as { code: string }).code
     : undefined;
 }

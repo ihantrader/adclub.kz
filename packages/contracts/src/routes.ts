@@ -779,7 +779,10 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["user"],
-    requestBody: { description: "Only the fields to change", schema: updateAccountProfileBodySchema },
+    requestBody: {
+      description: "Only the fields to change",
+      schema: updateAccountProfileBodySchema,
+    },
     responses: {
       200: { description: "The updated profile", schema: accountProfileSchema },
     },
@@ -867,9 +870,15 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["user"],
-    requestBody: { description: "Every car of the device's guest garage", schema: transferGarageBodySchema },
+    requestBody: {
+      description: "Every car of the device's guest garage",
+      schema: transferGarageBodySchema,
+    },
     responses: {
-      200: { description: "The account's garage after the merge", schema: transferGarageResponseSchema },
+      200: {
+        description: "The account's garage after the merge",
+        schema: transferGarageResponseSchema,
+      },
     },
   }),
   listMySuppliers: defineRoute({

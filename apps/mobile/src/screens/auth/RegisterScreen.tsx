@@ -14,7 +14,9 @@ import { useSession } from "../../state/session-provider";
  * was verified) — this only gives it a name and the mandatory consent
  * (T-AUTH-05). The city comes from the switcher, not asked here (SCREENS).
  */
-export function RegisterScreen({ navigation }: NativeStackScreenProps<RootParams, "auth-register">) {
+export function RegisterScreen({
+  navigation,
+}: NativeStackScreenProps<RootParams, "auth-register">) {
   const t = useT();
   const session = useSession();
   const [name, setName] = useState("");
@@ -35,7 +37,11 @@ export function RegisterScreen({ navigation }: NativeStackScreenProps<RootParams
       // under way in the background (`SessionProvider`).
       navigation.popToTop();
     } catch (thrown) {
-      setError(isApiError(thrown) && thrown.code === "VALIDATION_ERROR" ? t("auth.nameInvalid") : t("state.errorText"));
+      setError(
+        isApiError(thrown) && thrown.code === "VALIDATION_ERROR"
+          ? t("auth.nameInvalid")
+          : t("state.errorText"),
+      );
     }
   };
 
@@ -58,7 +64,9 @@ export function RegisterScreen({ navigation }: NativeStackScreenProps<RootParams
           autoCapitalize="words"
           textContentType="name"
           maxLength={ACCOUNT_NAME_MAX_LENGTH}
-          error={error ?? (trimmed.length > 0 && !nameLooksUsable ? t("auth.nameInvalid") : undefined)}
+          error={
+            error ?? (trimmed.length > 0 && !nameLooksUsable ? t("auth.nameInvalid") : undefined)
+          }
         />
         <Checkbox label={t("auth.consentLabel")} checked={consent} onChange={setConsent} />
         <Text variant="caption" color="textMuted">

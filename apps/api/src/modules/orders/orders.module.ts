@@ -49,7 +49,14 @@ export class OrdersModule {
             AdminDisciplineController,
           ]
         : [],
-      providers: [AccountStore, Discipline, OrderNotices, OrderTransitions, OrderLookup, OrdersService],
+      providers: [
+        AccountStore,
+        Discipline,
+        OrderNotices,
+        OrderTransitions,
+        OrderLookup,
+        OrdersService,
+      ],
       exports: [OrdersService],
     };
   }

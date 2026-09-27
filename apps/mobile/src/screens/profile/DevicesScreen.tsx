@@ -87,11 +87,18 @@ export function DevicesScreen({
   const endingSession = sessions?.find((session) => session.id === endingId) ?? null;
 
   return (
-    <Screen title={t("profile.devices")} back={{ label: t("common.back"), onPress: navigation.goBack }}>
+    <Screen
+      title={t("profile.devices")}
+      back={{ label: t("common.back"), onPress: navigation.goBack }}
+    >
       <DataState
         status={status}
         skeleton={null}
-        error={{ title: t("state.errorTitle"), text: t("state.errorText"), retry: { label: t("common.retry"), onRetry: load } }}
+        error={{
+          title: t("state.errorTitle"),
+          text: t("state.errorText"),
+          retry: { label: t("common.retry"), onRetry: load },
+        }}
         empty={{ icon: "devices", title: t("state.errorTitle") }}
       >
         <View style={styles.content}>
@@ -102,7 +109,9 @@ export function DevicesScreen({
                 first={index === 0}
                 icon="devices"
                 title={deviceTitle(session, t)}
-                subtitle={session.current ? t("profile.thisDevice") : formatDateTime(session.lastUsedAt)}
+                subtitle={
+                  session.current ? t("profile.thisDevice") : formatDateTime(session.lastUsedAt)
+                }
                 trailing={
                   session.current ? undefined : (
                     <Button variant="text" size="m" onPress={() => setEndingId(session.id)}>
@@ -127,7 +136,11 @@ export function DevicesScreen({
         title={t("profile.endSessionConfirmTitle")}
         actions={
           <>
-            <Button variant="secondary" destructive onPress={() => endingId && void endOne(endingId)}>
+            <Button
+              variant="secondary"
+              destructive
+              onPress={() => endingId && void endOne(endingId)}
+            >
               {t("profile.endSession")}
             </Button>
             <Button variant="text" onPress={() => setEndingId(null)}>

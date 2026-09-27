@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceStorage } from "./device-store";
-import { createSessionStore, parseSessionState, SIGNED_OUT, type StoredSession } from "./session-store";
+import {
+  createSessionStore,
+  parseSessionState,
+  SIGNED_OUT,
+  type StoredSession,
+} from "./session-store";
 
 function memoryStorage(initial: Record<string, string> = {}): DeviceStorage & {
   written: Record<string, string>;

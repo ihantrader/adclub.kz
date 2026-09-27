@@ -85,7 +85,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // transfer itself is idempotent (repeating it is harmless), this only
   // avoids calling it on every render.
   const transferTried = useRef(false);
-  const syncedDeviceValues = useRef<{ cityId: string | null; language: string | null } | null>(null);
+  const syncedDeviceValues = useRef<{ cityId: string | null; language: string | null } | null>(
+    null,
+  );
 
   const status: "guest" | "signed_in" = state.status === "signed_in" ? "signed_in" : "guest";
   const accountId = state.status === "signed_in" ? state.session.accountId : null;

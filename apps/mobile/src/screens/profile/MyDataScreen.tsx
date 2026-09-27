@@ -3,7 +3,15 @@ import { layout } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Button, Checkbox, DataState, Screen, Text, TextField, useToast } from "../../design-system";
+import {
+  Button,
+  Checkbox,
+  DataState,
+  Screen,
+  Text,
+  TextField,
+  useToast,
+} from "../../design-system";
 import type { ProfileStackParams } from "../../navigation/routes";
 import { useT } from "../../state/language";
 import { useSession } from "../../state/session-provider";

@@ -14,7 +14,9 @@ export function loginErrorText(error: unknown, t: LanguageContextValue["t"]): st
       return t("state.offline");
     case "RATE_LIMITED": {
       const seconds =
-        typeof error.details === "object" && error.details !== null && "retryAfterSeconds" in error.details
+        typeof error.details === "object" &&
+        error.details !== null &&
+        "retryAfterSeconds" in error.details
           ? Number((error.details as { retryAfterSeconds: unknown }).retryAfterSeconds)
           : 0;
       return t("auth.rateLimited", { minutes: String(Math.max(1, Math.ceil(seconds / 60))) });
@@ -25,7 +27,9 @@ export function loginErrorText(error: unknown, t: LanguageContextValue["t"]): st
       return t("auth.codeExpired");
     case "LOGIN_CODE_INVALID": {
       const remaining =
-        typeof error.details === "object" && error.details !== null && "attemptsRemaining" in error.details
+        typeof error.details === "object" &&
+        error.details !== null &&
+        "attemptsRemaining" in error.details
           ? Number((error.details as { attemptsRemaining: unknown }).attemptsRemaining)
           : 0;
       return remaining > 0

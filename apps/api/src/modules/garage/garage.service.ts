@@ -50,7 +50,9 @@ function toAccountCar(row: AccountCarRow): AccountCar {
     make: { id: row.makeId, label: row.makeLabel },
     model: { id: row.modelId, label: row.modelLabel },
     year: row.year,
-    generation: row.generationId ? { id: row.generationId, label: row.generationLabel ?? "" } : null,
+    generation: row.generationId
+      ? { id: row.generationId, label: row.generationLabel ?? "" }
+      : null,
     body: row.bodyTypeId ? { id: row.bodyTypeId, label: row.bodyTypeLabel ?? "" } : null,
     engine: row.engineId ? { id: row.engineId, label: row.engineLabel ?? "" } : null,
     transmission: row.transmissionTypeId
@@ -196,48 +198,50 @@ export class GarageService {
    */
   async transfer(accountId: string, body: TransferGarageBody): Promise<TransferGarageResponse> {
     const limit = await this.settings.get("garage_max_cars");
-    return this.withVehicleReferenceCheck(() => this.database.db.transaction(async (tx) => {
-      await this.store.lockAccount(accountId, tx);
-      const existing = await this.store.listByAccount(accountId, tx);
-      const hadPrimary = existing.some((row) => row.isPrimary);
-      const merged: AccountCarRow[] = [...existing];
-      let transferred = 0;
-      let primaryCandidateId: string | null = null;
+    return this.withVehicleReferenceCheck(() =>
+      this.database.db.transaction(async (tx) => {
+        await this.store.lockAccount(accountId, tx);
+        const existing = await this.store.listByAccount(accountId, tx);
+        const hadPrimary = existing.some((row) => row.isPrimary);
+        const merged: AccountCarRow[] = [...existing];
+        let transferred = 0;
+        let primaryCandidateId: string | null = null;
 
-      for (const car of body.cars) {
-        const match = merged.find((row) => sameLevels(row, car.levels));
-        let resolvedId: string;
-        if (match) {
-          resolvedId = match.id;
-        } else {
-          if (merged.length >= limit) {
-            // Generous limit reached mid-merge: leave the rest on the
-            // device rather than fail the whole sign-in.
-            continue;
+        for (const car of body.cars) {
+          const match = merged.find((row) => sameLevels(row, car.levels));
+          let resolvedId: string;
+          if (match) {
+            resolvedId = match.id;
+          } else {
+            if (merged.length >= limit) {
+              // Generous limit reached mid-merge: leave the rest on the
+              // device rather than fail the whole sign-in.
+              continue;
+            }
+            const inserted = await this.store.insert(
+              { accountId, ...levelsOf(car.levels), color: car.color, isPrimary: false },
+              tx,
+            );
+            merged.push(inserted);
+            transferred += 1;
+            resolvedId = inserted.id;
           }
-          const inserted = await this.store.insert(
-            { accountId, ...levelsOf(car.levels), color: car.color, isPrimary: false },
-            tx,
-          );
-          merged.push(inserted);
-          transferred += 1;
-          resolvedId = inserted.id;
+          if (!hadPrimary && primaryCandidateId === null && car.isPrimary) {
+            primaryCandidateId = resolvedId;
+          }
         }
-        if (!hadPrimary && primaryCandidateId === null && car.isPrimary) {
-          primaryCandidateId = resolvedId;
+
+        if (!hadPrimary && merged.length > 0) {
+          // No submitted car claimed primary (a well-behaved device always
+          // sends one when it has any car) — fall back to the first merged,
+          // so the garage never ends up with cars and no primary at all.
+          const chosen = primaryCandidateId ?? merged[0]!.id;
+          await this.store.setPrimary(accountId, chosen, tx);
         }
-      }
 
-      if (!hadPrimary && merged.length > 0) {
-        // No submitted car claimed primary (a well-behaved device always
-        // sends one when it has any car) — fall back to the first merged,
-        // so the garage never ends up with cars and no primary at all.
-        const chosen = primaryCandidateId ?? merged[0]!.id;
-        await this.store.setPrimary(accountId, chosen, tx);
-      }
-
-      const finalRows = await this.store.listByAccount(accountId, tx);
-      return { cars: finalRows.map(toAccountCar), transferred };
-    }));
+        const finalRows = await this.store.listByAccount(accountId, tx);
+        return { cars: finalRows.map(toAccountCar), transferred };
+      }),
+    );
   }
 }

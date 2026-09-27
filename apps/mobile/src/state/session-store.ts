@@ -28,8 +28,7 @@ export interface StoredSession {
 }
 
 export type SessionState =
-  | { status: "signed_in"; session: StoredSession }
-  | { status: "signed_out" };
+  { status: "signed_in"; session: StoredSession } | { status: "signed_out" };
 
 export const SIGNED_OUT: SessionState = { status: "signed_out" };
 

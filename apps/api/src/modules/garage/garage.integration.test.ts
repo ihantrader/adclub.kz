@@ -133,14 +133,12 @@ describe("account garage (PostgreSQL + Redis)", () => {
    * itself needs.
    */
   async function seedVehicleCatalog(): Promise<void> {
-    await db.query(
-      `INSERT INTO vehicle_make (id) VALUES ($1)`,
-      [GEELY_ID],
-    );
-    await db.query(
-      `INSERT INTO vehicle_model (id, make_id) VALUES ($1, $2), ($3, $2)`,
-      [ATLAS_MODEL_ID, GEELY_ID, COOLRAY_MODEL_ID],
-    );
+    await db.query(`INSERT INTO vehicle_make (id) VALUES ($1)`, [GEELY_ID]);
+    await db.query(`INSERT INTO vehicle_model (id, make_id) VALUES ($1, $2), ($3, $2)`, [
+      ATLAS_MODEL_ID,
+      GEELY_ID,
+      COOLRAY_MODEL_ID,
+    ]);
     await db.query(
       `INSERT INTO vehicle_generation (id, model_id, name, name_key, year_from)
        VALUES ($1, $2, 'II', 'ii', 2023)`,
@@ -207,7 +205,11 @@ describe("account garage (PostgreSQL + Redis)", () => {
     return { Authorization: `Bearer ${token}` };
   }
 
-  async function addCar(token: string, levels: CarLevels, color: string | null = null): Promise<Response> {
+  async function addCar(
+    token: string,
+    levels: CarLevels,
+    color: string | null = null,
+  ): Promise<Response> {
     return http()
       .post("/garage/cars")
       .set("X-Client", IOS)

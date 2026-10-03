@@ -338,6 +338,76 @@ describe("account garage (PostgreSQL + Redis)", () => {
     expect(madeUp.status).toBe(404);
   });
 
+  it("keeps its own primary when the car named to become primary is someone else's or does not exist", async () => {
+    const token = await signIn("+77011230031");
+    const strangerToken = await signIn("+77011230032");
+    const mine = accountCarSchema.parse((await addCar(token, ATLAS)).body);
+    const other = accountCarSchema.parse((await addCar(token, COOLRAY)).body);
+    const stranger = accountCarSchema.parse((await addCar(strangerToken, COOLRAY)).body);
+    expect(mine.isPrimary).toBe(true);
+
+    for (const carId of [stranger.id, randomUUID()]) {
+      const response = await http()
+        .post(`/garage/cars/${carId}/primary`)
+        .set("X-Client", IOS)
+        .set(bearer(token));
+      expect(response.status, JSON.stringify(response.body)).toBe(404);
+      // The refusal cost the caller nothing: still exactly one primary car, the same one.
+      const cars = garageCarsResponseSchema.parse(
+        (await http().get("/garage/cars").set("X-Client", IOS).set(bearer(token))).body,
+      ).cars;
+      expect(cars.filter((car) => car.isPrimary).map((car) => car.id)).toEqual([mine.id]);
+    }
+    // The stranger's own primary was not touched either.
+    const strangerCars = garageCarsResponseSchema.parse(
+      (await http().get("/garage/cars").set("X-Client", IOS).set(bearer(strangerToken))).body,
+    ).cars;
+    expect(strangerCars.map((car) => [car.id, car.isPrimary])).toEqual([[stranger.id, true]]);
+
+    // A real one still works, and moves the primary.
+    const moved = await http()
+      .post(`/garage/cars/${other.id}/primary`)
+      .set("X-Client", IOS)
+      .set(bearer(token));
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    const after = garageCarsResponseSchema.parse(
+      (await http().get("/garage/cars").set("X-Client", IOS).set(bearer(token))).body,
+    ).cars;
+    expect(after.filter((car) => car.isPrimary).map((car) => car.id)).toEqual([other.id]);
+  });
+
+  it("lists the cars of one transfer in the order the device sent them, newest first, and passes primary to the oldest", async () => {
+    const token = await signIn("+77011230033");
+    const wire = (levels: CarLevels, isPrimary: boolean) => ({ levels, color: null, isPrimary });
+    // Three cars in one transaction used to share one created_at: the order was a guess.
+    const third: CarLevels = { ...COOLRAY, year: 2021 };
+    const response = await http()
+      .post("/garage/transfer")
+      .set("X-Client", IOS)
+      .set(bearer(token))
+      .send({ cars: [wire(ATLAS, true), wire(COOLRAY, false), wire(third, false)] });
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    const years = transferGarageResponseSchema.parse(response.body).cars.map((car) => car.year);
+    expect(years).toEqual([2021, 2022, 2023]);
+    const cars = garageCarsResponseSchema.parse(
+      (await http().get("/garage/cars").set("X-Client", IOS).set(bearer(token))).body,
+    ).cars;
+    expect(cars.map((car) => car.year)).toEqual([2021, 2022, 2023]);
+
+    // The primary (the device's own choice, the first sent) leaves: the oldest left takes over.
+    const primary = cars.find((car) => car.isPrimary)!;
+    expect(primary.year).toBe(2023);
+    const removed = await http()
+      .delete(`/garage/cars/${primary.id}`)
+      .set("X-Client", IOS)
+      .set(bearer(token));
+    expect(removed.status).toBe(200);
+    const left = garageCarsResponseSchema.parse(
+      (await http().get("/garage/cars").set("X-Client", IOS).set(bearer(token))).body,
+    ).cars;
+    expect(left.find((car) => car.isPrimary)?.year).toBe(2022);
+  });
+
   it("refuses to add a car once the account is at the settings limit", async () => {
     await settings.set({ garage_max_cars: 1 });
     const token = await signIn("+77011230008");

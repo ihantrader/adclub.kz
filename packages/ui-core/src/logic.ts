@@ -234,6 +234,7 @@ export type IconName =
   | "moon"
   | "myLocation"
   | "package"
+  | "phone"
   | "plus"
   | "progressCheck"
   | "receipt"

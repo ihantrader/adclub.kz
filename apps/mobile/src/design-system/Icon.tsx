@@ -34,6 +34,7 @@ import IconMinus from "@tabler/icons-react-native/IconMinus";
 import IconMoon from "@tabler/icons-react-native/IconMoon";
 import IconCurrentLocation from "@tabler/icons-react-native/IconCurrentLocation";
 import IconPackage from "@tabler/icons-react-native/IconPackage";
+import IconPhone from "@tabler/icons-react-native/IconPhone";
 import IconPlus from "@tabler/icons-react-native/IconPlus";
 import IconProgressCheck from "@tabler/icons-react-native/IconProgressCheck";
 import IconReceipt from "@tabler/icons-react-native/IconReceipt";
@@ -82,6 +83,7 @@ export const icons = {
   moon: IconMoon,
   myLocation: IconCurrentLocation,
   package: IconPackage,
+  phone: IconPhone,
   plus: IconPlus,
   progressCheck: IconProgressCheck,
   receipt: IconReceipt,

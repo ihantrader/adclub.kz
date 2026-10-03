@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Animated,
   Easing,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -38,6 +39,12 @@ export interface ScreenProps {
   refreshing?: boolean;
   /** Refresh label for screen readers. */
   refreshingLabel?: string;
+  /**
+   * Pulling the content down asks for a refresh (M-ORD-03, TASK-030). The
+   * platform's spinner lets go at once; the refresh itself shows as the
+   * line above, like any other refresh over content (SCREENS 2.1).
+   */
+  onPullToRefresh?: () => void;
   /** `false` for a screen that lays out its own list. */
   scroll?: boolean;
   /**
@@ -68,6 +75,7 @@ export function Screen({
   footer,
   refreshing = false,
   refreshingLabel,
+  onPullToRefresh,
   scroll = true,
   centerContent = false,
   bottomInset = false,
@@ -83,6 +91,16 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       onScroll={(event) => setScrolled(event.nativeEvent.contentOffset.y > 4)}
       scrollEventThrottle={32}
+      refreshControl={
+        onPullToRefresh ? (
+          <RefreshControl
+            refreshing={false}
+            onRefresh={onPullToRefresh}
+            tintColor={theme.colors.accent}
+            colors={[theme.colors.accent]}
+          />
+        ) : undefined
+      }
     >
       {children}
     </ScrollView>

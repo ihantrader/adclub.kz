@@ -1,7 +1,14 @@
 import { isLang, type Lang } from "@adclub/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getRandomBytes } from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { INITIAL_GARAGE, parseGarage, type GarageState } from "../garage/garage";
+import { forgetOpenedOrders } from "../orders/opened-orders";
+import {
+  createOrdersCopyStore,
+  type OrdersCopyStore,
+  type ValueStorage,
+} from "../orders/order-copy";
 import { INITIAL_FIRST_RUN, parseFirstRun, type FirstRunState } from "../start/first-run";
 import { INITIAL_CITY_STATE, parseCityState, type CityState } from "./city";
 import {
@@ -35,10 +42,48 @@ const secureStorage: DeviceStorage = {
  */
 export const sessionStore: DeviceStore<SessionState> = createSessionStore(secureStorage);
 
-/** Clears the session and the secure key itself (sign-out, `SESSION_ENDED`, PRODUCT 6.7). */
+/**
+ * The saved copy of active orders (TASK-030, ARCHITECTURE 4.42): the codes
+ * and the QR of every active order, to open without a network. Sealed with
+ * AES-GCM (`orders/copy-crypto.ts`); the sealed text is in `AsyncStorage`
+ * (no size limit to worry about), its key in the secure storage of this
+ * device only — the key never travels to a backup or another phone, and
+ * deleting it makes whatever is left of the text unreadable.
+ */
+const ORDERS_COPY_KEY = "adclub.mobile.orders-copy";
+const ORDERS_COPY_SECRET_KEY = "adclub.mobile.orders-key";
+
+const ordersCopyText: ValueStorage = {
+  read: () => AsyncStorage.getItem(ORDERS_COPY_KEY),
+  write: (value) => AsyncStorage.setItem(ORDERS_COPY_KEY, value),
+  remove: () => AsyncStorage.removeItem(ORDERS_COPY_KEY),
+};
+
+const ordersCopySecret: ValueStorage = {
+  read: () => SecureStore.getItemAsync(ORDERS_COPY_SECRET_KEY),
+  write: (value) =>
+    SecureStore.setItemAsync(ORDERS_COPY_SECRET_KEY, value, {
+      keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+    }),
+  remove: () => SecureStore.deleteItemAsync(ORDERS_COPY_SECRET_KEY),
+};
+
+export const ordersCopyStore: OrdersCopyStore = createOrdersCopyStore({
+  sealed: ordersCopyText,
+  key: ordersCopySecret,
+  random: getRandomBytes,
+});
+
+/**
+ * Clears the session and the secure key itself (sign-out, `SESSION_ENDED`,
+ * PRODUCT 6.7) — and with it the saved copy of active orders: the codes do
+ * not outlive the session they were saved under (TASK-030 requirement 6).
+ */
 export function clearSession(): void {
   sessionStore.set(SIGNED_OUT);
   void SecureStore.deleteItemAsync("adclub.mobile.session").catch(() => undefined);
+  void ordersCopyStore.clear();
+  forgetOpenedOrders();
 }
 
 /**
@@ -86,6 +131,7 @@ export const devicePreferencesLoaded: Promise<void> = Promise.all([
   firstRunStore.ready,
   garageStore.ready,
   sessionStore.ready,
+  ordersCopyStore.ready,
 ]).then(() => undefined);
 
 let preferencesRead = false;

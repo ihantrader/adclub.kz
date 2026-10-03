@@ -1,13 +1,14 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import { RootNavigator } from "../navigation/RootNavigator";
 import { LanguageScreen } from "../screens/LanguageScreen";
 import { SplashScreen } from "../screens/SplashScreen";
 import { UpdateRequiredScreen } from "../screens/UpdateRequiredScreen";
 import { updateGate } from "../services/api";
-import { useOnline } from "../services/use-network";
+import { useNetworkStatus } from "../services/use-network";
 import { useGarage } from "../state/garage-provider";
 import { useLanguage } from "../state/language";
+import { OrdersReadOnly, useOrdersCopy } from "../state/orders-provider";
 import {
   devicePreferencesLoaded,
   devicePreferencesWereRead,
@@ -21,8 +22,6 @@ import { decideStart, type PolicyState, type StartInput } from "./start-decision
 /** How long the splash may wait for the client policy before going on (SCREENS 5.1). */
 const POLICY_WAIT_MS = 2_500;
 
-/** What TASK-030 will provide: the saved copy of active orders. */
-const SAVED_ACTIVE_ORDERS = false;
 /** What TASK-031 will provide: the push the app was opened from. */
 const PUSH: StartInput["push"] = null;
 
@@ -40,8 +39,14 @@ const PUSH: StartInput["push"] = null;
 export function AppStart() {
   const { chosen, system, setLanguage } = useLanguage();
   const gate = useUpdateGateState(updateGate);
-  const policy = usePolicyState(gate);
-  const online = useOnline();
+  const waited = useWaited(POLICY_WAIT_MS);
+  const policy = policyStateOf(gate, waited);
+  const network = useNetworkStatus();
+  const { copy } = useOrdersCopy();
+  const savedActiveOrders = (copy?.orders.length ?? 0) > 0;
+  // M-START-03 «Показать активные заявки» was pressed: the codes from the copy, read only (D-027).
+  const [readOnlyOrders, setReadOnlyOrders] = useState(false);
+  const leaveReadOnly = useCallback(() => setReadOnlyOrders(false), [setReadOnlyOrders]);
   const firstRun = useSyncExternalStore(firstRunStore.subscribe, firstRunStore.get);
   const { cars } = useGarage();
   const preferencesRead = usePreferencesRead();
@@ -69,10 +74,22 @@ export function AppStart() {
     firstRun,
     hasCar: cars.length > 0,
     session: session.status === "signed_in" ? "active" : "none",
-    online,
-    savedActiveOrders: SAVED_ACTIVE_ORDERS,
+    // Unknown only for the first moments: after the policy wait the app goes
+    // on as if online, and a request that fails shows its own state.
+    online: network ?? (waited ? true : null),
+    // The copy of this account only (`useOrdersCopy` shows no other).
+    savedActiveOrders,
     push: PUSH,
   });
+
+  // The update is no longer required (checked again on return): the
+  // read-only list goes together with the update screen.
+  const updateRequired = decision.screen === "update-required";
+  useEffect(() => {
+    // Following the gate, an external state, back to the ordinary app.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!updateRequired) setReadOnlyOrders(false);
+  }, [updateRequired]);
 
   // Rule 2: a system kk/ru/en is applied silently and kept, without a screen.
   useEffect(() => {
@@ -84,10 +101,23 @@ export function AppStart() {
       return <SplashScreen />;
 
     case "update-required":
+      // «Показать активные заявки» — only for a signed-in person whose copy
+      // holds orders; the same navigator, opened on the list of the copy,
+      // with nothing that needs the server (D-027, SCREENS M-START-03).
+      if (readOnlyOrders && savedActiveOrders) {
+        return (
+          <OrdersReadOnly exit={leaveReadOnly}>
+            <RootNavigator key="orders-readonly" start={{ screen: "orders-readonly" }} />
+          </OrdersReadOnly>
+        );
+      }
       return (
         <UpdateRequiredScreen
           message={gate.status === "update-required" ? gate.message : ""}
           onCheckAgain={updateGate.check}
+          {...(session.status === "signed_in" && savedActiveOrders
+            ? { onShowOrders: () => setReadOnlyOrders(true) }
+            : {})}
         />
       );
 
@@ -130,18 +160,22 @@ function usePreferencesRead(): boolean {
   return read;
 }
 
+/** Whether `ms` have passed since the app opened: how long the splash may wait for anything. */
+function useWaited(ms: number): boolean {
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(true), ms);
+    return () => clearTimeout(timer);
+  }, [ms]);
+  return waited;
+}
+
 /**
  * The policy as the start decision sees it: `pending` while the request is
  * in flight, and only for the first couple of seconds — after that the app
  * goes on without an answer and reacts to a 426 whenever it arrives.
  */
-function usePolicyState(state: UpdateGateState): PolicyState {
-  const [waited, setWaited] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setWaited(true), POLICY_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, []);
-
+function policyStateOf(state: UpdateGateState, waited: boolean): PolicyState {
   switch (state.status) {
     case "update-required":
       return "update-required";

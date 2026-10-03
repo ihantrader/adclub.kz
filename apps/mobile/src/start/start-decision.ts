@@ -5,10 +5,10 @@ import { isLang, type Lang } from "@adclub/i18n";
  *
  * A pure function on purpose — the order of the seven rules is the product
  * decision, and it is checked by tests without React Native. Everything the
- * order needs is an input; the inputs whose data arrives with later tasks
- * (a session — TASK-029, the saved copy of active orders — TASK-030, a push
- * — TASK-031) are already here and are passed as "no" today. Adding them
- * later means passing another value, not changing this order.
+ * order needs is an input; the session (TASK-029) and the saved copy of
+ * active orders (TASK-030) are real values now, and the push (TASK-031) is
+ * still passed as "no". Adding it means passing another value, not changing
+ * this order.
  */
 export type StartScreen =
   /** M-START-01 — the logo, while the policy answer is still worth waiting for. */
@@ -42,7 +42,7 @@ export type PolicyState =
   /** No answer yet — the splash does not wait for the server longer than a few seconds. */
   | "pending";
 
-/** The saved session (TASK-029): today always `none`. */
+/** The saved session (TASK-029): `active` — signed in, `none` — a guest. */
 export type SessionState = "none" | "active" | "revoked";
 
 export interface PushTarget {
@@ -65,8 +65,15 @@ export interface StartInput {
    */
   hasCar: boolean;
   session: SessionState;
-  online: boolean;
-  /** Whether the device holds a copy of active orders (TASK-030). */
+  /**
+   * Whether the device has a network; `null` — it has not said yet (the
+   * first moment of the app). Only rule 5 cares about the difference: a
+   * signed-in person with saved orders waits on the splash for that answer
+   * — never longer than the policy wait, after which the caller says
+   * `true` (TASK-030).
+   */
+  online: boolean | null;
+  /** Whether the device holds a copy of active orders for this session (TASK-030). */
   savedActiveOrders: boolean;
   /** The push the app was opened from (TASK-031). */
   push: PushTarget | null;
@@ -135,9 +142,11 @@ function continueAfterLanguage(input: StartInput): StartDecision {
     return { screen: "catalog", signedOutNotice: true };
   }
 
-  // 5. No network, signed in, and the device holds active orders.
-  if (!input.online && input.session === "active" && input.savedActiveOrders) {
-    return { screen: "orders-offline" };
+  // 5. No network, signed in, and the device holds active orders. Until the
+  //    device has said whether there is a network, that one person waits.
+  if (input.session === "active" && input.savedActiveOrders) {
+    if (input.online === null) return { screen: "splash" };
+    if (!input.online) return { screen: "orders-offline" };
   }
 
   // 6. Opened from a push.

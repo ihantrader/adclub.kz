@@ -45,3 +45,20 @@ export function useSignIn() {
     };
   }, [navigation]);
 }
+
+/**
+ * Leaves the sign-in flow for the screen that opened it (TASK-030): only the
+ * screens of the flow go, so a checkout that sent a person to finish the
+ * registration (`REGISTRATION_INCOMPLETE`) is still there when they are done,
+ * with what they had entered — not every screen above the tabs.
+ */
+export function leaveAuthFlow(navigation: {
+  getState: () => { routes: readonly { name: string }[] };
+  pop: (count?: number) => void;
+  popToTop: () => void;
+}): void {
+  const routes = navigation.getState().routes;
+  const first = routes.findIndex((route) => route.name.startsWith("auth-"));
+  if (first <= 0) navigation.popToTop();
+  else navigation.pop(routes.length - first);
+}

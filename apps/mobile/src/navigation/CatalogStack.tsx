@@ -140,6 +140,7 @@ function CatalogItem({
       onBack={navigation.goBack}
       onOpenItem={(item) => navigation.push("catalog-item", { itemId: item.id, title: item.name })}
       onCompleteCar={completeEngine}
+      {...(route.params.notice ? { notice: route.params.notice } : {})}
     />
   );
 }

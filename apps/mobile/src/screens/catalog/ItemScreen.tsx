@@ -4,12 +4,15 @@ import type {
   ShowcaseOfferSort,
 } from "@adclub/contracts";
 import { layout, radius, size } from "@adclub/ui-core";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   Badge,
+  Banner,
+  Button,
   CategoryIcon,
   DataState,
   Icon,
@@ -29,7 +32,14 @@ import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { formatTenge } from "../../catalog/format";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle, type GarageCar } from "../../garage/garage";
+import { ROOT_NAVIGATOR, type RootParams } from "../../navigation/routes";
+import { useSignIn } from "../../navigation/use-sign-in";
+import { canOrderOffer } from "../../orders/checkout";
+import { orderGate, resumeOrderGate, type OrderGate } from "../../orders/order-gate";
+import { catalogRefresh } from "../../services/catalog-refresh";
 import { SignInSheet } from "../auth/SignInSheet";
+import { ClubAccessSheet } from "../orders/ClubAccessSheet";
+import { useSession } from "../../state/session-provider";
 import { useShowcaseItem } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
@@ -54,18 +64,32 @@ export interface ItemScreenProps {
   /** «Дополнить автомобиль»: the steps of choosing a car, at the engine. */
   onCompleteCar: (car: GarageCar) => void;
   onBack: () => void;
+  /** Opened by «Повторить заказ» instead of the checkout: why the same offer is not here (TASK-030). */
+  notice?: "offer_withdrawn" | "supplier_unavailable";
 }
 
 /**
- * M-CAT-07 — the card of an item. There is no «Оформить» here: orders are
- * TASK-030, and a button that does nothing is worse than no button.
+ * M-CAT-07 — the card of an item. «Оформить» on an offer in stock leads by
+ * the state of the person (`orderGate`, TASK-030): a guest signs in and
+ * comes back to the checkout, an account without a name finishes the
+ * registration first, a member without club access sees the stand-in
+ * sheet, anybody else checks out. An offer «Под заказ» has no button — a
+ * short line says those orders come later (stage C), so nothing is pressed
+ * in vain.
  *
  * The supplier of an offer is shown **exactly** as the server hands it over
  * (D-005): without club access the answer carries no name, no id and no
  * address at all, only `kind: "hidden"`, and the card says «Поставщик
  * клуба». The app never tries to work the name out from anything else.
  */
-export function ItemScreen({ itemId, title, onOpenItem, onCompleteCar, onBack }: ItemScreenProps) {
+export function ItemScreen({
+  itemId,
+  title,
+  onOpenItem,
+  onCompleteCar,
+  onBack,
+  notice,
+}: ItemScreenProps) {
   const { t } = useLanguage();
   const online = useOnline();
   const toast = useToast();
@@ -86,12 +110,15 @@ export function ItemScreen({ itemId, title, onOpenItem, onCompleteCar, onBack }:
 
   useFocusEffect(
     useCallback(() => {
-      request.reloadIfStale();
+      // The checkout learned that an offer of this card is gone: load now.
+      if (catalogRefresh.take(itemId)) request.reload();
+      else request.reloadIfStale();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []),
+    }, [itemId]),
   );
 
   const data = request.data;
+  const ordering = useOrderButton(itemId, data?.viewer ?? null, request.reload);
   const carName = carTitle(car);
 
   const status =
@@ -140,6 +167,13 @@ export function ItemScreen({ itemId, title, onOpenItem, onCompleteCar, onBack }:
       >
         {data && (
           <View style={styles.body}>
+            {notice && (
+              <Banner tone="warning">
+                {notice === "offer_withdrawn"
+                  ? t("item.noticeOfferWithdrawn")
+                  : t("item.noticeSupplierUnavailable")}
+              </Banner>
+            )}
             <Photos
               photos={data.item.photos}
               icon={null}
@@ -236,7 +270,7 @@ export function ItemScreen({ itemId, title, onOpenItem, onCompleteCar, onBack }:
                   </Pressable>
                   <View style={styles.offers}>
                     {data.offers.map((offer) => (
-                      <OfferCard key={offer.id} offer={offer} />
+                      <OfferCard key={offer.id} offer={offer} onOrder={ordering.press} />
                     ))}
                   </View>
                 </>
@@ -286,6 +320,7 @@ export function ItemScreen({ itemId, title, onOpenItem, onCompleteCar, onBack }:
           />
         ))}
       </Sheet>
+      {ordering.sheets}
     </Screen>
   );
 }
@@ -356,7 +391,110 @@ function Photos({
   );
 }
 
-function OfferCard({ offer }: { offer: ShowcaseOffer }) {
+/**
+ * «Оформить» of the card (TASK-030 requirement 1): what a press leads to,
+ * and the press of a guest remembered until they come back signed in
+ * (SCREENS M-AUTH-00 «после входа — возврат к действию»). The sign-in and
+ * the registration are screens pushed over this one, so «came back» is this
+ * screen in focus again after it had been left.
+ */
+function useOrderButton(
+  itemId: string,
+  viewer: { signedIn: boolean; clubAccess: boolean } | null,
+  reload: () => void,
+) {
+  const { t } = useLanguage();
+  const session = useSession();
+  const signIn = useSignIn();
+  const navigation = useNavigation();
+  const focused = useIsFocused();
+  const [signInSheet, setSignInSheet] = useState(false);
+  const [clubSheet, setClubSheet] = useState(false);
+  const [pending, setPending] = useState<{ offerId: string; afterReturn: boolean } | null>(null);
+  const left = useRef(false);
+
+  const gate: OrderGate = orderGate({
+    session: session.status,
+    registrationCompleted:
+      session.status === "signed_in" ? (session.profile?.registrationCompleted ?? null) : null,
+    viewer,
+  });
+
+  const go = useCallback(
+    (to: OrderGate, offerId: string) => {
+      if (to === "club-access") {
+        setClubSheet(true);
+        // The card says what the server thought a moment ago; access given
+        // meanwhile (by invitation, today) shows on the next press.
+        reload();
+        return;
+      }
+      navigation
+        .getParent<NativeStackNavigationProp<RootParams>>(ROOT_NAVIGATOR)
+        ?.push("order-checkout", { itemId, offerId });
+    },
+    [navigation, itemId, reload],
+  );
+
+  useEffect(() => {
+    if (!focused) left.current = true;
+  }, [focused]);
+
+  // Carry the remembered press out once the person is back (or once what it
+  // waited for — the profile, the card as this account sees it — has come).
+  useEffect(() => {
+    if (!pending || !focused) return;
+    if (pending.afterReturn && !left.current) return;
+    const next = resumeOrderGate(gate);
+    if (next === "wait") return;
+    // A remembered press is carried out or forgotten once, as an effect of
+    // the session and the card arriving.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPending(null);
+    if (next === "go") go(gate, pending.offerId);
+  }, [pending, focused, gate, go]);
+
+  const press = (offerId: string) => {
+    left.current = false;
+    switch (gate) {
+      case "sign-in":
+        setPending({ offerId, afterReturn: true });
+        setSignInSheet(true);
+        return;
+      case "register":
+        setPending({ offerId, afterReturn: true });
+        signIn.resumeRegistration();
+        return;
+      case "wait":
+        setPending({ offerId, afterReturn: false });
+        return;
+      default:
+        go(gate, offerId);
+    }
+  };
+
+  return {
+    press,
+    sheets: (
+      <>
+        <SignInSheet
+          visible={signInSheet}
+          onClose={() => setSignInSheet(false)}
+          reason={t("auth.gateOrder")}
+        />
+        <ClubAccessSheet visible={clubSheet} onClose={() => setClubSheet(false)} />
+      </>
+    ),
+  };
+}
+
+function OfferCard({
+  offer,
+  onOrder,
+}: {
+  offer: ShowcaseOffer;
+  onOrder: (offerId: string) => void;
+}) {
   const { t, lang } = useLanguage();
   const { theme } = useTheme();
   const receiptText = useReceiptText();
@@ -440,6 +578,15 @@ function OfferCard({ offer }: { offer: ShowcaseOffer }) {
           {offer.warrantyText}
         </Text>
       ) : null}
+      {canOrderOffer(offer) ? (
+        <Button size="m" onPress={() => onOrder(offer.id)} style={styles.orderButton}>
+          {t("item.order")}
+        </Button>
+      ) : (
+        <Text variant="bodyS" color="textMuted" style={styles.orderLater}>
+          {t("item.onOrderLater")}
+        </Text>
+      )}
     </View>
   );
 }
@@ -469,4 +616,6 @@ const styles = StyleSheet.create({
   offers: { gap: 12 },
   offer: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
   supplierLine: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 4 },
+  orderButton: { marginTop: 8 },
+  orderLater: { paddingTop: 8 },
 });

@@ -1,3 +1,4 @@
+import type { OrderFulfillment } from "@adclub/contracts";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { CarColorId } from "../garage/car-color";
 import type { CarDraft } from "../garage/car-picker";
@@ -23,8 +24,16 @@ export type CatalogStackParams = {
   "catalog-node": { categoryId: string; title?: string };
   /** M-CAT-02: the items of a subcategory. */
   "catalog-items": { categoryId: string; title?: string };
-  /** M-CAT-07. */
-  "catalog-item": { itemId: string; title?: string };
+  /**
+   * M-CAT-07. `notice` — why the card was opened by «Повторить заказ»
+   * instead of the checkout (TASK-030): the offer was withdrawn, or the
+   * supplier is not taking orders now.
+   */
+  "catalog-item": {
+    itemId: string;
+    title?: string;
+    notice?: "offer_withdrawn" | "supplier_unavailable";
+  };
 };
 
 export type GarageStackParams = {
@@ -109,6 +118,32 @@ export type AuthStackParams = {
   "auth-register": undefined;
 };
 
+/**
+ * M-ORD-01 (TASK-030): the checkout of one offer of an item. The screen
+ * loads the card of the item itself, so the price, the dates and the
+ * supplier are the ones of now, not of the screen it came from. `preset` —
+ * what «Повторить заказ» fills in from the finished order;
+ * `previousPrice` — its price, to say «Цена изменилась».
+ */
+export interface CheckoutParams {
+  itemId: string;
+  offerId: string;
+  preset?: { quantity: number; fulfillment: OrderFulfillment };
+  previousPrice?: number;
+}
+
+/** The order screens (TASK-030). The code is never a parameter — it is read from the order or the copy. */
+export type OrderStackParams = {
+  /** M-ORD-01. */
+  "order-checkout": CheckoutParams;
+  /** M-ORD-03. */
+  order: { orderId: string };
+  /** M-ORD-04. */
+  "order-qr": { orderId: string };
+  /** M-ORD-02 «только просмотр» after M-START-03 (D-027): the copy, nothing that needs the server. */
+  "orders-readonly": undefined;
+};
+
 export type RootParams = {
   /** M-START-04. */
   "first-run-city": undefined;
@@ -119,7 +154,8 @@ export type RootParams = {
   "car-step": CarStepParams;
   /** M-GAR-03, final step. */
   "car-summary": CarSummaryParams;
-} & AuthStackParams;
+} & AuthStackParams &
+  OrderStackParams;
 
 /** The id of the root navigator: `navigation.getParent(ROOT_NAVIGATOR)` finds it from any screen. */
 export const ROOT_NAVIGATOR = "root";

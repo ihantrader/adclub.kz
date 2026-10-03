@@ -1,4 +1,5 @@
 import { isApiError } from "@adclub/api-client";
+import { leaveAuthFlow } from "../../navigation/use-sign-in";
 import { accountNameSchema, ACCOUNT_NAME_MAX_LENGTH } from "@adclub/contracts";
 import { layout } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -35,7 +36,7 @@ export function RegisterScreen({
       // The root stack's history starts at "tabs" (see `CodeScreen`) — this
       // returns to whatever asked to sign in, with the transfer already
       // under way in the background (`SessionProvider`).
-      navigation.popToTop();
+      leaveAuthFlow(navigation);
     } catch (thrown) {
       setError(
         isApiError(thrown) && thrown.code === "VALIDATION_ERROR"

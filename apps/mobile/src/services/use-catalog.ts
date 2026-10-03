@@ -9,11 +9,12 @@ import {
   type ShowcaseListResponse,
   type ShowcaseListSort,
 } from "@adclub/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import type { FilterQuery } from "../catalog/filters";
 import type { VehicleQuery } from "../catalog/vehicle-query";
 import { useLanguage } from "../state/language";
+import { sessionStore } from "../state/stores";
 import { apiClient } from "./api";
 import { createRequestCache } from "./request-cache";
 import { loadRows } from "./showcase-rows";
@@ -107,16 +108,27 @@ export interface ShowcaseItemOptions {
   sort: NonNullable<ShowcaseItemQuery["sort"]>;
 }
 
+/** The account the catalog speaks to; `guest` — nobody signed in. */
+function useViewerKey(): string {
+  const session = useSyncExternalStore(sessionStore.subscribe, sessionStore.get);
+  return session.status === "signed_in" ? session.session.accountId : "guest";
+}
+
 export function useShowcaseItem(
   itemId: string,
   { cityId, vehicle, sort }: ShowcaseItemOptions,
 ): RequestState<ShowcaseItemResponse> {
   const { lang } = useLanguage();
+  const viewer = useViewerKey();
   const query = { ...(cityId ? { cityId } : {}), ...vehicle, sort };
   // Another order of the offers is the same card: it stays on screen, with
   // the refresh line, until the new answer arrives — not a skeleton in place
   // of the whole card and the reader back at the top (SCREENS 2.1).
-  const scope = `item:${itemId}:${lang}:${JSON.stringify(scopeQuery({ cityId, vehicle }))}`;
+  // Who is asking is part of the question (TASK-030): the card of a guest
+  // names no supplier and says `viewer.signedIn: false`, so signing in
+  // loads it again, as the account sees it — that is how «Оформить» pressed
+  // by a guest goes on once they are back.
+  const scope = `item:${itemId}:${lang}:${viewer}:${JSON.stringify(scopeQuery({ cityId, vehicle }))}`;
   return useRequest(
     `${scope}:${sort}`,
     (signal) => apiClient.getShowcaseItem({ itemId }, { signal, query }),

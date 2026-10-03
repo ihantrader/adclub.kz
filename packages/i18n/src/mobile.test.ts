@@ -61,6 +61,38 @@ describe("mobile texts", () => {
     expect(mobileText("ru", "orders.guestEmptyTitle")).toBe(
       "Здесь будут ваши заявки и коды для получения",
     );
+    // TASK-030: the orders (T-GATE-01, T-ORD-01, T-ORD-04…07, M-ORD-01…03).
+    expect(mobileText("ru", "auth.gateOrder")).toBe(
+      "Войдите, чтобы оформить заявку и получить код",
+    );
+    expect(mobileText("ru", "checkout.phoneNotice")).toBe(
+      "Имя и номер телефона передадим поставщику, когда он примет заявку",
+    );
+    expect(mobileText("ru", "checkout.deliveryNote")).toBe(
+      "Условия и стоимость доставки согласуете с поставщиком",
+    );
+    expect(mobileText("ru", "order.showCode")).toBe("Покажите QR или назовите код сотруднику");
+    expect(mobileText("ru", "order.codeLater")).toBe("Код понадобится после принятия заявки");
+    expect(mobileText("ru", "order.offlineNote")).toBe("Обновлено в {time}. Статус мог измениться");
+    expect(mobileText("ru", "checkout.priceChangedText")).toBe(
+      "Цена изменилась: было {was}, стало {now}",
+    );
+    expect(mobileText("ru", "checkout.duplicateTitle")).toBe(
+      "У вас уже есть заявка на это предложение",
+    );
+    expect(mobileText("ru", "order.cancelConfirmText")).toBe(
+      "Поставщик получит уведомление об отмене",
+    );
+    expect(mobileText("ru", "orders.activeEmptyTitle")).toBe("Активных заявок нет");
+    expect(mobileText("ru", "orders.historyEmptyTitle")).toBe("Здесь появятся выполненные заявки");
+    expect(mobileText("ru", "orders.historyOffline")).toBe("История доступна при подключении");
+    expect(mobileText("ru", "orders.readOnlyBanner")).toBe(
+      "Приложение нужно обновить. Сейчас доступны только коды заявок",
+    );
+    expect(mobileText("ru", "orderStatus.created.title")).toBe("Ждём ответа поставщика");
+    expect(mobileText("ru", "orderStatus.reserveExpired.text")).toBe(
+      "Заявка закрыта. Оформите новую, если товар ещё нужен",
+    );
   });
 
   it("shows the language options in their own language, without flags", () => {

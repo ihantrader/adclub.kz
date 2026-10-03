@@ -11,6 +11,10 @@ import { FirstRunCarScreen } from "../screens/FirstRunCarScreen";
 import { FirstRunCityScreen } from "../screens/FirstRunCityScreen";
 import { CarStepScreen } from "../screens/garage/CarStepScreen";
 import { CarSummaryScreen } from "../screens/garage/CarSummaryScreen";
+import { CheckoutScreen } from "../screens/orders/CheckoutScreen";
+import { OrderQrScreen } from "../screens/orders/OrderQrScreen";
+import { OrderScreen } from "../screens/orders/OrderScreen";
+import { OrdersScreen } from "../screens/tabs/OrdersScreen";
 import type { RootStart } from "../start/root-start";
 import { firstRunStore } from "../state/stores";
 import { MainTabs } from "./MainTabs";
@@ -88,6 +92,16 @@ export function RootNavigator({ start }: { start: RootStart }) {
             system "назад" still works — leaving it incomplete is allowed
             (SCREENS M-AUTH-03: a gated action simply returns here later). */}
         <Stack.Screen name="auth-register" component={RegisterScreen} />
+        {/* Orders (TASK-030): above the tabs, like the steps and the sign-in. */}
+        <Stack.Screen name="order-checkout" component={CheckoutScreen} />
+        <Stack.Screen name="order" component={OrderScreen} />
+        <Stack.Screen name="order-qr" component={OrderQrScreen} />
+        {/* M-START-03 «Показать активные заявки»: the copy, read only (`OrdersReadOnly`). */}
+        <Stack.Screen
+          name="orders-readonly"
+          component={OrdersScreen}
+          options={{ gestureEnabled: false }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

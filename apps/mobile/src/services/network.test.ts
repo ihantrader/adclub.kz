@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOnline } from "./network";
+import { isNetworkKnown, isOnline } from "./network";
 
 describe("isOnline", () => {
   it("is online when the device is connected and the internet is reachable", () => {
@@ -20,5 +20,14 @@ describe("isOnline", () => {
     expect(isOnline(undefined)).toBe(true);
     expect(isOnline({})).toBe(true);
     expect(isOnline({ isConnected: true, isInternetReachable: null })).toBe(true);
+  });
+});
+
+describe("isNetworkKnown", () => {
+  it("is false until the device has said whether it is connected (the first moment of the app)", () => {
+    expect(isNetworkKnown({})).toBe(false);
+    expect(isNetworkKnown(null)).toBe(false);
+    expect(isNetworkKnown({ isConnected: false })).toBe(true);
+    expect(isNetworkKnown({ isConnected: true, isInternetReachable: null })).toBe(true);
   });
 });

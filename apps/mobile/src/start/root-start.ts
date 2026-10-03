@@ -12,7 +12,15 @@ import type { StartScreen } from "./start-decision";
  * not steps in it.
  */
 export type RootStart =
-  { screen: "first-run-city" } | { screen: "first-run-car" } | { screen: "tabs"; tab: TabName };
+  | { screen: "first-run-city" }
+  | { screen: "first-run-car" }
+  | { screen: "tabs"; tab: TabName }
+  /**
+   * M-START-03 «Показать активные заявки» (D-027, TASK-030): the saved copy
+   * only, to show a code and a QR — not a decision of `decideStart`, but a
+   * press on the update screen, which opens the same navigator on this list.
+   */
+  | { screen: "orders-readonly" };
 
 export function rootStart(screen: StartScreen): RootStart | null {
   switch (screen) {

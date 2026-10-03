@@ -1,4 +1,5 @@
 import { layout } from "@adclub/ui-core";
+import { leaveAuthFlow } from "../../navigation/use-sign-in";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -51,7 +52,7 @@ export function CodeScreen({ navigation, route }: NativeStackScreenProps<RootPar
           // The root stack's history starts at "tabs" (`RootNavigator` resets it
           // there once the first run ends), so the top of it is always what
           // opened the sign-in flow, with its own nested state untouched.
-          navigation.popToTop();
+          leaveAuthFlow(navigation);
         }
       } catch (thrown) {
         setCode("");

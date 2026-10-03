@@ -1,5 +1,5 @@
 import { useNetworkState } from "expo-network";
-import { isOnline } from "./network";
+import { isNetworkKnown, isOnline } from "./network";
 
 /**
  * Whether the app has a network right now. One hook for the whole app: the
@@ -9,4 +9,10 @@ import { isOnline } from "./network";
 export function useOnline(): boolean {
   const state = useNetworkState();
   return isOnline(state);
+}
+
+/** `true`/`false` once the device has said, `null` until then (only the start of the app waits for it). */
+export function useNetworkStatus(): boolean | null {
+  const state = useNetworkState();
+  return isNetworkKnown(state) ? isOnline(state) : null;
 }

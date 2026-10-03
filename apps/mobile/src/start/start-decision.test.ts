@@ -167,6 +167,33 @@ describe("decideStart — the order of SCREENS 5.1", () => {
     ).toBe("catalog");
   });
 
+  it("5. waits on the splash while the network is unknown, only for a signed-in person with saved orders (TASK-030)", () => {
+    const signedInWithCopy = { ...RETURNING, session: "active" as const, savedActiveOrders: true };
+    expect(decideStart({ ...signedInWithCopy, online: null })).toEqual({ screen: "splash" });
+    // Nobody else waits for the network: there is nothing offline to open for them.
+    expect(decideStart({ ...RETURNING, online: null }).screen).toBe("catalog");
+    expect(
+      decideStart({ ...signedInWithCopy, savedActiveOrders: false, online: null }).screen,
+    ).toBe("catalog");
+    // Once known — the copy offline, the catalog online.
+    expect(decideStart({ ...signedInWithCopy, online: false }).screen).toBe("orders-offline");
+    expect(decideStart({ ...signedInWithCopy, online: true }).screen).toBe("catalog");
+  });
+
+  it("5. the copy changes no earlier rule: the update screen, the language, the first run come first", () => {
+    const withCopy = { session: "active" as const, savedActiveOrders: true, online: false };
+    expect(decideStart({ ...RETURNING, ...withCopy, policy: "update-required" }).screen).toBe(
+      "update-required",
+    );
+    expect(decideStart({ ...FIRST_LAUNCH, ...withCopy, systemLanguage: null }).screen).toBe(
+      "language",
+    );
+    expect(decideStart({ ...FIRST_LAUNCH, ...withCopy }).screen).toBe("first-run-city");
+    expect(decideStart({ ...RETURNING, ...withCopy, online: null, policy: "pending" }).screen).toBe(
+      "splash",
+    );
+  });
+
   it("5. beats a push", () => {
     expect(
       decideStart({

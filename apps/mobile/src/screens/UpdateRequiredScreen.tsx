@@ -8,16 +8,26 @@ interface UpdateRequiredScreenProps {
   /** Text of the server's client policy; empty — the app's own fallback text. */
   message: string;
   onCheckAgain: () => Promise<unknown>;
+  /**
+   * «Показать активные заявки» (TASK-030, D-027): given only when the person
+   * is signed in and the device holds a copy with orders — otherwise there
+   * is no such button.
+   */
+  onShowOrders?: () => void;
 }
 
 /**
  * M-START-03: the server said this version is too old. The text comes from
  * the server in the interface language, with the app's own fallback
  * (T-START-02); the store line follows the platform. "Показать активные
- * заявки" appears only for a signed-in user with a saved copy of orders
- * (TASK-029/030) — there is neither yet, so the button is not built.
+ * заявки" appears only for a signed-in user with a saved copy of orders and
+ * opens the codes read only (TASK-030).
  */
-export function UpdateRequiredScreen({ message, onCheckAgain }: UpdateRequiredScreenProps) {
+export function UpdateRequiredScreen({
+  message,
+  onCheckAgain,
+  onShowOrders,
+}: UpdateRequiredScreenProps) {
   const t = useT();
   const { theme } = useTheme();
   return (
@@ -37,6 +47,11 @@ export function UpdateRequiredScreen({ message, onCheckAgain }: UpdateRequiredSc
       {/* The button shows loading and ignores repeated presses until the check settles. */}
       <View style={styles.actions}>
         <Button onPress={onCheckAgain}>{t("update.checkAgain")}</Button>
+        {onShowOrders && (
+          <Button variant="secondary" onPress={onShowOrders}>
+            {t("update.showOrders")}
+          </Button>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -52,5 +67,5 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   center: { textAlign: "center" },
-  actions: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: 16 },
+  actions: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: 16, gap: 8 },
 });

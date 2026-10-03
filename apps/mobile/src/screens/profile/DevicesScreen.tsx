@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, DataState, Dialog, ListRow, Screen, useToast } from "../../design-system";
 import type { ProfileStackParams } from "../../navigation/routes";
+import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { apiClient } from "../../services/api";
 import { useT, type LanguageContextValue } from "../../state/language";
 
@@ -40,6 +41,7 @@ export function DevicesScreen({
 }: NativeStackScreenProps<ProfileStackParams, "profile-devices">) {
   const t = useT();
   const { show } = useToast();
+  useLeaveWhenSignedOut(navigation);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [endingId, setEndingId] = useState<string | null>(null);

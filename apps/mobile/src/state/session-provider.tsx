@@ -125,7 +125,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         garageStore.set(garageStateFromAccountCars(result.cars));
         if (result.transferred > 0) show(t("auth.garageTransferred"));
       }
-      const cityId = cityIdOf(city.selection);
+      // Read from the stores now, not from the render this callback was made
+      // in: it is made once, long before the city is chosen or the language
+      // known, and a stale value here overwrote the account's city with
+      // `null` right after the sync effect below had set it (found in the
+      // browser walk-through of TASK-029.A).
+      const cityId = cityIdOf(cityStore.get().selection);
       const lang = languageStore.get();
       syncedDeviceValues.current = { cityId, language: lang };
       const next = await apiUpdateAccountProfile({ cityId, ...(lang ? { language: lang } : {}) });
@@ -133,9 +138,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       transferTried.current = false;
     }
-    // Deliberately not depending on `city`/`language`: this effect fires once
-    // per sign-in, not on every later switch (the sync effect below handles those).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, t]);
 
   // A fresh sign-in (or the app reopening while signed in): load the profile,

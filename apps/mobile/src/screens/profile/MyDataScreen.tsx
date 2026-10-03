@@ -13,6 +13,7 @@ import {
   useToast,
 } from "../../design-system";
 import type { ProfileStackParams } from "../../navigation/routes";
+import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { useT } from "../../state/language";
 import { useSession } from "../../state/session-provider";
 
@@ -24,6 +25,7 @@ export function MyDataScreen({
 }: NativeStackScreenProps<ProfileStackParams, "profile-my-data">) {
   const t = useT();
   const session = useSession();
+  useLeaveWhenSignedOut(navigation);
   const { show } = useToast();
   const profile = session.profile;
 

@@ -544,6 +544,67 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       expect(output.text()).toContain("context=supplier route=admin");
     });
 
+    it("keeps the profile and the garage of an account for its mobile session alone (TASK-029)", async () => {
+      // The same number is an app user, an employee and an administrator at once.
+      const supplierId = await company("Автомаркет");
+      await employ(supplierId, PHONE);
+      const admin = await setUpAdmin(PHONE);
+      const mobile = await mobileSession(PHONE);
+      const cabinet = await supplierSession(PHONE);
+      const missing = "00000000-0000-4000-8000-000000000029";
+
+      // What each route answers a mobile session that sends nothing it could act on:
+      // past the access check, into the route — never 401 or 403.
+      const routes = [
+        {
+          method: "post",
+          path: "/auth/complete-registration",
+          body: { name: "Айгерим", phoneShareConsent: true, phoneShareConsentVersion: "test" },
+          reached: 200,
+        },
+        { method: "get", path: "/account/profile", reached: 200 },
+        { method: "patch", path: "/account/profile", body: {}, reached: 200 },
+        { method: "get", path: "/garage/cars", reached: 200 },
+        { method: "post", path: "/garage/cars", body: {}, reached: 400 },
+        { method: "patch", path: `/garage/cars/${missing}`, body: {}, reached: 400 },
+        { method: "delete", path: `/garage/cars/${missing}`, reached: 404 },
+        { method: "post", path: `/garage/cars/${missing}/primary`, reached: 404 },
+        { method: "post", path: "/garage/transfer", body: { cars: [] }, reached: 200 },
+      ] as const;
+      const call = (
+        route: (typeof routes)[number],
+        auth: { token: string; client: string } | null,
+      ): Test => {
+        const test = http()
+          [route.method](route.path)
+          .set("X-Client", auth?.client ?? IOS);
+        if (auth) {
+          test.set("Authorization", `Bearer ${auth.token}`);
+        }
+        return "body" in route ? test.send(route.body) : test;
+      };
+
+      for (const route of routes) {
+        const label = `${route.method} ${route.path}`;
+        // The mobile session gets in.
+        const own = await call(route, { token: mobile, client: IOS });
+        expect(own.status, `mobile ${label}: ${JSON.stringify(own.body)}`).toBe(route.reached);
+        // A guest does not.
+        expectError(await call(route, null), 401, "AUTH_REQUIRED");
+        // Neither does the same person's cabinet or admin session.
+        expectError(
+          await call(route, { token: cabinet.accessToken, client: SUPPLIER_WEB }),
+          403,
+          "FORBIDDEN",
+        );
+        expectError(
+          await call(route, { token: admin.accessToken, client: ADMIN_WEB }),
+          403,
+          "FORBIDDEN",
+        );
+      }
+    });
+
     it("gives a caller without X-Client only a mobile session, even for an employee and an administrator", async () => {
       const supplierId = await company("Автомаркет");
       await employ(supplierId, PHONE);

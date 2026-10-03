@@ -166,12 +166,19 @@ export class GarageService {
   }
 
   async setPrimary(accountId: string, carId: string): Promise<AccountCar> {
-    const row = await this.database.db.transaction((tx) =>
-      this.store.setPrimary(accountId, carId, tx),
-    );
-    if (!row) {
-      throw garageCarNotFound();
-    }
+    const row = await this.database.db.transaction(async (tx) => {
+      await this.store.lockAccount(accountId, tx);
+      // Ownership is settled before anything is touched: a car that is not
+      // this account's (or is gone) must not cost the account its primary.
+      if (!(await this.store.findOwned(accountId, carId, tx))) {
+        throw garageCarNotFound();
+      }
+      const updated = await this.store.setPrimary(accountId, carId, tx);
+      if (!updated) {
+        throw garageCarNotFound();
+      }
+      return updated;
+    });
     return toAccountCar(row);
   }
 
@@ -185,8 +192,8 @@ export class GarageService {
    * person transferring at the same moment merge one after the other, not
    * into two racing copies (edge case, TASK-029).
    *
-   * The primary stays whatever the account already had (`требование: если
-   * в учётной записи основного ещё нет`); only an account with none yet
+   * The primary stays whatever the account already had (the device's
+   * choice counts only while the account has none); only an account with none yet
    * takes the device's own primary, or — if none of the submitted cars was
    * marked primary — the first one merged, so a garage that gains its first
    * car always ends up with exactly one primary.

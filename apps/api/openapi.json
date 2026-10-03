@@ -29049,7 +29049,7 @@
         "type": "object",
         "properties": {
           "cars": {
-            "maxItems": 50,
+            "maxItems": 500,
             "type": "array",
             "items": {
               "type": "object",
@@ -29452,7 +29452,8 @@
           "language": {
             "$ref": "#/components/schemas/CatalogLanguage"
           }
-        }
+        },
+        "additionalProperties": {}
       },
       "UpdateAttributeBody": {
         "type": "object",

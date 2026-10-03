@@ -6,31 +6,9 @@ import type {
 } from "@adclub/contracts";
 import { isRegistrationComplete } from "@adclub/domain";
 import { ApiException } from "../../../common/errors";
-import { DatabaseService } from "../../../database";
+import { DatabaseService, FOREIGN_KEY_VIOLATION, postgresError } from "../../../database";
 import { ActionJournal } from "../action-journal";
 import { AccountStore, type AccountProfileRow } from "./account.store";
-
-/**
- * A Postgres foreign-key violation (`city_id` naming a city that doesn't
- * exist), however deep a wrapper buried the driver's own error: Drizzle
- * throws `DrizzleQueryError` with the real `pg` error (and its `code`) only
- * on `.cause`, and `withoutQueryParameters` (`database/database-error.ts`)
- * wraps even that a level further for logging — checking `error.code` alone
- * missed both (found live-testing `PATCH /account/profile` with a
- * non-existent `cityId`, TASK-029 report, "Errors & Fixes"; the garage
- * module's `isVehicleReferenceViolation` had the identical bug).
- */
-function isForeignKeyViolation(error: unknown): boolean {
-  let current = error;
-  for (let depth = 0; depth < 3 && typeof current === "object" && current !== null; depth += 1) {
-    const candidate = current as { code?: string; cause?: unknown };
-    if (typeof candidate.code === "string") {
-      return candidate.code === "23503";
-    }
-    current = candidate.cause;
-  }
-  return false;
-}
 
 function validationError(path: string, message: string): ApiException {
   return new ApiException(400, "VALIDATION_ERROR", message, { details: [{ path, message }] });
@@ -45,9 +23,8 @@ function collapseSpaces(name: string): string {
  * The account's profile (TASK-029, ARCHITECTURE 4.41): finishing
  * registration (a name and the phone-share consent — SCREENS M-AUTH-03) and
  * reading/changing "Мои данные" (M-PRO-02) afterward. The phone number is
- * never part of a body here (PRODUCT 6.1); the contract already leaves it
- * out of every request schema, so there is nothing more to reject beyond
- * what `updateAccountProfileBodySchema`'s `.strict()` already refuses.
+ * never part of a body here (PRODUCT 6.1): `updateAccountProfileBodySchema`
+ * refuses a body that names it, so it never reaches this service.
  *
  * Every write and its journal entry share one transaction (ARCHITECTURE
  * 4.13, TASK-009): a failure to record either rolls back both, so the
@@ -155,7 +132,8 @@ export class AccountProfileService {
       });
       return this.toProfile(row);
     } catch (error) {
-      if (isForeignKeyViolation(error)) {
+      // `city_id` naming a city that doesn't exist.
+      if (postgresError(error)?.code === FOREIGN_KEY_VIOLATION) {
         throw validationError("cityId", "No such city");
       }
       throw error;

@@ -35,7 +35,7 @@ export const carLevelsSchema = z.object({
 
 export type CarLevels = z.infer<typeof carLevelsSchema>;
 
-/** D-063: a fixed list, kept in application code (`packages/domain`), not the vehicle catalog. */
+/** D-063: a fixed list, kept in application code (here), not the vehicle catalog. The app adds only the swatches. */
 export const CAR_COLOR_IDS = [
   "white",
   "black",
@@ -118,7 +118,9 @@ export const transferGarageBodySchema = z.object({
         isPrimary: z.boolean(),
       }),
     )
-    .max(50),
+    // The ceiling of `garage_max_cars` (500): the setting is the real limit, and a
+    // transfer past it is cut there, not refused; this only bounds the body.
+    .max(500),
 });
 
 export type TransferGarageBody = z.infer<typeof transferGarageBodySchema>;

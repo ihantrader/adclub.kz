@@ -1,4 +1,5 @@
 import { ApiException } from "../../common/errors";
+import { FOREIGN_KEY_VIOLATION, postgresError } from "../../database";
 
 /**
  * Contract errors of the account's garage (ARCHITECTURE 4.41). A car that
@@ -27,41 +28,19 @@ const LEVEL_BY_CONSTRAINT: Record<string, string> = {
   account_car_engine_id_fkey: "levels.engine.id",
 };
 
-/**
- * The Postgres driver's own error, however deep a wrapper buried it: Drizzle
- * throws `DrizzleQueryError`, whose `code`/`constraint` live on `.cause`
- * (the `pg` error itself), not on the `DrizzleQueryError` instance — and
- * `withoutQueryParameters` (`database/database-error.ts`) wraps *that* in a
- * plain `Error` for logging, keeping the original one step further down as
- * `.cause` again. One property is `undefined` on none, one, or both of the
- * wrappers a given error passed through, so this walks down until it finds
- * `code`, rather than assuming a fixed depth.
- */
-function pgErrorOf(error: unknown): { code?: string; constraint?: string } | undefined {
-  let current = error;
-  for (let depth = 0; depth < 3 && typeof current === "object" && current !== null; depth += 1) {
-    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
-    if (typeof candidate.code === "string") {
-      return candidate;
-    }
-    current = candidate.cause;
-  }
-  return undefined;
-}
-
-/** A Postgres foreign-key violation (`23503`) on one of `account_car`'s vehicle references. */
+/** A Postgres foreign-key violation on one of `account_car`'s vehicle references. */
 export function isVehicleReferenceViolation(error: unknown): boolean {
-  const pgError = pgErrorOf(error);
+  const pgError = postgresError(error);
   return (
-    pgError?.code === "23503" &&
-    typeof pgError.constraint === "string" &&
+    pgError?.code === FOREIGN_KEY_VIOLATION &&
+    pgError.constraint !== undefined &&
     pgError.constraint in LEVEL_BY_CONSTRAINT
   );
 }
 
 /** The level a rejected insert or update named, once `isVehicleReferenceViolation` is true. */
 export function vehicleReferenceInvalid(error: unknown): ApiException {
-  const constraint = pgErrorOf(error)?.constraint ?? "";
+  const constraint = postgresError(error)?.constraint ?? "";
   const path = LEVEL_BY_CONSTRAINT[constraint] ?? "levels";
   return new ApiException(400, "VALIDATION_ERROR", "No such vehicle in the catalog", {
     details: [{ path, message: "No such vehicle in the catalog" }],

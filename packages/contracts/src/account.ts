@@ -21,8 +21,9 @@ export const ACCOUNT_NAME_MAX_LENGTH = 80;
  * A letter of any script (so the Kazakh letters ә ғ қ ң ө ұ ү h і pass, as
  * SCREENS M-AUTH-03 calls for explicitly), then letters, single spaces,
  * hyphens and apostrophes — no digits, no emoji, no control characters.
- * Normalizing (trim, collapse inner whitespace) happens on the server before
- * this is checked, so " Марат  Б " and "Марат Б" are the same request.
+ * The schema trims the edges; the server then collapses inner whitespace
+ * (`AccountProfileService`), so " Марат  Б " and "Марат Б" are stored alike.
+ * The length limit is counted before that collapse.
  */
 export const accountNameSchema = z
   .string()
@@ -55,7 +56,7 @@ export const accountProfileSchema = z.object({
   cityId: z.uuid().nullable(),
   /** `null` — not yet transferred from a device (TASK-029 requirement 5). */
   language: catalogLanguageSchema.nullable(),
-  /** `name !== null` — whether this account may act as a club member. */
+  /** A name and the phone-share consent are both there — whether this account may act as a club member. */
   registrationCompleted: z.boolean(),
   phoneShareConsent: phoneShareConsentSchema.nullable(),
 });
@@ -83,23 +84,35 @@ export type CompleteRegistrationBody = z.infer<typeof completeRegistrationBodySc
 /**
  * `PATCH /account/profile` (SCREENS M-PRO-02 «Мои данные», and the silent
  * transfer of the device's city and language after registration, TASK-029
- * requirement 5): every field optional, `phone` not among them at all —
- * every route of the contract tolerates fields it doesn't declare (a newer
- * client, ARCHITECTURE 7.4), so an attempt to send it is simply ignored
- * rather than a `.strict()` schema turning it into a `VALIDATION_ERROR`
- * (that would also make `openapi.test.ts`'s "response objects [and request
- * bodies] stay open to additive fields" check fail — the whole contract, not
- * only responses, is meant to grow this way). `email: null` clears the
- * address (and `emailNewsConsent` is not implicitly changed by that — the
- * server turns it off itself, since a consent about an address that no
- * longer exists cannot stay on).
+ * requirement 5): every field optional, `phone` not among them. The body
+ * stays open to fields it doesn't declare (a newer client, ARCHITECTURE 7.4:
+ * a `.strict()` schema would also fail `openapi.test.ts`), except `phone`
+ * itself, which is refused by name (400 `VALIDATION_ERROR` on `phone`) —
+ * the number doesn't change in MVP (PRODUCT 6.1), the same way
+ * `PATCH /supplier/company` refuses the administrator's fields. `email: null`
+ * clears the address, and the server turns `emailNewsConsent` off with it,
+ * since a consent about an address that no longer exists cannot stay on.
  */
-export const updateAccountProfileBodySchema = z.object({
-  name: accountNameSchema.optional(),
-  email: z.string().trim().toLowerCase().max(254).email().nullable().optional(),
-  emailNewsConsent: z.boolean().optional(),
-  cityId: z.uuid().nullable().optional(),
-  language: catalogLanguageSchema.optional(),
-});
+export const updateAccountProfileBodySchema = z
+  .object({
+    name: accountNameSchema.optional(),
+    email: z.string().trim().toLowerCase().max(254).email().nullable().optional(),
+    emailNewsConsent: z.boolean().optional(),
+    cityId: z.uuid().nullable().optional(),
+    language: catalogLanguageSchema.optional(),
+  })
+  .loose()
+  .superRefine((body, context) => {
+    // The one field refused by name (PRODUCT 6.1: the phone number does not
+    // change in MVP): a body naming it is a mistake worth a clear answer,
+    // not one to swallow. Every other unknown field stays tolerated.
+    if ("phone" in body) {
+      context.addIssue({
+        code: "custom",
+        path: ["phone"],
+        message: "The phone number cannot be changed",
+      });
+    }
+  });
 
 export type UpdateAccountProfileBody = z.infer<typeof updateAccountProfileBodySchema>;

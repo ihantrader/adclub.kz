@@ -69,8 +69,17 @@ export class GarageStore {
     return row;
   }
 
+  /**
+   * Cars added in one transaction (a transfer) get their own moments, in the
+   * order they were inserted: `now()` is the moment the transaction began and
+   * would give them all the same one, and "the oldest" and "newest first"
+   * would then be a guess.
+   */
   async insert(input: NewAccountCar, executor: DbExecutor): Promise<AccountCarRow> {
-    const [row] = await executor.insert(accountCar).values(input).returning();
+    const [row] = await executor
+      .insert(accountCar)
+      .values({ ...input, createdAt: sql`clock_timestamp()`, updatedAt: sql`clock_timestamp()` })
+      .returning();
     return row!;
   }
 
@@ -146,13 +155,5 @@ export class GarageStore {
       .orderBy(asc(accountCar.createdAt))
       .limit(1);
     return row?.id;
-  }
-
-  async hasPrimary(accountId: string, executor: DbExecutor = this.database.db): Promise<boolean> {
-    const [row] = await executor
-      .select({ id: accountCar.id })
-      .from(accountCar)
-      .where(and(eq(accountCar.accountId, accountId), eq(accountCar.isPrimary, true)));
-    return row !== undefined;
   }
 }

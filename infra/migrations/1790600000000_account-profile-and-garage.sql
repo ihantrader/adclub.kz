@@ -10,7 +10,7 @@
 
 ALTER TABLE account
   -- Required to act as a club member (PRODUCT 6.1); NULL — registration is
-  -- not finished yet (`registrationComplete`, ARCHITECTURE 4.41).
+  -- not finished yet (`isRegistrationComplete`, ARCHITECTURE 4.41).
   ADD COLUMN name TEXT,
   -- The city switch (PRODUCT 6.3), once it lives in the account rather
   -- than only on the device. NULL — "весь Казахстан", same as the device.
@@ -38,8 +38,8 @@ ALTER TABLE account
 -- adding the same `..._kind` companion columns and composite key here only to
 -- guard a value the account garage never computes anything from (no
 -- compatibility check reads `account_car`, PRODUCT 6.4) is not worth the
--- weight — a garage-only application check keeps them consistent instead
--- (`GarageService`).
+-- weight — the ids are stored as the device sent them and echoed back as
+-- they came, with the labels it showed.
 CREATE TABLE account_car (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL REFERENCES account (id),
@@ -61,7 +61,7 @@ CREATE TABLE account_car (
   -- Known only when the levels named exactly one modification (mobile
   -- ARCHITECTURE 4.38 I397); not used by the merge, only echoed back.
   modification_id UUID REFERENCES vehicle_modification (id),
-  -- D-063; a fixed list in application code (`packages/domain`), not a
+  -- D-063; a fixed list in application code (`CAR_COLOR_IDS`, `packages/contracts`), not a
   -- foreign key — it never affects compatibility and needs no migration
   -- of its own to add a colour.
   color TEXT,

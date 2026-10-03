@@ -102,3 +102,7 @@ export {
 } from "./order/order-reserve";
 export { isRegistrationComplete } from "./account/registration";
 export type { RegistrationFacts } from "./account/registration";
+export { CAR_IDENTITY_LEVELS, carIdentity, sameCar, sameCarIdentity } from "./garage/same-car";
+export type { CarIdentity, CarIdentityLevel, CarLevelRef, CarLevelsLike } from "./garage/same-car";
+export { sameCarCases } from "./garage/same-car-cases";
+export type { SameCarCase, SameCarCaseCar, SameCarCaseLevel } from "./garage/same-car-cases";

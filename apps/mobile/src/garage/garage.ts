@@ -1,4 +1,7 @@
+import { CAR_IDENTITY_LEVELS, sameCar, type CarIdentityLevel } from "@adclub/domain";
 import { isCarColorId, type CarColorId } from "./car-color";
+
+export { sameCar };
 
 /**
  * The garage kept on the device (PRODUCT 6.6, SCREENS M-GAR-01, M-GAR-06;
@@ -18,8 +21,9 @@ import { isCarColorId, type CarColorId } from "./car-color";
  *   apart while both exist;
  * - `addedAt` keeps the order in which the guest added the cars, so a merge
  *   can be reproducible;
- * - `sameCar` is the one rule for "this is the same car", used both by the
- *   duplicate question here and by the merge without duplicates later;
+ * - `sameCar` is the one rule for "this is the same car" — `@adclub/domain`'s,
+ *   the very function the server's merge decides by (ARCHITECTURE 4.41 I447);
+ *   it is used here by the duplicate question;
  * - `version` lets a later format be recognised instead of silently
  *   mis-parsed.
  *
@@ -29,19 +33,14 @@ import { isCarColorId, type CarColorId } from "./car-color";
  * paint, and a colour is never part of what the server is asked to match.
  */
 
-/** The levels of a car, in the order they are asked for (M-GAR-03). */
-export const CAR_LEVELS = [
-  "make",
-  "model",
-  "year",
-  "generation",
-  "body",
-  "engine",
-  "transmission",
-  "drive",
-] as const;
+/**
+ * The levels of a car, in the order they are asked for (M-GAR-03): the very
+ * levels the rule of «the same car» compares, so a level cannot be added to
+ * the picker without the rule hearing of it.
+ */
+export const CAR_LEVELS = CAR_IDENTITY_LEVELS;
 
-export type CarLevel = (typeof CAR_LEVELS)[number];
+export type CarLevel = CarIdentityLevel;
 
 /** A chosen level: the id the server knows and the label that was shown. */
 export interface CarLevelValue {
@@ -77,8 +76,6 @@ export interface GarageState {
 }
 
 export const INITIAL_GARAGE: GarageState = { version: 1, cars: [], primaryId: null };
-
-const OPTIONAL_LEVELS = ["generation", "body", "engine", "transmission", "drive"] as const;
 
 function parseLevelValue(raw: unknown): CarLevelValue | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -126,16 +123,6 @@ export function parseGarage(raw: unknown): GarageState | null {
       ? value.primaryId
       : (cars[0]?.id ?? null);
   return { version: 1, cars, primaryId };
-}
-
-/** The one rule for "the same car": every level is the same (TASK-029 merges by it). */
-export function sameCar(a: GarageCar, b: GarageCar): boolean {
-  return (
-    a.make.id === b.make.id &&
-    a.model.id === b.model.id &&
-    a.year === b.year &&
-    OPTIONAL_LEVELS.every((level) => (a[level]?.id ?? null) === (b[level]?.id ?? null))
-  );
 }
 
 export function findDuplicate(state: GarageState, car: GarageCar): GarageCar | undefined {

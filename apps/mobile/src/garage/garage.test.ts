@@ -1,6 +1,13 @@
+import {
+  CAR_IDENTITY_LEVELS,
+  sameCar as domainSameCar,
+  sameCarCases,
+  type SameCarCaseCar,
+} from "@adclub/domain";
 import { describe, expect, it } from "vitest";
 import {
   addCar,
+  CAR_LEVELS,
   carParameters,
   carTitle,
   findDuplicate,
@@ -35,6 +42,25 @@ function car(overrides: Partial<GarageCar> = {}): GarageCar {
 }
 
 describe("the same car", () => {
+  it("is the very rule the server merges by, not a copy of it (ARCHITECTURE 4.41 I447)", () => {
+    expect(sameCar).toBe(domainSameCar);
+    expect(CAR_LEVELS).toBe(CAR_IDENTITY_LEVELS);
+  });
+
+  // The server's `sameLevels` is run through the same table in
+  // `apps/api/src/modules/garage/garage-merge.test.ts`: both must answer what a case says.
+  for (const { name, a, b, same } of sameCarCases()) {
+    it(`answers ${String(same)} for two garage cars when ${name}`, () => {
+      const garageCar = (shared: SameCarCaseCar, id: string): GarageCar => ({
+        ...car(),
+        ...shared,
+        id,
+        color: shared.color as GarageCar["color"],
+      });
+      expect(sameCar(garageCar(a, "car-1"), garageCar(b, "car-2"))).toBe(same);
+    });
+  }
+
   it("compares every level, not the device id", () => {
     expect(sameCar(car(), car({ id: "car-2", addedAt: "2026-01-01T00:00:00.000Z" }))).toBe(true);
   });

@@ -1,3 +1,5 @@
+import type { CarColorId } from "@adclub/contracts";
+
 /**
  * The colour of a car in the garage (D-063, TASK-028.B): a fixed list kept in
  * the code, not the server — it never changes the compatibility of a single
@@ -9,21 +11,11 @@
  * The swatch is a real paint-like hex, not a `ColorToken` of DESIGN 7.2 — the
  * design system's tokens name interface roles (`accent`, `danger`, …), and a
  * car's colour is not one of those roles.
+ *
+ * The ids are the contract's (`CAR_COLOR_IDS` in `@adclub/contracts`), the one
+ * list the account's garage accepts too; only the swatches are the app's.
  */
-export type CarColorId =
-  | "white"
-  | "black"
-  | "gray"
-  | "silver"
-  | "blue"
-  | "darkBlue"
-  | "red"
-  | "green"
-  | "brown"
-  | "beige"
-  | "orange"
-  | "yellow"
-  | "burgundy";
+export type { CarColorId };
 
 export interface CarColorOption {
   id: CarColorId;

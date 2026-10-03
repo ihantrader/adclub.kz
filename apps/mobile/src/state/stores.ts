@@ -20,9 +20,8 @@ const storage: DeviceStorage = {
 /**
  * The signed-in session is a secret (an access and a refresh token): it
  * lives in the platform's secure storage, not in `AsyncStorage` with the
- * rest of the device's preferences (TASK-029). `SecureStore` rejects keys
- * with characters outside `[A-Za-z0-9._-]`, unlike the `adclub.mobile.*`
- * keys above — its own key is named accordingly, not reusing that pattern.
+ * rest of the device's preferences (TASK-029). `SecureStore` accepts only
+ * keys of `[A-Za-z0-9._-]`; `adclub.mobile.session` is one.
  */
 const secureStorage: DeviceStorage = {
   read: (key) => SecureStore.getItemAsync(key),

@@ -1,9 +1,11 @@
 /**
  * What the app keeps on the device (ARCHITECTURE 4.37): the interface
  * language, the chosen city, whether the first run is done and the theme
- * mode. Nothing here is a secret, and nothing is sent anywhere by itself —
- * with TASK-029 the language and the city also travel with the account,
- * and this store stays the copy of the device.
+ * mode. With a plain storage adapter nothing here is a secret, and nothing is
+ * sent anywhere by itself — with TASK-029 the language and the city also
+ * travel with the account, and this store stays the copy of the device. The
+ * same factory, on the platform's secure storage, holds the signed-in session
+ * (`session-store.ts`).
  *
  * The store is plain TypeScript with an injected storage adapter (the same
  * shape as `createThemeModeStore` in `@adclub/ui-core`), so its rules are

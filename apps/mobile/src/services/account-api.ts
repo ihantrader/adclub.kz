@@ -1,7 +1,6 @@
 import type {
   AccountCar,
   AccountProfile,
-  CarColorId,
   CarLevels,
   CompleteRegistrationBody,
   TransferGarageResponse,
@@ -11,14 +10,15 @@ import type { GarageCar, GarageState } from "../garage/garage";
 import { apiClient } from "./api";
 
 /**
- * The account's profile and its own garage (TASK-029, ARCHITECTURE 4.41),
- * the thin layer between the app and the routes `completeRegistration`,
- * `getAccountProfile`, `updateAccountProfile`, `listGarageCars`,
- * `addGarageCar`, `updateGarageCar`, `removeGarageCar`,
- * `setPrimaryGarageCar` and `transferGarage` (`packages/contracts`). Every
- * call site of these routes goes through here, not `apiClient` directly, so
- * the one place that maps the device's `GarageCar` (mobile ARCHITECTURE
- * 4.38 I397) to the wire shape (and back) stays this one.
+ * The account's profile and the transfer of the device's garage into it (TASK-029,
+ * ARCHITECTURE 4.41): the thin layer between the app and the routes
+ * `completeRegistration`, `getAccountProfile`, `updateAccountProfile` and
+ * `transferGarage` (`packages/contracts`). The five garage routes of the
+ * account (`listGarageCars`, `addGarageCar`, …) have no call here on purpose:
+ * after the transfer the garage tab still writes to the device (I433). Every
+ * call goes through here, not `apiClient` directly, so the one place that maps
+ * the device's `GarageCar` (mobile ARCHITECTURE 4.38 I397) to the wire shape
+ * (and back) stays this one.
  */
 
 /** The text version shown for T-AUTH-05 (SCREENS M-AUTH-03); the wording itself is TASK-072's. */
@@ -67,7 +67,7 @@ function fromAccountCar(car: AccountCar): GarageCar {
     transmission: car.transmission,
     drive: car.drive,
     modificationId: car.modificationId,
-    color: car.color as GarageCar["color"],
+    color: car.color,
     addedAt: car.createdAt,
   };
 }
@@ -92,7 +92,7 @@ export function transferGarage(
   return apiClient.transferGarage({
     cars: cars.map((car) => ({
       levels: toWireLevels(car),
-      color: (car.color as CarColorId | null) ?? null,
+      color: car.color,
       isPrimary: car.id === primaryId,
     })),
   });

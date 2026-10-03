@@ -828,7 +828,12 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
           delivery: true,
           warrantyMonths: 12,
         },
-        supplier: { name: "Автомаркет", cityName: "Алматы", district: shop.district },
+        supplier: {
+          id: shop.supplierId,
+          name: "Автомаркет",
+          cityName: "Алматы",
+          district: shop.district,
+        },
         reserveUntil: null,
         receiptOn: null,
         history: [{ action: "create", status: "created", by: "user" }],
@@ -3440,7 +3445,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         awaitsReceipt: false,
         needsAnswer: false,
         mainDate: { kind: "respond_by", at: order.respondBy },
-        supplier: { name: shop.name, district: shop.district },
+        supplier: { id: shop.supplierId, name: shop.name, district: shop.district },
         confirmation: { code: codeOf(order), qrPayload: qrOf(order) },
       });
       // Before accepting there is nowhere to go yet (D-026), and nothing of
@@ -3480,7 +3485,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         id: order.id,
         status: "completed",
         total: 13_000,
-        supplier: { name: shop.name },
+        supplier: { id: shop.supplierId, name: shop.name },
         canRepeat: true,
         canReview: true,
       });
@@ -3725,7 +3730,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       expect(same).toMatchObject({
         result: "offer",
         item: { id: padsId },
-        offer: { id: offer.id, price: 6_500, supplier: { name: shop.name } },
+        offer: { id: offer.id, price: 6_500, supplier: { id: shop.supplierId, name: shop.name } },
         previous: { quantity: 2, fulfillment: "pickup", unitPrice: 6_500 },
         priceChanged: false,
       });

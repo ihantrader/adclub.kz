@@ -415,6 +415,16 @@ export const showcaseItemResponseSchema = z.object({
   /** «Сейчас нет предложений» (D-031): opened by a link or from history. */
   noOffers: z.boolean(),
   analogs: z.array(showcaseAnalogSchema).max(SHOWCASE_ANALOGS_MAX),
+  /**
+   * What the checkout of an offer of this card needs to say (M-ORD-01,
+   * TASK-030) and the app must not make up: the most items one order may
+   * have (`order_max_quantity`) and how long a pickup order is kept once it
+   * can be collected (`pickup_reserve_hours`, «держат для вас N суток»).
+   */
+  ordering: z.object({
+    maxQuantity: z.number().int(),
+    pickupReserveHours: z.number().int(),
+  }),
 });
 
 export type ShowcaseItemResponse = z.infer<typeof showcaseItemResponseSchema>;

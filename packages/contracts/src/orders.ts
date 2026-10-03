@@ -389,6 +389,12 @@ const orderBaseFields = {
 
 /** The supplier of the user's own order: named (the order was placed with club access), before accepting — no address. */
 export const userOrderSupplierSchema = z.object({
+  /**
+   * Which supplier it is (TASK-030): the full-screen QR leafs through the
+   * active orders of one supplier (M-ORD-04), and a name is not an identity.
+   * Nothing the user may not know — the name is here already.
+   */
+  id: z.uuid(),
   name: z.string(),
   cityName: z.string(),
   district: z.string().nullable(),

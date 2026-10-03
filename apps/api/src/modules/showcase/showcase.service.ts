@@ -316,10 +316,12 @@ export class ShowcaseService {
     const subcategory = await this.visibleSubcategory(executor, row.categoryId).catch(() => {
       throw notFound("item");
     });
-    const [chosenCity, vehicle, weights] = await Promise.all([
+    const [chosenCity, vehicle, weights, maxQuantity, pickupReserveHours] = await Promise.all([
       this.chosenCity(executor, query.cityId, lang),
       this.vehicle(executor, query),
       this.settings.get("catalog_recommended_weights"),
+      this.settings.get("order_max_quantity"),
+      this.settings.get("pickup_reserve_hours"),
     ]);
     const cityId = chosenCity?.id ?? null;
 
@@ -393,6 +395,9 @@ export class ShowcaseService {
       })),
       noOffers: offers.length === 0,
       analogs,
+      // The checkout (M-ORD-01) says these and must not make them up: the
+      // order itself is checked against the same settings (`OrdersService`).
+      ordering: { maxQuantity, pickupReserveHours },
     };
   }
 

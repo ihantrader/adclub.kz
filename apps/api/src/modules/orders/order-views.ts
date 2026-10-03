@@ -444,6 +444,7 @@ export async function userSummaries(
   return rows.map((row) => ({
     ...baseOf(row, lang),
     supplier: {
+      id: row.supplierId,
       name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
       cityName: row.offerSnapshot.location.cityName,
       district: row.offerSnapshot.location.district,
@@ -528,6 +529,7 @@ export async function activeCopyEntries(
       currency: row.currency,
       item: itemOf(row, lang),
       supplier: {
+        id: row.supplierId,
         name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
         cityName: row.offerSnapshot.location.cityName,
         district: row.offerSnapshot.location.district,
@@ -594,6 +596,7 @@ export async function historyMonths(
       currency: row.currency,
       item: itemOf(row, lang),
       supplier: {
+        id: row.supplierId,
         name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
         cityName: row.offerSnapshot.location.cityName,
         district: row.offerSnapshot.location.district,

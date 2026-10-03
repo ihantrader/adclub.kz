@@ -40,6 +40,7 @@ export async function repeatView(
       delivery: offer.delivery,
       warrantyMonths: offer.warrantyMonths,
       warrantyText: offer.warrantyText,
+      supplierId: supplier.id,
       supplierName: supplier.name,
       district: supplierLocation.district,
       cityName: city.nameRu,
@@ -81,6 +82,7 @@ export async function repeatView(
       warrantyMonths: current!.warrantyMonths,
       warrantyText: current!.warrantyText,
       supplier: {
+        id: current!.supplierId,
         name: current!.supplierName,
         cityName: current!.cityName,
         district: current!.district,

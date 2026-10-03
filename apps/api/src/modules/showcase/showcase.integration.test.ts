@@ -1287,6 +1287,22 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       expectError(await guest("/catalog/items/not-a-uuid"), 400, "VALIDATION_ERROR");
     });
 
+    it("tells the checkout the order limits from the settings, not from the app (TASK-030)", async () => {
+      const w = await world();
+      const shop = await company("Автомаркет", almaty);
+      await put(shop, w.frontPads);
+      expect((await card(w.frontPads)).ordering).toEqual({
+        maxQuantity: 50,
+        pickupReserveHours: 24,
+      });
+      await settings.set({ order_max_quantity: 7, pickup_reserve_hours: 48 });
+      // The same values the order itself is checked against, for every viewer.
+      expect((await card(w.frontPads)).ordering).toEqual({
+        maxQuantity: 7,
+        pickupReserveHours: 48,
+      });
+    });
+
     it("keeps a very long Kazakh name whole", async () => {
       const w = await world();
       const shop = await company("Автомаркет", almaty);

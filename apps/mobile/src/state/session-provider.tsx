@@ -12,11 +12,11 @@ import {
   type ReactNode,
 } from "react";
 import { useToast } from "../design-system";
+import { garageStateFromAccountCars } from "../garage/account-cars";
 import { INITIAL_GARAGE } from "../garage/garage";
 import { apiClient, sessionEndedNotice } from "../services/api";
 import {
   completeRegistration as apiCompleteRegistration,
-  garageStateFromAccountCars,
   getAccountProfile,
   transferGarage as apiTransferGarage,
   updateAccountProfile as apiUpdateAccountProfile,

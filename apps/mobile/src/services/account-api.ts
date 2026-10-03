@@ -1,12 +1,11 @@
 import type {
-  AccountCar,
   AccountProfile,
-  CarLevels,
   CompleteRegistrationBody,
   TransferGarageResponse,
   UpdateAccountProfileBody,
 } from "@adclub/contracts";
-import type { GarageCar, GarageState } from "../garage/garage";
+import { toWireLevels } from "../garage/account-cars";
+import type { GarageCar } from "../garage/garage";
 import { apiClient } from "./api";
 
 /**
@@ -39,44 +38,6 @@ export function getAccountProfile(): Promise<AccountProfile> {
 
 export function updateAccountProfile(body: UpdateAccountProfileBody): Promise<AccountProfile> {
   return apiClient.updateAccountProfile(body);
-}
-
-function toWireLevels(car: GarageCar): CarLevels {
-  return {
-    make: car.make,
-    model: car.model,
-    year: car.year,
-    generation: car.generation,
-    body: car.body,
-    engine: car.engine,
-    transmission: car.transmission,
-    drive: car.drive,
-  };
-}
-
-/** The account's car, as the device's own `GarageCar` shape. */
-function fromAccountCar(car: AccountCar): GarageCar {
-  return {
-    id: car.id,
-    make: car.make,
-    model: car.model,
-    year: car.year,
-    generation: car.generation,
-    body: car.body,
-    engine: car.engine,
-    transmission: car.transmission,
-    drive: car.drive,
-    modificationId: car.modificationId,
-    color: car.color,
-    addedAt: car.createdAt,
-  };
-}
-
-/** The device's guest garage, in the account after a successful `transferGarage`. */
-export function garageStateFromAccountCars(cars: readonly AccountCar[]): GarageState {
-  const mapped = cars.map(fromAccountCar);
-  const primary = cars.find((car) => car.isPrimary);
-  return { version: 1, cars: mapped, primaryId: primary?.id ?? mapped[0]?.id ?? null };
 }
 
 /**

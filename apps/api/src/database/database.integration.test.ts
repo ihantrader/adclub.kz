@@ -118,7 +118,101 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790450000000_close-orders",
       "1790500000000_create-messaging",
       "1790550000000_order-notices",
+      "1790600000000_account-profile-and-garage",
     ]);
+  });
+
+  it("holds the rules of the profile and the garage of an account, and rolls back keeping the accounts (account profile and garage)", async () => {
+    const accountId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77005550029') RETURNING id",
+      )
+    ).rows[0]!.id;
+    // A new account has no name, no city and no language yet, and no newsletter consent.
+    const fresh = await client.query(
+      "SELECT name, city_id, language, email_news_consent FROM account WHERE id = $1",
+      [accountId],
+    );
+    expect(fresh.rows[0]).toEqual({
+      name: null,
+      city_id: null,
+      language: null,
+      email_news_consent: false,
+    });
+    // The interface language is one of ours, or not set.
+    await client.query("UPDATE account SET language = 'kk' WHERE id = $1", [accountId]);
+    await expect(
+      client.query("UPDATE account SET language = 'de' WHERE id = $1", [accountId]),
+    ).rejects.toThrow(/account_language_check/);
+    // The city is one of the directory.
+    await expect(
+      client.query("UPDATE account SET city_id = $1 WHERE id = $2", [randomUUID(), accountId]),
+    ).rejects.toThrow(/account_city_id_fkey/);
+
+    // A car names a real make and a real model; the labels are what the device showed.
+    const make = (
+      await client.query<{ id: string }>("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const model = (
+      await client.query<{ id: string }>(
+        "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+        [make],
+      )
+    ).rows[0]!.id;
+    const car = (values: Record<string, unknown>) => {
+      const row: Record<string, unknown> = {
+        account_id: accountId,
+        make_id: make,
+        make_label: "Geely",
+        model_id: model,
+        model_label: "Atlas",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO account_car (${columns.join(", ")}) VALUES (${columns.map((_, i) => `$${String(i + 1)}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    await car({ is_primary: true });
+    await car({});
+    await expect(car({ make_id: randomUUID() })).rejects.toThrow(/account_car_make_id_fkey/);
+    await expect(car({ model_id: randomUUID() })).rejects.toThrow(/account_car_model_id_fkey/);
+    await expect(car({ generation_id: randomUUID() })).rejects.toThrow(
+      /account_car_generation_id_fkey/,
+    );
+    await expect(car({ engine_id: randomUUID() })).rejects.toThrow(/account_car_engine_id_fkey/);
+    await expect(car({ modification_id: randomUUID() })).rejects.toThrow(
+      /account_car_modification_id_fkey/,
+    );
+    await expect(car({ account_id: randomUUID() })).rejects.toThrow(/account_car_account_id_fkey/);
+    // At most one primary car per account, whoever races for it.
+    await expect(car({ is_primary: true })).rejects.toThrow(/account_car_primary_key/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+
+    // The garage and the profile columns are gone; the account stays.
+    expect(await tableExists(client, "account_car")).toBe(false);
+    for (const column of ["name", "city_id", "language", "email_news_consent"]) {
+      expect(await columnExists(client, "account", column)).toBe(false);
+    }
+    expect((await client.query("SELECT 1 FROM account WHERE id = $1", [accountId])).rowCount).toBe(
+      1,
+    );
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await tableExists(client, "account_car")).toBe(true);
+    // The account came through the round trip without a name, as it was.
+    const again = await client.query("SELECT name, language FROM account WHERE id = $1", [
+      accountId,
+    ]);
+    expect(again.rows[0]).toEqual({ name: null, language: null });
+    // What this test put in leaves with it: later ones count makes and accounts.
+    await client.query("DELETE FROM account_car");
+    await client.query("DELETE FROM vehicle_model");
+    await client.query("DELETE FROM vehicle_make");
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+    await walkDownPast(() => tableExists(client, "account_car"));
   });
 
   it("holds the rules of the notices of orders, their presses and the channel signal, and rolls back keeping the messages (order notices)", async () => {

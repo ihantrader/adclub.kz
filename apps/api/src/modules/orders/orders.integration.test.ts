@@ -63,6 +63,7 @@ import {
   rememberSecret,
 } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
+import { completeTestRegistration, TEST_CUSTOMER_NAME } from "../../testing/registration";
 import { TcpProxy } from "../../testing/tcp-proxy";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
@@ -303,7 +304,11 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
     }
   }
 
-  async function signIn(phone: string, client: string): Promise<Response> {
+  async function signIn(
+    phone: string,
+    client: string,
+    options: { registered?: boolean } = {},
+  ): Promise<Response> {
     rememberCode(phone);
     await redis.del(`rl:login-code:resend:${phone}`);
     const sent = await http()
@@ -331,23 +336,11 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         rememberSecret(refresh[1]!);
       }
     }
-    // TASK-029: placing an order now needs a finished profile (name +
-    // phone-share consent, `REGISTRATION_INCOMPLETE` otherwise) — every
-    // mobile-app customer this whole file signs in is meant to be a ready
-    // club member, so this one place finishes it for all of them rather
-    // than touching each of this file's many call sites. Harmless to call
-    // again for a phone this file already signed in earlier (it just
-    // re-affirms the same name and consent, `AccountProfileService.complete`).
-    if (client === IOS && response.status === 200) {
-      const token = (response.body as { session?: { accessToken?: string } }).session?.accessToken;
-      if (token) {
-        const completed = await http()
-          .post("/auth/complete-registration")
-          .set("X-Client", client)
-          .send({ name: "Тест Тестов", phoneShareConsent: true, phoneShareConsentVersion: "test" })
-          .set("Authorization", `Bearer ${token}`);
-        expect(completed.status, JSON.stringify(completed.body)).toBe(200);
-      }
+    // Placing an order needs a finished profile (`REGISTRATION_INCOMPLETE`):
+    // every mobile customer this file signs in is meant to be a club member,
+    // unless a test asks for the one who has not finished registering.
+    if (client === IOS && options.registered !== false) {
+      await completeTestRegistration((path) => http().post(path), client, response);
     }
     return response;
   }
@@ -392,8 +385,12 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
     return body.session.accessToken;
   }
 
-  async function sessionToken(phone: string, client: string): Promise<string> {
-    const response = await signIn(phone, client);
+  async function sessionToken(
+    phone: string,
+    client: string,
+    options: { registered?: boolean } = {},
+  ): Promise<string> {
+    const response = await signIn(phone, client, options);
     expect(response.status, JSON.stringify(response.body)).toBe(200);
     return (response.body as { session: { accessToken: string } }).session.accessToken;
   }
@@ -559,10 +556,12 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
   }
 
   /** A user of the app, with club access unless told otherwise. */
-  async function customer(options: { access?: boolean } = {}): Promise<Customer> {
+  async function customer(
+    options: { access?: boolean; registered?: boolean } = {},
+  ): Promise<Customer> {
     const phone = `+7747${String(++phoneCounter).padStart(7, "0")}`;
     rememberCode(phone);
-    const bearer = await sessionToken(phone, IOS);
+    const bearer = await sessionToken(phone, IOS, { registered: options.registered });
     if (options.access !== false) {
       await ok(
         asAdmin("post", "/admin/club-access/grants", {
@@ -713,6 +712,73 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
   // ------------------------------------------------------------- creating
 
   describe("creating an order", () => {
+    it("needs a finished registration — a name and the consent — before anything else, and goes on once it is finished (REGISTRATION_INCOMPLETE)", async () => {
+      const shop = await company("Регистрация");
+      const offer = await put(shop, padsId);
+      const registrationGate = "REGISTRATION_INCOMPLETE" as const;
+
+      // No name, no consent, club access given: the gate speaks, not the offer.
+      const nobody = await customer({ registered: false });
+      expectError(await nobody.as("post", "/orders", orderBody(offer)), 403, registrationGate);
+
+      // …and before the club access is looked at: without both, the answer is
+      // still «finish registration», never «subscription» (it leads to the right screen).
+      const noAccess = await customer({ access: false, registered: false });
+      expectError(await noAccess.as("post", "/orders", orderBody(offer)), 403, registrationGate);
+
+      // …and before the offer is looked up: an offer that does not exist is not the news.
+      expectError(
+        await nobody.as("post", "/orders", orderBody(offer, { offerId: randomUUID() })),
+        403,
+        registrationGate,
+      );
+
+      // Half of it is not it: a name without the consent, the consent without a name.
+      await db.query(
+        "UPDATE account SET name = 'Марат', consent_phone_share_at = NULL WHERE id = $1",
+        [nobody.accountId],
+      );
+      expectError(await nobody.as("post", "/orders", orderBody(offer)), 403, registrationGate);
+      await db.query(
+        "UPDATE account SET name = NULL, consent_phone_share_at = now(), consent_version = 'test' WHERE id = $1",
+        [nobody.accountId],
+      );
+      expectError(await nobody.as("post", "/orders", orderBody(offer)), 403, registrationGate);
+      expect(await db.query("SELECT 1 FROM customer_order")).toMatchObject({ rowCount: 0 });
+
+      // The profile says the same thing the order does.
+      const profile = await ok(nobody.as("get", "/account/profile"), (body) => body);
+      expect(profile).toMatchObject({ name: null, registrationCompleted: false });
+
+      // Finish it through the route the app uses: the same account passes on to the next
+      // check (club access is given to it here), and the order is placed.
+      await ok(
+        nobody.as("post", "/auth/complete-registration", {
+          name: "Марат Ахметов",
+          phoneShareConsent: true,
+          phoneShareConsentVersion: "test",
+        }),
+        (body) => body,
+      );
+      const placed = await place(nobody, offer);
+      expect(placed.status).toBe("created");
+
+      // The one without club access, now registered, is told what is missing next: the subscription.
+      await ok(
+        noAccess.as("post", "/auth/complete-registration", {
+          name: "Айгерим",
+          phoneShareConsent: true,
+          phoneShareConsentVersion: "test",
+        }),
+        (body) => body,
+      );
+      expectError(
+        await noAccess.as("post", "/orders", orderBody(offer)),
+        403,
+        "SUBSCRIPTION_REQUIRED",
+      );
+    });
+
     it("needs a user with club access; creates it with the snapshot, the total, a number, the code and the QR", async () => {
       const shop = await company("Автомаркет");
       const offer = await put(shop, padsId, { price: 6_500, warrantyMonths: 12 });
@@ -1516,16 +1582,23 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       expect(list.counts).toEqual({ new: 1, inProgress: 0, finished: 0 });
       expect(list.orders[0]).not.toHaveProperty("customer");
       expect(JSON.stringify(list)).not.toContain(buyer.phone);
+      expect(JSON.stringify(list)).not.toContain(TEST_CUSTOMER_NAME);
       const before = await supplierOrder(shop, order.id);
       expect(before.customer).toEqual({ kind: "hidden", reason: "not_accepted" });
       expect(JSON.stringify(before)).not.toContain(buyer.phone);
+      expect(JSON.stringify(before)).not.toContain(TEST_CUSTOMER_NAME);
 
       const accepted = await accept(shop, order.id);
-      expect(accepted.customer).toEqual({ kind: "revealed", phone: buyer.phone });
+      expect(accepted.customer).toEqual({
+        kind: "revealed",
+        phone: buyer.phone,
+        name: TEST_CUSTOMER_NAME,
+      });
       const inProgress = await ok(shop.as("get", "/supplier/orders?tab=in_progress"), (b) =>
         checked(supplierOrderPageSchema)(b),
       );
       expect(JSON.stringify(inProgress)).not.toContain(buyer.phone);
+      expect(JSON.stringify(inProgress)).not.toContain(TEST_CUSTOMER_NAME);
       expect(inProgress.counts).toEqual({ new: 0, inProgress: 1, finished: 0 });
       // The disclosure is in the action journal, without the phone.
       const { rows: audit } = await db.query<{
@@ -1561,6 +1634,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       expect((await supplierOrder(shop, order.id)).customer).toEqual({
         kind: "revealed",
         phone: buyer.phone,
+        name: TEST_CUSTOMER_NAME,
       });
     });
 
@@ -1612,7 +1686,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       const byAdmin = await adminOrder(order.id);
       expect(byAdmin.events).toEqual(bySupplier.events);
       expect(byAdmin).toMatchObject({
-        customer: { accountId: buyer.accountId, phone: buyer.phone },
+        customer: { accountId: buyer.accountId, phone: buyer.phone, name: TEST_CUSTOMER_NAME },
         supplier: { id: shop.supplierId, name: "Журнал" },
         decline: { reason: "out_of_stock", note: "Закончились" },
         handledBy: { memberId: shop.first.memberId, name: "Айгерим" },

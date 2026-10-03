@@ -51,6 +51,7 @@ import {
   rememberCode,
   rememberSecret,
 } from "../../testing/output-capture";
+import { completeTestRegistration, TEST_CUSTOMER_NAME } from "../../testing/registration";
 import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
@@ -350,6 +351,12 @@ describe("notices of orders to suppliers, their buttons and the outage of the ch
       if (refresh) {
         rememberSecret(refresh[1]!);
       }
+    }
+    // Placing an order needs a finished profile (`REGISTRATION_INCOMPLETE`):
+    // every mobile customer this file signs in is a club member who has said
+    // their name; a notice about their order carries it once accepted.
+    if (client === IOS) {
+      await completeTestRegistration((path) => http().post(path), client, response);
     }
     return response;
   }
@@ -800,6 +807,11 @@ describe("notices of orders to suppliers, their buttons and the outage of the ch
       expect(JSON.stringify(channels.flatMap((channel) => channel.sent))).not.toContain(
         buyer.phone.slice(1),
       );
+      // Nor the customer's name: it opens with the accept, like the phone.
+      expect(everything).not.toContain(TEST_CUSTOMER_NAME);
+      expect(JSON.stringify(channels.flatMap((channel) => channel.sent))).not.toContain(
+        TEST_CUSTOMER_NAME,
+      );
     });
 
     it("goes to no more employees than max_notified_members, and a refused one does not stop the others", async () => {
@@ -931,7 +943,11 @@ describe("notices of orders to suppliers, their buttons and the outage of the ch
         channel: "whatsapp",
         actor: { kind: "member", name: "Айгерим" },
       });
-      expect(seen.customer).toEqual({ kind: "revealed", phone: buyer.phone });
+      expect(seen.customer).toEqual({
+        kind: "revealed",
+        phone: buyer.phone,
+        name: TEST_CUSTOMER_NAME,
+      });
       expect((await adminOrder(order.id)).events.find((e) => e.action === "accept")!.channel).toBe(
         "whatsapp",
       );
@@ -945,10 +961,27 @@ describe("notices of orders to suppliers, their buttons and the outage of the ch
       expect(reply!.phone).toBe(shop.first.phone);
       expect(reply!.variables).toMatchObject({
         number: String(order.number),
-        customerName: "имя не указано",
+        customerName: TEST_CUSTOMER_NAME,
         customerPhone: `+7 ${buyer.phone.slice(2, 5)} ${buyer.phone.slice(5, 8)} ${buyer.phone.slice(8, 10)} ${buyer.phone.slice(10)}`,
       });
       expect(reply!.variables!.link).toMatch(new RegExp(`/orders/${order.id}$`));
+    });
+
+    it("keeps «имя не указано» in W-02 for an order of a customer who has no name (placed before names existed)", async () => {
+      const { shop, buyer, order, toFirst } = await world();
+      // The gate no longer lets a nameless account place an order, so the old
+      // case is the one the account is in now: the order stands, the name is gone.
+      await db.query("UPDATE account SET name = NULL WHERE phone = $1", [buyer.phone]);
+      expect(await pressAndDecide(toFirst, "confirm")).toBe("accepted");
+      const [reply] = await sent(order.id, "order_accepted", 1);
+      expect(reply!.phone).toBe(shop.first.phone);
+      expect(reply!.variables).toMatchObject({ customerName: "имя не указано" });
+      // …and the supplier's card says the same thing in its own way: a phone, no name.
+      expect((await supplierOrder(shop, order.id)).customer).toEqual({
+        kind: "revealed",
+        phone: buyer.phone,
+        name: null,
+      });
     });
 
     it("is applied once however often the provider delivers it", async () => {

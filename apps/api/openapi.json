@@ -13268,7 +13268,7 @@
             "const": "KZT"
           },
           "item": {
-            "$ref": "#/components/schemas/OrderItem"
+            "$ref": "#/components/schemas/OrderItemWithPhoto"
           },
           "supplier": {
             "$ref": "#/components/schemas/UserOrderSupplier"
@@ -15503,7 +15503,7 @@
             "$ref": "#/components/schemas/OrderFulfillment"
           },
           "item": {
-            "$ref": "#/components/schemas/OrderItem"
+            "$ref": "#/components/schemas/OrderItemWithPhoto"
           },
           "respondBy": {
             "type": "string",
@@ -23951,6 +23951,56 @@
           "brand"
         ]
       },
+      "OrderItemWithPhoto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "part",
+              "generic"
+            ]
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "article": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPhotoImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "article",
+          "brand",
+          "photo"
+        ]
+      },
       "OrderKind": {
         "type": "string",
         "enum": [
@@ -28226,7 +28276,7 @@
             "$ref": "#/components/schemas/OrderFulfillment"
           },
           "item": {
-            "$ref": "#/components/schemas/OrderItem"
+            "$ref": "#/components/schemas/OrderItemWithPhoto"
           },
           "respondBy": {
             "type": "string",
@@ -30529,7 +30579,7 @@
             "const": "KZT"
           },
           "item": {
-            "$ref": "#/components/schemas/OrderItem"
+            "$ref": "#/components/schemas/OrderItemWithPhoto"
           },
           "supplier": {
             "$ref": "#/components/schemas/UserOrderSupplier"
@@ -30626,7 +30676,7 @@
             "$ref": "#/components/schemas/OrderFulfillment"
           },
           "item": {
-            "$ref": "#/components/schemas/OrderItem"
+            "$ref": "#/components/schemas/OrderItemWithPhoto"
           },
           "respondBy": {
             "type": "string",

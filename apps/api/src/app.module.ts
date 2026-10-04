@@ -93,7 +93,7 @@ export class AppModule implements NestModule {
         clubAccess,
         signals,
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
-        OrdersModule.forRoot({ http: true, offers, clubAccess, signals }),
+        OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

@@ -123,6 +123,8 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   dev:member:remove <memberId>
  *   dev:catalog:seed             fill the catalog with the example tree (TASK-010);
  *                                a second run creates nothing
+ *   dev:catalog:arrange          bring a catalog seeded earlier to the tree's order
+ *                                and icons (TASK-030.A); a second run changes nothing
  *   dev:vehicles:seed            fill the vehicle catalog with draft example data
  *                                (TASK-014); a second run creates nothing
  *   dev:compatibility:seed       both seeds above, then compatibility of the
@@ -210,6 +212,7 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
   dev:catalog:seed
+  dev:catalog:arrange
   dev:vehicles:seed
   dev:compatibility:seed
   dev:suppliers:seed
@@ -534,6 +537,8 @@ async function run(
       });
     case "dev:catalog:seed":
       return catalogSeed.run();
+    case "dev:catalog:arrange":
+      return catalogSeed.arrange();
     case "dev:vehicles:seed":
       return vehicleSeed.run();
     case "dev:compatibility:seed":

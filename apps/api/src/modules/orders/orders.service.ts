@@ -47,7 +47,7 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { ALMATY_TIME_ZONE } from "../../jobs";
 import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
-import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
+import { CatalogPhotosService, decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
 import { AccountStore, supplier, supplierMember } from "../identity";
 import { offer, offerShowcase, OfferSnapshots } from "../offers";
@@ -174,6 +174,8 @@ export class OrdersService {
     @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
     @Inject(Metrics) private readonly metrics: Metrics,
     @Inject(OrderNotices) private readonly notices: OrderNotices,
+    // The thumbnail of the item in the card of an order (TASK-030.A).
+    @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
   ) {}
 
   // ---------------------------------------------------------------- create
@@ -225,7 +227,10 @@ export class OrdersService {
     this.logger.log(
       `Order created order=${outcome.row.id} number=${String(outcome.row.number)} supplier=${outcome.row.supplierId} test=${String(outcome.row.isTest)}`,
     );
-    return { order: await userOrderView(this.database.db, outcome.row, lang), created: true };
+    return {
+      order: await userOrderView(this.database.db, outcome.row, lang, this.photos),
+      created: true,
+    };
   }
 
   private async insert(
@@ -384,7 +389,7 @@ export class OrdersService {
     ) {
       throw idempotencyMismatch();
     }
-    return { order: await userOrderView(this.database.db, row, lang), created: false };
+    return { order: await userOrderView(this.database.db, row, lang, this.photos), created: false };
   }
 
   /**
@@ -444,7 +449,7 @@ export class OrdersService {
 
   async userOrder(accountId: string, orderId: string, lang: CatalogLanguage): Promise<UserOrder> {
     const row = await this.fresh(await this.userRow(this.database.db, accountId, orderId));
-    return userOrderView(this.database.db, row, lang);
+    return userOrderView(this.database.db, row, lang, this.photos);
   }
 
   /**
@@ -487,7 +492,7 @@ export class OrdersService {
     return {
       language: lang,
       serverTime: serverTime.toISOString(),
-      orders: await activeCopyEntries(this.database.db, inCardOrder(shown), lang),
+      orders: await activeCopyEntries(this.database.db, inCardOrder(shown), lang, this.photos),
       total,
       limit,
       truncated: total > shown.length,
@@ -534,7 +539,7 @@ export class OrdersService {
     return {
       language: lang,
       timeZone: ALMATY_TIME_ZONE,
-      months: await historyMonths(this.database.db, rows, lang, ALMATY_TIME_ZONE),
+      months: await historyMonths(this.database.db, rows, lang, ALMATY_TIME_ZONE, this.photos),
       total: counted?.value ?? 0,
       nextCursor,
     };
@@ -585,7 +590,7 @@ export class OrdersService {
       },
       forUser: true,
     });
-    return userOrderView(this.database.db, row, lang);
+    return userOrderView(this.database.db, row, lang, this.photos);
   }
 
   private async userRow(executor: DbExecutor, accountId: string, orderId: string) {
@@ -643,7 +648,7 @@ export class OrdersService {
     lang: CatalogLanguage,
   ): Promise<SupplierOrder> {
     const row = await this.fresh(await this.supplierRow(this.database.db, supplierId, orderId));
-    return supplierOrderView(this.database.db, row, lang);
+    return supplierOrderView(this.database.db, row, lang, this.photos);
   }
 
   /**
@@ -722,7 +727,10 @@ export class OrdersService {
         withdrawOffer = { offerId: current.id, version: current.version };
       }
     }
-    return { order: await supplierOrderView(this.database.db, row, lang), withdrawOffer };
+    return {
+      order: await supplierOrderView(this.database.db, row, lang, this.photos),
+      withdrawOffer,
+    };
   }
 
   private async supplierMove(
@@ -737,7 +745,7 @@ export class OrdersService {
       request: { orderId, action, actor, channel: "supplier_web", expectedVersion },
       forUser: false,
     });
-    return supplierOrderView(this.database.db, row, lang);
+    return supplierOrderView(this.database.db, row, lang, this.photos);
   }
 
   private async supplierRow(executor: DbExecutor, supplierId: string, orderId: string) {
@@ -832,7 +840,7 @@ export class OrdersService {
       throw notFound();
     }
     const row = await this.fresh(found);
-    return adminOrderView(this.database.db, row, lang, await this.marksOf(row.id));
+    return adminOrderView(this.database.db, row, lang, this.photos, await this.marksOf(row.id));
   }
 
   /**
@@ -867,7 +875,7 @@ export class OrdersService {
       },
       forUser: false,
     });
-    return adminOrderView(this.database.db, row, lang, await this.marksOf(row.id));
+    return adminOrderView(this.database.db, row, lang, this.photos, await this.marksOf(row.id));
   }
 
   /**
@@ -907,7 +915,13 @@ export class OrdersService {
         ),
       });
     }
-    return adminOrderView(this.database.db, outcome.order, lang, await this.marksOf(orderId));
+    return adminOrderView(
+      this.database.db,
+      outcome.order,
+      lang,
+      this.photos,
+      await this.marksOf(orderId),
+    );
   }
 
   /**

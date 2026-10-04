@@ -20,6 +20,7 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { AuditLog } from "../audit";
+import { CatalogPhotosService } from "../catalog";
 import { supplier, supplierMember } from "../identity";
 import { rateLimitSettingKeys } from "../../rate-limit";
 import { AppSettings } from "../settings";
@@ -79,6 +80,8 @@ export class OrderLookup {
     @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(Metrics) private readonly metrics: Metrics,
+    // The thumbnail of the item in the card of an order (TASK-030.A).
+    @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
   ) {}
 
   /** S-SCAN-03: what the employee sees for the credential, without changing anything. */
@@ -146,7 +149,7 @@ export class OrderLookup {
       );
       return {
         result: "given_out",
-        order: await supplierOrderView(this.database.db, outcome.order, lang),
+        order: await supplierOrderView(this.database.db, outcome.order, lang, this.photos),
         late: outcome.order.closedLate,
       };
     }

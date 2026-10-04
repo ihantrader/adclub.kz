@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { catalogLanguageSchema, localizedTextSchema } from "./catalog";
+import { itemPhotoImageSchema } from "./catalog-photos";
 import { OFFER_PRICE_LIMIT, offerAvailabilitySchema, offerReceiptSchema } from "./offers";
 import { dayHoursSchema } from "./suppliers";
 
@@ -176,6 +177,21 @@ export const orderItemSchema = z.object({
 });
 
 export type OrderItem = z.infer<typeof orderItemSchema>;
+
+/**
+ * The item of an order as a card of it shows it (TASK-030.A): with the
+ * thumbnail of the item, the same `photo` the catalog's list carries. The
+ * photo is the item's — the approved primary one of the catalog **now**,
+ * never kept in the snapshot of the offer — so a photo removed later gives
+ * `null` and the placeholder. Present in the user's card of an order, the
+ * saved copy and the history, the supplier's and the administrator's card;
+ * lists and the scan result carry the item without it.
+ */
+export const orderItemWithPhotoSchema = orderItemSchema.extend({
+  photo: itemPhotoImageSchema.nullable(),
+});
+
+export type OrderItemWithPhoto = z.infer<typeof orderItemWithPhotoSchema>;
 
 /** The terms of the offer when the order was created (the snapshot): later changes of the offer never reach them. */
 export const orderTermsSchema = z.object({
@@ -446,6 +462,7 @@ export type UserOrderSummary = z.infer<typeof userOrderSummarySchema>;
  * cancel, a decline, an expiry); `confirmation` — once the order is final.
  */
 export const userOrderSchema = userOrderSummarySchema.extend({
+  item: orderItemWithPhotoSchema,
   version: z.number().int(),
   updatedAt: z.iso.datetime(),
   terms: orderTermsSchema,
@@ -560,7 +577,7 @@ export const activeOrderSchema = z.object({
   status: orderStatusSchema,
   fulfillment: orderFulfillmentSchema,
   ...moneyFields,
-  item: orderItemSchema,
+  item: orderItemWithPhotoSchema,
   supplier: userOrderSupplierSchema,
   pickupPoint: userOrderPickupPointSchema.optional(),
   confirmation: orderConfirmationSchema,
@@ -629,7 +646,7 @@ export const userHistoryOrderSchema = z.object({
   fulfillment: orderFulfillmentSchema,
   isTest: z.boolean(),
   ...moneyFields,
-  item: orderItemSchema,
+  item: orderItemWithPhotoSchema,
   supplier: userOrderSupplierSchema,
   /** When the order reached its final status — the date the month groups by. */
   finishedAt: z.iso.datetime(),
@@ -789,6 +806,7 @@ export type SupplierOrderSummary = z.infer<typeof supplierOrderSummarySchema>;
  * employees. Never the code or the QR.
  */
 export const supplierOrderSchema = supplierOrderSummarySchema.extend({
+  item: orderItemWithPhotoSchema,
   version: z.number().int(),
   updatedAt: z.iso.datetime(),
   terms: orderTermsSchema,
@@ -1018,6 +1036,7 @@ export type AdminOrderSummary = z.infer<typeof adminOrderSummarySchema>;
 
 /** The card of an order for the administrator (A-ORD-02): everything but the code and the QR. */
 export const adminOrderSchema = adminOrderSummarySchema.extend({
+  item: orderItemWithPhotoSchema,
   version: z.number().int(),
   updatedAt: z.iso.datetime(),
   terms: orderTermsSchema,

@@ -6,6 +6,7 @@ import type {
   CatalogLanguage,
   DayHours,
   DisciplineMark,
+  ItemPhotoImage,
   LocalizedText,
   OrderActor,
   OrderClosure,
@@ -13,6 +14,7 @@ import type {
   OrderEventDetails,
   OrderGivenOut,
   OrderItem,
+  OrderItemWithPhoto,
   OrderTerms,
   SupplierOrder,
   SupplierOrderSummary,
@@ -82,6 +84,39 @@ export function itemOf(row: OrderRow, lang: CatalogLanguage): OrderItem {
     article: item.article,
     brand: item.brand,
   };
+}
+
+/**
+ * Where the thumbnail of an order's item comes from (TASK-030.A): the
+ * catalog's photos, the same `photo` its list carries — a port, so this
+ * file stays the one place of what each side sees without owning photos.
+ */
+export interface ItemPhotoSource {
+  imagesForItemIds(
+    executor: DbExecutor,
+    itemIds: readonly string[],
+  ): Promise<Map<string, ItemPhotoImage>>;
+}
+
+/** The item of a card of an order, with the item's photo now (`null` — the placeholder). */
+function withPhoto(
+  row: OrderRow,
+  lang: CatalogLanguage,
+  photos: ReadonlyMap<string, ItemPhotoImage>,
+): OrderItemWithPhoto {
+  const item = itemOf(row, lang);
+  return { ...item, photo: photos.get(item.id) ?? null };
+}
+
+async function photosOf(
+  executor: DbExecutor,
+  source: ItemPhotoSource,
+  rows: readonly OrderRow[],
+): Promise<Map<string, ItemPhotoImage>> {
+  return source.imagesForItemIds(
+    executor,
+    rows.map((row) => row.offerSnapshot.item.id),
+  );
 }
 
 function termsOf(row: OrderRow): OrderTerms {
@@ -456,12 +491,14 @@ export async function userOrderView(
   executor: DbExecutor,
   row: OrderRow,
   lang: CatalogLanguage,
+  photos: ItemPhotoSource,
 ): Promise<UserOrder> {
   const [summary] = await userSummaries(executor, [row], lang);
   const events = (await eventsOf(executor, [row.id])).get(row.id) ?? [];
   const pickupPoint = showsPickupPoint(row) ? await pickupPointOf(executor, row) : undefined;
   return {
     ...summary!,
+    item: withPhoto(row, lang, await photosOf(executor, photos, [row])),
     version: row.version,
     updatedAt: iso(row.updatedAt),
     terms: termsOf(row),
@@ -506,11 +543,13 @@ export async function activeCopyEntries(
   executor: DbExecutor,
   rows: readonly OrderRow[],
   lang: CatalogLanguage,
+  photos: ItemPhotoSource,
 ): Promise<ActiveOrder[]> {
   const names = await supplierNames(
     executor,
     rows.map((row) => row.supplierId),
   );
+  const images = await photosOf(executor, photos, rows);
   const points = await pickupPointsOf(
     executor,
     rows.filter(showsPickupPoint).map((row) => row.locationId),
@@ -527,7 +566,7 @@ export async function activeCopyEntries(
       unitPrice: row.unitPrice,
       total: row.total,
       currency: row.currency,
-      item: itemOf(row, lang),
+      item: withPhoto(row, lang, images),
       supplier: {
         id: row.supplierId,
         name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
@@ -569,11 +608,13 @@ export async function historyMonths(
   rows: readonly OrderRow[],
   lang: CatalogLanguage,
   timeZone: string,
+  photos: ItemPhotoSource,
 ): Promise<UserHistoryMonth[]> {
   const names = await supplierNames(
     executor,
     rows.map((row) => row.supplierId),
   );
+  const images = await photosOf(executor, photos, rows);
   const months: UserHistoryMonth[] = [];
   for (const row of rows) {
     // Every finished order has the moment it finished (the database keeps
@@ -594,7 +635,7 @@ export async function historyMonths(
       unitPrice: row.unitPrice,
       total: row.total,
       currency: row.currency,
-      item: itemOf(row, lang),
+      item: withPhoto(row, lang, images),
       supplier: {
         id: row.supplierId,
         name: names.get(row.supplierId) ?? row.offerSnapshot.supplier.name,
@@ -637,6 +678,7 @@ export async function supplierOrderView(
   executor: DbExecutor,
   row: OrderRow,
   lang: CatalogLanguage,
+  photos: ItemPhotoSource,
 ): Promise<SupplierOrder> {
   const events = (await eventsOf(executor, [row.id])).get(row.id) ?? [];
   const members = await memberNames(executor, [
@@ -655,6 +697,7 @@ export async function supplierOrderView(
       : null;
   return {
     ...baseOf(row, lang),
+    item: withPhoto(row, lang, await photosOf(executor, photos, [row])),
     ...handledOf(row, members),
     closure: closureFrom(row, members),
     version: row.version,
@@ -716,6 +759,7 @@ export async function adminOrderView(
   executor: DbExecutor,
   row: OrderRow,
   lang: CatalogLanguage,
+  photos: ItemPhotoSource,
   discipline: DisciplineMark[] = [],
 ): Promise<AdminOrder> {
   const [summary] = await adminSummaries(executor, [row], lang);
@@ -732,6 +776,7 @@ export async function adminOrderView(
     .where(eq(supplierLocation.id, row.locationId));
   return {
     ...summary!,
+    item: withPhoto(row, lang, await photosOf(executor, photos, [row])),
     version: row.version,
     updatedAt: iso(row.updatedAt),
     terms: termsOf(row),

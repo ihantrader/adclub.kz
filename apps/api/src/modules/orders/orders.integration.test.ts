@@ -1643,6 +1643,56 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       });
     });
 
+    it("shows the item's photo in each card of an order, the saved copy and the history — the item's now, not the snapshot's (TASK-030.A)", async () => {
+      const shop = await company("Фото");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      // An approved primary photo of the item, shown by its source
+      // (`photo_display_mode` = link, the default: no storage needed).
+      const source = "https://example.kz/pads.jpg";
+      const {
+        rows: [photo],
+      } = await db.query<{ id: string }>(
+        `INSERT INTO item_photo (item_id, source_type, source_url, status, content_type, byte_size, width, height, checksum)
+         VALUES ($1, 'manufacturer', $2, 'approved', 'image/jpeg', 1, 1, 1, $3) RETURNING id`,
+        [padsId, source, randomUUID().replace(/-/g, "").repeat(2)],
+      );
+      await db.query("UPDATE catalog_item SET primary_photo_id = $1 WHERE id = $2", [
+        photo!.id,
+        padsId,
+      ]);
+      const order = await place(buyer, offer);
+      const image = { photoId: photo!.id, mode: "link", thumbUrl: source, sourceUrl: source };
+
+      expect((await userOrder(buyer, order.id)).item.photo).toMatchObject(image);
+      expect((await supplierOrder(shop, order.id)).item.photo).toMatchObject(image);
+      expect((await adminOrder(order.id)).item.photo).toMatchObject(image);
+      const copy = await ok(buyer.as("get", "/active-orders"), (b) =>
+        checked(activeOrdersResponseSchema)(b),
+      );
+      expect(copy.orders.find((entry) => entry.id === order.id)?.item.photo).toMatchObject(image);
+      // Lists carry the item without it (additive to the cards only).
+      const list = await ok(shop.as("get", "/supplier/orders?tab=new"), (b) =>
+        checked(supplierOrderPageSchema)(b),
+      );
+      expect(list.orders[0]!.item).not.toHaveProperty("photo");
+
+      await ok(buyer.as("post", `/orders/${order.id}/cancel`), (b) => b);
+      const history = await ok(buyer.as("get", "/order-history"), (b) =>
+        checked(userOrderHistoryPageSchema)(b),
+      );
+      expect(
+        history.months.flatMap((month) => month.orders).find((entry) => entry.id === order.id)?.item
+          .photo,
+      ).toMatchObject(image);
+
+      // The item lost its photo later: every card shows the placeholder.
+      await db.query("UPDATE catalog_item SET primary_photo_id = NULL WHERE id = $1", [padsId]);
+      expect((await userOrder(buyer, order.id)).item.photo).toBeNull();
+      expect((await supplierOrder(shop, order.id)).item.photo).toBeNull();
+      expect((await adminOrder(order.id)).item.photo).toBeNull();
+    });
+
     it("names employees to the supplier and the administrator, never to the user; the reason stays with them", async () => {
       const shop = await company("Журнал", { firstName: "Айгерим" });
       const marat = await colleague(shop, "Марат");

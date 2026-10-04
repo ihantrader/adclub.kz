@@ -130,6 +130,27 @@ export class CatalogPhotosService {
   }
 
   /**
+   * `imagesFor` by the ids of items (the item of an order, TASK-030.A): the
+   * item's primary photo as it is in the catalog now — an order's snapshot
+   * keeps no photo, so one removed since gives no picture. Unknown ids are
+   * simply absent.
+   */
+  async imagesForItemIds(
+    executor: DbExecutor,
+    itemIds: readonly string[],
+  ): Promise<Map<string, ItemPhotoImage>> {
+    const ids = [...new Set(itemIds)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const items = await executor
+      .select({ id: catalogItem.id, primaryPhotoId: catalogItem.primaryPhotoId })
+      .from(catalogItem)
+      .where(inArray(catalogItem.id, ids));
+    return this.imagesFor(executor, items);
+  }
+
+  /**
    * The picture of each of these items as clients get it: the approved
    * primary photo, in the mode `photo_display_mode` asks for, and never
    * the full-size file. Items with no approved photo are absent from the
@@ -137,7 +158,7 @@ export class CatalogPhotosService {
    */
   async imagesFor(
     executor: DbExecutor,
-    items: readonly CatalogItemRow[],
+    items: readonly Pick<CatalogItemRow, "id" | "primaryPhotoId">[],
   ): Promise<Map<string, ItemPhotoImage>> {
     const photoIds = items.flatMap((item) => (item.primaryPhotoId ? [item.primaryPhotoId] : []));
     const images = new Map<string, ItemPhotoImage>();

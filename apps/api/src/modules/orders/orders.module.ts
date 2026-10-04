@@ -25,6 +25,11 @@ export interface OrdersModuleOptions {
   clubAccess: DynamicModule;
   /** The signals module of the application, the very same instance. */
   signals: DynamicModule;
+  /**
+   * The catalog module of the application, the very same instance: the
+   * thumbnail of an order's item in its card (TASK-030.A).
+   */
+  catalog: DynamicModule;
 }
 
 /**
@@ -39,7 +44,7 @@ export class OrdersModule {
   static forRoot(options: OrdersModuleOptions): DynamicModule {
     return {
       module: OrdersModule,
-      imports: [options.offers, options.clubAccess, options.signals],
+      imports: [options.offers, options.clubAccess, options.signals, options.catalog],
       controllers: options.http
         ? [
             UserOrdersController,

@@ -18,7 +18,9 @@ import { TranslationQueue } from "./translation-queue.service";
  * with TASK-011 — brands, brake pads of two brands (a pair of analogs),
  * engine oils by attributes (two of them incomplete) and three services.
  * Kazakh names are a first draft and need checking by a native speaker
- * (TASK-010-REPORT).
+ * (TASK-010-REPORT). With TASK-030.A «Расходники» come first and «Салон»
+ * has the steering wheel; `arrange()` brings a catalog seeded before that
+ * to the same order and icons.
  */
 
 /**
@@ -50,6 +52,73 @@ interface SeedNode {
 const same = (text: string): Names => ({ ru: text, kk: text, en: text });
 
 export const devCatalogTree: readonly SeedNode[] = [
+  // The first node of goods is the wide tile of M-CAT-01 (TASK-030.A).
+  {
+    code: "consumables",
+    kind: "goods",
+    icon: "droplet",
+    names: { ru: "Расходники", kk: "Шығын материалдары", en: "Consumables" },
+    children: [
+      {
+        code: "engine_oils",
+        names: { ru: "Моторные масла", kk: "Мотор майлары", en: "Engine oils" },
+        attributes: [
+          {
+            code: "viscosity",
+            valueType: "enum",
+            names: { ru: "Вязкость", kk: "Тұтқырлық", en: "Viscosity" },
+            isFilterable: true,
+            isRequiredForComplete: true,
+            options: [
+              { code: "0w_20", names: same("0W-20") },
+              { code: "5w_30", names: same("5W-30") },
+              { code: "5w_40", names: same("5W-40") },
+              { code: "10w_40", names: same("10W-40") },
+            ],
+          },
+          {
+            code: "approval",
+            valueType: "enum",
+            names: { ru: "Допуск", kk: "Рұқсат", en: "Approval" },
+            isFilterable: true,
+            // PRODUCT 7.3: an oil is its brand, viscosity, approval and volume
+            // (with TASK-011 these identify a product — ARCHITECTURE 4.17).
+            isRequiredForComplete: true,
+            options: [
+              { code: "api_sn", names: same("API SN") },
+              { code: "api_sp", names: same("API SP") },
+              { code: "acea_c3", names: same("ACEA C3") },
+              { code: "acea_a3_b4", names: same("ACEA A3/B4") },
+            ],
+          },
+          {
+            code: "volume",
+            valueType: "number",
+            names: { ru: "Объём", kk: "Көлемі", en: "Volume" },
+            unit: { ru: "л", kk: "л", en: "L" },
+            number: { integer: false, min: 0.1, max: 220 },
+            isFilterable: true,
+            isRequiredForComplete: true,
+          },
+        ],
+      },
+      {
+        code: "oil_filters",
+        names: { ru: "Масляные фильтры", kk: "Май сүзгілері", en: "Oil filters" },
+        compatibilityRequired: true,
+      },
+      {
+        code: "air_filters",
+        names: { ru: "Воздушные фильтры", kk: "Ауа сүзгілері", en: "Air filters" },
+        compatibilityRequired: true,
+      },
+      {
+        code: "cabin_filters",
+        names: { ru: "Салонные фильтры", kk: "Салон сүзгілері", en: "Cabin filters" },
+        compatibilityRequired: true,
+      },
+    ],
+  },
   {
     code: "engine",
     kind: "goods",
@@ -181,79 +250,13 @@ export const devCatalogTree: readonly SeedNode[] = [
   {
     code: "interior",
     kind: "goods",
-    icon: "armchair",
+    icon: "steering-wheel",
     names: { ru: "Салон", kk: "Салон", en: "Interior" },
     children: [
       { code: "floor_mats", names: { ru: "Коврики", kk: "Кілемшелер", en: "Floor mats" } },
       // Russian only: the automatic translation names them in Kazakh and English (TASK-012).
       { code: "seat_covers", names: { ru: "Чехлы" } },
       { code: "accessories", names: { ru: "Аксессуары" } },
-    ],
-  },
-  {
-    code: "consumables",
-    kind: "goods",
-    icon: "droplet",
-    names: { ru: "Расходники", kk: "Шығын материалдары", en: "Consumables" },
-    children: [
-      {
-        code: "engine_oils",
-        names: { ru: "Моторные масла", kk: "Мотор майлары", en: "Engine oils" },
-        attributes: [
-          {
-            code: "viscosity",
-            valueType: "enum",
-            names: { ru: "Вязкость", kk: "Тұтқырлық", en: "Viscosity" },
-            isFilterable: true,
-            isRequiredForComplete: true,
-            options: [
-              { code: "0w_20", names: same("0W-20") },
-              { code: "5w_30", names: same("5W-30") },
-              { code: "5w_40", names: same("5W-40") },
-              { code: "10w_40", names: same("10W-40") },
-            ],
-          },
-          {
-            code: "approval",
-            valueType: "enum",
-            names: { ru: "Допуск", kk: "Рұқсат", en: "Approval" },
-            isFilterable: true,
-            // PRODUCT 7.3: an oil is its brand, viscosity, approval and volume
-            // (with TASK-011 these identify a product — ARCHITECTURE 4.17).
-            isRequiredForComplete: true,
-            options: [
-              { code: "api_sn", names: same("API SN") },
-              { code: "api_sp", names: same("API SP") },
-              { code: "acea_c3", names: same("ACEA C3") },
-              { code: "acea_a3_b4", names: same("ACEA A3/B4") },
-            ],
-          },
-          {
-            code: "volume",
-            valueType: "number",
-            names: { ru: "Объём", kk: "Көлемі", en: "Volume" },
-            unit: { ru: "л", kk: "л", en: "L" },
-            number: { integer: false, min: 0.1, max: 220 },
-            isFilterable: true,
-            isRequiredForComplete: true,
-          },
-        ],
-      },
-      {
-        code: "oil_filters",
-        names: { ru: "Масляные фильтры", kk: "Май сүзгілері", en: "Oil filters" },
-        compatibilityRequired: true,
-      },
-      {
-        code: "air_filters",
-        names: { ru: "Воздушные фильтры", kk: "Ауа сүзгілері", en: "Air filters" },
-        compatibilityRequired: true,
-      },
-      {
-        code: "cabin_filters",
-        names: { ru: "Салонные фильтры", kk: "Салон сүзгілері", en: "Cabin filters" },
-        compatibilityRequired: true,
-      },
     ],
   },
   {
@@ -458,6 +461,13 @@ export interface DevCatalogSeedResult {
 
 export class DevCatalogSeedError extends Error {}
 
+export interface DevCatalogArrangeResult {
+  /** The kinds whose nodes were put in the order of the tree. */
+  reordered: CategoryKind[];
+  /** Codes of the nodes whose icon was set to the tree's. */
+  icons: string[];
+}
+
 const OPERATOR: CatalogActor = { role: "operator" };
 
 /**
@@ -524,6 +534,57 @@ export class DevCatalogSeed {
     );
     // What has no Kazakh or English name yet — the seed leaves some Russian-only — is translated.
     result.translationsQueued = (await this.translations.queueMissing()).queued;
+    return result;
+  }
+
+  /**
+   * Brings an already seeded development catalog to the order and the icons
+   * of `devCatalogTree` (TASK-030.A: «Расходники» first, «Салон» with the
+   * steering wheel) — `run()` never touches what exists. The nodes of the
+   * tree go first in its order, any other node after them as it was; each
+   * node of the tree gets the tree's icon. Through the administrator's
+   * service, so every change is checked and in the journal by the operator;
+   * a second run changes nothing. In real environments the order and the
+   * icons are the administrator's data — this is development only.
+   */
+  async arrange(): Promise<DevCatalogArrangeResult> {
+    if (this.config.nodeEnv !== "development" && this.config.nodeEnv !== "test") {
+      throw new DevCatalogSeedError(
+        "The order and the icons of the catalog are the administrator's; this is for development only",
+      );
+    }
+    const result: DevCatalogArrangeResult = { reordered: [], icons: [] };
+    const { categories } = await this.catalog.tree();
+    for (const kind of ["goods", "services"] as const) {
+      const current = categories.filter((node) => node.kind === kind);
+      const byCode = new Map(current.map((node) => [node.code, node]));
+      const seeded = devCatalogTree
+        .filter((node) => node.kind === kind)
+        .flatMap((node) => byCode.get(node.code) ?? []);
+      const wanted = [
+        ...seeded.map((node) => node.id),
+        ...current.filter((node) => !seeded.includes(node)).map((node) => node.id),
+      ];
+      const order = current.map((node) => node.id);
+      if (wanted.join() !== order.join()) {
+        await this.catalog.reorderCategories(null, kind, wanted, order, OPERATOR);
+        result.reordered.push(kind);
+      }
+    }
+    for (const spec of devCatalogTree) {
+      const node = categories.find((candidate) => candidate.code === spec.code);
+      if (node && node.icon !== spec.icon) {
+        await this.catalog.updateCategory(
+          node.id,
+          { expectedVersion: node.version, icon: spec.icon },
+          OPERATOR,
+        );
+        result.icons.push(spec.code);
+      }
+    }
+    this.logger.log(
+      `Development catalog arranged reordered=${JSON.stringify(result.reordered)} icons=${JSON.stringify(result.icons)}`,
+    );
     return result;
   }
 

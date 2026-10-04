@@ -1355,17 +1355,18 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         "new_node",
         ...devCatalogTree.filter((entry) => entry.kind === "services").map((entry) => entry.code),
       ]);
+      // «Расходники» lead the goods of the example tree (TASK-030.A).
       expect(ru.categories[0]).toMatchObject({
-        code: "engine",
-        icon: "engine",
+        code: "consumables",
+        icon: "droplet",
         sort: 0,
-        name: { text: "Двигатель", isFallback: false },
+        name: { text: "Расходники", isFallback: false },
       });
       const kk = categoryTreeResponseSchema.parse(
         (await asGuest("/catalog/categories", "kk-KZ")).body,
       );
       expect(kk.language).toBe("kk");
-      expect(kk.categories[0]!.name).toEqual({ text: "Қозғалтқыш", isFallback: false });
+      expect(kk.categories[0]!.name).toEqual({ text: "Шығын материалдары", isFallback: false });
       const brakesNode = kk.categories.find((entry) => entry.code === "brakes")!;
       expect(brakesNode.children.map((entry) => [entry.code, entry.compatibilityRequired])).toEqual(
         [
@@ -1708,7 +1709,10 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       );
       expect(
         tree.categories.filter((entry) => entry.kind === "goods").map((entry) => entry.code),
-      ).toEqual(["engine", "brakes", "suspension", "body", "electrics", "interior", "consumables"]);
+      ).toEqual(["consumables", "engine", "brakes", "suspension", "body", "electrics", "interior"]);
+      expect(tree.categories.find((entry) => entry.code === "interior")?.icon).toBe(
+        "steering-wheel",
+      );
       for (const node of tree.categories) {
         expect(node.children.length).toBeGreaterThanOrEqual(node.kind === "goods" ? 2 : 1);
         expect(node.children.length).toBeLessThanOrEqual(4);
@@ -1719,6 +1723,81 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       config.nodeEnv = "staging";
       try {
         await expect(seed.run()).rejects.toThrow(/development and tests only/);
+      } finally {
+        config.nodeEnv = "test";
+      }
+    });
+  });
+
+  describe("arranging a catalog seeded earlier (TASK-030.A)", () => {
+    it("puts the tree's nodes first in its order and gives them its icons, once; not outside development and tests", async () => {
+      const seed = app.get(DevCatalogSeed);
+      await seed.run();
+      // A catalog seeded before TASK-030.A: «Расходники» last, «Салон» an armchair,
+      // and a node of the administrator's own among them.
+      const own = await createCategory({
+        code: "own_node",
+        kind: "goods",
+        names: { ru: "Свой узел" },
+      });
+      const before = adminCategoryTreeResponseSchema.parse(
+        (await asAdmin("get", "/admin/catalog/categories")).body,
+      );
+      const goods = before.categories.filter((entry) => entry.kind === "goods");
+      const id = (code: string) => goods.find((entry) => entry.code === code)!.id;
+      const oldOrder = [
+        "engine",
+        "own_node",
+        "brakes",
+        "suspension",
+        "body",
+        "electrics",
+        "interior",
+        "consumables",
+      ];
+      await asAdmin("put", "/admin/catalog/categories/order", {
+        parentId: null,
+        kind: "goods",
+        categoryIds: oldOrder.map(id),
+      }).expect(200);
+      const interior = goods.find((entry) => entry.code === "interior")!;
+      await asAdmin("patch", `/admin/catalog/categories/${interior.id}`, {
+        expectedVersion: interior.version,
+        icon: "armchair",
+      }).expect(200);
+
+      expect(await seed.arrange()).toEqual({ reordered: ["goods"], icons: ["interior"] });
+      const after = adminCategoryTreeResponseSchema.parse(
+        (await asAdmin("get", "/admin/catalog/categories")).body,
+      );
+      expect(
+        after.categories.filter((entry) => entry.kind === "goods").map((entry) => entry.code),
+      ).toEqual([
+        "consumables",
+        "engine",
+        "brakes",
+        "suspension",
+        "body",
+        "electrics",
+        "interior",
+        "own_node",
+      ]);
+      expect(after.categories.find((entry) => entry.code === "interior")?.icon).toBe(
+        "steering-wheel",
+      );
+      expect(after.categories.find((entry) => entry.id === own.id)?.icon ?? null).toBeNull();
+      // Through the administrator's service: in the journal by the operator.
+      const journal = await db.query(
+        `SELECT action, actor_role FROM audit_log WHERE entity_type = 'catalog_category' AND actor_role = 'operator' ORDER BY created_at DESC LIMIT 2`,
+      );
+      expect(journal.rows.map((row: { action: string }) => row.action).sort()).toEqual(
+        [auditActions.catalogCategoriesReordered, auditActions.catalogCategoryChanged].sort(),
+      );
+
+      expect(await seed.arrange()).toEqual({ reordered: [], icons: [] });
+      config.nodeEnv = "staging";
+      try {
+        await expect(seed.arrange()).rejects.toThrow(/development only/);
       } finally {
         config.nodeEnv = "test";
       }

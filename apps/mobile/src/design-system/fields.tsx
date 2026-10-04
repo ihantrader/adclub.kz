@@ -43,7 +43,6 @@ export function TextField({
   const { theme } = useTheme();
   const { colors } = theme;
   const [focused, setFocused] = useState(false);
-  const active = Boolean(error) || focused;
   const ai = Boolean(aiLabel) && !error;
 
   return (
@@ -63,8 +62,9 @@ export function TextField({
                 : ai
                   ? colors.aiBorder
                   : colors.borderField,
-            borderWidth: active ? line.fieldActiveWidth : line.width,
-            paddingHorizontal: active ? 11 : 12,
+            // Active and invalid: still 1 px, only the color changes (D-068).
+            borderWidth: line.width,
+            paddingHorizontal: 12,
           },
         ]}
       >
@@ -211,7 +211,7 @@ export function CodeCells({ label, value, onChangeText, error, autoFocus }: Code
                         : highlighted
                           ? colors.accent
                           : colors.borderField,
-                      borderWidth: highlighted ? line.fieldActiveWidth : line.width,
+                      borderWidth: line.width,
                     },
                   ]}
                 >
@@ -280,7 +280,7 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit }: KeypadProps) {
           : {
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
-              borderWidth: 1,
+              borderWidth: StyleSheet.hairlineWidth,
             },
         pressed && { backgroundColor: theme.colors.surfaceRaised },
       ]}

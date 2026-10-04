@@ -86,7 +86,7 @@ textarea {
   border-radius: var(--ac-radius-s);
   font-size: 16px;
   line-height: 20px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-label);
   text-align: center;
   cursor: pointer;
   transition:
@@ -144,9 +144,12 @@ textarea {
   color: var(--ac-color-on-primary);
 }
 
+/* Secondary: no fill, a 1 px `borderField` frame (D-068). An inset shadow
+   draws it, so the secondary button is exactly as large as the primary one. */
 .ac-button--secondary {
-  background: var(--ac-color-fill);
+  background: transparent;
   color: var(--ac-color-text);
+  box-shadow: inset 0 0 0 var(--ac-line) var(--ac-color-border-field);
 }
 
 .ac-button--destructive {
@@ -181,6 +184,16 @@ textarea {
 
 .ac-button--text:disabled {
   background: transparent;
+}
+
+.ac-button--secondary:not(:disabled, [aria-disabled="true"]):active {
+  filter: none;
+  background: var(--ac-color-fill);
+}
+
+.ac-button--secondary:disabled {
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--ac-line) var(--ac-color-text-disabled);
 }
 
 .ac-button--loading {
@@ -253,20 +266,27 @@ textarea {
   gap: var(--ac-space-2);
   min-height: var(--ac-field);
   padding: 0 var(--ac-space-3);
-  border: 1px solid var(--ac-color-border-field);
+  border: var(--ac-line) solid var(--ac-color-border-field);
   border-radius: var(--ac-radius-s);
   background: var(--ac-color-surface);
 }
 
+/* Active and invalid fields keep a 1 px border (D-068); focus from the
+   keyboard adds the 2 px ring every element has (DESIGN.md 7.7). */
 .ac-field__control:focus-within {
-  border: 2px solid var(--ac-color-accent);
-  padding: 0 11px;
+  border-color: var(--ac-color-accent);
 }
 
 .ac-field__control--error,
 .ac-field__control--error:focus-within {
-  border: 2px solid var(--ac-color-danger);
-  padding: 0 11px;
+  border-color: var(--ac-color-danger);
+}
+
+.ac-field__control--keyboard,
+.ac-search--keyboard,
+.ac-code__cells--keyboard {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: var(--ac-focus-offset);
 }
 
 .ac-field__control--ai {
@@ -327,15 +347,14 @@ textarea {
   gap: var(--ac-space-2);
   min-height: var(--ac-field);
   padding: 0 4px 0 var(--ac-space-3);
-  border: 1px solid var(--ac-color-border-field);
+  border: var(--ac-line) solid var(--ac-color-border-field);
   border-radius: var(--ac-radius-s);
   background: var(--ac-color-surface);
   color: var(--ac-color-text-muted);
 }
 
 .ac-search:focus-within {
-  border: 2px solid var(--ac-color-accent);
-  padding: 0 3px 0 11px;
+  border-color: var(--ac-color-accent);
 }
 
 .ac-search__input {
@@ -381,25 +400,21 @@ textarea {
   flex: 0 1 var(--ac-code-cell-width);
   min-width: 36px;
   height: var(--ac-code-cell-height);
-  border: 1px solid var(--ac-color-border-field);
+  border: var(--ac-line) solid var(--ac-color-border-field);
   border-radius: var(--ac-radius-s);
   background: var(--ac-color-surface);
   font-size: 40px;
   line-height: 44px;
-  font-weight: 700;
+  font-weight: var(--ac-font-weight-code-x-l);
   font-variant-numeric: tabular-nums;
 }
 
-.ac-code__input:focus-visible ~ .ac-code__group .ac-code__cell--active {
-  border: 2px solid var(--ac-color-accent);
+.ac-code__input:focus ~ .ac-code__group .ac-code__cell--active {
+  border-color: var(--ac-color-accent);
 }
 
 .ac-code__cells--error .ac-code__cell {
-  border: 2px solid var(--ac-color-danger);
-}
-
-.ac-code__cells:has(.ac-code__input:focus-visible) {
-  outline: none;
+  border-color: var(--ac-color-danger);
 }
 
 /* keypad */
@@ -415,7 +430,7 @@ textarea {
   justify-content: center;
   min-height: var(--ac-keypad-key);
   padding: 4px;
-  border: 1px solid var(--ac-color-border);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
   border-radius: var(--ac-radius-s);
   background: var(--ac-color-surface);
   cursor: pointer;
@@ -433,7 +448,7 @@ textarea {
 .ac-keypad__key--action {
   background: var(--ac-color-fill);
   border-color: transparent;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-label);
 }
 
 .ac-keypad__key:disabled {
@@ -450,7 +465,7 @@ textarea {
   min-height: var(--ac-chip);
   max-width: 100%;
   padding: 4px var(--ac-space-3);
-  border: 1px solid var(--ac-color-border);
+  border: var(--ac-line) solid var(--ac-color-border);
   border-radius: var(--ac-radius-s);
   background: transparent;
   color: var(--ac-color-text);
@@ -493,7 +508,7 @@ textarea {
   color: var(--ac-color-text-muted);
   font-size: 14px;
   line-height: 18px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-label);
   text-align: center;
   cursor: pointer;
   transition: background-color var(--ac-motion-fast) var(--ac-motion-easing);
@@ -554,7 +569,7 @@ textarea {
   width: var(--ac-switch-width);
   height: var(--ac-switch-height);
   padding: 0;
-  border: 1px solid var(--ac-color-border-field);
+  border: var(--ac-line) solid var(--ac-color-border-field);
   border-radius: var(--ac-radius-full);
   background: var(--ac-color-fill);
   cursor: pointer;
@@ -608,7 +623,7 @@ textarea {
   justify-content: center;
   width: var(--ac-checkbox);
   height: var(--ac-checkbox);
-  border: 1px solid var(--ac-color-border-field);
+  border: var(--ac-line) solid var(--ac-color-border-field);
   border-radius: var(--ac-radius-xs);
   background: var(--ac-color-surface);
   color: var(--ac-color-on-primary);
@@ -683,7 +698,7 @@ textarea {
   border-radius: var(--ac-radius-s);
   font-size: 12px;
   line-height: 16px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-caption-strong);
 }
 
 .ac-badge--neutral {
@@ -722,7 +737,7 @@ textarea {
   gap: 4px;
   font-size: 12px;
   line-height: 16px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-caption-strong);
 }
 
 .ac-compat--fits {
@@ -749,7 +764,7 @@ textarea {
   color: var(--ac-color-ai);
   font-size: 12px;
   line-height: 16px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-caption-strong);
 }
 
 .ac-rating {
@@ -781,7 +796,7 @@ textarea {
   color: var(--ac-color-on-primary);
   font-size: 12px;
   line-height: 16px;
-  font-weight: 700;
+  font-weight: var(--ac-font-weight-caption-strong);
   font-variant-numeric: tabular-nums;
 }
 
@@ -872,7 +887,6 @@ textarea {
 }
 
 .ac-skeleton-list {
-  border: 1px solid var(--ac-color-border);
   border-radius: var(--ac-radius-m);
   background: var(--ac-color-surface);
   overflow: hidden;
@@ -881,11 +895,11 @@ textarea {
 .ac-skeleton-row {
   display: flex;
   gap: var(--ac-space-3);
-  padding: var(--ac-space-3) var(--ac-space-4);
+  padding: var(--ac-space-4);
 }
 
 .ac-skeleton-row + .ac-skeleton-row {
-  border-top: 1px solid var(--ac-color-border);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
 }
 
 .ac-skeleton-row .ac-skeleton:first-child {
@@ -975,7 +989,7 @@ textarea {
 .ac-table-wrap {
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--ac-color-border);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
   border-radius: var(--ac-radius-m);
 }
 
@@ -989,12 +1003,12 @@ textarea {
 
 .ac-table th {
   padding: 10px var(--ac-space-3);
-  border-bottom: 1px solid var(--ac-color-border);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
   background: var(--ac-color-surface-raised);
   color: var(--ac-color-text-muted);
   font-size: 12px;
   line-height: 16px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-caption-strong);
   text-align: left;
   vertical-align: top;
 }
@@ -1002,7 +1016,7 @@ textarea {
 .ac-table td {
   height: var(--ac-table-row);
   padding: 10px var(--ac-space-3);
-  border-bottom: 1px solid var(--ac-color-border);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
   vertical-align: top;
 }
 
@@ -1044,7 +1058,7 @@ textarea {
   display: block;
   color: var(--ac-color-ai);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: var(--ac-font-weight-caption);
 }
 
 /* ---------- navigation ---------- */
@@ -1063,7 +1077,7 @@ textarea {
   width: var(--ac-sidebar);
   min-height: 100%;
   padding: var(--ac-space-4) var(--ac-space-3);
-  border-right: 1px solid var(--ac-color-border);
+  border-right: var(--ac-line-hairline) solid var(--ac-color-border);
   background: var(--ac-color-bar);
 }
 
@@ -1094,7 +1108,7 @@ textarea {
   color: var(--ac-color-text-muted);
   font-size: 14px;
   line-height: 18px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-label);
   text-align: left;
   cursor: pointer;
 }
@@ -1119,7 +1133,7 @@ textarea {
   align-items: flex-end;
   min-height: var(--ac-tab-bar);
   padding: var(--ac-space-2) 4px calc(4px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--ac-color-border);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
   background: var(--ac-color-bar);
 }
 
@@ -1137,7 +1151,7 @@ textarea {
   color: var(--ac-color-text-muted);
   font-size: 11px;
   line-height: 14px;
-  font-weight: 500;
+  font-weight: var(--ac-font-weight-tab);
   cursor: pointer;
 }
 
@@ -1192,7 +1206,6 @@ textarea {
 .ac-code-block {
   position: relative;
   padding: var(--ac-space-4);
-  border: 1px solid var(--ac-color-border);
   border-radius: var(--ac-radius-m);
   background: var(--ac-color-surface);
 }

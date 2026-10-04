@@ -18,6 +18,7 @@
   --ac-radius-l: 12px;
   --ac-radius-full: 9999px;
   --ac-line: 1px;
+  --ac-line-hairline: 1px;
   --ac-focus-width: 2px;
   --ac-focus-offset: 2px;
   --ac-touch-target: 48px;
@@ -55,6 +56,20 @@
   --ac-pressed-darken: 0.88;
   --ac-breakpoint-two-columns: 600px;
   --ac-breakpoint-sidebar: 1024px;
+  --ac-font-weight-title-l: 300;
+  --ac-font-weight-title: 400;
+  --ac-font-weight-heading: 400;
+  --ac-font-weight-body: 400;
+  --ac-font-weight-body-strong: 500;
+  --ac-font-weight-body-s: 400;
+  --ac-font-weight-caption: 400;
+  --ac-font-weight-caption-strong: 500;
+  --ac-font-weight-label: 500;
+  --ac-font-weight-tab: 500;
+  --ac-font-weight-price: 400;
+  --ac-font-weight-price-s: 500;
+  --ac-font-weight-code: 300;
+  --ac-font-weight-code-x-l: 300;
 }
 
 :root,
@@ -129,21 +144,21 @@
 }
 
 .ac-text-title-l {
-  font-size: 24px;
-  line-height: 30px;
-  font-weight: 700;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 300;
 }
 
 .ac-text-title {
   font-size: 20px;
   line-height: 26px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .ac-text-heading {
-  font-size: 17px;
-  line-height: 22px;
-  font-weight: 500;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 400;
 }
 
 .ac-text-body {
@@ -189,29 +204,29 @@
 }
 
 .ac-text-price {
-  font-size: 20px;
-  line-height: 24px;
-  font-weight: 700;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
 .ac-text-price-s {
   font-size: 16px;
   line-height: 20px;
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .ac-text-code {
   font-size: 32px;
   line-height: 36px;
-  font-weight: 700;
+  font-weight: 300;
   font-variant-numeric: tabular-nums;
 }
 
 .ac-text-code-x-l {
   font-size: 40px;
   line-height: 44px;
-  font-weight: 700;
+  font-weight: 300;
   font-variant-numeric: tabular-nums;
 }

@@ -1,6 +1,7 @@
 import {
   bannerTones,
   floatShadow,
+  layout,
   motion,
   radius,
   sheetMotion,
@@ -35,6 +36,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import { hairline } from "./lines";
 import { animateTo, useMotionPlan, useOverlayTransition } from "./motion";
 import { Text } from "./text";
 import { useTheme } from "./theme";
@@ -211,17 +213,14 @@ export function SkeletonList({ rows = 3, label }: { rows?: number; label: string
       accessible
       accessibilityLabel={label}
       accessibilityState={{ busy: true }}
-      style={[
-        styles.list,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-      ]}
+      style={[styles.list, { backgroundColor: theme.colors.surface }]}
     >
       {Array.from({ length: rows }, (_, index) => (
         <View
           key={index}
           style={[
             styles.skeletonRow,
-            index > 0 && { borderTopWidth: 1, borderTopColor: theme.colors.border },
+            index > 0 && { borderTopWidth: hairline, borderTopColor: theme.colors.border },
           ]}
         >
           <Skeleton width={size.thumbnail} height={size.thumbnail} rounded />
@@ -505,8 +504,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: radius.s,
   },
-  list: { borderWidth: 1, borderRadius: radius.m, overflow: "hidden" },
-  skeletonRow: { flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  list: { borderRadius: radius.m, overflow: "hidden" },
+  skeletonRow: { flexDirection: "row", gap: 12, padding: layout.rowPadding },
   skeletonLines: { flex: 1, gap: 8, paddingTop: 4 },
   empty: { alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 32 },
   emptyAction: { marginTop: 8, alignSelf: "stretch", alignItems: "center" },

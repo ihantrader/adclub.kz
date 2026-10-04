@@ -33,6 +33,7 @@ export {
   type ScreenProps,
 } from "./states";
 export { GlyphIcon, Icon, icons, type IconProps } from "./Icon";
+export { hairline } from "./lines";
 export { AiBadge, Badge, CompatibilityMark, IconBadge, Rating, StatusBadge } from "./marks";
 export { useAfterDismiss, useMotionPlan } from "./motion";
 export { BottomTabs, ListGroup, ListRow, TopBar, type TabItem } from "./navigation";

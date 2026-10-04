@@ -1,5 +1,5 @@
 import type { CategoryAttribute } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
+import { space } from "@adclub/ui-core";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Button, Chip, Sheet, Text, TextField, useAfterDismiss } from "../../design-system";
@@ -290,5 +290,5 @@ const styles = StyleSheet.create({
   group: { gap: 8, paddingVertical: 8 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "flex-end" },
   range: { flexGrow: 1, flexBasis: "45%" },
-  actions: { gap: 4, paddingTop: layout.cardPaddingS },
+  actions: { gap: 4, paddingTop: space[3] },
 });

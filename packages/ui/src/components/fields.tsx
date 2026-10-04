@@ -4,10 +4,38 @@ import {
   sanitizeOrderCode,
   splitOrderCode,
 } from "@adclub/ui-core";
-import { useId, useRef, type InputHTMLAttributes, type ReactNode } from "react";
+import { useId, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import { AiBadge } from "./marks";
 import { cx } from "./cx";
+
+/** A press shortly before focus means the focus came from a pointer, not the keyboard. */
+const POINTER_FOCUS_WINDOW_MS = 1000;
+
+/**
+ * Whether the field was focused from the keyboard. A text input matches
+ * `:focus-visible` after a click too, so CSS alone cannot tell the two apart:
+ * a click or tap keeps the 1 px active border, the keyboard adds the 2 px ring
+ * every element has (DESIGN.md 7.7, D-068). Handlers go on the wrapper —
+ * React focus events bubble.
+ */
+function useKeyboardFocus() {
+  const pressedAt = useRef(-Infinity);
+  const [keyboard, setKeyboard] = useState(false);
+  return {
+    keyboard,
+    handlers: {
+      onPointerDown: () => {
+        pressedAt.current = Date.now();
+      },
+      onFocus: () => {
+        setKeyboard(Date.now() - pressedAt.current > POINTER_FOCUS_WINDOW_MS);
+        pressedAt.current = -Infinity;
+      },
+      onBlur: () => setKeyboard(false),
+    },
+  };
+}
 
 export interface TextFieldProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -48,6 +76,7 @@ export function TextField({
   const hintId = `${inputId}-hint`;
   const errorId = `${inputId}-error`;
   const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ");
+  const focus = useKeyboardFocus();
 
   return (
     <div className={cx("ac-field", className)}>
@@ -55,11 +84,13 @@ export function TextField({
         {label}
       </label>
       <div
+        {...focus.handlers}
         className={cx(
           "ac-field__control",
           error ? "ac-field__control--error" : null,
           aiLabel && !error ? "ac-field__control--ai" : null,
           disabled && "ac-field__control--disabled",
+          focus.keyboard && "ac-field__control--keyboard",
         )}
       >
         <input
@@ -115,8 +146,13 @@ export function SearchField({
   ...rest
 }: SearchFieldProps) {
   const input = useRef<HTMLInputElement>(null);
+  const focus = useKeyboardFocus();
   return (
-    <div className={cx("ac-search", className)} role="search">
+    <div
+      {...focus.handlers}
+      className={cx("ac-search", focus.keyboard && "ac-search--keyboard", className)}
+      role="search"
+    >
       <Icon name="search" size={20} />
       <input
         {...rest}
@@ -164,13 +200,21 @@ export function CodeCells({ label, value, onChange, error, autoFocus, disabled }
   const code = sanitizeOrderCode(value);
   const groups = splitOrderCode(code.padEnd(ORDER_CODE_LENGTH, " "));
   const activeIndex = Math.min(code.length, ORDER_CODE_LENGTH - 1);
+  const focus = useKeyboardFocus();
 
   return (
     <div className="ac-code">
       <label className="ac-field__label" htmlFor={id}>
         {label}
       </label>
-      <div className={cx("ac-code__cells", error ? "ac-code__cells--error" : null)}>
+      <div
+        {...focus.handlers}
+        className={cx(
+          "ac-code__cells",
+          error ? "ac-code__cells--error" : null,
+          focus.keyboard && "ac-code__cells--keyboard",
+        )}
+      >
         <input
           id={id}
           className="ac-code__input"

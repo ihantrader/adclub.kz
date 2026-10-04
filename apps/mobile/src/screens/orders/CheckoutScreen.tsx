@@ -284,12 +284,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
             )}
 
             <Section title={t("checkout.offer")}>
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
-              >
+              <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                 <Text variant="caption" color="accent">
                   {t("item.clubPrice")}
                 </Text>
@@ -519,7 +514,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
   itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   grow: { flex: 1 },
-  card: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
+  // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
+  card: { borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
   quantityRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   center: { textAlign: "center" },
 });

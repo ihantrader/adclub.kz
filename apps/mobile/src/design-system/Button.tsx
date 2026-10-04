@@ -1,13 +1,14 @@
 import {
   createPressGuard,
   isPressBlocked,
+  line,
   motion,
   radius,
   size,
   type ColorToken,
   type IconName,
 } from "@adclub/ui-core";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -39,12 +40,20 @@ export interface ButtonProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * Fill and text of each variant. The secondary button has no fill: a 1 px
+ * `borderField` frame, `fill` only while pressed, a `textDisabled` frame when
+ * disabled (DESIGN.md 7.7, D-068).
+ */
 const palette: Record<ButtonVariant, { background: ColorToken | null; text: ColorToken }> = {
   primary: { background: "primary", text: "onPrimary" },
-  secondary: { background: "fill", text: "text" },
+  secondary: { background: null, text: "text" },
   text: { background: null, text: "accent" },
   danger: { background: "danger", text: "onDanger" },
 };
+
+/** A button inside `ButtonRow` fills its half in height too, so a pair stays a pair. */
+const InRow = createContext(false);
 
 export function Button({
   children,
@@ -59,6 +68,7 @@ export function Button({
   style,
 }: ButtonProps) {
   const { theme } = useTheme();
+  const inRow = useContext(InRow);
   const [pending, setPending] = useState(false);
   const [guard] = useState(() => createPressGuard(setPending));
   const busy = loading || pending;
@@ -70,13 +80,15 @@ export function Button({
     : destructive && variant === "secondary"
       ? "danger"
       : colors.text;
-  const background = disabled
-    ? variant === "text"
-      ? "transparent"
-      : theme.colors.fill
-    : colors.background
-      ? theme.colors[colors.background]
-      : "transparent";
+  const framed = variant === "secondary";
+  const background =
+    disabled && !framed && variant !== "text"
+      ? theme.colors.fill
+      : colors.background && !disabled
+        ? theme.colors[colors.background]
+        : "transparent";
+  // Without a fill there is nothing to darken: pressed shows `fill` instead.
+  const pressedFill = variant === "text" || framed;
 
   return (
     <Pressable
@@ -91,14 +103,19 @@ export function Button({
       }}
       style={({ pressed }) => [
         styles.base,
+        inRow && styles.fill,
         { minHeight: size.button[buttonSize], backgroundColor: background },
-        pressed && !blocked && variant === "text" && { backgroundColor: theme.colors.fill },
+        framed && {
+          borderWidth: line.width,
+          borderColor: theme.colors[disabled ? "textDisabled" : "borderField"],
+        },
+        pressed && !blocked && pressedFill && { backgroundColor: theme.colors.fill },
         style,
       ]}
     >
       {({ pressed }) => (
         <>
-          {pressed && !blocked && variant !== "text" && <View style={styles.pressed} />}
+          {pressed && !blocked && !pressedFill && <View style={styles.pressed} />}
           {/* The label keeps its place while loading, so the width does not change. */}
           <View style={[styles.content, busy && styles.hidden]}>
             {icon && <Icon name={icon} size={20} color={textColor} />}
@@ -119,7 +136,7 @@ export function Button({
  * Two equal actions side by side, 50 × 50 across the width (TASK-030.A:
  * «Маршрут | Позвонить»). One child takes the whole row. With a large
  * system font the labels wrap inside their halves (DESIGN 7.11), they are
- * never cut.
+ * never cut — and the other button of the pair grows with it.
  */
 export function ButtonRow({ children }: { children: ReactNode }) {
   const items = (Array.isArray(children) ? children : [children]).filter(
@@ -129,7 +146,7 @@ export function ButtonRow({ children }: { children: ReactNode }) {
     <View style={styles.row}>
       {items.map((child, index) => (
         <View key={index} style={styles.rowItem}>
-          {child}
+          <InRow.Provider value>{child}</InRow.Provider>
         </View>
       ))}
     </View>
@@ -183,6 +200,7 @@ const styles = StyleSheet.create({
   },
   content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   hidden: { opacity: 0 },
+  fill: { flexGrow: 1 },
   row: { flexDirection: "row", gap: 8 },
   rowItem: { flex: 1, minWidth: 0 },
   label: { textAlign: "center", flexShrink: 1 },

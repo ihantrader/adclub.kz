@@ -6,6 +6,7 @@ import {
   quantityControls,
   radius,
   size,
+  typography,
   type IconName,
 } from "@adclub/ui-core";
 import { useEffect, useState, type ReactNode } from "react";
@@ -522,7 +523,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.s,
     borderWidth: line.width,
   },
-  selectLabel: { flex: 1, minWidth: 0, fontFamily: fontFamily.native[500] },
+  // 14 with the weight of the `label` token (DESIGN.md 7.7 "Кнопка выбора").
+  selectLabel: { flex: 1, minWidth: 0, fontFamily: fontFamily.native[typography.label.fontWeight] },
   segmentsBlock: { gap: 6 },
   segments: { flexGrow: 0, borderRadius: radius.s },
   segmentsContent: { flexGrow: 1, minHeight: size.segments, padding: segmentMetrics.inset },
@@ -545,7 +547,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.s,
     borderWidth: line.width,
   },
-  segmentLabel: { textAlign: "center", fontFamily: fontFamily.native[500] },
+  segmentLabel: {
+    textAlign: "center",
+    fontFamily: fontFamily.native[typography.label.fontWeight],
+  },
   segmentsHints: { justifyContent: "flex-start" },
   segmentHint: { position: "absolute", top: 0, left: 0, right: 0 },
   hidden: { opacity: 0 },

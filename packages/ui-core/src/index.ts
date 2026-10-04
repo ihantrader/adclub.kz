@@ -14,6 +14,7 @@ export {
 export {
   fontFamily,
   fontScale,
+  lightMinFontSize,
   typography,
   type FontWeight,
   type TextStyleToken,

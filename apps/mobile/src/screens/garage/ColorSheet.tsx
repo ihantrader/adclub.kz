@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { Icon, Sheet, Text, useAfterDismiss, useTheme } from "../../design-system";
+import { hairline, Icon, Sheet, Text, useAfterDismiss, useTheme } from "../../design-system";
 import { CAR_COLORS, type CarColorId } from "../../garage/car-color";
 import { useT } from "../../state/language";
 
@@ -81,7 +81,7 @@ function ColorRow({
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
           borderTopColor: theme.colors.border,
-          borderTopWidth: first ? 0 : 1,
+          borderTopWidth: first ? 0 : hairline,
         },
       ]}
     >

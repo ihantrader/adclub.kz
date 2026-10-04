@@ -1,8 +1,16 @@
-import { aiPilotButtonColorway, fontScale, radius, size, type IconName } from "@adclub/ui-core";
+import {
+  aiPilotButtonColorway,
+  fontScale,
+  layout,
+  radius,
+  size,
+  type IconName,
+} from "@adclub/ui-core";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AiPilot } from "./AiPilot";
+import { hairline } from "./lines";
 import { IconButton } from "./Button";
 import { Icon } from "./Icon";
 import { Text } from "./text";
@@ -174,7 +182,10 @@ export interface ListRowProps {
   first?: boolean;
 }
 
-/** List row: min 56, `surface`, `border` lines between rows; pressed — `surfaceRaised`. */
+/**
+ * List row: min 56, fields 16 / 16, `surface`, hairline `border` between rows;
+ * pressed — `surfaceRaised` (DESIGN.md 7.7, D-068).
+ */
 export function ListRow({
   title,
   subtitle,
@@ -195,7 +206,7 @@ export function ListRow({
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
           borderTopColor: theme.colors.border,
-          borderTopWidth: first ? 0 : 1,
+          borderTopWidth: first ? 0 : hairline,
         },
       ]}
     >
@@ -217,22 +228,23 @@ export function ListRow({
 }
 
 /**
- * Rows of one kind together (TASK-030.A): a `radiusM` block with a `border`
- * frame, lines between the rows — the profile's settings, the parameters of
+ * Rows of one kind together (TASK-030.A): a `radiusM` block of `surface` rows
+ * with hairlines between them and no frame — the rows differ from the page by
+ * their color (DESIGN.md 7.6, D-068) — the profile's settings, the parameters of
  * a car, the characteristics of an item, the course of an order. One look
  * for every list of rows inside a screen's padding.
  */
 export function ListGroup({ children }: { children: ReactNode }) {
   const { theme } = useTheme();
-  return <View style={[styles.group, { borderColor: theme.colors.border }]}>{children}</View>;
+  return <View style={[styles.group, { backgroundColor: theme.colors.surface }]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
-  group: { borderWidth: 1, borderRadius: radius.m, overflow: "hidden" },
+  group: { borderRadius: radius.m, overflow: "hidden" },
   bar: {
     flexDirection: "row",
     alignItems: "flex-end",
-    borderTopWidth: 1,
+    borderTopWidth: hairline,
     paddingTop: 8,
     paddingHorizontal: 4,
     minHeight: size.tabBar,
@@ -246,7 +258,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   pilotButton: { borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
-  topBar: { borderBottomWidth: 1 },
+  topBar: { borderBottomWidth: hairline },
   topBarRow: {
     minHeight: size.topBar,
     flexDirection: "row",
@@ -261,8 +273,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     minHeight: 56,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: layout.rowPadding,
+    paddingVertical: layout.rowPadding,
   },
   rowText: { flex: 1, gap: 2 },
 });

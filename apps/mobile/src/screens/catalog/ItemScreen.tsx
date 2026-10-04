@@ -15,6 +15,7 @@ import {
   Button,
   CategoryIcon,
   DataState,
+  hairline,
   Icon,
   ListGroup,
   ListRow,
@@ -490,7 +491,8 @@ function OfferCard({
     <View
       style={[
         styles.offer,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+        // `surface` sets the offer apart from the page: no frame (DESIGN.md 7.6).
+        { backgroundColor: theme.colors.surface },
       ]}
     >
       <View style={styles.offerTop}>
@@ -619,11 +621,11 @@ const styles = StyleSheet.create({
   dots: { flexDirection: "row", justifyContent: "center", gap: 6, paddingTop: 8 },
   dot: { width: 6, height: 6, borderRadius: radius.full },
   offers: { gap: 12 },
-  offer: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
+  offer: { borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
   offerTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   offerDates: { gap: 4 },
   offerLine: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
-  offerDivider: { height: 1, marginVertical: 6 },
+  offerDivider: { height: hairline, marginVertical: 6 },
   offerMarks: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   supplierLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   orderButton: { marginTop: 8 },

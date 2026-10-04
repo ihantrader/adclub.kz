@@ -273,7 +273,7 @@ export interface SectionProps {
   children: ReactNode;
 }
 
-/** A block of a screen: heading plus content, 24 between blocks (DESIGN 7.5). */
+/** A block of a screen: heading plus content, 32 between blocks (DESIGN 7.5, D-068). */
 export function Section({ title, children }: SectionProps) {
   return (
     <View style={styles.section}>

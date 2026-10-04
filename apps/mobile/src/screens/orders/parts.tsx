@@ -96,12 +96,7 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
   const { t } = useLanguage();
   const { theme } = useTheme();
   return (
-    <View
-      style={[
-        styles.row,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-      ]}
-    >
+    <View style={[styles.row, { backgroundColor: theme.colors.surface }]}>
       <Pressable
         accessibilityRole="button"
         onPress={onPress}
@@ -142,7 +137,8 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
 }
 
 const styles = StyleSheet.create({
-  row: { borderWidth: 1, borderRadius: radius.m, overflow: "hidden" },
+  // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
+  row: { borderRadius: radius.m, overflow: "hidden" },
   rowBody: { flexDirection: "row", gap: 12, padding: layout.cardPadding },
   rowText: { flex: 1, gap: 4 },
   rowTop: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 4 },

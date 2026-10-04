@@ -91,7 +91,6 @@ function CarCard({
         styles.card,
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
-          borderColor: theme.colors.border,
         },
       ]}
     >
@@ -146,8 +145,8 @@ function CarCard({
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12 },
   list: { gap: 12 },
+  // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
   card: {
-    borderWidth: 1,
     borderRadius: radius.m,
     padding: layout.cardPadding,
     gap: 8,

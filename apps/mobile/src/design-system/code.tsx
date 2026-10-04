@@ -58,7 +58,8 @@ export function CodeBlock({ code, qrValue, codeLabel, qrLabel, ready, pending }:
     <View
       style={[
         styles.block,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+        // `surface` sets the block apart from the page: no frame (DESIGN.md 7.6).
+        { backgroundColor: theme.colors.surface },
       ]}
     >
       <View
@@ -102,7 +103,7 @@ export function CodeBlock({ code, qrValue, codeLabel, qrLabel, ready, pending }:
 }
 
 const styles = StyleSheet.create({
-  block: { borderRadius: radius.m, borderWidth: 1, padding: 16 },
+  block: { borderRadius: radius.m, padding: 16 },
   content: { alignItems: "center", gap: 16 },
   qrBox: { padding: qr.padding, borderRadius: radius.s },
   overlay: {

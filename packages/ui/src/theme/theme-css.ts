@@ -64,6 +64,7 @@ export function buildThemeCss(): string {
       px(value),
     ]),
     ["--ac-line", px(line.width)],
+    ["--ac-line-hairline", px(line.hairline)],
     ["--ac-focus-width", px(line.focusWidth)],
     ["--ac-focus-offset", px(line.focusOffset)],
     ["--ac-touch-target", px(size.touchTarget)],
@@ -101,6 +102,12 @@ export function buildThemeCss(): string {
     ["--ac-pressed-darken", String(1 - motion.pressedDarken)],
     ["--ac-breakpoint-two-columns", px(breakpoints.twoColumns)],
     ["--ac-breakpoint-sidebar", px(breakpoints.sidebar)],
+    // Component styles take weights only from the typography tokens (D-068):
+    // no raw `font-weight` in components.css, so Light never lands below 24.
+    ...Object.entries(typography).map(([token, style]): [string, number] => [
+      `--ac-font-weight-${kebab(token)}`,
+      style.fontWeight,
+    ]),
   ];
 
   const typographyRules = Object.entries(typography).map(([token, style]) =>

@@ -1,6 +1,15 @@
-/* Onest 400/500/700 (Google Fonts, SIL OFL 1.1 — ../fonts/OFL.txt), served by
+/* Onest 300/400/500 (Google Fonts, SIL OFL 1.1 — ../fonts/OFL.txt), served by
    the app itself: no request to Google Fonts. One file per weight with the
-   full character set, including Kazakh Cyrillic, № and ₸ (DESIGN.md 5). */
+   full character set, including Kazakh Cyrillic, № and ₸ (DESIGN.md 5).
+   700 is not used by the interface (D-068, "light design"). */
+@font-face {
+  font-family: "Onest";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("../fonts/onest-300.woff2") format("woff2");
+}
+
 @font-face {
   font-family: "Onest";
   font-style: normal;
@@ -15,14 +24,6 @@
   font-weight: 500;
   font-display: swap;
   src: url("../fonts/onest-500.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Onest";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("../fonts/onest-700.woff2") format("woff2");
 }
 
 /* While Onest loads (or if it fails): a local font scaled to Onest's metrics,

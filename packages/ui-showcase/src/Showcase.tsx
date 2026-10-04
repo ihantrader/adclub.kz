@@ -754,7 +754,7 @@ const showcaseCss = `
 .sc-header h1, .sc-header p { margin: 0; }
 .sc-header__controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .sc-header__controls .ac-segments { min-width: 280px; }
-.sc-section { background: var(--ac-color-surface); border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-m); padding: 16px; }
+.sc-section { background: var(--ac-color-surface); border-radius: var(--ac-radius-m); padding: 16px; }
 .sc-section__title { margin: 0; }
 .sc-section__note { margin: 4px 0 0; }
 .sc-section__body { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
@@ -762,7 +762,7 @@ const showcaseCss = `
 .sc-row__items { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .sc-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .sc-narrow { width: 100%; max-width: 360px; }
-.sc-card { border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-m); background: var(--ac-color-bg); }
+.sc-card { border: var(--ac-line-hairline) solid var(--ac-color-border); border-radius: var(--ac-radius-m); background: var(--ac-color-bg); }
 .sc-keypad { max-width: 320px; margin-top: 16px; }
 .sc-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
 .sc-swatch { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -771,7 +771,7 @@ const showcaseCss = `
 .sc-swatch-tile--dark { background: #0F1012; }
 .sc-swatch-tile--light { background: #F6F3EC; border: 1px solid var(--ac-color-border); }
 .sc-swatch-tile--photo { background: #5b4a32; }
-.sc-type { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--ac-color-border); }
+.sc-type { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; border-bottom: var(--ac-line-hairline) solid var(--ac-color-border); }
 .sc-icon { display: inline-flex; color: var(--ac-color-text); }
 .sc-sidebar-head { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 16px; }
 .sc-sidebar-user { display: inline-flex; gap: 8px; align-items: center; padding: 0 12px; }

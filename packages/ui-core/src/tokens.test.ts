@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   darkColors,
+  layout,
   lightColors,
+  lightMinFontSize,
+  line,
   radius,
   size,
   space,
@@ -97,9 +100,26 @@ describe("typography tokens", () => {
   it("keeps line height >= 1.25 for text, so Kazakh Қ, Ң, Ғ, Ұ are not clipped", () => {
     // Price and code tokens carry digits only (their DESIGN.md values are 1.1–1.2).
     const digitsOnly: TypographyToken[] = ["price", "priceS", "code", "codeXL"];
+    // `titleL` is 28 / 34 in the DESIGN.md 7.4 table (1.21, TASK-030.B). Instead of
+    // this ratio, every token — `titleL` included — is checked against the real
+    // glyph extents of its Onest weight in packages/ui/src/fonts.test.ts.
+    const measuredOnly: TypographyToken[] = ["titleL"];
     for (const [token, style] of Object.entries(typography)) {
       if (digitsOnly.includes(token as TypographyToken)) continue;
+      if (measuredOnly.includes(token as TypographyToken)) continue;
       expect(style.lineHeight / style.fontSize, token).toBeGreaterThanOrEqual(1.25);
+    }
+  });
+
+  it("uses Light 300 only from 24 up, and only the weights of DESIGN.md 5 (D-068)", () => {
+    const rule = /Light 300 — только от размера (\d+) и выше/.exec(design);
+    expect(Number(rule?.[1])).toBe(lightMinFontSize);
+    expect(design).toContain(`Ниже ${lightMinFontSize} Light не применяется`);
+    for (const [token, style] of Object.entries(typography)) {
+      expect([300, 400, 500], token).toContain(style.fontWeight);
+      if (style.fontWeight === 300) {
+        expect(style.fontSize, token).toBeGreaterThanOrEqual(lightMinFontSize);
+      }
     }
   });
 
@@ -111,6 +131,12 @@ describe("typography tokens", () => {
 });
 
 describe("shape and size tokens", () => {
+  it("follow the DESIGN.md 7.6 lines: hairline dividers, 1 px fields, 2 px keyboard focus", () => {
+    expect(design).toContain("рамки полей, второстепенных кнопок и чипов — 1 px");
+    expect(design).toContain("на вебе 1 px");
+    expect(line).toEqual({ width: 1, hairline: 1, focusWidth: 2, focusOffset: 2 });
+  });
+
   it("match the DESIGN.md 7.6 radius table", () => {
     const rows = tableAfter("### 7.6 Форма");
     const expected: Record<string, number> = {};
@@ -129,6 +155,13 @@ describe("shape and size tokens", () => {
   it("match DESIGN.md 7.5 spacing and sizes", () => {
     expect(Object.values(space)).toEqual([4, 8, 12, 16, 20, 24, 32, 40, 48]);
     expect(design).toContain("**Шкала отступов:** 4 · 8 · 12 · 16 · 20 · 24 · 32 · 40 · 48.");
+    expect(layout.blockGap).toBe(32);
+    expect(design).toContain("между блоками экрана — 32");
+    expect(layout.screenPadding).toBe(16);
+    expect(layout.cardPadding).toBe(16);
+    expect(design).toContain("внутри карточки — 16");
+    expect(layout.rowPadding).toBe(16);
+    expect(design).toContain("Поля 16 / 16, между строками — hairline");
     expect(size.touchTarget).toBe(48);
     expect(size.button).toEqual({ l: 52, m: 44, s: 36 });
     expect(design).toContain(

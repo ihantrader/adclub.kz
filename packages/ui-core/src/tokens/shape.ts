@@ -13,13 +13,19 @@ export const radius = {
   full: 9999,
 } as const;
 
+/**
+ * Lines (DESIGN.md 7.6, D-068). Row dividers and card borders are the thinnest
+ * line of the screen — `hairline` (1 px on the web; the app uses
+ * `StyleSheet.hairlineWidth`, a single physical pixel). Fields, secondary
+ * buttons and chips — 1 px, active and invalid fields included.
+ */
 export const line = {
   width: 1,
-  /** Focus ring (web and keyboard): 2 px `accent`, 2 px offset (7.7). */
+  /** Web value of the hairline; the app replaces it with `StyleSheet.hairlineWidth`. */
+  hairline: 1,
+  /** Focus ring (web and keyboard): 2 px `accent`, 2 px offset (7.7) — an accessibility requirement. */
   focusWidth: 2,
   focusOffset: 2,
-  /** Focused / invalid field border. */
-  fieldActiveWidth: 2,
 } as const;
 
 /** Shadow of floating elements (sheet, dialog, toast): none in the dark theme. */

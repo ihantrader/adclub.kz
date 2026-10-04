@@ -12,16 +12,20 @@ import {
   type TextProps as NativeTextProps,
   type TextStyle,
 } from "react-native";
-import onestBold from "../../assets/fonts/Onest-Bold.ttf";
+import onestLight from "../../assets/fonts/Onest-Light.ttf";
 import onestMedium from "../../assets/fonts/Onest-Medium.ttf";
 import onestRegular from "../../assets/fonts/Onest-Regular.ttf";
 import { useTheme } from "./theme";
 
-/** Onest 400/500/700 bundled with the app (assets/fonts, SIL OFL 1.1). */
+/**
+ * Onest 300/400/500 bundled with the app (assets/fonts, SIL OFL 1.1; D-068 —
+ * no 700). Light is its own registered family, so the phone draws the real
+ * thin face instead of a system weight.
+ */
 export const fontAssets = {
+  [fontFamily.native[300]]: onestLight,
   [fontFamily.native[400]]: onestRegular,
   [fontFamily.native[500]]: onestMedium,
-  [fontFamily.native[700]]: onestBold,
 };
 
 /** `[loaded, error]`: a failed load falls back to the system font (it covers Kazakh). */

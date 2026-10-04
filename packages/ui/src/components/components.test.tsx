@@ -78,6 +78,19 @@ describe("fields", () => {
     expect(document.getElementById(describedBy)?.textContent).toBe("Неверный номер");
   });
 
+  it("rings a field focused from the keyboard, not one focused by a click (D-068)", () => {
+    const { container } = render(<TextField label="Имя" value="" onChange={() => undefined} />);
+    const control = container.querySelector(".ac-field__control") as HTMLElement;
+    const input = screen.getByLabelText("Имя");
+    fireEvent.focus(input);
+    expect(control.classList.contains("ac-field__control--keyboard")).toBe(true);
+    fireEvent.blur(input);
+    expect(control.classList.contains("ac-field__control--keyboard")).toBe(false);
+    fireEvent.pointerDown(input);
+    fireEvent.focus(input);
+    expect(control.classList.contains("ac-field__control--keyboard")).toBe(false);
+  });
+
   it("marks AI data with text, not only color", () => {
     render(<TextField label="VIN" value="XWB" onChange={() => undefined} aiLabel="распознано" />);
     expect(screen.getByText("распознано")).toBeTruthy();

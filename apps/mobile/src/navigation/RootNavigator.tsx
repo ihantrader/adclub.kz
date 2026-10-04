@@ -1,4 +1,5 @@
 import { NavigationContainer, type Theme as NavigationTheme } from "@react-navigation/native";
+import { fontFamily, typography } from "@adclub/ui-core";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
@@ -133,13 +134,14 @@ function FirstRunCarRoute({ navigation }: NativeStackScreenProps<RootParams, "fi
 
 /**
  * React Navigation asks for font styles for its own headers and titles;
- * the app draws none of them (`headerShown: false`, own tab bar), so the
- * platform defaults are enough here — screen text uses `Text` of the design
- * system with Onest.
+ * the app draws none of them (`headerShown: false`, own tab bar) — screen
+ * text uses `Text` of the design system. Should one ever show, it is Onest
+ * without 700, like the rest of the interface (D-068): its "bold" and
+ * "heavy" are Medium.
  */
 const DEFAULT_FONTS: NavigationTheme["fonts"] = {
-  regular: { fontFamily: "System", fontWeight: "400" },
-  medium: { fontFamily: "System", fontWeight: "500" },
-  bold: { fontFamily: "System", fontWeight: "700" },
-  heavy: { fontFamily: "System", fontWeight: "700" },
+  regular: { fontFamily: fontFamily.native[typography.body.fontWeight], fontWeight: "normal" },
+  medium: { fontFamily: fontFamily.native[typography.label.fontWeight], fontWeight: "normal" },
+  bold: { fontFamily: fontFamily.native[typography.label.fontWeight], fontWeight: "normal" },
+  heavy: { fontFamily: fontFamily.native[typography.label.fontWeight], fontWeight: "normal" },
 };

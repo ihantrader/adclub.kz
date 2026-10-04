@@ -6,7 +6,6 @@ import {
   Button,
   CategoryIcon,
   DataState,
-  IconBadge,
   OfflineBanner,
   Screen,
   Section,
@@ -133,7 +132,7 @@ export function CatalogHomeScreen({
 }
 
 /**
- * A tile: the icon in the middle on the round accent plate, the name under
+ * A tile: the icon 32 of `accent` in the middle, without a plate (D-068), the name under
  * it in the middle, up to two lines (a Kazakh name is never cut: the tile
  * grows). Tiles of one row are as tall as the tallest of them, and their
  * icons stand on one line.
@@ -148,14 +147,12 @@ function CategoryTile({ node, onPress }: { node: CategoryNode; onPress: () => vo
       style={({ pressed }) => [
         styles.tile,
         {
+          // `surface` sets the tile apart from the page: no frame (DESIGN.md 7.6).
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
-          borderColor: theme.colors.border,
         },
       ]}
     >
-      <IconBadge size={28}>
-        <CategoryIcon name={node.icon} size={28} color="accent" />
-      </IconBadge>
+      <CategoryIcon name={node.icon} size={32} color="accent" />
       <Text variant="bodyStrong" style={styles.tileName}>
         {node.name.text}
       </Text>
@@ -169,11 +166,9 @@ const styles = StyleSheet.create({
   tileRow: { flexDirection: "row", gap: 12, alignItems: "stretch" },
   tile: {
     flex: 1,
-    minHeight: 136,
-    borderWidth: 1,
+    minHeight: 120,
     borderRadius: radius.m,
-    paddingHorizontal: layout.cardPaddingS,
-    paddingVertical: layout.cardPadding,
+    padding: layout.cardPadding,
     gap: 12,
     alignItems: "center",
     justifyContent: "flex-start",

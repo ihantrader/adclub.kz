@@ -1,6 +1,7 @@
 import {
   aiPilotStates,
   compatibilityMarks,
+  line,
   orderStatusGroups,
   typography,
   type AiPilotState,
@@ -22,6 +23,7 @@ import {
   Banner,
   BottomTabs,
   Button,
+  ButtonRow,
   CategoryIcon,
   Checkbox,
   Chip,
@@ -31,6 +33,7 @@ import {
   Dialog,
   EmptyState,
   GlyphIcon,
+  hairline,
   Icon,
   IconButton,
   icons,
@@ -53,7 +56,7 @@ import {
   useToast,
   type TabItem,
 } from "../design-system";
-import { carCandidateGlyphs, customCategoryIcons, regularGlyphs } from "./preview-glyphs";
+import { carCandidateGlyphs, customCategoryIcons } from "./preview-glyphs";
 import { showcaseTexts, type ShowcaseLang, type ShowcaseTexts } from "./showcase-texts";
 
 type Tab = "catalog" | "orders" | "pilot" | "garage" | "profile";
@@ -68,12 +71,7 @@ const tabItems = (t: ShowcaseTexts): TabItem<Tab>[] => [
 function Section({ title, children }: { title: string; children: ReactNode }) {
   const { theme } = useTheme();
   return (
-    <View
-      style={[
-        styles.section,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-      ]}
-    >
+    <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
       <Text variant="title" accessibilityRole="header">
         {title}
       </Text>
@@ -315,7 +313,7 @@ function Content({
         <View style={styles.wrap}>
           {categoryIcons.map((code) => (
             <View key={code} style={styles.carIconCell}>
-              <View style={[styles.categoryBadge, { backgroundColor: theme.colors.accentTint }]}>
+              <View style={styles.categoryBadge}>
                 <CategoryIcon name={code} size={32} color="accent" />
               </View>
               <Text variant="caption" style={styles.carIconLabel}>
@@ -331,19 +329,6 @@ function Content({
         </View>
       </Section>
 
-      <Section title={t.sections.iconWeights}>
-        <Caption>{t.iconWeightsNote}</Caption>
-        {(Object.keys(icons) as IconName[]).map((iconName) => (
-          <View key={iconName} style={styles.row}>
-            <Icon name={iconName} size={16} />
-            <GlyphIcon glyph={regularGlyphs[iconName]} size={16} color={theme.colors.text} />
-            <Text variant="bodyS" color="textMuted">
-              {iconName}
-            </Text>
-          </View>
-        ))}
-      </Section>
-
       <Section title={t.sections.buttons}>
         <Button>{t.primary}</Button>
         <Button variant="secondary">{t.secondary}</Button>
@@ -357,6 +342,16 @@ function Content({
           {t.danger}
         </Button>
         <Button disabled>{t.disabled}</Button>
+        <Button variant="secondary" disabled>
+          {t.secondaryDisabled}
+        </Button>
+        <Caption>{t.pairNote}</Caption>
+        <ButtonRow>
+          <Button size="m">{t.pairPrimary}</Button>
+          <Button variant="secondary" size="m">
+            {t.pairSecondary}
+          </Button>
+        </ButtonRow>
         <Button loading>{t.primary}</Button>
         <Caption>{t.pressGuard}</Caption>
         <Button
@@ -370,6 +365,30 @@ function Content({
           {`${t.slowAction} · ${presses}`}
         </Button>
         <Button>{t.longButton}</Button>
+      </Section>
+
+      <Section title={t.sections.lines}>
+        <Caption>{t.linesNote}</Caption>
+        {(["surface", "bg"] as const).map((background) => (
+          <View
+            key={background}
+            style={[styles.linesBox, { backgroundColor: theme.colors[background] }]}
+          >
+            {[hairline, line.width].map((width, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.lineSample,
+                  { borderTopWidth: width, borderTopColor: theme.colors.border },
+                ]}
+              >
+                <Text variant="caption" color="textMuted">
+                  {`${background} · border · ${index === 0 ? "hairline" : "1 px"}`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ))}
       </Section>
 
       <Section title={t.sections.fields}>
@@ -677,7 +696,7 @@ export default function ShowcaseScreen({ onClose }: { onClose: () => void }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { padding: 16, gap: 24, paddingBottom: 48 },
-  section: { borderWidth: 1, borderRadius: 6, padding: 16, gap: 12 },
+  section: { borderRadius: 6, padding: 16, gap: 12 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "flex-start" },
   swatch: { width: 96, gap: 2 },
@@ -691,8 +710,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatar: { width: 32, height: 32, borderRadius: 16, overflow: "hidden" },
-  list: { borderWidth: 1, borderRadius: 6, overflow: "hidden" },
-  tabsPreview: { borderWidth: 1, borderRadius: 6, overflow: "hidden" },
+  list: { borderWidth: hairline, borderRadius: 6, overflow: "hidden" },
+  tabsPreview: { borderWidth: hairline, borderRadius: 6, overflow: "hidden" },
+  linesBox: { borderRadius: 6, paddingHorizontal: 16 },
+  lineSample: { paddingVertical: 16 },
   carIconCell: { alignItems: "center", gap: 6, width: 84 },
   carIconBadge: {
     width: 64,

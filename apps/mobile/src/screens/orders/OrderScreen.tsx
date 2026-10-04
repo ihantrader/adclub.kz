@@ -13,6 +13,7 @@ import {
   CodeBlock,
   DataState,
   Dialog,
+  hairline,
   ListGroup,
   ListRow,
   OfflineBanner,
@@ -264,12 +265,7 @@ export function OrderScreen({ route, navigation }: Props) {
                   order.fulfillment === "pickup" ? "order.placePickup" : "order.placeDelivery",
                 )}
               >
-                <View
-                  style={[
-                    styles.card,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                  ]}
-                >
+                <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                   <Text variant="bodyStrong">{order.supplier.name}</Text>
                   {view.place === "full" && order.pickupPoint ? (
                     <PickupPlace order={order} />
@@ -286,12 +282,7 @@ export function OrderScreen({ route, navigation }: Props) {
 
             {/* 4. The item. */}
             <Section title={t("order.item")}>
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
-              >
+              <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.itemRow}>
                   <ItemPhoto photo={order.item.photo} icon={null} />
                   <View style={styles.grow}>
@@ -526,11 +517,12 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
   block: { gap: 8 },
   center: { textAlign: "center" },
-  card: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
+  // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
+  card: { borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
   place: { gap: 8 },
   itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   grow: { flex: 1, gap: 2 },
-  divider: { height: 1, marginVertical: 6 },
+  divider: { height: hairline, marginVertical: 6 },
   term: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
   termValue: { flexShrink: 1, textAlign: "right" },
   actions: { gap: 8, paddingTop: 12 },

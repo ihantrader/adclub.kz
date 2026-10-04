@@ -14,6 +14,7 @@ import {
   Button,
   CategoryIcon,
   CompatibilityMark,
+  hairline,
   Icon,
   Text,
   useTheme,
@@ -233,7 +234,7 @@ export function ItemRow({
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
           borderTopColor: theme.colors.border,
-          borderTopWidth: first ? 0 : 1,
+          borderTopWidth: first ? 0 : hairline,
         },
       ]}
     >
@@ -281,7 +282,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     paddingHorizontal: layout.screenPadding,
-    paddingVertical: layout.cardPaddingS,
+    paddingVertical: layout.rowPadding,
   },
   rowBody: { flex: 1, gap: 4 },
   priceLine: { flexDirection: "row", alignItems: "baseline", gap: 4, flexWrap: "wrap" },

@@ -286,7 +286,6 @@ function PersonCard({
         styles.personCard,
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
-          borderColor: theme.colors.border,
         },
       ]}
     >
@@ -313,7 +312,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     padding: layout.cardPadding,
-    borderWidth: 1,
     borderRadius: radius.m,
   },
   personText: { flex: 1, gap: 2 },

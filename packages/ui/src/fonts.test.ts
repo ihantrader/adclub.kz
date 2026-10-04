@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { typography, type TypographyToken } from "@adclub/ui-core";
 import * as fontkit from "fontkit";
 import { describe, expect, it } from "vitest";
 
@@ -20,13 +21,15 @@ describe("Onest web fonts", () => {
     ...fontsCss.matchAll(/font-weight: (\d+);[^}]*url\("\.\.\/fonts\/([^"]+)"\)/g),
   ].map((match) => ({ weight: Number(match[1]), file: match[2] ?? "" }));
 
-  it("declares 400, 500 and 700 served by the app itself", () => {
-    expect(faces.map((face) => face.weight)).toEqual([400, 500, 700]);
+  it("declares 300, 400 and 500 served by the app itself, and no 700 (D-068)", () => {
+    expect(faces.map((face) => face.weight)).toEqual([300, 400, 500]);
+    expect(fontsCss).not.toMatch(/font-weight: 700/);
+    expect(existsSync(join(fonts, "onest-700.woff2"))).toBe(false);
     expect(fontsCss).not.toMatch(/googleapis|gstatic/);
     for (const face of faces) expect(existsSync(join(fonts, face.file)), face.file).toBe(true);
   });
 
-  it.each([400, 500, 700])(
+  it.each([300, 400, 500])(
     "weight %i contains Kazakh letters, № and ₸, and tabular figures",
     (weight) => {
       const file = faces.find((face) => face.weight === weight)?.file ?? "";
@@ -38,6 +41,42 @@ describe("Onest web fonts", () => {
       );
       expect(missing).toEqual([]);
       expect(font.availableFeatures).toContain("tnum");
+    },
+  );
+
+  /**
+   * Every text token holds the tallest and deepest letters it can carry (Й, Ё
+   * on top; Қ, Ң, Ұ below) inside its line, measured on the real glyphs of its
+   * weight. Two layouts are checked: CSS half-leading (the web) and Android,
+   * which shrinks ascent and descent in proportion when the line is shorter
+   * than the font's own height. Tokens of digits carry digits, ₸ and "от".
+   */
+  it.each(Object.keys(typography) as TypographyToken[])(
+    "token %s keeps its letters inside the line height",
+    (token) => {
+      const style = typography[token];
+      const file = faces.find((face) => face.weight === style.fontWeight)?.file ?? "";
+      const font = open(file);
+      const letters = style.tabularNums ? "0123456789₸от" : `${REQUIRED}ЙЁйёQgjy`;
+      const scale = style.fontSize / font.unitsPerEm;
+      let top = 0;
+      let bottom = 0;
+      for (const char of letters) {
+        const box = font.glyphForCodePoint(char.codePointAt(0) ?? 0).bbox;
+        top = Math.max(top, box.maxY * scale);
+        bottom = Math.max(bottom, -box.minY * scale);
+      }
+      const ascent = font.ascent * scale;
+      const descent = -font.descent * scale;
+      const line = style.lineHeight;
+      // Web: the leading (negative when the line is short) is split in half.
+      const halfLeading = (line - ascent - descent) / 2;
+      expect(halfLeading + ascent, `${token} web top`).toBeGreaterThanOrEqual(top);
+      expect(halfLeading + descent, `${token} web bottom`).toBeGreaterThanOrEqual(bottom);
+      // Android: ascent and descent scaled by line / font height.
+      const androidDescent = (line * descent) / (ascent + descent);
+      expect(line - androidDescent, `${token} android top`).toBeGreaterThanOrEqual(top);
+      expect(androidDescent, `${token} android bottom`).toBeGreaterThanOrEqual(bottom);
     },
   );
 

@@ -34,6 +34,26 @@ describe("theme.css", () => {
     expect([...used].filter((name) => !defined.has(name))).toEqual([]);
   });
 
+  it("takes font weights only from the typography tokens, so Light stays at 24 and up (D-068)", () => {
+    const weights = [...componentsCss.matchAll(/font-weight:\s*([^;]+);/g)].map((m) => m[1]);
+    expect(weights.length).toBeGreaterThan(5);
+    expect(
+      weights.filter((value) => !/^var\(--ac-font-weight-[\w-]+\)$/.test(value ?? "")),
+    ).toEqual([]);
+    expect(componentsCss).not.toMatch(/font:\s*\d/);
+    const css = buildThemeCss();
+    expect(css).not.toMatch(/font-weight: 700/);
+    expect(css).toContain("--ac-font-weight-title-l: 300;");
+  });
+
+  it("draws dividers with the hairline and controls with the 1 px line (DESIGN.md 7.6)", () => {
+    // Lines take their width from tokens; the spinner's ring (`currentColor`) is not a line.
+    expect(componentsCss).not.toMatch(/\b[12]px solid var\(--ac-color/);
+    expect(componentsCss).toContain(
+      "border-top: var(--ac-line-hairline) solid var(--ac-color-border);",
+    );
+  });
+
   it("uses no raw colors in component styles", () => {
     expect(componentsCss.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
     expect(componentsCss).not.toMatch(/rgba?\(/);

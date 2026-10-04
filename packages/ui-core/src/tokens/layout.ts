@@ -16,11 +16,12 @@ export const space = {
 export const layout = {
   /** Mobile screen side padding. */
   screenPadding: 16,
-  /** Between screen blocks. */
-  blockGap: 24,
-  /** Inside a card: 12–16. */
-  cardPaddingS: 12,
+  /** Between screen blocks: 32 (D-068 — air instead of lines and fills). */
+  blockGap: 32,
+  /** Inside a card. */
   cardPadding: 16,
+  /** List rows and the item row: 16 vertical / 16 horizontal (DESIGN.md 7.7, 7.8). */
+  rowPadding: 16,
 } as const;
 
 export const size = {

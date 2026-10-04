@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fontFamily } from "@adclub/ui-core";
 import * as fontkit from "fontkit";
@@ -10,13 +10,13 @@ const fonts = join(app, "assets/fonts");
 const REQUIRED = "әғқңөұүһіӘҒҚҢӨҰҮҺІ№₸";
 
 const files: Record<number, string> = {
+  300: "Onest-Light.ttf",
   400: "Onest-Regular.ttf",
   500: "Onest-Medium.ttf",
-  700: "Onest-Bold.ttf",
 };
 
 describe("bundled Onest fonts", () => {
-  it.each([400, 500, 700] as const)(
+  it.each([300, 400, 500] as const)(
     "weight %i has Kazakh letters, № and ₸, and tabular figures",
     (weight) => {
       const font = fontkit.openSync(join(fonts, files[weight] ?? ""));
@@ -32,10 +32,19 @@ describe("bundled Onest fonts", () => {
 
   it("registers one family per weight, loaded from these files", () => {
     const source = readFileSync(join(__dirname, "text.tsx"), "utf8");
-    for (const weight of [400, 500, 700] as const) {
+    for (const weight of [300, 400, 500] as const) {
       expect(fontFamily.native[weight]).toBe(files[weight]?.replace(".ttf", ""));
       expect(source).toContain(`assets/fonts/${files[weight]}`);
     }
+  });
+
+  it("bundles exactly the interface weights, without Bold 700 (D-068)", () => {
+    expect(
+      readdirSync(fonts)
+        .filter((file) => file.endsWith(".ttf"))
+        .sort(),
+    ).toEqual(Object.values(files).sort());
+    expect(Object.keys(fontFamily.native).map(Number)).toEqual([300, 400, 500]);
   });
 
   it("ships the SIL Open Font License next to the files", () => {

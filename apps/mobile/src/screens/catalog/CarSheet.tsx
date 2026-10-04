@@ -1,4 +1,4 @@
-import { layout } from "@adclub/ui-core";
+import { space } from "@adclub/ui-core";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Button, Icon, ListRow, Sheet, useAfterDismiss } from "../../design-system";
 import { carParameters, carTitle } from "../../garage/garage";
@@ -71,6 +71,6 @@ export function CarSheet({ visible, onClose, onPickCar, onAddCar }: CarSheetProp
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 12, paddingBottom: layout.cardPaddingS },
+  body: { gap: 12, paddingBottom: space[3] },
   list: { maxHeight: 320 },
 });

@@ -9,6 +9,7 @@ import {
 } from "@adclub/ui-core";
 import { useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { codeCellLayout } from "./code-cell-metrics";
 import { Icon } from "./Icon";
 import { AiBadge } from "./marks";
 import { Text, textStyles } from "./text";
@@ -173,29 +174,33 @@ export interface CodeCellsProps {
 
 /**
  * Six code cells, groups 3 + 3 (DESIGN.md 7.10). A single hidden input
- * receives typing and paste; digits only.
+ * receives typing and paste; digits only. Cells are 48 wide and narrower,
+ * down to 36, only where the row does not fit (a 320-pt phone, the showcase;
+ * `codeCellLayout`).
  */
 export function CodeCells({ label, value, onChangeText, error, autoFocus }: CodeCellsProps) {
   const { theme } = useTheme();
   const { colors } = theme;
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
+  const [rowWidth, setRowWidth] = useState(0);
+  const cells = codeCellLayout(rowWidth);
   const code = sanitizeOrderCode(value);
   const groups = splitOrderCode(code.padEnd(ORDER_CODE_LENGTH, " "));
   const activeIndex = Math.min(code.length, ORDER_CODE_LENGTH - 1);
 
   return (
-    <View style={styles.field}>
+    <View style={styles.field} onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}>
       <Text variant="bodyS" color="textMuted" style={styles.label}>
         {label}
       </Text>
       <Pressable
         accessibilityRole="none"
         onPress={() => input.current?.focus()}
-        style={styles.cells}
+        style={[styles.cells, { gap: cells.groupGap }]}
       >
         {groups.map((group, groupIndex) => (
-          <View key={groupIndex} style={styles.group}>
+          <View key={groupIndex} style={[styles.group, { gap: cells.gap }]}>
             {[...group].map((digit, digitIndex) => {
               const index = groupIndex * 3 + digitIndex;
               const highlighted = Boolean(error) || (focused && index === activeIndex);
@@ -205,6 +210,7 @@ export function CodeCells({ label, value, onChangeText, error, autoFocus }: Code
                   style={[
                     styles.cell,
                     {
+                      width: cells.cell,
                       backgroundColor: colors.surface,
                       borderColor: error
                         ? colors.danger
@@ -336,10 +342,9 @@ const styles = StyleSheet.create({
   help: { flexDirection: "row", gap: 4, marginTop: 6, alignItems: "flex-start" },
   helpText: { flex: 1 },
   hint: { marginTop: 6 },
-  cells: { flexDirection: "row", gap: 16, alignSelf: "flex-start" },
-  group: { flexDirection: "row", gap: 8 },
+  cells: { flexDirection: "row", alignSelf: "flex-start" },
+  group: { flexDirection: "row" },
   cell: {
-    width: size.codeCell.width,
     height: size.codeCell.height,
     borderRadius: radius.s,
     alignItems: "center",

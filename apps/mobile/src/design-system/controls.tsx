@@ -14,6 +14,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { Icon } from "./Icon";
 import { animateLayoutTo, animateTo, useMotionPlan } from "./motion";
 import { segmentMetrics } from "./segment-metrics";
+import { selectLabelFontSize, selectLabelMetrics } from "./select-label";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -71,13 +72,18 @@ export interface SelectButtonProps {
  * A button that shows the current choice and opens the list to change it —
  * the car and the city of the catalog header (TASK-030.A): 44 high (touch
  * zone 48), `surface` with a `border` line, the icon, the value in one line
- * and a caret. A long value first shrinks a little (to 85 %, on the phone)
- * and then ends in an ellipsis — it never wraps. It takes the width it is
- * given, so two of them side by side are 50 × 50: «Geely Atlas 2023» fits
- * half of a 375-pt screen.
+ * and a caret. A value that fits keeps 14; a long one first shrinks a little
+ * (not below 12) and then ends in an ellipsis — it never wraps. The app
+ * measures the value itself (`selectLabelFontSize`, TASK-030.C): a hidden copy
+ * gives its full width, the label its box. Like a tab label, it grows with
+ * the system font only to 120 %. It takes the width it is given, so two of
+ * them side by side are 50 × 50.
  */
 export function SelectButton({ icon, children, onPress, accessibilityLabel }: SelectButtonProps) {
   const { theme } = useTheme();
+  const [natural, setNatural] = useState(0);
+  const [available, setAvailable] = useState(0);
+  const fontSize = selectLabelFontSize(natural, available);
   return (
     <Pressable
       accessibilityRole="button"
@@ -92,17 +98,37 @@ export function SelectButton({ icon, children, onPress, accessibilityLabel }: Se
         },
       ]}
     >
-      <Icon name={icon} size={16} color="accent" />
+      <Icon name={icon} size={selectLabelMetrics.icon} color="accent" />
       <Text
         variant="bodyS"
         numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.85}
-        style={styles.selectLabel}
+        maxFontSizeMultiplier={fontScale.tabLabelMax}
+        onLayout={(event) => setAvailable(event.nativeEvent.layout.width)}
+        style={[styles.selectLabel, { fontSize }]}
       >
         {children}
       </Text>
-      <Icon name="chevronDown" size={16} color="textMuted" />
+      <Icon name="chevronDown" size={selectLabelMetrics.icon} color="textMuted" />
+      {/* The full width of the value at 14: unclipped, unseen, unheard. */}
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        aria-hidden
+        style={styles.measureClip}
+      >
+        <View style={styles.measureRow}>
+          <Text
+            variant="bodyS"
+            numberOfLines={1}
+            maxFontSizeMultiplier={fontScale.tabLabelMax}
+            onLayout={(event) => setNatural(event.nativeEvent.layout.width)}
+            style={styles.selectLabelFont}
+          >
+            {children}
+          </Text>
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -517,14 +543,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: selectLabelMetrics.gap,
     minHeight: size.button.m,
-    paddingHorizontal: 10,
+    paddingHorizontal: selectLabelMetrics.paddingX,
     borderRadius: radius.s,
     borderWidth: line.width,
   },
   // 14 with the weight of the `label` token (DESIGN.md 7.7 "Кнопка выбора").
+  selectLabelFont: { fontFamily: fontFamily.native[typography.label.fontWeight] },
   selectLabel: { flex: 1, minWidth: 0, fontFamily: fontFamily.native[typography.label.fontWeight] },
+  // The hidden copy lays out in a row far wider than any value, inside a
+  // zero box that clips it, so it neither shows nor widens anything.
+  measureClip: { position: "absolute", left: 0, top: 0, width: 0, height: 0, overflow: "hidden" },
+  measureRow: { position: "absolute", left: 0, top: 0, width: 4000, flexDirection: "row" },
   segmentsBlock: { gap: 6 },
   segments: { flexGrow: 0, borderRadius: radius.s },
   segmentsContent: { flexGrow: 1, minHeight: size.segments, padding: segmentMetrics.inset },

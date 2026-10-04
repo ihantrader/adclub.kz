@@ -30,6 +30,18 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "mobile", "start"],
       "port": 8081
+    },
+    {
+      "name": "supplier-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@adclub/supplier-web", "dev"],
+      "port": 5175
+    },
+    {
+      "name": "admin-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@adclub/admin-web", "dev"],
+      "port": 5174
     }
   ]
 }

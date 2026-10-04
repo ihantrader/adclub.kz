@@ -1,6 +1,7 @@
 import { orderStatusSchema } from "@adclub/contracts";
+import { mobileText } from "@adclub/i18n";
 import { describe, expect, it } from "vitest";
-import { isActiveStatus, listStatusKey, orderStatusView } from "./order-status";
+import { isActiveStatus, listStatusKey, orderMarkKey, orderStatusView } from "./order-status";
 
 // Plain Node checks of the table of states of M-ORD-03 (TASK-030 requirement 3, AC-4).
 
@@ -98,6 +99,24 @@ describe("the state of an order on its screen", () => {
   it("shows an unknown status of a newer server as finished, without a code", () => {
     const view = orderStatusView({ status: "brand_new" as never, fulfillment: "pickup" });
     expect(view).toMatchObject({ code: "none", finished: true, cancellable: false });
+  });
+
+  it("never repeats the heading in the mark over it, in any language (TASK-030.A)", () => {
+    for (const lang of ["ru", "kk", "en"] as const) {
+      for (const status of orderStatusSchema.options) {
+        for (const fulfillment of ["pickup", "delivery"] as const) {
+          const view = orderStatusView({ status, fulfillment });
+          const mark = mobileText(lang, orderMarkKey({ status, fulfillment }));
+          const title = mobileText(lang, view.title);
+          expect(title.startsWith(mark), `${lang} ${status}/${fulfillment}`).toBe(false);
+        }
+      }
+    }
+    // Ready for pickup: «Готово» over «Можно забирать».
+    expect(orderMarkKey({ status: "ready", fulfillment: "pickup" })).toBe(
+      "orderStatus.short.ready",
+    );
+    expect(mobileText("ru", "orderStatus.short.ready")).toBe("Готово");
   });
 
   it("reads a given-out order in a list as «Получено» without its date", () => {

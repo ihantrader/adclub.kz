@@ -5,14 +5,15 @@ import { formatOrderCode, layout, radius } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import {
   Banner,
   Button,
-  CategoryIcon,
+  ButtonRow,
   CodeBlock,
   DataState,
   Dialog,
+  ListGroup,
   ListRow,
   OfflineBanner,
   Screen,
@@ -28,14 +29,16 @@ import type { RootParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { rememberOpenedOrder } from "../../orders/opened-orders";
 import { copyIsBehind } from "../../orders/order-copy";
-import { isActiveStatus, orderStatusView } from "../../orders/order-status";
+import { isActiveStatus, orderMarkKey, orderStatusView } from "../../orders/order-status";
 import { orderViewOfCopy, orderViewOfServer, type OrderView } from "../../orders/order-view";
-import { callUrl, mapsUrl, weeklyHoursLines } from "../../orders/pickup-place";
+import { callUrl, navigatorLinks, weeklyHoursLines } from "../../orders/pickup-place";
 import { apiClient } from "../../services/api";
 import { useOnline } from "../../services/use-network";
 import { useRequest } from "../../services/use-request";
 import { useLanguage } from "../../state/language";
 import { useOrdersCopy, useOrdersReadOnly } from "../../state/orders-provider";
+import { ItemPhoto } from "../catalog/parts";
+import { NavigatorSheet } from "./NavigatorSheet";
 import { useNow, useOrderTime } from "./parts";
 import { useRepeatOrder } from "./use-repeat-order";
 
@@ -198,7 +201,7 @@ export function OrderScreen({ route, navigation }: Props) {
 
             {/* 1. The status: heading, explanation, deadline. */}
             <View style={styles.block}>
-              <StatusBadge group={view.group}>{t(statusShort(order.status))}</StatusBadge>
+              <StatusBadge group={view.group}>{t(orderMarkKey(order))}</StatusBadge>
               <Text variant="title" accessibilityRole="header">
                 {view.title === "orderStatus.completed.title" && order.givenOut
                   ? t(view.title, time.dateAndTime(order.givenOut.at, timeZone))
@@ -253,9 +256,14 @@ export function OrderScreen({ route, navigation }: Props) {
               </View>
             )}
 
-            {/* 3. The supplier and the place — exactly as the server gave them. */}
+            {/* 3. The supplier and the place — exactly as the server gave them:
+                «Где забрать» for a pickup, «Поставщик» for a delivery (TASK-030.A). */}
             {view.place !== "none" && (
-              <Section title={t("order.supplierAndPlace")}>
+              <Section
+                title={t(
+                  order.fulfillment === "pickup" ? "order.placePickup" : "order.placeDelivery",
+                )}
+              >
                 <View
                   style={[
                     styles.card,
@@ -278,35 +286,41 @@ export function OrderScreen({ route, navigation }: Props) {
 
             {/* 4. The item. */}
             <Section title={t("order.item")}>
-              <View style={styles.itemRow}>
-                <View style={[styles.photo, { backgroundColor: theme.colors.surfaceRaised }]}>
-                  <CategoryIcon name={null} size={28} color="textMuted" />
+              <View
+                style={[
+                  styles.card,
+                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                ]}
+              >
+                <View style={styles.itemRow}>
+                  <ItemPhoto photo={order.item.photo} icon={null} />
+                  <View style={styles.grow}>
+                    <Text variant="bodyStrong">{order.item.name.text}</Text>
+                    {(order.item.brand || order.item.article) && (
+                      <Text variant="bodyS" color="textMuted">
+                        {[order.item.brand, order.item.article].filter(Boolean).join(" · ")}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.grow}>
-                  <Text variant="bodyStrong">{order.item.name.text}</Text>
-                  {(order.item.brand || order.item.article) && (
-                    <Text variant="bodyS" color="textMuted">
-                      {[order.item.brand, order.item.article].filter(Boolean).join(" · ")}
-                    </Text>
-                  )}
-                  <Text variant="bodyS">{t("order.quantity", { n: order.quantity })}</Text>
-                  <Text variant="bodyS">
-                    {t("order.priceByOrder", { price: formatTenge(order.unitPrice) })}
-                  </Text>
-                  <Text variant="bodyStrong">
-                    {t("order.total", { sum: formatTenge(order.total) })}
-                  </Text>
-                  <Text variant="bodyS" color="textMuted">
-                    {order.fulfillment === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
-                  </Text>
-                </View>
+                <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                <Term label={t("order.quantityLabel")}>
+                  {t("orders.quantityShort", { n: order.quantity })}
+                </Term>
+                <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
+                <Term label={t("order.fulfillmentLabel")}>
+                  {order.fulfillment === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
+                </Term>
+                <Term label={t("order.totalLabel")} strong>
+                  {formatTenge(order.total)}
+                </Term>
               </View>
             </Section>
 
             {/* 5. The course of the order — moves and times, never an employee's name. */}
             {order.history && order.history.length > 0 && (
               <Section title={t("order.history")}>
-                <View>
+                <ListGroup>
                   {order.history.map((step, index) => (
                     <ListRow
                       key={`${step.at}-${index}`}
@@ -322,7 +336,7 @@ export function OrderScreen({ route, navigation }: Props) {
                       }
                     />
                   ))}
-                </View>
+                </ListGroup>
               </Section>
             )}
 
@@ -384,11 +398,16 @@ export function OrderScreen({ route, navigation }: Props) {
   );
 }
 
-/** «Поставщик и место» after acceptance: address, hours, closed dates, «Маршрут», «Позвонить». */
+/**
+ * The place after acceptance: address, hours, closed dates, and «Маршрут» |
+ * «Позвонить» — two equal buttons across the width, or the one there is
+ * (TASK-030.A). «Маршрут» lets the person choose the navigation app.
+ */
 function PickupPlace({ order }: { order: OrderView }) {
   const { t } = useLanguage();
+  const [navigators, setNavigators] = useState(false);
   const point = order.pickupPoint!;
-  const maps = mapsUrl(point, Platform.OS);
+  const canRoute = navigatorLinks(point, "android").length > 0;
   const call = callUrl(point.phone);
   const lines = weeklyHoursLines(point.weeklyHours);
   return (
@@ -431,46 +450,50 @@ function PickupPlace({ order }: { order: OrderView }) {
         </View>
       )}
       {point.phone && <Text variant="bodyS">{point.phone}</Text>}
-      <View style={styles.placeActions}>
-        {maps && (
-          <Button
-            variant="secondary"
-            size="m"
-            icon="mapPin"
-            onPress={() => void Linking.openURL(maps)}
-          >
-            {t("order.route")}
-          </Button>
-        )}
-        {call && (
-          <Button
-            variant="secondary"
-            size="m"
-            icon="phone"
-            onPress={() => void Linking.openURL(call)}
-          >
-            {t("order.call")}
-          </Button>
-        )}
-      </View>
+      {(canRoute || call) && (
+        <ButtonRow>
+          {canRoute && (
+            <Button variant="secondary" size="m" icon="route" onPress={() => setNavigators(true)}>
+              {t("order.route")}
+            </Button>
+          )}
+          {call && (
+            <Button
+              variant="secondary"
+              size="m"
+              icon="phone"
+              onPress={() => void Linking.openURL(call)}
+            >
+              {t("order.call")}
+            </Button>
+          )}
+        </ButtonRow>
+      )}
+      <NavigatorSheet visible={navigators} onClose={() => setNavigators(false)} place={point} />
     </View>
   );
 }
 
-/** The short status word of the mark over the heading. */
-function statusShort(status: OrderView["status"]): MobileTextKey {
-  switch (status) {
-    case "created":
-      return "orderStatus.short.created";
-    case "accepted":
-      return "orderStatus.short.accepted";
-    case "ready":
-      return "orderStatus.short.ready";
-    case "completed":
-      return "orderStatus.completed.short";
-    default:
-      return "orderStatus.short.finished";
-  }
+/** A term of the order: the label on the left, the value on the right. */
+function Term({
+  label,
+  strong = false,
+  children,
+}: {
+  label: string;
+  strong?: boolean;
+  children: string;
+}) {
+  return (
+    <View style={styles.term}>
+      <Text variant={strong ? "bodyStrong" : "bodyS"} color={strong ? "text" : "textMuted"}>
+        {label}
+      </Text>
+      <Text variant={strong ? "priceS" : "bodyS"} style={styles.termValue}>
+        {children}
+      </Text>
+    </View>
+  );
 }
 
 /** A step of «Ход заявки» by the status it led to. */
@@ -505,15 +528,10 @@ const styles = StyleSheet.create({
   center: { textAlign: "center" },
   card: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
   place: { gap: 8 },
-  placeActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  photo: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.m,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   grow: { flex: 1, gap: 2 },
+  divider: { height: 1, marginVertical: 6 },
+  term: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
+  termValue: { flexShrink: 1, textAlign: "right" },
   actions: { gap: 8, paddingTop: 12 },
 });

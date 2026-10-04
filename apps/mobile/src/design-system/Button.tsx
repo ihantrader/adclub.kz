@@ -115,6 +115,27 @@ export function Button({
   );
 }
 
+/**
+ * Two equal actions side by side, 50 × 50 across the width (TASK-030.A:
+ * «Маршрут | Позвонить»). One child takes the whole row. With a large
+ * system font the labels wrap inside their halves (DESIGN 7.11), they are
+ * never cut.
+ */
+export function ButtonRow({ children }: { children: ReactNode }) {
+  const items = (Array.isArray(children) ? children : [children]).filter(
+    (child) => child !== null && child !== undefined && child !== false,
+  );
+  return (
+    <View style={styles.row}>
+      {items.map((child, index) => (
+        <View key={index} style={styles.rowItem}>
+          {child}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export interface IconButtonProps {
   icon: IconName;
   /** Screen reader text — required, the button has no visible label. */
@@ -162,6 +183,8 @@ const styles = StyleSheet.create({
   },
   content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   hidden: { opacity: 0 },
+  row: { flexDirection: "row", gap: 8 },
+  rowItem: { flex: 1, minWidth: 0 },
   label: { textAlign: "center", flexShrink: 1 },
   iconButton: {
     width: size.touchTarget,

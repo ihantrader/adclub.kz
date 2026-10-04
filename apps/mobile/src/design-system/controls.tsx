@@ -1,6 +1,7 @@
 import {
   clampQuantity,
   fontFamily,
+  fontScale,
   line,
   quantityControls,
   radius,
@@ -8,9 +9,10 @@ import {
   type IconName,
 } from "@adclub/ui-core";
 import { useEffect, useState, type ReactNode } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Icon } from "./Icon";
-import { animateTo, useMotionPlan } from "./motion";
+import { animateLayoutTo, animateTo, useMotionPlan } from "./motion";
+import { segmentMetrics } from "./segment-metrics";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -56,46 +58,207 @@ export function Chip({ children, selected = false, onPress, icon, disabled }: Ch
   );
 }
 
+export interface SelectButtonProps {
+  icon: IconName;
+  children: string;
+  onPress: () => void;
+  /** What the button chooses, for screen readers («Автомобиль», «Город»). */
+  accessibilityLabel: string;
+}
+
+/**
+ * A button that shows the current choice and opens the list to change it —
+ * the car and the city of the catalog header (TASK-030.A): 44 high (touch
+ * zone 48), `surface` with a `border` line, the icon, the value in one line
+ * and a caret. A long value first shrinks a little (to 85 %, on the phone)
+ * and then ends in an ellipsis — it never wraps. It takes the width it is
+ * given, so two of them side by side are 50 × 50: «Geely Atlas 2023» fits
+ * half of a 375-pt screen.
+ */
+export function SelectButton({ icon, children, onPress, accessibilityLabel }: SelectButtonProps) {
+  const { theme } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${accessibilityLabel}: ${children}`}
+      onPress={onPress}
+      hitSlop={touchSlop(size.button.m)}
+      style={({ pressed }) => [
+        styles.select,
+        {
+          backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
+          borderColor: theme.colors.border,
+        },
+      ]}
+    >
+      <Icon name={icon} size={16} color="accent" />
+      <Text
+        variant="bodyS"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+        style={styles.selectLabel}
+      >
+        {children}
+      </Text>
+      <Icon name="chevronDown" size={16} color="textMuted" />
+    </Pressable>
+  );
+}
+
 export interface SegmentsProps<T extends string> {
   label: string;
-  options: readonly { value: T; label: string; icon?: IconName }[];
+  options: readonly {
+    value: T;
+    label: string;
+    icon?: IconName;
+    /**
+     * One line under the control for the selected option — what choosing it
+     * does («Сначала — самая низкая цена»: a sort is an order, not a filter).
+     */
+    hint?: string;
+  }[];
   value: T;
   onChange: (value: T) => void;
 }
 
-/** Up to three options, 40 high; four or long Kazakh labels — a list instead. */
+interface SegmentFrame {
+  x: number;
+  width: number;
+}
+
+/**
+ * Segments, 40 high (DESIGN 7.7): the container `fill`, the selected option
+ * on a `surface` thumb that slides to it by the rule of a change of state.
+ *
+ * A label never wraps (TASK-030.A): it keeps one line and grows with the
+ * system font only to 120 %, like a tab label; each option is as wide as its
+ * label and the spare width is shared out, so «Рекомендуем · Дешевле ·
+ * Быстрее» fits a 360-pt phone in every language. Where even that does not
+ * fit (four options, the largest font, a narrow phone) the row scrolls
+ * sideways instead of wrapping or clipping a word.
+ *
+ * With `hint`s the line under the control keeps the height of the tallest
+ * one, so switching options never moves what is below it.
+ */
 export function Segments<T extends string>({ label, options, value, onChange }: SegmentsProps<T>) {
   const { theme } = useTheme();
+  const plan = useMotionPlan("state");
+  const [frames, setFrames] = useState<Partial<Record<T, SegmentFrame>>>({});
+  const [thumbX] = useState(() => new Animated.Value(0));
+  const [thumbWidth] = useState(() => new Animated.Value(0));
+  const [placed, setPlaced] = useState(false);
+  const [hintHeights, setHintHeights] = useState<Partial<Record<T, number>>>({});
+  const frame = frames[value];
+
+  useEffect(() => {
+    if (!frame) return;
+    // The first placing, and every move with reduced motion, is instant.
+    if (!placed || !plan.moves) {
+      thumbX.setValue(frame.x);
+      thumbWidth.setValue(frame.width);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (!placed) setPlaced(true);
+      return;
+    }
+    const animation = Animated.parallel([
+      animateLayoutTo(thumbX, frame.x, plan),
+      animateLayoutTo(thumbWidth, frame.width, plan),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [frame, placed, plan, thumbX, thumbWidth]);
+
+  const hinted = options.some((option) => option.hint);
+  const hintHeight = Math.max(0, ...Object.values<number | undefined>(hintHeights).map(Number));
+
   return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel={label}
-      style={[styles.segments, { backgroundColor: theme.colors.fill }]}
-    >
-      {options.map((option) => {
-        const on = option.value === value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            onPress={() => onChange(option.value)}
+    <View style={styles.segmentsBlock}>
+      <ScrollView
+        horizontal
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        accessibilityRole="radiogroup"
+        accessibilityLabel={label}
+        style={[styles.segments, { backgroundColor: theme.colors.fill }]}
+        contentContainerStyle={styles.segmentsContent}
+      >
+        {frame && (
+          <Animated.View
+            pointerEvents="none"
             style={[
-              styles.segment,
-              on && {
+              styles.segmentThumb,
+              {
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
-                borderWidth: 1,
+                width: thumbWidth,
+                transform: [{ translateX: thumbX }],
               },
             ]}
-          >
-            {option.icon && <Icon name={option.icon} size={16} color={on ? "text" : "textMuted"} />}
-            <Text variant="bodyS" color={on ? "text" : "textMuted"} style={styles.segmentLabel}>
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+          />
+        )}
+        {options.map((option) => {
+          const on = option.value === value;
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={option.label}
+              onPress={() => onChange(option.value)}
+              onLayout={(event) => {
+                const { x, width } = event.nativeEvent.layout;
+                setFrames((current) => {
+                  const known = current[option.value];
+                  return known && known.x === x && known.width === width
+                    ? current
+                    : { ...current, [option.value]: { x, width } };
+                });
+              }}
+              style={styles.segment}
+            >
+              {option.icon && (
+                <Icon name={option.icon} size={16} color={on ? "text" : "textMuted"} />
+              )}
+              <Text
+                variant="bodyS"
+                color={on ? "text" : "textMuted"}
+                numberOfLines={1}
+                maxFontSizeMultiplier={fontScale.tabLabelMax}
+                style={styles.segmentLabel}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {hinted && (
+        <View style={[styles.segmentsHints, { minHeight: hintHeight }]}>
+          {options.map((option) =>
+            option.hint ? (
+              <Text
+                key={option.value}
+                variant="caption"
+                color="textMuted"
+                accessibilityElementsHidden={option.value !== value}
+                importantForAccessibility={option.value === value ? "auto" : "no-hide-descendants"}
+                onLayout={(event) => {
+                  const height = event.nativeEvent.layout.height;
+                  setHintHeights((current) =>
+                    current[option.value] === height
+                      ? current
+                      : { ...current, [option.value]: height },
+                  );
+                }}
+                style={[styles.segmentHint, option.value !== value && styles.hidden]}
+              >
+                {option.hint}
+              </Text>
+            ) : null,
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -348,19 +511,44 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     maxWidth: "100%",
   },
-  segments: { flexDirection: "row", minHeight: size.segments, padding: 2, borderRadius: radius.s },
-  segment: {
+  select: {
     flex: 1,
+    minWidth: 0,
     flexDirection: "row",
-    minHeight: 36,
-    paddingHorizontal: 8,
+    alignItems: "center",
+    gap: 6,
+    minHeight: size.button.m,
+    paddingHorizontal: 10,
+    borderRadius: radius.s,
+    borderWidth: line.width,
+  },
+  selectLabel: { flex: 1, minWidth: 0, fontFamily: fontFamily.native[500] },
+  segmentsBlock: { gap: 6 },
+  segments: { flexGrow: 0, borderRadius: radius.s },
+  segmentsContent: { flexGrow: 1, minHeight: size.segments, padding: segmentMetrics.inset },
+  segment: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexDirection: "row",
+    minHeight: size.segments - 2 * segmentMetrics.inset,
+    paddingHorizontal: segmentMetrics.paddingX,
     paddingVertical: 4,
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    borderRadius: radius.s,
   },
-  segmentLabel: { textAlign: "center", flexShrink: 1, fontFamily: fontFamily.native[500] },
+  segmentThumb: {
+    position: "absolute",
+    top: segmentMetrics.inset,
+    bottom: segmentMetrics.inset,
+    left: 0,
+    borderRadius: radius.s,
+    borderWidth: line.width,
+  },
+  segmentLabel: { textAlign: "center", fontFamily: fontFamily.native[500] },
+  segmentsHints: { justifyContent: "flex-start" },
+  segmentHint: { position: "absolute", top: 0, left: 0, right: 0 },
+  hidden: { opacity: 0 },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,15 +1,17 @@
 import { layout, type IconName } from "@adclub/ui-core";
 import type { ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Icon, Text, useTheme } from "../design-system";
+import { Icon, IconBadge, Text, useTheme } from "../design-system";
 
 /**
  * The layout of a step of the first run (M-START-04, M-START-05): the icon, the
  * question and one line of why in the middle, the actions at the bottom, clear
  * of every edge. One layout for every step, so moving from the city to the car
  * changes what is said and nothing else — the icon, the title and the buttons
- * stay where they were.
+ * stay where they were. The middle scrolls when it does not fit (the largest
+ * system font on a narrow phone, TASK-030.A) instead of running under the
+ * buttons.
  */
 export function FirstRunLayout({
   banner,
@@ -35,8 +37,10 @@ export function FirstRunLayout({
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
       {banner}
-      <View style={styles.content}>
-        <Icon name={icon} size={48} color="accent" />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <IconBadge size={48}>
+          <Icon name={icon} size={48} color="accent" />
+        </IconBadge>
         <Text variant="titleL" accessibilityRole="header" style={styles.center}>
           {title}
         </Text>
@@ -44,7 +48,7 @@ export function FirstRunLayout({
           {text}
         </Text>
         {note}
-      </View>
+      </ScrollView>
       <View style={styles.actions}>{actions}</View>
       {children}
     </SafeAreaView>
@@ -53,13 +57,15 @@ export function FirstRunLayout({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  scroll: { flex: 1 },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: layout.screenPadding,
     gap: 12,
+    paddingVertical: layout.blockGap,
   },
   center: { textAlign: "center" },
-  actions: { paddingHorizontal: layout.screenPadding, paddingBottom: 16, gap: 8 },
+  actions: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: 16, gap: 8 },
 });

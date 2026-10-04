@@ -22,14 +22,21 @@ import {
 } from "../../catalog/filters";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle } from "../../garage/garage";
-import { useCategoryAttributes, useShowcaseList } from "../../services/use-catalog";
+import { categoryIconOf } from "../../catalog/category-icon";
+import {
+  useCategoryAttributes,
+  useCategoryTree,
+  useShowcaseList,
+} from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useLanguage } from "../../state/language";
 import { CatalogHeader } from "./CatalogHeader";
 import { FiltersSheet } from "./FiltersSheet";
-import { ItemRow } from "./parts";
+import { ItemRow, SORT_HINT, SORT_TEXT } from "./parts";
+
+const LIST_SORTS: ShowcaseListSort[] = ["recommended", "cheaper", "faster"];
 
 export interface ItemListScreenProps {
   categoryId: string;
@@ -79,6 +86,8 @@ export function ItemListScreen({
   };
 
   const attributes = useCategoryAttributes(categoryId);
+  // The placeholder of an item without a photo is the icon of its category (DESIGN 7.8).
+  const placeholderIcon = categoryIconOf(useCategoryTree().data?.categories, categoryId);
   const cityId = cityIdOf(selection);
   const vehicle = vehicleQuery(car);
   const list = useShowcaseList({
@@ -137,14 +146,14 @@ export function ItemListScreen({
               label={t("catalog.sort")}
               value={sort}
               onChange={setSort}
-              options={[
-                { value: "recommended", label: t("catalog.sort.recommended") },
-                { value: "cheaper", label: t("catalog.sort.cheaper") },
-                { value: "faster", label: t("catalog.sort.faster") },
-              ]}
+              options={LIST_SORTS.map((value) => ({
+                value,
+                label: t(SORT_TEXT[value]),
+                hint: t(SORT_HINT[value]),
+              }))}
             />
             <View style={styles.filterRow}>
-              <Chip icon="settings" selected={count > 0} onPress={openFilters}>
+              <Chip icon="filters" selected={count > 0} onPress={openFilters}>
                 {count > 0 ? t("catalog.filtersCount", { n: count }) : t("catalog.filters")}
               </Chip>
               {count > 0 && (
@@ -190,7 +199,7 @@ export function ItemListScreen({
               brand={item.brand?.name ?? null}
               article={item.article}
               photo={item.photo}
-              icon={null}
+              icon={placeholderIcon}
               keyAttributes={item.keyAttributes}
               compatibility={item.compatibility}
               carName={carName}
@@ -261,7 +270,7 @@ export function ItemListScreen({
         };
       case "filters":
         return {
-          icon: "settings" as const,
+          icon: "filters" as const,
           title: t("catalog.emptyFilters"),
           action: (
             <Button variant="secondary" size="m" onPress={() => setFilters(EMPTY_FILTERS)}>

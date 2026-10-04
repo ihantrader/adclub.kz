@@ -1,7 +1,7 @@
 import { layout } from "@adclub/ui-core";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Icon, Text, useTheme } from "../design-system";
+import { Button, Icon, IconBadge, Text, useTheme } from "../design-system";
 import { useT } from "../state/language";
 
 interface UpdateRequiredScreenProps {
@@ -32,8 +32,15 @@ export function UpdateRequiredScreen({
   const { theme } = useTheme();
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
-      <View style={styles.content} accessibilityRole="alert">
-        <Icon name="refresh" size={48} color="accent" />
+      {/* Scrolls when the server's text and a large system font do not fit (TASK-030.A). */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        accessibilityRole="alert"
+      >
+        <IconBadge size={48}>
+          <Icon name="refresh" size={48} color="accent" />
+        </IconBadge>
         <Text variant="titleL" accessibilityRole="header" style={styles.center}>
           {t("update.title")}
         </Text>
@@ -43,7 +50,7 @@ export function UpdateRequiredScreen({
         <Text variant="bodyStrong" style={styles.center}>
           {Platform.OS === "ios" ? t("update.openIos") : t("update.openAndroid")}
         </Text>
-      </View>
+      </ScrollView>
       {/* The button shows loading and ignores repeated presses until the check settles. */}
       <View style={styles.actions}>
         <Button onPress={onCheckAgain}>{t("update.checkAgain")}</Button>
@@ -59,8 +66,9 @@ export function UpdateRequiredScreen({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  scroll: { flex: 1 },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: layout.blockGap,

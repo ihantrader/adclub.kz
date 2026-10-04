@@ -169,6 +169,31 @@ function finished(title: OrderStatusTitleKey, text: OrderStatusTextKey | null): 
   };
 }
 
+export type OrderMarkKey =
+  | "orderStatus.short.created"
+  | "orderStatus.short.accepted"
+  | "orderStatus.short.ready"
+  | "orderStatus.short.finished";
+
+/**
+ * The mark over the heading of an order (M-ORD-03): the name of its group —
+ * «Ожидание», «В работе», «Готово», «Завершена» — and never the heading's
+ * own words. A mark that repeats the heading («Можно забирать» over
+ * «Можно забирать», TASK-030 acceptance) says nothing twice.
+ */
+export function orderMarkKey(input: OrderStateInput): OrderMarkKey {
+  switch (orderStatusView(input).group) {
+    case "waiting":
+      return "orderStatus.short.created";
+    case "inProgress":
+      return "orderStatus.short.accepted";
+    case "ready":
+      return "orderStatus.short.ready";
+    default:
+      return "orderStatus.short.finished";
+  }
+}
+
 /** The statuses of an order still going on (the server's `activeOrderStatuses`). */
 export function isActiveStatus(status: OrderStatusValue): boolean {
   return status === "created" || status === "accepted" || status === "ready";

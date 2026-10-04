@@ -3,11 +3,10 @@ import { layout, radius } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { randomUUID } from "expo-crypto";
 import { useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   Banner,
   Button,
-  CategoryIcon,
   DataState,
   Dialog,
   OfflineBanner,
@@ -46,7 +45,7 @@ import { useGarage } from "../../state/garage-provider";
 import { useLanguage } from "../../state/language";
 import { useOrdersCopy } from "../../state/orders-provider";
 import { NoCarContent } from "../NoCarState";
-import { CompatibilityLine, useReceiptText } from "../catalog/parts";
+import { CompatibilityLine, ItemPhoto, useReceiptText } from "../catalog/parts";
 import { ClubAccessSheet } from "./ClubAccessSheet";
 
 type Props = NativeStackScreenProps<RootParams, "order-checkout">;
@@ -265,23 +264,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
         {data && offer && (
           <View style={styles.body}>
             <View style={styles.itemRow}>
-              {data.item.photos[0] ? (
-                <Image
-                  source={{ uri: data.item.photos[0].url }}
-                  style={styles.photo}
-                  accessibilityIgnoresInvertColors
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.photo,
-                    styles.placeholder,
-                    { backgroundColor: theme.colors.surfaceRaised },
-                  ]}
-                >
-                  <CategoryIcon name={null} size={28} color="textMuted" />
-                </View>
-              )}
+              <ItemPhoto photo={data.item.photos[0] ?? null} icon={null} />
               <View style={styles.grow}>
                 <Text variant="bodyStrong">{data.item.name.text}</Text>
                 {(data.item.brand || data.item.article) && (
@@ -307,6 +290,9 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                   { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                 ]}
               >
+                <Text variant="caption" color="accent">
+                  {t("item.clubPrice")}
+                </Text>
                 <Text variant="price">{formatTenge(offer.price)}</Text>
                 {priceWas && (
                   <Text variant="bodyS" color="warning">
@@ -532,8 +518,6 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
 const styles = StyleSheet.create({
   body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
   itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  photo: { width: 72, height: 72, borderRadius: radius.m },
-  placeholder: { alignItems: "center", justifyContent: "center" },
   grow: { flex: 1 },
   card: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
   quantityRow: { flexDirection: "row", alignItems: "center", gap: 16 },

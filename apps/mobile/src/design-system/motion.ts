@@ -37,6 +37,23 @@ export function animateTo(
 }
 
 /**
+ * The same, for a value the native driver cannot move — a width, a left
+ * edge (the thumb of `Segments`, which slides and changes its width at once).
+ */
+export function animateLayoutTo(
+  value: Animated.Value,
+  toValue: number,
+  plan: MotionPlan,
+): Animated.CompositeAnimation {
+  return Animated.timing(value, {
+    toValue,
+    duration: plan.durationMs,
+    easing: planEasing(plan),
+    useNativeDriver: false,
+  });
+}
+
+/**
  * The appearing and disappearing of something over the screen — a sheet, a
  * dialog, a toast. `progress` goes 0 → 1 → 0 by the plan, and the thing stays
  * mounted (`mounted`) until it has finished going away, so closing is the

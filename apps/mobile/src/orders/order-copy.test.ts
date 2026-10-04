@@ -121,6 +121,15 @@ describe("the saved copy on the device", () => {
     expect(parsed?.orders.map((entry) => entry.id)).toEqual([order.id]);
   });
 
+  it("reads a copy saved before the item's photo (TASK-030.A): the orders stay, without a photo", () => {
+    const { photo: _photo, ...itemWithout } = order.item;
+    const saved = { ...order, item: itemWithout };
+    const parsed = parseSavedCopy({ version: 1, ...copy, orders: [saved] });
+    expect(parsed?.orders).toHaveLength(1);
+    expect(parsed?.orders[0]?.item.photo).toBeNull();
+    expect(parsed?.orders[0]?.confirmation.code).toBe(order.confirmation.code);
+  });
+
   it("goes with the session: both the sealed text and its key are deleted", async () => {
     const sealed = memory();
     const key = memory();

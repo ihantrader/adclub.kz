@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Dialog,
+  ListGroup,
   ListRow,
   Screen,
   Text,
@@ -69,7 +70,7 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
         <Text variant="heading" accessibilityRole="header">
           {t("garage.parameters")}
         </Text>
-        <View style={styles.list}>
+        <ListGroup>
           {CAR_LEVELS.map((level, index) => {
             const value = levelValue(car, level);
             return (
@@ -104,7 +105,7 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
             }
             onPress={() => setColorSheet(true)}
           />
-        </View>
+        </ListGroup>
 
         {!primary && (
           <Button variant="secondary" onPress={() => makePrimary(car.id)}>
@@ -161,5 +162,4 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
-  list: { gap: 0 },
 });

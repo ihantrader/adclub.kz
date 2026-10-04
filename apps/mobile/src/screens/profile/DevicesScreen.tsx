@@ -3,7 +3,16 @@ import { layout } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Button, DataState, Dialog, ListRow, Screen, useToast } from "../../design-system";
+import {
+  Button,
+  DataState,
+  Dialog,
+  ListGroup,
+  ListRow,
+  Screen,
+  SkeletonList,
+  useToast,
+} from "../../design-system";
 import type { ProfileStackParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { apiClient } from "../../services/api";
@@ -95,7 +104,7 @@ export function DevicesScreen({
     >
       <DataState
         status={status}
-        skeleton={null}
+        skeleton={<SkeletonList rows={3} label={t("common.loading")} />}
         error={{
           title: t("state.errorTitle"),
           text: t("state.errorText"),
@@ -104,7 +113,7 @@ export function DevicesScreen({
         empty={{ icon: "devices", title: t("state.errorTitle") }}
       >
         <View style={styles.content}>
-          <View style={styles.rows}>
+          <ListGroup>
             {sessions?.map((session, index) => (
               <ListRow
                 key={session.id}
@@ -123,7 +132,7 @@ export function DevicesScreen({
                 }
               />
             ))}
-          </View>
+          </ListGroup>
           {sessions && sessions.length > 1 && (
             <Button variant="secondary" destructive onPress={() => setConfirmEndOthers(true)}>
               {t("profile.endOthers")}
@@ -176,6 +185,5 @@ export function DevicesScreen({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 8, gap: 16 },
-  rows: { borderRadius: layout.cardPadding, overflow: "hidden" },
+  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
 });

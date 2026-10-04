@@ -1,7 +1,7 @@
 import { layout } from "@adclub/ui-core";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Chip } from "../../design-system";
+import { SelectButton } from "../../design-system";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { carTitle } from "../../garage/garage";
 import { cityLabel } from "../../state/city";
@@ -15,6 +15,9 @@ import { CarSheet } from "./CarSheet";
  * of the garage and «Добавить автомобиль» — and the city switch. One
  * component, so both screens switch the same way. There is always a car: the
  * catalog does not open without one (D-062).
+ *
+ * The two are equal buttons, half the width each (TASK-030.A): one line,
+ * a long car name ends in an ellipsis instead of wrapping.
  */
 export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
   const t = useT();
@@ -24,12 +27,20 @@ export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
 
   return (
     <View style={styles.header}>
-      <Chip icon="car" onPress={() => setSheet("car")}>
+      <SelectButton
+        icon="car"
+        accessibilityLabel={t("catalog.carLabel")}
+        onPress={() => setSheet("car")}
+      >
         {carTitle(car)}
-      </Chip>
-      <Chip icon="mapPin" onPress={() => setSheet("city")}>
+      </SelectButton>
+      <SelectButton
+        icon="mapPin"
+        accessibilityLabel={t("profile.city")}
+        onPress={() => setSheet("city")}
+      >
         {cityLabel(selection, t("city.all"))}
-      </Chip>
+      </SelectButton>
 
       <CarSheet
         visible={sheet === "car"}
@@ -45,10 +56,9 @@ export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
 const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
     paddingHorizontal: layout.screenPadding,
     paddingTop: 4,
-    paddingBottom: 8,
+    paddingBottom: 12,
   },
 });

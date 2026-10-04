@@ -1,5 +1,5 @@
 import { StyleSheet, View } from "react-native";
-import { Button, Icon, Sheet, Text } from "../../design-system";
+import { Button, Icon, IconBadge, Sheet, Text } from "../../design-system";
 import { useT } from "../../state/language";
 
 /**
@@ -15,12 +15,16 @@ import { useT } from "../../state/language";
 export function ClubAccessSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useT();
   return (
-    <Sheet visible={visible} onClose={onClose} closeLabel={t("common.close")}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={t("club.title")}
+      closeLabel={t("common.close")}
+    >
       <View style={styles.content}>
-        <Icon name="lock" size={28} color="textMuted" />
-        <Text variant="heading" accessibilityRole="header">
-          {t("club.title")}
-        </Text>
+        <IconBadge size={28}>
+          <Icon name="lock" size={28} color="accent" />
+        </IconBadge>
         <Text color="textMuted">{t("club.text")}</Text>
         <Button onPress={onClose}>{t("club.ok")}</Button>
       </View>

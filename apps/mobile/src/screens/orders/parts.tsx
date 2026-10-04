@@ -1,9 +1,11 @@
+import type { ItemPhotoImage } from "@adclub/contracts";
 import type { MobileTextKey } from "@adclub/i18n";
 import { layout, radius } from "@adclub/ui-core";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Badge, Icon, StatusBadge, Text, useTheme } from "../../design-system";
 import { formatTenge } from "../../catalog/format";
+import { ItemPhoto } from "../catalog/parts";
 import { listStatusKey, orderStatusView, type OrderStateInput } from "../../orders/order-status";
 import {
   CLUB_TIME_ZONE,
@@ -73,7 +75,7 @@ export interface OrderRowProps {
     id: string;
     quantity: number;
     total: number;
-    item: { name: { text: string } };
+    item: { name: { text: string }; photo: ItemPhotoImage | null };
     supplier: { name: string };
   };
   /** The line under the item: the main date of an active order, the date of a finished one. */
@@ -85,7 +87,11 @@ export interface OrderRowProps {
   footer?: React.ReactNode;
 }
 
-/** A card of «Мои заявки»: the status, the item and its quantity, the supplier, the main date. */
+/**
+ * A card of «Мои заявки»: the photo of the item on the left like a row of
+ * the catalog (TASK-030.A), then the status, the item and its quantity,
+ * the supplier, the main date.
+ */
 export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: OrderRowProps) {
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -101,27 +107,34 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
         onPress={onPress}
         style={({ pressed }) => [styles.rowBody, pressed && { opacity: 0.7 }]}
       >
-        <View style={styles.rowTop}>
-          <OrderStatusMark order={order} />
-          {needsAnswer && (
-            <Badge tone="warning" icon="alertTriangle">
-              {t("orders.needsAnswer")}
-            </Badge>
-          )}
-        </View>
-        <Text variant="bodyStrong">{order.item.name.text}</Text>
-        <Text variant="bodyS" color="textMuted">
-          {[t("orders.quantityShort", { n: order.quantity }), formatTenge(order.total)].join(" · ")}
-        </Text>
-        <Text variant="bodyS">{order.supplier.name}</Text>
-        {dateLine ? (
-          <View style={styles.dateLine}>
-            <Icon name="clock" size={16} color="textMuted" />
-            <Text variant="caption" color="textMuted" style={styles.shrink}>
-              {dateLine}
-            </Text>
+        <ItemPhoto photo={order.item.photo} icon={null} />
+        <View style={styles.rowText}>
+          <View style={styles.rowTop}>
+            <OrderStatusMark order={order} />
+            {needsAnswer && (
+              <Badge tone="warning" icon="alertTriangle">
+                {t("orders.needsAnswer")}
+              </Badge>
+            )}
           </View>
-        ) : null}
+          <Text variant="bodyStrong" numberOfLines={3}>
+            {order.item.name.text}
+          </Text>
+          <Text variant="bodyS" color="textMuted">
+            {[t("orders.quantityShort", { n: order.quantity }), formatTenge(order.total)].join(
+              " · ",
+            )}
+          </Text>
+          <Text variant="bodyS">{order.supplier.name}</Text>
+          {dateLine ? (
+            <View style={styles.dateLine}>
+              <Icon name="clock" size={16} color="textMuted" />
+              <Text variant="caption" color="textMuted" style={styles.shrink}>
+                {dateLine}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </Pressable>
       {footer}
     </View>
@@ -130,7 +143,8 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
 
 const styles = StyleSheet.create({
   row: { borderWidth: 1, borderRadius: radius.m, overflow: "hidden" },
-  rowBody: { padding: layout.cardPadding, gap: 4 },
+  rowBody: { flexDirection: "row", gap: 12, padding: layout.cardPadding },
+  rowText: { flex: 1, gap: 4 },
   rowTop: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 4 },
   dateLine: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 2 },
   shrink: { flexShrink: 1 },

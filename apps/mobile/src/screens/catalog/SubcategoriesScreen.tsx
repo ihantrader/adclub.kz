@@ -5,6 +5,7 @@ import {
   Button,
   CategoryIcon,
   DataState,
+  ListGroup,
   ListRow,
   OfflineBanner,
   Screen,
@@ -82,7 +83,7 @@ export function SubcategoriesScreen({
             text: t("catalog.emptyItemsText"),
           }}
         >
-          <View>
+          <ListGroup>
             {children.map((child, index) => (
               <ListRow
                 key={child.id}
@@ -90,10 +91,14 @@ export function SubcategoriesScreen({
                 title={child.name.text}
                 navigates
                 onPress={() => onOpen(child)}
-                trailing={<CategoryIcon name={child.icon} size={24} color="textMuted" />}
+                trailing={
+                  // A subcategory without an icon of its own shows none — the
+                  // generic grid next to every row said nothing (TASK-030.A).
+                  child.icon ? <CategoryIcon name={child.icon} size={24} color="textMuted" /> : null
+                }
               />
             ))}
-          </View>
+          </ListGroup>
         </DataState>
       </View>
     </Screen>

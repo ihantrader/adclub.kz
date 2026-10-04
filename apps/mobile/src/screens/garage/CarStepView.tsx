@@ -6,6 +6,7 @@ import {
   Chip,
   DataState,
   Dialog,
+  ListGroup,
   ListRow,
   Screen,
   SearchField,
@@ -311,16 +312,20 @@ export function CarStepView({
                 </View>
               )}
               <ScrollView keyboardShouldPersistTaps="handled">
-                {options.map((option, index) => (
-                  <ListRow
-                    key={option.id}
-                    first={index === 0}
-                    title={option.label}
-                    subtitle={option.hint}
-                    navigates
-                    onPress={() => choose(stage.step, option)}
-                  />
-                ))}
+                {options.length > 0 && (
+                  <ListGroup>
+                    {options.map((option, index) => (
+                      <ListRow
+                        key={option.id}
+                        first={index === 0}
+                        title={option.label}
+                        subtitle={option.hint}
+                        navigates
+                        onPress={() => choose(stage.step, option)}
+                      />
+                    ))}
+                  </ListGroup>
+                )}
                 {options.length === 0 && (
                   <Text color="textMuted" style={styles.searchEmpty}>
                     {t("car.noOptions")}
@@ -368,7 +373,7 @@ export function CarStepView({
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, paddingHorizontal: layout.screenPadding, paddingTop: 8 },
+  body: { flex: 1, paddingHorizontal: layout.screenPadding, paddingTop: 12 },
   chosen: {
     flexDirection: "row",
     flexWrap: "wrap",

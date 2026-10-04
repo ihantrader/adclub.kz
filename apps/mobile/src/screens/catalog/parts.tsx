@@ -1,11 +1,13 @@
 import type {
   CategoryIcon as CategoryIconName,
+  ShowcaseOfferSort,
   CompatibilityItemResult,
   ItemPhotoImage,
   ShowcaseAttributeValue,
   ShowcaseOfferSummary,
 } from "@adclub/contracts";
 import { layout, radius, size } from "@adclub/ui-core";
+import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import {
   Banner,
@@ -30,6 +32,25 @@ import { useLanguage } from "../../state/language";
  * (DESIGN 7.8): the compatibility mark, the photo or its placeholder, the
  * price line, and the row of an item.
  */
+
+/**
+ * The words of the sorts (TASK-030.A): short labels that fit one line of the
+ * segments, and the line under them that says it is an order, not a filter.
+ * The list has three of them, the offers of an item card all four.
+ */
+export const SORT_TEXT = {
+  recommended: "catalog.sort.recommended",
+  cheaper: "catalog.sort.cheaper",
+  faster: "catalog.sort.faster",
+  rating: "catalog.sort.rating",
+} as const satisfies Record<ShowcaseOfferSort, string>;
+
+export const SORT_HINT = {
+  recommended: "catalog.sortHint.recommended",
+  cheaper: "catalog.sortHint.cheaper",
+  faster: "catalog.sortHint.faster",
+  rating: "catalog.sortHint.rating",
+} as const satisfies Record<ShowcaseOfferSort, string>;
 
 /**
  * The receipt date in words. A list card says just «Завтра» (M-CAT-02); an
@@ -139,11 +160,16 @@ export function ItemPhoto({
   side?: number;
 }) {
   const { theme } = useTheme();
-  if (photo) {
+  // A picture that does not load — a signed link of the saved copy of
+  // orders that expired while there was no network — gives the placeholder,
+  // not an empty square.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (photo && failed !== photo.thumbUrl) {
     return (
       <Image
         source={{ uri: photo.thumbUrl }}
         accessibilityIgnoresInvertColors
+        onError={() => setFailed(photo.thumbUrl)}
         style={[styles.photo, { width: side, height: side }]}
       />
     );

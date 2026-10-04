@@ -29,6 +29,7 @@ export function activeOrder(overrides: Partial<ActiveOrder> = {}): ActiveOrder {
       name: { text: "Колодки тормозные передние", isFallback: false },
       article: "04465-0K090",
       brand: "Geely",
+      photo: null,
     },
     supplier: { id: SUPPLIER_A, name: "Автомаркет", cityName: "Алматы", district: "Жетысуский" },
     pickupPoint: {

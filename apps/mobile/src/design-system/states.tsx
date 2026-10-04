@@ -3,6 +3,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   Animated,
   Easing,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -120,8 +122,15 @@ export function Screen({
       {/* The slot is always there, so a refresh does not push the screen down 2 px and back. */}
       <RefreshLine label={refreshingLabel} active={refreshing} />
       {header}
-      {content}
-      {footer && <View style={styles.footer}>{footer}</View>}
+      {/* The keyboard pushes the content and the footer up instead of covering
+          the main button (iOS; Android resizes the window itself) — TASK-030.A. */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {content}
+        {footer && <View style={styles.footer}>{footer}</View>}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -3,10 +3,10 @@
  * components on the shared tokens of `@adclub/ui-core`.
  */
 export { AiPilot, type AiPilotProps } from "./AiPilot";
-export { Button, IconButton, type ButtonProps, type IconButtonProps } from "./Button";
+export { Button, ButtonRow, IconButton, type ButtonProps, type IconButtonProps } from "./Button";
 export { CodeBlock, QrCode, type CodeBlockProps, type QrCodeProps } from "./code";
 export { CategoryIcon, type CategoryIconProps } from "./CategoryIcon";
-export { Checkbox, Chip, Quantity, Radio, Segments, Switch } from "./controls";
+export { Checkbox, Chip, Quantity, Radio, Segments, SelectButton, Switch } from "./controls";
 export {
   Banner,
   Dialog,
@@ -32,9 +32,9 @@ export {
   type OfflineContentProps,
   type ScreenProps,
 } from "./states";
-export { Icon, icons, type IconProps } from "./Icon";
-export { AiBadge, Badge, CompatibilityMark, Rating, StatusBadge } from "./marks";
+export { GlyphIcon, Icon, icons, type IconProps } from "./Icon";
+export { AiBadge, Badge, CompatibilityMark, IconBadge, Rating, StatusBadge } from "./marks";
 export { useAfterDismiss, useMotionPlan } from "./motion";
-export { BottomTabs, ListRow, TopBar, type TabItem } from "./navigation";
+export { BottomTabs, ListGroup, ListRow, TopBar, type TabItem } from "./navigation";
 export { fontAssets, Text, textStyles, useAppFonts, type TextProps } from "./text";
 export { ThemeProvider, themeModeStore, useTheme, type ThemeContextValue } from "./theme";

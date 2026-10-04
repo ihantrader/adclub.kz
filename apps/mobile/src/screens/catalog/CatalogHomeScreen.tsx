@@ -6,6 +6,7 @@ import {
   Button,
   CategoryIcon,
   DataState,
+  IconBadge,
   OfflineBanner,
   Screen,
   Section,
@@ -14,6 +15,7 @@ import {
   useTheme,
 } from "../../design-system";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
+import { tileRows } from "../../catalog/tile-rows";
 import type { GarageCar } from "../../garage/garage";
 import { useCategoryTree } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
@@ -108,8 +110,19 @@ export function CatalogHomeScreen({
         >
           <Section title={t("catalog.goods")}>
             <View style={styles.tiles}>
-              {nodes.map((node) => (
-                <CategoryTile key={node.id} node={node} onPress={() => onOpenNode(node)} />
+              {tileRows(nodes).map((row) => (
+                <View
+                  key={row.map((node) => node?.id ?? "spacer").join(":")}
+                  style={styles.tileRow}
+                >
+                  {row.map((node) =>
+                    node ? (
+                      <CategoryTile key={node.id} node={node} onPress={() => onOpenNode(node)} />
+                    ) : (
+                      <View key="spacer" style={styles.spacer} />
+                    ),
+                  )}
+                </View>
               ))}
             </View>
           </Section>
@@ -119,11 +132,18 @@ export function CatalogHomeScreen({
   );
 }
 
+/**
+ * A tile: the icon in the middle on the round accent plate, the name under
+ * it in the middle, up to two lines (a Kazakh name is never cut: the tile
+ * grows). Tiles of one row are as tall as the tallest of them, and their
+ * icons stand on one line.
+ */
 function CategoryTile({ node, onPress }: { node: CategoryNode; onPress: () => void }) {
   const { theme } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={node.name.text}
       onPress={onPress}
       style={({ pressed }) => [
         styles.tile,
@@ -133,8 +153,10 @@ function CategoryTile({ node, onPress }: { node: CategoryNode; onPress: () => vo
         },
       ]}
     >
-      <CategoryIcon name={node.icon} size={28} color="accent" />
-      <Text variant="bodyStrong" numberOfLines={2}>
+      <IconBadge size={28}>
+        <CategoryIcon name={node.icon} size={28} color="accent" />
+      </IconBadge>
+      <Text variant="bodyStrong" style={styles.tileName}>
         {node.name.text}
       </Text>
     </Pressable>
@@ -143,16 +165,19 @@ function CategoryTile({ node, onPress }: { node: CategoryNode; onPress: () => vo
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, gap: 12 },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tiles: { gap: 12 },
+  tileRow: { flexDirection: "row", gap: 12, alignItems: "stretch" },
   tile: {
-    // Two per row with a 12 gap inside the screen's 16 padding.
-    flexGrow: 1,
-    flexBasis: "45%",
-    minHeight: 96,
+    flex: 1,
+    minHeight: 136,
     borderWidth: 1,
     borderRadius: radius.m,
-    padding: layout.cardPadding,
-    gap: 8,
-    justifyContent: "space-between",
+    paddingHorizontal: layout.cardPaddingS,
+    paddingVertical: layout.cardPadding,
+    gap: 12,
+    alignItems: "center",
+    justifyContent: "flex-start",
   },
+  tileName: { textAlign: "center" },
+  spacer: { flex: 1 },
 });

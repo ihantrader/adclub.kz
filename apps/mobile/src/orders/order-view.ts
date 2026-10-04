@@ -3,7 +3,7 @@ import type {
   OrderConfirmation,
   OrderFulfillment,
   OrderGivenOut,
-  OrderItem,
+  OrderItemWithPhoto,
   OrderStatusValue,
   UserOrder,
   UserOrderStep,
@@ -27,7 +27,8 @@ export interface OrderView {
   quantity: number;
   unitPrice: number;
   total: number;
-  item: OrderItem;
+  /** With the item's photo of the catalog now (TASK-030.A); `null` — the placeholder. */
+  item: OrderItemWithPhoto;
   supplier: { id: string; name: string; cityName: string; district: string | null };
   /** Only once the supplier accepted (D-026) — and only as the server gave it. */
   pickupPoint: PickupPoint | null;

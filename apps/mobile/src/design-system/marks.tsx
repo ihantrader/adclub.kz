@@ -76,6 +76,31 @@ export function AiBadge({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * An icon on a round `accentTint` plate (DESIGN 7.6: «на плитках категорий —
+ * крупнее, на круглой подложке акцента»): the catalog's category tiles and
+ * the cards of the garage. The plate is the icon's own size plus a ring of
+ * the same width on each side of it, so a 28 icon sits on a 56 circle.
+ */
+export function IconBadge({ children, size }: { children: ReactNode; size: number }) {
+  const { theme } = useTheme();
+  return (
+    <View
+      style={[
+        styles.iconBadge,
+        {
+          width: size * 2,
+          height: size * 2,
+          borderRadius: size,
+          backgroundColor: theme.colors.accentTint,
+        },
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
 export interface RatingProps {
   value: number | null;
   count: number;
@@ -118,6 +143,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   inline: { flexDirection: "row", alignItems: "flex-start", gap: 4, flexShrink: 1 },
+  iconBadge: { alignItems: "center", justifyContent: "center" },
   shrink: { flexShrink: 1 },
   tabular: { fontVariant: ["tabular-nums"] },
 });

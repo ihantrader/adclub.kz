@@ -41,6 +41,19 @@ export function copyFromResponse(
   };
 }
 
+/**
+ * A copy saved before the item's photo was in it (TASK-030.A) reads as an
+ * order without a photo — the placeholder — rather than as an order this
+ * version cannot read: after the update the codes must still be there
+ * without a network.
+ */
+function withItemPhoto(entry: unknown): unknown {
+  if (typeof entry !== "object" || entry === null) return entry;
+  const item = (entry as { item?: unknown }).item;
+  if (typeof item !== "object" || item === null || "photo" in item) return entry;
+  return { ...entry, item: { ...item, photo: null } };
+}
+
 /** A stored copy in the shape this version reads; `null` — not one (it is then deleted). */
 export function parseSavedCopy(raw: unknown): SavedOrdersCopy | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -61,7 +74,7 @@ export function parseSavedCopy(raw: unknown): SavedOrdersCopy | null {
   // know is fine — a missing code is not) is left out rather than shown half.
   const orders: ActiveOrder[] = [];
   for (const entry of record.orders) {
-    const parsed = activeOrderSchema.safeParse(entry);
+    const parsed = activeOrderSchema.safeParse(withItemPhoto(entry));
     if (parsed.success) orders.push(parsed.data);
   }
   return {

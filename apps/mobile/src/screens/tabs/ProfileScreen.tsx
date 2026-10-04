@@ -8,6 +8,8 @@ import {
   Button,
   Dialog,
   Icon,
+  IconBadge,
+  ListGroup,
   ListRow,
   OfflineBanner,
   Radio,
@@ -50,7 +52,7 @@ export function ProfileScreen({
 }: NativeStackScreenProps<ProfileStackParams, "profile-home">) {
   const t = useT();
   const { lang, setLanguage } = useLanguage();
-  const { theme, mode, setMode } = useTheme();
+  const { mode, setMode } = useTheme();
   const { selection } = useCity();
   const online = useOnline();
   const session = useSession();
@@ -77,26 +79,15 @@ export function ProfileScreen({
             }
           />
         ) : (
-          <Pressable onPress={signIn.start} accessibilityRole="button">
-            <View
-              style={[
-                styles.guestCard,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              ]}
-            >
-              <Icon name="user" size={24} color="textMuted" />
-              <View style={styles.guestText}>
-                <Text variant="bodyStrong">{t("profile.guestTitle")}</Text>
-                <Text variant="bodyS" color="textMuted">
-                  {t("profile.guestText")}
-                </Text>
-              </View>
-            </View>
-          </Pressable>
+          <PersonCard
+            title={t("profile.guestTitle")}
+            text={t("profile.guestText")}
+            onPress={signIn.start}
+          />
         )}
 
         <Section>
-          <View style={[styles.rows, { borderColor: theme.colors.border }]}>
+          <ListGroup>
             <ListRow
               first
               icon="mapPin"
@@ -119,12 +110,12 @@ export function ProfileScreen({
               navigates
               onPress={() => setSheet("appearance")}
             />
-          </View>
+          </ListGroup>
         </Section>
 
         {session.status === "signed_in" && (
           <Section>
-            <View style={[styles.rows, { borderColor: theme.colors.border }]}>
+            <ListGroup>
               <ListRow
                 first
                 icon="user"
@@ -138,7 +129,7 @@ export function ProfileScreen({
                 navigates
                 onPress={() => navigation.navigate("profile-devices")}
               />
-            </View>
+            </ListGroup>
           </Section>
         )}
 
@@ -261,45 +252,71 @@ function SignedInCard({
   onResumeRegistration?: () => void;
 }) {
   const t = useT();
+  return (
+    <PersonCard
+      title={name ?? t("profile.finishRegistration")}
+      text={phone}
+      {...(onResumeRegistration ? { onPress: onResumeRegistration } : {})}
+    />
+  );
+}
+
+/**
+ * The card at the top of the profile: the person on the round accent plate,
+ * a title and a line under it; with `onPress` it reads as a button — it
+ * darkens when pressed and has a chevron (TASK-030.A: the guest's «Войдите»
+ * looked like a note).
+ */
+function PersonCard({
+  title,
+  text,
+  onPress,
+}: {
+  title: string;
+  text: string | null;
+  onPress?: () => void;
+}) {
   const { theme } = useTheme();
-  const content = (
-    <View
-      style={[
-        styles.guestCard,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+  return (
+    <Pressable
+      disabled={!onPress}
+      accessibilityRole={onPress ? "button" : undefined}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.personCard,
+        {
+          backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
+          borderColor: theme.colors.border,
+        },
       ]}
     >
-      <Icon name="user" size={24} color="textMuted" />
-      <View style={styles.guestText}>
-        <Text variant="bodyStrong">{name ?? t("profile.finishRegistration")}</Text>
-        {phone && (
+      <IconBadge size={24}>
+        <Icon name="user" size={24} color="accent" />
+      </IconBadge>
+      <View style={styles.personText}>
+        <Text variant="bodyStrong">{title}</Text>
+        {text ? (
           <Text variant="bodyS" color="textMuted">
-            {phone}
+            {text}
           </Text>
-        )}
+        ) : null}
       </View>
-    </View>
-  );
-  return onResumeRegistration ? (
-    <Pressable onPress={onResumeRegistration} accessibilityRole="button">
-      {content}
+      {onPress && <Icon name="chevronRight" size={20} color="textMuted" />}
     </Pressable>
-  ) : (
-    content
   );
 }
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 4 },
-  guestCard: {
+  personCard: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     padding: layout.cardPadding,
     borderWidth: 1,
     borderRadius: radius.m,
   },
-  guestText: { flex: 1, gap: 4 },
-  rows: { borderWidth: 1, borderRadius: radius.m, overflow: "hidden" },
+  personText: { flex: 1, gap: 2 },
   choices: { paddingBottom: 8 },
   version: { paddingTop: layout.blockGap },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { callUrl, mapsUrl, weeklyHoursLines } from "./pickup-place";
+import { callUrl, navigatorLinks, openNavigator, weeklyHoursLines } from "./pickup-place";
 
 // Plain Node checks of «Поставщик и место» after acceptance (M-ORD-03, D-026).
 
@@ -35,14 +35,75 @@ describe("the hours of the point", () => {
 });
 
 describe("the links that leave the app", () => {
-  it("open the system maps by the address the server gave, and nothing without one", () => {
-    const place = { address: "ул. Райымбека, 200", cityName: "Алматы" };
-    const query = encodeURIComponent("Алматы, ул. Райымбека, 200");
-    expect(mapsUrl(place, "ios")).toBe(`maps://?q=${query}`);
-    expect(mapsUrl(place, "android")).toBe(`geo:0,0?q=${query}`);
-    expect(mapsUrl(place, "web")).toContain(query);
-    expect(mapsUrl({ address: null, cityName: "Алматы" }, "ios")).toBeNull();
-    expect(mapsUrl({ address: "  ", cityName: "Алматы" }, "ios")).toBeNull();
+  const place = { address: "ул. Райымбека, 200", cityName: "Алматы" };
+  const query = encodeURIComponent("Алматы, ул. Райымбека, 200");
+
+  it("offer the navigators by the address the server gave — Apple Maps only on iOS", () => {
+    expect(navigatorLinks(place, "ios").map((link) => link.id)).toEqual([
+      "yandexMaps",
+      "yandexNavi",
+      "twoGis",
+      "googleMaps",
+      "appleMaps",
+    ]);
+    expect(navigatorLinks(place, "android").map((link) => link.id)).toEqual([
+      "yandexMaps",
+      "yandexNavi",
+      "twoGis",
+      "googleMaps",
+    ]);
+  });
+
+  it("search for the address in each of them, the app first and the same service on the web", () => {
+    const ios = Object.fromEntries(navigatorLinks(place, "ios").map((link) => [link.id, link]));
+    expect(ios.yandexMaps).toEqual({
+      id: "yandexMaps",
+      app: `yandexmaps://maps.yandex.ru/?text=${query}`,
+      web: `https://yandex.kz/maps/?text=${query}`,
+    });
+    expect(ios.yandexNavi?.app).toBe(`yandexnavi://map_search?text=${query}`);
+    expect(ios.twoGis).toMatchObject({
+      app: `dgis://2gis.ru/search/${query}`,
+      web: `https://2gis.kz/search/${query}`,
+    });
+    expect(ios.googleMaps?.app).toBe(`comgooglemaps://?q=${query}`);
+    expect(ios.appleMaps).toMatchObject({
+      app: `maps://?q=${query}`,
+      web: `https://maps.apple.com/?q=${query}`,
+    });
+    const android = navigatorLinks(place, "android").find((link) => link.id === "googleMaps");
+    expect(android?.app).toBe(android?.web);
+    // No entry leads nowhere: each has a web address of its own service.
+    for (const link of navigatorLinks(place, "ios")) {
+      expect(link.web, link.id).toMatch(/^https:\/\//);
+      expect(link.web, link.id).toContain(query);
+    }
+  });
+
+  it("offer nothing without an address", () => {
+    expect(navigatorLinks({ address: null, cityName: "Алматы" }, "ios")).toEqual([]);
+    expect(navigatorLinks({ address: "  ", cityName: "Алматы" }, "android")).toEqual([]);
+  });
+
+  it("open the web of the service when the app is not installed, and say when nothing opened", async () => {
+    const [link] = navigatorLinks(place, "android");
+    const opened: string[] = [];
+    const noApps = async (url: string) => {
+      if (!url.startsWith("https://")) throw new Error("No app handles this link");
+      opened.push(url);
+    };
+    expect(await openNavigator(link!, noApps)).toBe(true);
+    expect(opened).toEqual([link!.web]);
+
+    const everything = async (url: string) => void opened.push(url);
+    opened.length = 0;
+    expect(await openNavigator(link!, everything)).toBe(true);
+    expect(opened).toEqual([link!.app]);
+
+    const nothing = async () => {
+      throw new Error("no browser either");
+    };
+    expect(await openNavigator(link!, nothing)).toBe(false);
   });
 
   it("call the phone the server gave, and nothing without one", () => {

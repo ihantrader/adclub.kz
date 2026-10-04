@@ -135,5 +135,5 @@ export function MyDataScreen({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 8, gap: 16 },
+  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
 });

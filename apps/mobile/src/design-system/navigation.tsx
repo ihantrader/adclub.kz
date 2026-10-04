@@ -216,7 +216,19 @@ export function ListRow({
   );
 }
 
+/**
+ * Rows of one kind together (TASK-030.A): a `radiusM` block with a `border`
+ * frame, lines between the rows — the profile's settings, the parameters of
+ * a car, the characteristics of an item, the course of an order. One look
+ * for every list of rows inside a screen's padding.
+ */
+export function ListGroup({ children }: { children: ReactNode }) {
+  const { theme } = useTheme();
+  return <View style={[styles.group, { borderColor: theme.colors.border }]}>{children}</View>;
+}
+
 const styles = StyleSheet.create({
+  group: { borderWidth: 1, borderRadius: radius.m, overflow: "hidden" },
   bar: {
     flexDirection: "row",
     alignItems: "flex-end",

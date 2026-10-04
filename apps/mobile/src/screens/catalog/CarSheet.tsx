@@ -31,7 +31,7 @@ export function CarSheet({ visible, onClose, onPickCar, onAddCar }: CarSheetProp
       visible={visible}
       onClose={onClose}
       onDismissed={dismissed.onDismissed}
-      title={t("garage.parameters")}
+      title={t("catalog.carSheetTitle")}
       closeLabel={t("common.close")}
     >
       <View style={styles.body}>

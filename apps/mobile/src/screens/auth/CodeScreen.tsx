@@ -131,6 +131,6 @@ export function CodeScreen({ navigation, route }: NativeStackScreenProps<RootPar
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 8, gap: 16 },
+  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
   phoneRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 });

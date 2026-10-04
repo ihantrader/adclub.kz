@@ -28,10 +28,10 @@ export function SignInSheet({ visible, onClose, reason }: SignInSheetProps) {
       visible={visible}
       onClose={onClose}
       onDismissed={dismissed.onDismissed}
+      title={reason}
       closeLabel={t("common.close")}
     >
       <View style={styles.content}>
-        <Text variant="bodyStrong">{reason}</Text>
         {cars.length > 0 && (
           <Text variant="bodyS" color="textMuted">
             {t("auth.carsWillBeSaved")}

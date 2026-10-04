@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import {
   Button,
   Dialog,
+  ListGroup,
   ListRow,
   Screen,
   Text,
@@ -158,7 +159,7 @@ export function CarSummaryView({
         <Text variant="bodyS" color="textMuted">
           {t("car.summary.text")}
         </Text>
-        <View style={styles.list}>
+        <ListGroup>
           {rows.map((row, index) => (
             <ListRow
               key={row.level}
@@ -187,7 +188,7 @@ export function CarSummaryView({
             }
             onPress={() => setColorSheet(true)}
           />
-        </View>
+        </ListGroup>
       </View>
 
       <Dialog
@@ -248,5 +249,4 @@ export function CarSummaryView({
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
-  list: { gap: 0 },
 });

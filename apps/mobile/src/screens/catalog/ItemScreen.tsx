@@ -16,13 +16,13 @@ import {
   CategoryIcon,
   DataState,
   Icon,
+  ListGroup,
   ListRow,
   OfflineBanner,
   Rating,
   Screen,
   Section,
-  Sheet,
-  useAfterDismiss,
+  Segments,
   SkeletonList,
   Text,
   useTheme,
@@ -40,20 +40,15 @@ import { catalogRefresh } from "../../services/catalog-refresh";
 import { SignInSheet } from "../auth/SignInSheet";
 import { ClubAccessSheet } from "../orders/ClubAccessSheet";
 import { useSession } from "../../state/session-provider";
-import { useShowcaseItem } from "../../services/use-catalog";
+import { categoryIconOf } from "../../catalog/category-icon";
+import { useCategoryTree, useShowcaseItem } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useLanguage } from "../../state/language";
-import { CompatibilityLine, useReceiptText } from "./parts";
+import { CompatibilityLine, SORT_HINT, SORT_TEXT, useReceiptText } from "./parts";
 
 const OFFER_SORTS: ShowcaseOfferSort[] = ["recommended", "cheaper", "faster", "rating"];
-const SORT_TEXT = {
-  recommended: "catalog.sort.recommended",
-  cheaper: "catalog.sort.cheaper",
-  faster: "catalog.sort.faster",
-  rating: "catalog.sort.rating",
-} as const satisfies Record<ShowcaseOfferSort, string>;
 
 export interface ItemScreenProps {
   itemId: string;
@@ -96,9 +91,6 @@ export function ItemScreen({
   const { selection } = useCity();
   const { car } = useCatalogCar();
   const [sort, setSort] = useState<ShowcaseOfferSort>("recommended");
-  const [sortSheet, setSortSheet] = useState(false);
-  // The offers reorder once the sheet has gone, not while it is closing.
-  const sortDismissed = useAfterDismiss(sortSheet);
   const [showFitsFor, setShowFitsFor] = useState(false);
 
   const cityId = cityIdOf(selection);
@@ -118,6 +110,7 @@ export function ItemScreen({
   );
 
   const data = request.data;
+  const tree = useCategoryTree();
   const ordering = useOrderButton(itemId, data?.viewer ?? null, request.reload);
   const carName = carTitle(car);
 
@@ -176,7 +169,7 @@ export function ItemScreen({
             )}
             <Photos
               photos={data.item.photos}
-              icon={null}
+              icon={categoryIconOf(tree.data?.categories, data.item.category.id)}
               placeholder={t("item.photoPlaceholder")}
             />
 
@@ -184,12 +177,9 @@ export function ItemScreen({
               <Text variant="heading" accessibilityRole="header">
                 {data.item.name.text}
               </Text>
-              {data.item.brand && (
-                <Text variant="bodyS" color="textMuted">
-                  {data.item.brand.name}
-                </Text>
-              )}
-              {data.item.article && (
+              {/* The brand and the article on one line (TASK-030.A); a long press
+                  copies the article — the line keeps the 48 touch zone. */}
+              {data.item.article ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`${t("item.article")}: ${data.item.article}`}
@@ -197,11 +187,17 @@ export function ItemScreen({
                   onLongPress={() => copyArticle(data.item.article ?? "")}
                   style={styles.article}
                 >
-                  <Text variant="bodyS" color="textMuted">
-                    {data.item.article}
+                  <Text variant="bodyS" color="textMuted" style={styles.articleText}>
+                    {[data.item.brand?.name, data.item.article].filter(Boolean).join(" · ")}
                   </Text>
                   <Icon name="copy" size={16} color="textMuted" />
                 </Pressable>
+              ) : (
+                data.item.brand && (
+                  <Text variant="bodyS" color="textMuted">
+                    {data.item.brand.name}
+                  </Text>
+                )
               )}
 
               <CompatibilityLine
@@ -238,16 +234,20 @@ export function ItemScreen({
 
             {data.item.attributes.length > 0 && (
               <Section title={t("item.characteristics")}>
-                <View>
+                <ListGroup>
                   {data.item.attributes.map((attribute, index) => (
                     <ListRow
                       key={attribute.attributeId}
                       first={index === 0}
                       title={attribute.name.text}
-                      trailing={<Text variant="bodyStrong">{attribute.display.text}</Text>}
+                      trailing={
+                        <Text variant="bodyStrong" style={styles.attributeValue}>
+                          {attribute.display.text}
+                        </Text>
+                      }
                     />
                   ))}
-                </View>
+                </ListGroup>
               </Section>
             )}
 
@@ -256,18 +256,19 @@ export function ItemScreen({
                 <Text color="textMuted">{t("item.noOffers")}</Text>
               ) : (
                 <>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t("catalog.sort")}
-                    onPress={() => setSortSheet(true)}
-                    style={styles.sortButton}
-                  >
-                    <Text variant="bodyS" color="textMuted">
-                      {t("catalog.sort")}:
-                    </Text>
-                    <Text variant="bodyS">{t(SORT_TEXT[sort])}</Text>
-                    <Icon name="chevronDown" size={16} color="textMuted" />
-                  </Pressable>
+                  {/* The same control as the list (TASK-030.A), with «Рейтинг». */}
+                  {data.offers.length > 1 && (
+                    <Segments
+                      label={t("catalog.sort")}
+                      value={sort}
+                      onChange={setSort}
+                      options={OFFER_SORTS.map((value) => ({
+                        value,
+                        label: t(SORT_TEXT[value]),
+                        hint: t(SORT_HINT[value]),
+                      }))}
+                    />
+                  )}
                   <View style={styles.offers}>
                     {data.offers.map((offer) => (
                       <OfferCard key={offer.id} offer={offer} onOrder={ordering.press} />
@@ -279,7 +280,7 @@ export function ItemScreen({
 
             {data.analogs.length > 0 && (
               <Section title={t("item.analogs")}>
-                <View>
+                <ListGroup>
                   {data.analogs.map((analog, index) => (
                     <ListRow
                       key={analog.id}
@@ -293,33 +294,13 @@ export function ItemScreen({
                       trailing={<Text variant="priceS">{formatTenge(analog.offers.minPrice)}</Text>}
                     />
                   ))}
-                </View>
+                </ListGroup>
               </Section>
             )}
           </View>
         )}
       </DataState>
 
-      <Sheet
-        visible={sortSheet}
-        onClose={() => setSortSheet(false)}
-        onDismissed={sortDismissed.onDismissed}
-        title={t("catalog.sort")}
-        closeLabel={t("common.close")}
-      >
-        {OFFER_SORTS.map((value, index) => (
-          <ListRow
-            key={value}
-            first={index === 0}
-            title={t(SORT_TEXT[value])}
-            onPress={() => {
-              sortDismissed.after(() => setSort(value));
-              setSortSheet(false);
-            }}
-            trailing={value === sort ? <Icon name="check" color="accent" /> : null}
-          />
-        ))}
-      </Sheet>
       {ordering.sheets}
     </Screen>
   );
@@ -512,15 +493,41 @@ function OfferCard({
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
       ]}
     >
-      <Text variant="caption" color="accent">
-        {t("item.offers")}
-      </Text>
-      <Text variant="price">{formatTenge(offer.price)}</Text>
-      <Text variant="bodyS" color="textMuted">
-        {offer.availability === "in_stock" ? t("catalog.inStock") : t("catalog.onOrder")}
-      </Text>
-      {date && offer.pickup && <Text variant="bodyS">{t("item.pickupDate", { date })}</Text>}
-      {date && offer.delivery && <Text variant="bodyS">{t("item.deliveryDate", { date })}</Text>}
+      <View style={styles.offerTop}>
+        <View style={styles.grow}>
+          <Text variant="caption" color="accent">
+            {t("item.clubPrice")}
+          </Text>
+          <Text variant="price">{formatTenge(offer.price)}</Text>
+        </View>
+        <Badge
+          tone={offer.availability === "in_stock" ? "success" : "neutral"}
+          icon={offer.availability === "in_stock" ? "package" : "clock"}
+        >
+          {offer.availability === "in_stock" ? t("catalog.inStock") : t("catalog.onOrder")}
+        </Badge>
+      </View>
+      {date && (offer.pickup || offer.delivery) && (
+        <View style={styles.offerDates}>
+          {offer.pickup && (
+            <View style={styles.offerLine}>
+              <Icon name="mapPin" size={16} color="textMuted" />
+              <Text variant="bodyS" style={styles.grow}>
+                {t("item.pickupDate", { date })}
+              </Text>
+            </View>
+          )}
+          {offer.delivery && (
+            <View style={styles.offerLine}>
+              <Icon name="route" size={16} color="textMuted" />
+              <Text variant="bodyS" style={styles.grow}>
+                {t("item.deliveryDate", { date })}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+      <View style={[styles.offerDivider, { backgroundColor: theme.colors.border }]} />
 
       {/* D-005: without club access there is no name in the answer at all. */}
       <Pressable
@@ -553,18 +560,20 @@ function OfferCard({
         </Text>
       )}
 
-      {offer.verifiedPartner && (
-        <Badge tone="success" icon="circleCheck">
-          {t("item.verifiedPartner")}
-        </Badge>
-      )}
-      <Rating
-        value={offer.rating?.value ?? null}
-        count={offer.rating?.count ?? 0}
-        emptyText={t("item.newSupplier")}
-        label={t("item.rating")}
-        locale={lang}
-      />
+      <View style={styles.offerMarks}>
+        {offer.verifiedPartner && (
+          <Badge tone="success" icon="circleCheck">
+            {t("item.verifiedPartner")}
+          </Badge>
+        )}
+        <Rating
+          value={offer.rating?.value ?? null}
+          count={offer.rating?.count ?? 0}
+          emptyText={t("item.newSupplier")}
+          label={t("item.rating")}
+          locale={lang}
+        />
+      </View>
       <Text variant="bodyS" color="textMuted">
         {offer.inCity ? t("item.inYourCity") : offer.city.name.text}
       </Text>
@@ -593,9 +602,11 @@ function OfferCard({
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
-  head: { gap: 6 },
+  head: { gap: 2 },
   grow: { flex: 1 },
+  attributeValue: { flexShrink: 1, maxWidth: "60%", textAlign: "right" },
   article: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: size.touchTarget },
+  articleText: { flexShrink: 1 },
   collapsible: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: size.touchTarget },
   photo: { borderRadius: radius.m },
   photoPlaceholder: {
@@ -607,15 +618,14 @@ const styles = StyleSheet.create({
   },
   dots: { flexDirection: "row", justifyContent: "center", gap: 6, paddingTop: 8 },
   dot: { width: 6, height: 6, borderRadius: radius.full },
-  sortButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: size.touchTarget,
-  },
   offers: { gap: 12 },
-  offer: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
-  supplierLine: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 4 },
+  offer: { borderWidth: 1, borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
+  offerTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  offerDates: { gap: 4 },
+  offerLine: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  offerDivider: { height: 1, marginVertical: 6 },
+  offerMarks: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  supplierLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   orderButton: { marginTop: 8 },
   orderLater: { paddingTop: 8 },
 });

@@ -1,10 +1,10 @@
 import type { DayHours } from "@adclub/contracts";
 
 /**
- * «Поставщик и место» once the order is accepted (M-ORD-03, D-026): the
- * hours of the point in a few lines, and the two links that leave the app —
- * the system maps by the address and the system dialer by the phone. Every
- * value comes from the server's `pickupPoint`; nothing is filled in.
+ * The place of an accepted order (M-ORD-03, D-026): the hours of the point
+ * in a few lines, and the ways out of the app — a navigation app of the
+ * person's choice by the address, the dialer by the phone. Every value comes
+ * from the server's `pickupPoint`; nothing is filled in.
  */
 
 /** Days 1 (Monday) … 7 (Sunday) that share the same hours, in a row. */
@@ -40,20 +40,75 @@ export function weeklyHoursLines(weeklyHours: readonly DayHours[] | null): Hours
   return lines;
 }
 
+/** The navigation apps «Маршрут» offers (TASK-030.A), in the order of the sheet. */
+export type NavigatorId = "yandexMaps" | "yandexNavi" | "twoGis" | "googleMaps" | "appleMaps";
+
+export interface NavigatorLink {
+  id: NavigatorId;
+  /** Opens the app itself; fails when it is not installed. */
+  app: string;
+  /** The same search in the browser — where a press goes when the app is not there. */
+  web: string;
+}
+
 /**
- * The system maps searching for the address (SCREENS M-ORD-03 «Маршрут»):
- * Apple Maps on iOS, the `geo:` intent on Android (whichever maps app the
- * person uses answers it), a web map elsewhere. `null` — no address to go to.
+ * «Маршрут» → «Открыть в…» (SCREENS M-ORD-03, TASK-030.A): the address the
+ * server gave, as a **search** in each navigation app — a pickup point has
+ * an address and no coordinates yet, so the app finds the place and the
+ * route is built there. Every entry has a web address of the same service,
+ * so no choice leads nowhere when the app is not installed (Yandex
+ * Navigator has no web of its own: its search opens in Yandex Maps). Apple
+ * Maps only on iOS. `[]` — no address to go to.
  */
-export function mapsUrl(
+export function navigatorLinks(
   place: { address: string | null; cityName: string },
   platform: "ios" | "android" | "web" | string,
-): string | null {
-  if (!place.address || place.address.trim() === "") return null;
-  const query = encodeURIComponent(`${place.cityName}, ${place.address}`);
-  if (platform === "ios") return `maps://?q=${query}`;
-  if (platform === "android") return `geo:0,0?q=${query}`;
-  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+): NavigatorLink[] {
+  if (!place.address || place.address.trim() === "") return [];
+  const query = encodeURIComponent(`${place.cityName}, ${place.address.trim()}`);
+  const yandexWeb = `https://yandex.kz/maps/?text=${query}`;
+  const googleWeb = `https://www.google.com/maps/search/?api=1&query=${query}`;
+  const links: NavigatorLink[] = [
+    { id: "yandexMaps", app: `yandexmaps://maps.yandex.ru/?text=${query}`, web: yandexWeb },
+    { id: "yandexNavi", app: `yandexnavi://map_search?text=${query}`, web: yandexWeb },
+    { id: "twoGis", app: `dgis://2gis.ru/search/${query}`, web: `https://2gis.kz/search/${query}` },
+    {
+      id: "googleMaps",
+      // On Android the Maps URL itself opens the Google Maps app (an app
+      // link) and the browser without it; iOS has a scheme of its own.
+      app: platform === "ios" ? `comgooglemaps://?q=${query}` : googleWeb,
+      web: googleWeb,
+    },
+  ];
+  if (platform === "ios") {
+    links.push({
+      id: "appleMaps",
+      app: `maps://?q=${query}`,
+      web: `https://maps.apple.com/?q=${query}`,
+    });
+  }
+  return links;
+}
+
+/**
+ * Opens a navigator: the app, and the web of the same service when the app
+ * is not installed (the system refuses its link). `false` — neither opened.
+ */
+export async function openNavigator(
+  link: NavigatorLink,
+  open: (url: string) => Promise<unknown>,
+): Promise<boolean> {
+  try {
+    await open(link.app);
+    return true;
+  } catch {
+    try {
+      await open(link.web);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 /** The system dialer (SCREENS M-ORD-03 «Позвонить»); `null` — no phone. */

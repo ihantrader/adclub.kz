@@ -44,7 +44,7 @@ function style(
 }
 
 export const typography: Record<TypographyToken, TextStyleToken> = {
-  titleL: style(28, 34, 300),
+  titleL: style(28, 35, 300),
   title: style(20, 26, 400),
   heading: style(18, 24, 400),
   body: style(16, 22, 400),

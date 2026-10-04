@@ -100,13 +100,10 @@ describe("typography tokens", () => {
   it("keeps line height >= 1.25 for text, so Kazakh Қ, Ң, Ғ, Ұ are not clipped", () => {
     // Price and code tokens carry digits only (their DESIGN.md values are 1.1–1.2).
     const digitsOnly: TypographyToken[] = ["price", "priceS", "code", "codeXL"];
-    // `titleL` is 28 / 34 in the DESIGN.md 7.4 table (1.21, TASK-030.B). Instead of
-    // this ratio, every token — `titleL` included — is checked against the real
-    // glyph extents of its Onest weight in packages/ui/src/fonts.test.ts.
-    const measuredOnly: TypographyToken[] = ["titleL"];
+    // Every token is also checked against the real glyph extents of its Onest
+    // weight in packages/ui/src/fonts.test.ts.
     for (const [token, style] of Object.entries(typography)) {
       if (digitsOnly.includes(token as TypographyToken)) continue;
-      if (measuredOnly.includes(token as TypographyToken)) continue;
       expect(style.lineHeight / style.fontSize, token).toBeGreaterThanOrEqual(1.25);
     }
   });

@@ -20,14 +20,9 @@ export default defineConfig({
   // Workspace packages ship CommonJS (see ARCHITECTURE 4); esbuild's dep
   // pre-bundler interops CJS -> ESM correctly, but only for deps it scans.
   // Linked workspace packages aren't scanned automatically, so list them.
-  // `@adclub/ui` is ESM with CSS and fonts and is served as is; its own
-  // dependencies are pre-bundled through it (ARCHITECTURE 4.10).
+  // `@adclub/ui` is ESM with CSS and fonts and is served as is (ARCHITECTURE
+  // 4.10); its icons are path data of `@adclub/ui-core` (4.43).
   optimizeDeps: {
-    include: [
-      "@adclub/api-client",
-      "@adclub/i18n",
-      "@adclub/ui-core",
-      "@adclub/ui > @tabler/icons-react",
-    ],
+    include: ["@adclub/api-client", "@adclub/i18n", "@adclub/ui-core"],
   },
 });

@@ -1,99 +1,11 @@
-import { icon as iconTokens, type IconName } from "@adclub/ui-core";
-import {
-  IconAlertTriangle,
-  IconArchive,
-  IconArrowLeft,
-  IconBackspace,
-  IconCar,
-  IconCategory,
-  IconCheck,
-  IconChecklist,
-  IconChevronDown,
-  IconChevronRight,
-  IconCircleCheck,
-  IconCircleX,
-  IconClock,
-  IconContrast,
-  IconCopy,
-  IconDevices,
-  IconDots,
-  IconFileSpreadsheet,
-  IconHelpCircle,
-  IconInfoCircle,
-  IconLanguage,
-  IconLock,
-  IconLogout,
-  IconMapPin,
-  IconMinus,
-  IconMoon,
-  IconCurrentLocation,
-  IconPackage,
-  IconPhone,
-  IconPlus,
-  IconProgressCheck,
-  IconReceipt,
-  IconRefresh,
-  IconScan,
-  IconSearch,
-  IconSettings,
-  IconSparkles,
-  IconStar,
-  IconSun,
-  IconTags,
-  IconTrash,
-  IconUser,
-  IconWifiOff,
-  IconX,
-  type Icon as TablerIcon,
-} from "@tabler/icons-react";
+import { glyphGrid, uiFilledGlyphs, uiGlyphs, type IconName } from "@adclub/ui-core";
 
-/** Tabler Icons (outline) behind the shared semantic names (DESIGN.md 7.6). */
-export const icons: Record<IconName, TablerIcon> = {
-  alertTriangle: IconAlertTriangle,
-  archive: IconArchive,
-  arrowLeft: IconArrowLeft,
-  backspace: IconBackspace,
-  car: IconCar,
-  category: IconCategory,
-  check: IconCheck,
-  checklist: IconChecklist,
-  chevronDown: IconChevronDown,
-  chevronRight: IconChevronRight,
-  circleCheck: IconCircleCheck,
-  circleX: IconCircleX,
-  clock: IconClock,
-  contrast: IconContrast,
-  copy: IconCopy,
-  devices: IconDevices,
-  dots: IconDots,
-  fileSpreadsheet: IconFileSpreadsheet,
-  helpCircle: IconHelpCircle,
-  info: IconInfoCircle,
-  language: IconLanguage,
-  lock: IconLock,
-  logout: IconLogout,
-  mapPin: IconMapPin,
-  minus: IconMinus,
-  moon: IconMoon,
-  myLocation: IconCurrentLocation,
-  package: IconPackage,
-  phone: IconPhone,
-  plus: IconPlus,
-  progressCheck: IconProgressCheck,
-  receipt: IconReceipt,
-  refresh: IconRefresh,
-  scan: IconScan,
-  search: IconSearch,
-  settings: IconSettings,
-  sparkles: IconSparkles,
-  star: IconStar,
-  sun: IconSun,
-  tags: IconTags,
-  trash: IconTrash,
-  user: IconUser,
-  wifiOff: IconWifiOff,
-  x: IconX,
-};
+/**
+ * The glyphs behind the shared semantic names (Phosphor Light, D-067,
+ * DESIGN.md 7.6). Which glyph draws which icon is decided once, in
+ * design/icons/icons.mjs, for the web and the app alike (`pnpm icons`).
+ */
+export const icons = uiGlyphs;
 
 export type IconSize = 16 | 20 | 24 | 28 | 48;
 
@@ -104,21 +16,39 @@ export interface IconProps {
   className?: string;
   /** Decorative by default; pass a label only when the icon alone carries meaning. */
   label?: string;
+  /** The filled form, where the icon has one (the star of a rating). */
   filled?: boolean;
 }
 
 export function Icon({ name, size = 20, className, label, filled }: IconProps) {
-  const Component = icons[name];
+  const glyph = (filled ? uiFilledGlyphs[name] : undefined) ?? uiGlyphs[name];
   return (
-    <Component
-      size={size}
-      stroke={iconTokens.strokeWidth}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox={glyphGrid.viewBox}
       className={className ? `ac-icon ${className}` : "ac-icon"}
-      fill={filled ? "currentColor" : "none"}
       aria-hidden={label ? undefined : true}
       aria-label={label}
       role={label ? "img" : undefined}
       focusable="false"
-    />
+    >
+      {glyph.map((part, index) =>
+        part.stroke ? (
+          <path
+            key={index}
+            d={part.d}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={glyphGrid.lightStroke}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : (
+          <path key={index} d={part.d} fill="currentColor" />
+        ),
+      )}
+    </svg>
   );
 }

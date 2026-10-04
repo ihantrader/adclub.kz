@@ -25,8 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@adclub/ui-core": "workspace:*",
-    "@tabler/icons-react": "^3.46.0"
+    "@adclub/ui-core": "workspace:*"
   },
   "devDependencies": {
     "@adclub/config": "workspace:*",

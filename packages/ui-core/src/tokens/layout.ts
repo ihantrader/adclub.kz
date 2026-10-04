@@ -54,12 +54,11 @@ export const size = {
   roundButton: 56,
 } as const;
 
-/** Icon sizes (Tabler, 24 grid): 16 · 20 · 24; tab bar — 24. */
+/** Icon sizes (Phosphor Light, drawn on its 256 grid — `glyphGrid`): 16 · 20 · 24; tab bar — 24. */
 export const icon = {
   s: 16,
   m: 20,
   l: 24,
-  strokeWidth: 1.75,
 } as const;
 
 /** Supplier cabinet breakpoints (web): < 600 one column, 600–1023 two, >= 1024 sidebar and tables. */

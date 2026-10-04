@@ -89,3 +89,5 @@ export {
   type SheetMotion,
 } from "./motion";
 export { aiPilotSvg, brandSvg, type BrandSvgName } from "./brand/brand-svg";
+export { glyphGrid, type Glyph, type GlyphPath } from "./icons/glyph";
+export { uiFilledGlyphs, uiGlyphs } from "./icons/glyphs";

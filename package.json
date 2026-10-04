@@ -15,7 +15,8 @@
     "test:integration": "turbo run test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "brand:assets": "node scripts/brand-assets.mjs"
+    "brand:assets": "node scripts/brand-assets.mjs",
+    "icons": "node scripts/icons.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

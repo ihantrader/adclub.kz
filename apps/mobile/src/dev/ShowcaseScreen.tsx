@@ -1,36 +1,28 @@
 import {
   aiPilotStates,
   compatibilityMarks,
-  icon as iconTokens,
   orderStatusGroups,
   typography,
   type AiPilotState,
   type ColorToken,
+  type Glyph,
   type Compatibility,
   type IconName,
   type OrderStatusGroup,
   type ThemeMode,
   type TypographyToken,
 } from "@adclub/ui-core";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { categoryIcons } from "@adclub/contracts";
+import { useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-// Only for the "Значок автомобиля" comparison below (TASK-028.B, AC-2): the
-// app itself never imports a Tabler module directly, only the shared `Icon`
-// component by its semantic name (`design-system/Icon.tsx`). This file is
-// development-only and never reaches the production bundle (TASK-027 checks
-// that by scanning the built bytes), so importing three extra glyphs here to
-// show side by side costs it nothing.
-import IconCarBaseline from "@tabler/icons-react-native/IconCar";
-import IconCarSuv from "@tabler/icons-react-native/IconCarSuv";
-import IconCar4wd from "@tabler/icons-react-native/IconCar4wd";
-import IconSteeringWheel from "@tabler/icons-react-native/IconSteeringWheel";
 import {
   AiBadge,
   AiPilot,
   Banner,
   BottomTabs,
   Button,
+  CategoryIcon,
   Checkbox,
   Chip,
   CodeBlock,
@@ -38,6 +30,7 @@ import {
   CompatibilityMark,
   Dialog,
   EmptyState,
+  GlyphIcon,
   Icon,
   IconButton,
   icons,
@@ -60,6 +53,7 @@ import {
   useToast,
   type TabItem,
 } from "../design-system";
+import { carCandidateGlyphs, customCategoryIcons, regularGlyphs } from "./preview-glyphs";
 import { showcaseTexts, type ShowcaseLang, type ShowcaseTexts } from "./showcase-texts";
 
 type Tab = "catalog" | "orders" | "pilot" | "garage" | "profile";
@@ -97,19 +91,16 @@ function Caption({ children }: { children: ReactNode }) {
 }
 
 /**
- * One candidate of "Значок автомобиля" (TASK-028.B, AC-2): the glyph at the
- * size and colour `EmptyState` really uses it at (DESIGN 7.7: 48, muted), on
- * an accent-tinted circle for the "premium" look the task asks to try —
- * shown here only for comparison, not applied to every empty state (see the
- * report's Future Improvements).
+ * One candidate of «Значок автомобиля» (TASK-030.A): the glyph on the round
+ * accent-tinted badge the catalog tiles use (DESIGN 7.6), at 32.
  */
 function CarIconCandidate({
   label,
-  Component,
+  glyph,
   current,
 }: {
   label: string;
-  Component: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+  glyph: Glyph;
   current?: boolean;
 }) {
   const { theme } = useTheme();
@@ -121,10 +112,10 @@ function CarIconCandidate({
           { backgroundColor: current ? theme.colors.accentTint : theme.colors.fill },
         ]}
       >
-        <Component
+        <GlyphIcon
+          glyph={glyph}
           size={32}
           color={current ? theme.colors.accent : theme.colors.textMuted}
-          strokeWidth={iconTokens.strokeWidth}
         />
       </View>
       <Text variant="captionStrong" style={styles.carIconLabel}>
@@ -308,11 +299,49 @@ function Content({
       <Section title={t.sections.carIcon}>
         <Caption>{t.carIconNote}</Caption>
         <View style={styles.wrap}>
-          <CarIconCandidate label={t.carIconWas} Component={IconCarBaseline} />
-          <CarIconCandidate label={t.carIconNow} Component={IconCarSuv} current />
-          <CarIconCandidate label={t.carIconOptionA} Component={IconCar4wd} />
-          <CarIconCandidate label={t.carIconOptionB} Component={IconSteeringWheel} />
+          {Object.entries(carCandidateGlyphs).map(([name, glyph], index) => (
+            <CarIconCandidate
+              key={name}
+              glyph={glyph}
+              current={index === 0}
+              label={[t.carIconNow, t.carIconOptionA, t.carIconOptionB][index] ?? name}
+            />
+          ))}
         </View>
+      </Section>
+
+      <Section title={t.sections.categoryIcons}>
+        <Caption>{t.categoryIconsNote}</Caption>
+        <View style={styles.wrap}>
+          {categoryIcons.map((code) => (
+            <View key={code} style={styles.carIconCell}>
+              <View style={[styles.categoryBadge, { backgroundColor: theme.colors.accentTint }]}>
+                <CategoryIcon name={code} size={32} color="accent" />
+              </View>
+              <Text variant="caption" style={styles.carIconLabel}>
+                {code}
+              </Text>
+              {customCategoryIcons.includes(code) && (
+                <Text variant="captionStrong" color="warning">
+                  {t.customDrawn}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </Section>
+
+      <Section title={t.sections.iconWeights}>
+        <Caption>{t.iconWeightsNote}</Caption>
+        {(Object.keys(icons) as IconName[]).map((iconName) => (
+          <View key={iconName} style={styles.row}>
+            <Icon name={iconName} size={16} />
+            <GlyphIcon glyph={regularGlyphs[iconName]} size={16} color={theme.colors.text} />
+            <Text variant="bodyS" color="textMuted">
+              {iconName}
+            </Text>
+          </View>
+        ))}
       </Section>
 
       <Section title={t.sections.buttons}>
@@ -673,4 +702,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   carIconLabel: { textAlign: "center" },
+  categoryBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

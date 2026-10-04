@@ -202,8 +202,9 @@ export const bannerTones: Record<BannerTone, { background: ColorToken; icon: Col
 };
 
 /**
- * Semantic icon names used by the shared components; each platform maps them
- * to its Tabler package (`@tabler/icons-react` / `@tabler/icons-react-native`).
+ * Semantic icon names used by the shared components and the screens. The
+ * glyph of each (Phosphor Light, D-067) is chosen once, in
+ * design/icons/icons.mjs, and generated into `uiGlyphs` for both platforms.
  */
 export type IconName =
   | "alertTriangle"
@@ -223,7 +224,9 @@ export type IconName =
   | "copy"
   | "devices"
   | "dots"
+  | "externalLink"
   | "fileSpreadsheet"
+  | "filters"
   | "helpCircle"
   | "info"
   | "language"
@@ -239,6 +242,7 @@ export type IconName =
   | "progressCheck"
   | "receipt"
   | "refresh"
+  | "route"
   | "scan"
   | "search"
   | "settings"

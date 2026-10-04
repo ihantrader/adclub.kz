@@ -38,6 +38,10 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # The icon path modules match design/icons and nothing unused is vendored (TASK-030.A).
+      - name: Icons are generated from design/icons
+        run: pnpm icons --check
+
       - name: Test
         run: pnpm test
 

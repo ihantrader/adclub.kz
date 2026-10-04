@@ -28,8 +28,11 @@ const vendorFrom = vendorIndex >= 0 ? args[vendorIndex + 1] : null;
 
 const map = await import(pathToFileURL(join(iconsDir, "icons.mjs")).href);
 
-/** Phosphor weights we vendor, by the folder (and file suffix) of the package. */
-const WEIGHTS = ["light", "regular", "fill"];
+/**
+ * Phosphor weights we vendor, by the folder (and file suffix) of the package.
+ * Light on every size, 16 included (D-067, 04.10.2026): no Regular.
+ */
+const WEIGHTS = ["light", "fill"];
 
 /** Every Phosphor glyph the map needs, by weight. */
 function needed() {
@@ -41,7 +44,6 @@ function needed() {
   );
   return {
     light,
-    regular: new Set(Object.values(map.ui)),
     fill: new Set(Object.values(map.uiFilled)),
   };
 }
@@ -53,7 +55,7 @@ async function vendor(from) {
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     for (const name of [...sets[weight]].sort()) {
-      const file = weight === "regular" ? `${name}.svg` : `${name}-${weight}.svg`;
+      const file = `${name}-${weight}.svg`;
       await copyFile(join(from, weight, file), join(dir, `${name}.svg`));
     }
   }
@@ -141,13 +143,11 @@ import type { Glyph } from "@adclub/ui-core";
 export const categoryGlyphs: Record<CategoryIcon, Glyph> = ${await record(map.category)};
 `,
     "apps/mobile/src/dev/preview-glyphs.ts": `${HEADER}import type { CategoryIcon } from "@adclub/contracts";
-import type { Glyph, IconName } from "@adclub/ui-core";
+import type { Glyph } from "@adclub/ui-core";
 
 /** The car glyphs the Product Owner compares (the first is the one in use). */
 export const carCandidateGlyphs: Record<string, Glyph> = ${await record(candidates)};
 
-/** Every semantic icon in the Regular weight, beside Light at 16 (DESIGN 7.6). */
-export const regularGlyphs: Record<IconName, Glyph> = ${await record(map.ui, "regular")};
 
 /** Category codes drawn by us in the Light style, for the Product Owner to approve. */
 export const customCategoryIcons: readonly CategoryIcon[] = ${JSON.stringify(customCategory)};
@@ -181,9 +181,13 @@ for (const [path, source] of Object.entries(await modules())) {
   console.log(`wrote ${path}`);
 }
 
-// Every vendored Phosphor file is one the map needs: nothing unused lingers.
+// Every vendored Phosphor file is one the map needs: nothing unused lingers —
+// a whole folder of a weight we no longer use included.
 const sets = needed();
-for (const weight of WEIGHTS) {
+const folders = (await readdir(phosphorDir, { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+for (const weight of new Set([...WEIGHTS, ...folders])) {
   let files = [];
   try {
     files = await readdir(join(phosphorDir, weight));
@@ -191,7 +195,7 @@ for (const weight of WEIGHTS) {
     files = [];
   }
   for (const file of files) {
-    if (!sets[weight].has(file.replace(/\.svg$/, ""))) {
+    if (!sets[weight]?.has(file.replace(/\.svg$/, ""))) {
       stale += 1;
       console.error(`unused: design/icons/phosphor/${weight}/${file}`);
     }

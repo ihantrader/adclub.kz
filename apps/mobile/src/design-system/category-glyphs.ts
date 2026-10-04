@@ -128,12 +128,12 @@ export const categoryGlyphs: Record<CategoryIcon, Glyph> = {
     },
   ],
   "manual-gearbox": [
-    { d: "M56,56a16,16 0 1 0 32,0a16,16 0 1 0 -32,0", stroke: true },
-    { d: "M112,56a16,16 0 1 0 32,0a16,16 0 1 0 -32,0", stroke: true },
-    { d: "M168,56a16,16 0 1 0 32,0a16,16 0 1 0 -32,0", stroke: true },
-    { d: "M56,200a16,16 0 1 0 32,0a16,16 0 1 0 -32,0", stroke: true },
-    { d: "M112,200a16,16 0 1 0 32,0a16,16 0 1 0 -32,0", stroke: true },
-    { d: "M72,72V184M128,72V184M184,72v56H72", stroke: true },
+    { d: "M28,48a20,20 0 1 0 40,0a20,20 0 1 0 -40,0", stroke: true },
+    { d: "M108,48a20,20 0 1 0 40,0a20,20 0 1 0 -40,0", stroke: true },
+    { d: "M188,48a20,20 0 1 0 40,0a20,20 0 1 0 -40,0", stroke: true },
+    { d: "M28,208a20,20 0 1 0 40,0a20,20 0 1 0 -40,0", stroke: true },
+    { d: "M108,208a20,20 0 1 0 40,0a20,20 0 1 0 -40,0", stroke: true },
+    { d: "M48,68V188M128,68V188M208,68v60H48", stroke: true },
   ],
   package: [
     {

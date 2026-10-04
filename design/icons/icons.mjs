@@ -117,9 +117,8 @@ export const category = {
 
 /**
  * Glyphs only the development showcase draws (never in a production
- * bundle): the other car candidates for the Product Owner to compare, and
- * the Regular weight of every icon for the Light-or-Regular-at-16 question
- * (DESIGN 7.6).
+ * bundle): the other car candidates for the Product Owner to compare. Every
+ * icon is Light on every size, 16 included (D-067, 04.10.2026).
  */
 export const preview = {
   carCandidates: ["car", "car-profile", "car-simple"],

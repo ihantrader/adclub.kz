@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# local HTTPS for checking the cabinet on a phone (pnpm dev:lan): CA key and certificates
+.dev-https/
+
 # dependencies / build
 node_modules/
 dist/

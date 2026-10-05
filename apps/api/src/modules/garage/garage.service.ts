@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   CAR_COLOR_IDS,
   type AccountCar,
+  type AddGarageCarBody,
   type CarLevels,
   type GarageCarsResponse,
   type SaveGarageCarBody,
@@ -20,7 +21,15 @@ import { sameLevels } from "./garage-merge";
 import { GarageStore, type NewAccountCar } from "./garage.store";
 import type { AccountCarRow } from "./schema";
 
-function levelsOf(levels: CarLevels): Omit<NewAccountCar, "accountId" | "isPrimary" | "color"> {
+/**
+ * The levels and the modification of a car as columns. The modification is
+ * kept as the device sent it (TASK-029.B): it never takes part in «the same
+ * car» (I435), and an older client that does not send it stores `null`.
+ */
+function levelsOf(
+  levels: CarLevels,
+  modificationId: string | null | undefined,
+): Omit<NewAccountCar, "accountId" | "isPrimary" | "color"> {
   return {
     makeId: levels.make.id,
     makeLabel: levels.make.label,
@@ -37,7 +46,7 @@ function levelsOf(levels: CarLevels): Omit<NewAccountCar, "accountId" | "isPrima
     transmissionTypeLabel: levels.transmission?.label ?? null,
     driveTypeId: levels.drive?.id ?? null,
     driveTypeLabel: levels.drive?.label ?? null,
-    modificationId: null,
+    modificationId: modificationId ?? null,
   };
 }
 
@@ -107,11 +116,24 @@ export class GarageService {
     }
   }
 
-  async add(accountId: string, body: SaveGarageCarBody): Promise<AccountCar> {
+  /**
+   * Adds a car. `idempotencyKey` (TASK-029.B): the same key again — the
+   * answer to the first request was lost on the way and the app asks again —
+   * gives back the car the first one added, before the size limit is even
+   * looked at, so a repeat never adds a second car and never fails for a
+   * limit the first request already counted. The account row lock makes two
+   * racing repeats wait for each other; the unique index
+   * `account_car_idempotency_key` holds the rule in the database as well.
+   */
+  async add(accountId: string, body: AddGarageCarBody): Promise<AccountCar> {
     const limit = await this.settings.get("garage_max_cars");
     return this.withVehicleReferenceCheck(() =>
       this.database.db.transaction(async (tx) => {
         await this.store.lockAccount(accountId, tx);
+        if (body.idempotencyKey) {
+          const earlier = await this.store.findByIdempotencyKey(accountId, body.idempotencyKey, tx);
+          if (earlier) return toAccountCar(earlier);
+        }
         const count = await this.store.count(accountId, tx);
         if (count >= limit) {
           throw garageLimitReached(limit);
@@ -119,8 +141,9 @@ export class GarageService {
         const row = await this.store.insert(
           {
             accountId,
-            ...levelsOf(body.levels),
+            ...levelsOf(body.levels, body.modificationId),
             color: body.color,
+            idempotencyKey: body.idempotencyKey ?? null,
             // The first car of an empty garage is primary by itself — the
             // same rule as the device (mobile ARCHITECTURE 4.38 I397).
             isPrimary: count === 0,
@@ -137,7 +160,7 @@ export class GarageService {
       this.store.updateLevels(
         accountId,
         carId,
-        { ...levelsOf(body.levels), color: body.color },
+        { ...levelsOf(body.levels, body.modificationId), color: body.color },
         this.database.db,
       ),
     );
@@ -226,7 +249,12 @@ export class GarageService {
               continue;
             }
             const inserted = await this.store.insert(
-              { accountId, ...levelsOf(car.levels), color: car.color, isPrimary: false },
+              {
+                accountId,
+                ...levelsOf(car.levels, car.modificationId),
+                color: car.color,
+                isPrimary: false,
+              },
               tx,
             );
             merged.push(inserted);

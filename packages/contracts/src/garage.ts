@@ -78,13 +78,36 @@ export const garageCarsResponseSchema = z.object({
 
 export type GarageCarsResponse = z.infer<typeof garageCarsResponseSchema>;
 
-/** `POST /garage/cars` and `PATCH /garage/cars/{carId}`: the levels and the colour. */
+/**
+ * The exact modification the levels named, when they named exactly one
+ * (TASK-029.B): kept next to the levels, not inside them, because it is not
+ * a level of the rule «the same car» (ARCHITECTURE 4.41 I435) — two cars
+ * with the same levels are the same car whatever the device worked out.
+ * Optional so a client that never sends it keeps working; absent — `null`.
+ */
+const modificationIdField = z.uuid().nullable().optional();
+
+/** `PATCH /garage/cars/{carId}`: the levels, the colour and the modification. */
 export const saveGarageCarBodySchema = z.object({
   levels: carLevelsSchema,
+  modificationId: modificationIdField,
   color: carColorIdSchema.nullable(),
 });
 
 export type SaveGarageCarBody = z.infer<typeof saveGarageCarBodySchema>;
+
+/**
+ * `POST /garage/cars`: the same as a change, plus `idempotencyKey` — made by
+ * the app once per adding (TASK-029.B): the same key again, after an answer
+ * was lost on the way, gives back the car the first request added instead
+ * of a second one (ARCHITECTURE 4.46). Optional: without it every request
+ * adds a car, as before.
+ */
+export const addGarageCarBodySchema = saveGarageCarBodySchema.extend({
+  idempotencyKey: z.uuid().optional(),
+});
+
+export type AddGarageCarBody = z.infer<typeof addGarageCarBodySchema>;
 
 export const garageCarIdPathSchema = z.object({ carId: z.uuid() });
 
@@ -114,6 +137,7 @@ export const transferGarageBodySchema = z.object({
     .array(
       z.object({
         levels: carLevelsSchema,
+        modificationId: modificationIdField,
         color: carColorIdSchema.nullable(),
         isPrimary: z.boolean(),
       }),

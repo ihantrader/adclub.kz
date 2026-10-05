@@ -1,10 +1,12 @@
 import { Body, Controller, Inject, Param } from "@nestjs/common";
 import {
+  addGarageCarBodySchema,
   apiRoutes,
   garageCarIdPathSchema,
   saveGarageCarBodySchema,
   transferGarageBodySchema,
   type AccountCar,
+  type AddGarageCarBody,
   type GarageCarIdPath,
   type GarageCarRemovedResponse,
   type GarageCarsResponse,
@@ -29,7 +31,7 @@ export class GarageController {
 
   @SessionRoute(apiRoutes.addGarageCar)
   add(
-    @Body(new ZodValidationPipe(saveGarageCarBodySchema)) body: SaveGarageCarBody,
+    @Body(new ZodValidationPipe(addGarageCarBodySchema)) body: AddGarageCarBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AccountCar> {
     return this.garage.add(session.accountId, body);

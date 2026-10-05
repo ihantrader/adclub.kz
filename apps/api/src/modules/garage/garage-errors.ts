@@ -26,6 +26,7 @@ const LEVEL_BY_CONSTRAINT: Record<string, string> = {
   account_car_model_id_fkey: "levels.model.id",
   account_car_generation_id_fkey: "levels.generation.id",
   account_car_engine_id_fkey: "levels.engine.id",
+  account_car_modification_id_fkey: "modificationId",
 };
 
 /** A Postgres foreign-key violation on one of `account_car`'s vehicle references. */

@@ -119,7 +119,53 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790500000000_create-messaging",
       "1790550000000_order-notices",
       "1790600000000_account-profile-and-garage",
+      "1790650000000_account-car-idempotency-key",
     ]);
+  });
+
+  it("keeps one car per key of an adding within an account, and rolls back keeping the cars (account car idempotency key)", async () => {
+    const accounts = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77005550291'), ('+77005550292') RETURNING id",
+      )
+    ).rows.map((row) => row.id);
+    const make = (
+      await client.query<{ id: string }>("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const model = (
+      await client.query<{ id: string }>(
+        "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+        [make],
+      )
+    ).rows[0]!.id;
+    const car = (accountId: string, key: string | null) =>
+      client.query(
+        `INSERT INTO account_car (account_id, make_id, make_label, model_id, model_label, idempotency_key)
+         VALUES ($1, $2, 'Geely', $3, 'Atlas', $4)`,
+        [accountId, make, model, key],
+      );
+    const key = randomUUID();
+    await car(accounts[0]!, key);
+    // The same key again in the same account is the same adding.
+    await expect(car(accounts[0]!, key)).rejects.toThrow(/account_car_idempotency_key/);
+    // Another account may happen to use it; cars without a key are not limited.
+    await car(accounts[1]!, key);
+    await car(accounts[0]!, null);
+    await car(accounts[0]!, null);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await columnExists(client, "account_car", "idempotency_key")).toBe(false);
+    // The cars stay; only the key is gone.
+    expect((await client.query("SELECT 1 FROM account_car")).rowCount).toBe(4);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await columnExists(client, "account_car", "idempotency_key")).toBe(true);
+    // What this test put in leaves with it: the next one counts makes and accounts.
+    await client.query("DELETE FROM account_car");
+    await client.query("DELETE FROM vehicle_model");
+    await client.query("DELETE FROM vehicle_make");
+    await client.query("DELETE FROM account WHERE id = ANY($1)", [accounts]);
+    await walkDownPast(() => columnExists(client, "account_car", "idempotency_key"));
   });
 
   it("holds the rules of the profile and the garage of an account, and rolls back keeping the accounts (account profile and garage)", async () => {

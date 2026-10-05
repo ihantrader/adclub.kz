@@ -49,6 +49,7 @@ const ATLAS_BODY_ID = randomUUID();
 const ATLAS_ENGINE_ID = randomUUID();
 const ATLAS_TRANSMISSION_ID = randomUUID();
 const ATLAS_DRIVE_ID = randomUUID();
+const ATLAS_MODIFICATION_ID = randomUUID();
 const COOLRAY_MODEL_ID = randomUUID();
 
 const ATLAS: CarLevels = {
@@ -153,6 +154,28 @@ describe("account garage (PostgreSQL + Redis)", () => {
       ATLAS_ENGINE_ID,
       fuelId,
     ]);
+    // The one modification the Atlas levels name (TASK-029.B: the exact
+    // modification travels with the car).
+    await db.query(
+      `INSERT INTO vehicle_option (id, kind, code, name_ru) VALUES
+         ($1, 'body', 'crossover_test', 'Кроссовер'),
+         ($2, 'transmission', 'auto_test', 'Автомат'),
+         ($3, 'drive', 'awd_test', 'Полный')`,
+      [ATLAS_BODY_ID, ATLAS_TRANSMISSION_ID, ATLAS_DRIVE_ID],
+    );
+    await db.query(
+      `INSERT INTO vehicle_modification
+         (id, generation_id, body_type_id, engine_id, transmission_type_id, drive_type_id, year_from, market)
+       VALUES ($1, $2, $3, $4, $5, $6, 2023, 'kz')`,
+      [
+        ATLAS_MODIFICATION_ID,
+        ATLAS_GENERATION_ID,
+        ATLAS_BODY_ID,
+        ATLAS_ENGINE_ID,
+        ATLAS_TRANSMISSION_ID,
+        ATLAS_DRIVE_ID,
+      ],
+    );
   }
 
   beforeEach(async () => {
@@ -546,6 +569,184 @@ describe("account garage (PostgreSQL + Redis)", () => {
       const result = transferGarageResponseSchema.parse(response.body);
       expect(result.transferred).toBe(1);
       expect(result.cars).toHaveLength(1);
+    });
+  });
+
+  describe("the exact modification and a repeated adding (TASK-029.B)", () => {
+    async function list(token: string) {
+      return garageCarsResponseSchema.parse(
+        (await http().get("/garage/cars").set("X-Client", IOS).set(bearer(token))).body,
+      ).cars;
+    }
+
+    it("keeps the modification through adding, changing and a transfer, and returns it", async () => {
+      const token = await signIn("+77011230101");
+      const added = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ levels: ATLAS, modificationId: ATLAS_MODIFICATION_ID, color: null });
+      expect(added.status, JSON.stringify(added.body)).toBe(201);
+      const car = accountCarSchema.parse(added.body);
+      expect(car.modificationId).toBe(ATLAS_MODIFICATION_ID);
+
+      // A change that names no modification (an older client) clears it.
+      const changed = await http()
+        .patch(`/garage/cars/${car.id}`)
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ levels: ATLAS, color: "red" });
+      expect(accountCarSchema.parse(changed.body).modificationId).toBeNull();
+      const back = await http()
+        .patch(`/garage/cars/${car.id}`)
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ levels: ATLAS, modificationId: ATLAS_MODIFICATION_ID, color: "red" });
+      expect(accountCarSchema.parse(back.body).modificationId).toBe(ATLAS_MODIFICATION_ID);
+
+      const other = await signIn("+77011230102");
+      const transferred = await http()
+        .post("/garage/transfer")
+        .set("X-Client", IOS)
+        .set(bearer(other))
+        .send({
+          cars: [
+            { levels: ATLAS, modificationId: ATLAS_MODIFICATION_ID, color: null, isPrimary: true },
+            { levels: COOLRAY, color: null, isPrimary: false },
+          ],
+        });
+      expect(transferred.status, JSON.stringify(transferred.body)).toBe(200);
+      const cars = transferGarageResponseSchema.parse(transferred.body).cars;
+      expect(cars.find((item) => item.model.id === ATLAS_MODEL_ID)?.modificationId).toBe(
+        ATLAS_MODIFICATION_ID,
+      );
+      expect(cars.find((item) => item.model.id === COOLRAY_MODEL_ID)?.modificationId).toBeNull();
+      const stored = await db.query<{ modification_id: string | null }>(
+        "SELECT modification_id FROM account_car WHERE model_id = $1",
+        [ATLAS_MODEL_ID],
+      );
+      expect(stored.rows.map((row) => row.modification_id)).toEqual([
+        ATLAS_MODIFICATION_ID,
+        ATLAS_MODIFICATION_ID,
+      ]);
+    });
+
+    it("refuses a modification the catalog does not have, naming the field", async () => {
+      const token = await signIn("+77011230103");
+      const response = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ levels: ATLAS, modificationId: randomUUID(), color: null });
+      expect(response.status, JSON.stringify(response.body)).toBe(400);
+      expect(response.body).toMatchObject({
+        code: "VALIDATION_ERROR",
+        details: [{ path: "modificationId" }],
+      });
+      expect(await list(token)).toEqual([]);
+    });
+
+    it("gives back the same car for the same key, however often and however at once it is asked", async () => {
+      const token = await signIn("+77011230104");
+      const idempotencyKey = randomUUID();
+      const body = { levels: ATLAS, color: "white", idempotencyKey };
+      const first = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send(body);
+      expect(first.status, JSON.stringify(first.body)).toBe(201);
+      const again = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send(body);
+      expect(again.status).toBe(201);
+      expect(accountCarSchema.parse(again.body).id).toBe(accountCarSchema.parse(first.body).id);
+
+      // Five repeats of another adding at the same moment: one car.
+      const racing = { levels: COOLRAY, color: null, idempotencyKey: randomUUID() };
+      const answers = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          http().post("/garage/cars").set("X-Client", IOS).set(bearer(token)).send(racing),
+        ),
+      );
+      expect(answers.map((answer) => answer.status)).toEqual([201, 201, 201, 201, 201]);
+      expect(new Set(answers.map((answer) => accountCarSchema.parse(answer.body).id)).size).toBe(1);
+      expect(await list(token)).toHaveLength(2);
+
+      // A new key is a new adding — «Всё равно добавить» still adds the same car twice.
+      const third = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ ...body, idempotencyKey: randomUUID() });
+      expect(third.status).toBe(201);
+      expect(await list(token)).toHaveLength(3);
+    });
+
+    it("answers a repeat with the car even once the garage is full, and keeps keys per account", async () => {
+      await settings.set({ garage_max_cars: 5 });
+      const token = await signIn("+77011230105");
+      const idempotencyKey = randomUUID();
+      const first = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ levels: ATLAS, color: null, idempotencyKey });
+      for (let index = 0; index < 4; index += 1) {
+        expect((await addCar(token, COOLRAY)).status).toBe(201);
+      }
+      expect((await addCar(token, COOLRAY)).body).toMatchObject({ code: "GARAGE_LIMIT_REACHED" });
+      const repeat = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(token))
+        .send({ levels: ATLAS, color: null, idempotencyKey });
+      expect(repeat.status, JSON.stringify(repeat.body)).toBe(201);
+      expect(accountCarSchema.parse(repeat.body).id).toBe(accountCarSchema.parse(first.body).id);
+
+      // The same key from another account is that account's own adding.
+      const other = await signIn("+77011230106");
+      const theirs = await http()
+        .post("/garage/cars")
+        .set("X-Client", IOS)
+        .set(bearer(other))
+        .send({ levels: ATLAS, color: null, idempotencyKey });
+      expect(theirs.status).toBe(201);
+      expect(accountCarSchema.parse(theirs.body).id).not.toBe(
+        accountCarSchema.parse(first.body).id,
+      );
+      expect(await list(other)).toHaveLength(1);
+    });
+
+    it("signs in on two phones at once with the same guest garage without a duplicate", async () => {
+      // Two sessions of one account — two phones (a second code may be asked
+      // for after the resend interval).
+      await settings.set({ login_code_resend_interval_seconds: 1 });
+      const phone = "+77011230107";
+      const a = await signIn(phone);
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      const b = await signIn(phone);
+      expect(b).not.toBe(a);
+      const body = {
+        cars: [
+          { levels: ATLAS, modificationId: ATLAS_MODIFICATION_ID, color: null, isPrimary: true },
+          { levels: COOLRAY, color: "red", isPrimary: false },
+        ],
+      };
+      const [first, second] = await Promise.all([
+        http().post("/garage/transfer").set("X-Client", IOS).set(bearer(a)).send(body),
+        http().post("/garage/transfer").set("X-Client", IOS).set(bearer(b)).send(body),
+      ]);
+      expect([first.status, second.status]).toEqual([200, 200]);
+      const transferred = [first, second].map(
+        (answer) => transferGarageResponseSchema.parse(answer.body).transferred,
+      );
+      expect(transferred.sort()).toEqual([0, 2]);
+      const cars = await list(a);
+      expect(cars).toHaveLength(2);
+      expect(cars.filter((car) => car.isPrimary)).toHaveLength(1);
     });
   });
 

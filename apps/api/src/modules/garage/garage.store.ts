@@ -23,6 +23,8 @@ export interface NewAccountCar {
   modificationId: string | null;
   color: string | null;
   isPrimary: boolean;
+  /** The key of the adding (`POST /garage/cars`); absent — none. */
+  idempotencyKey?: string | null;
 }
 
 /** Persistence of `account_car` (ARCHITECTURE 4.41). Ownership is enforced
@@ -69,6 +71,21 @@ export class GarageStore {
     return row;
   }
 
+  /** The car an earlier adding with this key made, if it is still there. */
+  async findByIdempotencyKey(
+    accountId: string,
+    idempotencyKey: string,
+    executor: DbExecutor,
+  ): Promise<AccountCarRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(accountCar)
+      .where(
+        and(eq(accountCar.accountId, accountId), eq(accountCar.idempotencyKey, idempotencyKey)),
+      );
+    return row;
+  }
+
   /**
    * Cars added in one transaction (a transfer) get their own moments, in the
    * order they were inserted: `now()` is the moment the transaction began and
@@ -87,7 +104,7 @@ export class GarageStore {
   async updateLevels(
     accountId: string,
     carId: string,
-    input: Omit<NewAccountCar, "accountId" | "isPrimary">,
+    input: Omit<NewAccountCar, "accountId" | "isPrimary" | "idempotencyKey">,
     executor: DbExecutor,
   ): Promise<AccountCarRow | undefined> {
     const [row] = await executor

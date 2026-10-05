@@ -10380,19 +10380,19 @@
           "user"
         ],
         "requestBody": {
-          "description": "The levels and the colour",
+          "description": "The levels, the modification, the colour and the key of this adding",
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveGarageCarBody"
+                "$ref": "#/components/schemas/AddGarageCarBody"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "The car was added",
+            "description": "The car was added — or, for an `idempotencyKey` seen before, the car it added",
             "content": {
               "application/json": {
                 "schema": {
@@ -10495,7 +10495,7 @@
           "user"
         ],
         "requestBody": {
-          "description": "The levels and the colour",
+          "description": "The levels, the modification and the colour",
           "required": true,
           "content": {
             "application/json": {
@@ -13404,6 +13404,45 @@
           "total",
           "limit",
           "truncated"
+        ]
+      },
+      "AddGarageCarBody": {
+        "type": "object",
+        "properties": {
+          "levels": {
+            "$ref": "#/components/schemas/CarLevels"
+          },
+          "modificationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarColorId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "levels",
+          "color"
         ]
       },
       "AddSupplierLeadNoteBody": {
@@ -20670,7 +20709,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 80,
-            "pattern": "^[\\p{L}][\\p{L}\\s'’-]*$"
+            "pattern": "^\\p{L}[\\p{L}\\p{M} '’-]*$"
           },
           "phoneShareConsent": {
             "type": "boolean",
@@ -25062,6 +25101,18 @@
           "levels": {
             "$ref": "#/components/schemas/CarLevels"
           },
+          "modificationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "color": {
             "anyOf": [
               {
@@ -29127,6 +29178,18 @@
                 "levels": {
                   "$ref": "#/components/schemas/CarLevels"
                 },
+                "modificationId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "color": {
                   "anyOf": [
                     {
@@ -29489,7 +29552,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 80,
-            "pattern": "^[\\p{L}][\\p{L}\\s'’-]*$"
+            "pattern": "^\\p{L}[\\p{L}\\p{M} '’-]*$"
           },
           "email": {
             "anyOf": [

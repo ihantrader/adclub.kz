@@ -12,6 +12,7 @@ import {
   carLevelValueSchema,
   garageCarRemovedResponseSchema,
   garageCarsResponseSchema,
+  addGarageCarBodySchema,
   saveGarageCarBodySchema,
   transferGarageBodySchema,
   transferGarageResponseSchema,
@@ -417,6 +418,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   GarageCarRemovedResponse: garageCarRemovedResponseSchema,
   GarageCarsResponse: garageCarsResponseSchema,
   SaveGarageCarBody: saveGarageCarBodySchema,
+  AddGarageCarBody: addGarageCarBodySchema,
   TransferGarageBody: transferGarageBodySchema,
   TransferGarageResponse: transferGarageResponseSchema,
 };

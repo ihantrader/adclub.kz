@@ -181,6 +181,7 @@ import {
   garageCarRemovedResponseSchema,
   garageCarsResponseSchema,
   accountCarSchema,
+  addGarageCarBodySchema,
   saveGarageCarBodySchema,
   transferGarageBodySchema,
   transferGarageResponseSchema,
@@ -811,9 +812,16 @@ export const apiRoutes = {
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["user"],
-    requestBody: { description: "The levels and the colour", schema: saveGarageCarBodySchema },
+    requestBody: {
+      description: "The levels, the modification, the colour and the key of this adding",
+      schema: addGarageCarBodySchema,
+    },
     responses: {
-      201: { description: "The car was added", schema: accountCarSchema },
+      201: {
+        description:
+          "The car was added — or, for an `idempotencyKey` seen before, the car it added",
+        schema: accountCarSchema,
+      },
     },
   }),
   updateGarageCar: defineRoute({
@@ -827,7 +835,10 @@ export const apiRoutes = {
     auth: "session",
     contexts: ["user"],
     pathParams: garageCarIdPathSchema,
-    requestBody: { description: "The levels and the colour", schema: saveGarageCarBodySchema },
+    requestBody: {
+      description: "The levels, the modification and the colour",
+      schema: saveGarageCarBodySchema,
+    },
     responses: {
       200: { description: "The updated car", schema: accountCarSchema },
     },

@@ -21,16 +21,22 @@ export const ACCOUNT_NAME_MAX_LENGTH = 80;
  * A letter of any script (so the Kazakh letters ә ғ қ ң ө ұ ү h і pass, as
  * SCREENS M-AUTH-03 calls for explicitly), then letters, single spaces,
  * hyphens and apostrophes — no digits, no emoji, no control characters.
- * The schema trims the edges; the server then collapses inner whitespace
+ * A letter typed as a base letter and a combining mark («и» + U+0306 for
+ * «й», what some keyboards and pasted text give) passes: the text is
+ * brought to NFC first, and a mark left without a precomposed form is
+ * allowed after a letter (`\p{M}`, TASK-029.B). Only the plain space
+ * separates words — a line break or a tab is not part of a name.
+ * The schema trims the edges; the server then collapses inner spaces
  * (`AccountProfileService`), so " Марат  Б " and "Марат Б" are stored alike.
  * The length limit is counted before that collapse.
  */
 export const accountNameSchema = z
   .string()
   .trim()
+  .normalize("NFC")
   .min(1)
   .max(ACCOUNT_NAME_MAX_LENGTH)
-  .regex(/^[\p{L}][\p{L}\s'’-]*$/u, "Only letters, spaces, hyphens and an apostrophe");
+  .regex(/^\p{L}[\p{L}\p{M} '’-]*$/u, "Only letters, spaces, hyphens and an apostrophe");
 
 export type AccountName = z.infer<typeof accountNameSchema>;
 

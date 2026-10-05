@@ -29,6 +29,8 @@ export const accountCar = pgTable("account_car", {
   driveTypeLabel: text("drive_type_label"),
   modificationId: uuid("modification_id"),
   color: text("color"),
+  /** The key of the adding that made this car (TASK-029.B); `null` — added without one. */
+  idempotencyKey: uuid("idempotency_key"),
   isPrimary: boolean("is_primary").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

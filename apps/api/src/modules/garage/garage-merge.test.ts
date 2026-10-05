@@ -25,6 +25,7 @@ function row(overrides: Partial<AccountCarRow> = {}): AccountCarRow {
     driveTypeLabel: "Полный",
     modificationId: null,
     color: "white",
+    idempotencyKey: null,
     isPrimary: false,
     createdAt: new Date(),
     updatedAt: new Date(),

@@ -1,34 +1,695 @@
-/* Service screen layout; colors, type and components come from @adclub/ui. */
-.service-page {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ac-space-4);
-  max-width: 560px;
-  padding: var(--ac-space-6) var(--ac-space-4);
+/* Layout of the supplier cabinet (TASK-031). Colors, type and components come
+   from @adclub/ui (DESIGN.md 7); only the arrangement of the pages is here.
+   Phone first: one column and bottom tabs; from 1024 px the side menu 240
+   and content up to 1200 (DESIGN.md 7.5). Nothing has a fixed height that
+   text could overflow — with a large system font everything wraps. */
+
+.num {
+  font-variant-numeric: tabular-nums;
 }
 
-.service-page h1,
-.service-page h2,
-.service-page p {
+h1,
+h2,
+p,
+dl,
+dd,
+ol,
+ul {
   margin: 0;
 }
 
-.service-page__stack {
+/* ---------- sign-in and the screens before the cabinet ---------- */
+.auth-page {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ac-space-3);
-  width: 100%;
+  align-items: center;
+  gap: var(--ac-space-8);
+  min-height: 100dvh;
+  padding: calc(var(--ac-space-8) + env(safe-area-inset-top)) var(--ac-space-4)
+    calc(var(--ac-space-6) + env(safe-area-inset-bottom));
 }
 
-.service-page__status {
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+}
+
+.auth-stack > .ac-button--text {
+  align-self: flex-start;
+}
+
+.auth-phone-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+}
+
+.auth-code .ac-field__input {
+  font-size: 24px;
+  line-height: 30px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.auth-note {
+  color: var(--ac-color-text-muted);
+}
+
+.auth-footer {
+  margin-top: auto;
+  max-width: 100%;
+}
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ac-space-6);
+  min-height: 100dvh;
+}
+
+.splash .ac-logo {
+  align-self: center;
+}
+
+/* ---------- choice lists (companies) and menus ---------- */
+.choice-list,
+.member-list,
+.week,
+.closed-dates,
+.install__steps {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  list-style: none;
+}
+
+.choice-list {
+  gap: var(--ac-space-2);
+}
+
+.choice-list__item,
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  width: 100%;
+  min-height: var(--ac-touch-target);
+  padding: var(--ac-space-3) var(--ac-space-4);
+  border: 0;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.choice-list__item:hover,
+.menu-row:hover {
+  background: var(--ac-color-surface-raised);
+}
+
+.choice-list__item[aria-current="true"] {
+  box-shadow: inset 0 0 0 1px var(--ac-color-accent);
+  cursor: default;
+}
+
+.choice-list__item[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.choice-list__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.choice-list__current {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ac-space-1);
+  color: var(--ac-color-accent);
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--ac-radius-m);
+}
+
+.menu:empty {
+  display: none;
+}
+
+.menu-row {
+  border-radius: 0;
+}
+
+.menu-row__label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- the shell ---------- */
+.shell {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.shell__sidebar {
+  display: none;
+}
+
+.shell__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  /* Room for the bottom tabs on a phone. */
+  padding-bottom: calc(var(--ac-tab-bar) + env(safe-area-inset-bottom));
+}
+
+.shell__tabs {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  min-height: var(--ac-top-bar);
+  padding: env(safe-area-inset-top) var(--ac-space-4) 0;
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  background: var(--ac-color-bar);
+}
+
+.topbar__back {
+  margin-left: calc(-1 * var(--ac-space-3));
+}
+
+/* The company is always in the header (SCREENS 6.0); a long Kazakh name
+   ends with an ellipsis, the full one is on «Компания». */
+.company-chip {
   display: flex;
   align-items: center;
   gap: var(--ac-space-2);
-  min-height: 24px;
+  min-width: 0;
+  min-height: var(--ac-touch-target);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-color-text);
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: var(--ac-font-weight-body-strong);
+  text-align: left;
 }
 
-.service-page .ac-segments {
-  min-width: 240px;
+.company-chip > .ac-icon:first-child {
+  flex: none;
+  color: var(--ac-color-text-muted);
+}
+
+.company-chip--button {
+  cursor: pointer;
+}
+
+.company-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell__banners {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell__banners:empty {
+  display: none;
+}
+
+.shell__banners .ac-banner__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--ac-space-3);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+  width: 100%;
+  max-width: 720px;
+  padding: var(--ac-space-6) var(--ac-space-4) var(--ac-space-8);
+}
+
+.page__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+}
+
+.page__title {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- side menu from 1024 px ---------- */
+.shell__sidebar-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  padding: var(--ac-space-1) var(--ac-space-3) var(--ac-space-4);
+}
+
+.sidebar-company {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--ac-space-2) var(--ac-space-3);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.sidebar-company__button,
+.sidebar-company__name {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-color-text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--ac-font-weight-body-strong);
+  text-align: left;
+}
+
+.sidebar-company__button {
+  cursor: pointer;
+}
+
+.sidebar-company__button .company-chip__name,
+.sidebar-company__name .company-chip__name {
+  flex: 1;
+  /* In the menu the name has room for two lines before the ellipsis. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.sidebar-member {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  min-width: 0;
+  padding: var(--ac-space-2) var(--ac-space-3);
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.sidebar-member__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1024px) {
+  .shell__sidebar {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex: none;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .shell__sidebar > .ac-sidebar {
+    min-height: 100%;
+  }
+
+  .shell__tabs,
+  .topbar__back {
+    display: none;
+  }
+
+  .shell__main {
+    padding-bottom: 0;
+  }
+
+  .topbar {
+    padding: 0 var(--ac-space-8);
+  }
+
+  .page {
+    max-width: 1200px;
+    padding: var(--ac-space-8);
+  }
+
+  .page > * {
+    max-width: 760px;
+  }
+}
+
+/* ---------- cards and facts ---------- */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  padding: var(--ac-space-4);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.stack-s {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+}
+
+.stack-m {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+}
+
+.facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.facts dt {
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.facts dd {
+  overflow-wrap: anywhere;
+}
+
+.facts__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-block__label {
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Segments keep one line per option (DESIGN.md 7.7): too wide — they scroll sideways. */
+.field-block .ac-segments,
+.week__day .ac-segments,
+.auth-footer .ac-segments {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.field-block .ac-segments__item,
+.week__day .ac-segments__item,
+.auth-footer .ac-segments__item {
+  flex: none;
+  white-space: nowrap;
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-3);
+}
+
+/* ---------- employees ---------- */
+.member-list {
+  gap: var(--ac-space-3);
+}
+
+.member {
+  gap: var(--ac-space-3);
+}
+
+.member__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.member__name {
+  overflow-wrap: anywhere;
+}
+
+.member__phone {
+  align-self: flex-start;
+  color: var(--ac-color-text-muted);
+  text-decoration: none;
+}
+
+.member__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+  margin-top: var(--ac-space-1);
+}
+
+.member__badges:empty {
+  display: none;
+}
+
+.member__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- company: hours and days off ---------- */
+.week {
+  gap: var(--ac-space-4);
+}
+
+.week__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  padding-bottom: var(--ac-space-4);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.week__day:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.week__hours {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+}
+
+.time-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-3);
+}
+
+.time-input {
+  display: flex;
+  flex: 1 1 120px;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.time-input__control {
+  width: 100%;
+  min-height: var(--ac-field);
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font-size: 16px;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-input__control:focus {
+  border-color: var(--ac-color-accent);
+}
+
+.time-input__control--error {
+  border-color: var(--ac-color-danger);
+}
+
+.closed-dates {
+  gap: 0;
+}
+
+.closed-dates__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-2) 0;
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.closed-dates__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.closed-dates__add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+}
+
+.closed-dates__add > .ac-button {
+  align-self: flex-start;
+}
+
+/* ---------- S-INST-01 ---------- */
+.install {
+  align-items: flex-start;
+}
+
+.install__icon {
+  border-radius: 14px;
+}
+
+.install__steps {
+  gap: var(--ac-space-3);
+}
+
+.install__steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-3);
+}
+
+.install__step-number {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-color-accent-tint);
+  color: var(--ac-color-accent-on-tint);
+  font-weight: var(--ac-font-weight-body-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.ios-picture {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  width: 100%;
+  max-width: 320px;
+  padding: var(--ac-space-3);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-l);
+  background: var(--ac-color-bg);
+}
+
+.ios-picture__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--ac-radius-m);
+}
+
+.ios-picture__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-3);
+  background: var(--ac-color-surface);
+}
+
+.ios-picture__row--on {
+  box-shadow: inset 0 0 0 2px var(--ac-color-accent);
+  border-radius: var(--ac-radius-m);
+}
+
+.ios-picture__app {
+  flex: none;
+  border-radius: 8px;
+}
+
+.ios-picture__row:first-child {
+  justify-content: flex-start;
+}
+
+.ios-picture__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  min-height: 44px;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text-muted);
+}
+
+.ios-picture__share {
+  display: inline-flex;
+  padding: var(--ac-space-1);
+  border-radius: var(--ac-radius-s);
+  box-shadow: 0 0 0 2px var(--ac-color-accent);
+  color: var(--ac-color-accent);
 }

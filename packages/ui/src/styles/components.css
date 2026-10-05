@@ -843,10 +843,13 @@ textarea {
   color: var(--ac-color-danger);
 }
 
+/* Above the safe area by default; above the bottom tabs and a pinned main
+   button when the page has them — the provider measures them and sets
+   `bottom` (DESIGN 7.7, `toastObstacle`). */
 .ac-toast-region {
   position: fixed;
   right: var(--ac-space-4);
-  bottom: var(--ac-space-6);
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
   left: var(--ac-space-4);
   z-index: 100;
   display: flex;
@@ -865,6 +868,43 @@ textarea {
   color: var(--ac-color-on-toast);
   box-shadow: var(--ac-float-shadow);
   animation: ac-fade-in var(--ac-motion-fast) var(--ac-motion-easing);
+}
+
+.ac-toast > .ac-icon {
+  flex: none;
+}
+
+.ac-toast__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A toast with «Отменить» takes the pointer; the region around it never does. */
+.ac-toast--action {
+  pointer-events: auto;
+  padding-right: var(--ac-space-2);
+}
+
+.ac-toast__action {
+  flex: none;
+  min-height: var(--ac-touch-target);
+  padding: 0 var(--ac-space-3);
+  border: 0;
+  border-radius: var(--ac-radius-s);
+  background: transparent;
+  color: var(--ac-color-on-toast);
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--ac-font-weight-body-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ac-toast__action:focus-visible {
+  outline: var(--ac-focus-width) solid var(--ac-color-on-toast);
+  outline-offset: calc(-1 * var(--ac-focus-width));
 }
 
 @keyframes ac-fade-in {

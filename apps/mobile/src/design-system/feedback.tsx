@@ -6,9 +6,12 @@ import {
   radius,
   sheetMotion,
   size,
+  TOAST_GAP,
+  toastBottomOffset,
   type BannerTone,
   type IconName,
 } from "@adclub/ui-core";
+import { NavigationContext } from "@react-navigation/native";
 import {
   createContext,
   memo,
@@ -19,6 +22,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   AccessibilityInfo,
@@ -28,6 +32,7 @@ import {
   PanResponder,
   Pressable,
   StyleSheet,
+  useWindowDimensions,
   View,
   type DimensionValue,
   type LayoutChangeEvent,
@@ -106,12 +111,71 @@ const Held = memo(
   (_previous, next) => next.hold,
 );
 
-/** Confirmations only ("Код скопирован"), 4 s; errors stay in the screen (7.7). */
+/** Reports the top edge (in the window) of a pinned element, `null` — gone or off screen. */
+type RegisterObstacle = (id: number, top: number | null) => void;
+
+const ToastObstacleContext = createContext<RegisterObstacle | null>(null);
+
+let nextObstacleId = 0;
+
+/**
+ * Marks a view pinned to the bottom that a toast must stand above (DESIGN
+ * 7.7, TASK-032): the tab bar, the pinned main button of a screen. Spread
+ * the result onto the view. Only while its screen is the focused one — the
+ * tab bar under a step of choosing a car, or the footer of a screen left
+ * behind in a stack, is not on screen and must not lift the toast.
+ */
+export function useToastObstacle(): {
+  ref: RefObject<View | null>;
+  onLayout: () => void;
+} {
+  const register = useContext(ToastObstacleContext);
+  const navigation = useContext(NavigationContext);
+  const [id] = useState(() => ++nextObstacleId);
+  const ref = useRef<View>(null);
+  const [focused, setFocused] = useState(() => navigation?.isFocused() ?? true);
+
+  useEffect(() => {
+    if (!navigation) return;
+    const offFocus = navigation.addListener("focus", () => setFocused(true));
+    const offBlur = navigation.addListener("blur", () => setFocused(false));
+    return () => {
+      offFocus();
+      offBlur();
+    };
+  }, [navigation]);
+
+  const onLayout = useCallback(() => {
+    if (!register) return;
+    if (!focused) {
+      register(id, null);
+      return;
+    }
+    ref.current?.measureInWindow((_x, y, width, height) =>
+      register(id, width > 0 && height > 0 ? y : null),
+    );
+  }, [register, focused, id]);
+
+  useEffect(() => {
+    onLayout();
+  }, [onLayout]);
+  useEffect(() => () => register?.(id, null), [register, id]);
+
+  return { ref, onLayout };
+}
+
+/**
+ * Confirmations only ("Код скопирован"), 4 s; errors stay in the screen
+ * (7.7). The toast stands 8 above the tab bar or the pinned main button of
+ * the focused screen (`useToastObstacle`), and above the safe area when
+ * there is neither — never on the navigation or the main action.
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<{ text: string; visible: boolean }>({
     text: "",
     visible: false,
   });
+  const [obstacles, setObstacles] = useState<ReadonlyMap<number, number>>(new Map());
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const show = useCallback((text: string) => {
@@ -126,28 +190,51 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  const register = useCallback<RegisterObstacle>((id, top) => {
+    setObstacles((current) => {
+      if (top === null ? !current.has(id) : current.get(id) === top) return current;
+      const next = new Map(current);
+      if (top === null) next.delete(id);
+      else next.set(id, top);
+      return next;
+    });
+  }, []);
+
   return (
     <ToastContext.Provider value={{ show }}>
-      {children}
-      <ToastView text={toast.text} visible={toast.visible} />
+      <ToastObstacleContext.Provider value={register}>{children}</ToastObstacleContext.Provider>
+      <ToastView text={toast.text} visible={toast.visible} pinnedTops={[...obstacles.values()]} />
     </ToastContext.Provider>
   );
 }
 
 /** The toast itself: it fades in and out over 150 ms (DESIGN 7.6) — opacity alone, so also with reduced motion. */
-function ToastView({ text, visible }: { text: string; visible: boolean }) {
+function ToastView({
+  text,
+  visible,
+  pinnedTops,
+}: {
+  text: string;
+  visible: boolean;
+  pinnedTops: readonly number[];
+}) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const viewport = useWindowDimensions();
   const plan = useMotionPlan("appear");
   const { progress, mounted } = useOverlayTransition(visible, plan);
   if (!mounted) return null;
+  const bottom = Math.max(
+    toastBottomOffset(viewport.height, pinnedTops) ?? 0,
+    insets.bottom + TOAST_GAP,
+  );
   return (
     <Animated.View
       pointerEvents="none"
       accessibilityLiveRegion="polite"
       style={[
         styles.toast,
-        { bottom: insets.bottom + 96, backgroundColor: theme.colors.toast, opacity: progress },
+        { bottom, backgroundColor: theme.colors.toast, opacity: progress },
         floatStyle(theme.name),
       ]}
     >

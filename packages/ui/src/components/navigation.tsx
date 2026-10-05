@@ -1,6 +1,7 @@
 import { brandSvg, type BrandSvgName, type IconName } from "@adclub/ui-core";
 import type { MouseEvent, ReactNode } from "react";
 import { useTheme } from "../theme/ThemeProvider";
+import { toastObstacle } from "./feedback";
 import { Icon } from "./Icon";
 import { cx } from "./cx";
 
@@ -169,7 +170,8 @@ export function BottomTabs<K extends string>({
     </NavTarget>
   );
   return (
-    <nav className="ac-tabs" aria-label={label}>
+    // A toast stands above the bar and its raised button, never on them (7.7).
+    <nav className="ac-tabs" aria-label={label} {...toastObstacle}>
       {items.slice(0, half).map(tab)}
       {center && (
         <NavTarget
@@ -178,7 +180,7 @@ export function BottomTabs<K extends string>({
           current={center.key === active}
           onSelect={() => onSelect(center.key)}
         >
-          <span className="ac-tab__center-button">
+          <span className="ac-tab__center-button" {...toastObstacle}>
             <Icon name={center.icon} size={28} />
           </span>
           <span className="ac-tab__label">{center.label}</span>

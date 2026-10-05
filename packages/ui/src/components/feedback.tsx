@@ -1,4 +1,10 @@
-import { motion, type BannerTone, type IconName } from "@adclub/ui-core";
+import {
+  motion,
+  TOAST_ACTION_LIFETIME,
+  toastBottomOffset,
+  type BannerTone,
+  type IconName,
+} from "@adclub/ui-core";
 import {
   createContext,
   useCallback,
@@ -51,33 +57,157 @@ export function Banner({
   );
 }
 
+/** An action of a toast: «Отменить» after «Сохранено». */
+export interface ToastAction {
+  label: string;
+  onAction: () => void;
+}
+
 interface ToastContextValue {
-  show: (message: string) => void;
+  show: (message: string, options?: { action?: ToastAction }) => void;
+  /** Takes the toast away at once (its action was taken some other way). */
+  hide: () => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-/** Confirmations only ("Код скопирован"); errors stay on the screen (7.7). */
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [message, setMessage] = useState<{ text: string; key: number } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+/**
+ * Marks an element pinned to the bottom of the screen that a toast must
+ * stand above (DESIGN 7.7): the bottom tabs, the raised center button, the
+ * pinned main button of a page. Spread onto the element.
+ */
+export const toastObstacle = { "data-ac-toast-obstacle": "" } as const;
 
-  const show = useCallback((text: string) => {
+/** Marks the content area a toast centers on, on a computer (next to a side menu). */
+export const toastArea = { "data-ac-toast-area": "" } as const;
+
+/**
+ * Where the region stands now: above the highest pinned element on screen
+ * (`toastBottomOffset`), else — the CSS default, above the safe area; and
+ * across the content area when the page marks one.
+ */
+export function toastRegionStyle(doc: Document = document): CSSProperties {
+  const view = doc.defaultView;
+  if (!view) return {};
+  const tops: number[] = [];
+  doc.querySelectorAll("[data-ac-toast-obstacle]").forEach((element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) tops.push(rect.top);
+  });
+  const style: CSSProperties = {};
+  const bottom = toastBottomOffset(view.innerHeight, tops);
+  if (bottom !== null) style.bottom = bottom;
+  const area = doc.querySelector("[data-ac-toast-area]")?.getBoundingClientRect();
+  if (area && area.width > 0) {
+    const inset = 16;
+    style.left = Math.max(0, area.left) + inset;
+    style.right = Math.max(0, view.innerWidth - area.right) + inset;
+  }
+  return style;
+}
+
+interface ToastMessage {
+  text: string;
+  key: number;
+  action?: ToastAction;
+}
+
+/**
+ * Confirmations only ("Код скопирован"); errors stay on the screen (7.7).
+ * A toast stands above the bottom tabs and a pinned main button, never on
+ * them (`toastObstacle`). One with an action stays `TOAST_ACTION_LIFETIME`
+ * and not at all while it is looked at: the pointer over it, the focus in
+ * it, a finger on it, or the page in the background.
+ */
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [message, setMessage] = useState<ToastMessage | null>(null);
+  const [place, setPlace] = useState<CSSProperties>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** Why a toast with an action stays now: each reason holds it until it ends. */
+  const holds = useRef(new Set<"pointer" | "focus" | "hidden">());
+  const lifetime = useRef<number>(motion.toast);
+
+  const hide = useCallback(() => {
     clearTimeout(timer.current);
-    setMessage({ text, key: Date.now() });
-    timer.current = setTimeout(() => setMessage(null), motion.toast);
+    setMessage(null);
   }, []);
+
+  const schedule = useCallback(() => {
+    clearTimeout(timer.current);
+    if (holds.current.size > 0) return;
+    timer.current = setTimeout(() => setMessage(null), lifetime.current);
+  }, []);
+
+  const show = useCallback(
+    (text: string, options: { action?: ToastAction } = {}) => {
+      holds.current.clear();
+      lifetime.current = options.action ? TOAST_ACTION_LIFETIME : motion.toast;
+      setPlace(toastRegionStyle());
+      setMessage({ text, key: Date.now(), action: options.action });
+      schedule();
+    },
+    [schedule],
+  );
+
+  const hold = useCallback(
+    (reason: "pointer" | "focus" | "hidden", on: boolean) => {
+      if (on) {
+        holds.current.add(reason);
+        clearTimeout(timer.current);
+      } else {
+        holds.current.delete(reason);
+        // The full lifetime again once nothing holds it: it was being looked at.
+        schedule();
+      }
+    },
+    [schedule],
+  );
+
+  useEffect(() => {
+    if (!message) return;
+    const replace = () => setPlace(toastRegionStyle());
+    const onVisibility = () => {
+      if (!message.action) return;
+      hold("hidden", document.visibilityState === "hidden");
+    };
+    window.addEventListener("resize", replace);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("resize", replace);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [message, hold]);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={{ show, hide }}>
       {children}
-      <div className="ac-toast-region" role="status" aria-live="polite">
+      <div className="ac-toast-region" role="status" aria-live="polite" style={place}>
         {message && (
-          <div className="ac-toast" key={message.key}>
+          <div
+            className={cx("ac-toast", message.action && "ac-toast--action")}
+            key={message.key}
+            onPointerEnter={message.action ? () => hold("pointer", true) : undefined}
+            onPointerLeave={message.action ? () => hold("pointer", false) : undefined}
+            onFocus={message.action ? () => hold("focus", true) : undefined}
+            onBlur={message.action ? () => hold("focus", false) : undefined}
+          >
             <Icon name="circleCheck" size={20} />
-            <span className="ac-text-body-s">{message.text}</span>
+            <span className="ac-text-body-s ac-toast__text">{message.text}</span>
+            {message.action && (
+              <button
+                type="button"
+                className="ac-toast__action"
+                onClick={() => {
+                  const action = message.action;
+                  hide();
+                  action?.onAction();
+                }}
+              >
+                {message.action.label}
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AiPilot } from "./AiPilot";
+import { useToastObstacle } from "./feedback";
 import { hairline } from "./lines";
 import { IconButton } from "./Button";
 import { Icon } from "./Icon";
@@ -47,6 +48,9 @@ export function BottomTabs<K extends string>({
 }: BottomTabsProps<K>) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  // A toast stands above the bar and the raised AI Pilot button (7.7, TASK-032).
+  const { ref: barRef, onLayout: onBarLayout } = useToastObstacle();
+  const { ref: pilotRef, onLayout: onPilotLayout } = useToastObstacle();
   const half = Math.ceil(items.length / 2);
   const { diameter, lift, ring, figure } = size.centerTab;
 
@@ -76,6 +80,8 @@ export function BottomTabs<K extends string>({
 
   return (
     <View
+      ref={barRef}
+      onLayout={onBarLayout}
       accessibilityRole="tablist"
       style={[
         styles.bar,
@@ -96,6 +102,8 @@ export function BottomTabs<K extends string>({
           style={styles.tab}
         >
           <View
+            ref={pilotRef}
+            onLayout={onPilotLayout}
             style={[
               styles.pilotButton,
               {

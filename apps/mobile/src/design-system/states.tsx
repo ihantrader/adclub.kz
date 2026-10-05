@@ -12,7 +12,13 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Banner, EmptyState, ScreenError, type EmptyStateProps } from "./feedback";
+import {
+  Banner,
+  EmptyState,
+  ScreenError,
+  useToastObstacle,
+  type EmptyStateProps,
+} from "./feedback";
 import { TopBar } from "./navigation";
 import { Text } from "./text";
 import { useTheme } from "./theme";
@@ -129,9 +135,19 @@ export function Screen({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {content}
-        {footer && <View style={styles.footer}>{footer}</View>}
+        {footer && <Footer>{footer}</Footer>}
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** The pinned main action of a screen: a toast stands above it, never on it (7.7, TASK-032). */
+function Footer({ children }: { children: ReactNode }) {
+  const { ref: footerRef, onLayout } = useToastObstacle();
+  return (
+    <View ref={footerRef} onLayout={onLayout} style={styles.footer}>
+      {children}
+    </View>
   );
 }
 

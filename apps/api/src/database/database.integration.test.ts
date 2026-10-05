@@ -120,7 +120,41 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790550000000_order-notices",
       "1790600000000_account-profile-and-garage",
       "1790650000000_account-car-idempotency-key",
+      "1790700000000_supplier-delivery-by-default",
     ]);
+  });
+
+  it("starts every company without delivery by default, and rolls back keeping the companies (supplier delivery by default)", async () => {
+    const city = (
+      await client.query<{ id: string }>(
+        "INSERT INTO city (code, name_ru) VALUES ('delivery-city', 'Город доставки') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const supplier = (
+      await client.query<{ id: string; delivery_by_default: boolean }>(
+        "INSERT INTO supplier (name, city_id) VALUES ('Доставка', $1) RETURNING id, delivery_by_default",
+        [city],
+      )
+    ).rows[0]!;
+    // Only the starting value of a new offer's form: off unless the company turns it on.
+    expect(supplier.delivery_by_default).toBe(false);
+    await expect(
+      client.query("UPDATE supplier SET delivery_by_default = NULL WHERE id = $1", [supplier.id]),
+    ).rejects.toThrow(/null value/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await columnExists(client, "supplier", "delivery_by_default")).toBe(false);
+    // The company stays; only the column is gone.
+    expect(
+      (await client.query("SELECT 1 FROM supplier WHERE id = $1", [supplier.id])).rowCount,
+    ).toBe(1);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await columnExists(client, "supplier", "delivery_by_default")).toBe(true);
+    // What this test put in leaves with it.
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplier.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city]);
+    await walkDownPast(() => columnExists(client, "supplier", "delivery_by_default"));
   });
 
   it("keeps one car per key of an adding within an account, and rolls back keeping the cars (account car idempotency key)", async () => {

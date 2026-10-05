@@ -44,6 +44,12 @@
       "port": 5175
     },
     {
+      "name": "supplier-lan",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:lan"],
+      "port": 5480
+    },
+    {
       "name": "admin-web",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@adclub/admin-web", "dev"],

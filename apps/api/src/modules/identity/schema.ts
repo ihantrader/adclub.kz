@@ -118,6 +118,8 @@ export const supplier = pgTable("supplier", {
   contractSignedOn: date("contract_signed_on"),
   verifiedAt: timestamp("verified_at", { withTimezone: true }),
   leadId: uuid("lead_id"),
+  /** The starting value of «Доставка» in the form of a new offer (S-COMP-01, TASK-032). */
+  deliveryByDefault: boolean("delivery_by_default").notNull().default(false),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

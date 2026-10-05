@@ -1214,6 +1214,76 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
       );
     });
 
+    it("keeps «доставка по умолчанию для новых предложений» with the version and the journal (TASK-032)", async () => {
+      const first = phoneOf(191);
+      const { supplierId } = await supplierWith(first);
+      const me = await cabinet(first);
+      const before = await ok(
+        asSupplier(me.token, "get", "/supplier/company"),
+        (body) => supplierCompanyResponseSchema.parse(body).company,
+      );
+      // A new company starts without it: the form of a new offer starts with pickup only.
+      expect(before.deliveryByDefault).toBe(false);
+
+      const on = await ok(
+        asSupplier(me.token, "patch", "/supplier/company", {
+          expectedVersion: before.version,
+          deliveryByDefault: true,
+        }),
+        (body) => supplierCardResponseSchema.parse(body).company,
+      );
+      expect(on).toMatchObject({ deliveryByDefault: true, version: before.version + 1 });
+      const { rows } = await db.query<{
+        actor_role: string;
+        before: Record<string, unknown>;
+        after: Record<string, unknown>;
+      }>(
+        "SELECT actor_role, before, after FROM audit_log WHERE entity_id = $1 AND action = 'supplier.changed'",
+        [supplierId],
+      );
+      expect(rows).toEqual([
+        {
+          actor_role: "supplier",
+          before: { deliveryByDefault: false },
+          after: { deliveryByDefault: true, version: before.version + 1 },
+        },
+      ]);
+      // The administrator's view of the card carries it too.
+      const admin = await ok(
+        asAdmin("get", `/admin/suppliers/${supplierId}`),
+        (body) => adminSupplierResponseSchema.parse(body).supplier,
+      );
+      expect(admin.deliveryByDefault).toBe(true);
+
+      // The same value again: no version, no entry; a stale version — a conflict.
+      const same = await ok(
+        asSupplier(me.token, "patch", "/supplier/company", {
+          expectedVersion: on.version,
+          deliveryByDefault: true,
+        }),
+        (body) => supplierCardResponseSchema.parse(body).company,
+      );
+      expect(same.version).toBe(on.version);
+      expect(
+        await count("audit_log", "entity_id = $1 AND action = 'supplier.changed'", [supplierId]),
+      ).toBe(1);
+      expectError(
+        await asSupplier(me.token, "patch", "/supplier/company", {
+          expectedVersion: before.version,
+          deliveryByDefault: false,
+        }),
+        409,
+        "SUPPLIER_VERSION_CONFLICT",
+      );
+      // Not a boolean — refused on the field.
+      const refused = await asSupplier(me.token, "patch", "/supplier/company", {
+        expectedVersion: on.version,
+        deliveryByDefault: "yes",
+      });
+      expectError(refused, 400, "VALIDATION_ERROR");
+      expect(refused.body.details[0].path).toBe("deliveryByDefault");
+    });
+
     it("saving the same hours twice raises no version and gives the next editor no conflict", async () => {
       const first = phoneOf(151);
       const { supplierId } = await supplierWith(first);

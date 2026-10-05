@@ -16483,6 +16483,9 @@
               }
             ]
           },
+          "deliveryByDefault": {
+            "type": "boolean"
+          },
           "version": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -16533,6 +16536,7 @@
           "verification",
           "pause",
           "block",
+          "deliveryByDefault",
           "version",
           "createdAt",
           "updatedAt",
@@ -27240,6 +27244,9 @@
               }
             ]
           },
+          "deliveryByDefault": {
+            "type": "boolean"
+          },
           "version": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -27272,6 +27279,7 @@
           "verification",
           "pause",
           "block",
+          "deliveryByDefault",
           "version",
           "createdAt",
           "updatedAt"
@@ -28157,6 +28165,11 @@
           "receipt": {
             "$ref": "#/components/schemas/OfferReceipt"
           },
+          "activeOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "version": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -28193,6 +28206,7 @@
           "withdrawnReason",
           "showcase",
           "receipt",
+          "activeOrders",
           "version",
           "createdAt",
           "updatedAt"
@@ -30179,6 +30193,9 @@
                 "type": "null"
               }
             ]
+          },
+          "deliveryByDefault": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -30230,6 +30247,9 @@
                 "type": "null"
               }
             ]
+          },
+          "deliveryByDefault": {
+            "type": "boolean"
           }
         },
         "required": [

@@ -309,8 +309,8 @@ export class SuppliersService {
 
   /**
    * What the supplier changes on its own card (S-COMP-01; TASK-017): the
-   * address and district of the pickup point and the company's phone —
-   * the same change, versions and journal as the administrator's, only
+   * address and district of the pickup point, the company's phone and
+   * «доставка по умолчанию для новых предложений» (TASK-032) — the same change, versions and journal as the administrator's, only
    * narrower (the route's schema refuses the other fields).
    */
   async updateOwn(
@@ -325,6 +325,7 @@ export class SuppliersService {
         address: input.address,
         district: input.district,
         contactPhone: input.contactPhone,
+        deliveryByDefault: input.deliveryByDefault,
       },
       actor,
     );
@@ -377,6 +378,10 @@ export class SuppliersService {
           row.contactPhone && maskPhone(row.contactPhone),
           next.contactPhone && maskPhone(next.contactPhone),
         );
+      }
+      if (input.deliveryByDefault !== undefined) {
+        next.deliveryByDefault = input.deliveryByDefault;
+        changes.note("deliveryByDefault", row.deliveryByDefault, input.deliveryByDefault);
       }
       let cityRow: CityRow | undefined;
       if (input.cityId !== undefined && input.cityId !== row.cityId) {
@@ -740,6 +745,7 @@ export class SuppliersService {
         row.blockReason && row.blockedAt
           ? { reason: row.blockReason, since: row.blockedAt.toISOString() }
           : null,
+      deliveryByDefault: row.deliveryByDefault,
       version: row.version,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

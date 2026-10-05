@@ -678,14 +678,19 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       await settings.set({ offer_price_max_kzt: 10_000, offer_lead_days_max: 5 });
       const expensive = await own.as("post", "/supplier/offers", inStock(pads.id));
       expectError(expensive, 400, "VALIDATION_ERROR");
-      expect(JSON.stringify(expensive.body.details)).toContain("price");
+      // The bounds come along, so the cabinet names them in its language (TASK-032).
+      expect(expensive.body.details).toEqual([
+        expect.objectContaining({ path: "price", min: 1, max: 10_000 }),
+      ]);
       const slow = await own.as(
         "post",
         "/supplier/offers",
         inStock(pads.id, { price: 9_000, availability: "on_order", leadDays: 6 }),
       );
       expectError(slow, 400, "VALIDATION_ERROR");
-      expect(JSON.stringify(slow.body.details)).toContain("leadDays");
+      expect(slow.body.details).toEqual([
+        expect.objectContaining({ path: "leadDays", min: 0, max: 5 }),
+      ]);
       expect(await db.query("SELECT 1 FROM offer")).toMatchObject({ rowCount: 0 });
     });
 

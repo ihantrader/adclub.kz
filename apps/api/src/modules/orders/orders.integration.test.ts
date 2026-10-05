@@ -19,6 +19,7 @@ import {
   closeOrderResponseSchema,
   createOrderResponseSchema,
   declineOrderResponseSchema,
+  offerPageSchema,
   ORDER_QR_PREFIX,
   orderLookupResponseSchema,
   orderStateConflictDetailsSchema,
@@ -1903,6 +1904,62 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         (b) => checked(adminOrderPageSchema)(b),
       );
       expect(byPeriod.total).toBe(0);
+    });
+
+    it("counts the active orders of each offer — the company's own, by the statuses of its tabs (TASK-032)", async () => {
+      const shop = await company("Активные");
+      const other = await company("Чужие");
+      const offer = await put(shop, padsId);
+      const theirs = await put(other, padsId);
+      const first = await customer();
+      const second = await customer();
+      const third = await customer();
+
+      const own = async (by: Company, offerId: string) =>
+        ok(
+          by.as("get", `/supplier/offers/${offerId}`),
+          (body) => checked(supplierOfferResponseSchema)(body).offer.activeOrders,
+        );
+      const listed = async (by: Company, tab: "on_sale" | "withdrawn") =>
+        ok(by.as("get", `/supplier/offers?tab=${tab}`), (body) =>
+          Object.fromEntries(
+            checked(offerPageSchema)(body).offers.map((entry) => [entry.id, entry.activeOrders]),
+          ),
+        );
+      expect(offer.activeOrders).toBe(0);
+
+      // «Новые» and «В работе» of the supplier's tabs count; another company's orders don't.
+      const a = await place(first, offer);
+      const b = await place(second, offer);
+      await place(third, theirs);
+      await accept(shop, b.id);
+      expect(await own(shop, offer.id)).toBe(2);
+      expect(await listed(shop, "on_sale")).toEqual({ [offer.id]: 2 });
+      expect(await own(other, theirs.id)).toBe(1);
+      const tabs = await ok(shop.as("get", "/supplier/orders?tab=new"), (body) =>
+        checked(supplierOrderPageSchema)(body),
+      );
+      expect(tabs.counts.new + tabs.counts.inProgress).toBe(2);
+
+      // A finished order leaves the count; a withdrawn offer keeps its live orders.
+      await ok(first.as("post", `/orders/${a.id}/cancel`), (body) => body);
+      expect(await own(shop, offer.id)).toBe(1);
+      const withdrawn = await ok(
+        shop.as("post", `/supplier/offers/${offer.id}/withdraw`, {
+          expectedVersion: offer.version,
+        }),
+        (body) => checked(supplierOfferResponseSchema)(body).offer,
+      );
+      expect(withdrawn.activeOrders).toBe(1);
+      expect(await listed(shop, "withdrawn")).toEqual({ [offer.id]: 1 });
+      // The administrator's read-only list shows the same number.
+      const adminList = await ok(
+        asAdmin("get", `/admin/suppliers/${shop.supplierId}/offers?tab=withdrawn`),
+        (body) => checked(offerPageSchema)(body),
+      );
+      expect(adminList.offers.map((entry) => entry.activeOrders)).toEqual([1]);
+      // Another company never reads this offer (404), so never its count.
+      expectError(await other.as("get", `/supplier/offers/${offer.id}`), 404, "NOT_FOUND");
     });
 
     it("pages lists without gaps or repeats", async () => {

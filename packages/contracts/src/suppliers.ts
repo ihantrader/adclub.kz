@@ -586,6 +586,12 @@ export const supplierCardSchema = z.object({
     })
     .nullable(),
   block: z.object({ reason: z.string(), since: z.iso.datetime() }).nullable(),
+  /**
+   * «Доставка по умолчанию для новых предложений» (S-COMP-01, TASK-032):
+   * only the starting value of «Доставка» in the form of a new offer;
+   * existing offers keep what they have.
+   */
+  deliveryByDefault: z.boolean(),
   version: z.number().int(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -744,12 +750,14 @@ const SUPPLIER_COMPANY_FIELDS: ReadonlySet<string> = new Set([
   "address",
   "district",
   "contactPhone",
+  "deliveryByDefault",
 ]);
 
 /**
  * `PATCH /supplier/company` — what the supplier changes on its card
  * (S-COMP-01): the address of the pickup point and its district, the
- * company's phone; the hours and days off are `PUT /supplier/company/schedule`.
+ * company's phone, «доставка по умолчанию для новых предложений»
+ * (TASK-032); the hours and days off are `PUT /supplier/company/schedule`.
  * The name, the БИН, the city and the states are the administrator's: a
  * body naming them is refused (400 `VALIDATION_ERROR`). A field left out
  * stays, `null` clears it. Saving without a change doesn't raise the
@@ -761,6 +769,7 @@ export const updateSupplierCompanyBodySchema = z
     address: plainText(SUPPLIER_ADDRESS_MAX_LENGTH).nullable().optional(),
     district: plainText(SUPPLIER_DISTRICT_MAX_LENGTH).nullable().optional(),
     contactPhone: phoneInputSchema.nullable().optional(),
+    deliveryByDefault: z.boolean().optional(),
   })
   .loose()
   .superRefine((body, context) => {
@@ -1042,6 +1051,7 @@ export const updateSupplierBodySchema = z.object({
   timeZone: timeZoneSchema.optional(),
   address: plainText(SUPPLIER_ADDRESS_MAX_LENGTH).nullable().optional(),
   district: plainText(SUPPLIER_DISTRICT_MAX_LENGTH).nullable().optional(),
+  deliveryByDefault: z.boolean().optional(),
 });
 
 export type UpdateSupplierBody = z.infer<typeof updateSupplierBodySchema>;

@@ -164,6 +164,14 @@ export const supplierOfferSchema = z.object({
   showcase: offerShowcaseSchema,
   /** The receipt date for an order confirmed now. */
   receipt: offerReceiptSchema,
+  /**
+   * «Активные заявки: N» (S-OFF-01; TASK-032): the company's orders on
+   * this offer that are still going through — the statuses of the tabs
+   * «Новые» and «В работе» of the supplier's orders. They keep the price of
+   * their snapshot whatever happens to the offer, and must still be
+   * fulfilled after it is withdrawn.
+   */
+  activeOrders: z.number().int(),
   version: z.number().int(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

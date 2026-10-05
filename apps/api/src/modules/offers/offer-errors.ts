@@ -13,8 +13,18 @@ export function notFound(what: string): ApiException {
   return new ApiException(404, "NOT_FOUND", `No such ${what}`);
 }
 
-export function validationError(path: string, message: string): ApiException {
-  return new ApiException(400, "VALIDATION_ERROR", message, { details: [{ path, message }] });
+/**
+ * `bounds` — the working range of a price or a term (settings, TASK-018
+ * I281), so the cabinet names it in its own language (TASK-032).
+ */
+export function validationError(
+  path: string,
+  message: string,
+  bounds?: { min: number; max: number },
+): ApiException {
+  return new ApiException(400, "VALIDATION_ERROR", message, {
+    details: [{ path, message, ...bounds }],
+  });
 }
 
 export function offerExists(existingOfferId: string, status: OfferStatusValue): ApiException {

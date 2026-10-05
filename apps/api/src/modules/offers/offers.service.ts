@@ -40,6 +40,7 @@ import {
   versionConflict,
   warrantyContacts,
 } from "./offer-errors";
+import { activeOrderCounts } from "./offer-active-orders";
 import { describeOfferItems } from "./offer-items";
 import { describeReceipt, receiptSchedules } from "./offer-receipt";
 import { offerShowcase } from "./offer-showcase";
@@ -473,7 +474,7 @@ export class OffersService {
       return [];
     }
     const now = new Date();
-    const [items, showcase, schedules] = await Promise.all([
+    const [items, showcase, schedules, activeOrders] = await Promise.all([
       describeOfferItems(
         executor,
         this.photos,
@@ -488,6 +489,10 @@ export class OffersService {
       receiptSchedules(
         executor,
         rows.map((row) => row.locationId),
+      ),
+      activeOrderCounts(
+        executor,
+        rows.map((row) => row.id),
       ),
     ]);
     return rows.map((row) => ({
@@ -510,6 +515,7 @@ export class OffersService {
       withdrawnReason: row.withdrawnReason,
       showcase: showcase.get(row.id)!,
       receipt: describeReceipt(schedules.get(row.locationId)!, row.leadDays, now),
+      activeOrders: activeOrders.get(row.id) ?? 0,
       version: row.version,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -526,14 +532,17 @@ export class OffersService {
       this.settings.get("offer_price_max_kzt"),
     ]);
     if (price < min || price > max) {
-      throw validationError("price", `The price must be from ${min} to ${max} tenge`);
+      throw validationError("price", `The price must be from ${min} to ${max} tenge`, { min, max });
     }
   }
 
   private async checkLeadDays(leadDays: number): Promise<void> {
     const max = await this.settings.get("offer_lead_days_max");
     if (leadDays > max) {
-      throw validationError("leadDays", `The term must be at most ${max} working days`);
+      throw validationError("leadDays", `The term must be at most ${max} working days`, {
+        min: 0,
+        max,
+      });
     }
   }
 

@@ -1,7 +1,7 @@
 # TASK REPORT — TASK-031
 
 ## Status
-PARTIAL — 12/13 AC подтверждены; AC-12 (CI на main) подтверждается после push (см. ответ сессии). Проверка на реальных iPhone и Android — за Product Owner (список ниже): у меня нет устройств, HTTPS-путь проверен `curl` с тем же сертификатом.
+PARTIAL — 12/13 AC подтверждены полностью; AC-5 реализован и проверен на production-сборке в браузере, но системный запрос установки Android и шаги iPhone на реальных устройствах не проверены — у меня нет устройств (список проверок для Product Owner ниже; HTTPS-путь проверен `curl` с тем же сертификатом).
 
 ## Result
 `apps/supplier-web` из заглушки стал кабинетом поставщика:
@@ -47,7 +47,7 @@ PARTIAL — 12/13 AC подтверждены; AC-12 (CI на main) подтве
 - `node scripts/icons.mjs --check`, `node scripts/brand-assets.mjs --check` — PASS
 - `pnpm test:integration` — NOT RUN: сервер не менялся.
 - OpenAPI — не менялся (`openapi:check` не запускался отдельно; контракт не тронут).
-- CI на main — см. ответ сессии после push.
+- CI на main — PASS: run 37299081891 на 5a86d58, job ci — success.
 
 ## UAT / E2E
 Браузерная панель Claude (Chromium), API и кабинет из `.claude/launch.json`, данные `dev:suppliers:seed`:
@@ -81,7 +81,7 @@ PARTIAL — 12/13 AC подтверждены; AC-12 (CI на main) подтве
 - AC-9 — PASS (браузер) — kk/ru/en, обе темы, 360 и 1280, ширина 180 px без переполнения; на телефоне с системным шрифтом 200 % — за Product Owner.
 - AC-10 — PASS — `CLAUDE.md` блок 0, `scripts/dev-lan.mjs`; cookie `HttpOnly; Secure; SameSite=Strict` по HTTPS (curl).
 - AC-11 — PASS — `ARCHITECTURE.md` 4.47.
-- AC-12 — PASS локально (format, lint, typecheck, test, build); CI на main — после push.
+- AC-12 — PASS — format, lint, typecheck, test, build локально; CI на main — success (run 37299081891, коммит 5a86d58).
 - AC-13 — PASS — этот отчёт, список проверок ниже.
 
 ## Errors & Fixes
@@ -111,7 +111,6 @@ PARTIAL — 12/13 AC подтверждены; AC-12 (CI на main) подтве
 
 ## Remaining Work
 - Проверка на реальных iPhone и Android по списку ниже (Product Owner).
-- CI на main — после push (в ответе сессии).
 
 ## Future Improvements
 - Разделить бандл (контракты/zod) — 1,27 МБ JS на телефоне при первом открытии.

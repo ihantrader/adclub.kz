@@ -10,6 +10,9 @@ import {
   type CabinetState,
 } from "./cabinet/cabinet-store";
 import { applyDefaultNotificationLanguage } from "./cabinet/notification-language";
+import { ItemSearch } from "./offers/ItemSearch";
+import { NewOfferScreen, OfferCardScreen } from "./offers/OfferScreen";
+import { OffersList } from "./offers/OffersList";
 import { subscribeOnline, isOnline } from "./connection";
 import { useLanguage, useT } from "./i18n";
 import { forgetPerson, installOffered, lastKnown, markInstallOffered } from "./prefs";
@@ -176,8 +179,6 @@ function Page({
   switch (route) {
     case "orders":
       return <SectionPlaceholder title={t("tabs.orders")} icon="receipt" />;
-    case "offers":
-      return <SectionPlaceholder title={t("tabs.offers")} icon="tags" />;
     case "scan":
       return <SectionPlaceholder title={t("tabs.scan")} icon="scan" />;
     case "more":
@@ -202,6 +203,14 @@ function Page({
       return <Settings cabinet={cabinet} />;
     case "team":
       return <Team />;
+    case "offers":
+      return <OffersList />;
+    case "offerSearch":
+      return <ItemSearch />;
+    case "offerNew":
+      return <NewOfferScreen company={cabinet.company.company} />;
+    case "offer":
+      return <OfferCardScreen company={cabinet.company.company} />;
     default:
       return <Company cabinet={cabinet} />;
   }

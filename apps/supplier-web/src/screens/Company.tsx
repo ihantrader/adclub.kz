@@ -9,6 +9,7 @@ import {
   Checkbox,
   IconButton,
   Segments,
+  Switch,
   TextField,
   useToast,
 } from "@adclub/ui";
@@ -119,13 +120,18 @@ export function Company({ cabinet }: { cabinet: Ready }) {
  * both forms to the version the server returned.
  */
 function CompanyForms({ card, onConflict }: { card: SupplierCard; onConflict: () => void }) {
-  const [versions, setVersions] = useState({ point: card.version, schedule: card.version });
+  const [versions, setVersions] = useState({
+    point: card.version,
+    schedule: card.version,
+    delivery: card.version,
+  });
 
   const saved = (next: SupplierCard, previous: number) => {
     setCompanyCard(next);
     setVersions((current) => ({
       point: current.point === previous ? next.version : current.point,
       schedule: current.schedule === previous ? next.version : current.schedule,
+      delivery: current.delivery === previous ? next.version : current.delivery,
     }));
   };
 
@@ -135,6 +141,12 @@ function CompanyForms({ card, onConflict }: { card: SupplierCard; onConflict: ()
       <ScheduleForm
         card={card}
         version={versions.schedule}
+        onSaved={saved}
+        onConflict={onConflict}
+      />
+      <DeliveryDefaultForm
+        card={card}
+        version={versions.delivery}
         onSaved={saved}
         onConflict={onConflict}
       />
@@ -235,6 +247,57 @@ function PointForm({ card, version, onSaved, onConflict }: FormProps) {
         error={phoneError ?? undefined}
       />
       <SaveRow onSave={save} error={error} />
+    </section>
+  );
+}
+
+/**
+ * «Доставка по умолчанию для новых предложений» (S-COMP-01, TASK-032):
+ * saved as soon as it is switched, with the version of the card. Only the
+ * starting value of «Доставка» in the form of a new offer — offers already
+ * on sale keep theirs.
+ */
+function DeliveryDefaultForm({ card, version, onSaved, onConflict }: FormProps) {
+  const t = useT();
+  const toast = useToast();
+  const online = useOnline();
+  const [value, setValue] = useState(card.deliveryByDefault);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const change = async (next: boolean) => {
+    setError(null);
+    setValue(next);
+    setSaving(true);
+    try {
+      const { company } = await apiClient.updateSupplierCompany({
+        expectedVersion: version,
+        deliveryByDefault: next,
+      });
+      onSaved(company, version);
+      setValue(company.deliveryByDefault);
+      toast.show(t("common.saved"));
+    } catch (thrown) {
+      setValue(card.deliveryByDefault);
+      if (isConflict(thrown)) onConflict();
+      else setError(saveErrorText(thrown, t));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="card stack-m">
+      <h2 className="ac-text-heading">{t("company.offers")}</h2>
+      <Switch
+        label={t("company.deliveryDefault")}
+        description={t("company.deliveryDefaultHint")}
+        checked={value}
+        disabled={!online || saving}
+        onChange={(next) => void change(next)}
+      />
+      {!online && <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>}
+      {error && <Banner tone="danger">{error}</Banner>}
     </section>
   );
 }

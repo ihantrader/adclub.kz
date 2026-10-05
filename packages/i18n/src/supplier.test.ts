@@ -87,6 +87,37 @@ describe("supplier cabinet texts", () => {
     expect(supplierText("ru", "placeholder.text")).toBe(
       "Раздел появится в следующем обновлении кабинета",
     );
+    // S-OFF-01…03 and TASK-032.
+    expect(supplierText("ru", "offers.withdrawActive.many", { n: 5 })).toBe(
+      "По этому предложению 5 активных заявок — их нужно выполнить",
+    );
+    expect(supplierText("ru", "offers.activeOrders", { n: 2 })).toBe("Активные заявки: 2");
+    expect(supplierText("ru", "offers.newPriceHint")).toBe("Новая цена — для новых заявок");
+    expect(supplierText("ru", "offers.emptyTitle")).toBe("Предложений пока нет");
+    expect(supplierText("ru", "offers.add")).toBe("Добавить позицию");
+    expect(supplierText("ru", "offers.return")).toBe("Вернуть в продажу");
+    expect(supplierText("ru", "offerSearch.already")).toBe("Уже в ваших предложениях");
+    expect(supplierText("ru", "offerSearch.notFound")).toBe(
+      "Позиции нет в справочнике. Напишите администратору клуба",
+    );
+    expect(supplierText("ru", "offerSearch.rateLimited", { seconds: 30 })).toBe(
+      "Слишком много поисков, подождите 30 с",
+    );
+    expect(supplierText("ru", "offers.error.warrantyContacts")).toBe(
+      "Уберите телефон, ссылку или e-mail из гарантии",
+    );
+    expect(supplierText("ru", "offerForm.previewNoHours")).toBe(
+      "Задайте часы работы, иначе клиенты не увидят предложение",
+    );
+    expect(supplierText("ru", "offerForm.preview")).toBe("Клиент увидит");
+    expect(
+      supplierText("ru", "offerForm.previewPickup", {
+        when: supplierText("ru", "offerForm.tomorrow", { date: "14 марта" }),
+      }),
+    ).toBe("Самовывоз — завтра, 14 марта");
+    expect(supplierText("ru", "company.deliveryDefault")).toBe(
+      "Доставка по умолчанию для новых предложений",
+    );
   });
 
   it("shows the language options in their own language", () => {

@@ -693,3 +693,408 @@ ul {
   box-shadow: 0 0 0 2px var(--ac-color-accent);
   color: var(--ac-color-accent);
 }
+
+/* ---------- offers (S-OFF-01…03, TASK-032) ---------- */
+.page__head--back {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: var(--ac-space-1);
+}
+
+.page__head--back > .ac-icon-button {
+  flex: none;
+  margin-left: calc(-1 * var(--ac-space-3));
+}
+
+.text-link {
+  color: var(--ac-color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.offers-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+/* Two tabs with their counters — wider than a phone with a long word: they scroll sideways. */
+.offers-controls .ac-segments {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+}
+
+.offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+}
+
+.offer-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  min-width: 0;
+  padding: var(--ac-space-4);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.offer-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+}
+
+.offer-card__head > .ac-badge {
+  flex: none;
+}
+
+.offer-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--ac-color-text);
+  font-weight: var(--ac-font-weight-body-strong);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.offer-title:hover {
+  text-decoration: underline;
+}
+
+.offer-card__line {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--ac-space-3);
+  row-gap: 2px;
+}
+
+.offer-card__meta,
+.offer-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--ac-space-3);
+  row-gap: var(--ac-space-1);
+}
+
+.offer-card__actions {
+  justify-content: flex-end;
+}
+
+.active-orders--some {
+  color: var(--ac-color-accent);
+}
+
+.receiving {
+  display: inline-flex;
+  gap: var(--ac-space-2);
+  color: var(--ac-color-text-muted);
+}
+
+.hidden-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  margin: 0;
+  color: var(--ac-color-warning);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.hidden-note > .ac-icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* The fields of a row, edited in place: price, availability, term. */
+.offer-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+}
+
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  min-width: 0;
+  min-height: var(--ac-field);
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+}
+
+.inline-field:focus-within {
+  border-color: var(--ac-color-accent);
+}
+
+.inline-field--error,
+.inline-field--error:focus-within {
+  border-color: var(--ac-color-danger);
+}
+
+.inline-field__input,
+.inline-field__select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ac-color-text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.inline-field__input {
+  width: 4ch;
+}
+
+.inline-field__input--price {
+  width: 11ch;
+}
+
+.inline-field__input:disabled,
+.inline-field__select:disabled {
+  color: var(--ac-color-text-disabled);
+}
+
+.inline-field--select {
+  position: relative;
+  padding-right: var(--ac-space-2);
+}
+
+.inline-field__select {
+  appearance: none;
+  padding-right: var(--ac-space-5);
+  cursor: pointer;
+}
+
+.inline-field--select > .ac-icon {
+  position: absolute;
+  right: var(--ac-space-2);
+  pointer-events: none;
+  color: var(--ac-color-text-muted);
+}
+
+.inline-field__unit {
+  color: var(--ac-color-text-muted);
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+}
+
+.table-wrap {
+  position: relative;
+  overflow-x: auto;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.offers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.offers-table th {
+  padding: var(--ac-space-3) var(--ac-space-2);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  color: var(--ac-color-text-muted);
+  font-weight: var(--ac-font-weight-body);
+  text-align: left;
+  vertical-align: bottom;
+}
+
+.offers-table td {
+  padding: var(--ac-space-3) var(--ac-space-2);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  vertical-align: top;
+}
+
+.offers-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.offers-table th:first-child,
+.offers-table td:first-child {
+  padding-left: var(--ac-space-4);
+}
+
+.offers-table__item {
+  min-width: 180px;
+}
+
+.offers-table__item > * + * {
+  margin-top: var(--ac-space-1);
+}
+
+.offers-table .inline-field__input--price {
+  width: 8ch;
+}
+
+.offers-table .offer-fields {
+  flex-wrap: nowrap;
+}
+
+/* S-OFF-02 */
+.search-hint {
+  margin: 0;
+}
+
+.search-hint--short {
+  color: var(--ac-color-warning);
+}
+
+.found-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--ac-radius-m);
+  list-style: none;
+}
+
+.found-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  width: 100%;
+  min-height: var(--ac-touch-target);
+  padding: var(--ac-space-3) var(--ac-space-4);
+  border: 0;
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.found-item__thumb,
+.item-block__thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface-raised);
+  color: var(--ac-color-text-muted);
+}
+
+.found-item__thumb img,
+.item-block__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.found-item__text,
+.item-block__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.found-item__name,
+.item-block__name {
+  overflow-wrap: anywhere;
+}
+
+.found-item__text > *,
+.item-block__text > * {
+  margin: 0;
+}
+
+.found-item__already {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  color: var(--ac-color-accent);
+}
+
+/* S-OFF-03 and the card */
+.item-block {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.offer-state {
+  gap: var(--ac-space-3);
+}
+
+.offer-state > .ac-badge {
+  align-self: flex-start;
+}
+
+.offer-form fieldset.field-block {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field-narrow {
+  max-width: 220px;
+}
+
+.preview {
+  gap: var(--ac-space-1);
+  background: var(--ac-color-surface-raised);
+}
+
+.preview > p {
+  margin: 0;
+}
+
+.preview__warning {
+  color: var(--ac-color-warning);
+}
+
+/* The main button of the form stays in reach above the tabs on a phone
+   (a toast stands above it, DESIGN 7.7); on a computer it ends the form. */
+.save-bar {
+  position: sticky;
+  bottom: calc(var(--ac-tab-bar) + env(safe-area-inset-bottom));
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-3);
+  margin: 0 calc(-1 * var(--ac-space-4)) calc(-1 * var(--ac-space-4));
+  padding: var(--ac-space-3) var(--ac-space-4);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: 0 0 var(--ac-radius-m) var(--ac-radius-m);
+  background: var(--ac-color-bar);
+}
+
+@media (min-width: 1024px) {
+  .page > .table-wrap {
+    max-width: none;
+  }
+
+  .save-bar {
+    position: static;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+}

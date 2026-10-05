@@ -6,6 +6,7 @@ import {
   IconButton,
   Logo,
   Sidebar,
+  toastArea,
   type NavItem,
 } from "@adclub/ui";
 import { useState, type ReactNode } from "react";
@@ -15,7 +16,16 @@ import { useOnline } from "../connection";
 import { useT } from "../i18n";
 import { useInstallWay } from "../pwa/install";
 import { useAppUpdated } from "../pwa/service-worker";
-import { goBackTo, morePages, navigate, routePaths, tabOf, type RouteKey } from "../router";
+import {
+  goBackTo,
+  menuOf,
+  morePages,
+  navigate,
+  routePaths,
+  tabOf,
+  type RouteKey,
+  type StaticRoute,
+} from "../router";
 import { CompanySwitchDialog } from "./CompanySwitch";
 
 type Ready = Extract<CabinetState, { status: "ready" }>;
@@ -46,13 +56,13 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const canSwitch = (cabinet?.companies.length ?? 0) > 1;
   const banners = cabinet ? companyBanners(cabinet.company.company) : [];
 
-  const tabs: NavItem<RouteKey>[] = [
+  const tabs: NavItem<StaticRoute>[] = [
     { key: "orders", label: t("tabs.orders"), icon: "receipt", href: routePaths.orders },
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
     { key: "more", label: t("tabs.more"), icon: "dots", href: routePaths.more },
   ];
   // The desktop menu lists the sections of «Ещё» directly (design/mockups/supplier.html).
-  const menu: NavItem<RouteKey>[] = [
+  const menu: NavItem<StaticRoute>[] = [
     { key: "orders", label: t("tabs.orders"), icon: "receipt", href: routePaths.orders },
     { key: "scan", label: t("tabs.scan"), icon: "scan", href: routePaths.scan },
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
@@ -80,10 +90,10 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   return (
     <div className="shell">
       <div className="shell__sidebar">
-        <Sidebar<RouteKey>
+        <Sidebar<StaticRoute>
           label={t("nav.label")}
           items={menu}
-          active={route === "more" ? "settings" : route}
+          active={menuOf(route)}
           onSelect={(key) => navigate(key)}
           header={
             <div className="shell__sidebar-head">
@@ -115,7 +125,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
         />
       </div>
 
-      <div className="shell__main">
+      <div className="shell__main" {...toastArea}>
         <header className="topbar">
           {morePages.includes(route) && (
             <IconButton
@@ -176,7 +186,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
       </div>
 
       <div className="shell__tabs">
-        <BottomTabs<RouteKey>
+        <BottomTabs<StaticRoute>
           label={t("nav.label")}
           items={tabs}
           active={tabOf(route)}

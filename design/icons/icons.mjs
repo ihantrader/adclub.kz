@@ -58,6 +58,8 @@ export const ui = {
   sun: "sun",
   tags: "tag",
   trash: "trash",
+  // Delivery of an offer (S-OFF-01, TASK-032); pickup is `store`.
+  truck: "truck",
   user: "user",
   users: "users-three",
   wifiOff: "wifi-slash",

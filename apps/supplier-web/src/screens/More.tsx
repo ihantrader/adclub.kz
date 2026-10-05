@@ -3,7 +3,7 @@ import { Icon } from "@adclub/ui";
 import type { MouseEvent } from "react";
 import { useT } from "../i18n";
 import { useInstallWay } from "../pwa/install";
-import { navigate, routePaths, type RouteKey } from "../router";
+import { navigate, routePaths, type StaticRoute } from "../router";
 
 /** A row of a menu that is a real link (opens in a new tab with a modifier). */
 export function MenuLink({
@@ -11,7 +11,7 @@ export function MenuLink({
   icon,
   label,
 }: {
-  route: RouteKey;
+  route: StaticRoute;
   icon: IconName;
   label: string;
 }) {

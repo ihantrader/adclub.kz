@@ -256,6 +256,7 @@ export type IconName =
   | "sun"
   | "tags"
   | "trash"
+  | "truck"
   | "user"
   | "users"
   | "wifiOff"

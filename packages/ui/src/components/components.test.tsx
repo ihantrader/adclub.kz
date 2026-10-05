@@ -159,6 +159,38 @@ describe("navigation and code", () => {
     );
   });
 
+  it("makes items with an address real links that the app routes on a plain click", () => {
+    const selected: string[] = [];
+    render(
+      <BottomTabs
+        label="Разделы"
+        active="more"
+        onSelect={(key) => selected.push(key)}
+        items={[
+          { key: "orders", label: "Заявки", icon: "receipt", href: "/orders" },
+          { key: "more", label: "Ещё", icon: "dots", href: "/more" },
+        ]}
+        center={{ key: "scan", label: "Сканер", icon: "scan", href: "/scan" }}
+      />,
+    );
+    const orders = screen.getByRole("link", { name: "Заявки" });
+    expect(orders.getAttribute("href")).toBe("/orders");
+    expect(screen.getByRole("link", { name: "Ещё" }).getAttribute("aria-current")).toBe("page");
+    // A plain click is the app's; a click with a modifier is left to the browser.
+    // (Seen after React's handler, then stopped: jsdom can't open another document.)
+    const leftToBrowser: boolean[] = [];
+    const record = (event: Event) => {
+      leftToBrowser.push(!event.defaultPrevented);
+      event.preventDefault();
+    };
+    document.addEventListener("click", record);
+    fireEvent.click(orders);
+    fireEvent.click(screen.getByRole("link", { name: "Сканер" }), { ctrlKey: true });
+    document.removeEventListener("click", record);
+    expect(leftToBrowser).toEqual([false, true]);
+    expect(selected).toEqual(["orders"]);
+  });
+
   it("renders the code in groups and the QR black on white; hides the code before acceptance", () => {
     const { container, rerender } = render(
       <ThemeProvider storageKey="test" defaultMode="dark">

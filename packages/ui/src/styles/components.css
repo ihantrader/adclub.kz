@@ -1110,6 +1110,7 @@ textarea {
   line-height: 18px;
   font-weight: var(--ac-font-weight-label);
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -1152,6 +1153,7 @@ textarea {
   font-size: 11px;
   line-height: 14px;
   font-weight: var(--ac-font-weight-tab);
+  text-decoration: none;
   cursor: pointer;
 }
 

@@ -12,7 +12,8 @@
     }
   },
   "sideEffects": [
-    "*.css"
+    "**/*.css",
+    "./dist/index.js"
   ],
   "peerDependencies": {
     "react": "^19"

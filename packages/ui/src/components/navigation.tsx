@@ -1,5 +1,5 @@
 import { brandSvg, type BrandSvgName, type IconName } from "@adclub/ui-core";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useTheme } from "../theme/ThemeProvider";
 import { Icon } from "./Icon";
 import { cx } from "./cx";
@@ -12,6 +12,55 @@ export interface NavItem<K extends string> {
   count?: number;
   /** Screen reader text for the counter ("3 новые"). */
   countLabel?: string;
+  /**
+   * The address of the section: the item becomes a real link (opens in a
+   * new tab with a modifier or the middle button; a plain click still goes
+   * through `onSelect`, so the app routes without reloading the page).
+   */
+  href?: string;
+}
+
+/** A plain left click, which the app routes itself; anything else is the browser's. */
+function isPlainClick(event: MouseEvent): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+interface NavTargetProps {
+  href?: string;
+  className: string;
+  current: boolean;
+  onSelect: () => void;
+  children: ReactNode;
+}
+
+/** A link when the item has an address, a button otherwise. */
+function NavTarget({ href, className, current, onSelect, children }: NavTargetProps) {
+  if (href !== undefined) {
+    return (
+      <a
+        href={href}
+        className={className}
+        aria-current={current ? "page" : undefined}
+        onClick={(event) => {
+          if (!isPlainClick(event)) return;
+          event.preventDefault();
+          onSelect();
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-current={current ? "page" : undefined}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
+  );
 }
 
 function svgDataUri(svg: string): string {
@@ -67,16 +116,16 @@ export function Sidebar<K extends string>({
       <ul className="ac-sidebar__list">
         {items.map((item) => (
           <li key={item.key}>
-            <button
-              type="button"
+            <NavTarget
+              href={item.href}
               className={cx("ac-nav-item", item.key === active && "ac-nav-item--on")}
-              aria-current={item.key === active ? "page" : undefined}
-              onClick={() => onSelect(item.key)}
+              current={item.key === active}
+              onSelect={() => onSelect(item.key)}
             >
               <Icon name={item.icon} size={20} />
               <span className="ac-nav-item__label">{item.label}</span>
               <Count value={item.count} label={item.countLabel} />
-            </button>
+            </NavTarget>
           </li>
         ))}
       </ul>
@@ -92,7 +141,7 @@ export interface BottomTabsProps<K extends string> {
   active: K;
   onSelect: (key: K) => void;
   /** Raised center button ("Сканер" in the cabinet); inserted in the middle. */
-  center?: { key: K; label: string; icon: IconName };
+  center?: { key: K; label: string; icon: IconName; href?: string };
 }
 
 /** Phone tab bar: 64 + safe area, `bar` background, active tab — `accent` (7.7). */
@@ -105,35 +154,35 @@ export function BottomTabs<K extends string>({
 }: BottomTabsProps<K>) {
   const half = Math.ceil(items.length / 2);
   const tab = (item: NavItem<K>) => (
-    <button
+    <NavTarget
       key={item.key}
-      type="button"
+      href={item.href}
       className={cx("ac-tab", item.key === active && "ac-tab--on")}
-      aria-current={item.key === active ? "page" : undefined}
-      onClick={() => onSelect(item.key)}
+      current={item.key === active}
+      onSelect={() => onSelect(item.key)}
     >
       <span className="ac-tab__icon">
         <Icon name={item.icon} size={24} />
         <Count value={item.count} label={item.countLabel} />
       </span>
       <span className="ac-tab__label">{item.label}</span>
-    </button>
+    </NavTarget>
   );
   return (
     <nav className="ac-tabs" aria-label={label}>
       {items.slice(0, half).map(tab)}
       {center && (
-        <button
-          type="button"
+        <NavTarget
+          href={center.href}
           className={cx("ac-tab", "ac-tab--center", center.key === active && "ac-tab--on")}
-          aria-current={center.key === active ? "page" : undefined}
-          onClick={() => onSelect(center.key)}
+          current={center.key === active}
+          onSelect={() => onSelect(center.key)}
         >
           <span className="ac-tab__center-button">
             <Icon name={center.icon} size={28} />
           </span>
           <span className="ac-tab__label">{center.label}</span>
-        </button>
+        </NavTarget>
       )}
       {items.slice(half).map(tab)}
     </nav>

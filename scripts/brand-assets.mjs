@@ -29,6 +29,9 @@ const BRAND_SVGS = [
   "favicon",
 ];
 
+/** A picture composed of design/brand sources rather than one file of it. */
+const MASKABLE = "<maskable>";
+
 /** Raster outputs: source SVG in design/brand, target, pixel width. */
 const RASTERS = [
   // iOS and store icon: opaque 1024 square, the system applies the mask.
@@ -46,6 +49,12 @@ const RASTERS = [
   // Web clients: home screen icon (iOS ignores SVG there).
   ["app-icon.svg", "apps/supplier-web/public/apple-touch-icon.png", 180],
   ["app-icon.svg", "apps/admin-web/public/apple-touch-icon.png", 180],
+  // The supplier cabinet is installable (PWA, TASK-031): the manifest's icons.
+  ["app-icon.svg", "apps/supplier-web/public/icons/icon-192.png", 192],
+  ["app-icon.svg", "apps/supplier-web/public/icons/icon-512.png", 512],
+  // Maskable (Android crops it to any shape): the adaptive layers keep the
+  // mark inside the safe zone, the full-bleed iOS icon does not.
+  [MASKABLE, "apps/supplier-web/public/icons/maskable-512.png", 512],
 ];
 
 /** Files copied verbatim. */
@@ -54,7 +63,19 @@ const COPIES = [
   ["favicon.svg", "apps/admin-web/public/favicon.svg"],
 ];
 
-const readSvg = (name) => readFile(join(brand, name), "utf8");
+const readSvg = (name) => (name === MASKABLE ? maskableSvg() : readFile(join(brand, name), "utf8"));
+
+/** The two Android adaptive layers as one square picture. */
+async function maskableSvg() {
+  const inner = (svg) =>
+    svg
+      .replace(/^<svg[^>]*>/, "")
+      .replace(/<\/svg>\s*$/, "")
+      .replace(/<title>.*?<\/title>/, "");
+  const background = await readFile(join(brand, "android-icon-background.svg"), "utf8");
+  const foreground = await readFile(join(brand, "android-icon-foreground.svg"), "utf8");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432">${inner(background)}${inner(foreground)}</svg>`;
+}
 
 function render(svg, width) {
   return new Resvg(svg, { fitTo: { mode: "width", value: width } }).render().asPng();

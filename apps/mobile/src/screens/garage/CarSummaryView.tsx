@@ -1,4 +1,5 @@
 import { layout } from "@adclub/ui-core";
+import { randomUUID } from "expo-crypto";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
@@ -20,10 +21,12 @@ import {
   type CarStep,
 } from "../../garage/car-picker";
 import { carTitle, type CarLevel, type GarageCar } from "../../garage/garage";
+import { useOnline } from "../../services/use-network";
 import { useVehicleModifications } from "../../services/use-vehicles";
 import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
 import { ColorSheet } from "./ColorSheet";
+import { garageErrorText } from "./garage-errors";
 
 const STEP_TEXT = {
   make: "car.step.make",
@@ -86,6 +89,10 @@ export function CarSummaryView({
   const t = useT();
   const toast = useToast();
   const garage = useGarage();
+  const online = useOnline();
+  // A signed-in person's car is saved in the account: without a network
+  // there is nothing to save it to (TASK-029.B, no queue of changes).
+  const offline = garage.remote && !online;
 
   const [pickedColor, setPickedColor] = useState<CarColorId | null>(color);
   const [colorSheet, setColorSheet] = useState(false);
@@ -98,6 +105,9 @@ export function CarSummaryView({
   // it is saved (or never, if it is only ever looked at and left).
   const [id] = useState(() => car?.id ?? garage.nextId());
   const [addedAt] = useState(() => car?.addedAt ?? new Date().toISOString());
+  // One key per adding screen: «Сохранить» pressed again after an answer
+  // was lost adds nothing new (ARCHITECTURE 4.46).
+  const [idempotencyKey] = useState(() => randomUUID());
 
   // The single modification the chosen levels name, if any — the same
   // request the last step already made, so this is normally already in its
@@ -112,30 +122,48 @@ export function CarSummaryView({
       color: finalColor,
     });
 
-  const commit = (built: GarageCar) => {
+  const [saving, setSaving] = useState(false);
+
+  /** Saved only once the server said so (signed in); a refusal leaves the screen as it was. */
+  const commit = async (built: GarageCar) => {
     if (!isActive()) return;
-    if (car) garage.update(built);
-    else garage.add(built);
-    toast.show(t("garage.added"));
-    onSaved(built);
+    setSaving(true);
+    try {
+      const saved = car ? await garage.update(built) : await garage.add(built, idempotencyKey);
+      toast.show(t("garage.added"));
+      onSaved(saved);
+    } catch (error) {
+      toast.show(garageErrorText(error, t));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const save = () => {
+  const save = async () => {
     if (!isActive()) return;
     const built = build(pickedColor);
     if (!built) return;
+    if (garage.remote) {
+      // «Такой автомобиль уже есть» is asked about the account's garage as
+      // it is now — another phone may have added the same car meanwhile.
+      const synced = await garage.sync();
+      if (synced.kind === "failed") {
+        toast.show(garageErrorText(synced.error, t));
+        return;
+      }
+    }
     const existing = garage.duplicateOf(built);
     if (existing) {
       setDuplicate(existing);
       return;
     }
-    commit(built);
+    await commit(built);
   };
 
   const saveAnyway = () => {
     const built = build(pickedColor);
     setDuplicate(null);
-    if (built) afterDialog.after(() => commit(built));
+    if (built) afterDialog.after(() => void commit(built));
   };
 
   const editLevel = (level: CarLevel) => {
@@ -153,7 +181,18 @@ export function CarSummaryView({
     <Screen
       title={t("car.summary.title")}
       back={{ label: t("common.back"), onPress: onBack }}
-      footer={<Button onPress={save}>{t("car.summary.save")}</Button>}
+      footer={
+        <View style={styles.footer}>
+          <Button onPress={save} loading={saving} disabled={offline}>
+            {t("car.summary.save")}
+          </Button>
+          {offline && (
+            <Text variant="caption" color="textMuted" style={styles.center}>
+              {t("garage.needsNetwork")}
+            </Text>
+          )}
+        </View>
+      }
     >
       <View style={styles.content}>
         <Text variant="bodyS" color="textMuted">
@@ -249,4 +288,6 @@ export function CarSummaryView({
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
+  footer: { gap: 8 },
+  center: { textAlign: "center" },
 });

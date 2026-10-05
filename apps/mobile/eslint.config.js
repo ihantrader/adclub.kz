@@ -13,8 +13,8 @@ module.exports = [
     },
   },
   {
-    // Metro loads its config as a CommonJS Node module.
-    files: ["metro.config.js"],
+    // Metro loads its config, and Expo its config plugins, as CommonJS Node modules.
+    files: ["metro.config.js", "plugins/**/*.js"],
     languageOptions: {
       sourceType: "commonjs",
       globals: { require: "readonly", module: "writable", __dirname: "readonly" },

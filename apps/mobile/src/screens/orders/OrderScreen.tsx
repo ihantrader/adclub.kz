@@ -5,7 +5,7 @@ import { formatOrderCode, layout, radius } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import {
   Banner,
   Button,
@@ -26,19 +26,28 @@ import {
   useToast,
 } from "../../design-system";
 import { formatTenge, parseDate } from "../../catalog/format";
+import { runEnvironment } from "../../config/environment";
 import type { RootParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { rememberOpenedOrder } from "../../orders/opened-orders";
 import { copyIsBehind } from "../../orders/order-copy";
 import { isActiveStatus, orderMarkKey, orderStatusView } from "../../orders/order-status";
 import { orderViewOfCopy, orderViewOfServer, type OrderView } from "../../orders/order-view";
-import { callUrl, navigatorLinks, weeklyHoursLines } from "../../orders/pickup-place";
+import {
+  callOptions,
+  callUrl,
+  detectWhatsapp,
+  openCallOption,
+  type CallOption,
+} from "../../orders/call-options";
+import { navigatorLinks, weeklyHoursLines } from "../../orders/pickup-place";
 import { apiClient } from "../../services/api";
 import { useOnline } from "../../services/use-network";
 import { useRequest } from "../../services/use-request";
 import { useLanguage } from "../../state/language";
 import { useOrdersCopy, useOrdersReadOnly } from "../../state/orders-provider";
 import { ItemPhoto } from "../catalog/parts";
+import { CallSheet } from "./CallSheet";
 import { NavigatorSheet } from "./NavigatorSheet";
 import { useNow, useOrderTime } from "./parts";
 import { useRepeatOrder } from "./use-repeat-order";
@@ -396,10 +405,33 @@ export function OrderScreen({ route, navigation }: Props) {
  */
 function PickupPlace({ order }: { order: OrderView }) {
   const { t } = useLanguage();
+  const toast = useToast();
   const [navigators, setNavigators] = useState(false);
+  const [callSheet, setCallSheet] = useState(false);
+  const [callChoices, setCallChoices] = useState<readonly CallOption[]>([]);
   const point = order.pickupPoint!;
   const canRoute = navigatorLinks(point, "android").length > 0;
   const call = callUrl(point.phone);
+
+  const openCall = async (option: CallOption) => {
+    if (!(await openCallOption(option, (url) => Linking.openURL(url)))) {
+      toast.show(t("order.openFailed"));
+    }
+  };
+  // «Позвонить»: the sheet only when a WhatsApp is there to choose (asked
+  // now — an app installed a minute ago counts), otherwise the call at once.
+  const startCall = async () => {
+    const presence = await detectWhatsapp(runEnvironment, Platform.OS, (url) =>
+      Linking.canOpenURL(url),
+    );
+    const options = callOptions(point.phone, presence);
+    if (options.length > 1) {
+      setCallChoices(options);
+      setCallSheet(true);
+    } else if (options[0]) {
+      await openCall(options[0]);
+    }
+  };
   const lines = weeklyHoursLines(point.weeklyHours);
   return (
     <View style={styles.place}>
@@ -449,18 +481,19 @@ function PickupPlace({ order }: { order: OrderView }) {
             </Button>
           )}
           {call && (
-            <Button
-              variant="secondary"
-              size="m"
-              icon="phone"
-              onPress={() => void Linking.openURL(call)}
-            >
+            <Button variant="secondary" size="m" icon="phone" onPress={startCall}>
               {t("order.call")}
             </Button>
           )}
         </ButtonRow>
       )}
       <NavigatorSheet visible={navigators} onClose={() => setNavigators(false)} place={point} />
+      <CallSheet
+        visible={callSheet}
+        onClose={() => setCallSheet(false)}
+        options={callChoices}
+        onPick={(option) => void openCall(option)}
+      />
     </View>
   );
 }

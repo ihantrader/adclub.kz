@@ -29,6 +29,14 @@ export interface SessionFetchCallbacks {
 
 const REFRESH_TIMEOUT_MS = 8_000;
 
+/**
+ * One attempt of a request (the first, or the retry after an exchange); the
+ * API client's own limit (`services/api.ts`) covers the whole call — attempt,
+ * exchange and retry — and is longer, so a slow exchange does not cut the
+ * retry short (TASK-029.B).
+ */
+export const ATTEMPT_TIMEOUT_MS = 8_000;
+
 /** The exchange itself, independent of the wrapped `fetch` — never recurses through it. */
 async function exchangeRefreshToken(refreshToken: string): Promise<ExchangeResult> {
   const controller = new AbortController();
@@ -78,5 +86,6 @@ export function createSessionAwareFetch(callbacks: SessionFetchCallbacks): Fetch
       callbacks.onSessionEnded();
     },
     exchange: exchangeRefreshToken,
+    attemptTimeoutMs: ATTEMPT_TIMEOUT_MS,
   });
 }

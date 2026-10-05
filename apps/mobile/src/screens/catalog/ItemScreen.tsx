@@ -272,7 +272,12 @@ export function ItemScreen({
                   )}
                   <View style={styles.offers}>
                     {data.offers.map((offer) => (
-                      <OfferCard key={offer.id} offer={offer} onOrder={ordering.press} />
+                      <OfferCard
+                        key={offer.id}
+                        offer={offer}
+                        onOrder={ordering.press}
+                        onSupplierSignIn={ordering.askSupplierSignIn}
+                      />
                     ))}
                   </View>
                 </>
@@ -390,7 +395,9 @@ function useOrderButton(
   const signIn = useSignIn();
   const navigation = useNavigation();
   const focused = useIsFocused();
-  const [signInSheet, setSignInSheet] = useState(false);
+  // One sign-in sheet for the whole card (TASK-029.B): the reason says why
+  // it opened — «Оформить» or the hidden name of a supplier (T-GATE-02).
+  const [signInReason, setSignInReason] = useState<"order" | "supplier" | null>(null);
   const [clubSheet, setClubSheet] = useState(false);
   const [pending, setPending] = useState<{ offerId: string; afterReturn: boolean } | null>(null);
   const left = useRef(false);
@@ -441,7 +448,7 @@ function useOrderButton(
     switch (gate) {
       case "sign-in":
         setPending({ offerId, afterReturn: true });
-        setSignInSheet(true);
+        setSignInReason("order");
         return;
       case "register":
         setPending({ offerId, afterReturn: true });
@@ -457,12 +464,13 @@ function useOrderButton(
 
   return {
     press,
+    askSupplierSignIn: () => setSignInReason("supplier"),
     sheets: (
       <>
         <SignInSheet
-          visible={signInSheet}
-          onClose={() => setSignInSheet(false)}
-          reason={t("auth.gateOrder")}
+          visible={signInReason !== null}
+          onClose={() => setSignInReason(null)}
+          reason={t(signInReason === "supplier" ? "auth.gateSupplierName" : "auth.gateOrder")}
         />
         <ClubAccessSheet visible={clubSheet} onClose={() => setClubSheet(false)} />
       </>
@@ -473,15 +481,17 @@ function useOrderButton(
 function OfferCard({
   offer,
   onOrder,
+  onSupplierSignIn,
 }: {
   offer: ShowcaseOffer;
   onOrder: (offerId: string) => void;
+  /** A guest taps «Поставщик клуба»: the card's one sign-in sheet opens. */
+  onSupplierSignIn: () => void;
 }) {
   const { t, lang } = useLanguage();
   const { theme } = useTheme();
   const receiptText = useReceiptText();
   const date = receiptText(offer.receipt, "withDate");
-  const [signInSheet, setSignInSheet] = useState(false);
   // A guest taps «Поставщик клуба» to sign in (T-GATE-02, SCREENS M-AUTH-00);
   // a signed-in user without club access sees the same line, but nothing
   // here can get them access yet (a subscription — EPIC-14), so it stays inert.
@@ -535,7 +545,7 @@ function OfferCard({
       <Pressable
         disabled={!opensSignIn}
         accessibilityRole={opensSignIn ? "button" : undefined}
-        onPress={() => setSignInSheet(true)}
+        onPress={onSupplierSignIn}
         style={styles.supplierLine}
       >
         {offer.supplier.kind === "hidden" ? (
@@ -549,13 +559,6 @@ function OfferCard({
           <Text variant="bodyStrong">{offer.supplier.name}</Text>
         )}
       </Pressable>
-      {opensSignIn && (
-        <SignInSheet
-          visible={signInSheet}
-          onClose={() => setSignInSheet(false)}
-          reason={t("auth.gateSupplierName")}
-        />
-      )}
       {offer.supplier.kind === "visible" && (offer.supplier.district ?? offer.supplier.address) && (
         <Text variant="bodyS" color="textMuted">
           {offer.supplier.district ?? offer.supplier.address}

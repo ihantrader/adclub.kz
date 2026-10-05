@@ -128,9 +128,6 @@ export function AppStart() {
       // The first run (city → car → the steps), the tabs, a push. The city and
       // the car steps finish by themselves, and each of them changes this
       // decision — the navigator reads where to open once and is not rebuilt.
-      // Rule 4's "Вы вышли из аккаунта" sheet comes with the session
-      // (TASK-029); today no session can be revoked, so there is nothing to
-      // show over it.
       // The key: a device whose storage answered late was opened on the
       // defaults, and the navigator opens again — once — on what the device
       // really holds (a returning person must not be left on the first run).

@@ -1,6 +1,17 @@
 import { layout, radius } from "@adclub/ui-core";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Badge, Button, Icon, IconBadge, OfflineBanner, Screen, Text } from "../../design-system";
+import {
+  Badge,
+  Button,
+  Icon,
+  IconBadge,
+  OfflineBanner,
+  Screen,
+  Text,
+  useToast,
+} from "../../design-system";
 import { findCarColor } from "../../garage/car-color";
 import { carParameters, carTitle, type GarageCar } from "../../garage/garage";
 import { useOnline } from "../../services/use-network";
@@ -9,6 +20,7 @@ import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
 import { useSession } from "../../state/session-provider";
 import { useTheme } from "../../design-system";
+import { garageErrorText } from "./garage-errors";
 
 export interface GarageViewProps {
   onAdd: () => void;
@@ -20,12 +32,36 @@ export interface GarageViewProps {
  * works without a network: the banner says there is none, the garage stays
  * (SCREENS 2.4). «Войдите — гараж сохранится» is a guest's note only: a
  * signed-in member was told it while already signed in (TASK-030.A).
+ *
+ * Signed in, the garage is the account's (TASK-029.B): opening the tab reads
+ * it again, so a car added or removed on another phone shows here; without a
+ * network the copy is shown and «Сделать основным» is off.
  */
 export function GarageView({ onAdd, onOpen }: GarageViewProps) {
   const t = useT();
   const online = useOnline();
-  const { cars, state, makePrimary } = useGarage();
+  const { cars, state, remote, makePrimary, sync } = useGarage();
   const session = useSession();
+  const toast = useToast();
+  const offline = remote && !online;
+  const [pendingPrimary, setPendingPrimary] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (remote) void sync();
+    }, [remote, sync]),
+  );
+
+  const choosePrimary = async (carId: string) => {
+    setPendingPrimary(carId);
+    try {
+      await makePrimary(carId);
+    } catch (error) {
+      toast.show(garageErrorText(error, t));
+    } finally {
+      setPendingPrimary(null);
+    }
+  };
 
   return (
     <Screen
@@ -52,7 +88,9 @@ export function GarageView({ onAdd, onOpen }: GarageViewProps) {
                 car={car}
                 primary={car.id === state.primaryId}
                 onOpen={() => onOpen(car)}
-                onMakePrimary={() => makePrimary(car.id)}
+                onMakePrimary={() => void choosePrimary(car.id)}
+                primaryPending={pendingPrimary === car.id}
+                offline={offline}
               />
             ))}
             {/* The guest's note of M-GAR-01. */}
@@ -73,11 +111,16 @@ function CarCard({
   primary,
   onOpen,
   onMakePrimary,
+  primaryPending,
+  offline,
 }: {
   car: GarageCar;
   primary: boolean;
   onOpen: () => void;
   onMakePrimary: () => void;
+  primaryPending: boolean;
+  /** Signed in without a network: the main car cannot change now. */
+  offline: boolean;
 }) {
   const t = useT();
   const { theme } = useTheme();
@@ -134,9 +177,23 @@ function CarCard({
           {t("garage.primary")}
         </Badge>
       ) : (
-        <Button variant="text" size="m" onPress={onMakePrimary} style={styles.primaryButton}>
-          {t("garage.makePrimary")}
-        </Button>
+        <View style={styles.primaryRow}>
+          <Button
+            variant="text"
+            size="m"
+            onPress={onMakePrimary}
+            loading={primaryPending}
+            disabled={offline}
+            style={styles.primaryButton}
+          >
+            {t("garage.makePrimary")}
+          </Button>
+          {offline && (
+            <Text variant="caption" color="textMuted">
+              {t("garage.needsNetwork")}
+            </Text>
+          )}
+        </View>
       )}
     </Pressable>
   );
@@ -155,6 +212,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1, gap: 2 },
   colorRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   swatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1 },
+  primaryRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   primaryButton: { alignSelf: "flex-start", paddingHorizontal: 0 },
   note: { paddingTop: 8 },
 });

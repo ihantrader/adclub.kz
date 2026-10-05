@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DeviceStorage } from "./device-store";
 import {
   createSessionStore,
-  parseSessionState,
+  parseStoredSessionState,
   SIGNED_OUT,
   type StoredSession,
 } from "./session-store";
@@ -31,13 +31,13 @@ const SESSION: StoredSession = {
   sessionExpiresAt: "2026-12-25T10:00:00.000Z",
 };
 
-describe("parseSessionState", () => {
+describe("parseStoredSessionState", () => {
   it("reads a signed-out value", () => {
-    expect(parseSessionState({ status: "signed_out" })).toEqual(SIGNED_OUT);
+    expect(parseStoredSessionState({ status: "signed_out" })).toEqual(SIGNED_OUT);
   });
 
   it("reads a signed-in value with a full session", () => {
-    expect(parseSessionState({ status: "signed_in", session: SESSION })).toEqual({
+    expect(parseStoredSessionState({ status: "signed_in", session: SESSION })).toEqual({
       status: "signed_in",
       session: SESSION,
     });
@@ -45,13 +45,13 @@ describe("parseSessionState", () => {
 
   it("rejects a signed-in value missing a field (never a half-usable session)", () => {
     const { refreshToken: _dropped, ...incomplete } = SESSION;
-    expect(parseSessionState({ status: "signed_in", session: incomplete })).toBeNull();
+    expect(parseStoredSessionState({ status: "signed_in", session: incomplete })).toBeNull();
   });
 
   it("rejects garbage", () => {
-    expect(parseSessionState(null)).toBeNull();
-    expect(parseSessionState("mobile")).toBeNull();
-    expect(parseSessionState({ status: "whatever" })).toBeNull();
+    expect(parseStoredSessionState(null)).toBeNull();
+    expect(parseStoredSessionState("mobile")).toBeNull();
+    expect(parseStoredSessionState({ status: "whatever" })).toBeNull();
   });
 });
 

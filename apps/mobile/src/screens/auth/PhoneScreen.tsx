@@ -31,7 +31,6 @@ export function PhoneScreen({ navigation }: NativeStackScreenProps<RootParams, "
         phone: response.phone,
         channel: response.channel,
         codeLength: response.codeLength,
-        expiresAt: response.expiresAt,
         resendAvailableAt: response.resendAvailableAt,
       });
     } catch (thrown) {

@@ -32,9 +32,9 @@ function deviceTitle(session: SessionSummary, t: LanguageContextValue["t"]): str
   if (session.deviceName) return session.deviceName;
   switch (session.platform) {
     case "ios":
-      return "iPhone / iPad";
+      return t("profile.platformIos");
     case "android":
-      return "Android";
+      return t("profile.platformAndroid");
     case "supplier-web":
       return t("profile.supplierCabinet");
     case "admin-web":

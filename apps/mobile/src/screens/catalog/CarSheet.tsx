@@ -1,14 +1,15 @@
 import { space } from "@adclub/ui-core";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Button, Icon, ListRow, Sheet, useAfterDismiss } from "../../design-system";
+import { Button, Icon, ListRow, Sheet, Text, useAfterDismiss } from "../../design-system";
 import { carParameters, carTitle } from "../../garage/garage";
+import { useOnline } from "../../services/use-network";
 import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
 
 export interface CarSheetProps {
   visible: boolean;
   onClose: () => void;
-  onPickCar: (carId: string) => void;
+  onPickCar: (carId: string) => Promise<void> | void;
   onAddCar: () => void;
 }
 
@@ -20,10 +21,16 @@ export interface CarSheetProps {
  * What a tap starts — the catalog reloading for another car, the steps of
  * choosing one opening — waits until the sheet has gone: the sheet closes,
  * and then the screen moves, not both at once.
+ *
+ * Signed in, another car is a change of the account (TASK-029.B): without a
+ * network only the current one is shown as chosen, the others wait with
+ * «Нужна сеть».
  */
 export function CarSheet({ visible, onClose, onPickCar, onAddCar }: CarSheetProps) {
   const t = useT();
-  const { cars, state } = useGarage();
+  const { cars, state, remote } = useGarage();
+  const online = useOnline();
+  const offline = remote && !online;
   const dismissed = useAfterDismiss(visible);
 
   return (
@@ -38,6 +45,7 @@ export function CarSheet({ visible, onClose, onPickCar, onAddCar }: CarSheetProp
         <ScrollView style={styles.list}>
           {cars.map((car, index) => {
             const parameters = carParameters(car);
+            const current = car.id === state.primaryId;
             return (
               <ListRow
                 key={car.id}
@@ -45,15 +53,24 @@ export function CarSheet({ visible, onClose, onPickCar, onAddCar }: CarSheetProp
                 icon="car"
                 title={carTitle(car)}
                 subtitle={parameters.length > 0 ? parameters.join(" · ") : undefined}
-                onPress={() => {
-                  dismissed.after(() => onPickCar(car.id));
-                  onClose();
-                }}
-                trailing={car.id === state.primaryId ? <Icon name="check" color="accent" /> : null}
+                onPress={
+                  offline && !current
+                    ? undefined
+                    : () => {
+                        dismissed.after(() => void onPickCar(car.id));
+                        onClose();
+                      }
+                }
+                trailing={current ? <Icon name="check" color="accent" /> : null}
               />
             );
           })}
         </ScrollView>
+        {offline && cars.length > 1 && (
+          <Text variant="caption" color="textMuted">
+            {t("garage.needsNetwork")}
+          </Text>
+        )}
 
         <Button
           variant="secondary"

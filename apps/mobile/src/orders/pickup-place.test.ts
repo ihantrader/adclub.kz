@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { callUrl, navigatorLinks, openNavigator, weeklyHoursLines } from "./pickup-place";
+import { callUrl } from "./call-options";
+import { navigatorLinks, openNavigator, weeklyHoursLines } from "./pickup-place";
 
 // Plain Node checks of «Поставщик и место» after acceptance (M-ORD-03, D-026).
 

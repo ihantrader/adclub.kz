@@ -11,19 +11,27 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 import { useToast } from "../design-system";
-import { garageStateFromAccountCars } from "../garage/account-cars";
 import { INITIAL_GARAGE } from "../garage/garage";
+import { accountGarage } from "../services/account-garage";
 import { apiClient, sessionEndedNotice } from "../services/api";
 import {
   completeRegistration as apiCompleteRegistration,
   getAccountProfile,
-  transferGarage as apiTransferGarage,
   updateAccountProfile as apiUpdateAccountProfile,
 } from "../services/account-api";
-import type { CitySelection } from "./city";
+import { selectionOf, type CitySelection } from "./city";
 import { useT } from "./language";
-import { cityStore, clearSession, garageStore, languageStore, sessionStore } from "./stores";
+import { runProfileSync } from "./profile-sync";
+import {
+  cityStore,
+  clearSession,
+  garageStore,
+  languageStore,
+  profileSyncStore,
+  sessionStore,
+} from "./stores";
 import type { StoredSession } from "./session-store";
 
 /** `SessionTokens` plus the account id `verifyLoginCode` answers with, as this device keeps a session. */
@@ -48,12 +56,16 @@ function cityIdOf(selection: CitySelection): string | null {
   return selection.kind === "city" ? selection.id : null;
 }
 
+function currentAccountId(): string | null {
+  const state = sessionStore.get();
+  return state.status === "signed_in" ? state.session.accountId : null;
+}
+
 export interface SessionContextValue {
   status: "guest" | "signed_in";
   accountId: string | null;
   /** `null` while a signed-in profile hasn't loaded yet, or for a guest. */
   profile: AccountProfile | null;
-  profileLoading: boolean;
   /** Stores the tokens `verifyLoginCode` returned and loads the profile behind them. */
   beginSession: (session: StoredSession) => Promise<AccountProfile | null>;
   /** M-AUTH-03 «Готово»: gives the account a name and the mandatory consent. */
@@ -66,11 +78,18 @@ export interface SessionContextValue {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 /**
- * The signed-in session and the account profile behind it (TASK-029): one
- * value for the whole app, like `GarageProvider` and `LanguageProvider`.
+ * The signed-in session and the account behind it (TASK-029, TASK-029.B):
+ * one value for the whole app, like `GarageProvider` and `LanguageProvider`.
  * Rendered inside `GarageProvider`/`CityProvider`/`LanguageProvider`/
- * `ToastProvider` (`App.tsx`) — it reads and writes the guest garage, the
- * city and the language, and shows T-AUTH-06 on a successful transfer.
+ * `ToastProvider` (`App.tsx`).
+ *
+ * Once registration is finished the account is the source of truth for the
+ * garage, the city and the language (ARCHITECTURE 4.46). This is where the
+ * device and the account meet: at a sign-in and every launch, and whenever
+ * the app comes back from the background, the profile is read, the garage
+ * copy is synced (the guest garage transferred first, if it has cars) and
+ * the city and the language are reconciled (`runProfileSync`); a change of
+ * the city or the language on this device is sent at once.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const state = useSyncExternalStore(sessionStore.subscribe, sessionStore.get);
@@ -80,107 +99,127 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const { show } = useToast();
 
   const [profile, setProfile] = useState<AccountProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  // Whether a garage/city/language sync has been tried this app run — the
-  // transfer itself is idempotent (repeating it is harmless), this only
-  // avoids calling it on every render.
-  const transferTried = useRef(false);
-  const syncedDeviceValues = useRef<{ cityId: string | null; language: string | null } | null>(
-    null,
-  );
+  // One read of the profile at a time: a sign-in asks for it and so does the
+  // effect that sees the session appear — they share the request.
+  const profileRequest = useRef<Promise<AccountProfile | null> | null>(null);
+  // One pass of the city and language sync at a time, in order.
+  const profileQueue = useRef<Promise<void>>(Promise.resolve());
 
   const status: "guest" | "signed_in" = state.status === "signed_in" ? "signed_in" : "guest";
   const accountId = state.status === "signed_in" ? state.session.accountId : null;
 
-  const loadProfile = useCallback(async (): Promise<AccountProfile | null> => {
-    setProfileLoading(true);
-    try {
-      const next = await getAccountProfile();
-      setProfile(next);
-      return next;
-    } catch (error) {
-      // A session that just ended is handled by the session store flipping
-      // to signed-out (`createSessionAwareFetch`) — nothing more to do here.
-      if (!isApiError(error)) throw error;
-      return null;
-    } finally {
-      setProfileLoading(false);
-    }
+  const loadProfile = useCallback((): Promise<AccountProfile | null> => {
+    if (profileRequest.current) return profileRequest.current;
+    const request = getAccountProfile()
+      .then((next) => {
+        // A late answer for a session that has ended meanwhile is not shown.
+        if (currentAccountId() === null) return null;
+        setProfile(next);
+        return next;
+      })
+      .catch((error: unknown) => {
+        // A session that just ended is handled by the session store flipping
+        // to signed-out (`createSessionAwareFetch`) — nothing more to do here.
+        if (!isApiError(error)) throw error;
+        return null;
+      })
+      .finally(() => {
+        profileRequest.current = null;
+      });
+    profileRequest.current = request;
+    return request;
   }, []);
 
-  /**
-   * The silent transfer of TASK-029 requirement 5: the guest garage merges
-   * into the account (only once there is one to send), and the device's
-   * city and language catch the account up. A failure here never blocks
-   * being signed in (requirement 5, edge case "перенос не прошёл") — it
-   * simply hasn't happened yet, and this runs again next launch.
-   */
-  const runTransfer = useCallback(async () => {
-    if (transferTried.current) return;
-    transferTried.current = true;
-    try {
-      const guest = garageStore.get();
-      if (guest.cars.length > 0) {
-        const result = await apiTransferGarage(guest.cars, guest.primaryId);
-        garageStore.set(garageStateFromAccountCars(result.cars));
-        if (result.transferred > 0) show(t("auth.garageTransferred"));
-      }
-      // Read from the stores now, not from the render this callback was made
-      // in: it is made once, long before the city is chosen or the language
-      // known, and a stale value here overwrote the account's city with
-      // `null` right after the sync effect below had set it (found in the
-      // browser walk-through of TASK-029.A).
-      const cityId = cityIdOf(cityStore.get().selection);
-      const lang = languageStore.get();
-      syncedDeviceValues.current = { cityId, language: lang };
-      const next = await apiUpdateAccountProfile({ cityId, ...(lang ? { language: lang } : {}) });
-      setProfile(next);
-    } catch {
-      transferTried.current = false;
-    }
-  }, [show, t]);
+  /** One pass of the city and language rule; `account` — as just read, or `null` (only the device changed). */
+  const syncProfile = useCallback((account: AccountProfile | null): Promise<void> => {
+    const pass = async () => {
+      const accountId = currentAccountId();
+      if (accountId === null) return;
+      await runProfileSync({
+        accountId,
+        account: account && { cityId: account.cityId, language: account.language },
+        device: () => ({
+          cityId: cityIdOf(cityStore.get().selection),
+          language: languageStore.get(),
+        }),
+        synced: profileSyncStore,
+        resolveCity: async (cityId) => {
+          try {
+            const { cities } = await apiClient.getCities();
+            const match = cities.find((item) => item.id === cityId);
+            // Archived by an administrator: as with any city the list no
+            // longer has (`reconcileCity`) — «Весь Казахстан».
+            return match ? selectionOf(match) : { kind: "all" };
+          } catch {
+            return "unavailable";
+          }
+        },
+        setDeviceCity: (selection) => {
+          cityStore.set({ ...cityStore.get(), selection, chosen: true });
+        },
+        // A language from the account is a chosen one: the start never asks again.
+        setDeviceLanguage: languageStore.set,
+        push: async (patch) => {
+          const next = await apiUpdateAccountProfile(patch);
+          if (currentAccountId() === accountId) setProfile(next);
+        },
+      });
+    };
+    const next = profileQueue.current.then(pass).catch(() => {
+      // Retried at the next change, launch or return from the background.
+    });
+    profileQueue.current = next;
+    return next;
+  }, []);
 
-  // A fresh sign-in (or the app reopening while signed in): load the profile,
-  // and once it says registration is finished, try the one-time transfer.
+  /** Garage, city and language in step with the account just read. */
+  const syncAccount = useCallback(
+    async (account: AccountProfile) => {
+      if (!account.registrationCompleted) return;
+      const garage = await accountGarage.sync();
+      if (garage.kind === "synced" && garage.transferred > 0) show(t("auth.garageTransferred"));
+      await syncProfile(account);
+    },
+    [show, t, syncProfile],
+  );
+
+  const refresh = useCallback(async () => {
+    const account = await loadProfile();
+    if (account) await syncAccount(account);
+  }, [loadProfile, syncAccount]);
+
+  // A sign-in, or the app opening while signed in.
   useEffect(() => {
     if (status !== "signed_in") {
       // Clearing local state to match the external session store flipping to
-      // guest, and loading the profile from the server once it flips to
-      // signed in: both are the rule's own "sync with an external system".
+      // guest: the rule's own "sync with an external system".
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfile(null);
-      transferTried.current = false;
-      syncedDeviceValues.current = null;
       return;
     }
-    void loadProfile();
-  }, [status, loadProfile]);
+    void refresh();
+  }, [status, refresh]);
 
+  // Back from the background: what another phone changed meanwhile (TASK-029.B).
   useEffect(() => {
-    if (status === "signed_in" && profile?.registrationCompleted) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void runTransfer();
-    }
-  }, [status, profile?.registrationCompleted, runTransfer]);
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active" && currentAccountId() !== null) void refresh();
+    });
+    return () => subscription.remove();
+  }, [refresh]);
 
-  // Changing the city or the language anywhere in the app (the catalog's
-  // switch, "Мои данные", M-PRO-01) keeps the account in step — one place
-  // that reacts, instead of every screen that can change either calling the
-  // server itself (TASK-029 requirement 6, "город и язык... в учётной записи").
+  // The city or the language changed on this device (the catalog's switch,
+  // M-PRO-01): one place sends it, instead of every screen that can change
+  // either (I432). A pass that applied the account's values finds nothing to
+  // send — it agreed on them before changing the stores.
+  const registered = profile?.registrationCompleted === true;
   useEffect(() => {
-    if (status !== "signed_in" || !profile?.registrationCompleted) return;
-    const cityId = cityIdOf(city.selection);
-    const already = syncedDeviceValues.current;
-    if (already && already.cityId === cityId && already.language === language) return;
-    syncedDeviceValues.current = { cityId, language };
-    apiUpdateAccountProfile({ cityId, ...(language ? { language } : {}) }).then(
-      (next) => setProfile(next),
-      () => {
-        // Retried the next time either value changes, or at the next sign-in.
-        syncedDeviceValues.current = already;
-      },
-    );
-  }, [status, profile?.registrationCompleted, city, language]);
+    if (status !== "signed_in" || !registered) return;
+    const agreed = profileSyncStore.get();
+    // Nothing agreed yet: the pass after reading the profile does the first one.
+    if (agreed?.accountId !== currentAccountId()) return;
+    void syncProfile(null);
+  }, [status, registered, city, language, syncProfile]);
 
   // `SESSION_ENDED` from anywhere (an expired refresh token, another device
   // ending this session) shows the explanation once the store has already
@@ -197,16 +236,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       status,
       accountId,
       profile,
-      profileLoading,
       beginSession: async (session) => {
-        transferTried.current = false;
-        syncedDeviceValues.current = null;
         sessionStore.set({ status: "signed_in", session });
         return loadProfile();
       },
       completeRegistration: async (name) => {
         const next = await apiCompleteRegistration(name);
         setProfile(next);
+        void syncAccount(next);
         return next;
       },
       updateProfile: async (patch) => {
@@ -227,7 +264,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setProfile(null);
       },
     }),
-    [status, accountId, profile, profileLoading, loadProfile],
+    [status, accountId, profile, loadProfile, syncAccount],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

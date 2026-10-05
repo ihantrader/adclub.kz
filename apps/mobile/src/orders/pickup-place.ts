@@ -2,9 +2,9 @@ import type { DayHours } from "@adclub/contracts";
 
 /**
  * The place of an accepted order (M-ORD-03, D-026): the hours of the point
- * in a few lines, and the ways out of the app — a navigation app of the
- * person's choice by the address, the dialer by the phone. Every value comes
- * from the server's `pickupPoint`; nothing is filled in.
+ * in a few lines, and the way out of the app to the place — a navigation app
+ * of the person's choice by the address (calling is `call-options.ts`).
+ * Every value comes from the server's `pickupPoint`; nothing is filled in.
  */
 
 /** Days 1 (Monday) … 7 (Sunday) that share the same hours, in a row. */
@@ -109,11 +109,4 @@ export async function openNavigator(
       return false;
     }
   }
-}
-
-/** The system dialer (SCREENS M-ORD-03 «Позвонить»); `null` — no phone. */
-export function callUrl(phone: string | null): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/[^\d+]/g, "");
-  return digits.length > 0 ? `tel:${digits}` : null;
 }

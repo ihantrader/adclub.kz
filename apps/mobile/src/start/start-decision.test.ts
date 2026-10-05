@@ -39,7 +39,7 @@ describe("decideStart — the order of SCREENS 5.1", () => {
       decideStart({
         ...FIRST_LAUNCH,
         policy: "update-required",
-        session: "revoked",
+        session: "active",
         online: false,
         savedActiveOrders: true,
         push: { screen: "order", params: { id: "1" } },
@@ -119,12 +119,12 @@ describe("decideStart — the order of SCREENS 5.1", () => {
     expect(decideStart({ ...RETURNING, hasCar: false })).toEqual({ screen: "catalog" });
   });
 
-  it("3. an unfinished first run beats a revoked session, being offline and a push", () => {
+  it("3. an unfinished first run beats being offline with saved orders and a push", () => {
     expect(
       decideStart({
         ...RETURNING,
         firstRun: { completed: false, step: "city" },
-        session: "revoked",
+        session: "active",
         online: false,
         savedActiveOrders: true,
         push: { screen: "order" },
@@ -132,23 +132,8 @@ describe("decideStart — the order of SCREENS 5.1", () => {
     ).toEqual({ screen: "first-run-city" });
   });
 
-  it("4. a revoked session → the catalog as a guest with the sheet", () => {
-    expect(decideStart({ ...RETURNING, session: "revoked" })).toEqual({
-      screen: "catalog",
-      signedOutNotice: true,
-    });
-  });
-
-  it("4. a revoked session beats being offline with saved orders and a push", () => {
-    expect(
-      decideStart({
-        ...RETURNING,
-        session: "revoked",
-        online: false,
-        savedActiveOrders: true,
-        push: { screen: "order" },
-      }),
-    ).toEqual({ screen: "catalog", signedOutNotice: true });
+  it("4. a session that ended while the app was closed opens as a guest (I434)", () => {
+    expect(decideStart({ ...RETURNING, session: "none" })).toEqual({ screen: "catalog" });
   });
 
   it("5. offline, signed in and saved active orders → M-ORD-02 without a network", () => {

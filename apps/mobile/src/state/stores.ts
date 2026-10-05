@@ -2,6 +2,7 @@ import { isLang, type Lang } from "@adclub/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getRandomBytes } from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
+import { parseAccountGarageCopy, type AccountGarageCopy } from "../garage/account-garage";
 import { INITIAL_GARAGE, parseGarage, type GarageState } from "../garage/garage";
 import { forgetOpenedOrders } from "../orders/opened-orders";
 import {
@@ -17,7 +18,13 @@ import {
   type DeviceStorage,
   type DeviceStore,
 } from "./device-store";
-import { createSessionStore, SIGNED_OUT, type SessionState } from "./session-store";
+import { parseProfileSync, type ProfileSyncState } from "./profile-sync";
+import {
+  createSessionStore,
+  SESSION_STORE_KEY,
+  SIGNED_OUT,
+  type StoredSessionState,
+} from "./session-store";
 
 const storage: DeviceStorage = {
   read: (key) => AsyncStorage.getItem(key),
@@ -40,7 +47,7 @@ const secureStorage: DeviceStorage = {
  * cleared at sign-out and on `SESSION_ENDED` — always together with the
  * sessions this store's own key protects, never left behind.
  */
-export const sessionStore: DeviceStore<SessionState> = createSessionStore(secureStorage);
+export const sessionStore: DeviceStore<StoredSessionState> = createSessionStore(secureStorage);
 
 /**
  * The saved copy of active orders (TASK-030, ARCHITECTURE 4.42): the codes
@@ -78,10 +85,15 @@ export const ordersCopyStore: OrdersCopyStore = createOrdersCopyStore({
  * Clears the session and the secure key itself (sign-out, `SESSION_ENDED`,
  * PRODUCT 6.7) — and with it the saved copy of active orders: the codes do
  * not outlive the session they were saved under (TASK-030 requirement 6).
+ * The copy of the account's garage and what this device last agreed with the
+ * account about the city and the language go too (TASK-029.B): they belong
+ * to the session, and a guest after it never sees the account's cars.
  */
 export function clearSession(): void {
   sessionStore.set(SIGNED_OUT);
-  void SecureStore.deleteItemAsync("adclub.mobile.session").catch(() => undefined);
+  accountGarageStore.set(null);
+  profileSyncStore.set(null);
+  void SecureStore.deleteItemAsync(SESSION_STORE_KEY).catch(() => undefined);
   void ordersCopyStore.clear();
   forgetOpenedOrders();
 }
@@ -124,12 +136,33 @@ export const garageStore: DeviceStore<GarageState> = createDeviceStore(storage, 
   parse: parseGarage,
 });
 
+/**
+ * The copy of the signed-in account's garage (TASK-029.B, ARCHITECTURE
+ * 4.46): what the garage, the catalog header and the catalog show while
+ * signed in, without waiting for the network. The account is the source of
+ * truth; this is refreshed from it (`garage/account-garage.ts`) and cleared
+ * with the session. Not a secret — the same kind of data as the guest garage.
+ */
+export const accountGarageStore: DeviceStore<AccountGarageCopy | null> = createDeviceStore(
+  storage,
+  { key: "adclub.mobile.account-garage", initial: null, parse: parseAccountGarageCopy },
+);
+
+/** The city and the language this device last agreed on with the account (TASK-029.B). */
+export const profileSyncStore: DeviceStore<ProfileSyncState | null> = createDeviceStore(storage, {
+  key: "adclub.mobile.profile-sync",
+  initial: null,
+  parse: parseProfileSync,
+});
+
 /** Resolves once every store of the device has really been read, however long it takes. */
 export const devicePreferencesLoaded: Promise<void> = Promise.all([
   languageStore.ready,
   cityStore.ready,
   firstRunStore.ready,
   garageStore.ready,
+  accountGarageStore.ready,
+  profileSyncStore.ready,
   sessionStore.ready,
   ordersCopyStore.ready,
 ]).then(() => undefined);

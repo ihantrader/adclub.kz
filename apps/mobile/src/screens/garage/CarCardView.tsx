@@ -14,9 +14,11 @@ import {
 } from "../../design-system";
 import type { CarStep } from "../../garage/car-picker";
 import { CAR_LEVELS, carTitle, type CarLevel, type GarageCar } from "../../garage/garage";
+import { useOnline } from "../../services/use-network";
 import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
 import { ColorSheet } from "./ColorSheet";
+import { garageErrorText } from "./garage-errors";
 
 const LEVEL_STEP_TEXT = {
   make: "car.step.make",
@@ -46,13 +48,31 @@ export interface CarCardViewProps {
  * M-GAR-06 — the card of a car: every parameter, «Не указано · Дополнить»
  * for the ones that are missing, «Сделать основным» and a deletion that
  * asks first (DESIGN 7.7: the button names the action).
+ *
+ * Signed in, each of them is a change of the account's garage (TASK-029.B):
+ * the button waits for the server, a refusal is said and changes nothing,
+ * and without a network they are off with «Нужна сеть».
  */
 export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps) {
   const t = useT();
   const toast = useToast();
-  const { state, makePrimary, remove, update } = useGarage();
+  const { state, remote, makePrimary, remove, update } = useGarage();
+  const online = useOnline();
+  const offline = remote && !online;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [colorSheet, setColorSheet] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  /** A change that the server may refuse: the refusal is said, the garage stays as it was. */
+  const attempt = async (change: () => Promise<unknown>): Promise<boolean> => {
+    try {
+      await change();
+      return true;
+    } catch (error) {
+      toast.show(garageErrorText(error, t));
+      return false;
+    }
+  };
   // The deletion happens once the dialog has gone: it fades out first, then
   // the card leaves — not both at once.
   const dismissed = useAfterDismiss(confirmDelete);
@@ -103,19 +123,38 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
                 </Text>
               ) : null
             }
-            onPress={() => setColorSheet(true)}
+            onPress={() => {
+              if (offline) toast.show(t("garage.needsNetwork"));
+              else setColorSheet(true);
+            }}
           />
         </ListGroup>
 
         {!primary && (
-          <Button variant="secondary" onPress={() => makePrimary(car.id)}>
+          <Button
+            variant="secondary"
+            disabled={offline}
+            onPress={() => attempt(() => makePrimary(car.id))}
+          >
             {t("garage.makePrimary")}
           </Button>
         )}
 
-        <Button variant="secondary" destructive icon="trash" onPress={() => setConfirmDelete(true)}>
+        <Button
+          variant="secondary"
+          destructive
+          icon="trash"
+          disabled={offline}
+          loading={deleting}
+          onPress={() => setConfirmDelete(true)}
+        >
           {t("garage.delete")}
         </Button>
+        {offline && (
+          <Text variant="caption" color="textMuted" style={styles.center}>
+            {t("garage.needsNetwork")}
+          </Text>
+        )}
       </View>
 
       <Dialog
@@ -130,12 +169,15 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
               onPress={() => {
                 setConfirmDelete(false);
                 dismissed.after(() => {
-                  // The card starts to leave first and the car goes with it: the
-                  // screen keeps showing the car while it slides away
-                  // (`GarageCarScreen`), so it never turns into «Гараж пуст».
-                  onDeleted();
-                  remove(car.id);
-                  toast.show(t("garage.deleted"));
+                  setDeleting(true);
+                  void attempt(() => remove(car.id)).then((removed) => {
+                    setDeleting(false);
+                    if (!removed) return;
+                    // The screen keeps showing the car while it slides away
+                    // (`GarageCarScreen`), so it never turns into «Гараж пуст».
+                    onDeleted();
+                    toast.show(t("garage.deleted"));
+                  });
                 });
               }}
             >
@@ -154,7 +196,7 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
         visible={colorSheet}
         onClose={() => setColorSheet(false)}
         value={car.color}
-        onPick={(color) => update({ ...car, color })}
+        onPick={(color) => void attempt(() => update({ ...car, color }))}
       />
     </Screen>
   );
@@ -162,4 +204,5 @@ export function CarCardView({ car, onEdit, onDeleted, onBack }: CarCardViewProps
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
+  center: { textAlign: "center" },
 });

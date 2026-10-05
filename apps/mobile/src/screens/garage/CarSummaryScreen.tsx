@@ -1,5 +1,6 @@
 import { CommonActions, StackActions } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useState } from "react";
 import { clearFrom, jumpToLevel } from "../../garage/car-picker";
 import type { CarLevel } from "../../garage/garage";
 import type { CarStepParams, RootParams } from "../../navigation/routes";
@@ -24,7 +25,13 @@ export function CarSummaryScreen({
 }: NativeStackScreenProps<RootParams, "car-summary">) {
   const { cars } = useGarage();
   const { origin, carId, draft, color } = route.params;
-  const car = carId ? cars.find((item) => item.id === carId) : undefined;
+  const current = carId ? cars.find((item) => item.id === carId) : undefined;
+  // A car being edited that another phone removed meanwhile (TASK-029.B)
+  // stays the car being edited: saving it is a change of that car — the
+  // server answers that it is gone — never a new car added in its place.
+  const [last, setLast] = useState(current);
+  if (current && current !== last) setLast(current);
+  const car = current ?? last;
 
   /** Every step screen still under the summary, bottom to top. */
   const stepRoutes = () => navigation.getState().routes.filter((item) => item.name === "car-step");

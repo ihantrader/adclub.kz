@@ -1,5 +1,5 @@
 import type { SessionTokens } from "@adclub/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { StoredSession } from "../state/session-store";
 import {
   createSessionAwareFetch,
@@ -186,6 +186,81 @@ describe("an expired access token", () => {
     await pending;
     expect(app.ended).toBe(0);
     expect(app.session?.accessToken).toBe("new");
+  });
+});
+
+describe("the time of one attempt (TASK-029.B)", () => {
+  /**
+   * A server in fake time: the first answer says the token expired, the
+   * exchange takes `exchangeMs`, a retry answers after `retryMs` — and every
+   * request stops when its signal is aborted, like `fetch` does.
+   */
+  function slowWorld(options: { exchangeMs: number; retryMs: number; attemptTimeoutMs: number }) {
+    vi.useFakeTimers();
+    let current: StoredSession | null = session();
+    const fetch = createSessionAwareFetch({
+      attemptTimeoutMs: options.attemptTimeoutMs,
+      fetch: (_input, init) => {
+        const token = new Headers(init.headers).get("Authorization")?.replace("Bearer ", "");
+        if (token === "access-1") return Promise.resolve(answer(401, "ACCESS_TOKEN_EXPIRED"));
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(answer(200)), options.retryMs);
+          init.signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        });
+      },
+      currentSession: () => current,
+      renewSession: (_sessionId, next) => {
+        if (current) current = { ...current, accessToken: next.accessToken };
+      },
+      endSession: () => {
+        current = null;
+      },
+      exchange: () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ kind: "ok", tokens: tokens(2) }), options.exchangeMs),
+        ),
+    });
+    return { fetch };
+  }
+
+  it("lets the retry have its own time after a slow exchange", async () => {
+    const { fetch } = slowWorld({ exchangeMs: 7_000, retryMs: 3_000, attemptTimeoutMs: 8_000 });
+    try {
+      const caller = new AbortController();
+      const pending = fetch("/slow", {
+        headers: { Authorization: "Bearer access-1" },
+        signal: caller.signal,
+      });
+      await vi.advanceTimersByTimeAsync(10_500);
+      // 7 s of exchange plus 3 s of retry — more than one attempt's 8 s, and it still answered.
+      expect((await pending).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops an attempt that takes longer than its time, and on the caller's cancel", async () => {
+    const { fetch } = slowWorld({ exchangeMs: 0, retryMs: 20_000, attemptTimeoutMs: 8_000 });
+    try {
+      const tooLong = fetch("/slow", { headers: { Authorization: "Bearer access-1" } });
+      const failed = expect(tooLong).rejects.toThrow("aborted");
+      await vi.advanceTimersByTimeAsync(8_001);
+      await failed;
+
+      const caller = new AbortController();
+      const cancelled = fetch("/slow", {
+        headers: { Authorization: "Bearer access-2" },
+        signal: caller.signal,
+      });
+      const stopped = expect(cancelled).rejects.toThrow("aborted");
+      caller.abort();
+      await stopped;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -42,8 +42,13 @@ export type PolicyState =
   /** No answer yet — the splash does not wait for the server longer than a few seconds. */
   | "pending";
 
-/** The saved session (TASK-029): `active` — signed in, `none` — a guest. */
-export type SessionState = "none" | "active" | "revoked";
+/**
+ * The saved session (TASK-029): `active` — signed in, `none` — a guest.
+ * A session revoked while the app was closed is a guest too: the device
+ * keeps no "was signed in" state to tell the two apart (ARCHITECTURE 4.41
+ * I434), so rule 4 of SCREENS 5.1 has no input here.
+ */
+export type StartSession = "none" | "active";
 
 export interface PushTarget {
   /** Where the push points; the app maps it to a screen in TASK-031. */
@@ -64,7 +69,7 @@ export interface StartInput {
    * itself even when the flag «completed» was not written in time.
    */
   hasCar: boolean;
-  session: SessionState;
+  session: StartSession;
   /**
    * Whether the device has a network; `null` — it has not said yet (the
    * first moment of the app). Only rule 5 cares about the difference: a
@@ -86,8 +91,6 @@ export interface StartDecision {
    * no language was chosen yet and the system one is kk/ru/en.
    */
   applyLanguage?: Lang;
-  /** Rule 4: the catalog opens as a guest with the "you were signed out" sheet. */
-  signedOutNotice?: true;
   /** Rule 6: where the push points. */
   push?: PushTarget;
 }
@@ -96,8 +99,8 @@ export interface StartDecision {
  * The order of SCREENS 5.1, rule by rule. Every earlier rule wins over the
  * later ones: a 426 outranks everything (it is also applied while the app is
  * already running — the same function runs again with `policy:
- * "update-required"`), and an unfinished first run outranks a revoked
- * session, a missing network and a push.
+ * "update-required"`), and an unfinished first run outranks a missing
+ * network and a push.
  */
 export function decideStart(input: StartInput): StartDecision {
   // 1. The server said an update is required.
@@ -136,11 +139,8 @@ function continueAfterLanguage(input: StartInput): StartDecision {
     return { screen: input.firstRun.step === "car" ? "first-run-car" : "first-run-city" };
   }
 
-  // 4. The saved session was revoked: the catalog as a guest plus the sheet
-  //    "Вы вышли из аккаунта" (the saved codes are already deleted).
-  if (input.session === "revoked") {
-    return { screen: "catalog", signedOutNotice: true };
-  }
+  // 4. A session revoked while the app was closed opens as a guest (I434):
+  //    nothing on the device says it was ever signed in.
 
   // 5. No network, signed in, and the device holds active orders. Until the
   //    device has said whether there is a network, that one person waits.

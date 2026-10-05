@@ -1,4 +1,9 @@
-import type { AccountCar, CarLevels } from "@adclub/contracts";
+import type {
+  AccountCar,
+  CarLevels,
+  SaveGarageCarBody,
+  TransferGarageBody,
+} from "@adclub/contracts";
 import type { GarageCar, GarageState } from "./garage";
 
 /**
@@ -18,6 +23,29 @@ export function toWireLevels(car: GarageCar): CarLevels {
     engine: car.engine,
     transmission: car.transmission,
     drive: car.drive,
+  };
+}
+
+/**
+ * A device car as `POST`/`PATCH /garage/cars` take it: the levels, the exact
+ * modification the levels named (TASK-029.B — it used to be lost on the way
+ * to the account, and the catalog then matched by levels only) and the colour.
+ */
+export function toSaveBody(car: GarageCar): SaveGarageCarBody {
+  return { levels: toWireLevels(car), modificationId: car.modificationId, color: car.color };
+}
+
+/**
+ * The guest garage as `POST /garage/transfer` takes it (TASK-029
+ * requirement 5): every car with its modification and colour; the guest's
+ * own main car marked, which the account keeps only when it has none yet.
+ */
+export function toTransferBody(guest: GarageState): TransferGarageBody {
+  return {
+    cars: guest.cars.map((car) => ({
+      ...toSaveBody(car),
+      isPrimary: car.id === guest.primaryId,
+    })),
   };
 }
 

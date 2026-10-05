@@ -111,7 +111,6 @@ export type AuthStackParams = {
     phone: string;
     channel: "whatsapp" | "sms";
     codeLength: number;
-    expiresAt: string;
     resendAvailableAt: string;
   };
   /** M-AUTH-03: the account exists (the code is verified) but has no name yet. */

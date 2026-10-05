@@ -27,10 +27,13 @@ export interface StoredSession {
   sessionExpiresAt: string;
 }
 
-export type SessionState =
+export type StoredSessionState =
   { status: "signed_in"; session: StoredSession } | { status: "signed_out" };
 
-export const SIGNED_OUT: SessionState = { status: "signed_out" };
+/** The key of the session in the secure storage — also what sign-out deletes. */
+export const SESSION_STORE_KEY = "adclub.mobile.session";
+
+export const SIGNED_OUT: StoredSessionState = { status: "signed_out" };
 
 function isStoredSession(value: unknown): value is StoredSession {
   if (typeof value !== "object" || value === null) return false;
@@ -47,7 +50,7 @@ function isStoredSession(value: unknown): value is StoredSession {
 }
 
 /** A stored value in a shape this version understands; anything else is a guest. */
-export function parseSessionState(raw: unknown): SessionState | null {
+export function parseStoredSessionState(raw: unknown): StoredSessionState | null {
   if (typeof raw !== "object" || raw === null) return null;
   const record = raw as Record<string, unknown>;
   if (record.status === "signed_out") return SIGNED_OUT;
@@ -62,10 +65,10 @@ export function parseSessionState(raw: unknown): SessionState | null {
  * `expo-secure-store`; tests — an in-memory fake), so the pure rules here
  * are testable without React Native.
  */
-export function createSessionStore(storage: DeviceStorage): DeviceStore<SessionState> {
+export function createSessionStore(storage: DeviceStorage): DeviceStore<StoredSessionState> {
   return createDeviceStore(storage, {
-    key: "adclub.mobile.session",
+    key: SESSION_STORE_KEY,
     initial: SIGNED_OUT,
-    parse: parseSessionState,
+    parse: parseStoredSessionState,
   });
 }

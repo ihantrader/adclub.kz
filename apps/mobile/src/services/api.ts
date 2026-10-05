@@ -4,7 +4,11 @@ import { apiUrl, clientInfo, systemLanguage } from "../config/environment";
 import { startLanguage } from "../start/start-decision";
 import { languageStore, sessionStore } from "../state/stores";
 import { UpdateGate } from "../update-gate";
-import { createSessionAwareFetch, type SessionFetchCallbacks } from "./session-fetch";
+import {
+  ATTEMPT_TIMEOUT_MS,
+  createSessionAwareFetch,
+  type SessionFetchCallbacks,
+} from "./session-fetch";
 
 /** The language every request is made in — the current interface language. */
 export function requestLanguage(): Lang {
@@ -45,7 +49,9 @@ export const apiClient = createApiClient({
     return session.status === "signed_in" ? session.session.accessToken : undefined;
   },
   fetch: createSessionAwareFetch(sessionFetchCallbacks),
-  // A phone on a flaky network shouldn't wait long at start-up.
-  timeoutMs: 8_000,
+  // A phone on a flaky network shouldn't wait long at start-up: each attempt
+  // is limited to 8 s (`ATTEMPT_TIMEOUT_MS`); this covers a whole call — an
+  // attempt, a token exchange (8 s at most) and the retry.
+  timeoutMs: 3 * ATTEMPT_TIMEOUT_MS,
   onError: updateGate.handleApiError,
 });

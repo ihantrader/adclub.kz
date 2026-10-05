@@ -18,6 +18,10 @@ import type { StoredSession } from "../state/session-store";
  * - A refresh that merely could not be done — no network, a timeout, a
  *   server error — signs nobody out: the session stays, the caller sees a
  *   network error, and the next request tries again.
+ * - Each attempt has its own time (`attemptTimeoutMs`, TASK-029.B): a
+ *   request retried after a slow exchange is not cut short by the time the
+ *   first attempt and the exchange already used. The caller's own signal
+ *   still cancels every attempt.
  */
 
 export type ExchangeResult =
@@ -38,6 +42,12 @@ export interface SessionFetchDeps {
   endSession: () => void;
   /** The exchange request itself; never goes through the wrapped `fetch`. */
   exchange: (refreshToken: string) => Promise<ExchangeResult>;
+  /**
+   * How long one attempt — the request, or its retry — may take; absent —
+   * only the caller's signal limits it. A timed-out attempt fails like a
+   * lost connection.
+   */
+  attemptTimeoutMs?: number;
 }
 
 /** What an exchange said, from the HTTP answer (`unavailable` for anything that is not a verdict). */
@@ -88,6 +98,22 @@ function withBearer(init: RequestInit, token: string): RequestInit {
 }
 
 export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
+  /** One attempt: its own time limit, and the caller's signal still cancels it. */
+  function attempt(input: string, init: RequestInit): Promise<Response> {
+    const limit = deps.attemptTimeoutMs;
+    if (limit === undefined) return deps.fetch(input, init);
+    const controller = new AbortController();
+    const outer = init.signal ?? undefined;
+    const cancel = () => controller.abort();
+    if (outer?.aborted) controller.abort();
+    else outer?.addEventListener("abort", cancel);
+    const timer = setTimeout(cancel, limit);
+    return deps.fetch(input, { ...init, signal: controller.signal }).finally(() => {
+      clearTimeout(timer);
+      outer?.removeEventListener("abort", cancel);
+    });
+  }
+
   // Shared by every call: a second request expiring while the first exchange
   // is in flight waits for it instead of starting its own.
   let refreshing: Promise<string | "ended" | "unavailable"> | null = null;
@@ -121,7 +147,7 @@ export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
   }
 
   return async (input, init) => {
-    const response = await deps.fetch(input, init);
+    const response = await attempt(input, init);
     if (response.status !== 401) return response;
     const code = await bodyCode(response);
 
@@ -142,7 +168,7 @@ export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
     const used = bearerOf(init);
     const current = deps.currentSession();
     if (current && used !== undefined && used !== current.accessToken) {
-      return deps.fetch(input, withBearer(init, current.accessToken));
+      return attempt(input, withBearer(init, current.accessToken));
     }
 
     const token = await sharedRefresh();
@@ -151,6 +177,6 @@ export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
       // Not the verdict of the server: a fetch that failed like a network one does.
       throw new TypeError("Network request failed");
     }
-    return deps.fetch(input, withBearer(init, token));
+    return attempt(input, withBearer(init, token));
   };
 }

@@ -28,6 +28,7 @@ import { isActiveOrderStatus, localDateTime, orderAwaitsReceipt } from "@adclub/
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { account, supplier, supplierMember } from "../identity";
+import { offer } from "../offers";
 import { city, supplierClosedDate, supplierLocation } from "../suppliers";
 import { qrPayload } from "./order-code";
 import { orderEvent, type OrderEventRow, type OrderRow } from "./schema";
@@ -658,10 +659,26 @@ export async function historyMonths(
 
 // -------------------------------------------------------------- supplier
 
+/**
+ * The end of the late close window of an order whose pickup reserve
+ * expired, while it is still open (PRODUCT 10.7; the same rule as
+ * `orderCloseVerdict` and the `close_late` guard: open strictly before
+ * `late_close_until`, and only while the order still holds its code).
+ */
+function openLateCloseUntil(row: OrderRow, at: Date): string | null {
+  return row.status === "reserve_expired" &&
+    row.lateCloseUntil !== null &&
+    row.codeReleasedAt === null &&
+    at < row.lateCloseUntil
+    ? iso(row.lateCloseUntil)
+    : null;
+}
+
 export async function supplierSummaries(
   executor: DbExecutor,
   rows: readonly OrderRow[],
   lang: CatalogLanguage,
+  at: Date = new Date(),
 ): Promise<SupplierOrderSummary[]> {
   const members = await memberNames(executor, [
     ...rows.map((row) => row.handledByMemberId),
@@ -671,6 +688,8 @@ export async function supplierSummaries(
     ...baseOf(row, lang),
     ...handledOf(row, members),
     closure: closureFrom(row, members),
+    version: row.version,
+    lateCloseUntil: openLateCloseUntil(row, at),
   }));
 }
 
@@ -695,13 +714,19 @@ export async function supplierOrderView(
     row.phoneRevealedAt !== null
       ? ((await namesOf(executor, [row.userAccountId])).get(row.userAccountId) ?? null)
       : null;
+  const [current] = await executor
+    .select({ price: offer.price })
+    .from(offer)
+    .where(eq(offer.id, row.offerId));
   return {
     ...baseOf(row, lang),
     item: withPhoto(row, lang, await photosOf(executor, photos, [row])),
     ...handledOf(row, members),
     closure: closureFrom(row, members),
     version: row.version,
+    lateCloseUntil: openLateCloseUntil(row, new Date()),
     updatedAt: iso(row.updatedAt),
+    currentOfferPrice: current?.price ?? null,
     terms: termsOf(row),
     comment: row.comment,
     customer:

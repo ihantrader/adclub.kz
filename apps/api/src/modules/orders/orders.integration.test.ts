@@ -2545,6 +2545,116 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
     });
   });
 
+  describe("what the cabinet's screens read (TASK-033)", () => {
+    const tab = async (by: Company, query: string) =>
+      ok(by.as("get", `/supplier/orders?${query}`), (body) =>
+        checked(supplierOrderPageSchema)(body),
+      );
+
+    it("keeps an expired pickup in «В работе» while it can be closed late, and «Завершённые» narrow by status and period", async () => {
+      const shop = await company("Вкладки");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const late = await place(buyer, offer);
+      const ready = await place(buyer, offer, { allowAnotherActive: true });
+      const cancelled = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, late.id);
+      await accept(shop, ready.id);
+      await ok(
+        shop.as("post", `/supplier/orders/${ready.id}/ready`, { expectedVersion: 2 }),
+        (body) => body,
+      );
+      await ok(buyer.as("post", `/orders/${cancelled.id}/cancel`), (body) => body);
+      await expireReserve(late.id);
+
+      const working = await tab(shop, "tab=in_progress");
+      expect(working.orders.map((entry) => entry.id).sort()).toEqual([late.id, ready.id].sort());
+      const expired = working.orders.find((entry) => entry.id === late.id)!;
+      expect(expired).toMatchObject({ status: "reserve_expired", version: expect.any(Number) });
+      expect(expired.lateCloseUntil).toEqual(
+        (await closeRow(late.id)).late_close_until!.toISOString(),
+      );
+      expect(working.orders.find((entry) => entry.id === ready.id)).toMatchObject({
+        status: "ready",
+        version: 3,
+        lateCloseUntil: null,
+      });
+      expect(working.counts).toEqual({ new: 0, inProgress: 2, finished: 1 });
+      expect((await tab(shop, "tab=finished")).orders.map((entry) => entry.id)).toEqual([
+        cancelled.id,
+      ]);
+
+      // The window passed: the order is finished, and «Клиент не пришёл» finds it.
+      await db.query(
+        "UPDATE customer_order SET late_close_until = now() - interval '1 minute' WHERE id = $1",
+        [late.id],
+      );
+      const after = await tab(shop, "tab=in_progress");
+      expect(after.orders.map((entry) => entry.id)).toEqual([ready.id]);
+      expect(after.counts).toEqual({ new: 0, inProgress: 1, finished: 2 });
+      const finished = await tab(shop, "tab=finished&status=reserve_expired");
+      expect(finished.orders).toMatchObject([{ id: late.id, lateCloseUntil: null }]);
+      expect(
+        (await tab(shop, "tab=finished&status=cancelled_by_user")).orders.map((entry) => entry.id),
+      ).toEqual([cancelled.id]);
+      // The period: by when the order was created, `from` inclusive, `to` exclusive.
+      const hourAgo = encodeURIComponent(new Date(Date.now() - HOUR).toISOString());
+      const inAnHour = encodeURIComponent(new Date(Date.now() + HOUR).toISOString());
+      expect((await tab(shop, `tab=finished&from=${hourAgo}`)).orders).toHaveLength(2);
+      expect((await tab(shop, `tab=finished&to=${hourAgo}`)).orders).toHaveLength(0);
+      expect((await tab(shop, `tab=finished&from=${inAnHour}`)).orders).toHaveLength(0);
+      // The other tabs ignore the filters; a status of an active order is no filter of «Завершённые».
+      expect((await tab(shop, "tab=in_progress&status=completed")).orders).toHaveLength(1);
+      expectError(
+        await shop.as("get", "/supplier/orders?tab=finished&status=accepted"),
+        400,
+        "VALIDATION_ERROR",
+      );
+    });
+
+    it("says in the card what the offer costs now, and the scanner's order leads to the card with the customer", async () => {
+      const shop = await company("Цена сейчас");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      const card = async () =>
+        ok(shop.as("get", `/supplier/orders/${order.id}`), (body) =>
+          checked(supplierOrderResponseSchema)(body),
+        );
+      expect((await card()).order).toMatchObject({
+        unitPrice: 6_500,
+        currentOfferPrice: 6_500,
+        version: 1,
+        lateCloseUntil: null,
+      });
+      await ok(
+        shop.as("patch", `/supplier/offers/${offer.id}`, {
+          expectedVersion: offer.version,
+          price: 7_100,
+        }),
+        (body) => body,
+      );
+      expect((await card()).order).toMatchObject({ unitPrice: 6_500, currentOfferPrice: 7_100 });
+
+      // The list carries the version a row acts on, never the customer.
+      const listed = (await tab(shop, "tab=new")).orders[0]!;
+      expect(listed).toMatchObject({ id: order.id, version: 1 });
+      expect(listed).not.toHaveProperty("customer");
+
+      await accept(shop, order.id);
+      // The scanner's answer has no customer data; S-SCAN-03 takes the name
+      // from the card of the order it found (the phone stays out of the screen).
+      const found = await lookup(shop, { code: codeOf(order) });
+      expect(found).toMatchObject({ result: "ready", order: { id: order.id } });
+      expect(JSON.stringify(found)).not.toContain(buyer.phone);
+      expect(JSON.stringify(found)).not.toContain(TEST_CUSTOMER_NAME);
+      expect((await card()).order.customer).toMatchObject({
+        kind: "revealed",
+        name: TEST_CUSTOMER_NAME,
+      });
+    });
+  });
+
   describe("the late close window (PRODUCT 10.7)", () => {
     it("gives out an expired reserve inside the window, marks it late and lifts the no-show", async () => {
       const shop = await company("Позднее");

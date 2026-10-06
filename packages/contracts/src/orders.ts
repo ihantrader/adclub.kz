@@ -796,6 +796,14 @@ const supplierSideFields = {
 export const supplierOrderSummarySchema = z.object({
   ...orderBaseFields,
   ...supplierSideFields,
+  /** The version to act on from the list («Принять» / «Отказать» in a row, TASK-033). */
+  version: z.number().int(),
+  /**
+   * The pickup reserve expired and the late close window is still open
+   * until then (PRODUCT 10.7): «Срок истёк — можно закрыть до {время}»
+   * (TASK-033). `null` — no such window (any other status, or it passed).
+   */
+  lateCloseUntil: z.iso.datetime().nullable(),
 });
 
 export type SupplierOrderSummary = z.infer<typeof supplierOrderSummarySchema>;
@@ -807,8 +815,13 @@ export type SupplierOrderSummary = z.infer<typeof supplierOrderSummarySchema>;
  */
 export const supplierOrderSchema = supplierOrderSummarySchema.extend({
   item: orderItemWithPhotoSchema,
-  version: z.number().int(),
   updatedAt: z.iso.datetime(),
+  /**
+   * The price of the offer now, whole tenge (TASK-033): when it differs
+   * from `unitPrice`, the card says «Цена зафиксирована на момент
+   * оформления». The order keeps its own price whatever the offer does.
+   */
+  currentOfferPrice: z.number().int().nullable(),
   terms: orderTermsSchema,
   comment: z.string().nullable(),
   customer: orderCustomerSchema,
@@ -857,8 +870,27 @@ export type DeclineOrderResponse = z.infer<typeof declineOrderResponseSchema>;
  */
 export const supplierOrderTabSchema = z.enum(["new", "in_progress", "finished"]);
 
+/** The statuses «Завершённые» can be narrowed to (S-ORD-01, TASK-033). */
+export const supplierFinishedStatusSchema = z.enum([
+  "completed",
+  "cancelled_by_user",
+  "declined_by_supplier",
+  "response_expired",
+  "reserve_expired",
+]);
+
+export type SupplierFinishedStatus = z.infer<typeof supplierFinishedStatusSchema>;
+
+/**
+ * `status`, `from` and `to` narrow «Завершённые» (by status, and by when
+ * the order was created — `from` inclusive, `to` exclusive); the other
+ * tabs ignore them.
+ */
 export const supplierOrderListQuerySchema = z.object({
   tab: supplierOrderTabSchema.default("new"),
+  status: supplierFinishedStatusSchema.optional(),
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
   limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });

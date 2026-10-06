@@ -612,27 +612,45 @@ export class OrdersService {
     lang: CatalogLanguage,
   ): Promise<SupplierOrderPage> {
     const own = eq(customerOrder.supplierId, supplierId);
+    const at = await databaseNow(this.database.db);
+    // «В работе» holds what still asks for the employee (TASK-033): the
+    // accepted and ready orders, and an expired pickup whose late close
+    // window is still open («Срок истёк — можно закрыть до …», PRODUCT
+    // 10.7) — the same window `orderCloseVerdict` and `close_late` use.
+    const lateWindowOpen = sql`(${customerOrder.status} = 'reserve_expired'
+      AND ${customerOrder.lateCloseUntil} IS NOT NULL
+      AND ${customerOrder.lateCloseUntil} > ${at.toISOString()}::timestamptz
+      AND ${customerOrder.codeReleasedAt} IS NULL)`;
+    const inProgress = sql`(${customerOrder.status} IN ('accepted', 'ready') OR ${lateWindowOpen})`;
     let page: { rows: OrderRow[]; nextCursor: string | null };
     if (query.tab === "new") {
       page = await this.soonestAnswerFirst(and(own, eq(customerOrder.status, "created"))!, query);
+    } else if (query.tab === "in_progress") {
+      page = await this.newestFirst(and(own, inProgress)!, query);
     } else {
-      const statuses =
-        query.tab === "in_progress"
-          ? inArray(customerOrder.status, ["accepted", "ready"])
-          : notInArray(customerOrder.status, ACTIVE);
-      page = await this.newestFirst(and(own, statuses)!, query);
+      page = await this.newestFirst(
+        and(
+          own,
+          notInArray(customerOrder.status, ACTIVE),
+          sql`NOT ${lateWindowOpen}`,
+          query.status ? eq(customerOrder.status, query.status) : undefined,
+          query.from ? gte(customerOrder.createdAt, new Date(query.from)) : undefined,
+          query.to ? lt(customerOrder.createdAt, new Date(query.to)) : undefined,
+        )!,
+        query,
+      );
     }
     const [counts] = await this.database.db
       .select({
         created: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} = 'created')::int`,
-        inProgress: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} IN ('accepted', 'ready'))::int`,
-        finished: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} NOT IN ('created', 'accepted', 'ready'))::int`,
+        inProgress: sql<number>`count(*) FILTER (WHERE ${inProgress})::int`,
+        finished: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} NOT IN ('created', 'accepted', 'ready') AND NOT ${lateWindowOpen})::int`,
       })
       .from(customerOrder)
       .where(own);
     return {
       language: lang,
-      orders: await supplierSummaries(this.database.db, page.rows, lang),
+      orders: await supplierSummaries(this.database.db, page.rows, lang, at),
       counts: {
         new: counts?.created ?? 0,
         inProgress: counts?.inProgress ?? 0,

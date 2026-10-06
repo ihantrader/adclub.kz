@@ -53,6 +53,7 @@
   --ac-motion-slow: 250ms;
   --ac-motion-easing: cubic-bezier(0, 0, 0.2, 1);
   --ac-motion-skeleton: 1200ms;
+  --ac-loading-dim: 0.5;
   --ac-pressed-darken: 0.88;
   --ac-breakpoint-two-columns: 600px;
   --ac-breakpoint-sidebar: 1024px;

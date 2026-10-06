@@ -99,6 +99,7 @@ export function buildThemeCss(): string {
     ["--ac-motion-slow", `${motion.slow}ms`],
     ["--ac-motion-easing", motion.easing],
     ["--ac-motion-skeleton", `${motion.skeleton}ms`],
+    ["--ac-loading-dim", String(motion.loadingDimOpacity)],
     ["--ac-pressed-darken", String(1 - motion.pressedDarken)],
     ["--ac-breakpoint-two-columns", px(breakpoints.twoColumns)],
     ["--ac-breakpoint-sidebar", px(breakpoints.sidebar)],

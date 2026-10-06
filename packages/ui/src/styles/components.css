@@ -200,8 +200,9 @@ textarea {
   cursor: progress;
 }
 
-/* The label keeps its place, so the width does not change. */
-.ac-button--loading .ac-button__content {
+/* The label keeps its place, so the width does not change; the spinner
+   takes it only after the loading delay (D-069). */
+.ac-button--spinning .ac-button__content {
   visibility: hidden;
 }
 
@@ -955,6 +956,70 @@ textarea {
   padding-top: 4px;
 }
 
+/* ---------- loading without flicker (DESIGN 7.6, D-069) ---------- */
+
+/* The skeleton of a first load keeps its place from the start and is seen
+   only once the indicator appears (after 300 ms): a quick first answer comes
+   with no skeleton at all. */
+.ac-first-load {
+  visibility: hidden;
+}
+
+.ac-first-load--shown {
+  visibility: visible;
+  animation: ac-fade-in var(--ac-motion-fast) var(--ac-motion-easing);
+}
+
+.ac-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+/* The line always has its place: a reload never pushes the content down and back. */
+.ac-refresh-line {
+  position: relative;
+  height: 2px;
+  margin-bottom: calc(-1 * var(--ac-space-3) + 2px);
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.ac-refresh-line--active {
+  background: var(--ac-color-fill);
+}
+
+.ac-refresh-line__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 30%;
+  height: 100%;
+  background: var(--ac-color-accent);
+  animation: ac-refresh-sweep var(--ac-motion-skeleton) linear infinite;
+}
+
+@keyframes ac-refresh-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(340%);
+  }
+}
+
+/* The old content stays where it is, dimmed, until the new one replaces it. */
+.ac-loading__content {
+  min-width: 0;
+  transition: opacity var(--ac-motion-fast) var(--ac-motion-easing);
+}
+
+.ac-loading__content--dim {
+  opacity: var(--ac-loading-dim);
+}
+
 .ac-empty {
   display: flex;
   flex-direction: column;
@@ -1297,6 +1362,16 @@ textarea {
 
   .ac-skeleton {
     animation: none;
+  }
+
+  /* No fades on a swap (D-069): the content is simply replaced. */
+  .ac-loading__content {
+    transition: none !important;
+  }
+
+  .ac-refresh-line__bar {
+    animation: none;
+    width: 100%;
   }
 
   .ac-spinner {

@@ -75,6 +75,18 @@ export {
   type ScreenErrorProps,
 } from "./components/feedback";
 export {
+  DelayedSkeleton,
+  FadeSwap,
+  LoadingContent,
+  RefreshLine,
+  useContentSwap,
+  useDelayedIndicator,
+  useLoadingGate,
+  useReducedMotion,
+  type LoadingContentProps,
+  type LoadingGateHandle,
+} from "./components/loading";
+export {
   CodeBlock,
   DataTable,
   QrCode,

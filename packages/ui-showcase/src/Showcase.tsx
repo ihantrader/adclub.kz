@@ -29,6 +29,7 @@ import {
   icons,
   kebab,
   Keypad,
+  LoadingContent,
   Logo,
   type NavItem,
   Quantity,
@@ -45,6 +46,7 @@ import {
   TextField,
   ToastProvider,
   typographyClass,
+  useLoadingGate,
   useTheme,
   useToast,
 } from "@adclub/ui";
@@ -568,6 +570,100 @@ function FeedbackSection({ t }: { t: ShowcaseTexts }) {
   );
 }
 
+/**
+ * One place that waits, with a pretend server: `latency` ms per answer. The
+ * first load starts empty; the others start with rows already on screen.
+ */
+function LoadingDemo({
+  t,
+  title,
+  text,
+  latency,
+  first,
+}: {
+  t: ShowcaseTexts;
+  title: string;
+  text: string;
+  latency: number;
+  first: boolean;
+}) {
+  const gate = useLoadingGate();
+  const [rows, setRows] = useState<readonly string[] | null>(first ? null : t.loadingDemo.rows);
+  const [round, setRound] = useState(0);
+  const load = () => {
+    if (first) setRows(null);
+    const next = round % 2 === 0 ? t.loadingDemo.rowsNext : t.loadingDemo.rows;
+    setRound((value) => value + 1);
+    const ticket = gate.begin();
+    setTimeout(() => gate.settle(ticket, () => setRows(next)), latency);
+  };
+  return (
+    <div className="sc-card sc-loading-demo">
+      <div className="ac-text-body-strong">{title}</div>
+      <p className="ac-text-body-s ac-muted">{text}</p>
+      <Button variant="secondary" size="s" icon="refresh" onClick={load}>
+        {first ? t.loadingDemo.start : t.loadingDemo.reload}
+      </Button>
+      <LoadingContent
+        ready={rows !== null}
+        indicator={gate.indicator}
+        // The skeleton repeats the rows' own layout, so nothing jumps when they come.
+        skeleton={
+          <div className="sc-loading-demo__rows" role="status" aria-label={t.loading}>
+            <Skeleton width="80%" height={24} />
+            <Skeleton width="65%" height={24} />
+            <Skeleton width="70%" height={24} />
+          </div>
+        }
+        label={t.loading}
+        swapKey={round}
+        lock
+      >
+        <ul className="sc-loading-demo__rows">
+          {rows?.map((row) => (
+            <li key={row} className="ac-text-body">
+              {row}
+            </li>
+          ))}
+        </ul>
+      </LoadingContent>
+    </div>
+  );
+}
+
+function LoadingSection({ t }: { t: ShowcaseTexts }) {
+  return (
+    <Section id="loading" title={t.sections.loading} note={t.notes.loading}>
+      <div className="sc-grid">
+        <LoadingDemo
+          key="first"
+          t={t}
+          title={t.loadingDemo.first}
+          text={t.loadingDemo.firstText}
+          latency={1200}
+          first
+        />
+        <LoadingDemo
+          key="again"
+          t={t}
+          title={t.loadingDemo.again}
+          text={t.loadingDemo.againText}
+          latency={1200}
+          first={false}
+        />
+        <LoadingDemo
+          key="quick"
+          t={t}
+          title={t.loadingDemo.quick}
+          text={t.loadingDemo.quickText}
+          latency={120}
+          first={false}
+        />
+      </div>
+    </Section>
+  );
+}
+
 function TableSection({ t }: { t: ShowcaseTexts }) {
   return (
     <Section id="table" title={t.sections.table} note={t.notes.table}>
@@ -708,6 +804,7 @@ function ShowcaseContent({ app }: ShowcaseProps) {
           <ChoiceSection t={t} key={`choice-${lang}`} />
           <MarksSection t={t} lang={lang} />
           <FeedbackSection t={t} />
+          <LoadingSection t={t} key={`loading-${lang}`} />
           <TableSection t={t} />
           <CodeSection t={t} />
           <p className="ac-text-caption ac-muted">{t.footer}</p>
@@ -764,6 +861,9 @@ const showcaseCss = `
 .sc-narrow { width: 100%; max-width: 360px; }
 .sc-card { border: var(--ac-line-hairline) solid var(--ac-color-border); border-radius: var(--ac-radius-m); background: var(--ac-color-bg); }
 .sc-keypad { max-width: 320px; margin-top: 16px; }
+.sc-loading-demo { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; }
+.sc-loading-demo > .ac-loading, .sc-loading-demo > .ac-first-load { align-self: stretch; }
+.sc-loading-demo__rows { display: flex; flex-direction: column; gap: 8px; min-height: 96px; margin: 0; padding: 0; list-style: none; }
 .sc-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
 .sc-swatch { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sc-swatch__color { height: 48px; border-radius: var(--ac-radius-s); border: 1px solid var(--ac-color-border); margin-bottom: 4px; }

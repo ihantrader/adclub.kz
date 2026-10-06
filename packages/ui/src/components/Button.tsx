@@ -2,6 +2,7 @@ import { createPressGuard, isPressBlocked, type IconName } from "@adclub/ui-core
 import { useState, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Spinner } from "./Spinner";
+import { useDelayedIndicator } from "./loading";
 import { cx } from "./cx";
 
 export type ButtonVariant = "primary" | "secondary" | "text" | "danger";
@@ -48,6 +49,9 @@ export function Button({
   const [guard] = useState(() => createPressGuard(setPending));
   const busy = loading || pending;
   const blocked = isPressBlocked({ loading: busy, disabled });
+  // The spinner by the loading rule (D-069): only after the delay, then for
+  // at least its minimum; presses are ignored from the first moment.
+  const spinning = useDelayedIndicator(busy);
 
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (blocked || guard.isBusy()) {
@@ -73,6 +77,7 @@ export function Button({
         destructive && "ac-button--destructive",
         block && "ac-button--block",
         busy && "ac-button--loading",
+        spinning && "ac-button--spinning",
         className,
       )}
     >
@@ -80,7 +85,7 @@ export function Button({
         {icon && <Icon name={icon} size={size === "s" ? 16 : 20} />}
         <span className="ac-button__label">{children}</span>
       </span>
-      {busy && <Spinner className="ac-button__spinner" />}
+      {spinning && <Spinner className="ac-button__spinner" />}
     </button>
   );
 }

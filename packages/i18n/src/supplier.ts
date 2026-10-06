@@ -21,13 +21,27 @@ type TextKeyOf<T> =
 
 export type SupplierTextKey = TextKeyOf<(typeof supplierLocales)["ru"]>;
 
+/**
+ * The text of `key` in `lang`, Russian when the language has none. A key
+ * the dictionary does not know at all (a code built from a server value,
+ * a text not added yet) never breaks a screen: the key itself is shown —
+ * `hasSupplierText` lets the cabinet warn about it in development.
+ */
 export function supplierText(
   lang: Lang,
   key: SupplierTextKey,
   params?: Readonly<Record<string, string | number>>,
 ): string {
-  const text = (supplierLocales[lang] as Record<string, string>)[key] ?? supplierLocales.ru[key];
+  const text =
+    (supplierLocales[lang] as Record<string, string | undefined>)[key] ??
+    (supplierLocales.ru as Record<string, string | undefined>)[key] ??
+    key;
   return formatText(text, params);
+}
+
+/** Whether the dictionary has a text for `key` (in Russian, the working wording). */
+export function hasSupplierText(key: string): boolean {
+  return !key.startsWith("$") && Object.prototype.hasOwnProperty.call(supplierLocales.ru, key);
 }
 
 /** Every text key of the dictionary, without the `$…` notes. */

@@ -20,7 +20,12 @@ type TextKeyOf<T> =
 export type MobileTextKey = TextKeyOf<(typeof mobileLocales)["ru"]>;
 
 export function mobileText(lang: Lang, key: MobileTextKey): string {
-  return (mobileLocales[lang] as Record<string, string>)[key] ?? mobileLocales.ru[key];
+  // A key the dictionary does not know shows itself rather than nothing (as in the cabinet).
+  return (
+    (mobileLocales[lang] as Record<string, string | undefined>)[key] ??
+    (mobileLocales.ru as Record<string, string | undefined>)[key] ??
+    key
+  );
 }
 
 /** Every text key of the dictionary, without the `$…` notes. */

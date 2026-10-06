@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { supplierLocales, supplierText, supplierTextKeys } from "./supplier";
+import { formatText } from "./plural";
+import {
+  hasSupplierText,
+  supplierLocales,
+  supplierText,
+  supplierTextKeys,
+  type SupplierTextKey,
+} from "./supplier";
 import { languages } from "./translate";
 
 const TAB_KEYS = ["tabs.orders", "tabs.offers", "tabs.scan", "tabs.more"] as const;
@@ -126,6 +133,19 @@ describe("supplier cabinet texts", () => {
       expect(supplierText(lang, "language.ru")).toBe("Русский");
       expect(supplierText(lang, "language.en")).toBe("English");
     }
+  });
+
+  it("never breaks on a key it does not know: the key itself, with or without values", () => {
+    const missing = "offers.reason.somethingNew" as SupplierTextKey;
+    for (const lang of languages) {
+      expect(supplierText(lang, missing)).toBe("offers.reason.somethingNew");
+      expect(() => supplierText(lang, missing, { n: 3 })).not.toThrow();
+      expect(supplierText(lang, missing, { n: 3 })).toBe("offers.reason.somethingNew");
+    }
+    expect(hasSupplierText("offers.reason.somethingNew")).toBe(false);
+    expect(hasSupplierText("offers.title")).toBe(true);
+    expect(hasSupplierText("$about")).toBe(false);
+    expect(formatText(undefined, { n: 1 })).toBe("");
   });
 
   it("keeps no capitalised words (DESIGN 7.4)", () => {

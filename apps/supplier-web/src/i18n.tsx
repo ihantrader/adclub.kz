@@ -1,12 +1,14 @@
-import { supplierText, type Lang, type SupplierTextKey } from "@adclub/i18n";
+import type { Lang } from "@adclub/i18n";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { setApiLanguage } from "./api";
 import { storedLanguage, storeLanguage } from "./prefs";
+import { createTranslate, type Translate } from "./translate";
 
-export type Translate = (
-  key: SupplierTextKey,
-  params?: Readonly<Record<string, string | number>>,
-) => string;
+export type { Translate } from "./translate";
+
+/** Keys already reported as missing in this page (development only). */
+const warnedKeys = new Set<string>();
+const warnMissing = import.meta.env.DEV ? (message: string) => console.warn(message) : null;
 
 interface LanguageContextValue {
   lang: Lang;
@@ -34,7 +36,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         storeLanguage(next);
         setLangState(next);
       },
-      t: (key, params) => supplierText(lang, key, params),
+      t: createTranslate(lang, warnMissing, warnedKeys),
     }),
     [lang],
   );

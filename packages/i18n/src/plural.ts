@@ -33,7 +33,12 @@ export function pluralForm(lang: Lang, count: number): PluralForm {
  * value is left as it is: a visible `{город}` in a draft screen is easier
  * to notice than a silent gap.
  */
-export function formatText(template: string, params?: Readonly<Record<string, string | number>>) {
+export function formatText(
+  template: string | undefined,
+  params?: Readonly<Record<string, string | number>>,
+): string {
+  // A missing text is an empty one, never an exception that takes a screen down.
+  if (template === undefined) return "";
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => {
     const value = params[name];

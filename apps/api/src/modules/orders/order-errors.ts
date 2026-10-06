@@ -41,6 +41,19 @@ export function registrationIncomplete(): ApiException {
   );
 }
 
+/**
+ * 403 `SUPPLIER_BLOCKED` (TASK-033.A, ARCHITECTURE 4.51): a blocked company
+ * looks at its orders and gives them out by the code, nothing more
+ * (SCREENS 6.0; the rule — `supplierOrderMoveVerdict`).
+ */
+export function supplierBlocked(): ApiException {
+  return new ApiException(
+    403,
+    "SUPPLIER_BLOCKED",
+    "The company is blocked by the club administrator: orders can be viewed and given out by the code, not accepted, marked ready or declined",
+  );
+}
+
 export function offerUnavailable(): ApiException {
   return new ApiException(
     409,

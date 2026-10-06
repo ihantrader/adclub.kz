@@ -116,7 +116,8 @@ export type InboundWebhookEventRow = typeof inboundWebhookEvent.$inferSelect;
  * What was decided about a press (TASK-025): `accepted`, `declined` — the
  * order moved; `repeated` — the same employee had already made that move;
  * `conflict` — the order had moved on, nothing changed; `member_removed` —
- * the employee is no longer one; `invalid_payload`, `expired`,
+ * the employee is no longer one; `supplier_blocked` — the company is
+ * blocked and may not make the move (TASK-033.A); `invalid_payload`, `expired`,
  * `phone_mismatch`, `foreign_message` — the press is not authentic enough
  * to act on; `no_handler` — no module acts on this button.
  */
@@ -126,6 +127,7 @@ export type ButtonPressOutcome =
   | "repeated"
   | "conflict"
   | "member_removed"
+  | "supplier_blocked"
   | "invalid_payload"
   | "expired"
   | "phone_mismatch"

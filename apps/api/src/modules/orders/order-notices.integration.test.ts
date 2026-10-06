@@ -1088,6 +1088,60 @@ describe("notices of orders to suppliers, their buttons and the outage of the ch
       expect(reply!.variables!.state).toBe("қолжетімсіз: кабинетке кіру жабылған");
     });
 
+    it("of a blocked company changes nothing, answers nobody and keeps `supplier_blocked`; once the block is lifted it is applied (TASK-033.A)", async () => {
+      const { order, toFirst, toMarat, shop } = await world();
+      const block = async (blocked: boolean) => {
+        const current = await ok(
+          asAdmin("get", `/admin/suppliers/${shop.supplierId}`),
+          (raw) => adminSupplierResponseSchema.parse(raw).supplier,
+        );
+        await ok(
+          asAdmin("post", `/admin/suppliers/${shop.supplierId}/block`, {
+            expectedVersion: current.version,
+            blocked,
+            reason: blocked ? "Нарушение правил клуба" : "Разобрались",
+          }),
+          (raw) => raw,
+        );
+      };
+      await block(true);
+      expect(await pressAndDecide(toFirst, "confirm")).toBe("supplier_blocked");
+      expect(await pressAndDecide(toMarat, "decline")).toBe("supplier_blocked");
+      expect((await orderRow(order.id)).status).toBe("created");
+      // Not a late answer to the order: nothing in its journal.
+      expect((await events(order.id)).map((event) => event.action)).toEqual(["create"]);
+      // No template says it (W-* change only with Meta's approval): no answer at all.
+      await sleep(500);
+      expect(
+        await messages("subject_id = $1 AND template <> 'order_new'", [order.id]),
+      ).toHaveLength(0);
+      // The phone of the customer stays hidden.
+      expect((await supplierOrder(shop, order.id)).customer.kind).toBe("hidden");
+
+      await block(false);
+      expect(await pressAndDecide(toFirst, "confirm")).toBe("accepted");
+      expect((await orderRow(order.id)).status).toBe("accepted");
+    });
+
+    it("of a paused company is applied as before", async () => {
+      const { order, toFirst, shop } = await world();
+      const current = await ok(
+        asAdmin("get", `/admin/suppliers/${shop.supplierId}`),
+        (raw) => adminSupplierResponseSchema.parse(raw).supplier,
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${shop.supplierId}/pause`, {
+          expectedVersion: current.version,
+          paused: true,
+          reason: "admin",
+          note: "Проверка",
+        }),
+        (raw) => raw,
+      );
+      expect(await pressAndDecide(toFirst, "confirm")).toBe("accepted");
+      expect((await orderRow(order.id)).status).toBe("accepted");
+    });
+
     it("of an employee who turned the notices off after it counts all the same", async () => {
       const { order, toMarat, marat } = await world();
       const off = await marat.as("patch", "/supplier/me", { notificationsEnabled: false });

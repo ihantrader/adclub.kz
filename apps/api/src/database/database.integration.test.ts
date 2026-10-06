@@ -121,7 +121,55 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790600000000_account-profile-and-garage",
       "1790650000000_account-car-idempotency-key",
       "1790700000000_supplier-delivery-by-default",
+      "1790750000000_button-press-supplier-blocked",
     ]);
+  });
+
+  it("keeps a press of a blocked company as `supplier_blocked`, and rolls back keeping the press (button press supplier blocked)", async () => {
+    const event = (
+      await client.query<{ id: string }>(
+        "INSERT INTO inbound_webhook_event (provider, external_id) VALUES ('whatsapp', 'blocked-press') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const press = (
+      await client.query<{ id: string }>(
+        `INSERT INTO message_button_press (event_id, provider_message_id, from_phone, applied_at, outcome)
+         VALUES ($1, 'wamid.blocked', '+77055550101', now(), 'supplier_blocked') RETURNING id`,
+        [event],
+      )
+    ).rows[0]!.id;
+    await expect(
+      client.query("UPDATE message_button_press SET outcome = 'unheard_of' WHERE id = $1", [press]),
+    ).rejects.toThrow(/message_button_press_outcome_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The press stays, with the nearest outcome the previous list had.
+    const after = await client.query<{ outcome: string }>(
+      "SELECT outcome FROM message_button_press WHERE id = $1",
+      [press],
+    );
+    expect(after.rows[0]?.outcome).toBe("conflict");
+    await expect(
+      client.query("UPDATE message_button_press SET outcome = 'supplier_blocked' WHERE id = $1", [
+        press,
+      ]),
+    ).rejects.toThrow(/message_button_press_outcome_check/);
+
+    runMigrate("up", container.getConnectionUri());
+    await client.query(
+      "UPDATE message_button_press SET outcome = 'supplier_blocked' WHERE id = $1",
+      [press],
+    );
+    // What this test put in leaves with it.
+    await client.query("DELETE FROM inbound_webhook_event WHERE id = $1", [event]);
+    const allowsBlocked = async () =>
+      (
+        await client.query<{ found: boolean }>(
+          `SELECT pg_get_constraintdef(oid) LIKE '%supplier_blocked%' AS found
+             FROM pg_constraint WHERE conname = 'message_button_press_outcome_check'`,
+        )
+      ).rows[0]?.found === true;
+    await walkDownPast(allowsBlocked);
   });
 
   it("starts every company without delivery by default, and rolls back keeping the companies (supplier delivery by default)", async () => {

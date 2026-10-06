@@ -31,7 +31,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * 3. the employee of the payload belongs to the order's company and has this
  *    number — otherwise `foreign_message` or `phone_mismatch`;
  * 4. the employee is still one — otherwise the press is not applied and the
- *    answer says only that there is no access any more (`member_removed`).
+ *    answer says only that there is no access any more (`member_removed`);
+ * 5. the company may make the move (`supplierOrderMoveVerdict`, decided by
+ *    the state machine) — a blocked one may not: `supplier_blocked`, no
+ *    answer (TASK-033.A).
  *
  * None of these is answered to anybody but the fourth: a message to a number
  * that did not prove itself would be a message to whoever sent the event.
@@ -149,6 +152,12 @@ export class OrderButtonPresses implements ButtonPressHandler, OnModuleInit {
           `Order button press found the order moved on order=${orderId} status=${outcome.order.status} member=${member.id}`,
         );
         return "conflict";
+      case "refused":
+        // A blocked company (TASK-033.A): the press is kept with its outcome,
+        // and nobody is written to — there is no template that says it, and
+        // the texts of W-* change only with Meta's approval. The cabinet
+        // says it to the employee on the next try.
+        return "supplier_blocked";
     }
   }
 }

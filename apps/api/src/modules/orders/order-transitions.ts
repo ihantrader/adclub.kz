@@ -17,11 +17,14 @@ import {
   readyReserveEnd,
   receiptDate,
   reserveWarningAt,
+  supplierOrderMoveVerdict,
+  supplierState,
   type OrderAction,
 } from "@adclub/domain";
 import { and, desc, eq, gte, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
+import { supplier } from "../identity";
 import { receiptSchedules } from "../offers";
 import { AppSettings } from "../settings";
 import { AdminSignals } from "../signals";
@@ -106,7 +109,14 @@ export type MoveOutcome =
   /** The same person already made this move; nothing changed. */
   | { kind: "repeated"; order: OrderRow }
   /** Someone else moved the order first, or it can't make this move any more. */
-  | { kind: "conflict"; order: OrderRow; last: OrderEventRow | null };
+  | { kind: "conflict"; order: OrderRow; last: OrderEventRow | null }
+  /**
+   * The company may not make this move in its state (TASK-033.A): blocked,
+   * it only gives orders out (`supplierOrderMoveVerdict`). Nothing changed,
+   * nothing is written to the order's journal — the press was not a late
+   * answer to the order, it was not allowed at all.
+   */
+  | { kind: "refused"; order: OrderRow; reason: "supplier_blocked" | "not_in_channel" };
 
 /** An administrator's extension of one deadline of one order (A-ORD-02, A-ORD-03). */
 export interface ExtensionRequest {
@@ -239,6 +249,10 @@ export class OrderTransitions {
 
   /** A person's move on an order (the caller has checked the order is theirs). */
   async move(tx: DbExecutor, request: MoveRequest): Promise<MoveOutcome> {
+    const refused = await this.supplierRefusal(tx, request);
+    if (refused) {
+      return refused;
+    }
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
       const at = await databaseNow(tx);
       const row = await this.read(tx, request.orderId);
@@ -263,6 +277,45 @@ export class OrderTransitions {
       }
     }
     return this.refuse(tx, await this.read(tx, request.orderId), request, await databaseNow(tx));
+  }
+
+  /**
+   * An employee's move the state of their company does not allow
+   * (`supplierOrderMoveVerdict`, TASK-033.A; SCREENS 6.0): a blocked company
+   * gives orders out and does nothing else to them, through the cabinet and
+   * the buttons of WhatsApp alike. The company's row is read `FOR SHARE`: a
+   * blocking that comes at the same moment waits for this move or is seen
+   * by it — the move never slips in after the administrator's decision.
+   */
+  private async supplierRefusal(
+    tx: DbExecutor,
+    request: MoveRequest,
+  ): Promise<Extract<MoveOutcome, { kind: "refused" }> | null> {
+    if (request.actor.type !== "supplier_member") {
+      return null;
+    }
+    const channel = request.channel === "whatsapp" ? "whatsapp" : "supplier_web";
+    const [company] = await tx
+      .select({ pauseReason: supplier.pauseReason, blockedAt: supplier.blockedAt })
+      .from(supplier)
+      .where(eq(supplier.id, request.actor.supplierId))
+      .for("share");
+    const state = supplierState({
+      pauseReason: company?.pauseReason ?? null,
+      blocked: company?.blockedAt != null,
+    });
+    // `close` may turn into `close_late` (`orElse`): both are judged.
+    const actions = [request.action, ...(request.orElse ? [request.orElse] : [])];
+    for (const action of actions) {
+      const verdict = supplierOrderMoveVerdict(state, action, channel);
+      if (verdict !== "allowed") {
+        this.logger.log(
+          `Order action refused order=${request.orderId} action=${action} channel=${channel} verdict=${verdict} member=${request.actor.memberId}`,
+        );
+        return { kind: "refused", order: await this.read(tx, request.orderId), reason: verdict };
+      }
+    }
+    return null;
   }
 
   /**

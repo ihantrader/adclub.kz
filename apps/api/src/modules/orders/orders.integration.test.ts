@@ -2545,6 +2545,153 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
     });
   });
 
+  describe("a blocked company (TASK-033.A, SCREENS 6.0)", () => {
+    /** Blocks or unblocks the company as the administrator, at its current version. */
+    async function setBlocked(of: Company, blocked: boolean) {
+      const current = await ok(
+        asAdmin("get", `/admin/suppliers/${of.supplierId}`),
+        (raw) => adminSupplierResponseSchema.parse(raw).supplier,
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${of.supplierId}/block`, {
+          expectedVersion: current.version,
+          blocked,
+          reason: blocked ? "Нарушение правил клуба" : "Разобрались",
+        }),
+        (raw) => raw,
+      );
+    }
+
+    async function setPaused(of: Company, paused: boolean) {
+      const current = await ok(
+        asAdmin("get", `/admin/suppliers/${of.supplierId}`),
+        (raw) => adminSupplierResponseSchema.parse(raw).supplier,
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${of.supplierId}/pause`, {
+          expectedVersion: current.version,
+          paused,
+          ...(paused ? { reason: "admin", note: "Проверка" } : {}),
+        }),
+        (raw) => raw,
+      );
+    }
+
+    async function refused(test: PromiseLike<Response>) {
+      const response = await test;
+      expect(response.status).toBe(403);
+      expect((response.body as { code: string }).code).toBe("SUPPLIER_BLOCKED");
+    }
+
+    it("refuses accepting, marking ready and declining, changes nothing and journals nothing; viewing, the lookup and giving out go on; lifting the block gives the moves back", async () => {
+      const shop = await company("Блокировка");
+      const marat = await colleague(shop, "Марат");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const fresh = await place(buyer, offer);
+      const accepted = await place(buyer, offer, { allowAnotherActive: true });
+      const ready = await place(buyer, offer, { allowAnotherActive: true });
+      await accept(shop, accepted.id);
+      await accept(shop, ready.id);
+      await ok(
+        shop.as("post", `/supplier/orders/${ready.id}/ready`, { expectedVersion: 2 }),
+        (raw) => raw,
+      );
+      const before = await Promise.all([fresh, accepted, ready].map((order) => row(order.id)));
+      const journalBefore = await Promise.all(
+        [fresh, accepted, ready].map((order) => events(order.id)),
+      );
+
+      await setBlocked(shop, true);
+
+      await refused(shop.as("post", `/supplier/orders/${fresh.id}/accept`, { expectedVersion: 1 }));
+      await refused(
+        marat.as("post", `/supplier/orders/${fresh.id}/decline`, {
+          expectedVersion: 1,
+          reason: "out_of_stock",
+        }),
+      );
+      await refused(
+        shop.as("post", `/supplier/orders/${accepted.id}/ready`, { expectedVersion: 2 }),
+      );
+      await refused(
+        marat.as("post", `/supplier/orders/${accepted.id}/decline`, { expectedVersion: 2 }),
+      );
+      await refused(
+        shop.as("post", `/supplier/orders/${ready.id}/decline`, { expectedVersion: 3 }),
+      );
+      // Nothing moved, and no «late action» was kept against anybody.
+      for (const [index, order] of [fresh, accepted, ready].entries()) {
+        const now = await row(order.id);
+        expect({ status: now.status, version: now.version }).toEqual({
+          status: before[index]!.status,
+          version: before[index]!.version,
+        });
+        expect(await events(order.id)).toEqual(journalBefore[index]);
+      }
+
+      // Looking at the orders stays.
+      expect((await supplierOrder(marat, fresh.id)).status).toBe("created");
+      await ok(shop.as("get", "/supplier/orders?tab=new"), (raw) =>
+        checked(supplierOrderPageSchema)(raw),
+      );
+      // So does finding an order by its code and giving it out.
+      expect(await lookup(marat, { code: codeOf(ready) })).toMatchObject({ result: "ready" });
+      expect(await closeByCode(marat, { code: codeOf(ready) })).toMatchObject({
+        result: "given_out",
+        late: false,
+      });
+      expect(await closeByCode(shop, { qr: qrOf(accepted) })).toMatchObject({
+        result: "given_out",
+      });
+
+      // Lifted: the same employee, the same session, the moves are back.
+      await setBlocked(shop, false);
+      expect((await accept(shop, fresh.id)).status).toBe("accepted");
+    });
+
+    it("gives an expired pickup out late while blocked (PRODUCT 10.7)", async () => {
+      const shop = await company("Блокировка поздно");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await accept(shop, order.id);
+      await expireReserve(order.id);
+      await setBlocked(shop, true);
+      expect(await lookup(shop, { code: codeOf(order) })).toMatchObject({ result: "late" });
+      expect(await closeByCode(shop, { code: codeOf(order) })).toMatchObject({
+        result: "given_out",
+        late: true,
+      });
+    });
+
+    it("lets a paused company answer its orders as before", async () => {
+      const shop = await company("Пауза заявок");
+      const offer = await put(shop, padsId);
+      const buyer = await customer();
+      const first = await place(buyer, offer);
+      const second = await place(buyer, offer, { allowAnotherActive: true });
+      await setPaused(shop, true);
+      expect((await accept(shop, first.id)).status).toBe("accepted");
+      await ok(
+        shop.as("post", `/supplier/orders/${first.id}/ready`, { expectedVersion: 2 }),
+        (raw) => raw,
+      );
+      await ok(
+        shop.as("post", `/supplier/orders/${second.id}/decline`, { expectedVersion: 1 }),
+        (raw) => raw,
+      );
+      // Paused and blocked at once: the blocking decides.
+      await setBlocked(shop, true);
+      await refused(
+        shop.as("post", `/supplier/orders/${first.id}/decline`, { expectedVersion: 3 }),
+      );
+      expect(await closeByCode(shop, { code: codeOf(first) })).toMatchObject({
+        result: "given_out",
+      });
+    });
+  });
+
   describe("what the cabinet's screens read (TASK-033)", () => {
     const tab = async (by: Company, query: string) =>
       ok(by.as("get", `/supplier/orders?${query}`), (body) =>

@@ -64,6 +64,7 @@ import {
   registrationIncomplete,
   stateConflict,
   subscriptionRequired,
+  supplierBlocked,
   validationError,
 } from "./order-errors";
 import { Discipline } from "./order-discipline";
@@ -791,6 +792,12 @@ export class OrdersService {
       await options.scope(tx);
       return this.transitions.move(tx, options.request);
     });
+    if (outcome.kind === "refused") {
+      // The cabinet has every move of an employee: only the state of the company refuses one.
+      throw outcome.reason === "supplier_blocked"
+        ? supplierBlocked()
+        : new Error(`Move ${options.request.action} refused: ${outcome.reason}`);
+    }
     if (outcome.kind === "conflict") {
       throw stateConflict({
         currentStatus: outcome.order.status,

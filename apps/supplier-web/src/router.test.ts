@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { locationOf, menuOf, offerPath, routeOf, tabOf } from "./router";
+import { locationOf, menuOf, offerPath, orderPath, routeOf, tabOf } from "./router";
 
 describe("the cabinet's addresses", () => {
   it("maps every page to its address and back, with or without a trailing slash", () => {
@@ -34,5 +34,15 @@ describe("the cabinet's addresses", () => {
     }
     expect(menuOf("more")).toBe("settings");
     expect(menuOf("team")).toBe("team");
+  });
+
+  it("gives an order its own address under «Заявки» — the link of W-01 (TASK-033)", () => {
+    const id = "6f1e2d3c-4b5a-4987-8a6b-5c4d3e2f1a0b";
+    expect(orderPath(id)).toBe(`/orders/${id}`);
+    expect(locationOf(`/orders/${id}`)).toEqual({ route: "order", id });
+    expect(locationOf(`/orders/${id.toUpperCase()}/`)).toEqual({ route: "order", id });
+    expect(routeOf("/orders/1042")).toBeNull();
+    expect(tabOf("order")).toBe("orders");
+    expect(menuOf("order")).toBe("orders");
   });
 });

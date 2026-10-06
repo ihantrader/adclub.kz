@@ -19,6 +19,9 @@ import { applyDefaultNotificationLanguage } from "./cabinet/notification-languag
 import { ItemSearch } from "./offers/ItemSearch";
 import { NewOfferScreen, OfferCardScreen } from "./offers/OfferScreen";
 import { OffersList } from "./offers/OffersList";
+import { OrderCardScreen } from "./orders/OrderScreen";
+import { OrdersList } from "./orders/OrdersList";
+import { Scanner } from "./scan/Scanner";
 import { subscribeOnline, isOnline } from "./connection";
 import { useLanguage, useT } from "./i18n";
 import { forgetPerson, installOffered, lastKnown, markInstallOffered } from "./prefs";
@@ -28,7 +31,6 @@ import { AuthLayout } from "./screens/AuthLayout";
 import { Company } from "./screens/Company";
 import { Install } from "./screens/Install";
 import { More } from "./screens/More";
-import { SectionPlaceholder } from "./screens/SectionPlaceholder";
 import { Settings } from "./screens/Settings";
 import { Shell } from "./screens/Shell";
 import { SignIn } from "./screens/SignIn";
@@ -37,6 +39,9 @@ import { Team } from "./screens/Team";
 import { UpdateRequired } from "./screens/UpdateRequired";
 
 type Ready = Extract<CabinetState, { status: "ready" }>;
+
+/** The club's time zone, for the scanner opened before the company is known (no network). */
+const CLUB_TIME_ZONE = "Asia/Almaty";
 
 /** How often an open cabinet re-reads the company's state (a pause, a block) while visible. */
 const COMPANY_REFRESH_MS = 5 * 60_000;
@@ -214,10 +219,14 @@ function Page({
 }) {
   const t = useT();
   switch (route) {
-    case "orders":
-      return <SectionPlaceholder title={t("tabs.orders")} icon="receipt" />;
     case "scan":
-      return <SectionPlaceholder title={t("tabs.scan")} icon="scan" />;
+      // Without a network the scanner still opens: it says T-SCAN-01 itself.
+      return (
+        <Scanner
+          companyName={cabinet?.company.supplier.name ?? lastKnown()?.supplierName ?? ""}
+          timeZone={cabinet?.company.company.timeZone ?? CLUB_TIME_ZONE}
+        />
+      );
     case "more":
       return <More />;
     case "install":
@@ -235,7 +244,18 @@ function Page({
       />
     );
   }
+  const card = cabinet.company.company;
   switch (route) {
+    case "orders":
+      return (
+        <OrdersList
+          generation={cabinet.generation}
+          timeZone={card.timeZone}
+          blocked={card.state === "blocked"}
+        />
+      );
+    case "order":
+      return <OrderCardScreen timeZone={card.timeZone} blocked={card.state === "blocked"} />;
     case "settings":
       return <Settings cabinet={cabinet} />;
     case "team":

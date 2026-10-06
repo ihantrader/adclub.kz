@@ -10,11 +10,12 @@ import {
   toastArea,
   type NavItem,
 } from "@adclub/ui";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { companyBanners } from "../cabinet/company-state";
 import type { CabinetState } from "../cabinet/cabinet-store";
 import { useOnline } from "../connection";
 import { useT } from "../i18n";
+import { refreshNewOrders, useNewOrders, useVisiblePoll } from "../orders/live";
 import { useInstallWay } from "../pwa/install";
 import { useAppUpdated } from "../pwa/service-worker";
 import {
@@ -31,6 +32,9 @@ import {
 import { CompanySwitchDialog } from "./CompanySwitch";
 
 type Ready = Extract<CabinetState, { status: "ready" }>;
+
+/** How often the other pages ask for «Новые · N» of the badge («Заявки» tells it with every answer). */
+const BADGE_POLL_MS = 30_000;
 
 export interface ShellProps {
   route: RouteKey;
@@ -58,15 +62,40 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const memberName = cabinet?.access.member.displayName ?? fallbackNames?.memberName ?? "";
   const canSwitch = (cabinet?.companies.length ?? 0) > 1;
   const banners = cabinet ? companyBanners(cabinet.company.company) : [];
+  const generation = cabinet?.generation ?? null;
+  const newOrders = useNewOrders(generation);
+  // «Заявки» keep the count current themselves; elsewhere it is asked for alone.
+  const askBadge = generation !== null && route !== "orders";
+  useEffect(() => {
+    if (askBadge) void refreshNewOrders(generation);
+  }, [askBadge, generation]);
+  useVisiblePoll(
+    () => {
+      if (generation !== null) void refreshNewOrders(generation);
+    },
+    BADGE_POLL_MS,
+    askBadge,
+  );
+  const ordersItem: NavItem<StaticRoute> = {
+    key: "orders",
+    label: t("tabs.orders"),
+    icon: "receipt",
+    href: routePaths.orders,
+    ...(newOrders !== null &&
+      newOrders > 0 && {
+        count: newOrders,
+        countLabel: t("orders.badgeLabel", { n: newOrders }),
+      }),
+  };
 
   const tabs: NavItem<StaticRoute>[] = [
-    { key: "orders", label: t("tabs.orders"), icon: "receipt", href: routePaths.orders },
+    ordersItem,
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
     { key: "more", label: t("tabs.more"), icon: "dots", href: routePaths.more },
   ];
   // The desktop menu lists the sections of «Ещё» directly (design/mockups/supplier.html).
   const menu: NavItem<StaticRoute>[] = [
-    { key: "orders", label: t("tabs.orders"), icon: "receipt", href: routePaths.orders },
+    ordersItem,
     { key: "scan", label: t("tabs.scan"), icon: "scan", href: routePaths.scan },
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
     { key: "team", label: t("nav.team"), icon: "users", href: routePaths.team },

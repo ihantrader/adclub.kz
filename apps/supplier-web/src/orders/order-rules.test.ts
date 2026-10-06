@@ -1,0 +1,401 @@
+import { ApiError } from "@adclub/api-client";
+import type { OrderEvent, SupplierOrderSummary } from "@adclub/contracts";
+import { supplierText } from "@adclub/i18n";
+import { describe, expect, it } from "vitest";
+import type { Translate } from "../i18n";
+import {
+  actionProblem,
+  answerTimer,
+  arrivedIds,
+  changeNotice,
+  conflictText,
+  durationText,
+  finishedQuery,
+  formatWhen,
+  journalLines,
+  nextTimerTick,
+  orderActions,
+  startOfDay,
+  whatsappLink,
+  workGroups,
+} from "./order-rules";
+
+const t: Translate = (key, params) => supplierText("ru", key, params);
+const ALMATY = "Asia/Almaty";
+const MINUTE = 60_000;
+/** 2026-10-06 12:00 in Almaty (UTC+5). */
+const NOON = Date.parse("2026-10-06T07:00:00Z");
+
+function summary(overrides: Partial<SupplierOrderSummary>): SupplierOrderSummary {
+  return {
+    id: crypto.randomUUID(),
+    number: 1001,
+    kind: "stock",
+    status: "created",
+    isTest: false,
+    quantity: 1,
+    unitPrice: 12_500,
+    total: 12_500,
+    currency: "KZT",
+    fulfillment: "pickup",
+    item: {
+      id: crypto.randomUUID(),
+      type: "part",
+      name: { text: "Колодки", isFallback: false },
+      article: null,
+      brand: null,
+    },
+    respondBy: new Date(NOON + 60 * MINUTE).toISOString(),
+    reserveUntil: null,
+    receiptOn: null,
+    createdAt: new Date(NOON - 10 * MINUTE).toISOString(),
+    offerId: crypto.randomUUID(),
+    handledBy: null,
+    handledAt: null,
+    closure: null,
+    version: 1,
+    lateCloseUntil: null,
+    ...overrides,
+  };
+}
+
+describe("the answer timer (S-ORD-01)", () => {
+  it("counts whole minutes up, never «0 мин», and is urgent under 15 minutes", () => {
+    const due = (ms: number) => new Date(NOON + ms).toISOString();
+    expect(answerTimer(due(90 * MINUTE), NOON)).toEqual({
+      kind: "left",
+      minutes: 90,
+      urgent: false,
+    });
+    expect(answerTimer(due(15 * MINUTE), NOON)).toEqual({
+      kind: "left",
+      minutes: 15,
+      urgent: false,
+    });
+    expect(answerTimer(due(15 * MINUTE - 1), NOON)).toEqual({
+      kind: "left",
+      minutes: 15,
+      urgent: true,
+    });
+    expect(answerTimer(due(1_000), NOON)).toEqual({ kind: "left", minutes: 1, urgent: true });
+    expect(answerTimer(due(0), NOON)).toEqual({ kind: "expired" });
+    expect(answerTimer(due(-MINUTE), NOON)).toEqual({ kind: "expired" });
+  });
+
+  it("says minutes and hours as a person would", () => {
+    expect(durationText(45, t)).toBe("45 мин");
+    expect(durationText(120, t)).toBe("2 ч");
+    expect(durationText(135, t)).toBe("2 ч 15 мин");
+  });
+
+  it("knows when the shown minute changes next", () => {
+    const due = new Date(NOON + 10 * MINUTE + 20_000).toISOString();
+    expect(nextTimerTick(due, NOON)).toBe(20_000);
+    expect(nextTimerTick(new Date(NOON - 1).toISOString(), NOON)).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("times in the zone of the point", () => {
+  it("says today's time alone, yesterday and tomorrow in words, other days by date", () => {
+    expect(formatWhen("2026-10-06T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("13:40");
+    expect(formatWhen("2026-10-05T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("вчера, 13:40");
+    expect(formatWhen("2026-10-07T03:00:00Z", ALMATY, "ru", t, NOON)).toBe("завтра, 08:00");
+    expect(formatWhen("2026-10-01T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("1 октября, 13:40");
+    // Just after midnight in Almaty is still «yesterday» in UTC.
+    expect(formatWhen("2026-10-05T19:30:00Z", ALMATY, "ru", t, NOON)).toBe("00:30");
+  });
+
+  it("finds the start of today in the point's zone", () => {
+    expect(new Date(startOfDay(ALMATY, NOON)).toISOString()).toBe("2026-10-05T19:00:00.000Z");
+  });
+});
+
+describe("«В работе» in groups", () => {
+  it("puts ready ones first by the end of the reserve, then accepted, then the late window", () => {
+    const late = summary({ status: "reserve_expired", lateCloseUntil: "2026-10-07T07:00:00Z" });
+    const passed = summary({ status: "reserve_expired", lateCloseUntil: null });
+    const accepted = summary({ status: "accepted" });
+    const readyLater = summary({ status: "ready", reserveUntil: "2026-10-06T15:00:00Z" });
+    const readySooner = summary({ status: "ready", reserveUntil: "2026-10-06T10:00:00Z" });
+    const groups = workGroups([late, accepted, readyLater, passed, readySooner]);
+    expect(groups.map((group) => [group.group, group.orders.map((order) => order.id)])).toEqual([
+      ["awaitingPickup", [readySooner.id, readyLater.id]],
+      ["preparing", [accepted.id]],
+      ["lateClose", [late.id]],
+    ]);
+    expect(workGroups([])).toEqual([]);
+  });
+
+  it("lights up only what came since the previous answer", () => {
+    expect(arrivedIds(null, ["a", "b"])).toEqual([]);
+    expect(arrivedIds(new Set(["a"]), ["a", "b", "c"])).toEqual(["b", "c"]);
+  });
+});
+
+describe("«Завершённые» narrowed", () => {
+  it("asks by status and from the start of the period's first day", () => {
+    expect(finishedQuery({ period: "all", status: null }, ALMATY, NOON)).toEqual({});
+    expect(finishedQuery({ period: "today", status: "completed" }, ALMATY, NOON)).toEqual({
+      status: "completed",
+      from: "2026-10-05T19:00:00.000Z",
+    });
+    expect(finishedQuery({ period: "week", status: null }, ALMATY, NOON)).toEqual({
+      from: "2026-09-29T19:00:00.000Z",
+    });
+  });
+});
+
+describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Любой»)", () => {
+  const open = { blocked: false };
+  it("offers exactly what the server allows from each status", () => {
+    expect(orderActions(summary({ status: "created" }), NOON, open)).toEqual({
+      primary: "accept",
+      secondary: ["decline"],
+    });
+    expect(orderActions(summary({ status: "accepted" }), NOON, open)).toEqual({
+      primary: "markReady",
+      secondary: ["giveOut", "decline"],
+    });
+    expect(orderActions(summary({ status: "ready" }), NOON, open)).toEqual({
+      primary: "giveOut",
+      secondary: ["decline"],
+    });
+    expect(
+      orderActions(
+        summary({ status: "reserve_expired", lateCloseUntil: "2026-10-07T07:00:00Z" }),
+        NOON,
+        open,
+      ),
+    ).toEqual({ primary: "closeLate", secondary: [] });
+    for (const status of [
+      "completed",
+      "cancelled_by_user",
+      "declined_by_supplier",
+      "response_expired",
+      "reserve_expired",
+    ] as const) {
+      expect(orderActions(summary({ status }), NOON, open)).toEqual({
+        primary: null,
+        secondary: [],
+      });
+    }
+  });
+
+  it("takes «Принять» away once the answer deadline passed, and the late close at its edge", () => {
+    const due = summary({ status: "created", respondBy: new Date(NOON).toISOString() });
+    expect(orderActions(due, NOON, open).primary).toBeNull();
+    const edge = summary({
+      status: "reserve_expired",
+      lateCloseUntil: new Date(NOON).toISOString(),
+    });
+    expect(orderActions(edge, NOON, open).primary).toBeNull();
+  });
+
+  it("leaves a blocked company looking at its orders and giving them out, nothing else (SCREENS 6.0)", () => {
+    const blocked = { blocked: true };
+    expect(orderActions(summary({ status: "created" }), NOON, blocked).primary).toBeNull();
+    expect(orderActions(summary({ status: "accepted" }), NOON, blocked)).toEqual({
+      primary: "giveOut",
+      secondary: [],
+    });
+    expect(orderActions(summary({ status: "ready" }), NOON, blocked)).toEqual({
+      primary: "giveOut",
+      secondary: [],
+    });
+  });
+
+  it("has no buttons for an order of a kind stage B doesn't know", () => {
+    const later = summary({ kind: "service" as SupplierOrderSummary["kind"] });
+    expect(orderActions(later, NOON, open)).toEqual({ primary: null, secondary: [] });
+  });
+});
+
+describe("a conflict is a notice naming who acted (PRODUCT 12.6)", () => {
+  const at = "2026-10-06T07:02:00Z";
+  const format = (iso: string) => formatWhen(iso, ALMATY, "ru", t, NOON);
+  const member = {
+    kind: "member" as const,
+    memberId: crypto.randomUUID(),
+    name: "Ерлан",
+    removed: false,
+  };
+  const details = (action: string, actor: object = member) => ({
+    currentStatus: "accepted",
+    version: 2,
+    lastAction: { action, at, actor },
+  });
+
+  it("says what the colleague, the client, the administrator or the clock did", () => {
+    expect(conflictText(details("accept"), format, t)).toBe("Заявку уже принял Ерлан в 12:02");
+    expect(conflictText(details("decline"), format, t)).toBe("Заявку уже отклонил Ерлан в 12:02");
+    expect(conflictText(details("close"), format, t)).toBe("Заявку уже выдал Ерлан в 12:02");
+    expect(conflictText(details("cancel", { kind: "user" }), format, t)).toBe(
+      "Клиент отменил заявку в 12:02",
+    );
+    expect(
+      conflictText(
+        details("admin_close", { kind: "admin", adminId: crypto.randomUUID() }),
+        format,
+        t,
+      ),
+    ).toBe("Заявку закрыл администратор клуба в 12:02");
+    expect(conflictText(details("expire_no_response", { kind: "system" }), format, t)).toBe(
+      "Срок ответа истёк в 12:02",
+    );
+    expect(conflictText({ currentStatus: "accepted", version: 2 }, format, t)).toBe(
+      "Заявка изменилась — посмотрите её текущий статус",
+    );
+    expect(conflictText("garbage", format, t)).toBe(
+      "Заявка изменилась — посмотрите её текущий статус",
+    );
+  });
+
+  it("says who moved an order seen moving on a re-read, and nothing when it stayed", () => {
+    const accepted = {
+      id: crypto.randomUUID(),
+      action: "accept" as const,
+      fromStatus: "created" as const,
+      toStatus: "accepted" as const,
+      at,
+      actor: member,
+      channel: "whatsapp" as const,
+      details: {},
+    };
+    expect(
+      changeNotice(
+        { status: "created" },
+        { status: "accepted", version: 2, events: [accepted] },
+        format,
+        t,
+      ),
+    ).toBe("Заявку уже принял Ерлан в 12:02");
+    expect(
+      changeNotice(
+        { status: "accepted" },
+        { status: "accepted", version: 3, events: [accepted] },
+        format,
+        t,
+      ),
+    ).toBeNull();
+  });
+
+  it("tells a conflict from an error of the press", () => {
+    const conflict = new ApiError({
+      code: "ORDER_STATE_CONFLICT",
+      message: "x",
+      status: 409,
+      retryable: false,
+      details: details("accept"),
+    });
+    expect(actionProblem(conflict, format, t)).toEqual({
+      conflict: true,
+      text: "Заявку уже принял Ерлан в 12:02",
+    });
+    const offline = new ApiError({
+      code: "NETWORK_ERROR",
+      message: "x",
+      status: 0,
+      retryable: true,
+    });
+    expect(actionProblem(offline, format, t).conflict).toBe(false);
+    const limited = new ApiError({
+      code: "RATE_LIMITED",
+      message: "x",
+      status: 429,
+      retryable: true,
+      details: { retryAfterSeconds: 90 },
+    });
+    expect(actionProblem(limited, format, t).text).toBe(
+      "Слишком много запросов. Попробуйте через 2 мин",
+    );
+  });
+});
+
+describe("the journal in words (S-ORD-02)", () => {
+  const format = (iso: string) => formatWhen(iso, ALMATY, "ru", t, NOON);
+  const event = (overrides: Partial<OrderEvent>): OrderEvent => ({
+    id: crypto.randomUUID(),
+    action: "create",
+    fromStatus: null,
+    toStatus: "created",
+    at: "2026-10-06T06:40:00Z",
+    actor: { kind: "user" },
+    channel: "app",
+    details: {},
+    ...overrides,
+  });
+
+  it("reads «Создана 11:40 · Принял Ерлан, 12:02 (через WhatsApp) · Готово — Айжан, …»", () => {
+    const erlan = {
+      kind: "member" as const,
+      memberId: crypto.randomUUID(),
+      name: "Ерлан",
+      removed: false,
+    };
+    const aizhan = {
+      kind: "member" as const,
+      memberId: crypto.randomUUID(),
+      name: "Айжан",
+      removed: false,
+    };
+    const lines = journalLines(
+      [
+        event({}),
+        event({ action: "accept", at: "2026-10-06T07:02:00Z", actor: erlan, channel: "whatsapp" }),
+        event({ action: "late_action_ignored", actor: aizhan, channel: "supplier_web" }),
+        event({ action: "reserve_expiring", actor: { kind: "system" }, channel: "timer" }),
+        event({
+          action: "mark_ready",
+          at: "2026-10-06T11:10:00Z",
+          actor: aizhan,
+          channel: "supplier_web",
+        }),
+        event({
+          action: "close",
+          at: "2026-10-06T11:30:00Z",
+          actor: aizhan,
+          channel: "supplier_web",
+          details: { closeMethod: "qr" },
+        }),
+      ],
+      format,
+      t,
+    ).map((line) => line.text);
+    expect(lines).toEqual([
+      "Создана 11:40",
+      "Принял Ерлан, 12:02 (через WhatsApp)",
+      "Готово — Айжан, 16:10",
+      "Выдана по QR — Айжан, 16:30",
+    ]);
+  });
+
+  it("names the administrator's close and the reason of a decline", () => {
+    const lines = journalLines(
+      [
+        event({
+          action: "decline",
+          actor: { kind: "member", memberId: crypto.randomUUID(), name: "Марат", removed: false },
+          details: { reason: "out_of_stock" },
+          channel: "supplier_web",
+        }),
+        event({
+          action: "admin_close",
+          actor: { kind: "admin", adminId: crypto.randomUUID() },
+          channel: "admin",
+        }),
+      ],
+      format,
+      t,
+    ).map((line) => line.text);
+    expect(lines).toEqual([
+      "Отказ — Марат, 11:40 · Нет в наличии",
+      "Закрыта администратором, 11:40",
+    ]);
+  });
+});
+
+describe("the customer's channels", () => {
+  it("opens WhatsApp on the customer's number", () => {
+    expect(whatsappLink("+77011234567")).toBe("https://wa.me/77011234567");
+  });
+});

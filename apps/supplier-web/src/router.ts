@@ -4,7 +4,8 @@ import { useSyncExternalStore } from "react";
  * The cabinet's pages and their addresses (TASK-031 requirement 1): plain
  * paths that survive a reload, pushed onto the browser history so «назад»
  * works as expected. `/` opens the orders. An offer has its own address,
- * `/offers/<id>` (TASK-032).
+ * `/offers/<id>` (TASK-032), an order — `/orders/<id>` (TASK-033: the link
+ * «Открыть в кабинете» of the WhatsApp notification W-01 leads there).
  */
 export const routePaths = {
   orders: "/orders",
@@ -22,8 +23,8 @@ export const routePaths = {
 /** A page with a fixed address. */
 export type StaticRoute = keyof typeof routePaths;
 
-/** Every page; `offer` — one offer, `/offers/<id>`. */
-export type RouteKey = StaticRoute | "offer";
+/** Every page; `offer` — one offer, `/offers/<id>`; `order` — one order, `/orders/<id>`. */
+export type RouteKey = StaticRoute | "offer" | "order";
 
 /** The pages reached from «Ещё» on a phone; they open with «назад» to it. */
 export const morePages: readonly RouteKey[] = ["settings", "team", "company", "install"];
@@ -33,10 +34,16 @@ export const offerPages: readonly RouteKey[] = ["offerSearch", "offerNew", "offe
 
 export const DEFAULT_ROUTE: StaticRoute = "orders";
 
-const OFFER_PATH = /^\/offers\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const UUID = "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
+const OFFER_PATH = new RegExp(`^/offers/${UUID}$`, "i");
+const ORDER_PATH = new RegExp(`^/orders/${UUID}$`, "i");
 
 export function offerPath(offerId: string): string {
   return `/offers/${offerId}`;
+}
+
+export function orderPath(orderId: string): string {
+  return `/orders/${orderId}`;
 }
 
 /** The page of an address and its id (an offer's); `route: null` — not a page of the cabinet. */
@@ -48,6 +55,8 @@ export function locationOf(pathname: string): { route: RouteKey | null; id: stri
   }
   const offer = OFFER_PATH.exec(path);
   if (offer) return { route: "offer", id: offer[1]!.toLowerCase() };
+  const order = ORDER_PATH.exec(path);
+  if (order) return { route: "order", id: order[1]!.toLowerCase() };
   return { route: null, id: null };
 }
 
@@ -60,6 +69,7 @@ export function routeOf(pathname: string): RouteKey | null {
 export function tabOf(route: RouteKey): "orders" | "offers" | "scan" | "more" {
   if (morePages.includes(route) || route === "more") return "more";
   if (offerPages.includes(route)) return "offers";
+  if (route === "order") return "orders";
   return route as "orders" | "offers" | "scan";
 }
 
@@ -67,6 +77,7 @@ export function tabOf(route: RouteKey): "orders" | "offers" | "scan" | "more" {
 export function menuOf(route: RouteKey): StaticRoute {
   if (route === "more") return "settings";
   if (route === "offer" || offerPages.includes(route)) return "offers";
+  if (route === "order") return "orders";
   return route;
 }
 

@@ -1144,3 +1144,572 @@ ul {
     background: transparent;
   }
 }
+
+/* ---------- S-ORD-01…03 «Заявки» (TASK-033) ---------- */
+.order-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+}
+
+.order-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+}
+
+.order-section__title {
+  color: var(--ac-color-text-muted);
+}
+
+/* The whole card opens the order; its buttons stay buttons above the link. */
+.order-card {
+  position: relative;
+  transition: background-color var(--ac-motion-slow) var(--ac-motion-easing);
+}
+
+.order-card__link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.order-card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.order-card__link:focus-visible {
+  outline: none;
+}
+
+.order-card__link:focus-visible::after {
+  outline: 2px solid var(--ac-color-accent);
+  outline-offset: 2px;
+}
+
+.order-card__actions,
+.order-card .ac-badge {
+  position: relative;
+  z-index: 1;
+}
+
+.order-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ac-space-2);
+}
+
+/* A new order that came in while the page was open lights up for a moment (S-ORD-01). */
+.order-card--fresh,
+.order-row--fresh > td {
+  background: var(--ac-color-accent-tint);
+}
+
+/* On the light theme the tint is close to the page: the ring says it too. */
+.order-card--fresh {
+  box-shadow: inset 0 0 0 1px var(--ac-color-accent);
+}
+
+.order-state,
+.order-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+/* «Ответить за 12 мин»: under 15 minutes in `warning` with its icon, not by colour alone. */
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer--urgent {
+  color: var(--ac-color-warning);
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+.timer > .ac-icon {
+  flex: none;
+}
+
+.orders-table__group th {
+  padding-top: var(--ac-space-4);
+  background: var(--ac-color-surface-raised);
+  color: var(--ac-color-text);
+}
+
+.orders-table td {
+  vertical-align: middle;
+}
+
+/* Numbers, sums and times stay on one line; the item takes what is left. */
+.orders-table__number,
+.orders-table__money,
+.orders-table .timer,
+.orders-table .receiving {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.orders-table .order-state {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.orders-table .order-card__actions {
+  flex-wrap: nowrap;
+}
+
+.order-row--fresh > td {
+  transition: background-color var(--ac-motion-slow) var(--ac-motion-easing);
+}
+
+/* The item of an order: the thumbnail beside the name (in the offer card the block is a card itself). */
+.card > .item-block {
+  display: flex;
+  gap: var(--ac-space-3);
+}
+
+/* «Позвонить», «Написать в WhatsApp» are links that look like buttons. */
+a.ac-button {
+  text-decoration: none;
+}
+
+.order-hidden {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  color: var(--ac-color-text-muted);
+}
+
+.order-hidden > .ac-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.facts__note {
+  display: block;
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding-left: var(--ac-space-5);
+}
+
+.decline-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.order-actions {
+  justify-content: flex-end;
+}
+
+/* ---------- S-SCAN-01…04 «Сканер» (TASK-033, DESIGN 7.10) ---------- */
+/* The scanner takes the whole screen of a phone, the tabs too; from 1024 px
+   the side menu stays and the scanner fills the content area. */
+.scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--ac-color-bg);
+}
+
+.scanner__view {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.scanner__camera {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  color: var(--scanner-text);
+}
+
+/* One video for the whole scanner: it keeps playing under the panels. */
+.scanner__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--scanner-bg);
+  object-fit: cover;
+}
+
+.scanner__video--hidden {
+  visibility: hidden;
+}
+
+/* The frame: a square of 70 % of the smaller side (at most 320); outside it
+   the scrim, drawn as the frame's own shadow. */
+.scanner__frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(70vmin, 320px);
+  height: min(70vmin, 320px);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 200vmax var(--scanner-scrim);
+}
+
+.scanner__corner {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border: 0 solid var(--scanner-frame);
+}
+
+.scanner__corner--tl {
+  top: 0;
+  left: 0;
+  border-top-width: 4px;
+  border-left-width: 4px;
+}
+
+.scanner__corner--tr {
+  top: 0;
+  right: 0;
+  border-top-width: 4px;
+  border-right-width: 4px;
+}
+
+.scanner__corner--bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 4px;
+  border-left-width: 4px;
+}
+
+.scanner__corner--br {
+  right: 0;
+  bottom: 0;
+  border-right-width: 4px;
+  border-bottom-width: 4px;
+}
+
+.scanner__top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  padding: calc(var(--ac-space-4) + env(safe-area-inset-top)) var(--ac-space-4) var(--ac-space-4);
+}
+
+.scanner__company {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: var(--ac-font-weight-body-strong);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scanner__company--panel {
+  color: var(--ac-color-text);
+}
+
+/* Round buttons over the camera — 56 (DESIGN 7.10). */
+.scanner__round {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--scanner-round);
+  color: var(--scanner-text);
+  cursor: pointer;
+}
+
+.scanner__round--on {
+  background: var(--scanner-frame);
+  color: var(--scanner-on-frame);
+}
+
+.scanner__round:focus-visible,
+.scanner__manual:focus-visible {
+  outline: 2px solid var(--scanner-frame);
+  outline-offset: 2px;
+}
+
+.scanner__round-space {
+  flex: none;
+  width: 56px;
+}
+
+.scanner__bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ac-space-4);
+  padding: var(--ac-space-4) var(--ac-space-4) calc(var(--ac-space-6) + env(safe-area-inset-bottom));
+}
+
+.scanner__hint {
+  min-height: 22px;
+  max-width: 420px;
+  text-align: center;
+}
+
+.scanner__foreign {
+  display: inline-block;
+  padding: var(--ac-space-2) var(--ac-space-3);
+  border-radius: var(--ac-radius-s);
+  background: var(--scanner-round);
+}
+
+/* «Ввести код вручную» — a secondary button L on the dark of the camera. */
+.scanner__manual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ac-space-2);
+  width: 100%;
+  max-width: 420px;
+  min-height: 52px;
+  padding: var(--ac-space-3) var(--ac-space-4);
+  border: 1px solid var(--scanner-text);
+  border-radius: var(--ac-radius-s);
+  background: transparent;
+  color: var(--scanner-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: var(--ac-font-weight-label);
+  cursor: pointer;
+}
+
+/* The panels without the camera: manual entry, the order found, the outcome. */
+.scanner__panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--ac-color-bg);
+  color: var(--ac-color-text);
+}
+
+.scanner__panel-top {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  padding: calc(var(--ac-space-2) + env(safe-area-inset-top)) var(--ac-space-2) var(--ac-space-2);
+}
+
+.scanner__icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.scanner__icon-button:hover {
+  background: var(--ac-color-fill);
+}
+
+.scanner__icon-button:focus-visible {
+  outline: 2px solid var(--ac-color-accent);
+  outline-offset: 2px;
+}
+
+.scanner__panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 var(--ac-space-4) calc(var(--ac-space-6) + env(safe-area-inset-bottom));
+}
+
+.scanner__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  margin-top: var(--ac-space-2);
+}
+
+.scanner__searching {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ac-space-3);
+  color: var(--ac-color-text-muted);
+}
+
+.manual,
+.found,
+.camera-problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+}
+
+.manual .ac-keypad {
+  margin-top: var(--ac-space-2);
+}
+
+.found__item {
+  overflow-wrap: anywhere;
+}
+
+.camera-problem__icon {
+  color: var(--ac-color-text-muted);
+}
+
+.camera-problem__help {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  padding: var(--ac-space-4);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.camera-problem__help > .ac-text-body-strong:not(:first-child) {
+  margin-top: var(--ac-space-3);
+}
+
+/* S-SCAN-04: the top of the screen in the colour of the outcome, icon 48 and `titleL`. */
+.scanner__panel--success .scanner__panel-top,
+.result--success .result__top {
+  background: var(--ac-color-success-tint);
+}
+
+.scanner__panel--warning .scanner__panel-top,
+.result--warning .result__top {
+  background: var(--ac-color-warning-tint);
+}
+
+.scanner__panel--danger .scanner__panel-top,
+.result--danger .result__top {
+  background: var(--ac-color-danger-tint);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+}
+
+.scanner__panel--success .scanner__panel-body,
+.scanner__panel--warning .scanner__panel-body,
+.scanner__panel--danger .scanner__panel-body {
+  max-width: none;
+  padding: 0 0 calc(var(--ac-space-6) + env(safe-area-inset-bottom));
+}
+
+.result__top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-4) var(--ac-space-4) var(--ac-space-8);
+  overflow-wrap: anywhere;
+}
+
+.result--success .result__head > .ac-icon {
+  color: var(--ac-color-success);
+}
+
+.result--warning .result__head > .ac-icon {
+  color: var(--ac-color-warning);
+}
+
+.result--danger .result__head > .ac-icon {
+  color: var(--ac-color-danger);
+}
+
+.result__top,
+.result__body {
+  width: 100%;
+}
+
+.result__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 var(--ac-space-4);
+}
+
+.result__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-3);
+  width: 100%;
+  max-width: 448px;
+  margin: 0 auto;
+}
+
+/* T-SCAN-01: the code typed by hand, big (codeXL) — to write it down. */
+.result__code {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+@media (min-width: 1024px) {
+  .scanner {
+    left: var(--ac-sidebar);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-card,
+  .order-row--fresh > td {
+    transition: none;
+  }
+}

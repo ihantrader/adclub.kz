@@ -125,6 +125,44 @@ describe("supplier cabinet texts", () => {
     expect(supplierText("ru", "company.deliveryDefault")).toBe(
       "Доставка по умолчанию для новых предложений",
     );
+    // S-ORD-01…03, S-SCAN-01…04, T-SCAN-01 (TASK-033).
+    expect(supplierText("ru", "orders.emptyNew")).toBe("Новых заявок нет");
+    expect(supplierText("ru", "orders.emptyNewText")).toBe(
+      "Уведомления о новых заявках приходят в WhatsApp",
+    );
+    expect(supplierText("ru", "orders.emptyInProgress")).toBe("Заявок в работе нет");
+    expect(supplierText("ru", "orders.customerHidden")).toBe(
+      "Телефон откроется после принятия заявки",
+    );
+    expect(supplierText("ru", "orders.priceFixed")).toBe("Цена зафиксирована на момент оформления");
+    expect(supplierText("ru", "orders.conflict.accepted", { who: "Ерлан", time: "14:02" })).toBe(
+      "Заявку уже принял Ерлан в 14:02",
+    );
+    expect(supplierText("ru", "orders.declineTitle")).toBe("Отказать клиенту?");
+    expect(supplierText("ru", "orders.withdrawTitle")).toBe("Снять это предложение с продажи?");
+    expect(supplierText("ru", "scan.camera.denied")).toBe(
+      "Разрешите доступ к камере в настройках браузера",
+    );
+    expect(supplierText("ru", "scan.foreignQr")).toBe("Это не QR заявки клуба");
+    expect(supplierText("ru", "scan.result.notFound")).toBe("Код не найден. Проверьте цифры");
+    expect(supplierText("ru", "scan.result.otherSupplier")).toBe(
+      "Эта заявка оформлена у другого поставщика",
+    );
+    expect(supplierText("ru", "scan.result.closed", { when: "6 октября", who: "Айжан" })).toBe(
+      "Заявка уже выдана 6 октября, закрыл(а) Айжан",
+    );
+    expect(supplierText("ru", "scan.result.responseExpired")).toBe(
+      "Заявка истекла без ответа — закрыть её нельзя",
+    );
+    expect(supplierText("ru", "scan.result.offline")).toBe(
+      "Нет связи. Запишите код клиента и закройте заявку, когда связь появится",
+    );
+    expect(supplierText("ru", "scan.result.rateLimited", { n: 12 })).toBe(
+      "Слишком много неверных кодов. Попробуйте через 12 мин",
+    );
+    expect(supplierText("ru", "scan.lateText", { when: "вчера, 18:00" })).toBe(
+      "Срок заявки истёк вчера, 18:00. Если клиент был у вас вовремя, заявку можно закрыть",
+    );
   });
 
   it("shows the language options in their own language", () => {

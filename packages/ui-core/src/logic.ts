@@ -212,6 +212,7 @@ export type IconName =
   | "arrowLeft"
   | "backspace"
   | "calendarX"
+  | "cameraSlash"
   | "car"
   | "category"
   | "check"
@@ -229,8 +230,10 @@ export type IconName =
   | "externalLink"
   | "fileSpreadsheet"
   | "filters"
+  | "flashlight"
   | "helpCircle"
   | "info"
+  | "keyboard"
   | "language"
   | "lock"
   | "logout"
@@ -259,6 +262,7 @@ export type IconName =
   | "truck"
   | "user"
   | "users"
+  | "whatsapp"
   | "wifiOff"
   | "x";
 

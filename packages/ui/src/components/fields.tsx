@@ -188,6 +188,14 @@ export interface CodeCellsProps {
   error?: ReactNode;
   autoFocus?: boolean;
   disabled?: boolean;
+  /**
+   * `false` — the page has its own keypad (S-SCAN-02): a phone's system
+   * keyboard does not come up over it (`inputmode="none"`); a physical
+   * keyboard and pasting still work.
+   */
+  systemKeyboard?: boolean;
+  /** Enter in the field (a physical keyboard): «Найти». */
+  onSubmit?: () => void;
 }
 
 /**
@@ -195,7 +203,16 @@ export interface CodeCellsProps {
  * input sits over the cells, so typing, pasting, deleting and screen readers
  * work as with a normal field; non-digits are dropped.
  */
-export function CodeCells({ label, value, onChange, error, autoFocus, disabled }: CodeCellsProps) {
+export function CodeCells({
+  label,
+  value,
+  onChange,
+  error,
+  autoFocus,
+  disabled,
+  systemKeyboard = true,
+  onSubmit,
+}: CodeCellsProps) {
   const id = useId();
   const code = sanitizeOrderCode(value);
   const groups = splitOrderCode(code.padEnd(ORDER_CODE_LENGTH, " "));
@@ -219,15 +236,26 @@ export function CodeCells({ label, value, onChange, error, autoFocus, disabled }
           id={id}
           className="ac-code__input"
           value={code}
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={ORDER_CODE_LENGTH}
+          inputMode={systemKeyboard ? "numeric" : "none"}
+          autoComplete={systemKeyboard ? "one-time-code" : "off"}
+          // No native `maxLength`: it would cut a pasted «482 915» / «482-915»
+          // before its separators are dropped; `sanitizeOrderCode` keeps six digits.
           autoFocus={autoFocus}
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
           aria-label={`${label}: ${formatOrderCode(code)}`}
           onChange={(event) => onChange(sanitizeOrderCode(event.target.value))}
+          onKeyDown={
+            onSubmit
+              ? (event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onSubmit();
+                  }
+                }
+              : undefined
+          }
         />
         {groups.map((group, groupIndex) => (
           <span className="ac-code__group" key={groupIndex} aria-hidden="true">

@@ -12,6 +12,8 @@ export const ui = {
   arrowLeft: "arrow-left",
   backspace: "backspace",
   calendarX: "calendar-x",
+  // The scanner without a camera (S-SCAN-01, TASK-033).
+  cameraSlash: "camera-slash",
   // The car of the garage, «нет автомобиля», the catalog header and the car
   // sheet: the front view reads at 20 and in the tab bar at 24 alike.
   car: "car",
@@ -31,8 +33,12 @@ export const ui = {
   externalLink: "arrow-square-out",
   fileSpreadsheet: "file-xls",
   filters: "sliders-horizontal",
+  // The torch of the scanner, where the browser has one (TASK-033).
+  flashlight: "flashlight",
   helpCircle: "question",
   info: "info",
+  // «Ввести код вручную» (S-SCAN-02, TASK-033).
+  keyboard: "keyboard",
   language: "translate",
   lock: "lock",
   logout: "sign-out",
@@ -62,6 +68,8 @@ export const ui = {
   truck: "truck",
   user: "user",
   users: "users-three",
+  // «Написать в WhatsApp» to the customer (S-ORD-02, TASK-033).
+  whatsapp: "whatsapp-logo",
   wifiOff: "wifi-slash",
   x: "x",
 };

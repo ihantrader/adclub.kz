@@ -370,16 +370,21 @@ textarea {
 .ac-code__cells {
   position: relative;
   display: flex;
-  gap: var(--ac-space-4);
+  flex-wrap: wrap;
+  gap: var(--ac-space-2) var(--ac-space-4);
   width: max-content;
   max-width: 100%;
 }
 
+/* A group is three cells of 48, down to 36 on a narrow phone; when even
+   that is too wide for one line (a large system font), the second group
+   goes under the first — «482» over «915», as the customer reads it. */
 .ac-code__group {
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 calc(3 * 36px + 2 * var(--ac-space-2));
   gap: var(--ac-space-2);
   min-width: 0;
+  max-width: calc(3 * var(--ac-code-cell-width) + 2 * var(--ac-space-2));
 }
 
 .ac-code__input {
@@ -397,8 +402,11 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 48 wide; narrower only when six cells do not fit (phones of 320). */
+  /* 48 wide; narrower only when six cells do not fit (phones of 320). The
+     width, not only the basis: an empty cell has no content, and the
+     max-content width of the row is counted from the cells' widths. */
   flex: 0 1 var(--ac-code-cell-width);
+  width: var(--ac-code-cell-width);
   min-width: 36px;
   height: var(--ac-code-cell-height);
   border: var(--ac-line) solid var(--ac-color-border-field);

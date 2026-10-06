@@ -106,6 +106,31 @@ describe("fields", () => {
     expect(groups[0]?.textContent).toBe("482");
     expect(groups[1]?.textContent).toBe("9");
   });
+
+  it("with the page's own keypad keeps the phone keyboard away, takes a grouped paste whole and finds on Enter (S-SCAN-02)", () => {
+    const onChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <CodeCells
+        label="Код клиента"
+        value=""
+        onChange={onChange}
+        systemKeyboard={false}
+        onSubmit={onSubmit}
+      />,
+    );
+    const input = screen.getByLabelText(/Код клиента/);
+    expect(input.getAttribute("inputmode")).toBe("none");
+    expect(input.getAttribute("autocomplete")).toBe("off");
+    // No native limit cuts «482 915» before its separator is dropped.
+    expect(input.hasAttribute("maxlength")).toBe(false);
+    fireEvent.change(input, { target: { value: "482 915" } });
+    expect(onChange).toHaveBeenLastCalledWith("482915");
+    fireEvent.change(input, { target: { value: "482-915" } });
+    expect(onChange).toHaveBeenLastCalledWith("482915");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("controls and marks", () => {

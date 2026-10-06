@@ -92,6 +92,16 @@ export type {
   OrderRepeatFacts,
   OrderRepeatImpossible,
 } from "./order/order-repeat";
+export {
+  supplierOrderChannels,
+  supplierOrderMoves,
+  supplierOrderMoveVerdict,
+} from "./order/order-supplier-rights";
+export type {
+  SupplierOrderChannel,
+  SupplierOrderMove,
+  SupplierOrderMoveVerdict,
+} from "./order/order-supplier-rights";
 export { lateCloseUntil, orderCloseVerdict } from "./order/order-close";
 export type { OrderCloseFacts, OrderCloseRefusal, OrderCloseVerdict } from "./order/order-close";
 export {

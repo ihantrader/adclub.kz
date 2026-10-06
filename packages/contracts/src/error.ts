@@ -233,6 +233,11 @@ import { clientPlatformSchema } from "./client";
  *   Repeating one's own action is no error — but repeating a decline with
  *   another reason is this conflict, because the reason is not changed
  *   (TASK-022, ARCHITECTURE 4.32).
+ * - `SUPPLIER_BLOCKED` (403, TASK-033.A, ARCHITECTURE 4.51): the company is
+ *   blocked by the club administrator — it still looks at its orders and
+ *   gives them out by the code or the QR, but no longer accepts, marks
+ *   ready or declines (SCREENS 6.0); nothing changed. Re-read the company
+ *   (`GET /supplier/company`) and the order.
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -375,6 +380,8 @@ export const errorCodeSchema = z.enum([
   "ORDER_DUPLICATE_ACTIVE",
   "ORDER_IDEMPOTENCY_MISMATCH",
   "ORDER_STATE_CONFLICT",
+  // A blocked company and its orders (TASK-033.A, ARCHITECTURE 4.51).
+  "SUPPLIER_BLOCKED",
   // Giving an order out (TASK-022, ARCHITECTURE 4.32).
   "ORDER_QR_UNKNOWN",
   "DISCIPLINE_ALREADY_REVOKED",

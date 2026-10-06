@@ -36,6 +36,14 @@ export { GlyphIcon, Icon, icons, type IconProps } from "./Icon";
 export { hairline } from "./lines";
 export { AiBadge, Badge, CompatibilityMark, IconBadge, Rating, StatusBadge } from "./marks";
 export { useAfterDismiss, useMotionPlan } from "./motion";
+export {
+  useContentOpacity,
+  useContentSwap,
+  useDelayedIndicator,
+  useFadeTo,
+  useLoadingGate,
+  type LoadingGateHandle,
+} from "./loading";
 export { BottomTabs, ListGroup, ListRow, TopBar, type TabItem } from "./navigation";
 export { fontAssets, Text, textStyles, useAppFonts, type TextProps } from "./text";
 export { ThemeProvider, themeModeStore, useTheme, type ThemeContextValue } from "./theme";

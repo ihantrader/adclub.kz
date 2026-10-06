@@ -21,6 +21,7 @@ import {
 } from "./feedback";
 import { TopBar } from "./navigation";
 import { Text } from "./text";
+import { useContentOpacity, useDelayedIndicator, useFadeTo } from "./loading";
 import { useTheme } from "./theme";
 
 /**
@@ -47,6 +48,17 @@ export interface ScreenProps {
   refreshing?: boolean;
   /** Refresh label for screen readers. */
   refreshingLabel?: string;
+  /**
+   * What the content answers (another sort, another list): when it changes,
+   * the new content fades in from the dimmed old one (DESIGN 7.6, D-069). A
+   * reload of the same content changes nothing and does not fade.
+   */
+  contentKey?: unknown;
+  /**
+   * The old content cannot be touched while a reload is seen — for screens
+   * where acting on what is about to go away would be wrong.
+   */
+  lockWhileRefreshing?: boolean;
   /**
    * Pulling the content down asks for a refresh (M-ORD-03, TASK-030). The
    * platform's spinner lets go at once; the refresh itself shows as the
@@ -83,6 +95,8 @@ export function Screen({
   footer,
   refreshing = false,
   refreshingLabel,
+  contentKey,
+  lockWhileRefreshing = false,
   onPullToRefresh,
   scroll = true,
   centerContent = false,
@@ -91,6 +105,9 @@ export function Screen({
 }: ScreenProps) {
   const { theme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
+  // While a reload is seen the content stays where it is, dimmed under the
+  // line; the next content takes its place with a fade (D-069).
+  const opacity = useContentOpacity(refreshing, contentKey);
 
   const content = scroll ? (
     <ScrollView
@@ -134,7 +151,13 @@ export function Screen({
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {content}
+        <Animated.View
+          style={[styles.flex, { opacity }]}
+          pointerEvents={lockWhileRefreshing && refreshing ? "none" : "auto"}
+          accessibilityState={{ busy: refreshing }}
+        >
+          {content}
+        </Animated.View>
         {footer && <Footer>{footer}</Footer>}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -263,11 +286,50 @@ export interface DataStateProps {
  * One rule for "what is on the screen right now": the skeleton while
  * loading, the error with "Повторить", the empty state, the "Нет сети"
  * state, or the content.
+ *
+ * Loading by the rule (DESIGN 7.6, D-069): the skeleton keeps its place
+ * from the start but is seen only after the delay — a quick answer comes
+ * with no skeleton at all — and once seen it stays its minimum, so it never
+ * blinks. What comes after it fades in.
  */
-export function DataState({ status, skeleton, error, empty, offline, children }: DataStateProps) {
+export function DataState(props: DataStateProps) {
+  const loading = props.status === "loading";
+  const indicator = useDelayedIndicator(loading);
+  const skeletonOpacity = useFadeTo(indicator ? 1 : 0, 0);
+  // Whether this place has waited: what comes after a wait fades in.
+  const [waited, setWaited] = useState(loading);
+  if (loading && !waited) setWaited(true);
+
+  if (loading || indicator) {
+    return (
+      <Animated.View
+        style={{ opacity: skeletonOpacity }}
+        importantForAccessibility={indicator ? "auto" : "no-hide-descendants"}
+        accessibilityElementsHidden={!indicator}
+      >
+        {props.skeleton}
+      </Animated.View>
+    );
+  }
+  return waited ? (
+    <FadeIn>
+      <DataStateContent {...props} />
+    </FadeIn>
+  ) : (
+    <DataStateContent {...props} />
+  );
+}
+
+/** Appears from nothing by the swap rule (nothing fades under «Уменьшить движение»). */
+function FadeIn({ children }: { children: ReactNode }) {
+  const opacity = useFadeTo(1, 0);
+  return <Animated.View style={{ opacity }}>{children}</Animated.View>;
+}
+
+function DataStateContent({ status, error, empty, offline, children }: DataStateProps) {
   switch (status) {
     case "loading":
-      return <>{skeleton}</>;
+      return null;
     case "error":
       return <ScreenError title={error.title} text={error.text} retry={error.retry} />;
     case "offline":

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { AppState } from "react-native";
 import type { FilterQuery } from "../catalog/filters";
 import type { VehicleQuery } from "../catalog/vehicle-query";
+import { useLoadingGate } from "../design-system/loading";
 import { useLanguage } from "../state/language";
 import { sessionStore } from "../state/stores";
 import { apiClient } from "./api";
@@ -187,6 +188,11 @@ export interface ShowcaseListState {
  * different question and starts from a skeleton. Reloading the list that is
  * on screen (coming back after a minute) asks for as many rows as it already
  * has, so it does not shrink under the reader.
+ *
+ * The first page reaches the screen through the one loading rule (DESIGN
+ * 7.6, D-069, the same gate as `useRequest` and the web): a quick answer at
+ * once, with no line; a slow one when the line has been seen its minimum;
+ * of quick changes one after another only the last.
  */
 export function useShowcaseList({
   categoryId,
@@ -228,6 +234,8 @@ export function useShowcaseList({
   /** The request whose answer has arrived; anything else is still in flight. */
   const [settled, setSettled] = useState<string | null>(null);
   const loadedAt = useRef(0);
+  const gate = useLoadingGate();
+  const { begin, settle, cancel } = gate;
   const query = useRef(baseQuery);
   const shown = useRef(state);
   useEffect(() => {
@@ -245,6 +253,7 @@ export function useShowcaseList({
     // has — including a page that lands while this loads — so the list does
     // not shrink under them and take their place with it (`loadRows`).
     const rows = shown.current.key === key ? shown.current.items.length : 0;
+    const ticket = begin();
     loadRows({
       fetchPage: ({ cursor, limit }) =>
         apiClient.getShowcaseItems(
@@ -266,35 +275,42 @@ export function useShowcaseList({
       .then(({ first, items, cursor }) => {
         if (signal.aborted) return;
         loadedAt.current = Date.now();
-        setState((previous) => ({
-          scope,
-          key,
-          page: first,
-          items,
-          cursor,
-          failure: null,
-          loadingMore: false,
-          generation: previous.key === key ? previous.generation : previous.generation + 1,
-        }));
-        setSettled(request);
+        settle(ticket, () => {
+          setState((previous) => ({
+            scope,
+            key,
+            page: first,
+            items,
+            cursor,
+            failure: null,
+            loadingMore: false,
+            generation: previous.key === key ? previous.generation : previous.generation + 1,
+          }));
+          setSettled(request);
+        });
       })
       .catch((error: unknown) => {
         if (signal.aborted) return;
         loadedAt.current = Date.now();
-        setState((previous) => ({
-          // Reloading the same list keeps it on screen (SCREENS 2.1); a new
-          // list that failed is not the old one, and shows the error.
-          ...(previous.key === key
-            ? previous
-            : { page: null, items: [], cursor: null, generation: previous.generation }),
-          scope,
-          key,
-          failure: failureOf(error),
-          loadingMore: false,
-        }));
-        setSettled(request);
+        settle(ticket, () => {
+          setState((previous) => ({
+            // Reloading the same list keeps it on screen (SCREENS 2.1); a new
+            // list that failed is not the old one, and shows the error.
+            ...(previous.key === key
+              ? previous
+              : { page: null, items: [], cursor: null, generation: previous.generation }),
+            scope,
+            key,
+            failure: failureOf(error),
+            loadingMore: false,
+          }));
+          setSettled(request);
+        });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      cancel();
+    };
     // `key`, `scope` and `categoryId` only ever change together with `request`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
@@ -357,7 +373,7 @@ export function useShowcaseList({
     page,
     items: showing ? state.items : [],
     loadingMore: fresh && state.loadingMore,
-    refreshing: pending && page !== null,
+    refreshing: pending && gate.indicator && page !== null,
     // Paging belongs to the list the cursor came with, never to a carried one.
     hasMore: fresh && state.cursor !== null,
     generation: state.generation,

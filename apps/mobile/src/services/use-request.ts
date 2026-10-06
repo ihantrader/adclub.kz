@@ -1,6 +1,7 @@
 import { isApiError } from "@adclub/api-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
+import { useLoadingGate } from "../design-system/loading";
 import type { RequestCache } from "./request-cache";
 
 /**
@@ -15,6 +16,11 @@ import type { RequestCache } from "./request-cache";
  * the app returns from the background, or the screen is focused again, and
  * the answer is older than that, it is loaded afresh — over the content
  * that is on screen, not instead of it.
+ *
+ * **Without flicker** (DESIGN 7.6, D-069): every answer — and every error —
+ * reaches the screen through the loading rule of `@adclub/ui-core`: a quick
+ * one at once, one that made the refresh line appear when the line has been
+ * seen its minimum. `refreshing` is that line, never a blink of it.
  */
 
 export type RequestFailure =
@@ -32,8 +38,14 @@ export interface RequestState<T> {
   status: "idle" | "loading" | "ready" | "error";
   data: T | null;
   failure: RequestFailure | null;
-  /** Loading over data that is already on screen. */
+  /** Loading over data that is already on screen — after the delay of the loading rule. */
   refreshing: boolean;
+  /**
+   * The key of the answer on screen: changes when an answer to another
+   * question (another sort) takes the place of the old one — `Screen`
+   * fades the new content in on it.
+   */
+  answerKey: string | null;
   reload: () => void;
   /** Reloads only when the answer is older than `staleAfterMs`. */
   reloadIfStale: () => void;
@@ -114,6 +126,8 @@ export function useRequest<T>(
       : { key: "", scope: undefined, data: null, failure: null },
   );
   const loadedAt = useRef(0);
+  const gate = useLoadingGate();
+  const { begin, settle, cancel } = gate;
 
   // The attempt is part of the request but not of the identity of the data:
   // «Повторить» and a stale refresh load over what is on screen, while a new
@@ -134,30 +148,39 @@ export function useRequest<T>(
       return;
     }
     const controller = new AbortController();
+    const ticket = begin();
     loader
       .current(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         loadedAt.current = Date.now();
         cache?.write(key, data);
-        setResult({ key, scope, data, failure: null });
-        setSettled(request);
+        settle(ticket, () => {
+          setResult({ key, scope, data, failure: null });
+          setSettled(request);
+        });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         loadedAt.current = Date.now();
-        setResult((previous) => ({
-          key,
-          scope,
-          // The old data stays on screen while a refresh fails (SCREENS 2.1);
-          // a new request — even one of the same scope, whose answer would
-          // no longer match what was asked — starts with nothing to show.
-          data: previous.key === key ? previous.data : null,
-          failure: failureOf(error),
-        }));
-        setSettled(request);
+        settle(ticket, () => {
+          setResult((previous) => ({
+            key,
+            scope,
+            // The old data stays on screen while a refresh fails (SCREENS 2.1);
+            // a new request — even one of the same scope, whose answer would
+            // no longer match what was asked — starts with nothing to show.
+            data: previous.key === key ? previous.data : null,
+            failure: failureOf(error),
+          }));
+          setSettled(request);
+        });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      // Nothing more to wait for, unless the next request begins right away.
+      cancel();
+    };
     // `key` only ever changes together with `request`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
@@ -200,7 +223,8 @@ export function useRequest<T>(
     status,
     data,
     failure,
-    refreshing: pending && data !== null,
+    refreshing: pending && gate.indicator && data !== null,
+    answerKey: data !== null ? result.key : null,
     reload,
     reloadIfStale,
   };

@@ -11,6 +11,7 @@ import {
   Screen,
   Segments,
   SkeletonList,
+  useDelayedIndicator,
   useTheme,
 } from "../../design-system";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
@@ -107,6 +108,9 @@ export function ItemListScreen({
     }, []),
   );
 
+  // The spinner under the rows only when the next page takes a while (D-069).
+  const moreIndicator = useDelayedIndicator(list.loadingMore);
+
   // A new list took the place of the old one: back to its first row, in the
   // same frame as the swap. Nothing else scrolls the list (see `generation`).
   const listRef = useRef<FlatList>(null);
@@ -137,6 +141,8 @@ export function ItemListScreen({
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={list.refreshing}
       refreshingLabel={t("common.loading")}
+      // Another sort or other filters: the new rows fade in over the old ones.
+      contentKey={list.generation}
       scroll={false}
       header={
         <>
@@ -188,7 +194,7 @@ export function ItemListScreen({
           onEndReachedThreshold={0.4}
           onEndReached={() => list.hasMore && list.loadMore()}
           ListFooterComponent={
-            list.loadingMore ? (
+            moreIndicator ? (
               <ActivityIndicator style={styles.more} color={theme.colors.accent} />
             ) : null
           }

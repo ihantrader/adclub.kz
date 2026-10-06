@@ -137,6 +137,8 @@ export function ItemScreen({
       back={{ label: t("common.back"), onPress: onBack }}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={request.refreshing}
+      // Another order of the offers: the card fades from the old order to the new one.
+      contentKey={request.answerKey}
       refreshingLabel={t("common.loading")}
     >
       <DataState

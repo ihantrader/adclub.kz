@@ -18,6 +18,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Icon } from "./Icon";
+import { useDelayedIndicator } from "./loading";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -73,6 +74,9 @@ export function Button({
   const [guard] = useState(() => createPressGuard(setPending));
   const busy = loading || pending;
   const blocked = isPressBlocked({ loading: busy, disabled });
+  // The spinner only after the loading delay, then for at least its minimum
+  // (D-069); presses are ignored from the first moment.
+  const spinning = useDelayedIndicator(busy);
 
   const colors = palette[variant];
   const textColor: ColorToken = disabled
@@ -117,13 +121,13 @@ export function Button({
         <>
           {pressed && !blocked && !pressedFill && <View style={styles.pressed} />}
           {/* The label keeps its place while loading, so the width does not change. */}
-          <View style={[styles.content, busy && styles.hidden]}>
+          <View style={[styles.content, spinning && styles.hidden]}>
             {icon && <Icon name={icon} size={20} color={textColor} />}
             <Text variant="label" color={textColor} style={styles.label}>
               {children}
             </Text>
           </View>
-          {busy && (
+          {spinning && (
             <ActivityIndicator style={StyleSheet.absoluteFill} color={theme.colors[textColor]} />
           )}
         </>

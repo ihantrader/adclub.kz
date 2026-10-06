@@ -15,6 +15,7 @@ import {
   Segments,
   SkeletonList,
   Text,
+  useDelayedIndicator,
 } from "../../design-system";
 import { ROOT_NAVIGATOR, type RootParams } from "../../navigation/routes";
 import { useSignIn } from "../../navigation/use-sign-in";
@@ -118,6 +119,14 @@ function SignedInOrders() {
     <OfflineBanner label={updated ?? t("state.offline")} />
   ) : null;
 
+  // The line of a refresh (a pull, a return to the tab) by the loading rule:
+  // a quick answer shows none, a slow one keeps it at least its minimum.
+  const refreshing = useDelayedIndicator(
+    tab === "active"
+      ? orders.refreshing && copy !== null
+      : history.status === "loading" && history.history.months.length > 0,
+  );
+
   const activeStatus = copy
     ? copy.orders.length > 0
       ? "ready"
@@ -134,11 +143,7 @@ function SignedInOrders() {
       root={!readOnly}
       {...(readOnly ? { back: { label: t("common.back"), onPress: readOnly.exit } } : {})}
       banner={banner}
-      refreshing={
-        tab === "active"
-          ? orders.refreshing && copy !== null
-          : history.status === "loading" && history.history.months.length > 0
-      }
+      refreshing={refreshing}
       refreshingLabel={t("common.loading")}
       {...(!readOnly && online
         ? { onPullToRefresh: () => (tab === "active" ? void orders.refresh() : history.reload()) }

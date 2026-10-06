@@ -54,6 +54,12 @@ export const motion = {
   bezier: [0, 0, 0.2, 1] as const,
   /** Skeleton shimmer period. */
   skeleton: 1200,
+  /** A loading indicator appears only when waiting is longer than this (D-069). */
+  loadingDelay: 300,
+  /** A loading indicator that has appeared stays at least this long (D-069). */
+  loadingMinVisible: 500,
+  /** Opacity of content that stays on screen under the refresh line (D-069). */
+  loadingDimOpacity: 0.5,
   /** Toast lifetime. */
   toast: 4000,
   /** Green check after a person confirms AI data (7.9). */

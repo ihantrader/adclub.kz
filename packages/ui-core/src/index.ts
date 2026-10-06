@@ -90,6 +90,14 @@ export {
   type ScreenTransition,
   type SheetMotion,
 } from "./motion";
+export {
+  contentSwap,
+  createLoadingGate,
+  loadingRule,
+  type ContentSwap,
+  type LoadingClock,
+  type LoadingGate,
+} from "./loading";
 export { aiPilotSvg, brandSvg, type BrandSvgName } from "./brand/brand-svg";
 export { glyphGrid, type Glyph, type GlyphPath } from "./icons/glyph";
 export { uiFilledGlyphs, uiGlyphs } from "./icons/glyphs";

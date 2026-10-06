@@ -6,8 +6,10 @@ import {
   EmptyState,
   Icon,
   IconButton,
+  LoadingContent,
   SearchField,
   SkeletonList,
+  useLoadingGate,
 } from "@adclub/ui";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api";
@@ -25,11 +27,12 @@ import {
 
 const SEARCH_DELAY_MS = 400;
 
-type Found =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "failed"; text: string }
-  | { status: "ready"; results: OfferItemSearchResult[]; nextOffset: number | null };
+/** The results on screen, with the query they answer. */
+interface Found {
+  query: string;
+  results: OfferItemSearchResult[];
+  nextOffset: number | null;
+}
 
 function failureText(error: unknown, t: Translate): string {
   if (isApiError(error) && error.code === "RATE_LIMITED") {
@@ -47,39 +50,67 @@ function failureText(error: unknown, t: Translate): string {
  * letters or digits, and pages no further than its first matches). An
  * article in any spelling or a name in any language. An item already on
  * sale opens its offer; another one opens the form of a new offer.
+ *
+ * Typing on keeps the results of the previous query on screen until the
+ * next ones arrive (DESIGN 7.6, D-069); a skeleton only for the first.
  */
 export function ItemSearch() {
   const t = useT();
   const online = useOnline();
   const opened = useRouteState() as { search?: string } | null;
+  const gate = useLoadingGate();
   const [typed, setTyped] = useState(opened?.search ?? "");
-  const [found, setFound] = useState<Found>({ status: "idle" });
+  const [found, setFound] = useState<Found | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const request = useRef<AbortController | null>(null);
+  const { begin, settle, cancel } = gate;
 
-  const search = async (query: string, offset = 0) => {
+  const search = async (query: string) => {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    if (offset === 0) setFound({ status: "loading" });
-    else setLoadingMore(true);
+    setLoadingMore(false);
+    const ticket = begin();
     try {
       const answer = await apiClient.searchOfferItems({
-        query: { q: query, offset },
+        query: { q: query, offset: 0 },
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      setFound((current) => ({
-        status: "ready",
-        results:
-          offset > 0 && current.status === "ready"
-            ? [...current.results, ...answer.results]
-            : answer.results,
-        nextOffset: answer.nextOffset,
-      }));
+      settle(ticket, () => {
+        setFound({ query, results: answer.results, nextOffset: answer.nextOffset });
+        setFailure(null);
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
-      setFound({ status: "failed", text: failureText(error, t) });
+      settle(ticket, () => setFailure(failureText(error, t)));
+    }
+  };
+
+  /** «Показать ещё»: the next matches below the ones on screen. */
+  const searchMore = async (list: Found) => {
+    if (list.nextOffset === null) return;
+    const controller = new AbortController();
+    request.current = controller;
+    setLoadingMore(true);
+    try {
+      const answer = await apiClient.searchOfferItems({
+        query: { q: list.query, offset: list.nextOffset },
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setFound((current) =>
+        current && current.query === list.query
+          ? {
+              ...current,
+              results: [...current.results, ...answer.results],
+              nextOffset: answer.nextOffset,
+            }
+          : current,
+      );
+    } catch (error) {
+      if (!controller.signal.aborted) setFailure(failureText(error, t));
     } finally {
       if (request.current === controller) setLoadingMore(false);
     }
@@ -91,6 +122,7 @@ export function ItemSearch() {
     replaceRouteState({ search: typed });
     if (meaningfulLength(query) < OFFER_ITEM_SEARCH_MIN_LENGTH) {
       request.current?.abort();
+      cancel();
       return;
     }
     const timer = setTimeout(() => void search(query), SEARCH_DELAY_MS);
@@ -101,10 +133,10 @@ export function ItemSearch() {
 
   useEffect(() => () => request.current?.abort(), []);
 
-  const short = typed.trim() !== "" && meaningfulLength(typed) < OFFER_ITEM_SEARCH_MIN_LENGTH;
+  const tooShortToAsk = meaningfulLength(typed.trim()) < OFFER_ITEM_SEARCH_MIN_LENGTH;
+  const short = typed.trim() !== "" && tooShortToAsk;
   // Too short to ask: no results on screen, only the hint.
-  const shown: Found =
-    meaningfulLength(typed.trim()) < OFFER_ITEM_SEARCH_MIN_LENGTH ? { status: "idle" } : found;
+  const asked = !tooShortToAsk;
 
   return (
     <>
@@ -136,35 +168,47 @@ export function ItemSearch() {
       </div>
 
       {!online && <Banner icon="wifiOff">{t("offerSearch.offline")}</Banner>}
-      {shown.status === "loading" && <SkeletonList rows={3} label={t("offerSearch.searching")} />}
-      {shown.status === "failed" && <Banner tone="danger">{shown.text}</Banner>}
-      {shown.status === "ready" &&
-        (shown.results.length === 0 ? (
-          <EmptyState icon="search" title={t("offerSearch.notFound")} />
-        ) : (
-          <>
-            <ul className="found-list">
-              {shown.results.map((result) => (
-                <FoundItem key={result.item.id} result={result} />
-              ))}
-            </ul>
-            {shown.nextOffset !== null ? (
-              <div className="load-more">
-                <Button
-                  variant="secondary"
-                  loading={loadingMore}
-                  onClick={() => search(typed.trim(), shown.nextOffset ?? 0)}
-                >
-                  {t("offers.loadMore")}
-                </Button>
-              </div>
+      {asked && failure !== null && !found && <Banner tone="danger">{failure}</Banner>}
+      {asked && (found !== null || gate.pending) && (
+        <LoadingContent
+          className="search-results"
+          ready={found !== null}
+          indicator={gate.indicator}
+          skeleton={<SkeletonList rows={3} label={t("offerSearch.searching")} />}
+          label={t("offerSearch.searching")}
+          swapKey={found?.query}
+          notice={failure !== null && found && <Banner tone="danger">{failure}</Banner>}
+        >
+          {found &&
+            (found.results.length === 0 ? (
+              <EmptyState icon="search" title={t("offerSearch.notFound")} />
             ) : (
-              shown.results.length >= 100 && (
-                <p className="ac-text-body-s ac-muted">{t("offerSearch.limitReached")}</p>
-              )
-            )}
-          </>
-        ))}
+              <>
+                <ul className="found-list">
+                  {found.results.map((result) => (
+                    <FoundItem key={result.item.id} result={result} />
+                  ))}
+                </ul>
+                {found.nextOffset !== null ? (
+                  <div className="load-more">
+                    <Button
+                      variant="secondary"
+                      loading={loadingMore}
+                      disabled={gate.pending}
+                      onClick={() => searchMore(found)}
+                    >
+                      {t("offers.loadMore")}
+                    </Button>
+                  </div>
+                ) : (
+                  found.results.length >= 100 && (
+                    <p className="ac-text-body-s ac-muted">{t("offerSearch.limitReached")}</p>
+                  )
+                )}
+              </>
+            ))}
+        </LoadingContent>
+      )}
     </>
   );
 }

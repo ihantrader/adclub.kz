@@ -12,11 +12,13 @@ import {
   Banner,
   Button,
   Dialog,
+  LoadingContent,
   ScreenError,
   Segments,
   SkeletonList,
   Switch,
   TextField,
+  useLoadingGate,
   useToast,
 } from "@adclub/ui";
 import { useCallback, useEffect, useState } from "react";
@@ -80,21 +82,27 @@ export function Team() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<SupplierMember | null>(null);
+  const gate = useLoadingGate();
+  const { begin, settle } = gate;
 
-  // No state is set before the answer: the effect below only starts the request.
+  // No state is set before the answer: the effect below only starts the
+  // request. The answer comes through the loading rule (D-069): the list on
+  // screen stays until the next one, a skeleton only for the first.
   const load = useCallback(async () => {
+    const ticket = begin();
     try {
-      setList(await apiClient.listSupplierMembers());
-      setLoadError(null);
+      const next = await apiClient.listSupplierMembers();
+      settle(ticket, () => {
+        setList(next);
+        setLoadError(null);
+      });
     } catch (thrown) {
-      setLoadError(thrown);
+      settle(ticket, () => setLoadError(thrown));
     }
-  }, []);
+  }, [begin, settle]);
 
   useEffect(() => {
-    // Loading on mount, as DevicesScreen of the app does: the rule's own
-    // exception ("subscribe for updates from some external system") is this.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Loading on mount, as DevicesScreen of the app does.
     void load();
   }, [load]);
 
@@ -190,65 +198,88 @@ export function Team() {
           text={t("common.errorText")}
           retry={{ label: t("common.retry"), onRetry: load }}
         />
-      ) : !list ? (
-        <SkeletonList rows={3} label={t("common.loading")} />
       ) : (
-        <ul className="member-list">
-          {list.members.map((member) => (
-            <li key={member.id} className="card member">
-              <div className="member__head">
-                <span className="ac-text-body-strong member__name">{member.displayName}</span>
-                <a className="member__phone num" href={`tel:${member.phone}`}>
-                  {formatPhone(member.phone)}
-                </a>
-                <span className="member__badges">
-                  {member.isMe && (
-                    <Badge tone="accent" icon="user">
-                      {t("team.me")}
-                    </Badge>
-                  )}
-                  {member.isContactPerson && (
-                    <Badge tone="neutral" icon="phone">
-                      {t("team.contactPerson")}
-                    </Badge>
-                  )}
-                </span>
-              </div>
-              <Switch
-                label={t("team.receives")}
-                description={notificationNote(member, list.notifications, t) ?? undefined}
-                checked={member.notificationsEnabled}
-                disabled={!online || (!member.notificationsEnabled && list.notifications.full)}
-                onChange={(checked) => update(member, { notificationsEnabled: checked })}
-              />
-              <div className="field-block">
-                <span className="field-block__label">{t("team.notificationLanguage")}</span>
-                <Segments<NotificationLanguage>
-                  label={`${t("team.notificationLanguage")}: ${member.displayName}`}
-                  value={member.notificationLanguage}
-                  onChange={(value) => {
-                    if (online) void update(member, { notificationLanguage: value });
-                  }}
-                  options={[
-                    { value: "kk", label: t("language.kk") },
-                    { value: "ru", label: t("language.ru") },
-                  ]}
-                />
-              </div>
-              <div className="member__actions">
-                <Button
-                  variant="secondary"
-                  destructive
-                  icon="trash"
-                  disabled={!online}
-                  onClick={() => setRemoving(member)}
-                >
-                  {t("team.remove")}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <LoadingContent
+          ready={list !== null}
+          indicator={gate.indicator}
+          skeleton={<SkeletonList rows={3} label={t("common.loading")} />}
+          label={t("common.loading")}
+          // Switches over a list about to be replaced would act on what is gone.
+          lock
+          notice={
+            loadError !== null && (
+              <Banner
+                tone="danger"
+                action={
+                  <Button variant="text" size="s" icon="refresh" onClick={load}>
+                    {t("common.retry")}
+                  </Button>
+                }
+              >
+                {t("common.errorText")}
+              </Banner>
+            )
+          }
+        >
+          {list && (
+            <ul className="member-list">
+              {list.members.map((member) => (
+                <li key={member.id} className="card member">
+                  <div className="member__head">
+                    <span className="ac-text-body-strong member__name">{member.displayName}</span>
+                    <a className="member__phone num" href={`tel:${member.phone}`}>
+                      {formatPhone(member.phone)}
+                    </a>
+                    <span className="member__badges">
+                      {member.isMe && (
+                        <Badge tone="accent" icon="user">
+                          {t("team.me")}
+                        </Badge>
+                      )}
+                      {member.isContactPerson && (
+                        <Badge tone="neutral" icon="phone">
+                          {t("team.contactPerson")}
+                        </Badge>
+                      )}
+                    </span>
+                  </div>
+                  <Switch
+                    label={t("team.receives")}
+                    description={notificationNote(member, list.notifications, t) ?? undefined}
+                    checked={member.notificationsEnabled}
+                    disabled={!online || (!member.notificationsEnabled && list.notifications.full)}
+                    onChange={(checked) => update(member, { notificationsEnabled: checked })}
+                  />
+                  <div className="field-block">
+                    <span className="field-block__label">{t("team.notificationLanguage")}</span>
+                    <Segments<NotificationLanguage>
+                      label={`${t("team.notificationLanguage")}: ${member.displayName}`}
+                      value={member.notificationLanguage}
+                      onChange={(value) => {
+                        if (online) void update(member, { notificationLanguage: value });
+                      }}
+                      options={[
+                        { value: "kk", label: t("language.kk") },
+                        { value: "ru", label: t("language.ru") },
+                      ]}
+                    />
+                  </div>
+                  <div className="member__actions">
+                    <Button
+                      variant="secondary"
+                      destructive
+                      icon="trash"
+                      disabled={!online}
+                      onClick={() => setRemoving(member)}
+                    >
+                      {t("team.remove")}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </LoadingContent>
       )}
 
       <Dialog

@@ -20,7 +20,16 @@ type SupplierAccess = Extract<SessionAccess, { context: "supplier" }>;
  */
 export type CabinetState =
   | { status: "idle" }
-  | { status: "loading" }
+  | {
+      status: "loading";
+      /**
+       * Loading another company of the same employee (a switch here or in
+       * another tab): the frame stays, with the name of the company switched
+       * to when it is known, and the page fades into its loading state — nothing
+       * of the previous company is on screen, and no flash of an empty page.
+       */
+      switchingTo?: { supplierName: string; memberName: string };
+    }
   | { status: "failed"; error: unknown }
   | {
       status: "ready";
@@ -42,8 +51,12 @@ function set(next: CabinetState): void {
 }
 
 /** Loads the employee and the company of the session; `reset` drops what is on screen first. */
-export async function loadCabinet(options: { reset?: boolean } = {}): Promise<void> {
-  if (options.reset || state.status !== "ready") set({ status: "loading" });
+export async function loadCabinet(
+  options: { reset?: boolean; switchingTo?: string } = {},
+): Promise<void> {
+  if (options.reset || state.status !== "ready") {
+    set({ status: "loading", switchingTo: switchingFrom(state, options.switchingTo) });
+  }
   try {
     const [me, company, memberships] = await Promise.all([
       apiClient.getCurrentAccount(),
@@ -71,6 +84,17 @@ export async function loadCabinet(options: { reset?: boolean } = {}): Promise<vo
     // What is on screen stays; only a first load shows the error.
     if (state.status !== "ready") set({ status: "failed", error });
   }
+}
+
+/** The frame kept while another company of the same employee loads. */
+function switchingFrom(
+  current: CabinetState,
+  supplierId: string | undefined,
+): { supplierName: string; memberName: string } | undefined {
+  if (current.status === "loading") return current.switchingTo;
+  if (current.status !== "ready") return undefined;
+  const target = current.companies.find((company) => company.id === supplierId);
+  return { supplierName: target?.name ?? "", memberName: current.access.member.displayName };
 }
 
 /** The card after an edit (S-COMP-01) or a reload of the company. */
@@ -109,7 +133,7 @@ export async function switchCompany(supplierId: string): Promise<void> {
   await apiClient.switchSupplier({ supplierId });
   rememberSupplier(supplierId);
   session.contextChanged();
-  await loadCabinet({ reset: true });
+  await loadCabinet({ reset: true, switchingTo: supplierId });
 }
 
 /** Forgets the person when the session is over. */

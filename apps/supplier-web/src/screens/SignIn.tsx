@@ -6,7 +6,7 @@ import {
   type SupplierSummary,
 } from "@adclub/contracts";
 import { normalizeKzMobilePhone } from "@adclub/domain";
-import { Banner, Button, Icon, TextField } from "@adclub/ui";
+import { Banner, Button, FadeSwap, Icon, TextField } from "@adclub/ui";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { apiClient, session } from "../api";
 import type { SignedOutReason } from "../session/web-session-core";
@@ -73,45 +73,48 @@ export function SignIn({ reason, onSignedIn }: SignInProps) {
 
   return (
     <AuthLayout>
-      {notice && step.kind === "phone" && (
-        <Banner tone={reason === "access_closed" ? "warning" : "neutral"}>{notice}</Banner>
-      )}
-      {step.kind === "phone" && (
-        <PhoneStep
-          onSent={(next) => {
-            setNotice(null);
-            setStep(next);
-          }}
-        />
-      )}
-      {step.kind === "code" && (
-        <CodeStep
-          step={step}
-          onBack={() => setStep({ kind: "phone" })}
-          onSignedIn={finish}
-          onSelect={(next) => setStep(next)}
-          onNotMember={() => setStep({ kind: "not_member" })}
-        />
-      )}
-      {step.kind === "select" && (
-        <SelectStep
-          step={step}
-          onSignedIn={finish}
-          onExpired={() => {
-            setNotice(t("auth.stepExpired"));
-            setStep({ kind: "phone" });
-          }}
-          onNotMember={() => setStep({ kind: "not_member" })}
-        />
-      )}
-      {step.kind === "not_member" && (
-        <div className="auth-stack">
-          <Banner tone="warning">{t("auth.notMember")}</Banner>
-          <Button variant="secondary" size="l" block onClick={() => setStep({ kind: "phone" })}>
-            {t("auth.otherNumber")}
-          </Button>
-        </div>
-      )}
+      {/* A step takes the place of the previous one with a fade (D-069); the logo stays. */}
+      <FadeSwap className="auth-step" fadeKey={step.kind}>
+        {notice && step.kind === "phone" && (
+          <Banner tone={reason === "access_closed" ? "warning" : "neutral"}>{notice}</Banner>
+        )}
+        {step.kind === "phone" && (
+          <PhoneStep
+            onSent={(next) => {
+              setNotice(null);
+              setStep(next);
+            }}
+          />
+        )}
+        {step.kind === "code" && (
+          <CodeStep
+            step={step}
+            onBack={() => setStep({ kind: "phone" })}
+            onSignedIn={finish}
+            onSelect={(next) => setStep(next)}
+            onNotMember={() => setStep({ kind: "not_member" })}
+          />
+        )}
+        {step.kind === "select" && (
+          <SelectStep
+            step={step}
+            onSignedIn={finish}
+            onExpired={() => {
+              setNotice(t("auth.stepExpired"));
+              setStep({ kind: "phone" });
+            }}
+            onNotMember={() => setStep({ kind: "not_member" })}
+          />
+        )}
+        {step.kind === "not_member" && (
+          <div className="auth-stack">
+            <Banner tone="warning">{t("auth.notMember")}</Banner>
+            <Button variant="secondary" size="l" block onClick={() => setStep({ kind: "phone" })}>
+              {t("auth.otherNumber")}
+            </Button>
+          </div>
+        )}
+      </FadeSwap>
     </AuthLayout>
   );
 }

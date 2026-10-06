@@ -1,6 +1,7 @@
 import {
   Banner,
   BottomTabs,
+  FadeSwap,
   Button,
   Icon,
   IconButton,
@@ -25,6 +26,7 @@ import {
   tabOf,
   type RouteKey,
   type StaticRoute,
+  useRouteId,
 } from "../router";
 import { CompanySwitchDialog } from "./CompanySwitch";
 
@@ -50,6 +52,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const updated = useAppUpdated();
   const installWay = useInstallWay();
   const [switching, setSwitching] = useState(false);
+  const routeId = useRouteId();
 
   const supplierName = cabinet?.company.supplier.name ?? fallbackNames?.supplierName ?? "";
   const memberName = cabinet?.access.member.displayName ?? fallbackNames?.memberName ?? "";
@@ -180,9 +183,16 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
           ))}
         </div>
 
-        <main className="page" key={cabinet?.generation ?? "offline"}>
+        {/* A page taking the place of another fades in (D-069); the header, the tabs
+            and the side menu stay. Another company remounts the page entirely. */}
+        <FadeSwap
+          as="main"
+          className="page"
+          key={cabinet?.generation ?? "offline"}
+          fadeKey={routeId ? route + "/" + routeId : route}
+        >
           {children}
-        </main>
+        </FadeSwap>
       </div>
 
       <div className="shell__tabs">

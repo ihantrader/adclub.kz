@@ -1,6 +1,12 @@
 import { isApiError } from "@adclub/api-client";
-import { ScreenError } from "@adclub/ui";
-import { useEffect, useRef } from "react";
+import {
+  DelayedSkeleton,
+  FadeSwap,
+  ScreenError,
+  SkeletonList,
+  useDelayedIndicator,
+} from "@adclub/ui";
+import { useEffect, useRef, type ReactNode } from "react";
 import { session, useSessionState, useUpdateRequiredMessage } from "./api";
 import {
   clearCabinet,
@@ -105,49 +111,80 @@ export function App() {
     };
   }, []);
 
-  if (updateMessage !== null) return <UpdateRequired message={updateMessage} />;
+  // The screens of the page take each other's place with a fade (D-069):
+  // the start, the sign-in, the cabinet. Within the cabinet the pages fade
+  // by themselves (Shell), so the frame is one screen here.
+  const [kind, screen] = view();
+  return <FadeSwap fadeKey={kind}>{screen}</FadeSwap>;
 
-  switch (state.status) {
-    case "starting":
-      return <Starting />;
-    case "signed_out":
-      return (
-        <SignIn
-          reason={state.reason}
-          onSignedIn={() => {
-            signedInHere.current = true;
-          }}
-        />
-      );
-    case "unreachable": {
-      // Opened without a network: the shell with what the header knew, if anything.
-      const known = lastKnown();
-      if (!known) return <Unreachable onRetry={() => session.start()} />;
-      return (
-        <Shell route={route} cabinet={null} fallbackNames={known}>
-          <Page route={route} cabinet={null} />
-        </Shell>
-      );
-    }
-    case "signed_in":
-      if (cabinet.status === "ready") {
-        return (
-          <Shell route={route} cabinet={cabinet}>
-            <Page
-              route={route}
-              cabinet={cabinet}
-              firstInstall={offerInstall}
-              onInstallDone={() => {
-                offerInstallNow(false);
-                navigate("orders", { replace: true });
-              }}
-            />
-          </Shell>
-        );
+  function view(): [string, ReactNode] {
+    if (updateMessage !== null) return ["update", <UpdateRequired message={updateMessage} />];
+
+    switch (state.status) {
+      case "starting":
+        return ["starting", <Starting />];
+      case "signed_out":
+        return [
+          "sign-in",
+          <SignIn
+            reason={state.reason}
+            onSignedIn={() => {
+              signedInHere.current = true;
+            }}
+          />,
+        ];
+      case "unreachable": {
+        // Opened without a network: the shell with what the header knew, if anything.
+        const known = lastKnown();
+        if (!known) return ["unreachable", <Unreachable onRetry={() => session.start()} />];
+        return [
+          "cabinet",
+          <Shell route={route} cabinet={null} fallbackNames={known}>
+            <Page route={route} cabinet={null} />
+          </Shell>,
+        ];
       }
-      if (cabinet.status === "failed") return <CabinetFailed error={cabinet.error} />;
-      return <Starting />;
+      case "signed_in":
+        if (cabinet.status === "ready") {
+          return [
+            "cabinet",
+            <Shell route={route} cabinet={cabinet}>
+              <Page
+                route={route}
+                cabinet={cabinet}
+                firstInstall={offerInstall}
+                onInstallDone={() => {
+                  offerInstallNow(false);
+                  navigate("orders", { replace: true });
+                }}
+              />
+            </Shell>,
+          ];
+        }
+        if (cabinet.status === "failed") return ["failed", <CabinetFailed error={cabinet.error} />];
+        if (cabinet.status === "loading" && cabinet.switchingTo) {
+          // Another company: the frame stays, the page fades into its loading state.
+          return [
+            "cabinet",
+            <Shell route={route} cabinet={null} fallbackNames={cabinet.switchingTo}>
+              <SwitchingCompany />
+            </Shell>,
+          ];
+        }
+        return ["starting", <Starting />];
+    }
   }
+}
+
+/** The page while another company loads: its skeleton after the delay, nothing of the previous one. */
+function SwitchingCompany() {
+  const t = useT();
+  const indicator = useDelayedIndicator(true);
+  return (
+    <DelayedSkeleton indicator={indicator}>
+      <SkeletonList rows={3} label={t("common.loading")} />
+    </DelayedSkeleton>
+  );
 }
 
 function CabinetFailed({ error }: { error: unknown }) {

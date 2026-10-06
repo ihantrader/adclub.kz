@@ -10,8 +10,10 @@ import {
   Banner,
   Button,
   Checkbox,
+  DelayedSkeleton,
   Dialog,
   EmptyState,
+  FadeSwap,
   Icon,
   IconButton,
   ScreenError,
@@ -19,6 +21,7 @@ import {
   SkeletonList,
   TextField,
   toastObstacle,
+  useLoadingGate,
   useToast,
 } from "@adclub/ui";
 import { isApiError } from "@adclub/api-client";
@@ -96,45 +99,51 @@ export function OfferCardScreen({ company }: { company: SupplierCard }) {
 
 function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
   const t = useT();
+  const gate = useLoadingGate();
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
+  const { begin, settle } = gate;
 
+  // The answer (or the error) comes through the loading rule (D-069): a quick
+  // one at once, a slow one after its skeleton has been seen. «Повторить»
+  // keeps the error on screen until the new answer, its button says it waits.
   const fetchOffer = async () => {
+    const ticket = begin();
     try {
       const { offer } = await apiClient.getSupplierOffer({ offerId: id });
-      setLoaded({ status: "ready", offer });
+      settle(ticket, () => setLoaded({ status: "ready", offer }));
     } catch (error) {
-      setLoaded(
-        isApiError(error) && error.code === "NOT_FOUND"
-          ? { status: "missing" }
-          : { status: "failed", error },
+      settle(ticket, () =>
+        setLoaded(
+          isApiError(error) && error.code === "NOT_FOUND"
+            ? { status: "missing" }
+            : { status: "failed", error },
+        ),
       );
     }
-  };
-
-  const load = () => {
-    setLoaded({ status: "loading" });
-    return fetchOffer();
   };
 
   useEffect(() => {
     // Loading on mount, as «Сотрудники» does: no state is set before the
     // answer. Keyed by the id, so once per card.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchOffer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  let body: ReactNode;
   switch (loaded.status) {
     case "loading":
-      return (
+      body = (
         <>
           <BackHead title={t("offerForm.title")} />
-          <SkeletonList rows={2} label={t("common.loading")} />
+          <DelayedSkeleton indicator={gate.indicator}>
+            <SkeletonList rows={2} label={t("common.loading")} />
+          </DelayedSkeleton>
         </>
       );
+      break;
     case "missing":
       // Another company's offer, or one of the company switched away from.
-      return (
+      body = (
         <>
           <BackHead title={t("offerForm.title")} />
           <EmptyState
@@ -148,19 +157,21 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
           />
         </>
       );
+      break;
     case "failed":
-      return (
+      body = (
         <>
           <BackHead title={t("offerForm.title")} />
           <ScreenError
             title={t("common.errorTitle")}
             text={t("common.errorText")}
-            retry={{ label: t("common.retry"), onRetry: load }}
+            retry={{ label: t("common.retry"), onRetry: fetchOffer }}
           />
         </>
       );
+      break;
     default:
-      return (
+      body = (
         <OfferEditor
           key={loaded.offer.id}
           item={loaded.offer.item}
@@ -170,6 +181,13 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
         />
       );
   }
+  // What the card shows fades in when it changes from loading to the offer,
+  // the same 150 ms as the page around it.
+  return (
+    <FadeSwap className="page-part" fadeKey={loaded.status}>
+      {body}
+    </FadeSwap>
+  );
 }
 
 function BackHead({ title }: { title: string }) {
@@ -244,33 +262,45 @@ function ReceiptPreview({ form, initial }: { form: OfferForm; initial: OfferRece
     initial && initial.leadDays === days ? initial : null,
   );
   const [failed, setFailed] = useState(false);
+  const gate = useLoadingGate();
+  const { begin, settle, cancel } = gate;
 
   useEffect(() => {
-    if (days === null) return;
+    if (days === null) {
+      cancel();
+      return;
+    }
     const controller = new AbortController();
+    // The date of the previous term stays until the new one is there (D-069);
+    // «Загрузка…» only where there is nothing yet and the wait is not short.
+    const ticket = begin();
     const timer = setTimeout(() => {
       apiClient
         .previewOfferReceipt({ query: { leadDays: days }, signal: controller.signal })
-        .then(({ receipt: next }) => {
-          setReceipt(next);
-          setFailed(false);
-        })
+        .then(({ receipt: next }) =>
+          settle(ticket, () => {
+            setReceipt(next);
+            setFailed(false);
+          }),
+        )
         .catch(() => {
-          if (!controller.signal.aborted) setFailed(true);
+          if (!controller.signal.aborted) settle(ticket, () => setFailed(true));
         });
     }, PREVIEW_DELAY_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [days]);
+  }, [days, begin, settle, cancel]);
 
-  const fresh = receipt !== null && receipt.leadDays === days;
+  const stale = receipt !== null && receipt.leadDays !== days;
   let body: ReactNode;
   if (days === null || failed) {
     body = <p className="ac-text-body-s ac-muted">{t("offerForm.previewUnknown")}</p>;
-  } else if (!fresh) {
-    body = <p className="ac-text-body-s ac-muted">{t("common.loading")}…</p>;
+  } else if (receipt === null) {
+    body = (
+      <p className="ac-text-body-s ac-muted">{gate.indicator ? `${t("common.loading")}…` : " "}</p>
+    );
   } else if (receipt.unavailable) {
     body = (
       <p className="ac-text-body-s preview__warning">
@@ -308,7 +338,14 @@ function ReceiptPreview({ form, initial }: { form: OfferForm; initial: OfferRece
       <p className="ac-text-body-s">
         {t(form.availability === "in_stock" ? "offers.inStock" : "offers.onOrder")}
       </p>
-      {body}
+      <div
+        className={
+          stale && gate.indicator ? "preview__receipt preview__receipt--dim" : "preview__receipt"
+        }
+        aria-busy={stale || undefined}
+      >
+        {body}
+      </div>
     </section>
   );
 }

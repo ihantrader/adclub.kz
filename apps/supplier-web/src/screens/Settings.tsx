@@ -4,11 +4,13 @@ import type { ThemeMode } from "@adclub/ui-core";
 import {
   Banner,
   Button,
+  DelayedSkeleton,
   Dialog,
   ScreenError,
   Segments,
   SkeletonList,
   Switch,
+  useLoadingGate,
   useTheme,
 } from "@adclub/ui";
 import { useCallback, useEffect, useState } from "react";
@@ -37,21 +39,26 @@ export function Settings({ cabinet }: { cabinet: Ready }) {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const gate = useLoadingGate();
+  const { begin, settle } = gate;
 
-  // No state is set before the answer: the effect below only starts the request.
+  // No state is set before the answer: the effect below only starts the
+  // request; the answer comes through the loading rule (D-069).
   const load = useCallback(async () => {
+    const ticket = begin();
     try {
-      setMe(await apiClient.getSupplierMe());
-      setLoadError(null);
+      const next = await apiClient.getSupplierMe();
+      settle(ticket, () => {
+        setMe(next);
+        setLoadError(null);
+      });
     } catch (thrown) {
-      setLoadError(thrown);
+      settle(ticket, () => setLoadError(thrown));
     }
-  }, []);
+  }, [begin, settle]);
 
   useEffect(() => {
-    // Loading on mount, as DevicesScreen of the app does: the rule's own
-    // exception ("subscribe for updates from some external system") is this.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Loading on mount, as DevicesScreen of the app does.
     void load();
   }, [load]);
 
@@ -108,7 +115,9 @@ export function Settings({ cabinet }: { cabinet: Ready }) {
             retry={{ label: t("common.retry"), onRetry: load }}
           />
         ) : !me ? (
-          <SkeletonList rows={2} label={t("common.loading")} />
+          <DelayedSkeleton indicator={gate.indicator}>
+            <SkeletonList rows={2} label={t("common.loading")} />
+          </DelayedSkeleton>
         ) : (
           <>
             <dl className="facts">

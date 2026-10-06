@@ -1,14 +1,21 @@
-import { Button, Logo, Spinner } from "@adclub/ui";
+import { Button, DelayedSkeleton, Logo, Spinner, useDelayedIndicator } from "@adclub/ui";
 import { useT } from "../i18n";
 import { AuthLayout } from "./AuthLayout";
 
 /** The first moments of the page: the session is being found out (the cookie exchange). */
 export function Starting() {
   const t = useT();
+  // A quick start shows nothing but the background, then the cabinet fades
+  // in; the logo and the spinner only when it takes longer (D-069).
+  const indicator = useDelayedIndicator(true);
   return (
     <main className="splash" aria-busy="true">
-      <Logo height={48} />
-      <Spinner />
+      <DelayedSkeleton indicator={indicator}>
+        <div className="splash__content">
+          <Logo height={48} />
+          <Spinner />
+        </div>
+      </DelayedSkeleton>
       <span className="ac-visually-hidden">{t("common.loading")}</span>
     </main>
   );

@@ -16,6 +16,7 @@ import {
 } from "@adclub/ui";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
+import { refreshCompany } from "../cabinet/cabinet-store";
 import { useOnline } from "../connection";
 import { useLanguage, useT } from "../i18n";
 import { formatPhone } from "../phone";
@@ -30,6 +31,7 @@ import {
   OrderStatus,
   WorkDeadline,
   actionLabel,
+  useAt,
   useWhen,
 } from "./OrderParts";
 import {
@@ -180,6 +182,7 @@ function OrderView({
   const online = useOnline();
   const now = useNow();
   const when = useWhen(timeZone);
+  const at = useAt(timeZone);
   const [notice, setNotice] = useState<{ conflict: boolean; text: string } | null>(null);
   const [declining, setDeclining] = useState(false);
   /** The order just changed under the employee's finger: the buttons wait a moment. */
@@ -200,7 +203,7 @@ function OrderView({
   const reread = async (options: { tell?: boolean } = {}) => {
     try {
       const { order: current } = await apiClient.getSupplierOrder({ orderId: order.id });
-      const changed = changeNotice(order, current, when, t);
+      const changed = changeNotice(order, current, at, t);
       if (changed) {
         setHeld(true);
         if (options.tell !== false) setNotice({ conflict: true, text: changed });
@@ -243,8 +246,9 @@ function OrderView({
         }),
       );
     } catch (thrown) {
-      const problem = actionProblem(thrown, when, t);
+      const problem = actionProblem(thrown, at, t);
       setNotice(problem);
+      if (problem.companyChanged) void refreshCompany();
       if (problem.conflict) await reread({ tell: false });
     } finally {
       busy.current = false;
@@ -445,7 +449,7 @@ function OrderView({
 
       <DeclineDialog
         target={declining ? { id: order.id, number: order.number, version: order.version } : null}
-        format={when}
+        format={at}
         onClose={() => setDeclining(false)}
         onDeclined={(declined) => onOrder(declined)}
         onProblem={(problem) => {

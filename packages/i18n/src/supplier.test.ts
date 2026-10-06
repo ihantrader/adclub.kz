@@ -135,9 +135,13 @@ describe("supplier cabinet texts", () => {
       "Телефон откроется после принятия заявки",
     );
     expect(supplierText("ru", "orders.priceFixed")).toBe("Цена зафиксирована на момент оформления");
-    expect(supplierText("ru", "orders.conflict.accepted", { who: "Ерлан", time: "14:02" })).toBe(
-      "Заявку уже принял Ерлан в 14:02",
-    );
+    // `when` carries its own preposition: «в 14:02», «вчера в 14:02» (TASK-033.A).
+    expect(
+      supplierText("ru", "orders.conflict.accepted", {
+        who: "Ерлан",
+        when: supplierText("ru", "orders.at.yesterday", { time: "14:02" }),
+      }),
+    ).toBe("Заявку уже принял Ерлан вчера в 14:02");
     expect(supplierText("ru", "orders.declineTitle")).toBe("Отказать клиенту?");
     expect(supplierText("ru", "orders.withdrawTitle")).toBe("Снять это предложение с продажи?");
     expect(supplierText("ru", "scan.camera.denied")).toBe(

@@ -50,10 +50,31 @@ function wallClock(at: number, timeZone: string): { date: string; time: string }
   };
 }
 
+type Moment =
+  | { day: "today" | "yesterday" | "tomorrow"; time: string }
+  | { day: "date"; date: string; time: string };
+
+/** Which day `iso` falls on, seen from `now`, in the time zone of the company's point. */
+function momentOf(iso: string, timeZone: string, lang: Lang, now: number): Moment {
+  const at = Date.parse(iso);
+  const { date, time } = wallClock(at, timeZone);
+  const dayMs = 86_400_000;
+  if (date === wallClock(now, timeZone).date) return { day: "today", time };
+  if (date === wallClock(now - dayMs, timeZone).date) return { day: "yesterday", time };
+  if (date === wallClock(now + dayMs, timeZone).date) return { day: "tomorrow", time };
+  const day = new Intl.DateTimeFormat(localeOf(lang), {
+    day: "numeric",
+    month: "long",
+    timeZone,
+  }).format(new Date(at));
+  return { day: "date", date: day, time };
+}
+
 /**
- * When something happened or is due, as short as it can be said: «14:02»
- * today, «вчера, 14:02» / «завтра, 14:02», otherwise «6 октября, 14:02» —
- * in the time zone of the company's point.
+ * When something happened or is due, as short as it can be said — a label
+ * of its own (a line of the journal, a row of the list): «14:02» today,
+ * «вчера, 14:02» / «завтра, 14:02», otherwise «6 октября, 14:02» — in the
+ * time zone of the company's point.
  */
 export function formatWhen(
   iso: string,
@@ -62,19 +83,43 @@ export function formatWhen(
   t: Translate,
   now: number = Date.now(),
 ): string {
-  const at = Date.parse(iso);
-  const { date, time } = wallClock(at, timeZone);
-  const today = wallClock(now, timeZone).date;
-  if (date === today) return time;
-  const dayMs = 86_400_000;
-  if (date === wallClock(now - dayMs, timeZone).date) return t("orders.when.yesterday", { time });
-  if (date === wallClock(now + dayMs, timeZone).date) return t("orders.when.tomorrow", { time });
-  const day = new Intl.DateTimeFormat(localeOf(lang), {
-    day: "numeric",
-    month: "long",
-    timeZone,
-  }).format(new Date(at));
-  return t("orders.when.day", { day, time });
+  const moment = momentOf(iso, timeZone, lang, now);
+  switch (moment.day) {
+    case "today":
+      return moment.time;
+    case "yesterday":
+      return t("orders.when.yesterday", { time: moment.time });
+    case "tomorrow":
+      return t("orders.when.tomorrow", { time: moment.time });
+    case "date":
+      return t("orders.when.day", { day: moment.date, time: moment.time });
+  }
+}
+
+/**
+ * The same moment inside a sentence, with its preposition (TASK-033.A):
+ * «Заявку уже принял Марат **в 14:02**» / «**вчера в 14:02**» / «**12
+ * октября в 14:02**»; «at 14:02» / «yesterday at 14:02» / «on 12 October at
+ * 14:02»; «14:02 кезінде» / «кеше 14:02 кезінде» / «12 қазан 14:02 кезінде».
+ */
+export function formatAt(
+  iso: string,
+  timeZone: string,
+  lang: Lang,
+  t: Translate,
+  now: number = Date.now(),
+): string {
+  const moment = momentOf(iso, timeZone, lang, now);
+  switch (moment.day) {
+    case "today":
+      return t("orders.at.today", { time: moment.time });
+    case "yesterday":
+      return t("orders.at.yesterday", { time: moment.time });
+    case "tomorrow":
+      return t("orders.at.tomorrow", { time: moment.time });
+    case "date":
+      return t("orders.at.day", { day: moment.date, time: moment.time });
+  }
 }
 
 /** «6 октября» of a `YYYY-MM-DD` date (as the server gave it). */
@@ -321,7 +366,7 @@ export function conflictText(
   const parsed = orderStateConflictDetailsSchema.safeParse(details);
   const last = parsed.success ? parsed.data.lastAction : undefined;
   if (!last) return t("orders.conflict.changed");
-  const params = { who: actorName(last.actor, t), time: format(last.at) };
+  const params = { who: actorName(last.actor, t), when: format(last.at) };
   switch (last.action) {
     case "accept":
       return t("orders.conflict.accepted", params);
@@ -376,17 +421,22 @@ export function changeNotice(
 /**
  * What a refused press says: a conflict — a notice of what happened
  * (`conflict: true`, the screen re-reads the order); anything else — an
- * error under which the order stays as it was.
+ * error under which the order stays as it was. The company blocked while
+ * the page was open (`SUPPLIER_BLOCKED`, TASK-033.A) is said in words and
+ * `companyChanged`: the page re-reads the company, so the buttons the
+ * server refuses go away — and come back once the block is lifted.
  */
 export function actionProblem(
   error: unknown,
   format: (iso: string) => string,
   t: Translate,
-): { conflict: boolean; text: string } {
+): { conflict: boolean; text: string; companyChanged?: true } {
   if (!isApiError(error)) return { conflict: false, text: t("common.saveFailed") };
   switch (error.code) {
     case "ORDER_STATE_CONFLICT":
       return { conflict: true, text: conflictText(error.details, format, t) };
+    case "SUPPLIER_BLOCKED":
+      return { conflict: true, text: t("orders.blockedRefused"), companyChanged: true };
     case "NOT_FOUND":
       return { conflict: true, text: t("orders.notFound") };
     case "NETWORK_ERROR":

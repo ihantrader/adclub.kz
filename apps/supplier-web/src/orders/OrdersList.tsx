@@ -17,6 +17,7 @@ import {
 } from "@adclub/ui";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
+import { refreshCompany } from "../cabinet/cabinet-store";
 import { useOnline } from "../connection";
 import { useT } from "../i18n";
 import { useWide } from "../offers/use-wide";
@@ -32,6 +33,7 @@ import {
   QuickActions,
   WorkDeadline,
   openOrder,
+  useAt,
   useWhen,
 } from "./OrderParts";
 import {
@@ -114,6 +116,7 @@ export function OrdersList({
   const online = useOnline();
   const toast = useToast();
   const when = useWhen(timeZone);
+  const at = useAt(timeZone);
   const opened = useRouteState();
   const gate = useLoadingGate();
   const [query, setQuery] = useState<ListQuery>(() => queryOf(opened));
@@ -273,7 +276,9 @@ export function OrdersList({
         action: { label: t("orders.open"), onAction: () => navigateTo(orderPath(order.id)) },
       });
     } catch (thrown) {
-      setNotice(actionProblem(thrown, when, t));
+      const problem = actionProblem(thrown, at, t);
+      setNotice(problem);
+      if (problem.companyChanged) void refreshCompany();
     }
     await refresh();
   };
@@ -419,7 +424,7 @@ export function OrdersList({
 
       <DeclineDialog
         target={declining}
-        format={when}
+        format={at}
         onClose={() => setDeclining(null)}
         onDeclined={() => void refresh()}
         onProblem={(problem) => {

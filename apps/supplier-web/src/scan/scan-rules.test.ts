@@ -9,11 +9,13 @@ import {
   answerOfClose,
   answerOfError,
   answerOfLookup,
+  createCodeEntryGate,
   createScanGate,
   credentialOfScan,
   resultTone,
   resultWords,
   typedCode,
+  type CodeEntryGate,
   type ScanResult,
 } from "./scan-rules";
 
@@ -214,6 +216,71 @@ describe("the answers of the server (S-SCAN-03, S-SCAN-04)", () => {
       code: "482915",
     });
     expect(answerOfError(new Error("boom"), { code: "1" }, 0)).toEqual({ kind: "failed" });
+  });
+});
+
+describe("the manual entry searches by itself (TASK-033.A)", () => {
+  /** The cells as the keypad, a keyboard or a paste would fill them. */
+  const type = (gate: CodeEntryGate, input: string, held = false) =>
+    gate.typed(typedCode(input), held);
+
+  it("searches once the sixth digit is in, and not before", () => {
+    const gate = createCodeEntryGate();
+    const searches = ["4", "48", "482", "4829", "48291", "482915"].map((code) => type(gate, code));
+    expect(searches).toEqual([false, false, false, false, false, true]);
+  });
+
+  it("searches a pasted code once, whatever its separators or tail", () => {
+    for (const pasted of ["482 915", "482-915", "482 915 7", " 482915 "]) {
+      const gate = createCodeEntryGate();
+      expect(type(gate, pasted)).toBe(true);
+      // The same input event again (a re-render, the browser repeating it).
+      expect(type(gate, pasted)).toBe(false);
+    }
+  });
+
+  it("sends one request for a double tap on the last key and for Enter after it", () => {
+    const gate = createCodeEntryGate();
+    type(gate, "48291");
+    expect(type(gate, "482915")).toBe(true);
+    // The second tap: the cells are full, a seventh digit is dropped, the code is the same.
+    expect(type(gate, "4829155")).toBe(false);
+    // Enter does not search: the request has gone already.
+    expect(type(gate, "482915")).toBe(false);
+  });
+
+  it("searches again after «Стереть» and a new digit — even the same one", () => {
+    const gate = createCodeEntryGate();
+    expect(type(gate, "482915")).toBe(true);
+    expect(type(gate, "48291")).toBe(false);
+    expect(type(gate, "482914")).toBe(true);
+    expect(type(gate, "48291")).toBe(false);
+    expect(type(gate, "482914")).toBe(true);
+  });
+
+  it("searches another code pasted over a full one", () => {
+    const gate = createCodeEntryGate();
+    expect(type(gate, "482915")).toBe(true);
+    expect(type(gate, "111 222")).toBe(true);
+  });
+
+  it("starts over after the cells are emptied («Ввести ещё раз»)", () => {
+    const gate = createCodeEntryGate();
+    expect(type(gate, "482915")).toBe(true);
+    gate.reset();
+    expect(type(gate, "482915")).toBe(true);
+  });
+
+  it("sends nothing while held after 429, and searches the waiting code once when let go", () => {
+    const gate = createCodeEntryGate();
+    expect(type(gate, "482915", true)).toBe(false);
+    expect(type(gate, "482915", true)).toBe(false);
+    // Typing goes on while held.
+    expect(type(gate, "48291", true)).toBe(false);
+    expect(type(gate, "482916", true)).toBe(false);
+    // `Retry-After` passed: the code in the cells goes, once.
+    expect(type(gate, "482916")).toBe(true);
+    expect(type(gate, "482916")).toBe(false);
   });
 });
 

@@ -1600,6 +1600,18 @@ a.ac-button {
   margin-top: var(--ac-space-2);
 }
 
+/* «Ищем заявку» after 300 ms, or why the search waits (429): the line keeps its
+   height, so the keypad under it never moves when it appears (TASK-033.A). */
+.manual__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ac-space-2);
+  min-height: 24px;
+  margin: 0;
+  text-align: center;
+}
+
 .found__item {
   overflow-wrap: anywhere;
 }

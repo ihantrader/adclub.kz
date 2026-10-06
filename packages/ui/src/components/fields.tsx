@@ -289,10 +289,12 @@ export interface KeypadProps {
   eraseLabel: string;
   /** Optional key in the bottom-left corner (e.g. "Найти"). */
   submit?: { label: string; onPress: () => void; disabled?: boolean };
+  /** Every key waits (a search the keys started is going, TASK-033.A). */
+  disabled?: boolean;
 }
 
 /** Digit keypad of the manual code entry: keys 64 high, digits `title` (DESIGN.md 7.10). */
-export function Keypad({ onDigit, onErase, eraseLabel, submit }: KeypadProps) {
+export function Keypad({ onDigit, onErase, eraseLabel, submit, disabled }: KeypadProps) {
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
   return (
     <div className="ac-keypad">
@@ -301,6 +303,7 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit }: KeypadProps) {
           type="button"
           key={digit}
           className="ac-keypad__key ac-text-title"
+          disabled={disabled}
           onClick={() => onDigit(digit)}
         >
           {digit}
@@ -310,7 +313,7 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit }: KeypadProps) {
         <button
           type="button"
           className="ac-keypad__key ac-keypad__key--action"
-          disabled={submit.disabled}
+          disabled={disabled || submit.disabled}
           onClick={submit.onPress}
         >
           {submit.label}
@@ -318,7 +321,12 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit }: KeypadProps) {
       ) : (
         <span />
       )}
-      <button type="button" className="ac-keypad__key ac-text-title" onClick={() => onDigit("0")}>
+      <button
+        type="button"
+        className="ac-keypad__key ac-text-title"
+        disabled={disabled}
+        onClick={() => onDigit("0")}
+      >
         0
       </button>
       <button
@@ -326,6 +334,7 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit }: KeypadProps) {
         className="ac-keypad__key ac-keypad__key--ghost"
         aria-label={eraseLabel}
         title={eraseLabel}
+        disabled={disabled}
         onClick={onErase}
       >
         <Icon name="backspace" size={24} />

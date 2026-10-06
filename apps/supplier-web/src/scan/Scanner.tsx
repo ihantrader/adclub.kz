@@ -22,7 +22,7 @@ import { apiClient } from "../api";
 import { switchCompany } from "../cabinet/cabinet-store";
 import { isOnline } from "../connection";
 import { useLanguage, useT } from "../i18n";
-import { Money, useWhen } from "../orders/OrderParts";
+import { Money, useAt } from "../orders/OrderParts";
 import { formatDate, statusKey } from "../orders/order-rules";
 import { goBack, navigate, useRouteState } from "../router";
 import {
@@ -42,6 +42,7 @@ import {
   answerOfClose,
   answerOfError,
   answerOfLookup,
+  createCodeEntryGate,
   createScanGate,
   resultIcon,
   resultTone,
@@ -103,7 +104,7 @@ type Camera =
  */
 export function Scanner({ companyName, timeZone }: { companyName: string; timeZone: string }) {
   const t = useT();
-  const when = useWhen(timeZone);
+  const when = useAt(timeZone);
   const opened = useRouteState() as { manual?: boolean } | null;
   const [view, setView] = useState<View>(() =>
     opened?.manual ? { kind: "manual" } : { kind: "camera" },
@@ -115,12 +116,25 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
   const [torchOn, setTorchOn] = useState(false);
   const [foreign, setForeign] = useState(false);
   const [code, setCode] = useState("");
+  /** The cells as they are now, for the search that waited out a 429. */
+  const codeRef = useRef("");
   /** What the customer showed, for the «Выдать» after the lookup (memory only). */
   const credential = useRef<Credential | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const decoder = useRef<QrDecoder | null>(null);
   const [gate] = useState(createScanGate);
+  /** The sixth digit searches by itself, once per code typed (TASK-033.A). */
+  const [entry] = useState(createCodeEntryGate);
+  /**
+   * After 429 the scanner sends no search until `Retry-After` (`until`);
+   * `now` — when the minutes left were last counted. Typing goes on.
+   */
+  const [wait, setWait] = useState<{ until: number; now: number } | null>(() => {
+    const until = lookupsBlockedUntil();
+    const now = Date.now();
+    return until > now ? { until, now } : null;
+  });
 
   const close = () => goBack("orders");
 
@@ -171,11 +185,60 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
         });
         return;
       }
-      if (answer.kind === "rateLimited") blockLookupsUntil(answer.until);
+      if (answer.kind === "rateLimited") {
+        blockLookupsUntil(answer.until);
+        setWait({ until: answer.until, now: Date.now() });
+      }
       finish(from, answer);
     },
     [finish, gate],
   );
+
+  /**
+   * The cells changed — by the keypad, a keyboard or a paste: the sixth
+   * digit searches by itself (S-SCAN-02), once per code; while a 429 holds
+   * the scanner, the code waits for `Retry-After`.
+   */
+  const typeCode = (next: string) => {
+    setCode(next);
+    codeRef.current = next;
+    const held = lookupsBlockedUntil() > Date.now();
+    if (entry.typed(next, held)) void lookup({ code: next }, "manual");
+  };
+
+  // The keypad goes from the cells as they are now, not as the last render
+  // saw them: two taps faster than a render would otherwise both start from
+  // the same digits.
+  const typeDigit = (digit: string) => typeCode((codeRef.current + digit).slice(0, 6));
+  const eraseDigit = () => typeCode(codeRef.current.slice(0, -1));
+
+  /** A fresh, empty entry: the next six digits are a new code. */
+  const clearCode = () => {
+    setCode("");
+    codeRef.current = "";
+    entry.reset();
+  };
+
+  // The minutes of a 429 count down; when they are over, the code that
+  // waited in the cells is searched — once, as if just typed.
+  const manualOpen = view.kind === "manual";
+  useEffect(() => {
+    if (!wait) return;
+    const timer = setTimeout(
+      () => {
+        const now = Date.now();
+        if (now < wait.until) {
+          setWait({ until: wait.until, now });
+          return;
+        }
+        setWait(null);
+        const typed = codeRef.current;
+        if (manualOpen && entry.typed(typed, false)) void lookup({ code: typed }, "manual");
+      },
+      Math.min(Math.max(wait.until - Date.now(), 0), 15_000),
+    );
+    return () => clearTimeout(timer);
+  }, [wait, manualOpen, entry, lookup]);
 
   /** «Выдать» / «Закрыть заявку»: the second, explicit press. */
   const giveOut = async (from: From) => {
@@ -314,15 +377,18 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
   /** «Сканировать следующую»: back to the camera, the gate open again. */
   const next = () => {
     credential.current = null;
-    setCode("");
+    clearCode();
     gate.resume();
     setView(noCamera ? { kind: "manual" } : { kind: "camera" });
   };
 
   const toManual = () => {
-    setCode("");
+    clearCode();
     setView({ kind: "manual" });
   };
+
+  const waitMinutes =
+    wait && wait.until > wait.now ? Math.max(1, Math.ceil((wait.until - wait.now) / 60_000)) : null;
 
   // --------------------------------------------------------------- views
 
@@ -391,15 +457,35 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
         <ManualEntry
           companyName={companyName}
           code={code}
-          onCode={setCode}
+          onCode={typeCode}
+          onDigit={typeDigit}
+          onErase={eraseDigit}
           onClose={close}
           onCamera={noCamera ? null : next}
-          onFind={() => lookup({ code }, "manual")}
+          searching={false}
+          waitMinutes={waitMinutes}
         />
       );
       break;
     case "searching":
-      content = <Searching companyName={companyName} onClose={close} />;
+      // A typed code is searched under its own cells, held still meanwhile
+      // (D-069: the indicator only after 300 ms) — the screen doesn't blink.
+      content =
+        view.from === "manual" ? (
+          <ManualEntry
+            companyName={companyName}
+            code={code}
+            onCode={typeCode}
+            onDigit={typeDigit}
+            onErase={eraseDigit}
+            onClose={close}
+            onCamera={null}
+            searching
+            waitMinutes={null}
+          />
+        ) : (
+          <Searching companyName={companyName} onClose={close} />
+        );
       break;
     case "found":
       content = (
@@ -456,7 +542,14 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
       />
       <FadeSwap
         className="scanner__view"
-        fadeKey={view.kind === "camera" ? `camera-${camera.kind === "problem"}` : view.kind}
+        fadeKey={
+          view.kind === "camera"
+            ? `camera-${camera.kind === "problem"}`
+            : // A typed code is searched on the same screen: nothing to fade between.
+              view.kind === "searching" && view.from === "manual"
+              ? "manual"
+              : view.kind
+        }
       >
         {content}
       </FadeSwap>
@@ -567,25 +660,32 @@ function ManualEntry({
   code,
   onCode,
   onClose,
+  onDigit,
+  onErase,
   onCamera,
-  onFind,
+  searching,
+  waitMinutes,
 }: {
   companyName: string;
   code: string;
+  /** Every change of the cells; the sixth digit searches by itself (TASK-033.A). */
   onCode: (code: string) => void;
+  /** A key of the keypad: from the cells as they are now. */
+  onDigit: (digit: string) => void;
+  onErase: () => void;
   onClose: () => void;
   onCamera: (() => void) | null;
-  onFind: () => Promise<void>;
+  /** The typed code is being searched: the cells and the keys wait. */
+  searching: boolean;
+  /** After 429: minutes until a search may go; the typing goes on meanwhile. */
+  waitMinutes: number | null;
 }) {
   const t = useT();
-  const complete = code.length === 6;
+  const indicator = useDelayedIndicator(searching);
   // A touch screen gets the keypad of the page; a mouse and keyboard type straight in.
   const [finePointer] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.("(pointer: fine)").matches === true,
   );
-  const find = () => {
-    if (complete) void onFind();
-  };
   return (
     <Panel
       companyName={companyName}
@@ -600,14 +700,24 @@ function ManualEntry({
           value={code}
           onChange={onCode}
           autoFocus={finePointer}
+          disabled={searching}
           systemKeyboard={false}
-          onSubmit={find}
         />
+        <p className="manual__status ac-text-body-s ac-muted" role="status" aria-live="polite">
+          {indicator ? (
+            <>
+              <Spinner />
+              <span>{t("scan.searching")}</span>
+            </>
+          ) : waitMinutes !== null && !searching ? (
+            t("scan.searchWaits", { n: waitMinutes })
+          ) : null}
+        </p>
         <Keypad
-          onDigit={(digit) => onCode((code + digit).slice(0, 6))}
-          onErase={() => onCode(code.slice(0, -1))}
+          onDigit={onDigit}
+          onErase={onErase}
           eraseLabel={t("scan.erase")}
-          submit={{ label: t("scan.find"), onPress: find, disabled: !complete }}
+          disabled={searching}
         />
       </div>
     </Panel>

@@ -11,6 +11,7 @@ import {
   conflictText,
   durationText,
   finishedQuery,
+  formatAt,
   formatWhen,
   journalLines,
   nextTimerTick,
@@ -103,6 +104,31 @@ describe("times in the zone of the point", () => {
     expect(formatWhen("2026-10-01T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("1 октября, 13:40");
     // Just after midnight in Almaty is still «yesterday» in UTC.
     expect(formatWhen("2026-10-05T19:30:00Z", ALMATY, "ru", t, NOON)).toBe("00:30");
+  });
+
+  it("says a moment inside a sentence with its preposition, in three languages (TASK-033.A)", () => {
+    const say = (lang: "ru" | "kk" | "en", iso: string) =>
+      formatAt(iso, ALMATY, lang, (key, params) => supplierText(lang, key, params), NOON);
+    const today = "2026-10-06T09:02:00Z";
+    const yesterday = "2026-10-05T09:02:00Z";
+    const tomorrow = "2026-10-07T09:02:00Z";
+    const earlier = "2026-09-12T09:02:00Z";
+    expect([today, yesterday, tomorrow, earlier].map((iso) => say("ru", iso))).toEqual([
+      "в 14:02",
+      "вчера в 14:02",
+      "завтра в 14:02",
+      "12 сентября в 14:02",
+    ]);
+    expect([today, yesterday, tomorrow, earlier].map((iso) => say("en", iso))).toEqual([
+      "at 14:02",
+      "yesterday at 14:02",
+      "tomorrow at 14:02",
+      "on September 12 at 14:02",
+    ]);
+    const kk = [today, yesterday, tomorrow, earlier].map((iso) => say("kk", iso));
+    expect(kk.slice(0, 3)).toEqual(["14:02 кезінде", "кеше 14:02 кезінде", "ертең 14:02 кезінде"]);
+    // The month by the platform's Kazakh data («12 қыркүйек»), then the time.
+    expect(kk[3]).toMatch(/^12 \S+ 14:02 кезінде$/);
   });
 
   it("finds the start of today in the point's zone", () => {
@@ -212,7 +238,7 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
 
 describe("a conflict is a notice naming who acted (PRODUCT 12.6)", () => {
   const at = "2026-10-06T07:02:00Z";
-  const format = (iso: string) => formatWhen(iso, ALMATY, "ru", t, NOON);
+  const format = (iso: string) => formatAt(iso, ALMATY, "ru", t, NOON);
   const member = {
     kind: "member" as const,
     memberId: crypto.randomUUID(),
@@ -241,6 +267,17 @@ describe("a conflict is a notice naming who acted (PRODUCT 12.6)", () => {
     ).toBe("Заявку закрыл администратор клуба в 12:02");
     expect(conflictText(details("expire_no_response", { kind: "system" }), format, t)).toBe(
       "Срок ответа истёк в 12:02",
+    );
+    // Not «в вчера, 14:02» (TASK-033.A).
+    const earlier = (iso: string) => ({
+      ...details("accept"),
+      lastAction: { action: "accept", at: iso, actor: member },
+    });
+    expect(conflictText(earlier("2026-10-05T09:02:00Z"), format, t)).toBe(
+      "Заявку уже принял Ерлан вчера в 14:02",
+    );
+    expect(conflictText(earlier("2026-09-12T09:02:00Z"), format, t)).toBe(
+      "Заявку уже принял Ерлан 12 сентября в 14:02",
     );
     expect(conflictText({ currentStatus: "accepted", version: 2 }, format, t)).toBe(
       "Заявка изменилась — посмотрите её текущий статус",
@@ -308,6 +345,20 @@ describe("a conflict is a notice naming who acted (PRODUCT 12.6)", () => {
     expect(actionProblem(limited, format, t).text).toBe(
       "Слишком много запросов. Попробуйте через 2 мин",
     );
+  });
+
+  it("says the server's refusal to a blocked company in words, and asks for the company again (TASK-033.A)", () => {
+    const blocked = new ApiError({
+      code: "SUPPLIER_BLOCKED",
+      message: "x",
+      status: 403,
+      retryable: false,
+    });
+    expect(actionProblem(blocked, format, t)).toEqual({
+      conflict: true,
+      companyChanged: true,
+      text: "Кабинет заблокирован администратором клуба: принять, отметить готовность или отказать нельзя. Выдача по коду доступна",
+    });
   });
 });
 

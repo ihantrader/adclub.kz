@@ -8,6 +8,7 @@ import { useNow } from "./live";
 import {
   answerTimer,
   durationText,
+  formatAt,
   formatWhen,
   orderActions,
   statusGroup,
@@ -19,6 +20,12 @@ import {
 export function useWhen(timeZone: string): (iso: string) => string {
   const { lang, t } = useLanguage();
   return useCallback((iso: string) => formatWhen(iso, timeZone, lang, t), [timeZone, lang, t]);
+}
+
+/** The same times inside a sentence: «в 14:02», «вчера в 14:02», «12 октября в 14:02». */
+export function useAt(timeZone: string): (iso: string) => string {
+  const { lang, t } = useLanguage();
+  return useCallback((iso: string) => formatAt(iso, timeZone, lang, t), [timeZone, lang, t]);
 }
 
 /** «12 500 ₸» */

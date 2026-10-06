@@ -23,7 +23,7 @@ export function takeHandedOver(): Credential | null {
 /**
  * Until when the server refused more lookups (429, «Слишком много неверных
  * кодов»): kept for the page, so leaving the scanner and coming back — or
- * pressing «Найти» again and again — does not ask the server before then.
+ * typing code after code — does not ask the server before then.
  */
 let blockedUntil = 0;
 

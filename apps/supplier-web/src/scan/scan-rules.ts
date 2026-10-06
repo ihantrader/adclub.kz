@@ -83,6 +83,38 @@ export function typedCode(input: string): string {
   return input.replace(/\D/g, "").slice(0, 6);
 }
 
+/**
+ * The manual entry searches by itself once the sixth digit is in (S-SCAN-02,
+ * TASK-033.A) — there is no «Найти». **One request per code typed**: the same
+ * six digits again (a double tap on the last key, a re-render, Enter) search
+ * nothing; a digit erased and typed again, or another code pasted over, is a
+ * new code. While the scanner may not search (`held` — 429 until
+ * `Retry-After`), typing goes on and nothing is sent: the code waits, and is
+ * searched once when it is asked about again with `held` false.
+ */
+export function createCodeEntryGate() {
+  /** The code the last search went with, while it stays in the cells. */
+  let searched: string | null = null;
+  return {
+    /** The cells now hold `code`: `true` — search it now. */
+    typed(code: string, held: boolean): boolean {
+      if (code.length < 6) {
+        searched = null;
+        return false;
+      }
+      if (held || code === searched) return false;
+      searched = code;
+      return true;
+    },
+    /** The cells were emptied for a new code («Ввести ещё раз», «Сканировать следующую»). */
+    reset(): void {
+      searched = null;
+    },
+  };
+}
+
+export type CodeEntryGate = ReturnType<typeof createCodeEntryGate>;
+
 // --------------------------------------------------------------- answers
 
 /** What the scanner shows after a request. */

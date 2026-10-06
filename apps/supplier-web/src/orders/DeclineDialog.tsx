@@ -3,6 +3,7 @@ import { ORDER_DECLINE_NOTE_MAX_LENGTH } from "@adclub/contracts";
 import { Banner, Button, Dialog, Radio, TextField, useToast } from "@adclub/ui";
 import { useState } from "react";
 import { apiClient } from "../api";
+import { refreshCompany } from "../cabinet/cabinet-store";
 import { useOnline } from "../connection";
 import { useT } from "../i18n";
 import { offerProblem } from "../offers/offer-rules";
@@ -90,6 +91,7 @@ export function DeclineDialog({
       }
     } catch (thrown) {
       const problem = actionProblem(thrown, format, t);
+      if (problem.companyChanged) void refreshCompany();
       if (problem.conflict) {
         close();
         onProblem(problem);

@@ -225,10 +225,74 @@
         }
       }
     },
+    "/admin/administrators/{adminId}/second-factor-reset": {
+      "post": {
+        "operationId": "resetAdministratorSecondFactor",
+        "summary": "Reset another administrator's second factor with the reason (SCREENS 7.0): ends their admin sessions, setup is required at next sign-in; the reason goes into the action journal",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "adminId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "Why (required)",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetAdministratorSecondFactorBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The second factor is reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpResetResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/administrators/{adminId}/totp-reset": {
       "post": {
         "operationId": "resetAdministratorTotp",
-        "summary": "Reset another administrator's second factor: ends their admin sessions, setup is required at next sign-in",
+        "summary": "Reset another administrator's second factor: ends their admin sessions, setup is required at next sign-in. Kept for compatibility: the admin panel uses `second-factor-reset`, which takes the reason",
         "tags": [
           "admin"
         ],
@@ -3829,6 +3893,49 @@
         }
       }
     },
+    "/admin/home": {
+      "get": {
+        "operationId": "getAdminHome",
+        "summary": "The administrator's queue of attention (A-HOME) in one answer: the channel outage, open signals by kind, the AI budget, new supplier requests, the quality of the catalog",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The counters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminHome"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/order-extension-candidates": {
       "get": {
         "operationId": "listAdminExtensionCandidates",
@@ -4426,6 +4533,27 @@
             }
           },
           {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
             "$ref": "#/components/parameters/ClientHeader"
           },
           {
@@ -4542,7 +4670,8 @@
               "enum": [
                 "duplicate_after_late_close",
                 "frequent_admin_closes",
-                "whatsapp_outage"
+                "whatsapp_outage",
+                "supplier_unreachable"
               ]
             }
           },
@@ -4555,7 +4684,8 @@
               "enum": [
                 "open",
                 "acknowledged",
-                "closed"
+                "closed",
+                "current"
               ]
             }
           },
@@ -4613,6 +4743,134 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSignalPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/signals/{signalId}/acknowledge": {
+      "post": {
+        "operationId": "acknowledgeAdminSignal",
+        "summary": "«Взять в работу» (A-SIG): a new signal becomes «в работе» with the administrator who took it; another version — SIGNAL_CONFLICT with the signal as it is now",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "signalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The version of the signal the administrator saw",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcknowledgeAdminSignalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The signal in work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSignalResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/signals/{signalId}/close": {
+      "post": {
+        "operationId": "closeAdminSignal",
+        "summary": "«Закрыть с комментарием» (A-SIG): the comment is required and goes into the action journal; already closed by someone else — SIGNAL_CONFLICT «уже закрыт {кем}»",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "signalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The version of the signal the administrator saw and the comment",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseAdminSignalBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The closed signal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSignalResponse"
                 }
               }
             }
@@ -13261,6 +13519,19 @@
           "phoneShareConsent"
         ]
       },
+      "AcknowledgeAdminSignalBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
       "ActiveOrder": {
         "type": "object",
         "properties": {
@@ -15305,6 +15576,154 @@
           "limit"
         ]
       },
+      "AdminHome": {
+        "type": "object",
+        "properties": {
+          "channelOutage": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "signalId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/AdminSignalStatus"
+                  },
+                  "since": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "affectedOrders": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "failedMessages": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "signalId",
+                  "status",
+                  "since",
+                  "affectedOrders",
+                  "failedMessages"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "signals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "#/components/schemas/AdminSignalKind"
+                },
+                "open": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "acknowledged": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "kind",
+                "open",
+                "acknowledged"
+              ]
+            }
+          },
+          "aiBudget": {
+            "type": "object",
+            "properties": {
+              "exhausted": {
+                "type": "boolean"
+              },
+              "spentUsd": {
+                "type": "number"
+              },
+              "budgetUsd": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "exhausted",
+              "spentUsd",
+              "budgetUsd"
+            ]
+          },
+          "newSupplierLeads": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "catalog": {
+            "type": "object",
+            "properties": {
+              "withoutPhoto": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "incomplete": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "withoutCompatibility": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "withoutTranslation": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "withoutPhoto",
+              "incomplete",
+              "withoutCompatibility",
+              "withoutTranslation"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "channelOutage",
+          "signals",
+          "aiBudget",
+          "newSupplierLeads",
+          "catalog",
+          "at"
+        ]
+      },
       "AdminItemCompatibilityResponse": {
         "type": "object",
         "properties": {
@@ -16176,6 +16595,49 @@
                 "type": "null"
               }
             ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "acknowledgedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "acknowledgedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminSignalActor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminSignalActor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closeComment": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -16188,7 +16650,78 @@
           "times",
           "firstSeenAt",
           "lastSeenAt",
-          "closedAt"
+          "closedAt",
+          "version",
+          "acknowledgedAt",
+          "acknowledgedBy",
+          "closedBy",
+          "closeComment"
+        ]
+      },
+      "AdminSignalActor": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "system"
+            ]
+          },
+          "adminId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phoneMasked": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "adminId",
+          "name",
+          "phoneMasked"
+        ]
+      },
+      "AdminSignalConflictDetails": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "$ref": "#/components/schemas/AdminSignal"
+          }
+        },
+        "required": [
+          "signal"
+        ]
+      },
+      "AdminSignalIdPath": {
+        "type": "object",
+        "properties": {
+          "signalId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "signalId"
         ]
       },
       "AdminSignalKind": {
@@ -16196,7 +16729,8 @@
         "enum": [
           "duplicate_after_late_close",
           "frequent_admin_closes",
-          "whatsapp_outage"
+          "whatsapp_outage",
+          "supplier_unreachable"
         ]
       },
       "AdminSignalListQuery": {
@@ -16206,7 +16740,7 @@
             "$ref": "#/components/schemas/AdminSignalKind"
           },
           "status": {
-            "$ref": "#/components/schemas/AdminSignalStatus"
+            "$ref": "#/components/schemas/AdminSignalStatusFilter"
           },
           "subjectId": {
             "type": "string",
@@ -16368,8 +16902,29 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "recipients": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "recipientsWithoutWhatsapp": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         }
+      },
+      "AdminSignalResponse": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "$ref": "#/components/schemas/AdminSignal"
+          }
+        },
+        "required": [
+          "signal"
+        ]
       },
       "AdminSignalStatus": {
         "type": "string",
@@ -16377,6 +16932,15 @@
           "open",
           "acknowledged",
           "closed"
+        ]
+      },
+      "AdminSignalStatusFilter": {
+        "type": "string",
+        "enum": [
+          "open",
+          "acknowledged",
+          "closed",
+          "current"
         ]
       },
       "AdminSignalSubject": {
@@ -18224,6 +18788,24 @@
             "type": "string",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastSignInAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -18231,7 +18813,9 @@
           "phoneMasked",
           "totpConfigured",
           "current",
-          "createdAt"
+          "createdAt",
+          "name",
+          "lastSignInAt"
         ]
       },
       "ApiErrorResponse": {
@@ -18344,6 +18928,12 @@
               "null"
             ]
           },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "adminId": {
             "type": [
               "string",
@@ -18367,6 +18957,7 @@
           "role",
           "accountId",
           "phoneMasked",
+          "name",
           "adminId",
           "supplierId",
           "supplierMemberId"
@@ -19638,6 +20229,25 @@
             "$ref": "#/components/schemas/VehicleMarket"
           }
         }
+      },
+      "CloseAdminSignalBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "comment": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "comment"
+        ]
       },
       "CloseOrderResponse": {
         "oneOf": [
@@ -22265,6 +22875,7 @@
           "ORDER_IDEMPOTENCY_MISMATCH",
           "ORDER_STATE_CONFLICT",
           "SUPPLIER_BLOCKED",
+          "SIGNAL_CONFLICT",
           "ORDER_QR_UNKNOWN",
           "DISCIPLINE_ALREADY_REVOKED",
           "REGISTRATION_INCOMPLETE",
@@ -24925,6 +25536,19 @@
           "phone"
         ]
       },
+      "ResetAdministratorSecondFactorBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
       "ResetSettingBody": {
         "type": "object",
         "properties": {
@@ -25982,11 +26606,18 @@
             "items": {
               "$ref": "#/components/schemas/SettingChange"
             }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "key",
-          "changes"
+          "changes",
+          "nextCursor"
         ]
       },
       "SettingListResponse": {

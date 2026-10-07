@@ -238,6 +238,11 @@ import { clientPlatformSchema } from "./client";
  *   gives them out by the code or the QR, but no longer accepts, marks
  *   ready or declines (SCREENS 6.0); nothing changed. Re-read the company
  *   (`GET /supplier/company`) and the order.
+ * - `SIGNAL_CONFLICT` (409, TASK-034, ARCHITECTURE 4.52): the signal is no
+ *   longer where the action expected it — another administrator took it in
+ *   work or closed it, or the server closed it by itself; nothing changed.
+ *   `details` is `AdminSignalConflictDetails` with the signal as it is now
+ *   («уже закрыт {кем}»).
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -382,6 +387,8 @@ export const errorCodeSchema = z.enum([
   "ORDER_STATE_CONFLICT",
   // A blocked company and its orders (TASK-033.A, ARCHITECTURE 4.51).
   "SUPPLIER_BLOCKED",
+  // Signals the administrator works with (TASK-034, ARCHITECTURE 4.52).
+  "SIGNAL_CONFLICT",
   // Giving an order out (TASK-022, ARCHITECTURE 4.32).
   "ORDER_QR_UNKNOWN",
   "DISCIPLINE_ALREADY_REVOKED",

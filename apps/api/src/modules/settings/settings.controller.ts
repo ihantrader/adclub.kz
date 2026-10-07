@@ -1,12 +1,14 @@
-import { Body, Controller, Inject, Param } from "@nestjs/common";
+import { Body, Controller, Inject, Param, Query } from "@nestjs/common";
 import {
   apiRoutes,
   changeSettingBodySchema,
   resetSettingBodySchema,
+  settingHistoryQuerySchema,
   settingKeyPathSchema,
   type ChangeSettingBody,
   type ResetSettingBody,
   type SettingChangedResponse,
+  type SettingHistoryQuery,
   type SettingHistoryResponse,
   type SettingKeyPath,
   type SettingListResponse,
@@ -66,7 +68,8 @@ export class SettingsController {
   @SessionRoute(apiRoutes.getSettingHistory)
   history(
     @Param(new ZodValidationPipe(settingKeyPathSchema)) params: SettingKeyPath,
+    @Query(new ZodValidationPipe(settingHistoryQuerySchema)) query: SettingHistoryQuery,
   ): Promise<SettingHistoryResponse> {
-    return this.settings.history(params.key);
+    return this.settings.history(params.key, query);
   }
 }

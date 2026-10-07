@@ -17,6 +17,7 @@ export { CatalogJobsModule, TranslationRunner, TranslationWake } from "./transla
 export { catalogJobCatalog, translateJob, translationWakeJob } from "./translation-jobs";
 export { photoFileDeletionJob, photoJobCatalog, photoOrphanCleanupJob } from "./photo-jobs";
 export { TranslationQueue } from "./translation-queue.service";
+export { TranslationAdminService } from "./translation-admin.service";
 export { evalDataDirectory, loadEvalData, loadGlossary } from "./eval/eval-data";
 export type { EvalData, EvalSample, EvalTerm } from "./eval/eval-data";
 export { EvalBudgetError, recheckEvalRun, saveEvalRun, TranslationEval } from "./eval/eval-runner";

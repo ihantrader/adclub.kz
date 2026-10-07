@@ -4,6 +4,7 @@ import {
   administratorListResponseSchema,
   backupCodesResponseSchema,
   regenerateBackupCodesBodySchema,
+  resetAdministratorSecondFactorBodySchema,
   supplierCompanyResponseSchema,
   supplierIdPathSchema,
   supplierMembershipListResponseSchema,
@@ -223,7 +224,15 @@ import {
   userOrderPageSchema,
   userOrderResponseSchema,
 } from "./orders";
-import { adminSignalListQuerySchema, adminSignalPageSchema } from "./signals";
+import {
+  acknowledgeAdminSignalBodySchema,
+  adminHomeSchema,
+  adminSignalIdPathSchema,
+  adminSignalListQuerySchema,
+  adminSignalPageSchema,
+  adminSignalResponseSchema,
+  closeAdminSignalBodySchema,
+} from "./signals";
 import {
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
@@ -304,6 +313,7 @@ import {
   changeSettingBodySchema,
   resetSettingBodySchema,
   settingChangedResponseSchema,
+  settingHistoryQuerySchema,
   settingHistoryResponseSchema,
   settingKeyPathSchema,
   settingListResponseSchema,
@@ -968,12 +978,31 @@ export const apiRoutes = {
     method: "POST",
     path: "/admin/administrators/{adminId}/totp-reset",
     summary:
-      "Reset another administrator's second factor: ends their admin sessions, setup is required at next sign-in",
+      "Reset another administrator's second factor: ends their admin sessions, setup is required at next sign-in. Kept for compatibility: the admin panel uses `second-factor-reset`, which takes the reason",
     tag: "admin",
     clientVersionCheck: "enforced",
     auth: "session",
     contexts: ["admin"],
     pathParams: adminIdPathSchema,
+    responses: {
+      200: { description: "The second factor is reset", schema: totpResetResponseSchema },
+    },
+  }),
+  resetAdministratorSecondFactor: defineRoute({
+    operationId: "resetAdministratorSecondFactor",
+    method: "POST",
+    path: "/admin/administrators/{adminId}/second-factor-reset",
+    summary:
+      "Reset another administrator's second factor with the reason (SCREENS 7.0): ends their admin sessions, setup is required at next sign-in; the reason goes into the action journal",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminIdPathSchema,
+    requestBody: {
+      description: "Why (required)",
+      schema: resetAdministratorSecondFactorBodySchema,
+    },
     responses: {
       200: { description: "The second factor is reset", schema: totpResetResponseSchema },
     },
@@ -1071,6 +1100,7 @@ export const apiRoutes = {
     auth: "session",
     contexts: ["admin"],
     pathParams: settingKeyPathSchema,
+    query: settingHistoryQuerySchema,
     responses: {
       200: { description: "The history", schema: settingHistoryResponseSchema },
     },
@@ -3663,6 +3693,58 @@ export const apiRoutes = {
     query: adminSignalListQuerySchema,
     responses: {
       200: { description: "The signals", schema: adminSignalPageSchema },
+    },
+  }),
+  acknowledgeAdminSignal: defineRoute({
+    operationId: "acknowledgeAdminSignal",
+    method: "POST",
+    path: "/admin/signals/{signalId}/acknowledge",
+    summary:
+      "«Взять в работу» (A-SIG): a new signal becomes «в работе» with the administrator who took it; another version — SIGNAL_CONFLICT with the signal as it is now",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminSignalIdPathSchema,
+    requestBody: {
+      description: "The version of the signal the administrator saw",
+      schema: acknowledgeAdminSignalBodySchema,
+    },
+    responses: {
+      200: { description: "The signal in work", schema: adminSignalResponseSchema },
+    },
+  }),
+  closeAdminSignal: defineRoute({
+    operationId: "closeAdminSignal",
+    method: "POST",
+    path: "/admin/signals/{signalId}/close",
+    summary:
+      "«Закрыть с комментарием» (A-SIG): the comment is required and goes into the action journal; already closed by someone else — SIGNAL_CONFLICT «уже закрыт {кем}»",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminSignalIdPathSchema,
+    requestBody: {
+      description: "The version of the signal the administrator saw and the comment",
+      schema: closeAdminSignalBodySchema,
+    },
+    responses: {
+      200: { description: "The closed signal", schema: adminSignalResponseSchema },
+    },
+  }),
+  getAdminHome: defineRoute({
+    operationId: "getAdminHome",
+    method: "GET",
+    path: "/admin/home",
+    summary:
+      "The administrator's queue of attention (A-HOME) in one answer: the channel outage, open signals by kind, the AI budget, new supplier requests, the quality of the catalog",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    responses: {
+      200: { description: "The counters", schema: adminHomeSchema },
     },
   }),
 } as const;

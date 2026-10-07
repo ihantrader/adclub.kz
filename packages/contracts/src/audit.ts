@@ -257,6 +257,12 @@ export const auditActions = {
    * number. The order's own journal has the same as `deadline_extended`.
    */
   orderDeadlineExtended: "order.deadline_extended",
+  /**
+   * TASK-034 (A-SIG): an administrator took a signal in work, or closed it
+   * (`reason` — the comment). `before`/`after`: the status and version.
+   */
+  adminSignalAcknowledged: "admin_signal.acknowledged",
+  adminSignalClosed: "admin_signal.closed",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -295,6 +301,8 @@ export const auditEntities = {
   order: "order",
   /** A discipline mark of a user (TASK-022). */
   disciplineEvent: "user_discipline_event",
+  /** A signal to the administrator (TASK-034). */
+  adminSignal: "admin_signal",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];
@@ -310,6 +318,11 @@ export const auditActorSchema = z.object({
   accountId: z.string().nullable(),
   /** That account's number, partly hidden (`+7***1234`); `null` without an account. */
   phoneMasked: z.string().nullable(),
+  /**
+   * TASK-034: the name to show — the employee's name in the company for a
+   * supplier, the account's name otherwise; `null` — none given.
+   */
+  name: z.string().nullable(),
   adminId: z.string().nullable(),
   supplierId: z.string().nullable(),
   supplierMemberId: z.string().nullable(),

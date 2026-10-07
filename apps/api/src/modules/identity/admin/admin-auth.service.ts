@@ -324,6 +324,8 @@ export class AdminAuthService {
         totpConfigured: row.totpConfigured,
         current: row.id === currentAdminId,
         createdAt: row.createdAt.toISOString(),
+        name: row.name,
+        lastSignInAt: row.lastSignInAt?.toISOString() ?? null,
       })),
     };
   }
@@ -337,6 +339,8 @@ export class AdminAuthService {
   async resetByAdmin(
     actor: { adminId: string; accountId: string },
     targetAdminId: string,
+    /** Why (TASK-034, SCREENS 7.0); the old route without it records none. */
+    reason: string | null = null,
   ): Promise<TotpResetResponse> {
     const actorAdminId = actor.adminId;
     if (actorAdminId === targetAdminId) {
@@ -365,6 +369,7 @@ export class AdminAuthService {
           entityId: targetAdminId,
           before: { accountId: target.accountId, totpConfigured: true },
           after: { totpConfigured: false, sessionsEnded: ended },
+          reason: reason?.trim() || null,
         },
         tx,
       );

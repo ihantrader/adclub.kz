@@ -18,6 +18,9 @@ export interface AdminSummaryRow {
   phone: string;
   totpConfigured: boolean;
   createdAt: Date;
+  name: string | null;
+  /** When the latest admin panel session began (TASK-034). */
+  lastSignInAt: Date | null;
 }
 
 /**
@@ -200,6 +203,13 @@ export class AdminUserStore {
         phone: account.phone,
         totpConfigured: sql<boolean>`${adminUser.totpSecret} IS NOT NULL`,
         createdAt: adminUser.createdAt,
+        name: account.name,
+        lastSignInAt: sql<Date | null>`(
+          SELECT max(s.created_at) FROM session s
+          WHERE s.account_id = ${adminUser.accountId} AND s.kind = 'admin_web'
+        )`.mapWith((value: unknown) =>
+          value === null || value === undefined ? null : new Date(String(value)),
+        ),
       })
       .from(adminUser)
       .innerJoin(account, eq(account.id, adminUser.accountId))

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import {
   appSetting,
@@ -159,12 +159,28 @@ export class SettingsStore {
     return row;
   }
 
-  history(key: string, executor: DbExecutor = this.database.db): Promise<SettingChangeRecord[]> {
+  /**
+   * Newest first. `beforeVersion` — only the changes older than that
+   * version (the versions of a key only grow, so it is a stable cursor:
+   * changes made while paging never shift a page, TASK-034).
+   */
+  history(
+    key: string,
+    options: { limit?: number; beforeVersion?: number } = {},
+    executor: DbExecutor = this.database.db,
+  ): Promise<SettingChangeRecord[]> {
     return executor
       .select(changeColumns)
       .from(appSettingChange)
-      .where(eq(appSettingChange.key, key))
+      .where(
+        and(
+          eq(appSettingChange.key, key),
+          options.beforeVersion === undefined
+            ? undefined
+            : lt(appSettingChange.version, options.beforeVersion),
+        ),
+      )
       .orderBy(desc(appSettingChange.version))
-      .limit(SETTING_HISTORY_LIMIT);
+      .limit(options.limit ?? SETTING_HISTORY_LIMIT);
   }
 }

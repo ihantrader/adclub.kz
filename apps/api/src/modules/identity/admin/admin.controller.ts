@@ -3,10 +3,12 @@ import {
   adminIdPathSchema,
   apiRoutes,
   regenerateBackupCodesBodySchema,
+  resetAdministratorSecondFactorBodySchema,
   type AdminIdPath,
   type AdministratorListResponse,
   type BackupCodesResponse,
   type RegenerateBackupCodesBody,
+  type ResetAdministratorSecondFactorBody,
   type TotpResetResponse,
 } from "@adclub/contracts";
 import { ZodValidationPipe } from "../../../common/validation";
@@ -47,6 +49,20 @@ export class AdminController {
     return this.adminAuth.resetByAdmin(
       { adminId: adminOf(session), accountId: session.accountId },
       params.adminId,
+    );
+  }
+
+  @SessionRoute(apiRoutes.resetAdministratorSecondFactor)
+  resetAdministratorSecondFactor(
+    @Param(new ZodValidationPipe(adminIdPathSchema)) params: AdminIdPath,
+    @Body(new ZodValidationPipe(resetAdministratorSecondFactorBodySchema))
+    body: ResetAdministratorSecondFactorBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<TotpResetResponse> {
+    return this.adminAuth.resetByAdmin(
+      { adminId: adminOf(session), accountId: session.accountId },
+      params.adminId,
+      body.reason,
     );
   }
 

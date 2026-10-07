@@ -21,6 +21,7 @@ import { ClubAccessModule } from "./modules/club-access";
 import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
 import { SignalsModule } from "./modules/signals";
+import { AdminHomeModule } from "./modules/admin-home";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -53,6 +54,8 @@ export class AppModule implements NestModule {
     const signals = SignalsModule.forRoot({ http: true });
     // One offers module: orders take the snapshot through this very instance.
     const offers = OffersModule.forRoot({ http: true, catalog });
+    // One suppliers module: the queue of attention counts its funnel through it.
+    const suppliers = SuppliersModule.forRoot({ http: true });
     return {
       module: AppModule,
       imports: [
@@ -88,12 +91,13 @@ export class AppModule implements NestModule {
         catalog,
         VehiclesModule.forRoot({ http: true }),
         compatibility,
-        SuppliersModule.forRoot({ http: true }),
+        suppliers,
         offers,
         clubAccess,
         signals,
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
         OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
+        AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

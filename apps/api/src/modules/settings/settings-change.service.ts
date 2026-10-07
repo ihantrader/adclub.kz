@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { z } from "zod";
-import { auditActions, auditEntities } from "@adclub/contracts";
+import { auditActions, auditEntities, SETTING_HISTORY_MAX_PAGE_SIZE } from "@adclub/contracts";
 import type {
   Setting,
   SettingActor,
@@ -81,6 +81,17 @@ function auditActorOf(actor: SettingChangeActor): AuditActorRecord {
 const reasonSchema = z.string().trim().min(3).max(500);
 
 /** The contract checks the reason of an API request; the operator command's is checked here. */
+/** The history cursor is a version of the key (TASK-034); anything else is refused here. */
+function versionCursor(cursor: string): number {
+  const version = /^\d{1,9}$/.test(cursor) ? Number(cursor) : Number.NaN;
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new ApiException(400, "VALIDATION_ERROR", "The paging cursor is not one we issued", {
+      details: [{ path: "cursor", message: "Use the nextCursor of the previous page" }],
+    });
+  }
+  return version;
+}
+
 function reasonOf(input: string): string {
   const result = reasonSchema.safeParse(input);
   if (!result.success) {
@@ -145,7 +156,7 @@ export class SettingsChangeService {
     const definitionKey = this.keyOf(key);
     const [stored, history] = await Promise.all([
       this.store.findStored(definitionKey, this.database.db),
-      this.store.history(definitionKey),
+      this.store.history(definitionKey, { limit: 1 }),
     ]);
     const latest = history[0];
     return this.describe(
@@ -156,11 +167,31 @@ export class SettingsChangeService {
     );
   }
 
-  async history(key: string): Promise<SettingHistoryResponse> {
+  /**
+   * Newest first, a page at a time (TASK-034): without a cursor — the latest
+   * `limit` (200 by default, as before); `cursor` — the `nextCursor` of the
+   * previous page, the version the next page starts below.
+   */
+  async history(
+    key: string,
+    page: { limit?: number; cursor?: string } = {},
+  ): Promise<SettingHistoryResponse> {
     const definitionKey = this.keyOf(key);
-    const changes = await this.store.history(definitionKey);
+    const limit = Math.min(
+      page.limit ?? SETTING_HISTORY_MAX_PAGE_SIZE,
+      SETTING_HISTORY_MAX_PAGE_SIZE,
+    );
+    const beforeVersion = page.cursor === undefined ? undefined : versionCursor(page.cursor);
+    // One extra row tells whether an older page follows.
+    const rows = await this.store.history(definitionKey, { limit: limit + 1, beforeVersion });
+    const changes = rows.slice(0, limit);
     const phones = await this.phonesOf(changes);
-    return { key: definitionKey, changes: changes.map((change) => this.toChange(change, phones)) };
+    const last = changes.at(-1);
+    return {
+      key: definitionKey,
+      changes: changes.map((change) => this.toChange(change, phones)),
+      nextCursor: rows.length > limit && last ? String(last.version) : null,
+    };
   }
 
   async change(input: ChangeSettingInput): Promise<SettingChangedResponse> {

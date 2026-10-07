@@ -122,7 +122,48 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790650000000_account-car-idempotency-key",
       "1790700000000_supplier-delivery-by-default",
       "1790750000000_button-press-supplier-blocked",
+      "1790800000000_admin-signal-actions",
     ]);
+  });
+
+  it("keeps one signal of a subject that is not closed, an administrator's close with a comment, and rolls back keeping the signals (admin signal actions)", async () => {
+    const subject = "00000000-0000-4000-8000-000000000034";
+    const inWork = (
+      await client.query<{ id: string; version: number }>(
+        `INSERT INTO admin_signal (kind, subject_type, subject_id, status)
+         VALUES ('frequent_admin_closes', 'supplier', $1, 'acknowledged') RETURNING id, version`,
+        [subject],
+      )
+    ).rows[0]!;
+    expect(inWork.version).toBe(1);
+    // A signal in work is still the current one of its subject.
+    await expect(
+      client.query(
+        `INSERT INTO admin_signal (kind, subject_type, subject_id) VALUES ('frequent_admin_closes', 'supplier', $1)`,
+        [subject],
+      ),
+    ).rejects.toThrow(/admin_signal_current_key/);
+    // A comment comes only with an administrator's close, never blank.
+    await expect(
+      client.query(
+        "UPDATE admin_signal SET status = 'closed', closed_at = now(), close_comment = 'x' WHERE id = $1",
+        [inWork.id],
+      ),
+    ).rejects.toThrow(/admin_signal_close_comment_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The signal stays, open again: the previous rules know no «in work».
+    const after = await client.query<{ status: string }>(
+      "SELECT status FROM admin_signal WHERE id = $1",
+      [inWork.id],
+    );
+    expect(after.rows[0]?.status).toBe("open");
+    expect(await columnExists(client, "admin_signal", "version")).toBe(false);
+
+    runMigrate("up", container.getConnectionUri());
+    // What this test put in leaves with it.
+    await client.query("DELETE FROM admin_signal WHERE id = $1", [inWork.id]);
+    await walkDownPast(() => columnExists(client, "admin_signal", "version"));
   });
 
   it("keeps a press of a blocked company as `supplier_blocked`, and rolls back keeping the press (button press supplier blocked)", async () => {

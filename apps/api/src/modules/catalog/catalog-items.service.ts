@@ -155,6 +155,21 @@ export class CatalogItemsService {
 
   // ---------------------------------------------------------------- reads
 
+  /**
+   * Active items with no approved photo (TASK-034, A-HOME «Без фото»): the
+   * client catalog shows them with a placeholder (TASK-013).
+   */
+  async countActiveWithoutPhoto(): Promise<number> {
+    const result = await this.database.db.execute<{ n: string }>(sql`
+      SELECT count(*)::text AS n FROM catalog_item i
+      WHERE i.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1 FROM item_photo p WHERE p.item_id = i.id AND p.status = 'approved'
+        )
+    `);
+    return Number(result.rows[0]?.n ?? 0);
+  }
+
   async page(query: CatalogItemListQuery): Promise<AdminCatalogItemPage> {
     const filters: (SQL | undefined)[] = [
       query.categoryId ? eq(catalogItem.categoryId, query.categoryId) : undefined,

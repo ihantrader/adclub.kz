@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, Module, type OnModuleInit } from "@nestjs/c
 import { sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { defineSweeperJob, JobRegistry, type Sweeper, type SweepResult } from "../../jobs";
+import { AccountDirectory } from "../identity";
 import { AdminSignals } from "../signals";
 import { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
 import { Discipline } from "./order-discipline";
@@ -9,6 +10,7 @@ import { OrderButtonPresses } from "./order-button-presses";
 import { NoticeChannelWatch, noticeChannelWatchJob } from "./order-notice-channel";
 import { OrderMessages, OrderNotices } from "./order-notices";
 import { OrderTransitions, type DeadlineOutcome } from "./order-transitions";
+import { SupplierReachWatch, supplierReachWatchJob } from "./supplier-reach";
 
 /**
  * The deadlines of orders (ARCHITECTURE 13.1, 13.2, 6.1, 4.31; TASK-021
@@ -35,6 +37,7 @@ export const orderJobCatalog = [
   orderDeadlinesJob,
   orderIdempotencyCleanupJob,
   noticeChannelWatchJob,
+  supplierReachWatchJob,
 ];
 
 @Injectable()
@@ -130,6 +133,7 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
   providers: [
     Discipline,
     AdminSignals,
+    AccountDirectory,
     OrderNotices,
     OrderTransitions,
     OrderDeadlineSweeper,
@@ -137,6 +141,7 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
     OrderMessages,
     OrderButtonPresses,
     NoticeChannelWatch,
+    SupplierReachWatch,
   ],
 })
 export class OrderJobsModule {}

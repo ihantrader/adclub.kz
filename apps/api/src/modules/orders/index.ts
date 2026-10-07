@@ -7,6 +7,7 @@ export type { ExtensionOutcome, ExtensionRequest } from "./order-transitions";
 export { ORDER_BUTTONS, ORDER_SUBJECT, OrderMessages, OrderNotices } from "./order-notices";
 export { OrderButtonPresses } from "./order-button-presses";
 export { NoticeChannelWatch, noticeChannelWatchJob } from "./order-notice-channel";
+export { SupplierReachWatch, supplierReachWatchJob } from "./supplier-reach";
 export { OrderLookup } from "./order-lookup.service";
 export { Discipline } from "./order-discipline";
 export {

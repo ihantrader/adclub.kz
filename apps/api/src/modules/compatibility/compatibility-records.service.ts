@@ -10,7 +10,7 @@ import {
   type CreateCompatibilityRecordBody,
   type UpdateCompatibilityRecordBody,
 } from "@adclub/contracts";
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog, type AuditActorRecord } from "../audit";
 import { itemAnalog } from "../catalog";
@@ -57,6 +57,23 @@ export class CompatibilityRecordsService {
   ) {}
 
   /** The compatibility card of an item: records and the proposals waiting for review. */
+  /**
+   * Active parts and goods of a subcategory where compatibility is required
+   * with no approved record (TASK-034, A-HOME «Без совместимости»): the
+   * client catalog doesn't list them at all (D-029).
+   */
+  async countActiveGoodsWithoutRecord(): Promise<number> {
+    const result = await this.database.db.execute<{ n: string }>(sql`
+      SELECT count(*)::text AS n FROM catalog_item i
+      JOIN category c ON c.id = i.category_id
+      WHERE i.status = 'active' AND i.item_type <> 'service' AND c.compatibility_required
+        AND NOT EXISTS (
+          SELECT 1 FROM item_compatibility r WHERE r.item_id = i.id AND r.status = 'approved'
+        )
+    `);
+    return Number(result.rows[0]?.n ?? 0);
+  }
+
   async card(itemId: string, includeArchived: boolean): Promise<AdminItemCompatibilityResponse> {
     const executor = this.database.db;
     const item = await findItem(executor, itemId);

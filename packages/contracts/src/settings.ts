@@ -207,10 +207,32 @@ export const settingChangedResponseSchema = z.object({
 
 export type SettingChangedResponse = z.infer<typeof settingChangedResponseSchema>;
 
+/** How many history entries one page holds at most (and without `limit`). */
+export const SETTING_HISTORY_MAX_PAGE_SIZE = 200;
+
+/**
+ * Paging of `GET /admin/settings/{key}/history` (TASK-034, additively):
+ * without parameters — the latest 200, as before; `cursor` — the
+ * `nextCursor` of the previous page.
+ */
+export const settingHistoryQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(SETTING_HISTORY_MAX_PAGE_SIZE)
+    .default(SETTING_HISTORY_MAX_PAGE_SIZE),
+  cursor: z.string().min(1).max(64).optional(),
+});
+
+export type SettingHistoryQuery = z.infer<typeof settingHistoryQuerySchema>;
+
 /** `GET /admin/settings/{key}/history`: newest first. */
 export const settingHistoryResponseSchema = z.object({
   key: z.string(),
   changes: z.array(settingChangeSchema),
+  /** TASK-034: pass as `cursor` for the older entries; `null` — none older. */
+  nextCursor: z.string().nullable(),
 });
 
 export type SettingHistoryResponse = z.infer<typeof settingHistoryResponseSchema>;

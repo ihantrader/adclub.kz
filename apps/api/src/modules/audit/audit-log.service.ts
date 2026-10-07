@@ -9,7 +9,7 @@ import {
 import { ApiException } from "../../common/errors";
 import { getRequestId, getRequestOrigin } from "../../common/logging";
 import { afterCommit, type DbExecutor } from "../../database";
-import { AccountDirectory } from "../identity";
+import { AccountDirectory, type ShownPerson } from "../identity";
 import { AuditLogStore, type AuditLogRow } from "./audit-log.store";
 
 /** Who acted, as the journal records it. */
@@ -166,24 +166,37 @@ export class AuditLog {
       limit: limit + 1,
     });
     const page = rows.slice(0, limit);
-    const phones = await this.accounts.maskedPhones(
-      page.flatMap((row) => (row.actorAccountId ? [row.actorAccountId] : [])),
-    );
+    const [people, members] = await Promise.all([
+      this.accounts.accounts(
+        page.flatMap((row) => (row.actorAccountId ? [row.actorAccountId] : [])),
+      ),
+      this.accounts.memberNames(
+        page.flatMap((row) => (row.actorMemberId ? [row.actorMemberId] : [])),
+      ),
+    ]);
     const last = page.at(-1);
     return {
-      entries: page.map((row) => this.toEntry(row, phones)),
+      entries: page.map((row) => this.toEntry(row, people, members)),
       nextCursor: rows.length > limit && last ? cursorOf(last) : null,
     };
   }
 
-  private toEntry(row: AuditLogRow, phones: Map<string, string>): AuditLogEntry {
+  private toEntry(
+    row: AuditLogRow,
+    people: Map<string, ShownPerson>,
+    members: Map<string, string>,
+  ): AuditLogEntry {
+    const person = row.actorAccountId ? people.get(row.actorAccountId) : undefined;
+    // An employee is known in the journal by the name their company gave them.
+    const memberName = row.actorMemberId ? members.get(row.actorMemberId) : undefined;
     return {
       id: row.id,
       action: row.action,
       actor: {
         role: row.actorRole,
         accountId: row.actorAccountId,
-        phoneMasked: (row.actorAccountId && phones.get(row.actorAccountId)) ?? null,
+        phoneMasked: person?.phoneMasked ?? null,
+        name: memberName ?? person?.name ?? null,
         adminId: row.actorAdminId,
         supplierId: row.actorSupplierId,
         supplierMemberId: row.actorMemberId,

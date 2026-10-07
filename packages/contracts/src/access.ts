@@ -92,6 +92,10 @@ export const administratorSummarySchema = z.object({
   /** The administrator making the request. */
   current: z.boolean(),
   createdAt: z.iso.datetime(),
+  /** TASK-034: the account's name, `null` — not given. */
+  name: z.string().nullable(),
+  /** TASK-034: when the latest admin panel session began; `null` — never signed in. */
+  lastSignInAt: z.iso.datetime().nullable(),
 });
 
 export type AdministratorSummary = z.infer<typeof administratorSummarySchema>;
@@ -117,6 +121,19 @@ export const totpResetResponseSchema = z.object({
 });
 
 export type TotpResetResponse = z.infer<typeof totpResetResponseSchema>;
+
+/**
+ * `POST /admin/administrators/{adminId}/second-factor-reset` (TASK-034,
+ * SCREENS 7.0 «Безопасность»): the reset of another administrator's second
+ * factor with the reason, which goes into the action journal.
+ */
+export const resetAdministratorSecondFactorBodySchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+});
+
+export type ResetAdministratorSecondFactorBody = z.infer<
+  typeof resetAdministratorSecondFactorBodySchema
+>;
 
 const totpCodeSchema = z.string().regex(/^\d{6}$/, "Must be 6 digits");
 

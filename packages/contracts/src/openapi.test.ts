@@ -125,6 +125,7 @@ describe("buildOpenApiDocument", () => {
       "/admin/vehicles/modifications/{modificationId}",
       "/admin/vehicles/modifications/{modificationId}/status",
       "/admin/vehicles/options",
+      "/admin/vehicles/options/order",
       "/admin/vehicles/options/{optionId}",
       "/admin/vehicles/options/{optionId}/status",
       "/auth/complete-registration",

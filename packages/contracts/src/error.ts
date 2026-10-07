@@ -136,6 +136,10 @@ import { clientPlatformSchema } from "./client";
  * - `VEHICLE_IMPORT_STATE` (409): the import isn't in a state that allows
  *   this (applied twice, cancelled after it started to apply…); `details`
  *   is `VehicleImportStateDetails`.
+ * - `VEHICLE_ORDER_CONFLICT` (409): the options of a reference list were
+ *   reordered or added by someone else since the order the change was made
+ *   from (`expectedOrder`); nothing was written. `details` is
+ *   `VehicleOrderConflictDetails` (TASK-035.B).
  *
  * Compatibility of items with cars (TASK-015, ARCHITECTURE 4.25):
  * - `COMPATIBILITY_CONDITIONS_INVALID` (400): the levels of a record or a
@@ -342,6 +346,7 @@ export const errorCodeSchema = z.enum([
   "VEHICLE_YEARS_INVALID",
   "VEHICLE_IMPORT_FILE_INVALID",
   "VEHICLE_IMPORT_STATE",
+  "VEHICLE_ORDER_CONFLICT",
   // Compatibility of items with cars (TASK-015, ARCHITECTURE 4.25).
   "COMPATIBILITY_CONDITIONS_INVALID",
   "COMPATIBILITY_VEHICLE_INVALID",

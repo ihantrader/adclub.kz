@@ -4,6 +4,7 @@ import type {
   VehicleImportFileInvalidDetails,
   VehicleImportStateDetails,
   VehicleImportStatus,
+  VehicleOrderConflictDetails,
   VehicleReferenceArchivedDetails,
   VehicleVersionConflictDetails,
   VehicleYearsInvalidDetails,
@@ -47,6 +48,16 @@ export function duplicate(
 ): ApiException {
   const details: VehicleDuplicateDetails = { entity, existingId, spelling };
   return new ApiException(409, "VEHICLE_DUPLICATE", DUPLICATE_MESSAGES[entity], { details });
+}
+
+export function orderConflict(currentOrder: readonly string[]): ApiException {
+  const details: VehicleOrderConflictDetails = { currentOrder: [...currentOrder] };
+  return new ApiException(
+    409,
+    "VEHICLE_ORDER_CONFLICT",
+    "The options were reordered or changed meanwhile: look at the order again",
+    { details },
+  );
 }
 
 export function parentArchived(what: string): ApiException {

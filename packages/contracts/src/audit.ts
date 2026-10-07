@@ -129,6 +129,11 @@ export const auditActions = {
   vehicleOptionCreated: "vehicle_option.created",
   vehicleOptionChanged: "vehicle_option.changed",
   vehicleOptionStatusChanged: "vehicle_option.status_changed",
+  /**
+   * The options of one reference list put in a new order (TASK-035.B); the
+   * entity is the first option of the new order, `after.kind` the list.
+   */
+  vehicleOptionsReordered: "vehicle_option.reordered",
   vehicleMakeCreated: "vehicle_make.created",
   vehicleMakeChanged: "vehicle_make.changed",
   vehicleMakeStatusChanged: "vehicle_make.status_changed",

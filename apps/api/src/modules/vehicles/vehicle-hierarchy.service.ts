@@ -148,6 +148,46 @@ export async function writeModelSpellings(
   ]);
 }
 
+/** Children below a level: what holds them and which parent column names it. */
+const CHILDREN = {
+  model: { table: "vehicle_model", parent: "make_id" },
+  generation: { table: "vehicle_generation", parent: "model_id" },
+  modificationOfGeneration: { table: "vehicle_modification", parent: "generation_id" },
+  modificationOfEngine: { table: "vehicle_modification", parent: "engine_id" },
+} as const;
+
+/**
+ * How many records lie under each parent, archived ones included, and how
+ * many of them are active (TASK-035.B «моделей: 6», «Модели марки (N)
+ * пропадут из выбора»). One query for any number of parents.
+ */
+export async function childCounts(
+  executor: DbExecutor,
+  children: keyof typeof CHILDREN,
+  parentIds: readonly string[],
+): Promise<Map<string, { total: number; active: number }>> {
+  const result = new Map<string, { total: number; active: number }>();
+  const ids = [...new Set(parentIds)];
+  if (ids.length === 0) {
+    return result;
+  }
+  const { table, parent } = CHILDREN[children];
+  const rows = await executor.execute<{ id: string; total: number; active: number }>(
+    sql`SELECT ${sql.raw(parent)} AS id, count(*)::int AS total,
+          (count(*) FILTER (WHERE status = 'active'))::int AS active
+        FROM ${sql.raw(table)}
+        WHERE ${sql.raw(parent)} IN (${sql.join(
+          ids.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})
+        GROUP BY ${sql.raw(parent)}`,
+  );
+  for (const row of rows.rows) {
+    result.set(row.id, { total: row.total, active: row.active });
+  }
+  return result;
+}
+
 /** The keyset position of a model in the admin list: its make's name, then its own. */
 const modelPosition = sql<string>`(mk.key || chr(1) || ms.key) COLLATE "C"`;
 
@@ -686,16 +726,41 @@ export class VehicleHierarchyService {
     });
   }
 
+  // ------------------------------------------------------ one record (TASK-035.B)
+
+  async getMake(makeId: string): Promise<AdminVehicleMake> {
+    const executor = this.database.db;
+    return this.describeMake(executor, await this.findMake(executor, makeId));
+  }
+
+  async getModel(modelId: string): Promise<AdminVehicleModel> {
+    const executor = this.database.db;
+    return this.describeModel(executor, await this.findModel(executor, modelId));
+  }
+
+  async getGeneration(generationId: string): Promise<AdminVehicleGeneration> {
+    const executor = this.database.db;
+    const [row] = await executor
+      .select()
+      .from(vehicleGeneration)
+      .where(eq(vehicleGeneration.id, generationId));
+    if (!row) {
+      throw notFound("generation");
+    }
+    return this.describeGeneration(executor, row);
+  }
+
   // ---------------------------------------------------------- describing
 
   async describeMakes(
     executor: DbExecutor,
     rows: readonly VehicleMakeRow[],
   ): Promise<AdminVehicleMake[]> {
-    const spellings = await makeSpellings(
-      executor,
-      rows.map((row) => row.id),
-    );
+    const ids = rows.map((row) => row.id);
+    const [spellings, models] = await Promise.all([
+      makeSpellings(executor, ids),
+      childCounts(executor, "model", ids),
+    ]);
     return rows.map((row) => {
       const own = spellings.get(row.id);
       return {
@@ -707,6 +772,8 @@ export class VehicleHierarchyService {
         version: row.version,
         archivedAt: iso(row.archivedAt),
         updatedAt: row.updatedAt.toISOString(),
+        modelCount: models.get(row.id)?.total ?? 0,
+        activeModelCount: models.get(row.id)?.active ?? 0,
       };
     });
   }
@@ -716,11 +783,10 @@ export class VehicleHierarchyService {
     rows: readonly VehicleModelRow[],
   ): Promise<AdminVehicleModel[]> {
     const makeIds = rows.map((row) => row.makeId);
-    const [spellings, makes, makeRows] = await Promise.all([
-      modelSpellings(
-        executor,
-        rows.map((row) => row.id),
-      ),
+    const ids = rows.map((row) => row.id);
+    const [spellings, generations, makes, makeRows] = await Promise.all([
+      modelSpellings(executor, ids),
+      childCounts(executor, "generation", ids),
       makeSpellings(executor, makeIds),
       makeIds.length === 0
         ? Promise.resolve([] as VehicleMakeRow[])
@@ -744,6 +810,7 @@ export class VehicleHierarchyService {
         version: row.version,
         archivedAt: iso(row.archivedAt),
         updatedAt: row.updatedAt.toISOString(),
+        generationCount: generations.get(row.id)?.total ?? 0,
       };
     });
   }
@@ -752,13 +819,17 @@ export class VehicleHierarchyService {
     executor: DbExecutor,
     rows: readonly VehicleGenerationRow[],
   ): Promise<AdminVehicleGeneration[]> {
-    const models = await this.describeModels(
-      executor,
-      await this.loadModels(
+    const [models, modifications] = await Promise.all([
+      this.loadModels(
         executor,
         rows.map((row) => row.modelId),
+      ).then((loaded) => this.describeModels(executor, loaded)),
+      childCounts(
+        executor,
+        "modificationOfGeneration",
+        rows.map((row) => row.id),
       ),
-    );
+    ]);
     const byId = new Map(models.map((model) => [model.id, model]));
     return rows.map((row) => {
       const model = byId.get(row.modelId)!;
@@ -775,6 +846,7 @@ export class VehicleHierarchyService {
         version: row.version,
         archivedAt: iso(row.archivedAt),
         updatedAt: row.updatedAt.toISOString(),
+        modificationCount: modifications.get(row.id)?.total ?? 0,
       };
     });
   }

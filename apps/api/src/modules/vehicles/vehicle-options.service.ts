@@ -22,7 +22,13 @@ import {
   VEHICLE_LOCK,
   type VehicleActor,
 } from "./vehicle-common";
-import { duplicate, notFound, versionConflict } from "./vehicle-errors";
+import {
+  duplicate,
+  notFound,
+  orderConflict,
+  validationError,
+  versionConflict,
+} from "./vehicle-errors";
 import { vehicleOption, type VehicleOptionRow } from "./schema";
 
 export function optionNames(row: VehicleOptionRow): VehicleOptionNames {
@@ -218,6 +224,67 @@ export class VehicleOptionsService {
         tx,
       );
       return describeOption(updated!);
+    });
+  }
+
+  /**
+   * Puts the options of one kind in a new order (TASK-035.B): every option
+   * of the kind exactly once. Made from an order that isn't the stored one
+   * any more (`expectedOrder`) — refused rather than written over it.
+   */
+  async reorder(
+    kind: VehicleOptionKind,
+    optionIds: readonly string[],
+    expectedOrder: readonly string[] | undefined,
+    actor: VehicleActor,
+  ): Promise<AdminVehicleOption[]> {
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(VEHICLE_LOCK);
+      const rows = await tx
+        .select()
+        .from(vehicleOption)
+        .where(eq(vehicleOption.kind, kind))
+        .orderBy(asc(vehicleOption.sort), asc(vehicleOption.code));
+      const current = rows.map((row) => row.id);
+      const wanted = new Set(optionIds);
+      if (
+        wanted.size !== optionIds.length ||
+        wanted.size !== current.length ||
+        current.some((id) => !wanted.has(id))
+      ) {
+        throw validationError("optionIds", "List every option of the kind exactly once");
+      }
+      const same = (a: readonly string[], b: readonly string[]) =>
+        a.length === b.length && a.every((id, index) => id === b[index]);
+      if (same(current, optionIds)) {
+        return rows.map(describeOption);
+      }
+      if (expectedOrder !== undefined && !same(current, expectedOrder)) {
+        throw orderConflict(current);
+      }
+      for (const [index, id] of optionIds.entries()) {
+        await tx
+          .update(vehicleOption)
+          .set({ sort: index, updatedAt: new Date() })
+          .where(eq(vehicleOption.id, id));
+      }
+      await this.audit.record(
+        {
+          action: auditActions.vehicleOptionsReordered,
+          actor,
+          entityType: auditEntities.vehicleOption,
+          entityId: optionIds[0]!,
+          before: { kind, order: current },
+          after: { kind, order: [...optionIds] },
+        },
+        tx,
+      );
+      const updated = await tx
+        .select()
+        .from(vehicleOption)
+        .where(eq(vehicleOption.kind, kind))
+        .orderBy(asc(vehicleOption.sort), asc(vehicleOption.code));
+      return updated.map(describeOption);
     });
   }
 

@@ -79,7 +79,8 @@ describe("vehicle catalog contract (TASK-014)", () => {
   it("serves the admin routes to the admin context only and the choice to everyone", () => {
     const routes = Object.values(apiRoutes);
     const admin = routes.filter((route) => route.path.startsWith("/admin/vehicles"));
-    expect(admin.length).toBe(31);
+    // 31 of TASK-014 and, with TASK-035.B, one make, model and generation and the order of a list.
+    expect(admin.length).toBe(35);
     expect(admin.every((route) => "contexts" in route && route.contexts.join() === "admin")).toBe(
       true,
     );

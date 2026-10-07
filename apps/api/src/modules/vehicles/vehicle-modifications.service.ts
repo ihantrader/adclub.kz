@@ -41,7 +41,12 @@ import {
   versionConflict,
   yearsInvalid,
 } from "./vehicle-errors";
-import { checkYearOrder, statusChange, VehicleHierarchyService } from "./vehicle-hierarchy.service";
+import {
+  checkYearOrder,
+  childCounts,
+  statusChange,
+  VehicleHierarchyService,
+} from "./vehicle-hierarchy.service";
 import { optionRef } from "./vehicle-options.service";
 import {
   vehicleEngine,
@@ -553,15 +558,14 @@ export class VehicleModificationsService {
     executor: DbExecutor,
     rows: readonly VehicleEngineRow[],
   ): Promise<AdminVehicleEngine[]> {
-    const [spellings, fuels] = await Promise.all([
-      engineSpellings(
-        executor,
-        rows.map((row) => row.id),
-      ),
+    const ids = rows.map((row) => row.id);
+    const [spellings, fuels, used] = await Promise.all([
+      engineSpellings(executor, ids),
       optionsById(
         executor,
         rows.map((row) => row.fuelId),
       ),
+      childCounts(executor, "modificationOfEngine", ids),
     ]);
     return rows.map((row) => {
       const own = spellings.get(row.id);
@@ -577,6 +581,7 @@ export class VehicleModificationsService {
         version: row.version,
         archivedAt: iso(row.archivedAt),
         updatedAt: row.updatedAt.toISOString(),
+        modificationCount: used.get(row.id)?.total ?? 0,
       };
     });
   }

@@ -1,5 +1,6 @@
 import { Module, type DynamicModule, type OnModuleInit, Inject } from "@nestjs/common";
 import { JobRegistry } from "../../jobs";
+import { AccountDirectory } from "../identity";
 import { DevVehicleSeed } from "./dev-vehicle-seed";
 import { analyzeImportJob, applyImportJob, expireImportsJob } from "./import/import-jobs";
 import { VehicleImportController } from "./import/vehicle-import.controller";
@@ -42,6 +43,7 @@ export class VehiclesModule {
         VehicleReadService,
         VehicleImportService,
         DevVehicleSeed,
+        AccountDirectory,
       ],
       exports: [
         VehicleOptionsService,

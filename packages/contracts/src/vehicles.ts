@@ -164,6 +164,21 @@ export const updateVehicleOptionBodySchema = z.object({
 
 export type UpdateVehicleOptionBody = z.infer<typeof updateVehicleOptionBodySchema>;
 
+/**
+ * `PUT /admin/vehicles/options/order` (TASK-035.B): every option of the
+ * kind once, in the new order. `expectedOrder` — the order the new one was
+ * made from, as the admin panel read it; another stored order means someone
+ * reordered or added options meanwhile: 409 `VEHICLE_ORDER_CONFLICT`,
+ * nothing written. Left out, the order is written over whatever is stored.
+ */
+export const reorderVehicleOptionsBodySchema = z.object({
+  kind: vehicleOptionKindSchema,
+  optionIds: z.array(z.uuid()).min(1).max(500),
+  expectedOrder: z.array(z.uuid()).max(500).optional(),
+});
+
+export type ReorderVehicleOptionsBody = z.infer<typeof reorderVehicleOptionsBodySchema>;
+
 export const adminVehicleOptionResponseSchema = z.object({ option: adminVehicleOptionSchema });
 
 export type AdminVehicleOptionResponse = z.infer<typeof adminVehicleOptionResponseSchema>;
@@ -199,6 +214,10 @@ export const adminVehicleMakeSchema = z.object({
   version: z.number().int(),
   archivedAt: z.iso.datetime().nullable(),
   updatedAt: z.iso.datetime(),
+  /** Its models, archived ones included (TASK-035.B «моделей: 6»). */
+  modelCount: z.number().int(),
+  /** Its active models: what archiving the make hides from the car choice in the app. */
+  activeModelCount: z.number().int(),
 });
 
 export type AdminVehicleMake = z.infer<typeof adminVehicleMakeSchema>;
@@ -275,6 +294,8 @@ export const adminVehicleModelSchema = z.object({
   version: z.number().int(),
   archivedAt: z.iso.datetime().nullable(),
   updatedAt: z.iso.datetime(),
+  /** Its generations, archived ones included (TASK-035.B). */
+  generationCount: z.number().int(),
 });
 
 export type AdminVehicleModel = z.infer<typeof adminVehicleModelSchema>;
@@ -340,6 +361,8 @@ export const adminVehicleGenerationSchema = z.object({
   version: z.number().int(),
   archivedAt: z.iso.datetime().nullable(),
   updatedAt: z.iso.datetime(),
+  /** Its modifications, archived ones included (TASK-035.B). */
+  modificationCount: z.number().int(),
 });
 
 export type AdminVehicleGeneration = z.infer<typeof adminVehicleGenerationSchema>;
@@ -414,6 +437,8 @@ export const adminVehicleEngineSchema = z.object({
   version: z.number().int(),
   archivedAt: z.iso.datetime().nullable(),
   updatedAt: z.iso.datetime(),
+  /** Modifications with this engine, archived ones included — where it is used (TASK-035.B). */
+  modificationCount: z.number().int(),
 });
 
 export type AdminVehicleEngine = z.infer<typeof adminVehicleEngineSchema>;
@@ -629,6 +654,13 @@ export const vehicleYearsInvalidDetailsSchema = z.object({
 });
 
 export type VehicleYearsInvalidDetails = z.infer<typeof vehicleYearsInvalidDetailsSchema>;
+
+/** `details` of `VEHICLE_ORDER_CONFLICT`: the order of the kind stored now. */
+export const vehicleOrderConflictDetailsSchema = z.object({
+  currentOrder: z.array(z.uuid()),
+});
+
+export type VehicleOrderConflictDetails = z.infer<typeof vehicleOrderConflictDetailsSchema>;
 
 // ----------------------------------------------------------------- import
 
@@ -867,6 +899,35 @@ export const vehicleImportResultSchema = z.object({
 
 export type VehicleImportResult = z.infer<typeof vehicleImportResultSchema>;
 
+/**
+ * An administrator as the import history shows them: the name if given, the
+ * number partly hidden (TASK-035.B adds both). A new object for each field
+ * and not exported: the two fields stay inline in the OpenAPI document, as
+ * before they had names (a shared component there would not be additive).
+ */
+function importPersonSchema() {
+  return z.object({
+    adminId: z.uuid(),
+    accountId: z.uuid(),
+    name: z.string().nullable(),
+    /** `+7***4567`. */
+    phoneMasked: z.string().nullable(),
+  });
+}
+
+export type VehicleImportPerson = z.infer<ReturnType<typeof importPersonSchema>>;
+
+/**
+ * How far the background job has got (TASK-035.B): rows checked while
+ * `parsing`, rows applied while `applying`; `null` in other states.
+ */
+export const vehicleImportProgressSchema = z.object({
+  done: z.number().int(),
+  total: z.number().int(),
+});
+
+export type VehicleImportProgress = z.infer<typeof vehicleImportProgressSchema>;
+
 export const adminVehicleImportSchema = z.object({
   id: z.uuid(),
   status: vehicleImportStatusSchema,
@@ -880,13 +941,14 @@ export const adminVehicleImportSchema = z.object({
   error: z.string().nullable(),
   /** An earlier import of the very same file, if there was one. */
   sameFileAsImportId: z.uuid().nullable(),
-  uploadedBy: z.object({ adminId: z.uuid(), accountId: z.uuid() }),
-  appliedBy: z.object({ adminId: z.uuid(), accountId: z.uuid() }).nullable(),
+  uploadedBy: importPersonSchema(),
+  appliedBy: importPersonSchema().nullable(),
   createdAt: z.iso.datetime(),
   analyzedAt: z.iso.datetime().nullable(),
   appliedAt: z.iso.datetime().nullable(),
   finishedAt: z.iso.datetime().nullable(),
   updatedAt: z.iso.datetime(),
+  progress: vehicleImportProgressSchema.nullable(),
 });
 
 export type AdminVehicleImport = z.infer<typeof adminVehicleImportSchema>;
@@ -927,6 +989,11 @@ export type AdminVehicleImportPage = z.infer<typeof adminVehicleImportPageSchema
 export const vehicleImportRowsQuerySchema = z.object({
   planned: vehicleImportPlanSchema.optional(),
   outcome: vehicleImportOutcomeSchema.optional(),
+  /**
+   * `true` — only applied rows whose outcome is not what the report planned
+   * (`result.differsFromReport`, TASK-035.B).
+   */
+  differsFromReport: z.enum(["true"]).optional(),
   limit: pageLimitSchema,
   cursor: cursorSchema.optional(),
 });

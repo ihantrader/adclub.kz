@@ -1928,12 +1928,15 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "GET /admin/translations/{entityType}/{entityId}",
         "GET /admin/vehicles/engines",
         "GET /admin/vehicles/generations",
+        "GET /admin/vehicles/generations/{generationId}",
         "GET /admin/vehicles/import-template",
         "GET /admin/vehicles/imports",
         "GET /admin/vehicles/imports/{importId}",
         "GET /admin/vehicles/imports/{importId}/rows",
         "GET /admin/vehicles/makes",
+        "GET /admin/vehicles/makes/{makeId}",
         "GET /admin/vehicles/models",
+        "GET /admin/vehicles/models/{modelId}",
         "GET /admin/vehicles/modifications",
         "GET /admin/vehicles/options",
         "PATCH /admin/catalog/attribute-options/{optionId}",
@@ -2025,6 +2028,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
         "PUT /admin/settings/{key}",
         "PUT /admin/suppliers/{supplierId}/schedule",
         "PUT /admin/translations/{entityType}/{entityId}/{field}/{lang}",
+        "PUT /admin/vehicles/options/order",
       ]);
       // The list only reads (405 names what it takes, TASK-009.A); an
       // administrator by id has no route at all.

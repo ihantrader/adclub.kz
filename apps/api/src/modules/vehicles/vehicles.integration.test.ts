@@ -4,6 +4,7 @@ import type { INestApplication, INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
+  adminVehicleEnginePageSchema,
   adminVehicleEngineResponseSchema,
   adminVehicleGenerationPageSchema,
   adminVehicleGenerationResponseSchema,
@@ -31,6 +32,7 @@ import {
   vehicleMakesResponseSchema,
   vehicleModelsResponseSchema,
   vehicleModificationsResponseSchema,
+  vehicleOrderConflictDetailsSchema,
   vehicleYearsInvalidDetailsSchema,
   type AdminVehicleImport,
   type AdminVehicleMakePage,
@@ -976,6 +978,10 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
         result: { created: 4, updated: 1, unchanged: 1, rejected: 0, differsFromReport: 0 },
         appliedBy: { adminId: expect.any(String) as unknown },
       });
+      // TASK-035.B: the history names them, the number partly hidden.
+      expect(done.uploadedBy).toMatchObject({ phoneMasked: "+7***4567" });
+      expect(done.appliedBy).toMatchObject({ phoneMasked: "+7***4567" });
+      expect(JSON.stringify(done)).not.toContain(ADMIN_PHONE);
       expect(await count("vehicle_modification")).toBe(before.modifications + 4);
       expect(await count("vehicle_make")).toBe(before.makes + 1);
       expect(
@@ -1126,6 +1132,12 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
         ["create", "rejected", ["archived_reference"]],
         ["create", "rejected", ["archived_reference"]],
       ]);
+      // TASK-035.B: the same rows by the filter the admin panel lists them with.
+      const differing = await ok(
+        asAdmin("get", `/admin/vehicles/imports/${checked.id}/rows?differsFromReport=true`),
+        (body) => vehicleImportRowsPageSchema.parse(body),
+      );
+      expect(differing.total).toBe(3);
       expect(await count("vehicle_modification")).toBe(1);
       expect(await count("vehicle_make")).toBe(1);
     });
@@ -1156,8 +1168,13 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
         }
       }
       const created = await uploaded(csv(...rows));
-      expect(created).toMatchObject({ status: "parsing", rowCount: 10_000 });
+      expect(created).toMatchObject({
+        status: "parsing",
+        rowCount: 10_000,
+        progress: { total: 10_000 },
+      });
       const checked = await settled(created.id, ["parsing"], 120_000);
+      expect(checked.progress).toBeNull();
       expect(checked.report).toMatchObject({ create: 10_000, rejected: 0 });
       expect(await count("vehicle_modification")).toBe(0);
       const started = await ok(
@@ -1165,6 +1182,8 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
         (body) => adminVehicleImportResponseSchema.parse(body).import,
       );
       expect(started.status).toBe("applying");
+      expect(started.progress).toMatchObject({ total: 10_000 });
+      expect(started.progress!.done).toBeLessThanOrEqual(10_000);
       const done = await settled(created.id, ["applying"], 240_000);
       expect(done.result).toMatchObject({ created: 10_000, rejected: 0 });
       expect(await count("vehicle_modification")).toBe(10_000);
@@ -1401,13 +1420,138 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
     });
   });
 
+  describe("what the admin panel needs (TASK-035.B)", () => {
+    it("counts the records under each level, archived ones included, and the active models of a make", async () => {
+      const b = await basics();
+      const atlas = await modelOf(b.geely.id, "Atlas");
+      await modification(b);
+      await modification(b, { bodyTypeId: b.sedan.id });
+      await ok(
+        asAdmin("post", `/admin/vehicles/models/${atlas.id}/status`, {
+          status: "archived",
+          expectedVersion: atlas.version,
+        }),
+        (body) => body,
+      );
+      const make = await ok(
+        asAdmin("get", `/admin/vehicles/makes/${b.geely.id}`),
+        (body) => adminVehicleMakeResponseSchema.parse(body).make,
+      );
+      expect(make).toMatchObject({ name: "Geely", modelCount: 2, activeModelCount: 1 });
+      const listed = await ok(asAdmin("get", "/admin/vehicles/makes?q=джили"), (body) =>
+        adminVehicleMakePageSchema.parse(body),
+      );
+      expect(listed.makes).toEqual([make]);
+      const model = await ok(
+        asAdmin("get", `/admin/vehicles/models/${b.coolray.id}`),
+        (body) => adminVehicleModelResponseSchema.parse(body).model,
+      );
+      expect(model).toMatchObject({ name: "Coolray", generationCount: 1, make: { name: "Geely" } });
+      const generation = await ok(
+        asAdmin("get", `/admin/vehicles/generations/${b.coolrayI.id}`),
+        (body) => adminVehicleGenerationResponseSchema.parse(body).generation,
+      );
+      expect(generation).toMatchObject({
+        name: "I (SX11)",
+        modificationCount: 2,
+        model: { name: "Coolray" },
+        make: { name: "Geely" },
+      });
+      const engines = await ok(asAdmin("get", "/admin/vehicles/engines?q=3g15"), (body) =>
+        adminVehicleEnginePageSchema.parse(body),
+      );
+      expect(engines.engines).toEqual([
+        expect.objectContaining({ id: b.engine.id, modificationCount: 2 }),
+      ]);
+      for (const path of [
+        "/admin/vehicles/makes/00000000-0000-4000-8000-000000000000",
+        "/admin/vehicles/models/00000000-0000-4000-8000-000000000000",
+        "/admin/vehicles/generations/00000000-0000-4000-8000-000000000000",
+      ]) {
+        expectError(await asAdmin("get", path), 404, "NOT_FOUND");
+      }
+    });
+
+    it("reorders a reference list from the order it was read, refusing one changed meanwhile", async () => {
+      const b = await basics();
+      const coupe = await option("body", "coupe", { ru: "Купе" });
+      const read = [b.sedan.id, b.crossover.id, coupe.id];
+      const wanted = [coupe.id, b.sedan.id, b.crossover.id];
+      const reordered = await ok(
+        asAdmin("put", "/admin/vehicles/options/order", {
+          kind: "body",
+          optionIds: wanted,
+          expectedOrder: read,
+        }),
+        (body) => adminVehicleOptionListResponseSchema.parse(body).options,
+      );
+      expect(reordered.map((entry) => entry.id)).toEqual(wanted);
+      expect(reordered.every((entry) => entry.kind === "body")).toBe(true);
+      const listed = await ok(
+        asAdmin("get", "/admin/vehicles/options?kind=body"),
+        (body) => adminVehicleOptionListResponseSchema.parse(body).options,
+      );
+      expect(listed.map((entry) => entry.id)).toEqual(wanted);
+      // Another administrator still holds the old order.
+      const journalBefore = await count("audit_log");
+      const stale = await asAdmin("put", "/admin/vehicles/options/order", {
+        kind: "body",
+        optionIds: [b.crossover.id, b.sedan.id, coupe.id],
+        expectedOrder: read,
+      });
+      expectError(stale, 409, "VEHICLE_ORDER_CONFLICT");
+      expect(vehicleOrderConflictDetailsSchema.parse(stale.body.details).currentOrder).toEqual(
+        wanted,
+      );
+      // Not every option of the kind, or one of another kind.
+      expectError(
+        await asAdmin("put", "/admin/vehicles/options/order", {
+          kind: "body",
+          optionIds: [b.sedan.id, b.crossover.id],
+        }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expectError(
+        await asAdmin("put", "/admin/vehicles/options/order", {
+          kind: "body",
+          optionIds: [b.sedan.id, b.crossover.id, b.dct.id],
+        }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expect(await count("audit_log")).toBe(journalBefore);
+      // The same order again writes nothing.
+      await ok(
+        asAdmin("put", "/admin/vehicles/options/order", {
+          kind: "body",
+          optionIds: wanted,
+          expectedOrder: wanted,
+        }),
+        (body) => body,
+      );
+      expect(await count("audit_log")).toBe(journalBefore);
+      const journal = await ok(
+        asAdmin("get", "/admin/audit-log?action=vehicle_option.reordered"),
+        (body) => auditLogPageSchema.parse(body).entries,
+      );
+      expect(journal).toEqual([
+        expect.objectContaining({
+          entityType: "vehicle_option",
+          before: { kind: "body", order: read },
+          after: { kind: "body", order: wanted },
+        }),
+      ]);
+    });
+  });
+
   describe("access (AC-9)", () => {
     it("serves the admin routes to the admin context only", async () => {
       const b = await basics();
       const routes = Object.values(apiRoutes).filter((route) =>
         route.path.startsWith("/admin/vehicles"),
       );
-      expect(routes).toHaveLength(31);
+      expect(routes).toHaveLength(35);
       const ids: Record<string, string> = {
         optionId: b.sedan.id,
         makeId: b.geely.id,

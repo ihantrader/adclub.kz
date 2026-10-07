@@ -7,6 +7,8 @@ import {
   type AdminVehicleImportPage,
   type UploadVehicleImportQuery,
   type VehicleImportListQuery,
+  type VehicleImportPerson,
+  type VehicleImportProgress,
   type VehicleImportRowsPage,
   type VehicleImportRowsQuery,
   type VehicleImportTemplateResponse,
@@ -16,6 +18,7 @@ import { ApiException } from "../../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../../database";
 import { JobQueue } from "../../../jobs";
 import { AuditLog } from "../../audit";
+import { AccountDirectory, type ShownPerson } from "../../identity";
 import { AppSettings } from "../../settings";
 import { decodeCursor, encodeCursor, iso, TIME_POSITION } from "../vehicle-common";
 import { importState, notFound, validationError } from "../vehicle-errors";
@@ -55,7 +58,32 @@ export function isMalformed(values: Record<string, string>): boolean {
 
 const createdPosition = sql<string>`to_char(${vehicleImport.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
-function describe(row: VehicleImportRecord, sameFileAs: string | null): AdminVehicleImport {
+/** Who uploaded or confirmed an import, as the history shows them (TASK-035.B). */
+function person(
+  adminId: string,
+  accountId: string,
+  people: Map<string, ShownPerson>,
+): VehicleImportPerson {
+  const shown = people.get(accountId);
+  return { adminId, accountId, name: shown?.name ?? null, phoneMasked: shown?.phoneMasked ?? null };
+}
+
+/**
+ * Applied rows whose outcome is not what the report planned — the same rule
+ * `result.differsFromReport` counts by.
+ */
+const DIFFERS_FROM_REPORT = sql`${vehicleImportRow.outcome} IS NOT NULL AND NOT (
+  (${vehicleImportRow.planned} = 'create' AND ${vehicleImportRow.outcome} = 'created')
+  OR (${vehicleImportRow.planned} = 'update' AND ${vehicleImportRow.outcome} = 'updated')
+  OR (${vehicleImportRow.planned} = 'unchanged' AND ${vehicleImportRow.outcome} = 'unchanged')
+  OR (${vehicleImportRow.planned} = 'rejected' AND ${vehicleImportRow.outcome} = 'rejected'))`;
+
+function describe(
+  row: VehicleImportRecord,
+  sameFileAs: string | null,
+  people: Map<string, ShownPerson>,
+  progress: VehicleImportProgress | null,
+): AdminVehicleImport {
   return {
     id: row.id,
     status: row.status,
@@ -67,16 +95,17 @@ function describe(row: VehicleImportRecord, sameFileAs: string | null): AdminVeh
     result: row.result,
     error: row.error,
     sameFileAsImportId: sameFileAs,
-    uploadedBy: { adminId: row.uploadedByAdminId, accountId: row.uploadedByAccountId },
+    uploadedBy: person(row.uploadedByAdminId, row.uploadedByAccountId, people),
     appliedBy:
       row.appliedByAdminId && row.appliedByAccountId
-        ? { adminId: row.appliedByAdminId, accountId: row.appliedByAccountId }
+        ? person(row.appliedByAdminId, row.appliedByAccountId, people)
         : null,
     createdAt: row.createdAt.toISOString(),
     analyzedAt: iso(row.analyzedAt),
     appliedAt: iso(row.appliedAt),
     finishedAt: iso(row.finishedAt),
     updatedAt: row.updatedAt.toISOString(),
+    progress,
   };
 }
 
@@ -98,6 +127,7 @@ export class VehicleImportService {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(JobQueue) private readonly queue: JobQueue,
+    @Inject(AccountDirectory) private readonly directory: AccountDirectory,
   ) {}
 
   async template(): Promise<VehicleImportTemplateResponse> {
@@ -253,6 +283,7 @@ export class VehicleImportService {
       eq(vehicleImportRow.importId, importId),
       query.planned ? eq(vehicleImportRow.planned, query.planned) : undefined,
       query.outcome ? eq(vehicleImportRow.outcome, query.outcome) : undefined,
+      query.differsFromReport ? DIFFERS_FROM_REPORT : undefined,
     ];
     const [rows, [total]] = await Promise.all([
       executor
@@ -393,6 +424,44 @@ export class VehicleImportService {
     return (await this.describeMany(executor, [row]))[0]!;
   }
 
+  /**
+   * How far the background job has got with imports that are being checked
+   * (rows with a plan) or applied (rows with an outcome) — TASK-035.B.
+   */
+  private async progressOf(
+    executor: DbExecutor,
+    rows: readonly VehicleImportRecord[],
+  ): Promise<Map<string, VehicleImportProgress>> {
+    const result = new Map<string, VehicleImportProgress>();
+    const working = rows.filter((row) => row.status === "parsing" || row.status === "applying");
+    if (working.length === 0) {
+      return result;
+    }
+    const counted = await executor
+      .select({
+        importId: vehicleImportRow.importId,
+        planned: sql<number>`(count(*) FILTER (WHERE ${vehicleImportRow.planned} IS NOT NULL))::int`,
+        applied: sql<number>`(count(*) FILTER (WHERE ${vehicleImportRow.outcome} IS NOT NULL))::int`,
+      })
+      .from(vehicleImportRow)
+      .where(
+        inArray(
+          vehicleImportRow.importId,
+          working.map((row) => row.id),
+        ),
+      )
+      .groupBy(vehicleImportRow.importId);
+    const byId = new Map(counted.map((entry) => [entry.importId, entry]));
+    for (const row of working) {
+      const entry = byId.get(row.id);
+      result.set(row.id, {
+        done: row.status === "parsing" ? (entry?.planned ?? 0) : (entry?.applied ?? 0),
+        total: row.rowCount,
+      });
+    }
+    return result;
+  }
+
   /** With the earlier import of the very same file, if there was one. */
   private async describeMany(
     executor: DbExecutor,
@@ -418,6 +487,14 @@ export class VehicleImportService {
         ),
       )
       .orderBy(desc(vehicleImport.createdAt), desc(vehicleImport.id));
+    const people = await this.directory.accounts(
+      rows.flatMap((row) =>
+        row.appliedByAccountId
+          ? [row.uploadedByAccountId, row.appliedByAccountId]
+          : [row.uploadedByAccountId],
+      ),
+    );
+    const progress = await this.progressOf(executor, rows);
     return rows.map((row) => {
       const same = earlier.find(
         (entry) =>
@@ -425,7 +502,7 @@ export class VehicleImportService {
           entry.id !== row.id &&
           entry.createdAt.getTime() <= row.createdAt.getTime(),
       );
-      return describe(row, same?.id ?? null);
+      return describe(row, same?.id ?? null, people, progress.get(row.id) ?? null);
     });
   }
 }

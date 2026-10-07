@@ -7,6 +7,7 @@ import {
   createVehicleModelBodySchema,
   createVehicleModificationBodySchema,
   createVehicleOptionBodySchema,
+  reorderVehicleOptionsBodySchema,
   setVehicleStatusBodySchema,
   updateVehicleEngineBodySchema,
   updateVehicleGenerationBodySchema,
@@ -44,6 +45,7 @@ import {
   type CreateVehicleModelBody,
   type CreateVehicleModificationBody,
   type CreateVehicleOptionBody,
+  type ReorderVehicleOptionsBody,
   type SetVehicleStatusBody,
   type UpdateVehicleEngineBody,
   type UpdateVehicleGenerationBody,
@@ -111,6 +113,21 @@ export class VehicleAdminController {
     return { option: await this.options.update(params.optionId, body, adminActor(session)) };
   }
 
+  @SessionRoute(apiRoutes.reorderVehicleOptions)
+  async reorderOptions(
+    @Body(new ZodValidationPipe(reorderVehicleOptionsBodySchema)) body: ReorderVehicleOptionsBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminVehicleOptionListResponse> {
+    return {
+      options: await this.options.reorder(
+        body.kind,
+        body.optionIds,
+        body.expectedOrder,
+        adminActor(session),
+      ),
+    };
+  }
+
   @SessionRoute(apiRoutes.setVehicleOptionStatus)
   async setOptionStatus(
     @Param(new ZodValidationPipe(vehicleOptionIdPathSchema)) params: VehicleOptionIdPath,
@@ -134,6 +151,13 @@ export class VehicleAdminController {
     @Query(new ZodValidationPipe(vehicleMakeListQuerySchema)) query: VehicleMakeListQuery,
   ): Promise<AdminVehicleMakePage> {
     return this.hierarchy.makePage(query);
+  }
+
+  @SessionRoute(apiRoutes.getVehicleMake)
+  async getMake(
+    @Param(new ZodValidationPipe(vehicleMakeIdPathSchema)) params: VehicleMakeIdPath,
+  ): Promise<AdminVehicleMakeResponse> {
+    return { make: await this.hierarchy.getMake(params.makeId) };
   }
 
   @SessionRoute(apiRoutes.createVehicleMake)
@@ -178,6 +202,13 @@ export class VehicleAdminController {
     return this.hierarchy.modelPage(query);
   }
 
+  @SessionRoute(apiRoutes.getVehicleModel)
+  async getModel(
+    @Param(new ZodValidationPipe(vehicleModelIdPathSchema)) params: VehicleModelIdPath,
+  ): Promise<AdminVehicleModelResponse> {
+    return { model: await this.hierarchy.getModel(params.modelId) };
+  }
+
   @SessionRoute(apiRoutes.createVehicleModel)
   async createModel(
     @Body(new ZodValidationPipe(createVehicleModelBodySchema)) body: CreateVehicleModelBody,
@@ -219,6 +250,13 @@ export class VehicleAdminController {
     query: VehicleGenerationListQuery,
   ): Promise<AdminVehicleGenerationPage> {
     return this.hierarchy.generationPage(query);
+  }
+
+  @SessionRoute(apiRoutes.getVehicleGeneration)
+  async getGeneration(
+    @Param(new ZodValidationPipe(vehicleGenerationIdPathSchema)) params: VehicleGenerationIdPath,
+  ): Promise<AdminVehicleGenerationResponse> {
+    return { generation: await this.hierarchy.getGeneration(params.generationId) };
   }
 
   @SessionRoute(apiRoutes.createVehicleGeneration)

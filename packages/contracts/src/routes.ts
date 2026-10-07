@@ -102,6 +102,7 @@ import {
   createVehicleModelBodySchema,
   createVehicleModificationBodySchema,
   createVehicleOptionBodySchema,
+  reorderVehicleOptionsBodySchema,
   setVehicleStatusBodySchema,
   updateVehicleEngineBodySchema,
   updateVehicleGenerationBodySchema,
@@ -1890,6 +1891,24 @@ export const apiRoutes = {
       200: { description: "The option", schema: adminVehicleOptionResponseSchema },
     },
   }),
+  reorderVehicleOptions: defineRoute({
+    operationId: "reorderVehicleOptions",
+    method: "PUT",
+    path: "/admin/vehicles/options/order",
+    summary: "Put the options of one reference list in a new order (TASK-035.B)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: {
+      description:
+        "The kind, every option id of it in the new order and the order it was made from",
+      schema: reorderVehicleOptionsBodySchema,
+    },
+    responses: {
+      200: { description: "The options of the kind", schema: adminVehicleOptionListResponseSchema },
+    },
+  }),
   setVehicleOptionStatus: defineRoute({
     operationId: "setVehicleOptionStatus",
     method: "POST",
@@ -1922,6 +1941,20 @@ export const apiRoutes = {
     query: vehicleMakeListQuerySchema,
     responses: {
       200: { description: "A page of makes", schema: adminVehicleMakePageSchema },
+    },
+  }),
+  getVehicleMake: defineRoute({
+    operationId: "getVehicleMake",
+    method: "GET",
+    path: "/admin/vehicles/makes/{makeId}",
+    summary: "A make with its spellings and how many models it has (TASK-035.B)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: vehicleMakeIdPathSchema,
+    responses: {
+      200: { description: "The make", schema: adminVehicleMakeResponseSchema },
     },
   }),
   createVehicleMake: defineRoute({
@@ -1988,6 +2021,20 @@ export const apiRoutes = {
       200: { description: "A page of models", schema: adminVehicleModelPageSchema },
     },
   }),
+  getVehicleModel: defineRoute({
+    operationId: "getVehicleModel",
+    method: "GET",
+    path: "/admin/vehicles/models/{modelId}",
+    summary: "A model with its make and how many generations it has (TASK-035.B)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: vehicleModelIdPathSchema,
+    responses: {
+      200: { description: "The model", schema: adminVehicleModelResponseSchema },
+    },
+  }),
   createVehicleModel: defineRoute({
     operationId: "createVehicleModel",
     method: "POST",
@@ -2052,6 +2099,20 @@ export const apiRoutes = {
     query: vehicleGenerationListQuerySchema,
     responses: {
       200: { description: "A page of generations", schema: adminVehicleGenerationPageSchema },
+    },
+  }),
+  getVehicleGeneration: defineRoute({
+    operationId: "getVehicleGeneration",
+    method: "GET",
+    path: "/admin/vehicles/generations/{generationId}",
+    summary: "A generation with its model and make and how many modifications it has (TASK-035.B)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: vehicleGenerationIdPathSchema,
+    responses: {
+      200: { description: "The generation", schema: adminVehicleGenerationResponseSchema },
     },
   }),
   createVehicleGeneration: defineRoute({

@@ -1614,8 +1614,9 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         route.path.startsWith("/admin/catalog"),
       );
       // 14 of the structure (TASK-010), 14 of brands, items and the fill
-      // (TASK-011), 4 of photos (TASK-013) and 5 of compatibility (TASK-015).
-      expect(adminRoutes).toHaveLength(37);
+      // (TASK-011), 4 of photos (TASK-013), 5 of compatibility (TASK-015), and
+      // an item's offers, the admin check of compatibility and locate (TASK-035).
+      expect(adminRoutes).toHaveLength(40);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },

@@ -42,7 +42,7 @@ COMPLETED — 14/14 AC. Проверку с настоящим приложен�
 - `pnpm --filter @adclub/api openapi:check` — PASS — «openapi.json matches the contract and the served routes»
 - `pnpm --filter @adclub/api openapi:compat --base HEAD` — PASS — «Contract is backward compatible with HEAD» (без трейлера)
 - Интеграционные (локально, Docker, по одному файлу на итоговом коде): `admin-panel` — PASS 8/8, `access` — PASS (вместе с `admin-panel` 40/40), `database` — PASS 36/36, `settings` — PASS 16/16, `audit-log` — PASS 12/12, `order-notices` — PASS 34/34. Остальные интеграционные файлы локально не запускались — их прогоняет CI на main.
-- CI на main — см. раздел «Push и CI».
+- CI на main — PASS — run 37583415323 на `30f2afa` (success); предыдущий run 37582200813 на `74dcdfe` — FAIL (список фоновых задач в тесте, исправлено).
 
 ## UAT / E2E
 Встроенный браузер, локально: API + worker + `admin-web` dev, dev-база с заполнением, тестовый администратор `+77019990034` (`admin:grant`).
@@ -75,7 +75,7 @@ COMPLETED — 14/14 AC. Проверку с настоящим приложен�
 - **AC-10 — PASS** — загрузка через `LoadingContent`/`useLoadingGate`/`FadeSwap` (D-069), hairline-таблицы (D-068), всплывающие «Сохранено», «Сигнал закрыт»; светлая и тёмная; 1024 и 1920 — UAT 11.
 - **AC-11 — PASS** — `openapi:compat --base HEAD` без трейлера, `openapi:check` PASS.
 - **AC-12 — PASS** — `ARCHITECTURE.md` 4.52 (компоненты, общая веб-сессия, маршрут главной, статусы сигналов, детектор), `CLAUDE.md` блок 0 — «Админка в браузере».
-- **AC-13 — PASS** — format:check, lint, typecheck, test, build — PASS; CI на main — см. «Push и CI».
+- **AC-13 — PASS** — format:check, lint, typecheck, test, build — PASS; CI на main — success (run 37583415323, `30f2afa`).
 - **AC-14 — PASS** — этот отчёт; список проверок — ниже.
 
 ## Проверки для Product Owner (браузер компьютера + приложение-аутентификатор на телефоне)
@@ -97,7 +97,7 @@ COMPLETED — 14/14 AC. Проверку с настоящим приложен�
 - Первый вариант формы: кнопка «Получить код» с `type="submit"` и `onClick` отправила бы два запроса → кнопка без `submit`, Enter — через `onSubmit`.
 - `setState` в эффекте (`react-hooks/set-state-in-effect`) для данных шапки → данные сессии хранятся с её `sessionId`.
 - Первый коммит случайно захватил уже проиндексированные `git mv` → коммит пересобран (`git reset --soft`, переиндексация), в истории — три чистых шага.
-- Первый CI на main упал: `sign-in-data-cleanup.integration.test.ts` перечисляет все фоновые задачи, а новой `orders.watch-supplier-reach` в списках не было → списки дополнены, файл локально PASS 5/5, повторный CI — см. ниже.
+- Первый CI на main упал: `sign-in-data-cleanup.integration.test.ts` перечисляет все фоновые задачи, а новой `orders.watch-supplier-reach` в списках не было → списки дополнены, файл локально PASS 5/5, повторный CI — success.
 - Прогон пяти тяжёлых интеграционных файлов параллельно завис (~50 мин) → остановлен, файлы прогнаны по одному.
 
 ## Deviations

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   auditActions,
   auditEntities,
+  type AdminItemOffersResponse,
   type CatalogLanguage,
   type CreateOfferBody,
   type OfferAvailability,
@@ -41,6 +42,7 @@ import {
   warrantyContacts,
 } from "./offer-errors";
 import { activeOrderCounts } from "./offer-active-orders";
+import { OFFER_ON_SALE_STATUSES } from "./offer-list-rule";
 import { describeOfferItems } from "./offer-items";
 import { describeReceipt, receiptSchedules } from "./offer-receipt";
 import { offerShowcase } from "./offer-showcase";
@@ -452,6 +454,49 @@ export class OffersService {
       throw notFound("supplier");
     }
     return this.page(supplierId, query, lang);
+  }
+
+  /**
+   * Every offer on one item for the administrator (TASK-035; SCREENS
+   * A-CAT-05 «Предложения», read only): on sale first, newest first, with
+   * the showcase sign, the active orders and whose offer it is, and the two
+   * numbers the archiving of the item warns about. An unknown item — 404.
+   */
+  async forItem(itemId: string, lang: CatalogLanguage): Promise<AdminItemOffersResponse> {
+    const executor = this.database.db;
+    const [item] = await executor
+      .select({ id: catalogItem.id })
+      .from(catalogItem)
+      .where(eq(catalogItem.id, itemId));
+    if (!item) {
+      throw notFound("item");
+    }
+    const rows = await executor
+      .select({ offer, supplierName: supplier.name })
+      .from(offer)
+      .innerJoin(supplier, eq(supplier.id, offer.supplierId))
+      .where(eq(offer.itemId, itemId))
+      .orderBy(
+        sql`CASE WHEN ${inArray(offer.status, [...OFFER_ON_SALE_STATUSES])} THEN 0 ELSE 1 END`,
+        desc(offer.createdAt),
+        desc(offer.id),
+      );
+    const described = await this.describe(
+      executor,
+      rows.map((row) => row.offer),
+      lang,
+    );
+    const onSale = new Set<string>(OFFER_ON_SALE_STATUSES);
+    return {
+      itemId,
+      language: lang,
+      offers: described.map((entry, index) => ({
+        ...entry,
+        supplier: { id: entry.supplierId, name: rows[index]!.supplierName },
+      })),
+      onSale: described.filter((entry) => onSale.has(entry.status)).length,
+      activeOrders: described.reduce((sum, entry) => sum + entry.activeOrders, 0),
+    };
   }
 
   /** The receipt date of a term for an order confirmed now, by the company's point. */

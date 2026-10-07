@@ -369,6 +369,13 @@ export const auditLogQuerySchema = z.object({
   entityId: z.string().min(1).max(200).optional(),
   actorAccountId: z.uuid().optional(),
   actorRole: auditActorRoleSchema.optional(),
+  /**
+   * The history of one catalog item (SCREENS A-CAT-05 «История»; TASK-035):
+   * entries about the item itself and its translations, and those about its
+   * photos, compatibility records and proposals (they name the item in
+   * `before`/`after`). Combines with the other filters.
+   */
+  itemId: z.uuid().optional(),
   limit: z.coerce
     .number()
     .int()

@@ -539,6 +539,27 @@ export const compatibilityCheckResponseSchema = z.object({
 
 export type CompatibilityCheckResponse = z.infer<typeof compatibilityCheckResponseSchema>;
 
+/**
+ * `POST /admin/catalog/items/{itemId}/compatibility/check` (SCREENS A-CAT-05,
+ * TASK-035): the result of the one calculation for one item and a car,
+ * whatever the item's status — a draft or an item of a hidden subcategory
+ * is checked too, before it reaches clients. `vehicle` left out — no car.
+ */
+export const adminCompatibilityCheckBodySchema = z.object({
+  vehicle: compatibilityVehicleSchema.nullable().optional(),
+});
+
+export type AdminCompatibilityCheckBody = z.infer<typeof adminCompatibilityCheckBodySchema>;
+
+export const adminCompatibilityCheckResponseSchema = z.object({
+  vehicle: resolvedCompatibilityVehicleSchema.nullable(),
+  result: compatibilityItemResultSchema,
+  /** Clients see the item now (active, in an active subcategory under an active node). */
+  visibleToClients: z.boolean(),
+});
+
+export type AdminCompatibilityCheckResponse = z.infer<typeof adminCompatibilityCheckResponseSchema>;
+
 // ----------------------------------------------------------------- errors
 
 /**

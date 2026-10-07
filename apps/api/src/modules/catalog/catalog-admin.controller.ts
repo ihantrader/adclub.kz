@@ -1,8 +1,9 @@
-import { Body, Controller, Inject, Param } from "@nestjs/common";
+import { Body, Controller, Inject, Param, Query } from "@nestjs/common";
 import {
   apiRoutes,
   attributeIdPathSchema,
   attributeOptionIdPathSchema,
+  catalogLocateQuerySchema,
   categoryIdPathSchema,
   createAttributeBodySchema,
   createAttributeOptionBodySchema,
@@ -23,6 +24,8 @@ import {
   type AdminCategoryTreeResponse,
   type AttributeIdPath,
   type AttributeOptionIdPath,
+  type CatalogLocateQuery,
+  type CatalogLocation,
   type CategoryIdPath,
   type CreateAttributeBody,
   type CreateAttributeOptionBody,
@@ -70,6 +73,13 @@ export class CatalogAdminController {
   @SessionRoute(apiRoutes.listAdminCategories)
   tree(): Promise<AdminCategoryTreeResponse> {
     return this.catalog.tree();
+  }
+
+  @SessionRoute(apiRoutes.locateCatalogEntry)
+  locate(
+    @Query(new ZodValidationPipe(catalogLocateQuerySchema)) query: CatalogLocateQuery,
+  ): Promise<CatalogLocation> {
+    return this.catalog.locate(query);
   }
 
   @SessionRoute(apiRoutes.createCategory)

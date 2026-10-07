@@ -1,15 +1,23 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  adminHomeCatalogFilters,
   catalogItemListQuerySchema,
   supplierLeadListQuerySchema,
   translationQueueQuerySchema,
   type AdminHome,
 } from "@adclub/contracts";
 import { AiService } from "../ai";
-import { CatalogItemsService, TranslationAdminService } from "../catalog";
-import { CompatibilityRecordsService } from "../compatibility";
+import { CatalogItemsService, TranslationAdminService, UNTRANSLATED_STATES } from "../catalog";
 import { AdminSignals } from "../signals";
 import { SupplierLeadsService } from "../suppliers";
+
+/** The catalog cards, in the order their totals are read. */
+const CATALOG_CARDS = [
+  "withoutPhoto",
+  "incomplete",
+  "withoutCompatibility",
+  "itemsWithoutTranslation",
+] as const satisfies readonly (keyof typeof adminHomeCatalogFilters)[];
 
 /**
  * The administrator's queue of attention (TASK-034 requirement 3; SCREENS
@@ -18,8 +26,9 @@ import { SupplierLeadsService } from "../suppliers";
  * module that owns the data — the signals of `AdminSignals`, the funnel of
  * `SupplierLeadsService.list` (`counts.new`), the incomplete items of the
  * items list (`completeness=incomplete`), the translation queue — so the
- * number and the list never disagree. The counters without a list of their
- * own yet (no photo, no compatibility) are counted by their owners too.
+ * number and the list never disagree. The quality of the catalog is the
+ * `total` of the items list with the filter the card leads to (TASK-035):
+ * no photo, incomplete, no compatibility, no translation of the name.
  */
 @Injectable()
 export class AdminHomeService {
@@ -29,29 +38,25 @@ export class AdminHomeService {
     @Inject(AiService) private readonly ai: AiService,
     @Inject(CatalogItemsService) private readonly items: CatalogItemsService,
     @Inject(TranslationAdminService) private readonly translations: TranslationAdminService,
-    @Inject(CompatibilityRecordsService)
-    private readonly compatibility: CompatibilityRecordsService,
     @Inject(SupplierLeadsService) private readonly leads: SupplierLeadsService,
   ) {}
 
   async summary(): Promise<AdminHome> {
-    const [outage, signals, budget, leads, withoutPhoto, incomplete, compatibility, queue] =
-      await Promise.all([
-        this.signals.currentOfKind("whatsapp_outage"),
-        this.signals.currentCounts(),
-        this.ai.budget(),
-        this.leads.list(supplierLeadListQuerySchema.parse({ status: "new", limit: 1 })),
-        this.items.countActiveWithoutPhoto(),
-        this.items.page(
-          catalogItemListQuerySchema.parse({
-            completeness: "incomplete",
-            status: "active",
-            limit: 1,
-          }),
+    const [outage, signals, budget, leads, quality, queue] = await Promise.all([
+      this.signals.currentOfKind("whatsapp_outage"),
+      this.signals.currentCounts(),
+      this.ai.budget(),
+      this.leads.list(supplierLeadListQuerySchema.parse({ status: "new", limit: 1 })),
+      Promise.all(
+        CATALOG_CARDS.map((card) =>
+          this.items
+            .page(catalogItemListQuerySchema.parse({ ...adminHomeCatalogFilters[card], limit: 1 }))
+            .then((page) => page.total),
         ),
-        this.compatibility.countActiveGoodsWithoutRecord(),
-        this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
-      ]);
+      ),
+      this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
+    ]);
+    const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
       channelOutage: outage
         ? {
@@ -70,10 +75,14 @@ export class AdminHomeService {
       },
       newSupplierLeads: leads.counts.new,
       catalog: {
-        withoutPhoto,
-        incomplete: incomplete.total,
-        withoutCompatibility: compatibility,
-        withoutTranslation: queue.counts.missing + queue.counts.failed,
+        withoutPhoto: withoutPhoto!,
+        incomplete: incomplete!,
+        withoutCompatibility: withoutCompatibility!,
+        withoutTranslation: UNTRANSLATED_STATES.reduce(
+          (sum, state) => sum + queue.counts[state],
+          0,
+        ),
+        itemsWithoutTranslation: itemsWithoutTranslation!,
       },
       at: new Date().toISOString(),
     };

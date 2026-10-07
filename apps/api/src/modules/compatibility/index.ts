@@ -1,6 +1,7 @@
 export { CompatibilityModule } from "./compatibility.module";
 export type { CompatibilityModuleOptions } from "./compatibility.module";
 export { CompatibilityEvaluator } from "./compatibility-evaluator";
+export { withoutApprovedCompatibility } from "./compatibility-list-rule";
 export type { CompatibilityScope } from "./compatibility-evaluator";
 export { CompatibilityRecordsService } from "./compatibility-records.service";
 export type { CompatibilityActor } from "./compatibility-records.service";

@@ -3,6 +3,8 @@ import {
   auditActions,
   auditEntities,
   type AdminAttribute,
+  type CatalogLocateQuery,
+  type CatalogLocation,
   type AdminAttributeListResponse,
   type AdminAttributeOption,
   type AdminCategory,
@@ -179,6 +181,23 @@ export class CatalogAdminService {
   }
 
   /** Ids by code, for the development seed (ARCHITECTURE 4.15). */
+  /**
+   * Where an attribute or a list option lives (TASK-035): the journal opens
+   * the tree with it selected. Exactly one of the two; unknown — 404.
+   */
+  async locate(query: CatalogLocateQuery): Promise<CatalogLocation> {
+    if ((query.attributeId === undefined) === (query.optionId === undefined)) {
+      throw validationError("attributeId", "Name either attributeId or optionId, exactly one");
+    }
+    const executor = this.database.db;
+    const option = query.optionId ? await this.findOption(executor, query.optionId) : null;
+    const owner = await this.findAttribute(
+      executor,
+      option ? option.attributeId : query.attributeId!,
+    );
+    return { categoryId: owner.categoryId, attributeId: owner.id, optionId: option?.id ?? null };
+  }
+
   async findCategoryByCode(code: string): Promise<CategoryRow | undefined> {
     const [row] = await this.database.db.select().from(category).where(eq(category.code, code));
     return row;

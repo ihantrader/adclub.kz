@@ -27,6 +27,8 @@ import {
   attributeIdPathSchema,
   attributeOptionIdPathSchema,
   catalogCategoryPathSchema,
+  catalogLocateQuerySchema,
+  catalogLocationSchema,
   categoryAttributesResponseSchema,
   categoryIdPathSchema,
   categoryTreeResponseSchema,
@@ -133,6 +135,8 @@ import {
 import { clientPolicyResponseSchema } from "./client-policy";
 import {
   adminCompatibilityProposalPageSchema,
+  adminCompatibilityCheckBodySchema,
+  adminCompatibilityCheckResponseSchema,
   adminCompatibilityProposalQuerySchema,
   adminCompatibilityProposalResponseSchema,
   adminCompatibilityRecordResponseSchema,
@@ -156,6 +160,8 @@ import {
   updateCompatibilityRecordBodySchema,
 } from "./compatibility";
 import {
+  adminItemOffersPathSchema,
+  adminItemOffersResponseSchema,
   createOfferBodySchema,
   offerItemSearchQuerySchema,
   offerItemSearchResponseSchema,
@@ -1368,6 +1374,21 @@ export const apiRoutes = {
       200: { description: "The option", schema: adminAttributeOptionResponseSchema },
     },
   }),
+  locateCatalogEntry: defineRoute({
+    operationId: "locateCatalogEntry",
+    method: "GET",
+    path: "/admin/catalog/locate",
+    summary:
+      "Where an attribute or a list option lives in the tree: its subcategory — the journal opens the tree with it selected",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: catalogLocateQuerySchema,
+    responses: {
+      200: { description: "Its place", schema: catalogLocationSchema },
+    },
+  }),
   listAdminBrands: defineRoute({
     operationId: "listAdminBrands",
     method: "GET",
@@ -2361,6 +2382,25 @@ export const apiRoutes = {
       201: { description: "The record", schema: adminCompatibilityRecordResponseSchema },
     },
   }),
+  checkItemCompatibilityAdmin: defineRoute({
+    operationId: "checkItemCompatibilityAdmin",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/compatibility/check",
+    summary:
+      "Whether one item fits a car, by the one calculation of compatibility, whatever the item's status (a draft and an item of a hidden subcategory too)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: compatibilityItemPathSchema,
+    requestBody: {
+      description: "The car, by any levels it is known by",
+      schema: adminCompatibilityCheckBodySchema,
+    },
+    responses: {
+      200: { description: "The result", schema: adminCompatibilityCheckResponseSchema },
+    },
+  }),
   copyCompatibility: defineRoute({
     operationId: "copyCompatibility",
     method: "POST",
@@ -3222,6 +3262,21 @@ export const apiRoutes = {
     query: offerListQuerySchema,
     responses: {
       200: { description: "Offers", schema: offerPageSchema },
+    },
+  }),
+  listAdminItemOffers: defineRoute({
+    operationId: "listAdminItemOffers",
+    method: "GET",
+    path: "/admin/catalog/items/{itemId}/offers",
+    summary:
+      "Every offer on one catalog item, read only (A-CAT-05 «Предложения»): supplier, price, availability, whether the showcase shows it and why not, active orders; the counts archiving the item warns about",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminItemOffersPathSchema,
+    responses: {
+      200: { description: "The item's offers", schema: adminItemOffersResponseSchema },
     },
   }),
   // ------------------------------------------- the catalog for users (TASK-020)

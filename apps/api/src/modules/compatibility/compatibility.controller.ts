@@ -1,5 +1,6 @@
 import { Body, Controller, Inject, Param, Query } from "@nestjs/common";
 import {
+  adminCompatibilityCheckBodySchema,
   adminCompatibilityProposalQuerySchema,
   apiRoutes,
   approveCompatibilityProposalBodySchema,
@@ -15,6 +16,8 @@ import {
   rejectCompatibilityProposalBodySchema,
   supplierCompatibilityProposalQuerySchema,
   updateCompatibilityRecordBodySchema,
+  type AdminCompatibilityCheckBody,
+  type AdminCompatibilityCheckResponse,
   type AdminCompatibilityProposalPage,
   type AdminCompatibilityProposalQuery,
   type AdminCompatibilityProposalResponse,
@@ -92,6 +95,15 @@ export class CompatibilityController {
     @Query(new ZodValidationPipe(itemCompatibilityQuerySchema)) query: ItemCompatibilityQuery,
   ): Promise<AdminItemCompatibilityResponse> {
     return this.records.card(params.itemId, query.includeArchived === "true");
+  }
+
+  @SessionRoute(apiRoutes.checkItemCompatibilityAdmin)
+  checkForAdmin(
+    @Param(new ZodValidationPipe(compatibilityItemPathSchema)) params: CompatibilityItemPath,
+    @Body(new ZodValidationPipe(adminCompatibilityCheckBodySchema))
+    body: AdminCompatibilityCheckBody,
+  ): Promise<AdminCompatibilityCheckResponse> {
+    return this.evaluator.checkForAdmin(params.itemId, body);
   }
 
   @SessionRoute(apiRoutes.createCompatibilityRecord)

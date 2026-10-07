@@ -4,6 +4,7 @@ import { CatalogAdminService } from "./catalog-admin.service";
 import { CatalogBrandsService } from "./catalog-brands.service";
 import { CatalogItemsController } from "./catalog-items.controller";
 import { CatalogItemsService } from "./catalog-items.service";
+import { CatalogItemListRules } from "./item-list-rules";
 import { CatalogPhotosController } from "./catalog-photos.controller";
 import { CatalogPhotosService } from "./catalog-photos.service";
 import { PhotoStorage } from "./photo-storage";
@@ -48,6 +49,7 @@ export class CatalogModule {
         CatalogAdminService,
         CatalogBrandsService,
         CatalogItemsService,
+        CatalogItemListRules,
         CatalogPhotosService,
         CatalogReadService,
         PhotoStorage,
@@ -60,6 +62,7 @@ export class CatalogModule {
         CatalogAdminService,
         CatalogBrandsService,
         CatalogItemsService,
+        CatalogItemListRules,
         CatalogPhotosService,
         CatalogReadService,
         PhotoStorage,

@@ -48,7 +48,7 @@ export class AppModule implements NestModule {
     // One catalog module: offers import this very instance.
     const catalog = CatalogModule.forRoot({ http: true, metrics: config.metrics.enabled });
     // One of each: the client catalog reads through these very instances.
-    const compatibility = CompatibilityModule.forRoot({ http: true });
+    const compatibility = CompatibilityModule.forRoot({ http: true, catalog });
     const clubAccess = ClubAccessModule.forRoot({ http: true });
     // One signals module: orders raise signals through this very instance.
     const signals = SignalsModule.forRoot({ http: true });

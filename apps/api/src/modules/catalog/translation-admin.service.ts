@@ -26,6 +26,7 @@ import { findNameClash, nameNeighbours } from "./catalog-names";
 import { SOURCE_LANGUAGE, normalizeText, sourceHash } from "./catalog-texts";
 import { maxLengthOf } from "./translation-checks";
 import { TranslationQueue } from "./translation-queue.service";
+import { classifiedTranslations } from "./translation-states";
 import { translation, translationTask, type TranslationRow } from "./schema";
 
 const FIELDS: readonly TranslationField[] = ["name", "unit"];
@@ -317,29 +318,7 @@ export class TranslationAdminService {
       query.lang ? sql`AND l.lang = ${query.lang}` : sql``,
     ];
     // Pairs of (Russian text, target language), what each one holds now and its task.
-    const classified = sql`
-      WITH pairs AS (
-        SELECT src.entity_type, src.entity_id, src.field, l.lang, src.text AS source_text,
-               encode(sha256(convert_to(src.text, 'UTF8')), 'hex') AS source_hash
-        FROM translation src
-        CROSS JOIN (VALUES ('kk'), ('en')) AS l(lang)
-        WHERE src.origin = 'source' AND src.lang = 'ru' ${sql.join(filters, sql` `)}
-      ), classified AS (
-        SELECT p.entity_type, p.entity_id, p.field, p.lang, p.source_text,
-               t.text AS current_text, t.origin AS current_origin,
-               (t.id IS NOT NULL AND t.source_hash IS DISTINCT FROM p.source_hash) AS is_source_changed,
-               k.failure AS failure,
-               CASE WHEN k.status = 'failed' THEN 'failed'
-                    WHEN k.status = 'pending' THEN 'queued'
-                    WHEN t.id IS NULL THEN 'missing'
-                    WHEN t.source_hash IS DISTINCT FROM p.source_hash THEN 'outdated'
-               END AS state
-        FROM pairs p
-        LEFT JOIN translation t ON t.entity_type = p.entity_type AND t.entity_id = p.entity_id
-          AND t.field = p.field AND t.lang = p.lang
-        LEFT JOIN translation_task k ON k.entity_type = p.entity_type AND k.entity_id = p.entity_id
-          AND k.field = p.field AND k.lang = p.lang
-      )`;
+    const classified = classifiedTranslations(filters);
     const stateFilter = query.state ? sql`AND state = ${query.state}` : sql``;
     const position = query.cursor ? this.parseCursor(query.cursor) : undefined;
     const after = position

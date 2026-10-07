@@ -2,7 +2,12 @@ import type { INestApplication, INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
+  adminCatalogItemPageSchema,
+  adminCompatibilityCheckResponseSchema,
+  adminHomeCatalogFilters,
   adminHomeSchema,
+  adminItemOffersResponseSchema,
+  catalogLocationSchema,
   adminSignalConflictDetailsSchema,
   adminSignalPageSchema,
   adminSignalResponseSchema,
@@ -34,6 +39,7 @@ import { WorkerModule } from "../../worker.module";
 import { DevCatalogSeed } from "../catalog";
 import { DevCompatibilitySeed } from "../compatibility";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
+import { OffersService } from "../offers";
 import { SupplierReachWatch } from "../orders";
 import { AppSettings, SettingsChangeService } from "../settings";
 import { DevSupplierSeed } from "../suppliers";
@@ -46,6 +52,9 @@ import { DevVehicleSeed } from "../vehicles";
  * of an unreachable supplier (one signal per company, closing by itself),
  * the history of a setting a page at a time, the reset of another
  * administrator's second factor with a reason, and the names in the journal.
+ * TASK-035: every catalog card counts the rows of the items list it opens
+ * (the same filters, from the contract), offers on sale, an item's offers,
+ * its history, the admin check of compatibility and locating an attribute.
  * Real PostgreSQL and Redis; the detector runs in a real worker context.
  */
 
@@ -362,6 +371,305 @@ describe("admin panel (PostgreSQL + Redis)", () => {
 
     it("is for administrators only", async () => {
       const response = await http().get("/admin/home").set("X-Client", ADMIN_WEB);
+      expectError(response, 401, "AUTH_REQUIRED");
+    });
+  });
+
+  describe("the catalog section (TASK-035)", () => {
+    interface ListRow {
+      id: string;
+      status: string;
+      offersOnSale: number;
+    }
+
+    /** Every row of the items list with these filters, a small page at a time. */
+    async function allRows(admin: Admin, filters: Record<string, string>): Promise<ListRow[]> {
+      const rows: ListRow[] = [];
+      let cursor: string | null = null;
+      let total: number | null = null;
+      do {
+        const query = new URLSearchParams({ ...filters, limit: "2" });
+        if (cursor) query.set("cursor", cursor);
+        const response = await asAdmin("get", `/admin/catalog/items?${query.toString()}`, admin);
+        expect(response.status, JSON.stringify(response.body)).toBe(200);
+        const page = adminCatalogItemPageSchema.parse(response.body);
+        total ??= page.total;
+        expect(page.total).toBe(total);
+        rows.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      expect(rows).toHaveLength(total);
+      return rows;
+    }
+
+    async function seedAll(): Promise<{ supplierId: string }> {
+      await app.get(DevCatalogSeed).run();
+      await app.get(DevVehicleSeed).run();
+      await app.get(DevCompatibilitySeed).run();
+      return app.get(DevSupplierSeed).run();
+    }
+
+    async function itemByArticle(article: string): Promise<string> {
+      const { rows } = await db.query<{ id: string }>(
+        "SELECT id FROM catalog_item WHERE article = $1",
+        [article],
+      );
+      return rows[0]!.id;
+    }
+
+    async function offerOn(supplierId: string, itemId: string): Promise<string> {
+      const { rows } = await db.query<{ id: string; account_id: string }>(
+        "SELECT id, account_id FROM supplier_member WHERE supplier_id = $1 LIMIT 1",
+        [supplierId],
+      );
+      const offer = await app.get(OffersService).create(
+        {
+          itemId,
+          price: 12_500,
+          availability: "in_stock",
+          leadDays: 0,
+          pickup: true,
+          delivery: false,
+        },
+        { role: "supplier", supplierId, memberId: rows[0]!.id, accountId: rows[0]!.account_id },
+        "ru",
+      );
+      return offer.id;
+    }
+
+    it("counts on every catalog card exactly the rows of the list it opens", async () => {
+      const admin = await setUpAdmin();
+      await seedAll();
+      const pads = await itemByArticle("04465-0K090");
+      // An approved photo, a fully translated name, a refused translation
+      // and a draft (drafts are not on the cards) move the numbers apart.
+      await db.query(
+        `INSERT INTO item_photo (item_id, source_type, status, content_type, byte_size, checksum, width, height)
+         VALUES ($1, 'admin_upload', 'approved', 'image/jpeg', 10, $2, 10, 10)`,
+        [pads, "b".repeat(64)],
+      );
+      for (const lang of ["kk", "en"]) {
+        const edited = await http()
+          .put(`/admin/translations/catalog_item/${pads}/name/${lang}`)
+          .set("X-Client", ADMIN_WEB)
+          .set("Authorization", `Bearer ${admin.accessToken}`)
+          .send({ text: `Колодки ${lang}` });
+        expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+      }
+      const trw = await itemByArticle("GDB3534");
+      await db.query(
+        `INSERT INTO translation_task (entity_type, entity_id, field, lang, status, failure, source_hash)
+         SELECT 'catalog_item', $1, 'name', 'en', 'failed', 'wrong_language',
+                encode(sha256(convert_to(t.text, 'UTF8')), 'hex')
+         FROM translation t
+         WHERE t.entity_type = 'catalog_item' AND t.entity_id = $1 AND t.field = 'name' AND t.lang = 'ru'
+         ON CONFLICT (entity_type, entity_id, field, lang)
+         DO UPDATE SET status = 'failed', failure = 'wrong_language'`,
+        [trw],
+      );
+      const rear = await itemByArticle("4050068800");
+      await db.query("UPDATE catalog_item SET status = 'draft' WHERE id = $1", [rear]);
+
+      const home = adminHomeSchema.parse((await asAdmin("get", "/admin/home", admin)).body);
+      for (const card of Object.keys(adminHomeCatalogFilters) as Array<
+        keyof typeof adminHomeCatalogFilters
+      >) {
+        const rows = await allRows(admin, adminHomeCatalogFilters[card]);
+        expect(rows.length, card).toBe(home.catalog[card]);
+        expect(rows.every((row) => row.status === "active")).toBe(true);
+      }
+      expect(home.catalog.withoutPhoto).toBeGreaterThan(0);
+      expect(home.catalog.itemsWithoutTranslation).toBeGreaterThan(0);
+
+      // The long way for the new rules: what they mean, not how they are written.
+      const noPhoto = await allRows(admin, adminHomeCatalogFilters.withoutPhoto);
+      expect(noPhoto.map((row) => row.id)).not.toContain(pads);
+      const { rows: activeIds } = await db.query<{ id: string }>(
+        "SELECT id FROM catalog_item WHERE status = 'active'",
+      );
+      const queue = await asAdmin(
+        "get",
+        "/admin/translations?entityType=catalog_item&limit=100",
+        admin,
+      );
+      const untranslated = new Set(
+        (queue.body.items as { entityId: string; state: string }[])
+          .filter((entry) => entry.state === "missing" || entry.state === "failed")
+          .map((entry) => entry.entityId),
+      );
+      const expected = activeIds.filter((row) => untranslated.has(row.id)).map((row) => row.id);
+      const listed = await allRows(admin, adminHomeCatalogFilters.itemsWithoutTranslation);
+      expect(listed.map((row) => row.id).sort()).toEqual(expected.sort());
+      expect(listed.map((row) => row.id)).toContain(trw);
+      expect(listed.map((row) => row.id)).not.toContain(pads);
+
+      // Without compatibility: a service never is, a covered part isn't.
+      const noCompatibility = await allRows(admin, adminHomeCatalogFilters.withoutCompatibility);
+      expect(noCompatibility.map((row) => row.id)).not.toContain(pads);
+      const { rows: services } = await db.query<{ id: string }>(
+        "SELECT id FROM catalog_item WHERE item_type = 'service'",
+      );
+      for (const service of services) {
+        expect(noCompatibility.map((row) => row.id)).not.toContain(service.id);
+      }
+    });
+
+    it("lists the offers of an item, filters by offers on sale and tells the archiving numbers", async () => {
+      const admin = await setUpAdmin();
+      const { supplierId } = await seedAll();
+      const pads = await itemByArticle("04465-0K090");
+      const trw = await itemByArticle("GDB3534");
+      await offerOn(supplierId, pads);
+      const withdrawn = await offerOn(supplierId, trw);
+      await db.query(
+        "UPDATE offer SET status = 'withdrawn', withdrawn_at = now(), withdrawn_reason = 'manual' WHERE id = $1",
+        [withdrawn],
+      );
+
+      const withOffers = await allRows(admin, { hasOffers: "true" });
+      expect(withOffers.map((row) => row.id)).toEqual([pads]);
+      expect(withOffers[0]!.offersOnSale).toBe(1);
+      const all = await allRows(admin, {});
+      expect(all.find((row) => row.id === trw)!.offersOnSale).toBe(0);
+
+      const response = await asAdmin("get", `/admin/catalog/items/${pads}/offers`, admin);
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      const offers = adminItemOffersResponseSchema.parse(response.body);
+      expect(offers.onSale).toBe(1);
+      expect(offers.activeOrders).toBe(0);
+      expect(offers.offers[0]).toMatchObject({
+        supplier: { id: supplierId, name: "Автомаркет" },
+        price: 12_500,
+        status: "active",
+      });
+      // The seeded point has its hours: the showcase shows the offer.
+      expect(offers.offers[0]!.showcase).toEqual({ visible: true, reasons: [] });
+
+      const trwOffers = adminItemOffersResponseSchema.parse(
+        (await asAdmin("get", `/admin/catalog/items/${trw}/offers`, admin)).body,
+      );
+      expect(trwOffers.onSale).toBe(0);
+      expect(trwOffers.offers.map((offer) => offer.status)).toEqual(["withdrawn"]);
+
+      expectError(
+        await asAdmin("get", `/admin/catalog/items/${uuid(99)}/offers`, admin),
+        404,
+        "NOT_FOUND",
+      );
+    });
+
+    it("keeps the history of an item: itself, its translations, photos and compatibility", async () => {
+      const admin = await setUpAdmin();
+      await seedAll();
+      const pads = await itemByArticle("04465-0K090");
+      const trw = await itemByArticle("GDB3534");
+      const edited = await http()
+        .put(`/admin/translations/catalog_item/${pads}/name/kk`)
+        .set("X-Client", ADMIN_WEB)
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ text: "Тежегіш қалыптары, сынақ" });
+      expect(edited.status).toBe(200);
+
+      const page = auditLogPageSchema.parse(
+        (await asAdmin("get", `/admin/audit-log?itemId=${pads}&limit=100`, admin)).body,
+      );
+      const kinds = new Set(page.entries.map((entry) => entry.entityType));
+      expect(kinds).toEqual(new Set(["catalog_item", "catalog_translation", "item_compatibility"]));
+      for (const entry of page.entries) {
+        const named =
+          entry.entityId === pads ||
+          (entry.after as { itemId?: string } | null)?.itemId === pads ||
+          (entry.before as { itemId?: string } | null)?.itemId === pads;
+        expect(named, JSON.stringify(entry)).toBe(true);
+      }
+      // The analog's own records are its history, not this item's.
+      const other = auditLogPageSchema.parse(
+        (await asAdmin("get", `/admin/audit-log?itemId=${trw}&limit=100`, admin)).body,
+      );
+      expect(other.entries.some((entry) => entry.entityId === pads)).toBe(false);
+      expect(other.entries.length).toBeGreaterThan(0);
+    });
+
+    it("checks one item against a car whatever its status, and locates attributes and options", async () => {
+      const admin = await setUpAdmin();
+      await seedAll();
+      const pads = await itemByArticle("04465-0K090");
+      const { rows: generations } = await db.query<{ id: string; make_id: string; name: string }>(
+        `SELECT g.id, m.make_id, g.name FROM vehicle_generation g
+         JOIN vehicle_model m ON m.id = g.model_id
+         JOIN vehicle_model_spelling s ON s.model_id = m.id AND s.is_name AND s.text = 'Atlas'
+         ORDER BY g.year_from`,
+      );
+      const second = generations.at(-1)!;
+      const first = generations[0]!;
+      const check = (vehicle: object | null) =>
+        asAdmin("post", `/admin/catalog/items/${pads}/compatibility/check`, admin, { vehicle });
+
+      const fits = adminCompatibilityCheckResponseSchema.parse(
+        (await check({ makeId: second.make_id, generationId: second.id })).body,
+      );
+      expect(fits.result.result).toBe("fits");
+      expect(fits.visibleToClients).toBe(true);
+      const wrong = adminCompatibilityCheckResponseSchema.parse(
+        (await check({ makeId: first.make_id, generationId: first.id })).body,
+      );
+      expect(wrong.result.result).toBe("does_not_fit");
+
+      // A draft is checked too; clients don't see it.
+      await db.query("UPDATE catalog_item SET status = 'draft' WHERE id = $1", [pads]);
+      const draft = adminCompatibilityCheckResponseSchema.parse(
+        (await check({ makeId: second.make_id, generationId: second.id })).body,
+      );
+      expect(draft.result.result).toBe("fits");
+      expect(draft.visibleToClients).toBe(false);
+      expectError(
+        await asAdmin("post", `/admin/catalog/items/${uuid(98)}/compatibility/check`, admin, {}),
+        404,
+        "NOT_FOUND",
+      );
+
+      const { rows: options } = await db.query<{
+        id: string;
+        attribute_id: string;
+        category_id: string;
+      }>(
+        `SELECT o.id, o.attribute_id, a.category_id FROM attribute_option o
+         JOIN attribute a ON a.id = o.attribute_id LIMIT 1`,
+      );
+      const option = options[0]!;
+      const byOption = catalogLocationSchema.parse(
+        (await asAdmin("get", `/admin/catalog/locate?optionId=${option.id}`, admin)).body,
+      );
+      expect(byOption).toEqual({
+        categoryId: option.category_id,
+        attributeId: option.attribute_id,
+        optionId: option.id,
+      });
+      const byAttribute = catalogLocationSchema.parse(
+        (await asAdmin("get", `/admin/catalog/locate?attributeId=${option.attribute_id}`, admin))
+          .body,
+      );
+      expect(byAttribute.optionId).toBeNull();
+      expectError(
+        await asAdmin(
+          "get",
+          `/admin/catalog/locate?attributeId=${option.attribute_id}&optionId=${option.id}`,
+          admin,
+        ),
+        400,
+        "VALIDATION_ERROR",
+      );
+      expectError(
+        await asAdmin("get", `/admin/catalog/locate?attributeId=${uuid(97)}`, admin),
+        404,
+        "NOT_FOUND",
+      );
+    });
+
+    it("is for administrators only", async () => {
+      const response = await http()
+        .get(`/admin/catalog/items/${uuid(5)}/offers`)
+        .set("X-Client", ADMIN_WEB);
       expectError(response, 401, "AUTH_REQUIRED");
     });
   });

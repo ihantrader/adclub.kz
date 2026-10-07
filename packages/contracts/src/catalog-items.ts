@@ -322,14 +322,36 @@ export const catalogItemListQuerySchema = z.object({
    * when the attributes that identify a product change (TASK-011.A).
    */
   sameProduct: z.enum(["matching"]).optional(),
+  /**
+   * The quality filters of the list (TASK-035; SCREENS A-CAT-04), each the
+   * very rule of the home screen's counter that leads here (A-HOME):
+   * `withoutPhoto` — no approved photo; `withoutCompatibility` — a part or
+   * a product of a subcategory where compatibility is required, with no
+   * approved record (clients don't see it, D-029); `withoutTranslation` —
+   * the name has no Kazakh or English text and none is on its way
+   * (`missing` or `failed` of `GET /admin/translations`); `hasOffers` — at
+   * least one offer on sale (active or suspended).
+   */
+  withoutPhoto: z.enum(["true"]).optional(),
+  withoutCompatibility: z.enum(["true"]).optional(),
+  withoutTranslation: z.enum(["true"]).optional(),
+  hasOffers: z.enum(["true"]).optional(),
   limit: pageLimitSchema,
   cursor: cursorSchema.optional(),
 });
 
 export type CatalogItemListQuery = z.infer<typeof catalogItemListQuerySchema>;
 
+/** A row of the items list: the item and how many offers it has on sale (TASK-035). */
+export const adminCatalogItemListEntrySchema = adminCatalogItemSchema.extend({
+  /** Offers on sale (active or suspended), the same count as `hasOffers` looks at. */
+  offersOnSale: z.number().int(),
+});
+
+export type AdminCatalogItemListEntry = z.infer<typeof adminCatalogItemListEntrySchema>;
+
 export const adminCatalogItemPageSchema = z.object({
-  items: z.array(adminCatalogItemSchema),
+  items: z.array(adminCatalogItemListEntrySchema),
   /** How many items match the filters, over all pages. */
   total: z.number().int(),
   nextCursor: z.string().nullable(),

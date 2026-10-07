@@ -487,6 +487,28 @@ export const adminAttributeOptionResponseSchema = z.object({ option: adminAttrib
 
 export type AdminAttributeOptionResponse = z.infer<typeof adminAttributeOptionResponseSchema>;
 
+/**
+ * `GET /admin/catalog/locate`: where an attribute or a list option lives in
+ * the tree — the journal opens the tree with it selected (TASK-035). Exactly
+ * one of the two is given.
+ */
+export const catalogLocateQuerySchema = z.object({
+  attributeId: z.uuid().optional(),
+  optionId: z.uuid().optional(),
+});
+
+export type CatalogLocateQuery = z.infer<typeof catalogLocateQuerySchema>;
+
+export const catalogLocationSchema = z.object({
+  /** The subcategory the attribute belongs to. */
+  categoryId: z.uuid(),
+  attributeId: z.uuid(),
+  /** The option, when one was asked for. */
+  optionId: z.uuid().nullable(),
+});
+
+export type CatalogLocation = z.infer<typeof catalogLocationSchema>;
+
 /** `details` of `CATALOG_VERSION_CONFLICT`. */
 export const catalogVersionConflictDetailsSchema = z.object({
   currentVersion: z.number().int(),

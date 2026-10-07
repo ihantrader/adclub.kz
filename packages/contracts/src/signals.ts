@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CatalogItemListQuery } from "./catalog-items";
 
 /**
  * Signals to the administrator (`admin_signal`, ARCHITECTURE 5.11, 6.5,
@@ -218,6 +219,19 @@ export const adminSignalConflictDetailsSchema = z.object({
 export type AdminSignalConflictDetails = z.infer<typeof adminSignalConflictDetailsSchema>;
 
 /**
+ * The filters of `GET /admin/catalog/items` behind each counter of the
+ * catalog's quality on the home screen (TASK-035): the server counts the
+ * list's `total` with exactly these, and the card opens the list with them —
+ * one place, so the number on the card and the rows of the list agree.
+ */
+export const adminHomeCatalogFilters = {
+  withoutPhoto: { status: "active", withoutPhoto: "true" },
+  incomplete: { status: "active", completeness: "incomplete" },
+  withoutCompatibility: { status: "active", withoutCompatibility: "true" },
+  itemsWithoutTranslation: { status: "active", withoutTranslation: "true" },
+} as const satisfies Record<string, Partial<Record<keyof CatalogItemListQuery, string>>>;
+
+/**
  * `GET /admin/home` (TASK-034, SCREENS A-HOME): the counters of the
  * administrator's queue of attention in one answer, in the order of
  * importance. Each counter is what the list it leads to would show.
@@ -268,6 +282,12 @@ export const adminHomeSchema = z.object({
      * `GET /admin/translations` (waiting ones are on their way).
      */
     withoutTranslation: z.number().int(),
+    /**
+     * Active items whose name lacks a Kazakh or English text with
+     * none on its way — the number of rows of `GET /admin/catalog/items`
+     * with `withoutTranslation=true&status=active` (TASK-035).
+     */
+    itemsWithoutTranslation: z.number().int(),
   }),
   /** When the counters were taken. */
   at: z.iso.datetime(),

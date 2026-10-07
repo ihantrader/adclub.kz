@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, Inject, Param, Query } from "@nestjs/common";
 import {
   apiRoutes,
+  adminItemOffersPathSchema,
   createOfferBodySchema,
   offerItemSearchQuerySchema,
   offerListQuerySchema,
@@ -9,6 +10,8 @@ import {
   offerStatusBodySchema,
   supplierOffersPathSchema,
   updateOfferBodySchema,
+  type AdminItemOffersPath,
+  type AdminItemOffersResponse,
   type CreateOfferBody,
   type OfferItemSearchQuery,
   type OfferItemSearchResponse,
@@ -172,5 +175,13 @@ export class OffersAdminController {
     @Headers("accept-language") acceptLanguage: string | undefined,
   ): Promise<OfferPage> {
     return this.offers.adminPage(params.supplierId, query, pickLanguage(acceptLanguage));
+  }
+
+  @SessionRoute(apiRoutes.listAdminItemOffers)
+  forItem(
+    @Param(new ZodValidationPipe(adminItemOffersPathSchema)) params: AdminItemOffersPath,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+  ): Promise<AdminItemOffersResponse> {
+    return this.offers.forItem(params.itemId, pickLanguage(acceptLanguage));
   }
 }

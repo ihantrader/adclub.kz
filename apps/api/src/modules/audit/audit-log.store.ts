@@ -50,6 +50,8 @@ export interface AuditLogFilter {
   entityId?: string;
   actorAccountId?: string;
   actorRole?: AuditActorRole;
+  /** The history of one catalog item: see `itemHistory`. */
+  itemId?: string;
   /** Only entries older than this position (keyset paging, `position` of an entry). */
   before?: { position: string; id: string };
   limit: number;
@@ -74,6 +76,35 @@ const columns = {
   createdAt: auditLog.createdAt,
   position: sql<string>`to_char(${auditLog.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
 };
+
+/**
+ * Entity types whose entries belong to one catalog item by naming it in
+ * `before`/`after` (`itemId`): its photos, compatibility records and
+ * proposals (TASK-013, TASK-015).
+ */
+const ITEM_PART_ENTITIES = [
+  "catalog_item_photo",
+  "item_compatibility",
+  "item_compatibility_proposal",
+] as const;
+
+/**
+ * The history of one catalog item (SCREENS A-CAT-05 «История»; TASK-035):
+ * the entries about the item and its translations (their entity is the
+ * item), and those about its parts, which name it. Read from the journal
+ * alone — the journal doesn't ask the catalog's tables.
+ */
+function itemHistory(itemId: string): SQL {
+  const parts = sql.join(
+    ITEM_PART_ENTITIES.map((entity) => sql`${entity}`),
+    sql`, `,
+  );
+  return sql`(
+    (${auditLog.entityType} IN ('catalog_item', 'catalog_translation') AND ${auditLog.entityId} = ${itemId})
+    OR (${auditLog.entityType} IN (${parts})
+      AND (${auditLog.after} ->> 'itemId' = ${itemId} OR ${auditLog.before} ->> 'itemId' = ${itemId}))
+  )`;
+}
 
 /**
  * Persistence of `audit_log` (ARCHITECTURE 4.13). Writing takes the
@@ -102,6 +133,7 @@ export class AuditLogStore {
       filter.entityId ? eq(auditLog.entityId, filter.entityId) : undefined,
       filter.actorAccountId ? eq(auditLog.actorAccountId, filter.actorAccountId) : undefined,
       filter.actorRole ? eq(auditLog.actorRole, filter.actorRole) : undefined,
+      filter.itemId ? itemHistory(filter.itemId) : undefined,
       // Keyset paging: everything strictly older than the last entry read.
       // Compared at the database's own precision (microseconds), never
       // through a JavaScript `Date`.

@@ -320,6 +320,37 @@ export const offerPageSchema = z.object({
 
 export type OfferPage = z.infer<typeof offerPageSchema>;
 
+/** Path of `GET /admin/catalog/items/{itemId}/offers`. */
+export const adminItemOffersPathSchema = z.object({ itemId: z.uuid() });
+
+export type AdminItemOffersPath = z.infer<typeof adminItemOffersPathSchema>;
+
+/** An offer of the item as the admin panel shows it: the offer and whose it is. */
+export const adminItemOfferSchema = supplierOfferSchema.extend({
+  supplier: z.object({ id: z.uuid(), name: z.string() }),
+});
+
+export type AdminItemOffer = z.infer<typeof adminItemOfferSchema>;
+
+/**
+ * `GET /admin/catalog/items/{itemId}/offers` (SCREENS A-CAT-05 «Предложения»,
+ * read only; TASK-035): every offer of the item — on sale first, newest
+ * first — with whether the showcase shows it and why not, and the counts
+ * the archiving of the item warns about («У позиции N предложений и M
+ * активных заявок»).
+ */
+export const adminItemOffersResponseSchema = z.object({
+  itemId: z.uuid(),
+  language: catalogLanguageSchema,
+  offers: z.array(adminItemOfferSchema),
+  /** Offers on sale (active or suspended). */
+  onSale: z.number().int(),
+  /** Orders still going through over all offers of the item (`activeOrderStatuses`). */
+  activeOrders: z.number().int(),
+});
+
+export type AdminItemOffersResponse = z.infer<typeof adminItemOffersResponseSchema>;
+
 /**
  * `GET /supplier/catalog/items/search` (S-OFF-02): only by a query of at
  * least `OFFER_ITEM_SEARCH_MIN_LENGTH` letters or digits — a part of the

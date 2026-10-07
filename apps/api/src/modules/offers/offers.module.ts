@@ -1,5 +1,6 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { OfferItemSearch } from "./offer-item-search.service";
+import { OfferListRule } from "./offer-list-rule";
 import { OfferSnapshots } from "./offer-snapshots";
 import { OffersAdminController, OffersCabinetController } from "./offers.controller";
 import { OffersService } from "./offers.service";
@@ -27,7 +28,7 @@ export class OffersModule {
       module: OffersModule,
       imports: [options.catalog],
       controllers: options.http ? [OffersCabinetController, OffersAdminController] : [],
-      providers: [OffersService, OfferItemSearch, OfferSnapshots],
+      providers: [OffersService, OfferItemSearch, OfferSnapshots, OfferListRule],
       exports: [OffersService, OfferSnapshots],
     };
   }

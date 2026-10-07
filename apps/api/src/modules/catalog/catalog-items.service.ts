@@ -63,7 +63,9 @@ import {
 import { checkValue, journalValue, sameValue, valueOf, type StoredColumns } from "./catalog-values";
 import { refreshItemsCompleteness } from "./completeness";
 import { sameProductItemIds } from "./same-products";
+import { CatalogItemListRules, withoutApprovedPhoto } from "./item-list-rules";
 import { TranslationQueue } from "./translation-queue.service";
+import { itemWithoutTranslation } from "./translation-states";
 import {
   attribute,
   attributeOption,
@@ -151,26 +153,18 @@ export class CatalogItemsService {
     @Inject(CatalogBrandsService) private readonly brands: CatalogBrandsService,
     @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
     @Inject(TranslationQueue) private readonly translations: TranslationQueue,
+    @Inject(CatalogItemListRules) private readonly listRules: CatalogItemListRules,
   ) {}
 
   // ---------------------------------------------------------------- reads
 
   /**
-   * Active items with no approved photo (TASK-034, A-HOME «Без фото»): the
-   * client catalog shows them with a placeholder (TASK-013).
+   * The admin items list (A-CAT-04). Its quality filters are the rules of
+   * the home screen's counters (A-HOME): the counters are `total` of this
+   * very method with the same filters (TASK-035; ARCHITECTURE 4.53).
    */
-  async countActiveWithoutPhoto(): Promise<number> {
-    const result = await this.database.db.execute<{ n: string }>(sql`
-      SELECT count(*)::text AS n FROM catalog_item i
-      WHERE i.status = 'active'
-        AND NOT EXISTS (
-          SELECT 1 FROM item_photo p WHERE p.item_id = i.id AND p.status = 'approved'
-        )
-    `);
-    return Number(result.rows[0]?.n ?? 0);
-  }
-
   async page(query: CatalogItemListQuery): Promise<AdminCatalogItemPage> {
+    const item = sql`${catalogItem.id}`;
     const filters: (SQL | undefined)[] = [
       query.categoryId ? eq(catalogItem.categoryId, query.categoryId) : undefined,
       query.brandId ? eq(catalogItem.brandId, query.brandId) : undefined,
@@ -181,8 +175,20 @@ export class CatalogItemsService {
       query.sameProduct === "matching"
         ? sql`${catalogItem.id} IN (${sameProductItemIds(query.categoryId)})`
         : undefined,
+      query.withoutPhoto === "true" ? withoutApprovedPhoto(item) : undefined,
+      query.withoutTranslation === "true" ? itemWithoutTranslation(item) : undefined,
+      query.withoutCompatibility === "true" ? this.listRules.withoutCompatibility(item) : undefined,
+      query.hasOffers === "true" ? this.listRules.hasOffersOnSale(item) : undefined,
     ];
-    return this.pageOf(filters, query.limit, query.cursor);
+    const page = await this.pageOf(filters, query.limit, query.cursor);
+    const offers = await this.listRules.offersOnSale(
+      this.database.db,
+      page.items.map((entry) => entry.id),
+    );
+    return {
+      ...page,
+      items: page.items.map((entry) => ({ ...entry, offersOnSale: offers.get(entry.id) ?? 0 })),
+    };
   }
 
   async card(
@@ -1127,7 +1133,7 @@ export class CatalogItemsService {
     filters: readonly (SQL | undefined)[],
     limit: number,
     cursor: string | undefined,
-  ): Promise<AdminCatalogItemPage> {
+  ): Promise<{ items: AdminCatalogItem[]; total: number; nextCursor: string | null }> {
     const executor = this.database.db;
     const after = cursor ? decodeCursor(cursor) : undefined;
     if (after && !TIME_POSITION.test(after.position)) {

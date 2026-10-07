@@ -1,6 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   COMPATIBILITY_CHECK_CATEGORY_PAGE_MAX,
+  type AdminCompatibilityCheckBody,
+  type AdminCompatibilityCheckResponse,
   type CompatibilityCheckBody,
   type CompatibilityCheckResponse,
   type CompatibilityItemResult,
@@ -142,6 +144,39 @@ export class CompatibilityEvaluator {
     };
   }
 
+  /**
+   * The admin panel's check of one item (TASK-035; SCREENS A-CAT-05): the
+   * same statement and rules as everyone's, over the item whatever its
+   * status — a draft or an item of a hidden subcategory is checked before
+   * it reaches clients. An unknown item — 404.
+   */
+  async checkForAdmin(
+    itemId: string,
+    body: AdminCompatibilityCheckBody,
+  ): Promise<AdminCompatibilityCheckResponse> {
+    const executor = this.database.db;
+    const visibility = await executor.execute<{ visible: boolean }>(sql`
+      SELECT (i.status = 'active' AND c.status = 'active' AND p.status = 'active') AS visible
+      FROM catalog_item i
+      JOIN category c ON c.id = i.category_id
+      JOIN category p ON p.id = c.parent_id
+      WHERE i.id = ${itemId}::uuid
+    `);
+    const found = visibility.rows[0];
+    if (!found) {
+      throw notFound("item");
+    }
+    const vehicle = body.vehicle ? await resolveVehicle(executor, body.vehicle) : null;
+    const [row] = await this.facts(
+      vehicle,
+      { kind: "items", itemIds: [itemId] },
+      executor,
+      undefined,
+      "any",
+    );
+    return { vehicle, result: row!.result, visibleToClients: found.visible };
+  }
+
   /** One page of a subcategory, newest items first, and the cursor of the next one. */
   async evaluatePage(
     vehicle: ResolvedCompatibilityVehicle | null,
@@ -182,12 +217,17 @@ export class CompatibilityEvaluator {
     return answers;
   }
 
-  /** The one statement: the result per item of the scope, with each item's position. */
+  /**
+   * The one statement: the result per item of the scope, with each item's
+   * position. `visibility` `clients` — only what a client can see; `any`
+   * — the admin panel's check of one item.
+   */
   private async facts(
     vehicle: ResolvedCompatibilityVehicle | null,
     scope: CompatibilityScope,
     executor: DbExecutor,
     page: CompatibilityPage | undefined,
+    visibility: "clients" | "any" = "clients",
   ): Promise<{ result: CompatibilityItemResult; position: string }[]> {
     if (scope.kind === "items" && scope.itemIds.length === 0) {
       return [];
@@ -264,7 +304,7 @@ export class CompatibilityEvaluator {
         JOIN category c ON c.id = i.category_id
         JOIN category p ON p.id = c.parent_id
         WHERE ${scopeFilter}
-          AND i.status = 'active' AND c.status = 'active' AND p.status = 'active'
+          ${visibility === "clients" ? sql`AND i.status = 'active' AND c.status = 'active' AND p.status = 'active'` : sql``}
           ${afterFilter}
         ORDER BY i.created_at DESC, i.id DESC
         ${pageLimit}

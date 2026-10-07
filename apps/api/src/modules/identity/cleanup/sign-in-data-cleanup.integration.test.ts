@@ -374,6 +374,8 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       { name: "orders.cleanup-idempotency-keys", cron: "* * * * *", timezone: "Asia/Almaty" },
       // The detector of an outage of the channel of order notices (TASK-025).
       { name: "orders.watch-notice-channel", cron: "* * * * *", timezone: "Asia/Almaty" },
+      // The detector of a supplier no notice can reach (TASK-034, D-061).
+      { name: "orders.watch-supplier-reach", cron: "* * * * *", timezone: "Asia/Almaty" },
       // Imports of the vehicle catalog stuck longer than allowed (TASK-014).
       { name: "vehicles.expire-imports", cron: "* * * * *", timezone: "Asia/Almaty" },
     ]);
@@ -437,6 +439,7 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
       "orders.apply-deadlines",
       "orders.cleanup-idempotency-keys",
       "orders.watch-notice-channel",
+      "orders.watch-supplier-reach",
       "dev.always-fails",
       "dev.daily-at-setting",
     ]);

@@ -15,15 +15,17 @@ import {
   Button,
   Dialog,
   LoadingContent,
-  SearchField,
   Segments,
   SkeletonList,
   TextField,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../api";
+import { SearchSelect } from "../search-select/SearchSelect";
+import { SEARCH_PAGE, type Choice } from "../search-select/search-select-core";
+import { brandChoice } from "../search-select/sources";
 import { catalogItemPath, navigateTo, routePaths, useLocation } from "../router";
 import { useLoad } from "../use-load";
 import {
@@ -459,33 +461,24 @@ function BrandPicker({
   onChange: (brand: CatalogItemBrand | null) => void;
   error?: string;
 }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<{ q: string; brands: AdminBrand[] }>({
-    q: "",
-    brands: [],
-  });
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newAliases, setNewAliases] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
-  // Only the answer to what is typed now is shown.
-  const found = results.q && results.q === query.trim() ? results.brands : [];
 
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      apiClient.listAdminBrands({ query: { q, limit: 10, status: "active" } }).then(
-        (page) => !cancelled && setResults({ q, brands: page.brands }),
-        () => !cancelled && setResults({ q, brands: [] }),
-      );
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query]);
+  // The brands the search found, by id: the item keeps the brand as the server described it.
+  const found = useRef(new Map<string, AdminBrand>());
+  const activeBrandSearch = useMemo(
+    () =>
+      async (query: string): Promise<Choice[]> => {
+        const page = await apiClient.listAdminBrands({
+          query: { ...(query ? { q: query } : {}), status: "active", limit: SEARCH_PAGE },
+        });
+        for (const entry of page.brands) found.current.set(entry.id, entry);
+        return page.brands.map(brandChoice);
+      },
+    [],
+  );
 
   const create = async () => {
     setCreateError(null);
@@ -513,55 +506,46 @@ function BrandPicker({
 
   return (
     <div className="brand-picker">
-      <span className="ac-text-caption ac-muted">Бренд</span>
-      {brand ? (
-        <div className="button-row">
-          <span className="ac-text-body-strong">{brand.name}</span>
-          {brand.status === "archived" && <span className="warning-text">в архиве</span>}
-          <Button variant="text" size="s" onClick={() => onChange(null)}>
-            Сменить
+      <SearchSelect
+        label="Бренд"
+        value={
+          brand
+            ? {
+                id: brand.id,
+                label: brand.name,
+                note: brand.status === "archived" ? "в архиве" : null,
+                muted: brand.status === "archived",
+              }
+            : null
+        }
+        empty="Без бренда"
+        placeholder="Найдите бренд по любому написанию"
+        search={activeBrandSearch}
+        onChange={(choice) => {
+          const entry = choice ? found.current.get(choice.id) : undefined;
+          onChange(
+            choice && entry
+              ? { id: entry.id, name: entry.name, isOem: entry.isOem, status: entry.status }
+              : null,
+          );
+        }}
+        footer={(typed, close) => (
+          <Button
+            variant="text"
+            size="s"
+            icon="plus"
+            onClick={() => {
+              setCreating(true);
+              setNewName(typed);
+              close();
+            }}
+          >
+            {typed ? `Новый бренд «${typed}»` : "Новый бренд"}
           </Button>
-        </div>
-      ) : (
+        )}
+      />
+      {!brand && (
         <>
-          <SearchField
-            label="Найти бренд по любому написанию"
-            value={query}
-            onChange={setQuery}
-            clearLabel="Очистить"
-          />
-          {found.length > 0 && (
-            <ul className="pick-list">
-              {found.map((entry) => (
-                <li key={entry.id}>
-                  <button
-                    type="button"
-                    className="pick-list__item"
-                    onClick={() => {
-                      onChange({
-                        id: entry.id,
-                        name: entry.name,
-                        isOem: entry.isOem,
-                        status: entry.status,
-                      });
-                      setQuery("");
-                    }}
-                  >
-                    <span className="ac-text-body-strong">{entry.name}</span>
-                    {entry.aliases.length > 0 && (
-                      <span className="ac-text-caption ac-muted">
-                        {" "}
-                        · {entry.aliases.join(", ")}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {query.trim() && found.length === 0 && (
-            <span className="ac-text-caption ac-muted">Не нашлось — можно создать новый бренд</span>
-          )}
           {creating ? (
             <div className="localized-fields">
               <TextField label="Название бренда" value={newName} onChange={setNewName} />
@@ -581,19 +565,7 @@ function BrandPicker({
                 </Button>
               </div>
             </div>
-          ) : (
-            <Button
-              variant="text"
-              size="s"
-              icon="plus"
-              onClick={() => {
-                setCreating(true);
-                setNewName(query.trim());
-              }}
-            >
-              Новый бренд
-            </Button>
-          )}
+          ) : null}
         </>
       )}
       {error && <span className="dialog-error">{error}</span>}

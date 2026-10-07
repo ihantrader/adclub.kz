@@ -1,5 +1,4 @@
 import type {
-  AdminBrandPage,
   AdminCategoryTreeResponse,
   AdminCatalogItemListEntry,
   AdminCatalogItemPage,
@@ -17,6 +16,9 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
 import { catalogItemPath, navigateTo, routePaths, useLocation } from "../router";
+import { SearchSelect } from "../search-select/SearchSelect";
+import type { Choice } from "../search-select/search-select-core";
+import { createChoiceSources } from "../search-select/sources";
 import { useLoad } from "../use-load";
 import { ITEM_STATUS_TEXT, ITEM_TYPE_TEXT } from "./catalog-words";
 import {
@@ -31,6 +33,9 @@ import { AppLink, CatalogTabs } from "./shared";
 import { ruText } from "./values";
 
 const PAGE = 50;
+
+/** Brands of every status: an archived brand's items are found too. */
+const brandSearch = createChoiceSources(apiClient).brands();
 
 /** The checkbox filters of A-CAT-04, each the rule of a home card where there is one. */
 const FLAGS: { key: ItemFilterKey; value: string; label: string }[] = [
@@ -67,10 +72,14 @@ export function Items() {
     apiClient.listAdminCatalogItems({ query: listQueryOf(filters, { limit: PAGE, cursor }) });
   const first = useLoad<AdminCatalogItemPage>(() => request(), key);
   const tree = useLoad<AdminCategoryTreeResponse>(() => apiClient.listAdminCategories(), "tree");
-  const brands = useLoad<AdminBrandPage>(
-    () => apiClient.listAdminBrands({ query: { limit: 100 } }),
-    "brands",
-  );
+  // The chosen brand's name: from this page's rows, else what was chosen here.
+  const [brandLabel, setBrandLabel] = useState<Choice | null>(null);
+  const brandOfRows = first.data?.items.find((item) => item.brand?.id === filters.brandId)?.brand;
+  const brand: Choice | null = !filters.brandId
+    ? null
+    : brandLabel?.id === filters.brandId
+      ? brandLabel
+      : { id: filters.brandId, label: brandOfRows?.name ?? "Выбранный бренд" };
   const [more, setMore] = useState<{
     key: string;
     items: AdminCatalogItemListEntry[];
@@ -160,20 +169,16 @@ export function Items() {
             ))}
           </select>
         </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Бренд</span>
-          <select
-            value={filters.brandId ?? ""}
-            onChange={(event) => set({ brandId: event.target.value || undefined })}
-          >
-            <option value="">Все</option>
-            {(brands.data?.brands ?? []).map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SearchSelect
+          label="Бренд"
+          value={brand}
+          empty="Все"
+          search={brandSearch}
+          onChange={(choice) => {
+            setBrandLabel(choice);
+            set({ brandId: choice?.id });
+          }}
+        />
         <label className="select">
           <span className="ac-text-caption ac-muted">Тип</span>
           <select

@@ -1,8 +1,4 @@
 import type {
-  AdminVehicleEngine,
-  AdminVehicleGeneration,
-  AdminVehicleMake,
-  AdminVehicleModel,
   AdminVehicleOption,
   CompatibilityConditions,
   CompatibilityConditionsInput,
@@ -10,8 +6,18 @@ import type {
   CompatibilityVehicle,
 } from "@adclub/contracts";
 import { TextField } from "@adclub/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api";
+import { SearchSelect } from "../search-select/SearchSelect";
+import type { Choice } from "../search-select/search-select-core";
+import { createChoiceSources } from "../search-select/sources";
+
+const sources = createChoiceSources(apiClient);
+
+/** The levels chosen by searching the server (lists that can be long). */
+type SearchedLevel = "makeId" | "modelId" | "generationId" | "engineId";
+
+type ChoiceSourceOf = ReturnType<ReturnType<typeof createChoiceSources>["makes"]>;
 
 /** The levels of a car being chosen, as the selects hold them ("" — any / unknown). */
 export interface VehicleChoice {
@@ -106,32 +112,20 @@ export function labelText(label: CompatibilityConditionsLabel): string {
     .join(" · ");
 }
 
-interface Book {
-  makes: AdminVehicleMake[];
-  engines: AdminVehicleEngine[];
-  options: AdminVehicleOption[];
-}
-
-/** The vehicle catalog the selects choose from: active entries (archived ones stay in old records). */
-function useBook(): Book | null {
-  const [book, setBook] = useState<Book | null>(null);
+/** The reference lists the selects choose from: a few dozen options, loaded whole. */
+function useOptions(): AdminVehicleOption[] {
+  const [options, setOptions] = useState<AdminVehicleOption[]>([]);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      apiClient.listVehicleMakes({ query: { status: "active", limit: 100 } }),
-      apiClient.listVehicleEngines({ query: { status: "active", limit: 100 } }),
-      apiClient.listVehicleOptions({ query: { status: "active" } }),
-    ]).then(
-      ([makes, engines, options]) =>
-        !cancelled &&
-        setBook({ makes: makes.makes, engines: engines.engines, options: options.options }),
-      () => !cancelled && setBook({ makes: [], engines: [], options: [] }),
+    apiClient.listVehicleOptions({ query: { status: "active" } }).then(
+      (answer) => !cancelled && setOptions(answer.options),
+      () => undefined,
     );
     return () => {
       cancelled = true;
     };
   }, []);
-  return book;
+  return options;
 }
 
 /**
@@ -157,46 +151,53 @@ export function VehicleFields({
   errorField?: string | null;
   errorText?: string | null;
 }) {
-  const book = useBook();
-  // Each list belongs to the level above it; a list of another make or model isn't shown.
-  const [modelsOf, setModelsOf] = useState<{ makeId: string; models: AdminVehicleModel[] }>({
-    makeId: "",
-    models: [],
-  });
-  const [generationsOf, setGenerationsOf] = useState<{
-    modelId: string;
-    generations: AdminVehicleGeneration[];
-  }>({ modelId: "", generations: [] });
-  const models = modelsOf.makeId === value.makeId ? modelsOf.models : [];
-  const generations = generationsOf.modelId === value.modelId ? generationsOf.generations : [];
-
-  useEffect(() => {
-    const makeId = value.makeId;
-    if (!makeId) return;
-    let cancelled = false;
-    apiClient.listVehicleModels({ query: { makeId, status: "active", limit: 100 } }).then(
-      (page) => !cancelled && setModelsOf({ makeId, models: page.models }),
-      () => !cancelled && setModelsOf({ makeId, models: [] }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [value.makeId]);
-
-  useEffect(() => {
-    const modelId = value.modelId;
-    if (!modelId) return;
-    let cancelled = false;
-    apiClient.listVehicleGenerations({ query: { modelId, status: "active", limit: 100 } }).then(
-      (page) => !cancelled && setGenerationsOf({ modelId, generations: page.generations }),
-      () => !cancelled && setGenerationsOf({ modelId, generations: [] }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [value.modelId]);
+  const options = useOptions();
+  // The entries chosen here, by level: what the field shows (records name theirs in `labels`).
+  const [chosen, setChosen] = useState<Partial<Record<SearchedLevel, Choice>>>({});
+  const shown = (level: SearchedLevel, fallback?: string | null): Choice | null => {
+    const id = value[level];
+    if (!id) return null;
+    const known = chosen[level];
+    return known && known.id === id ? known : { id, label: fallback ?? "выбрано ранее" };
+  };
+  const pick = (level: SearchedLevel, choice: Choice | null, patch: Partial<VehicleChoice>) => {
+    setChosen((now) => ({ ...now, [level]: choice ?? undefined }));
+    // The levels below are cleared only when this one really changes.
+    const changed = (choice?.id ?? "") !== value[level];
+    onChange({ ...value, [level]: choice?.id ?? "", ...(changed ? patch : {}) });
+  };
+  const searched = (
+    level: SearchedLevel,
+    label: string,
+    search: ChoiceSourceOf,
+    sourceKey: string,
+    patch: Partial<VehicleChoice>,
+    fallback?: string | null,
+    extra: { empty?: string; disabled?: boolean; placeholder?: string } = {},
+  ) => (
+    <SearchSelect
+      key={level}
+      label={label}
+      name={level}
+      value={shown(level, fallback)}
+      onChange={(choice) => pick(level, choice, patch)}
+      search={search}
+      sourceKey={sourceKey}
+      empty={extra.empty}
+      disabled={extra.disabled}
+      placeholder={extra.placeholder}
+      error={errorField === level ? errorText : null}
+    />
+  );
 
   const anyText = mode === "conditions" ? "Любой" : "Не знаю";
+  const makeSearch = useMemo(() => sources.makes("active"), []);
+  const engineSearch = useMemo(() => sources.engines("active"), []);
+  const modelSearch = useMemo(() => sources.models(value.makeId, "active"), [value.makeId]);
+  const generationSearch = useMemo(
+    () => sources.generations(value.modelId, "active"),
+    [value.modelId],
+  );
   const field = (
     name: string,
     label: string,
@@ -214,11 +215,7 @@ export function VehicleFields({
           aria-invalid={errorField === name || undefined}
           onChange={(event) => onChange({ ...value, ...patch(event.target.value) })}
         >
-          {name === "makeId" ? (
-            <option value="">Выберите марку</option>
-          ) : (
-            <option value="">{anyText}</option>
-          )}
+          <option value="">{anyText}</option>
           {current && !known && <option value={current}>{fallback ?? "выбрано ранее"}</option>}
           {entries.map((entry) => (
             <option key={entry.id} value={entry.id}>
@@ -230,70 +227,57 @@ export function VehicleFields({
       </label>
     );
   };
-  const options = (kind: AdminVehicleOption["kind"]) =>
-    (book?.options ?? [])
+  const optionsOf = (kind: AdminVehicleOption["kind"]) =>
+    options
       .filter((option) => option.kind === kind)
       .map((option) => ({ id: option.id, text: option.names.ru }));
 
   return (
     <div className="vehicle-fields">
-      {field(
+      {searched(
         "makeId",
         "Марка",
-        value.makeId,
-        (book?.makes ?? []).map((make) => ({ id: make.id, text: make.name })),
-        (makeId) => ({ makeId, modelId: "", generationId: "" }),
+        makeSearch,
+        "makes",
+        { modelId: "", generationId: "" },
         labels?.make,
+        { placeholder: "Найдите марку" },
       )}
-      {field(
+      {searched(
         "modelId",
         "Модель",
-        value.modelId,
-        models.map((model) => ({ id: model.id, text: model.name })),
-        (modelId) => ({ modelId, generationId: "" }),
+        modelSearch,
+        value.makeId,
+        { generationId: "" },
         labels?.model,
+        { empty: anyText, disabled: !value.makeId },
       )}
-      {field(
+      {searched(
         "generationId",
         "Поколение",
-        value.generationId,
-        generations.map((generation) => ({
-          id: generation.id,
-          text: `${generation.name} (${generation.yearFrom}–${generation.yearTo ?? "н.в."})`,
-        })),
-        (generationId) => ({ generationId }),
+        generationSearch,
+        value.modelId,
+        {},
         labels?.generation,
+        { empty: anyText, disabled: !value.modelId },
       )}
       {field(
         "bodyTypeId",
         "Кузов",
         value.bodyTypeId,
-        options("body"),
+        optionsOf("body"),
         (bodyTypeId) => ({ bodyTypeId }),
         labels?.body,
       )}
-      {field(
-        "engineId",
-        "Двигатель",
-        value.engineId,
-        (book?.engines ?? []).map((engine) => ({
-          id: engine.id,
-          text: [
-            engine.code,
-            engine.displacementL ? `${String(engine.displacementL).replace(".", ",")} л` : null,
-            engine.powerHp ? `${engine.powerHp} л.с.` : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        })),
-        (engineId) => ({ engineId }),
-        labels?.engine,
-      )}
+      {searched("engineId", "Двигатель", engineSearch, "engines", {}, labels?.engine, {
+        empty: anyText,
+        placeholder: "Код двигателя",
+      })}
       {field(
         "transmissionTypeId",
         "КПП",
         value.transmissionTypeId,
-        options("transmission"),
+        optionsOf("transmission"),
         (transmissionTypeId) => ({ transmissionTypeId }),
         labels?.transmission,
       )}
@@ -301,7 +285,7 @@ export function VehicleFields({
         "driveTypeId",
         "Привод",
         value.driveTypeId,
-        options("drive"),
+        optionsOf("drive"),
         (driveTypeId) => ({ driveTypeId }),
         labels?.drive,
       )}

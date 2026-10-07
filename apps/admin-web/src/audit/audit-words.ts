@@ -1,5 +1,14 @@
 import type { AuditActor, AuditActorRole } from "@adclub/contracts";
-import { catalogItemPath, routePaths, settingHistoryPath, withQuery } from "../router";
+import {
+  catalogItemPath,
+  routePaths,
+  settingHistoryPath,
+  vehicleGenerationPath,
+  vehicleImportPath,
+  vehicleMakePath,
+  vehicleModelPath,
+  withQuery,
+} from "../router";
 
 /**
  * The words of A-AUD (TASK-034 requirement 5): an action of the journal in
@@ -63,6 +72,7 @@ const ACTIONS: Record<string, string> = {
   "vehicle_option.created": "Создано значение справочника автомобилей",
   "vehicle_option.changed": "Изменено значение справочника автомобилей",
   "vehicle_option.status_changed": "Изменён статус значения справочника автомобилей",
+  "vehicle_option.reordered": "Изменён порядок справочного списка автомобилей",
   "vehicle_make.created": "Создана марка",
   "vehicle_make.changed": "Изменена марка",
   "vehicle_make.status_changed": "Изменён статус марки",
@@ -251,6 +261,30 @@ export function entityLink(
       return routePaths.cities;
     case "admin_user":
       return routePaths.security;
+    // The vehicle catalog (TASK-035.B): a level opens with what lies under it.
+    case "vehicle_make":
+      return UUID.test(entityId) ? vehicleMakePath(entityId) : null;
+    case "vehicle_model":
+      return UUID.test(entityId) ? vehicleModelPath(entityId) : null;
+    case "vehicle_generation":
+      return UUID.test(entityId) ? vehicleGenerationPath(entityId) : null;
+    case "vehicle_modification": {
+      const generationId = named(payload, "generationId");
+      return generationId && UUID.test(generationId) && UUID.test(entityId)
+        ? vehicleGenerationPath(generationId, entityId)
+        : null;
+    }
+    case "vehicle_engine":
+      return routePaths.vehicleEngines;
+    case "vehicle_option": {
+      const kind = named(payload, "kind");
+      return withQuery(routePaths.vehicleOptions, {
+        kind: kind ?? undefined,
+        highlight: UUID.test(entityId) ? entityId : undefined,
+      });
+    }
+    case "vehicle_import":
+      return UUID.test(entityId) ? vehicleImportPath(entityId) : null;
     default:
       return null;
   }

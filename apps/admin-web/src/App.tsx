@@ -22,6 +22,12 @@ import { ClientPolicy } from "./settings/ClientPolicy";
 import { SettingHistory } from "./settings/SettingHistory";
 import { Thresholds } from "./settings/Thresholds";
 import { Signals } from "./signals/Signals";
+import { Engines } from "./vehicles/Engines";
+import { GenerationPage, ModelPage } from "./vehicles/Generations";
+import { ImportReport } from "./vehicles/ImportReport";
+import { Imports } from "./vehicles/Imports";
+import { MakePage, Makes } from "./vehicles/Makes";
+import { Options } from "./vehicles/Options";
 
 /**
  * The admin panel (TASK-034): which screen the page shows follows only from
@@ -141,7 +147,21 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
     case "catalogProposals":
       return <Proposals />;
     case "vehicles":
-      return <Coming title="Автомобили" icon="car" task={comingSections.vehicles!} />;
+      return <Makes />;
+    case "vehicleEngines":
+      return <Engines />;
+    case "vehicleOptions":
+      return <Options />;
+    case "vehicleImports":
+      return <Imports />;
+    case "vehicleMake":
+      return id ? <MakePage key={id} makeId={id} /> : null;
+    case "vehicleModel":
+      return id ? <ModelPage key={id} modelId={id} /> : null;
+    case "vehicleGeneration":
+      return id ? <GenerationPage key={id} generationId={id} /> : null;
+    case "vehicleImport":
+      return id ? <ImportReport key={id} importId={id} /> : null;
     case "suppliers":
       return <Coming title="Поставщики" icon="store" task={comingSections.suppliers!} />;
     case "orders":

@@ -70,6 +70,23 @@ describe("the words of the journal", () => {
     expect(entityLink("order", "x")).toBeNull();
   });
 
+  it("opens a level of the vehicle catalog with what lies under it, and an import (TASK-035.B)", () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const generation = "00000000-0000-4000-8000-000000000002";
+    expect(entityLink("vehicle_make", id)).toBe(`/vehicles/makes/${id}`);
+    expect(entityLink("vehicle_model", id)).toBe(`/vehicles/models/${id}`);
+    expect(entityLink("vehicle_generation", id)).toBe(`/vehicles/generations/${id}`);
+    expect(entityLink("vehicle_modification", id, { after: { generationId: generation } })).toBe(
+      `/vehicles/generations/${generation}?highlight=${id}`,
+    );
+    expect(entityLink("vehicle_modification", id, { after: { status: "archived" } })).toBeNull();
+    expect(entityLink("vehicle_option", id, { after: { kind: "body", order: [] } })).toBe(
+      `/vehicles/options?kind=body&highlight=${id}`,
+    );
+    expect(entityLink("vehicle_import", id)).toBe(`/vehicles/imports/${id}`);
+    expect(entityLink("vehicle_make", "not-an-id")).toBeNull();
+  });
+
   it("opens a catalog object: an item's card, the tree on a node, an attribute or an option", () => {
     const id = "00000000-0000-4000-8000-000000000001";
     const item = "00000000-0000-4000-8000-000000000002";

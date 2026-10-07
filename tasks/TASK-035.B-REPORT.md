@@ -1,7 +1,7 @@
 # TASK REPORT — TASK-035.B
 
 ## Status
-COMPLETED — 9/9 AC (AC-8 «CI на main — success» — см. Verification, заполняется после push).
+COMPLETED — 9/9 AC. CI на `main` — success (run 37663153221, попытка 2).
 
 ## Result
 В админке (`http://localhost:5174`) появился раздел **«Автомобили»** — справочник автомобилей и импорт ведутся экранами, а не запросами к API:
@@ -37,9 +37,10 @@ COMPLETED — 9/9 AC (AC-8 «CI на main — success» — см. Verification, 
 - `access.integration.test.ts`, тест списка админских маршрутов — PASS (1 passed).
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` — PASS (exit 0).
 - `pnpm --filter @adclub/admin-web test` — PASS, 51/51 (новые: `search-select.test.ts`, `vehicle-words.test.ts`, адреса автомобилей, ссылки журнала).
-- `pnpm test` — см. ниже (заполняется по результату).
-- `pnpm build` — см. ниже (заполняется по результату).
-- CI на `main` — см. ниже.
+- `pnpm test` — PASS, 19/19 задач Turborepo. Первый прогон упал на двух тестах `@adclub/contracts`, перечисляющих маршруты (`openapi.test.ts` — новый путь `/admin/vehicles/options/order`, `vehicles.test.ts` — 35 админских маршрутов вместо 31); списки дополнены.
+- `pnpm build` — PASS (12/12).
+- `openapi:compat --base 87bceda` (коммит до задачи) — PASS, «Contract is backward compatible».
+- CI на `main` (run 37663153221, коммит d950f63) — попытка 1: FAIL в `messaging.integration.test.ts` («retries when the provider limits us…»: `expected 'sending' to be 'queued'`) — модуль сообщений задача не меняла, гонка по времени; попытка 2 (перезапуск упавшей работы) — **success**.
 - Полный `pnpm test:integration` локально не запускался (на этой машине не укладывается во время, см. память проекта) — вердикт за CI.
 
 ## UAT / E2E
@@ -63,7 +64,7 @@ COMPLETED — 9/9 AC (AC-8 «CI на main — success» — см. Verification, 
 - **AC-5 — PASS** — D-068 (hairline-таблицы, токены), D-069 (`useLoad`/`LoadingContent`, `useLoadingGate` в `SearchSelect`, опрос импорта без мигания), всплывающие сообщения («Марка создана», «Сохранено», «Импорт применяется»…), тёмная тема, 1024 и 1920 без горизонтальной прокрутки.
 - **AC-6 — PASS** — контракт аддитивен, `openapi:compat --base HEAD` без трейлера, `openapi:check` PASS.
 - **AC-7 — PASS** — `ARCHITECTURE.md` 4.54; `CLAUDE.md` блок 0 — «Автомобили в админке».
-- **AC-8 — PASS/см. Verification** — `format:check`, `lint`, `typecheck` PASS; `test`, `build`, CI — по результату ниже.
+- **AC-8 — PASS** — `format:check`, `lint`, `typecheck`, `test` (19/19), `build` (12/12) — PASS; CI на `main` — success (run 37663153221, попытка 2; попытка 1 — нестабильный тест сообщений, см. Verification).
 - **AC-9 — PASS** — этот отчёт со списком проверок для Product Owner.
 
 ## Errors & Fixes
@@ -86,9 +87,10 @@ COMPLETED — 9/9 AC (AC-8 «CI на main — success» — см. Verification, 
 - Dev-данные после проверки содержат Haval / Jolion / «I» (2021) с двумя модификациями, двигатель GW4B15A, вариант «Пикап», импортированные модификации Tugella и Okavango и т. п.
 
 ## Remaining Work
-None (после зелёного `pnpm test`, `pnpm build` и CI — см. Verification).
+None.
 
 ## Future Improvements
+- `messaging.integration.test.ts` «retries when the provider limits us» нестабилен в CI (`sending` вместо `queued` — проверка состояния во время попытки); стоит дождаться состояния, а не читать его сразу.
 - Отбор строк импорта «Ошибка» в блоке «Строки с ошибками» показывает значение ячейки только в общей таблице — можно подтянуть значения и туда.
 - Ссылка журнала для правки и статуса модификации — сервер мог бы класть `generationId` в каждую запись.
 - Очередь «Предложения совместимости» всё ещё берёт первые 100 (вне задачи) — при росте можно перевести на курсор.

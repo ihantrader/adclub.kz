@@ -23,6 +23,13 @@ export default defineConfig({
   // `@adclub/ui` is ESM with CSS and fonts and is served as is (ARCHITECTURE
   // 4.10); its icons are path data of `@adclub/ui-core` (4.43).
   optimizeDeps: {
-    include: ["@adclub/api-client", "@adclub/contracts", "@adclub/i18n", "@adclub/ui-core"],
+    include: [
+      "@adclub/api-client",
+      "@adclub/contracts",
+      "@adclub/domain",
+      "@adclub/i18n",
+      "@adclub/ui-core",
+      "@adclub/web-session",
+    ],
   },
 });

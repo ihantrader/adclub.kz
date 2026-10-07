@@ -1,37 +1,28 @@
-import { createApiClient, type ApiError } from "@adclub/api-client";
-import { useSyncExternalStore } from "react";
+import { createWebClient, defaultApiUrl } from "@adclub/web-session";
 
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+/** `version` from this app's package.json, injected by `vite.config.ts`. */
 export const APP_VERSION = __APP_VERSION__;
 
-let updateRequiredMessage: string | null = null;
-const listeners = new Set<() => void>();
-
-function handleApiError(error: ApiError): void {
-  if (error.code === "CLIENT_UPDATE_REQUIRED") {
-    updateRequiredMessage = error.message;
-    listeners.forEach((listener) => listener());
-  }
-}
-
-export const apiClient = createApiClient({
-  baseUrl: API_URL,
-  client: { platform: "admin-web", version: APP_VERSION },
-  getLanguage: () => "ru",
-  onError: handleApiError,
-});
+/** The API: `VITE_API_URL` of the build, otherwise the page's host on the API's development port. */
+export const API_URL: string =
+  import.meta.env.VITE_API_URL ??
+  (typeof window === "undefined" ? "http://localhost:3000" : defaultApiUrl(window.location));
 
 /**
- * The server's "update required" text once any request was refused with
- * `CLIENT_UPDATE_REQUIRED` (this build is below the `client_min_version_admin_web` setting),
- * `null` otherwise.
+ * The admin panel's connection to the API: the web session shared with the
+ * supplier cabinet (`@adclub/web-session`, ARCHITECTURE 4.47, 4.52) — the
+ * refresh token only in the HttpOnly cookie `adclub_admin_refresh`, the
+ * access token only in this page's memory, one exchange for the tabs,
+ * «Нет сети», «нужно обновить». The interface is Russian only (SCREENS 7.0).
  */
-export function useUpdateRequiredMessage(): string | null {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => updateRequiredMessage,
-  );
-}
+const client = createWebClient({
+  apiUrl: API_URL,
+  platform: "admin-web",
+  version: APP_VERSION,
+  language: "ru",
+});
+
+export const session = client.session;
+export const apiClient = client.apiClient;
+export const useUpdateRequiredMessage = client.useUpdateRequiredMessage;
+export const useSessionState = client.useSessionState;

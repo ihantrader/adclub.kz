@@ -4,7 +4,7 @@ import { Banner, Button, Dialog, Radio, TextField, useToast } from "@adclub/ui";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { refreshCompany } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
 import { offerProblem } from "../offers/offer-rules";
 import { actionProblem, declineReasonKey } from "./order-rules";

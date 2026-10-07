@@ -1,0 +1,8 @@
+{
+  "extends": "../config/typescript/node-lib.json",
+  "compilerOptions": {
+    // The session of the two web clients: `fetch`, Web Locks, BroadcastChannel.
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src"]
+}

@@ -13,7 +13,7 @@ import {
 } from "@adclub/ui";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../api";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { useT, type Translate } from "../i18n";
 import { categoryLine, meaningfulLength } from "./offer-rules";
 import {

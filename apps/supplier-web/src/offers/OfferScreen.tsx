@@ -27,7 +27,7 @@ import {
 import { isApiError } from "@adclub/api-client";
 import { useEffect, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
 import {
   goBack,

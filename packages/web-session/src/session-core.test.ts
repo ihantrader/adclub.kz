@@ -7,7 +7,7 @@ import {
   type TabLock,
   type TabMessage,
   type WebTokens,
-} from "./web-session-core";
+} from "./session-core";
 
 const SESSION = "4b0a1c35-8d7e-4d55-9a7e-5d1f0f6c9a11";
 

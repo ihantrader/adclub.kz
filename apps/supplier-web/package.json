@@ -17,6 +17,7 @@
     "@adclub/i18n": "workspace:*",
     "@adclub/ui": "workspace:*",
     "@adclub/ui-core": "workspace:*",
+    "@adclub/web-session": "workspace:*",
     "jsqr": "^1.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

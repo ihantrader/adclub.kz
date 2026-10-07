@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { apiClient } from "../api";
-import { isOnline } from "../connection";
+import { isOnline } from "@adclub/web-session";
 
 /**
  * What keeps «Заявки» current while the cabinet is open (TASK-033): one

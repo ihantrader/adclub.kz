@@ -2,8 +2,9 @@ import type { FetchLike } from "@adclub/api-client";
 import { sessionTokensSchema } from "@adclub/contracts";
 
 /**
- * The cabinet's session in the browser (TASK-031 requirement 3; ARCHITECTURE
- * 4.47), free of the DOM so that it is tested as it is: `web-session.ts`
+ * The session of a web client — the supplier cabinet and the admin panel —
+ * in the browser (TASK-031 requirement 3, TASK-034; ARCHITECTURE 4.47,
+ * 4.52), free of the DOM so that it is tested as it is: `browser-session.ts`
  * only supplies the real `fetch`, the exchange request, the Web Locks and the
  * BroadcastChannel.
  *
@@ -26,7 +27,7 @@ import { sessionTokensSchema } from "@adclub/contracts";
  *   stays, the caller sees a network error, the next request tries again.
  */
 
-/** Why the cabinet shows the sign-in screen: decides the message above it. */
+/** Why the client shows the sign-in screen: decides the message above it. */
 export type SignedOutReason =
   /** No session in this browser (never signed in, signed out, cookie gone): no message. */
   | "none"
@@ -151,7 +152,7 @@ function errorResponse(status: number, code: string, message: string): Response 
 }
 
 const endedResponses: Record<SignedOutReason, () => Response> = {
-  none: () => errorResponse(401, "AUTH_REQUIRED", "Sign in to the cabinet"),
+  none: () => errorResponse(401, "AUTH_REQUIRED", "Sign in again"),
   session_ended: () => errorResponse(401, "SESSION_ENDED", "The session has ended, sign in again"),
   access_closed: () =>
     errorResponse(401, "SUPPLIER_ACCESS_CLOSED", "Access to the supplier cabinet is closed"),

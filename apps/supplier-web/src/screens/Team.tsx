@@ -24,10 +24,9 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, session } from "../api";
 import { clearCabinet } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { formatPhone, typePhone, useOnline } from "@adclub/web-session";
 import { rateLimitName, retryMinutes, saveErrorText } from "../errors";
 import { useT, type Translate } from "../i18n";
-import { formatPhone, typePhone } from "../phone";
 import { forgetPerson } from "../prefs";
 
 /**

@@ -13,7 +13,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { companyBanners } from "../cabinet/company-state";
 import type { CabinetState } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
 import { refreshNewOrders, useNewOrders, useVisiblePoll } from "../orders/live";
 import { useInstallWay } from "../pwa/install";

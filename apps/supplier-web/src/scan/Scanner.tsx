@@ -20,7 +20,7 @@ import {
 } from "react";
 import { apiClient } from "../api";
 import { switchCompany } from "../cabinet/cabinet-store";
-import { isOnline } from "../connection";
+import { isOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
 import { Money, useAt } from "../orders/OrderParts";
 import { formatDate, statusKey } from "../orders/order-rules";

@@ -1,5 +1,5 @@
 import { apiRoutes, CLIENT_HEADER, formatClientHeader } from "@adclub/contracts";
-import { reportRequestOutcome } from "../connection";
+import { reportRequestOutcome } from "./connection";
 import {
   createWebSession,
   exchangeVerdictOf,
@@ -8,29 +8,31 @@ import {
   type TabLock,
   type TabMessage,
   type WebSession,
-} from "./web-session-core";
+} from "./session-core";
 
 /**
- * Connects the session rules (`web-session-core.ts`, where they are tested)
- * to the browser: the real `fetch`, the cookie exchange, Web Locks and a
- * BroadcastChannel between the tabs of the cabinet. Browsers without the
+ * Connects the session rules (`session-core.ts`, where they are tested) to
+ * the browser: the real `fetch`, the cookie exchange, Web Locks and a
+ * BroadcastChannel between the tabs of one web client (the cabinet's tabs
+ * talk to each other, never to the admin panel's). Browsers without the
  * last two (Safari before 15.4) still work: the server's grace period keeps
  * concurrent exchanges of several tabs from ending the session.
  */
-const CHANNEL_NAME = "adclub.supplier-web.session";
-const LOCK_NAME = "adclub.supplier-web.refresh";
 const EXCHANGE_TIMEOUT_MS = 10_000;
 const ATTEMPT_TIMEOUT_MS = 12_000;
 
-function browserLock(): TabLock | undefined {
+/** The web clients that sign in with a session cookie. */
+export type WebPlatform = "supplier-web" | "admin-web";
+
+function browserLock(name: string): TabLock | undefined {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   if (!locks) return undefined;
-  return <T>(task: () => Promise<T>) => locks.request(LOCK_NAME, task) as Promise<T>;
+  return <T>(task: () => Promise<T>) => locks.request(name, task) as Promise<T>;
 }
 
-function browserChannel(): TabChannel | undefined {
+function browserChannel(name: string): TabChannel | undefined {
   if (typeof BroadcastChannel === "undefined") return undefined;
-  const channel = new BroadcastChannel(CHANNEL_NAME);
+  const channel = new BroadcastChannel(name);
   return {
     post: (message) => channel.postMessage(message),
     subscribe(listener) {
@@ -43,12 +45,14 @@ function browserChannel(): TabChannel | undefined {
 
 export interface BrowserSessionOptions {
   apiUrl: string;
-  client: { platform: "supplier-web"; version: string };
+  client: { platform: WebPlatform; version: string };
   onUpdateRequired: (message: string) => void;
   onContextChanged: () => void;
 }
 
 export function createBrowserSession(options: BrowserSessionOptions): WebSession {
+  const { platform } = options.client;
+
   /** `POST /auth/session/refresh` with the HttpOnly cookie; never through the wrapped `fetch`. */
   async function exchange(): Promise<ExchangeVerdict> {
     const controller = new AbortController();
@@ -79,8 +83,8 @@ export function createBrowserSession(options: BrowserSessionOptions): WebSession
   return createWebSession({
     fetch: (input, init) => fetch(input, init),
     exchange,
-    lock: browserLock(),
-    channel: browserChannel(),
+    lock: browserLock(`adclub.${platform}.refresh`),
+    channel: browserChannel(`adclub.${platform}.session`),
     attemptTimeoutMs: ATTEMPT_TIMEOUT_MS,
     onUpdateRequired: options.onUpdateRequired,
     onContextChanged: options.onContextChanged,

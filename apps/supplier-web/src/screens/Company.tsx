@@ -27,10 +27,9 @@ import {
   type DayMode,
   type WeekForm,
 } from "../company/schedule-form";
-import { useOnline } from "../connection";
+import { formatPhone, typePhone, useOnline } from "@adclub/web-session";
 import { saveErrorText } from "../errors";
 import { useLanguage, useT, type Translate } from "../i18n";
-import { formatPhone, typePhone } from "../phone";
 
 type Ready = Extract<CabinetState, { status: "ready" }>;
 

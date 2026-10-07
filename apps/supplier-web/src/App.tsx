@@ -22,7 +22,7 @@ import { OffersList } from "./offers/OffersList";
 import { OrderCardScreen } from "./orders/OrderScreen";
 import { OrdersList } from "./orders/OrdersList";
 import { Scanner } from "./scan/Scanner";
-import { subscribeOnline, isOnline } from "./connection";
+import { subscribeOnline, isOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "./i18n";
 import { forgetPerson, installOffered, lastKnown, markInstallOffered } from "./prefs";
 import { offerInstallNow, useInstallOfferedNow, useInstallWay } from "./pwa/install";

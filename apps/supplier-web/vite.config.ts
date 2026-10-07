@@ -49,6 +49,7 @@ export default defineConfig({
       "@adclub/domain",
       "@adclub/i18n",
       "@adclub/ui-core",
+      "@adclub/web-session",
     ],
   },
 });

@@ -18,7 +18,7 @@ import {
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { refreshCompany } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
 import { useWide } from "../offers/use-wide";
 import { navigateTo, orderPath, replaceRouteState, useRouteState } from "../router";

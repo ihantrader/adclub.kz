@@ -2,7 +2,7 @@ import type { SupplierMembershipListResponse } from "@adclub/contracts";
 import { Banner, Button, Dialog, Icon, useToast } from "@adclub/ui";
 import { useState } from "react";
 import { switchCompany } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { saveErrorText } from "../errors";
 import { useT } from "../i18n";
 import { ChoiceButton } from "./SignIn";

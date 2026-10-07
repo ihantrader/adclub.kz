@@ -9,11 +9,9 @@ import { normalizeKzMobilePhone } from "@adclub/domain";
 import { Banner, Button, FadeSwap, Icon, TextField } from "@adclub/ui";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { apiClient, session } from "../api";
-import type { SignedOutReason } from "../session/web-session-core";
-import { deviceName } from "../device-name";
+import { deviceName, formatPhone, type SignedOutReason, typePhone } from "@adclub/web-session";
 import { loginErrorText } from "../errors";
 import { useT } from "../i18n";
-import { formatPhone, typePhone } from "../phone";
 import { rememberedSupplier, rememberSupplier } from "../prefs";
 import { AuthLayout } from "./AuthLayout";
 

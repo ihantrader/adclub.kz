@@ -2,7 +2,7 @@ import type { OfferAvailability, SupplierOffer } from "@adclub/contracts";
 import { Badge, Button, Dialog, Icon, IconButton, useToast } from "@adclub/ui";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { apiClient } from "../api";
-import { useOnline } from "../connection";
+import { useOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
 import { navigate, navigateTo, offerPath } from "../router";
 import {

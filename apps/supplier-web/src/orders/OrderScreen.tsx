@@ -17,9 +17,8 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { refreshCompany } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { formatPhone, useOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
-import { formatPhone } from "../phone";
 import { goBack, navigate, useRouteId } from "../router";
 import { DeclineDialog } from "./DeclineDialog";
 import { useNow, useVisiblePoll } from "./live";

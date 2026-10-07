@@ -16,10 +16,9 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, session } from "../api";
 import { clearCabinet, type CabinetState } from "../cabinet/cabinet-store";
-import { useOnline } from "../connection";
+import { formatPhone, useOnline } from "@adclub/web-session";
 import { saveErrorText } from "../errors";
 import { useT } from "../i18n";
-import { formatPhone } from "../phone";
 import { forgetPerson, settleNotificationLanguage } from "../prefs";
 import { useInstallWay } from "../pwa/install";
 import { CompanyChoices } from "./CompanySwitch";

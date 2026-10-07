@@ -15,8 +15,12 @@ export const routePaths = {
   cities: "/settings/cities",
   audit: "/audit",
   security: "/security",
-  // Sections of the next tasks: an honest «появится» until then.
+  // The catalog of goods (TASK-035): the tree, the items, the proposals.
   catalog: "/catalog",
+  catalogItems: "/catalog/items",
+  catalogItemNew: "/catalog/items/new",
+  catalogProposals: "/catalog/proposals",
+  // Sections of the next tasks: an honest «появится» until then.
   vehicles: "/vehicles",
   suppliers: "/suppliers",
   orders: "/orders",
@@ -25,27 +29,44 @@ export const routePaths = {
 
 export type StaticRoute = keyof typeof routePaths;
 
-/** Every page; `settingHistory` — the history of one setting, `/settings/<key>/history`. */
-export type RouteKey = StaticRoute | "settingHistory";
+/**
+ * Every page; `settingHistory` — the history of one setting,
+ * `/settings/<key>/history`; `catalogItem` — an item's card,
+ * `/catalog/items/<id>`; `catalogFill` — the fill of a subcategory,
+ * `/catalog/fill/<categoryId>`.
+ */
+export type RouteKey = StaticRoute | "settingHistory" | "catalogItem" | "catalogFill";
 
-/** The sections that come with TASK-035 (catalog, cars) and TASK-036 (the rest). */
-export const comingSections: Partial<Record<StaticRoute, "TASK-035" | "TASK-036">> = {
-  catalog: "TASK-035",
-  vehicles: "TASK-035",
+/** The sections that come with TASK-035.B (cars) and TASK-036 (the rest). */
+export const comingSections: Partial<Record<StaticRoute, "TASK-035.B" | "TASK-036">> = {
+  vehicles: "TASK-035.B",
   suppliers: "TASK-036",
   orders: "TASK-036",
   users: "TASK-036",
 };
 
 const HISTORY_PATH = /^\/settings\/([a-z][a-z0-9_]{0,63})\/history$/;
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const ITEM_PATH = new RegExp(`^/catalog/items/(${UUID})$`, "i");
+const FILL_PATH = new RegExp(`^/catalog/fill/(${UUID})$`, "i");
 
 export function settingHistoryPath(key: string): string {
   return `/settings/${key}/history`;
 }
 
+/** The card of a catalog item, on a tab (`main` when left out). */
+export function catalogItemPath(itemId: string, tab?: string): string {
+  return tab && tab !== "main" ? `/catalog/items/${itemId}?tab=${tab}` : `/catalog/items/${itemId}`;
+}
+
+/** The fill of a subcategory (A-CAT-03). */
+export function catalogFillPath(categoryId: string): string {
+  return `/catalog/fill/${categoryId}`;
+}
+
 export interface Location {
   route: RouteKey | null;
-  /** The key of `settingHistory`. */
+  /** The key of `settingHistory`, the id of `catalogItem` and `catalogFill`. */
   id: string | null;
   /** The query string's values (filters of a list). */
   query: URLSearchParams;
@@ -60,6 +81,10 @@ export function locationOf(pathname: string, search = ""): Location {
   }
   const history = HISTORY_PATH.exec(path);
   if (history) return { route: "settingHistory", id: history[1]!, query };
+  const item = ITEM_PATH.exec(path);
+  if (item) return { route: "catalogItem", id: item[1]!.toLowerCase(), query };
+  const fill = FILL_PATH.exec(path);
+  if (fill) return { route: "catalogFill", id: fill[1]!.toLowerCase(), query };
   return { route: null, id: null, query };
 }
 
@@ -67,6 +92,15 @@ export function locationOf(pathname: string, search = ""): Location {
 export function menuOf(route: RouteKey): StaticRoute {
   if (route === "settingHistory" || route === "clientPolicy" || route === "cities") {
     return "settings";
+  }
+  if (
+    route === "catalogItems" ||
+    route === "catalogItem" ||
+    route === "catalogItemNew" ||
+    route === "catalogFill" ||
+    route === "catalogProposals"
+  ) {
+    return "catalog";
   }
   return route;
 }

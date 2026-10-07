@@ -1,5 +1,5 @@
 import type { AuditActor, AuditActorRole } from "@adclub/contracts";
-import { routePaths, settingHistoryPath } from "../router";
+import { catalogItemPath, routePaths, settingHistoryPath, withQuery } from "../router";
 
 /**
  * The words of A-AUD (TASK-034 requirement 5): an action of the journal in
@@ -172,9 +172,76 @@ export function actorText(actor: AuditActor): string {
   return who || ROLE_TEXT[actor.role];
 }
 
-/** Where the object of an entry opens, if its section exists already. */
-export function entityLink(entityType: string, entityId: string): string | null {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A field of `before`/`after` of an entry, if it is a string. */
+function named(
+  payload: { before?: unknown; after?: unknown } | undefined,
+  key: string,
+): string | null {
+  for (const side of [payload?.after, payload?.before]) {
+    if (typeof side === "object" && side !== null && key in side) {
+      const value = (side as Record<string, unknown>)[key];
+      if (typeof value === "string") return value;
+    }
+  }
+  return null;
+}
+
+/** Where a thing of the catalog opens: an item — its card, the structure — the tree on it (TASK-035). */
+function catalogLink(entityType: string, entityId: string): string | null {
+  if (!UUID.test(entityId)) return null;
   switch (entityType) {
+    case "catalog_item":
+      return catalogItemPath(entityId);
+    case "category":
+    case "catalog_category":
+      return withQuery(routePaths.catalog, { node: entityId });
+    case "attribute":
+    case "catalog_attribute":
+      return withQuery(routePaths.catalog, { attribute: entityId });
+    case "attribute_option":
+    case "catalog_attribute_option":
+      return withQuery(routePaths.catalog, { option: entityId });
+    case "catalog_brand":
+      return withQuery(routePaths.catalogItems, { brandId: entityId });
+    default:
+      return null;
+  }
+}
+
+/**
+ * Where the object of an entry opens, if its section exists already;
+ * `payload` — the entry's `before`/`after`, which name the item of a
+ * photo or a compatibility record and the thing a translation is of.
+ */
+export function entityLink(
+  entityType: string,
+  entityId: string,
+  payload?: { before?: unknown; after?: unknown },
+): string | null {
+  switch (entityType) {
+    case "catalog_item":
+    case "catalog_category":
+    case "catalog_attribute":
+    case "catalog_attribute_option":
+    case "catalog_brand":
+      return catalogLink(entityType, entityId);
+    case "catalog_translation": {
+      const of = named(payload, "entityType");
+      if (of === "catalog_item" && UUID.test(entityId))
+        return catalogItemPath(entityId, "translations");
+      return of ? catalogLink(of, entityId) : null;
+    }
+    case "catalog_item_photo": {
+      const itemId = named(payload, "itemId");
+      return itemId && UUID.test(itemId) ? catalogItemPath(itemId, "photos") : null;
+    }
+    case "item_compatibility":
+    case "item_compatibility_proposal": {
+      const itemId = named(payload, "itemId");
+      return itemId && UUID.test(itemId) ? catalogItemPath(itemId, "compatibility") : null;
+    }
     case "setting":
       return /^[a-z][a-z0-9_]*$/.test(entityId) ? settingHistoryPath(entityId) : null;
     case "admin_signal":

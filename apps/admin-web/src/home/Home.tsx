@@ -1,10 +1,11 @@
-import type { AdminHome } from "@adclub/contracts";
+import { adminHomeCatalogFilters, type AdminHome } from "@adclub/contracts";
 import { Banner, Button, Icon, LoadingContent, Skeleton } from "@adclub/ui";
 import type { IconName } from "@adclub/ui-core";
 import type { ReactNode } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { itemsLink } from "../catalog/item-filters";
 import { navigateTo, routePaths, withQuery } from "../router";
 import { count, KIND_HINTS, KIND_TITLES } from "../signals/signal-words";
 import { useLoad } from "../use-load";
@@ -194,28 +195,28 @@ function Cards({ home }: { home: AdminHome }) {
             title="Без фото"
             value={quality.withoutPhoto}
             note="Активные позиции без подтверждённого фото"
-            onOpen={() => navigateTo(routePaths.catalog)}
+            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.withoutPhoto))}
           />
           <Card
             icon="checklist"
             title="Неполные характеристики"
             value={quality.incomplete}
             note="Активные позиции, у которых не заполнены обязательные характеристики"
-            onOpen={() => navigateTo(routePaths.catalog)}
+            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.incomplete))}
           />
           <Card
             icon="car"
             title="Без совместимости"
             value={quality.withoutCompatibility}
             note="Позиции категорий с обязательной совместимостью: клиенты их не видят"
-            onOpen={() => navigateTo(routePaths.catalog)}
+            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.withoutCompatibility))}
           />
           <Card
             icon="language"
             title="Без перевода"
-            value={quality.withoutTranslation}
-            note="Тексты без казахского или английского перевода (нет или отказ)"
-            onOpen={() => navigateTo(routePaths.catalog)}
+            value={quality.itemsWithoutTranslation}
+            note={`Активные позиции, у которых название без казахского или английского перевода (нет или отказ). Всего текстов справочника без перевода, с категориями и характеристиками: ${quality.withoutTranslation.toLocaleString("ru-RU")}`}
+            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.itemsWithoutTranslation))}
           />
         </div>
       </section>

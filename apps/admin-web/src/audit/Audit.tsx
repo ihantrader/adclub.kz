@@ -225,7 +225,7 @@ export function Audit() {
               </thead>
               <tbody>
                 {entries.map((entry) => (
-                  <Row key={entry.id} entry={entry} />
+                  <AuditRow key={entry.id} entry={entry} />
                 ))}
               </tbody>
             </table>
@@ -242,11 +242,12 @@ export function Audit() {
   );
 }
 
-function Row({ entry }: { entry: AuditLogEntry }) {
+/** One entry of the journal; the item card's «История» shows the same rows (TASK-035). */
+export function AuditRow({ entry }: { entry: AuditLogEntry }) {
   const [open, setOpen] = useState(false);
   const lines = changeLines(entry.before, entry.after);
   const shown = open ? lines : lines.slice(0, SHORT_LINES);
-  const link = entityLink(entry.entityType, entry.entityId);
+  const link = entityLink(entry.entityType, entry.entityId, entry);
   const follow = (event: MouseEvent) => {
     if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
     event.preventDefault();

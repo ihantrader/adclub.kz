@@ -30,14 +30,14 @@ import { BACKUP_CODES_LOW, useBackupCodesRemaining } from "../security/backup-re
 const MENU: NavItem<StaticRoute>[] = [
   { key: "home", label: "Главная", icon: "checklist", href: routePaths.home },
   { key: "signals", label: "Сигналы", icon: "alertTriangle", href: routePaths.signals },
+  { key: "catalog", label: "Справочник", icon: "category", href: routePaths.catalog },
   { key: "settings", label: "Настройки", icon: "settings", href: routePaths.settings },
   { key: "audit", label: "Журнал", icon: "clock", href: routePaths.audit },
   { key: "security", label: "Безопасность", icon: "lock", href: routePaths.security },
 ];
 
-/** The sections of TASK-035 and TASK-036, shown as such. */
+/** The sections of TASK-035.B and TASK-036, shown as such. */
 const NEXT: NavItem<StaticRoute>[] = [
-  { key: "catalog", label: "Справочник", icon: "category", href: routePaths.catalog },
   { key: "vehicles", label: "Автомобили", icon: "car", href: routePaths.vehicles },
   { key: "suppliers", label: "Поставщики", icon: "store", href: routePaths.suppliers },
   { key: "orders", label: "Заявки", icon: "receipt", href: routePaths.orders },

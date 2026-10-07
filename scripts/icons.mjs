@@ -142,6 +142,12 @@ import type { Glyph } from "@adclub/ui-core";
 /** The glyph of every category code of the contract (design/icons/icons.mjs, \`category\`). */
 export const categoryGlyphs: Record<CategoryIcon, Glyph> = ${await record(map.category)};
 `,
+    "apps/admin-web/src/catalog/category-glyphs.ts": `${HEADER}import type { CategoryIcon } from "@adclub/contracts";
+import type { Glyph } from "@adclub/ui-core";
+
+/** The glyph of every category code — the admin panel's preview of the icon a node carries (TASK-035). */
+export const categoryGlyphs: Record<CategoryIcon, Glyph> = ${await record(map.category)};
+`,
     "apps/mobile/src/dev/preview-glyphs.ts": `${HEADER}import type { CategoryIcon } from "@adclub/contracts";
 import type { Glyph } from "@adclub/ui-core";
 

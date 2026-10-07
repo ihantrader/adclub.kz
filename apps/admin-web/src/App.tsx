@@ -4,8 +4,14 @@ import { isOnline, subscribeOnline } from "@adclub/web-session";
 import { useEffect, useState, type ReactNode } from "react";
 import { apiClient, session, useSessionState, useUpdateRequiredMessage } from "./api";
 import { Audit } from "./audit/Audit";
+import { CategoryTree } from "./catalog/CategoryTree";
+import { Fill } from "./catalog/Fill";
+import { ItemCard } from "./catalog/ItemCard";
+import { ItemCreate } from "./catalog/ItemMain";
+import { Items } from "./catalog/Items";
+import { Proposals } from "./catalog/Proposals";
 import { Home } from "./home/Home";
-import { comingSections, useRoute, type RouteKey } from "./router";
+import { comingSections, useLocation, useRoute, type RouteKey } from "./router";
 import { Coming } from "./screens/Coming";
 import { Shell } from "./screens/Shell";
 import { SignIn } from "./screens/SignIn";
@@ -104,6 +110,7 @@ export function App() {
 }
 
 function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | null }) {
+  const { id } = useLocation();
   switch (route) {
     case "signals":
       return <Signals />;
@@ -122,7 +129,17 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
         <Security currentAdminId={me?.access.context === "admin" ? me.access.admin.id : null} />
       );
     case "catalog":
-      return <Coming title="Справочник" icon="category" task={comingSections.catalog!} />;
+      return <CategoryTree />;
+    case "catalogItems":
+      return <Items />;
+    case "catalogItemNew":
+      return <ItemCreate />;
+    case "catalogItem":
+      return id ? <ItemCard key={id} itemId={id} /> : null;
+    case "catalogFill":
+      return id ? <Fill key={id} categoryId={id} /> : null;
+    case "catalogProposals":
+      return <Proposals />;
     case "vehicles":
       return <Coming title="Автомобили" icon="car" task={comingSections.vehicles!} />;
     case "suppliers":

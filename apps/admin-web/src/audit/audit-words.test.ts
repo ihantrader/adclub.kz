@@ -69,4 +69,29 @@ describe("the words of the journal", () => {
     expect(entityLink("city", "x")).toBe("/settings/cities");
     expect(entityLink("order", "x")).toBeNull();
   });
+
+  it("opens a catalog object: an item's card, the tree on a node, an attribute or an option", () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const item = "00000000-0000-4000-8000-000000000002";
+    expect(entityLink("catalog_item", id)).toBe(`/catalog/items/${id}`);
+    expect(entityLink("catalog_category", id)).toBe(`/catalog?node=${id}`);
+    expect(entityLink("catalog_attribute", id)).toBe(`/catalog?attribute=${id}`);
+    expect(entityLink("catalog_attribute_option", id)).toBe(`/catalog?option=${id}`);
+    expect(entityLink("catalog_brand", id)).toBe(`/catalog/items?brandId=${id}`);
+    expect(entityLink("catalog_item_photo", id, { after: { itemId: item } })).toBe(
+      `/catalog/items/${item}?tab=photos`,
+    );
+    expect(entityLink("item_compatibility", id, { before: null, after: { itemId: item } })).toBe(
+      `/catalog/items/${item}?tab=compatibility`,
+    );
+    expect(entityLink("catalog_translation", item, { after: { entityType: "catalog_item" } })).toBe(
+      `/catalog/items/${item}?tab=translations`,
+    );
+    expect(entityLink("catalog_translation", id, { after: { entityType: "category" } })).toBe(
+      `/catalog?node=${id}`,
+    );
+    // The reorder of a kind's nodes names the kind, not a category.
+    expect(entityLink("catalog_category", "goods")).toBeNull();
+    expect(entityLink("catalog_item_photo", id)).toBeNull();
+  });
 });

@@ -922,13 +922,17 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
     });
 
     it("retries when the provider limits us, exactly as for an unavailable one", async () => {
-      await configure({ message_send_attempts: 3, message_retry_delay_seconds: 1 });
+      // Room for one more attempt than the test needs: the state between attempts is awaited.
+      await configure({ message_send_attempts: 4, message_retry_delay_seconds: 1 });
       setMode("rate_limited");
       const { id } = await queue({ dedupeKey: "event:limited" });
-      await waitFor("a second attempt", async () =>
-        (await message(id)).attempts >= 2 ? true : undefined,
-      );
-      expect((await message(id)).status).toBe("queued");
+      // An attempt is counted when it is claimed (`sending`); after a limited one the
+      // message is back on the queue, never failed — that state is what is awaited.
+      const between = await waitFor("the queue after a second limited attempt", async () => {
+        const row = await message(id);
+        return row.attempts >= 2 && row.status !== "sending" ? row : undefined;
+      });
+      expect(between.status).toBe("queued");
       setMode("ok");
       await waitFor("the message to go out once the limit passed", async () =>
         (await message(id)).status === "sent" ? true : undefined,

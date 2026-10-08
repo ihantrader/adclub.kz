@@ -119,6 +119,9 @@ function catalog(): ImportSnapshot {
   return snapshot;
 }
 
+/** The current year the rows are planned at. */
+const LATEST_YEAR = 2026;
+
 const coolray: RowValues = {
   make: "Geely",
   model: "Coolray",
@@ -137,7 +140,7 @@ function planAll(rows: RowValues[], snapshot = catalog()): PlannedRow[] {
   const seen = newSeenRows();
   return rows.map((values, index) => {
     const rowNumber = index + 2;
-    const plan = planRow(values, snapshot, seen);
+    const plan = planRow(values, snapshot, seen, LATEST_YEAR);
     commitRow(rowNumber, values, plan, placeholderIds(rowNumber, plan.needs), snapshot, seen);
     return { rowNumber, plan };
   });
@@ -345,9 +348,40 @@ describe("planning import rows", () => {
 
   it("rejects the end before the start and a row that doesn't fit the header", () => {
     const seen = newSeenRows();
-    expect(planRow(null, catalog(), seen).reasons[0]).toMatchObject({ code: "wrong_field_count" });
+    expect(planRow(null, catalog(), seen, LATEST_YEAR).reasons[0]).toMatchObject({
+      code: "wrong_field_count",
+    });
     const [row] = planAll([{ ...coolray, year_from: "2022", year_to: "2021" }]);
     expect(codes(row!)).toEqual(["year_order"]);
+  });
+
+  it("refuses a year later than the current one, as the admin panel does (D-071)", () => {
+    const [current, future, generation, old] = planAll([
+      { ...coolray, year_from: "2026" },
+      { ...coolray, year_from: "2027" },
+      {
+        ...coolray,
+        generation: "II",
+        generation_year_from: "2027",
+        year_from: "2027",
+        market: "global",
+      },
+      { ...coolray, generation: "I-98", generation_year_from: "1998", year_from: "1998" },
+    ]);
+    expect(current!.plan.action).not.toBe("rejected");
+    expect(future!.plan.reasons).toEqual([
+      expect.objectContaining({
+        code: "invalid_year",
+        column: "year_from",
+        message: "2027 is later than the current year (2026)",
+      }),
+    ]);
+    expect(generation!.plan.reasons.map((reason) => `${reason.code}:${reason.column}`)).toEqual([
+      "invalid_year:year_from",
+      "invalid_year:generation_year_from",
+    ]);
+    // A year before 2000 still comes in by a file: the admin panel's list is only a convenience.
+    expect(old!.plan.action).toBe("create");
   });
 
   it("finds a row repeated with other case and spaces as a duplicate, even a rejected one", () => {

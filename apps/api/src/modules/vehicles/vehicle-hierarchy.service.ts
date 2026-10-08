@@ -19,6 +19,7 @@ import {
   type VehicleMakeListQuery,
   type VehicleModelListQuery,
 } from "@adclub/contracts";
+import { latestVehicleYear } from "@adclub/domain";
 import { and, asc, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
@@ -39,6 +40,7 @@ import {
   duplicate,
   notFound,
   parentArchived,
+  validationError,
   versionConflict,
   yearsInvalid,
 } from "./vehicle-errors";
@@ -598,6 +600,7 @@ export class VehicleHierarchyService {
     const name = normalizeText(input.name);
     const yearTo = input.yearTo ?? null;
     checkYearOrder(input.yearFrom, yearTo);
+    checkYearsNotLater({ yearFrom: input.yearFrom, yearTo });
     return this.database.db.transaction(async (tx) => {
       await tx.execute(VEHICLE_LOCK);
       const model = await this.findModel(tx, input.modelId);
@@ -654,6 +657,10 @@ export class VehicleHierarchyService {
         return this.describeGeneration(tx, row);
       }
       checkYearOrder(wanted.yearFrom, wanted.yearTo);
+      checkYearsNotLater({
+        yearFrom: changes.has("yearFrom") ? wanted.yearFrom : undefined,
+        yearTo: changes.has("yearTo") ? wanted.yearTo : undefined,
+      });
       if (changes.has("modelId")) {
         await this.assertModelUsable(tx, await this.findModel(tx, wanted.modelId));
       }
@@ -1053,6 +1060,26 @@ export class VehicleHierarchyService {
 export function checkYearOrder(yearFrom: number, yearTo: number | null): void {
   if (yearTo !== null && yearTo < yearFrom) {
     throw yearsInvalid({ reason: "order", generationYears: null, modificationIds: [] });
+  }
+}
+
+/**
+ * No year being written is later than the current year in Almaty
+ * (TASK-035.C, D-071: a year of production is never a future one). Only
+ * the years a request sets are checked, so a record that came with a later
+ * year keeps it through an edit of anything else. 400 `VALIDATION_ERROR`
+ * on the field.
+ */
+export function checkYearsNotLater(
+  years: { yearFrom?: number; yearTo?: number | null },
+  at: Date = new Date(),
+): void {
+  const latest = latestVehicleYear(at);
+  for (const field of ["yearFrom", "yearTo"] as const) {
+    const year = years[field];
+    if (year != null && year > latest) {
+      throw validationError(field, `The year can't be later than the current year (${latest})`);
+    }
   }
 }
 

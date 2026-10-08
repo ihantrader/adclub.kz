@@ -41,6 +41,7 @@ import {
   type ApiRouteDefinition,
   type ErrorCode,
 } from "@adclub/contracts";
+import { latestVehicleYear } from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
@@ -1149,13 +1150,17 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
       const transmissions = [b.dct, b.at];
       const drives = [b.fwd, b.awd];
       const rows: string[] = [];
+      // No year later than the current one (TASK-035.C): many ends per start instead.
+      const latest = latestVehicleYear(new Date());
       for (let yearFrom = 1900; rows.length < 10_000; yearFrom++) {
         for (const body of bodies) {
           for (const transmission of transmissions) {
             for (const drive of drives) {
               for (const yearTo of [
                 "",
-                ...[1, 2, 3, 4, 5, 6].map((add) => String(yearFrom + add)),
+                ...Array.from({ length: latest - yearFrom }, (_, index) =>
+                  String(yearFrom + 1 + index),
+                ),
               ]) {
                 if (rows.length < 10_000) {
                   rows.push(
@@ -1542,6 +1547,51 @@ describe("vehicle catalog (PostgreSQL + Redis)", () => {
           after: { kind: "body", order: wanted },
         }),
       ]);
+    });
+  });
+
+  describe("years of production (TASK-035.C)", () => {
+    it("refuses a year later than the current one, and keeps a later year nobody touches", async () => {
+      const b = await basics();
+      const next = latestVehicleYear(new Date()) + 1;
+      const refused = await asAdmin("post", "/admin/vehicles/generations", {
+        modelId: b.coolray.id,
+        name: "Next",
+        yearFrom: next,
+        yearTo: null,
+      });
+      expectError(refused, 400, "VALIDATION_ERROR");
+      expect(refused.body.details).toEqual([expect.objectContaining({ path: "yearFrom" })]);
+      const created = await modification(b);
+      expectError(
+        await asAdmin("patch", `/admin/vehicles/modifications/${created.id}`, {
+          expectedVersion: created.version,
+          yearTo: next,
+        }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      // A record that came with a later year (before the rule, or written
+      // by hand) keeps it through an edit of anything else.
+      await db.query("UPDATE vehicle_modification SET year_to = $2 WHERE id = $1", [
+        created.id,
+        next,
+      ]);
+      await db.query("UPDATE vehicle_generation SET year_to = $2 WHERE id = $1", [
+        b.coolrayI.id,
+        next,
+      ]);
+      const edited = await ok(
+        asAdmin("patch", `/admin/vehicles/modifications/${created.id}`, {
+          expectedVersion: created.version,
+          bodyTypeId: b.sedan.id,
+        }),
+        (body) => adminVehicleModificationResponseSchema.parse(body).modification,
+      );
+      expect(edited).toMatchObject({ yearTo: next, bodyType: { id: b.sedan.id } });
+      // An older year than the admin panel's list (2000) is the server's to accept.
+      const old = await generationOf(b.coolray.id, "Old", 1998, 2003);
+      expect(old).toMatchObject({ yearFrom: 1998 });
     });
   });
 

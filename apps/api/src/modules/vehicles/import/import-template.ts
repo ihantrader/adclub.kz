@@ -31,7 +31,8 @@ const COLUMNS: Record<VehicleImportColumn, { description: string; example: strin
     example: "2019",
   },
   generation_year_to: {
-    description: "Последний год поколения; пусто — выпускается сейчас.",
+    description:
+      "Последний год поколения; пусто — выпускается сейчас. Любой год — не позже текущего: год выпуска не бывает будущим.",
     example: "",
   },
   body: {
@@ -66,7 +67,7 @@ const COLUMNS: Record<VehicleImportColumn, { description: string; example: strin
     example: "fwd",
   },
   year_from: {
-    description: "Первый год модификации — в пределах лет поколения.",
+    description: "Первый год модификации — в пределах лет поколения и не позже текущего.",
     example: "2020",
   },
   year_to: {

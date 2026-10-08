@@ -116,3 +116,4 @@ export { CAR_IDENTITY_LEVELS, carIdentity, sameCar, sameCarIdentity } from "./ga
 export type { CarIdentity, CarIdentityLevel, CarLevelRef, CarLevelsLike } from "./garage/same-car";
 export { sameCarCases } from "./garage/same-car-cases";
 export type { SameCarCase, SameCarCaseCar, SameCarCaseLevel } from "./garage/same-car-cases";
+export { latestVehicleYear, VEHICLE_YEAR_TIME_ZONE } from "./vehicle/vehicle-years";

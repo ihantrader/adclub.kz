@@ -7,6 +7,7 @@ import {
   type VehicleImportReason,
   type VehicleImportResult,
 } from "@adclub/contracts";
+import { latestVehicleYear } from "@adclub/domain";
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../../database";
 import type { JobHandler, JobRunContext, JobRunOutcome, PeriodicJobHandler } from "../../../jobs";
@@ -94,9 +95,10 @@ export class VehicleImportAnalyzer implements JobHandler<{ importId: string }> {
     const values = rows.map(rowValues);
     const snapshot = await loadSnapshot(db, values);
     const seen = newSeenRows();
+    const latestYear = latestVehicleYear(new Date());
     const planned: PlannedRow[] = rows.map((row, index) => {
       const own = values[index] ?? null;
-      const plan = planRow(own, snapshot, seen);
+      const plan = planRow(own, snapshot, seen, latestYear);
       if (own) {
         commitRow(
           row.rowNumber,
@@ -234,6 +236,7 @@ export class VehicleImportApplier implements JobHandler<{ importId: string }> {
     const values = rows.map(rowValues);
     const snapshot = await loadSnapshot(tx, values);
     const seen = newSeenRows();
+    const latestYear = latestVehicleYear(new Date());
     const outcomes: RowOutcome[] = [];
     for (const [index, row] of rows.entries()) {
       const own = values[index] ?? null;
@@ -246,7 +249,7 @@ export class VehicleImportApplier implements JobHandler<{ importId: string }> {
         });
         continue;
       }
-      const plan = planRow(own, snapshot, seen);
+      const plan = planRow(own, snapshot, seen, latestYear);
       const created = plan.action === "rejected" ? {} : await this.write(tx, entry.id, plan);
       commitRow(row.rowNumber, own, plan, created, snapshot, seen);
       outcomes.push({

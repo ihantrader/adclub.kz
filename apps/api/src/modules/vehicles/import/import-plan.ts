@@ -178,6 +178,7 @@ function parseYear(
   value: string | undefined,
   column: VehicleImportColumn,
   reasons: VehicleImportReason[],
+  latestYear: number,
 ): number | null {
   if (value === undefined || value === "") {
     return null;
@@ -190,6 +191,13 @@ function parseYear(
         column,
         `«${value}» is not a year from ${VEHICLE_YEAR_MIN} to ${VEHICLE_YEAR_MAX}`,
       ),
+    );
+    return null;
+  }
+  // A year of production is never a future one (D-071) — as in the admin panel.
+  if (year > latestYear) {
+    reasons.push(
+      reason("invalid_year", column, `${year} is later than the current year (${latestYear})`),
     );
     return null;
   }
@@ -260,11 +268,14 @@ function findOption(
 /**
  * Plans one row against the snapshot and the rows already seen. Nothing
  * is changed: `commitRow` records what a row that isn't rejected creates.
+ * `latestYear` — the current year (`latestVehicleYear`): a later one is
+ * `invalid_year`.
  */
 export function planRow(
   values: RowValues | null,
   snapshot: ImportSnapshot,
   seen: SeenRows,
+  latestYear: number,
 ): RowPlan {
   if (values === null) {
     return rejected([
@@ -299,10 +310,20 @@ export function planRow(
     }
   }
 
-  const yearFrom = parseYear(text.year_from, "year_from", reasons);
-  const yearTo = parseYear(text.year_to, "year_to", reasons);
-  const generationFrom = parseYear(text.generation_year_from, "generation_year_from", reasons);
-  const generationTo = parseYear(text.generation_year_to, "generation_year_to", reasons);
+  const yearFrom = parseYear(text.year_from, "year_from", reasons, latestYear);
+  const yearTo = parseYear(text.year_to, "year_to", reasons, latestYear);
+  const generationFrom = parseYear(
+    text.generation_year_from,
+    "generation_year_from",
+    reasons,
+    latestYear,
+  );
+  const generationTo = parseYear(
+    text.generation_year_to,
+    "generation_year_to",
+    reasons,
+    latestYear,
+  );
   if (yearFrom !== null && yearTo !== null && yearTo < yearFrom) {
     reasons.push(reason("year_order", "year_to", "The last year is before the first one"));
   }

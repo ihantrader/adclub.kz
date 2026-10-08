@@ -43,6 +43,7 @@ import {
 } from "./vehicle-errors";
 import {
   checkYearOrder,
+  checkYearsNotLater,
   childCounts,
   statusChange,
   VehicleHierarchyService,
@@ -421,6 +422,7 @@ export class VehicleModificationsService {
       market: input.market,
     };
     checkYearOrder(values.yearFrom, values.yearTo);
+    checkYearsNotLater(values);
     return this.database.db.transaction(async (tx) => {
       await tx.execute(VEHICLE_LOCK);
       const generation = await this.usableGeneration(tx, values.generationId);
@@ -479,6 +481,10 @@ export class VehicleModificationsService {
         return this.describeModification(tx, row);
       }
       checkYearOrder(wanted.yearFrom, wanted.yearTo);
+      checkYearsNotLater({
+        yearFrom: changes.has("yearFrom") ? wanted.yearFrom : undefined,
+        yearTo: changes.has("yearTo") ? wanted.yearTo : undefined,
+      });
       // A value that stays may be archived meanwhile — the modification
       // keeps it; a value being chosen now must be usable.
       const generation = changes.has("generationId")

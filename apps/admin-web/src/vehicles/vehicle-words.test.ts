@@ -32,6 +32,7 @@ describe("the server's answers about cars, in words (TASK-035.B)", () => {
       field: "name",
       link: { href: `/vehicles/makes/${ID}`, label: "Открыть" },
       currentVersion: null,
+      existingId: ID,
     });
     expect(
       vehicleErrorView(
@@ -105,6 +106,28 @@ describe("the server's answers about cars, in words (TASK-035.B)", () => {
     expect(
       vehicleErrorView(apiError(409, "VEHICLE_REFERENCE_ARCHIVED", { field: "engineId" })),
     ).toMatchObject({ field: "engineId" });
+  });
+
+  it("keeps the engine a colleague just added, to choose it from a modification (TASK-035.C)", () => {
+    expect(
+      vehicleErrorView(
+        apiError(409, "VEHICLE_DUPLICATE", { entity: "engine", existingId: ID, spelling: "H4J" }),
+      ),
+    ).toMatchObject({
+      text: "«H4J» уже занято. Такой двигатель уже есть",
+      field: "code",
+      existingId: ID,
+    });
+  });
+
+  it("says a year can't be later than the current one, at its field (TASK-035.C)", () => {
+    const message = "The year can't be later than the current year (2026)";
+    expect(
+      vehicleErrorView(apiError(400, "VALIDATION_ERROR", [{ path: "yearTo", message }], message)),
+    ).toMatchObject({
+      text: "Год выпуска не может быть позже текущего — обновите страницу",
+      field: "yearTo",
+    });
   });
 
   it("counts in the right form of the word", () => {

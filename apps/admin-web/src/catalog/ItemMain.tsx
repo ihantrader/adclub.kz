@@ -529,44 +529,34 @@ function BrandPicker({
               : null,
           );
         }}
-        footer={(typed, close) => (
-          <Button
-            variant="text"
-            size="s"
-            icon="plus"
-            onClick={() => {
-              setCreating(true);
-              setNewName(typed);
-              close();
-            }}
-          >
-            {typed ? `Новый бренд «${typed}»` : "Новый бренд"}
-          </Button>
-        )}
+        create={{
+          label: "Новый бренд",
+          onCreate: (typed) => {
+            setCreating(true);
+            setNewName(typed);
+            setCreateError(null);
+          },
+        }}
       />
-      {!brand && (
-        <>
-          {creating ? (
-            <div className="localized-fields">
-              <TextField label="Название бренда" value={newName} onChange={setNewName} />
-              <TextField
-                label="Другие написания через запятую"
-                value={newAliases}
-                onChange={setNewAliases}
-                hint="GEELY Auto, Джили"
-              />
-              {createError && <p className="dialog-error">{createError}</p>}
-              <div className="button-row">
-                <Button size="s" onClick={create} disabled={!newName.trim()}>
-                  Создать бренд
-                </Button>
-                <Button variant="text" size="s" onClick={() => setCreating(false)}>
-                  Отмена
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </>
+      {creating && (
+        <div className="localized-fields">
+          <TextField label="Название бренда" value={newName} onChange={setNewName} />
+          <TextField
+            label="Другие написания через запятую"
+            value={newAliases}
+            onChange={setNewAliases}
+            hint="GEELY Auto, Джили"
+          />
+          {createError && <p className="dialog-error">{createError}</p>}
+          <div className="button-row">
+            <Button size="s" onClick={create} disabled={!newName.trim()}>
+              Создать бренд
+            </Button>
+            <Button variant="text" size="s" onClick={() => setCreating(false)}>
+              Отмена
+            </Button>
+          </div>
+        </div>
       )}
       {error && <span className="dialog-error">{error}</span>}
     </div>

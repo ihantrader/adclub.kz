@@ -9,20 +9,26 @@ import type {
   UpdateVehicleGenerationBody,
   UpdateVehicleModelBody,
   UpdateVehicleModificationBody,
-  VehicleMarket,
   VehicleOptionKind,
   VehicleParentRef,
 } from "@adclub/contracts";
 import { auditEntities } from "@adclub/contracts";
-import { Button, Dialog, Segments, TextField } from "@adclub/ui";
+import { Button, Dialog, TextField } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { SearchSelect } from "../search-select/SearchSelect";
-import type { Choice } from "../search-select/search-select-core";
-import { createChoiceSources } from "../search-select/sources";
+import { SEARCH_PAGE, type Choice } from "../search-select/search-select-core";
+import { createChoiceSources, engineChoice } from "../search-select/sources";
 import { aliasesOf, FormError, numberOf, sameAliases, useSaver, type Saver } from "./shared";
-import { MARKET_TEXT, OPTION_KIND_TEXT, yearsText } from "./vehicle-words";
+import { OPTION_KIND_TEXT, yearsText } from "./vehicle-words";
+import {
+  FIRST_LISTED_YEAR,
+  modificationYearChoices,
+  yearChoices,
+  yearFromValue,
+  yearValue,
+} from "./year-choices";
 
 const sources = createChoiceSources(apiClient);
 
@@ -76,12 +82,50 @@ function useOpened<T>(record: Editing<T>, reset: (record: Editing<T>) => void) {
   }
 }
 
-const yearText = (year: number | null | undefined) => (year == null ? "" : String(year));
-
-/** A year field's value: `null` when empty, `NaN` when it isn't a whole year. */
-function yearOf(text: string): number | null {
-  const value = numberOf(text);
-  return value === null || Number.isInteger(value) ? value : Number.NaN;
+/**
+ * A year chosen from a list (TASK-035.C, D-071): the years of
+ * `yearChoices`, newest first; the first entry — `none` («Выберите год»,
+ * «по настоящее время»).
+ */
+function YearSelect({
+  label,
+  value,
+  onChange,
+  years,
+  none,
+  hint,
+  error,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (year: number | null) => void;
+  years: readonly number[];
+  none: string;
+  hint?: string;
+  error?: ReactNode;
+}) {
+  return (
+    <label className="select">
+      <span className="ac-text-caption ac-muted">{label}</span>
+      <select
+        value={yearValue(value)}
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => onChange(yearFromValue(event.target.value))}
+      >
+        <option value="">{none}</option>
+        {years.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
+      {error ? (
+        <span className="dialog-error">{error}</span>
+      ) : hint ? (
+        <span className="ac-text-caption ac-muted">{hint}</span>
+      ) : null}
+    </label>
+  );
 }
 
 // -------------------------------------------------------------------- make
@@ -282,28 +326,22 @@ export function GenerationDialog({
     parents: { make: model.make, model },
   });
   const [name, setName] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [yearFrom, setYearFrom] = useState<number | null>(null);
+  const [yearTo, setYearTo] = useState<number | null>(null);
   const [local, setLocal] = useState<{ field: string; text: string } | null>(null);
+  const record = generation && generation !== "new" ? generation : null;
   useOpened(generation, (opened) => {
     saver.reset();
     setLocal(null);
     setName(opened && opened !== "new" ? opened.name : "");
-    setFrom(opened && opened !== "new" ? yearText(opened.yearFrom) : "");
-    setTo(opened && opened !== "new" ? yearText(opened.yearTo) : "");
+    setYearFrom(opened && opened !== "new" ? opened.yearFrom : null);
+    setYearTo(opened && opened !== "new" ? opened.yearTo : null);
   });
 
   const save = async () => {
     if (!generation) return;
-    const yearFrom = yearOf(from);
-    const yearTo = yearOf(to);
     if (!name.trim()) return setLocal({ field: "name", text: "Название обязательно" });
-    if (yearFrom === null || Number.isNaN(yearFrom)) {
-      return setLocal({ field: "yearFrom", text: "Первый год — четыре цифры, например 2019" });
-    }
-    if (Number.isNaN(yearTo)) {
-      return setLocal({ field: "yearTo", text: "Год — четыре цифры или пусто, если выпускается" });
-    }
+    if (yearFrom === null) return setLocal({ field: "yearFrom", text: "Выберите первый год" });
     setLocal(null);
     let saved: AdminVehicleGeneration | null = null;
     await saver.run(generation === "new" ? null : generation.id, async () => {
@@ -352,21 +390,21 @@ export function GenerationDialog({
         error={error("name")}
       />
       <div className="form-grid">
-        <TextField
+        <YearSelect
           label="Год с"
-          value={from}
-          onChange={setFrom}
-          inputMode="numeric"
-          autoComplete="off"
+          value={yearFrom}
+          onChange={setYearFrom}
+          years={yearChoices({ keep: [record?.yearFrom] })}
+          none="Выберите год"
           error={error("yearFrom")}
         />
-        <TextField
+        <YearSelect
           label="Год по"
-          value={to}
-          onChange={setTo}
-          inputMode="numeric"
-          autoComplete="off"
-          hint="Пусто — выпускается по наст. время"
+          value={yearTo}
+          onChange={setYearTo}
+          // Not before «с»: a 1998 from a file lists from 1998.
+          years={yearChoices({ from: yearFrom ?? FIRST_LISTED_YEAR, keep: [record?.yearTo] })}
+          none="по настоящее время"
           error={error("yearTo")}
         />
       </div>
@@ -424,11 +462,14 @@ function OptionSelect({
   );
 }
 
-const MARKETS: { value: VehicleMarket; label: string }[] = [
-  { value: "kz", label: MARKET_TEXT.kz },
-  { value: "global", label: MARKET_TEXT.global },
-];
-
+/**
+ * A modification (A-CAR-01). The market is the server's and the import
+ * file's: the admin panel doesn't offer it (TASK-035.C, D-071) — a new
+ * modification is `kz`, as before, and an edit never sends it. An engine
+ * that isn't in the catalog yet is added right from «Двигатель»
+ * («Новый двигатель «…»» of the search) and is chosen once saved; what is
+ * typed in this form stays.
+ */
 export function ModificationDialog({
   modification,
   generation,
@@ -457,9 +498,10 @@ export function ModificationDialog({
   const [engine, setEngine] = useState<Choice | null>(null);
   const [transmission, setTransmission] = useState("");
   const [drive, setDrive] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [market, setMarket] = useState<VehicleMarket>("kz");
+  const [yearFrom, setYearFrom] = useState<number | null>(null);
+  const [yearTo, setYearTo] = useState<number | null>(null);
+  /** The code typed for «Новый двигатель»: its form is open while not `null`. */
+  const [newEngine, setNewEngine] = useState<string | null>(null);
   const [local, setLocal] = useState<{ field: string; text: string } | null>(null);
   useOpened(modification, (opened) => {
     saver.reset();
@@ -478,16 +520,14 @@ export function ModificationDialog({
     );
     setTransmission(record?.transmissionType.id ?? "");
     setDrive(record?.driveType.id ?? "");
-    setFrom(record ? yearText(record.yearFrom) : yearText(generation.yearFrom));
-    setTo(record ? yearText(record.yearTo) : yearText(generation.yearTo));
-    setMarket(record?.market ?? "kz");
+    setYearFrom(record ? record.yearFrom : generation.yearFrom);
+    setYearTo(record ? record.yearTo : generation.yearTo);
+    setNewEngine(null);
   });
   const record = modification && modification !== "new" ? modification : null;
 
   const save = async () => {
     if (!modification) return;
-    const yearFrom = yearOf(from);
-    const yearTo = yearOf(to);
     const missing = !body
       ? "bodyTypeId"
       : !engine
@@ -498,11 +538,10 @@ export function ModificationDialog({
             ? "driveTypeId"
             : null;
     if (missing) return setLocal({ field: missing, text: "Выберите значение" });
-    if (yearFrom === null || Number.isNaN(yearFrom)) {
-      return setLocal({ field: "yearFrom", text: "Первый год — четыре цифры" });
-    }
-    if (Number.isNaN(yearTo)) {
-      return setLocal({ field: "yearTo", text: "Год — четыре цифры или пусто, если выпускается" });
+    if (yearFrom === null) return setLocal({ field: "yearFrom", text: "Выберите первый год" });
+    if (yearTo === null && generation.yearTo !== null) {
+      // The generation ended: a modification can't still be made.
+      return setLocal({ field: "yearTo", text: "Выберите последний год" });
     }
     setLocal(null);
     let saved: AdminVehicleModification | null = null;
@@ -517,7 +556,8 @@ export function ModificationDialog({
             driveTypeId: drive,
             yearFrom,
             yearTo,
-            market,
+            // Not offered by the admin panel (D-071): the value it always had.
+            market: "kz",
           })
         ).modification;
         return;
@@ -532,7 +572,6 @@ export function ModificationDialog({
       if (drive !== record.driveType.id) patch.driveTypeId = drive;
       if (yearFrom !== record.yearFrom) patch.yearFrom = yearFrom;
       if (yearTo !== record.yearTo) patch.yearTo = yearTo;
-      if (market !== record.market) patch.market = market;
       saved = (await apiClient.updateVehicleModification({ modificationId: record.id }, patch))
         .modification;
     });
@@ -541,92 +580,114 @@ export function ModificationDialog({
 
   const error = (field: string) => (local?.field === field ? local.text : saver.fieldError(field));
   return (
-    <EditDialog
-      open={modification !== null}
-      title={record ? "Изменить модификацию" : "Новая модификация"}
-      onClose={onClose}
-      onSave={save}
-      saver={saver}
-    >
-      <p className="ac-text-body-s ac-muted">
-        {generation.make.name} {generation.model.name} · поколение {generation.name},{" "}
-        {yearsText(generation.yearFrom, generation.yearTo)}
-      </p>
-      <div className="form-grid">
-        <OptionSelect
-          label="Кузов"
-          kind="body"
-          options={options}
-          value={body}
-          onChange={setBody}
-          current={record?.bodyType}
-          error={error("bodyTypeId")}
-        />
-        <SearchSelect
-          label="Двигатель"
-          name="engineId"
-          value={engine}
-          onChange={setEngine}
-          search={sources.engines("active")}
-          placeholder="Код двигателя"
-          error={
-            local?.field === "engineId"
-              ? local.text
-              : saver.error?.field === "engineId"
-                ? saver.error.text
-                : null
-          }
-        />
-        <OptionSelect
-          label="КПП"
-          kind="transmission"
-          options={options}
-          value={transmission}
-          onChange={setTransmission}
-          current={record?.transmissionType}
-          error={error("transmissionTypeId")}
-        />
-        <OptionSelect
-          label="Привод"
-          kind="drive"
-          options={options}
-          value={drive}
-          onChange={setDrive}
-          current={record?.driveType}
-          error={error("driveTypeId")}
-        />
-        <TextField
-          label="Год с"
-          value={from}
-          onChange={setFrom}
-          inputMode="numeric"
-          autoComplete="off"
-          error={error("yearFrom")}
-        />
-        <TextField
-          label="Год по"
-          value={to}
-          onChange={setTo}
-          inputMode="numeric"
-          autoComplete="off"
-          hint="Пусто — выпускается по наст. время"
-          error={error("yearTo")}
-        />
-      </div>
-      <Segments label="Рынок" options={MARKETS} value={market} onChange={setMarket} />
-      <FormError
+    <>
+      <EditDialog
+        open={modification !== null}
+        title={record ? "Изменить модификацию" : "Новая модификация"}
+        onClose={onClose}
+        onSave={save}
         saver={saver}
-        fields={[
-          "bodyTypeId",
-          "engineId",
-          "transmissionTypeId",
-          "driveTypeId",
-          "yearFrom",
-          "yearTo",
-        ]}
-        onRefresh={onRefresh}
+      >
+        <p className="ac-text-body-s ac-muted">
+          {generation.make.name} {generation.model.name} · поколение {generation.name},{" "}
+          {yearsText(generation.yearFrom, generation.yearTo)}
+        </p>
+        <div className="form-grid">
+          <OptionSelect
+            label="Кузов"
+            kind="body"
+            options={options}
+            value={body}
+            onChange={setBody}
+            current={record?.bodyType}
+            error={error("bodyTypeId")}
+          />
+          <SearchSelect
+            label="Двигатель"
+            name="engineId"
+            value={engine}
+            onChange={setEngine}
+            search={sources.engines("active")}
+            placeholder="Код двигателя"
+            create={{ label: "Новый двигатель", onCreate: setNewEngine }}
+            error={
+              local?.field === "engineId"
+                ? local.text
+                : saver.error?.field === "engineId"
+                  ? saver.error.text
+                  : null
+            }
+          />
+          <OptionSelect
+            label="КПП"
+            kind="transmission"
+            options={options}
+            value={transmission}
+            onChange={setTransmission}
+            current={record?.transmissionType}
+            error={error("transmissionTypeId")}
+          />
+          <OptionSelect
+            label="Привод"
+            kind="drive"
+            options={options}
+            value={drive}
+            onChange={setDrive}
+            current={record?.driveType}
+            error={error("driveTypeId")}
+          />
+          <YearSelect
+            label="Год с"
+            value={yearFrom}
+            onChange={setYearFrom}
+            years={modificationYearChoices(generation, [record?.yearFrom])}
+            none="Выберите год"
+            error={error("yearFrom")}
+          />
+          <YearSelect
+            label="Год по"
+            value={yearTo}
+            onChange={setYearTo}
+            years={modificationYearChoices(
+              { yearFrom: yearFrom ?? generation.yearFrom, yearTo: generation.yearTo },
+              [record?.yearTo],
+            )}
+            // Only a generation still made has modifications still made.
+            none={generation.yearTo === null ? "по настоящее время" : "Выберите год"}
+            error={error("yearTo")}
+          />
+        </div>
+        <FormError
+          saver={saver}
+          fields={[
+            "bodyTypeId",
+            "engineId",
+            "transmissionTypeId",
+            "driveTypeId",
+            "yearFrom",
+            "yearTo",
+          ]}
+          onRefresh={onRefresh}
+        />
+      </EditDialog>
+      {/* A sibling, not a child: the engine's dialog opens above, and closing it leaves this form as it was. */}
+      <EngineDialog
+        engine={newEngine === null ? null : "new"}
+        initialCode={newEngine ?? ""}
+        options={options}
+        onClose={() => setNewEngine(null)}
+        onSaved={(created) => {
+          setEngine(engineChoice(created));
+          setNewEngine(null);
+          if (local?.field === "engineId") setLocal(null);
+        }}
+        onChooseExisting={(existing) => {
+          setEngine(existing);
+          setNewEngine(null);
+          if (local?.field === "engineId") setLocal(null);
+        }}
       />
-    </EditDialog>
+    </>
   );
 }
 
@@ -634,15 +695,25 @@ export function ModificationDialog({
 
 export function EngineDialog({
   engine,
+  initialCode = "",
   options,
   onClose,
   onSaved,
+  onChooseExisting,
   onRefresh,
 }: {
   engine: Editing<AdminVehicleEngine>;
+  /** A new engine's code to start with: what was typed in the search (TASK-035.C). */
+  initialCode?: string;
   options: readonly AdminVehicleOption[];
   onClose: () => void;
   onSaved: (engine: AdminVehicleEngine) => void;
+  /**
+   * Opened from a modification: an engine that already has this code (a
+   * colleague added it a moment ago) is offered to choose instead of a
+   * link away from the form.
+   */
+  onChooseExisting?: (engine: Choice) => void;
   onRefresh?: () => void;
 }) {
   const saver = useSaver(auditEntities.vehicleEngine);
@@ -652,12 +723,14 @@ export function EngineDialog({
   const [displacement, setDisplacement] = useState("");
   const [power, setPower] = useState("");
   const [local, setLocal] = useState<{ field: string; text: string } | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const record = engine && engine !== "new" ? engine : null;
   useOpened(engine, (opened) => {
     saver.reset();
     setLocal(null);
+    setChoosing(false);
     const shown = opened && opened !== "new" ? opened : null;
-    setCode(shown?.code ?? "");
+    setCode(shown?.code ?? (opened === "new" ? initialCode.trim() : ""));
     setAliases(shown?.aliases.join(", ") ?? "");
     setFuel(shown?.fuel.id ?? "");
     setDisplacement(
@@ -704,7 +777,31 @@ export function EngineDialog({
     if (saved) onSaved(saved);
   };
 
-  const error = (field: string) => (local?.field === field ? local.text : saver.fieldError(field));
+  // The engine the server named as taken, to choose instead (nested in a modification only).
+  const existingId = onChooseExisting && !record ? (saver.error?.existingId ?? null) : null;
+  const chooseExisting = async () => {
+    if (!existingId || !onChooseExisting) return;
+    setChoosing(true);
+    try {
+      const page = await apiClient.listVehicleEngines({
+        query: { q: code.trim(), limit: SEARCH_PAGE },
+      });
+      const found = page.engines.find((entry) => entry.id === existingId);
+      onChooseExisting(found ? engineChoice(found) : { id: existingId, label: code.trim() });
+    } catch {
+      // The search failed: the id is enough to choose it, the code is what was typed.
+      onChooseExisting({ id: existingId, label: code.trim() });
+    } finally {
+      setChoosing(false);
+    }
+  };
+
+  const error = (field: string) =>
+    local?.field === field
+      ? local.text
+      : existingId && field === "code" && saver.error?.field === "code"
+        ? saver.error.text
+        : saver.fieldError(field);
   return (
     <EditDialog
       open={engine !== null}
@@ -721,6 +818,13 @@ export function EngineDialog({
         hint="JLH-3G15TD — как в документах производителя"
         error={error("code")}
       />
+      {existingId && (
+        <div className="button-row">
+          <Button variant="secondary" size="s" onClick={chooseExisting} loading={choosing}>
+            Выбрать существующий
+          </Button>
+        </div>
+      )}
       <TextField
         label="Другие написания через запятую"
         value={aliases}

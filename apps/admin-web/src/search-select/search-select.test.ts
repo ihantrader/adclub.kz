@@ -1,7 +1,14 @@
 import type { ApiClient } from "@adclub/api-client";
 import type { AdminBrand, AdminVehicleEngine, AdminVehicleMake } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
-import { listed, moveActive, SEARCH_PAGE, searchQuery } from "./search-select-core";
+import {
+  createText,
+  firstActive,
+  listed,
+  moveActive,
+  SEARCH_PAGE,
+  searchQuery,
+} from "./search-select-core";
 import { createChoiceSources, engineChoice, generationChoice } from "./sources";
 
 const NOW = "2026-10-07T10:00:00.000Z";
@@ -108,6 +115,20 @@ describe("«выбор с поиском» (TASK-035.B)", () => {
     // Typing shows only what was found.
     expect(listed([chery], { typed: true, empty: "Любой", chosen: archived })).toEqual([chery]);
     expect(listed([], { typed: false })).toEqual([]);
+  });
+
+  it("offers «Новый …» with what is typed, highlighted when nothing was found (TASK-035.C)", () => {
+    expect(createText("Новый двигатель", "H4J")).toBe("Новый двигатель «H4J»");
+    expect(createText("Новый бренд", "")).toBe("Новый бренд");
+    // Typed, nothing found: the «new value» entry is the only one — Enter opens its form.
+    expect(firstActive({ typed: true, found: 0, canCreate: true })).toBe(0);
+    // Typed and found: the best match, as before; the entry stays last for a click or End.
+    expect(firstActive({ typed: true, found: 3, canCreate: true })).toBe(0);
+    expect(firstActive({ typed: true, found: 0, canCreate: false })).toBe(-1);
+    // Browsing: nothing highlighted until the keyboard moves.
+    expect(firstActive({ typed: false, found: 20, canCreate: true })).toBe(-1);
+    // The entry is one more stop of the keyboard: End reaches it after 3 found.
+    expect(moveActive(0, 3 + 1, "End")).toBe(3);
   });
 
   it("says what an engine and a generation are besides their names", () => {

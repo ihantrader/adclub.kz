@@ -1,4 +1,4 @@
-import { Spinner, useLoadingGate } from "@adclub/ui";
+import { Icon, Spinner, useLoadingGate } from "@adclub/ui";
 import {
   useEffect,
   useId,
@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  createText,
+  firstActive,
   isMoveKey,
   listed,
   moveActive,
@@ -36,8 +38,15 @@ export interface SearchSelectProps {
   hint?: ReactNode;
   error?: string | null;
   disabled?: boolean;
-  /** Under the list: an action such as «Новый бренд» (gets what is typed). */
-  footer?: (typed: string, close: () => void) => ReactNode;
+  /**
+   * «Новое значение» (TASK-035.C): the last entry of the list — «Новый
+   * двигатель «{typed}»» — for a record the search didn't find. Choosing it
+   * (a click, or Enter: typed and nothing found, it is the one highlighted)
+   * closes the list and hands over what was typed; the screen opens its
+   * form and, once saved, makes the new record the value. The field keeps
+   * its value meanwhile.
+   */
+  create?: { label: string; onCreate: (typed: string) => void };
   /** `name` of the field for the error a server names it by. */
   name?: string;
 }
@@ -50,7 +59,9 @@ export interface SearchSelectProps {
  * arrows, Home/End, Enter chooses, Esc closes and keeps the choice (and
  * doesn't close a dialog around it). The found entries stay on screen while
  * the next answer comes; a slow one shows a quiet indicator, and only the
- * answer to what is typed now is shown (D-069).
+ * answer to what is typed now is shown (D-069). A list that can grow from
+ * here (`create`) ends with «Новый …» — one way of adding a value for every
+ * such field (brands, engines).
  */
 export function SearchSelect({
   label,
@@ -63,7 +74,7 @@ export function SearchSelect({
   hint,
   error,
   disabled,
-  footer,
+  create,
   name,
 }: SearchSelectProps) {
   const id = useId();
@@ -91,6 +102,10 @@ export function SearchSelect({
   const entries = open
     ? listed(current?.choices ?? [], { typed: query !== "", empty, chosen: value })
     : [];
+  // The «new value» entry comes after the found ones: its index is their count.
+  const createIndex = open && create ? entries.length : -1;
+  const count = entries.length + (createIndex >= 0 ? 1 : 0);
+  const canCreate = create !== undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -103,8 +118,7 @@ export function SearchSelect({
             !cancelled &&
             settle(ticket, () => {
               setFound({ key: sourceKey, query, choices, failed: false });
-              // Typed — Enter takes the best match; browsing — nothing is highlighted yet.
-              setActive(query && choices.length > 0 ? 0 : -1);
+              setActive(firstActive({ typed: query !== "", found: choices.length, canCreate }));
             }),
           () =>
             !cancelled &&
@@ -117,7 +131,7 @@ export function SearchSelect({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, query, sourceKey, begin, settle]);
+  }, [open, query, sourceKey, begin, settle, canCreate]);
 
   const close = () => {
     setOpen(false);
@@ -131,6 +145,12 @@ export function SearchSelect({
     close();
   };
 
+  const startCreating = () => {
+    const typed = query;
+    close();
+    create?.onCreate(typed);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (isMoveKey(event.key)) {
       event.preventDefault();
@@ -138,11 +158,14 @@ export function SearchSelect({
         setOpen(true);
         return;
       }
-      setActive(moveActive(active, entries.length, event.key));
+      setActive(moveActive(active, count, event.key));
       return;
     }
     if (event.key === "Enter") {
-      if (open && active >= 0 && active < entries.length) {
+      if (open && active >= 0 && active === createIndex) {
+        event.preventDefault();
+        startCreating();
+      } else if (open && active >= 0 && active < entries.length) {
         event.preventDefault();
         choose(entries[active] ?? null);
       }
@@ -203,6 +226,17 @@ export function SearchSelect({
           // A click inside keeps the focus in the field (it would close the list first).
           onMouseDown={(event) => event.preventDefault()}
         >
+          {!waitingFirst && current?.failed && (
+            <p className="search-select__message ac-text-caption ac-muted">
+              Не удалось найти — нет связи с сервером
+            </p>
+          )}
+          {!waitingFirst && !current?.failed && entries.length === 0 && (
+            <p className="search-select__message ac-text-caption ac-muted">Ничего не нашлось</p>
+          )}
+          {waitingFirst && gate.indicator && (
+            <p className="search-select__message ac-text-caption ac-muted">Ищем…</p>
+          )}
           <ul id={listId} role="listbox" aria-label={label} className="search-select__list">
             {entries.map((entry, index) => (
               <li
@@ -226,19 +260,26 @@ export function SearchSelect({
                 )}
               </li>
             ))}
+            {create && (
+              <li
+                id={`${listId}-${createIndex}`}
+                role="option"
+                aria-selected={false}
+                className={[
+                  "search-select__option search-select__option--create",
+                  createIndex === active && "search-select__option--active",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onMouseEnter={() => setActive(createIndex)}
+                onClick={startCreating}
+              >
+                <span className="search-select__text">
+                  <Icon name="plus" size={16} /> {createText(create.label, query)}
+                </span>
+              </li>
+            )}
           </ul>
-          {!waitingFirst && current?.failed && (
-            <p className="search-select__message ac-text-caption ac-muted">
-              Не удалось найти — нет связи с сервером
-            </p>
-          )}
-          {!waitingFirst && !current?.failed && entries.length === 0 && (
-            <p className="search-select__message ac-text-caption ac-muted">Ничего не нашлось</p>
-          )}
-          {waitingFirst && gate.indicator && (
-            <p className="search-select__message ac-text-caption ac-muted">Ищем…</p>
-          )}
-          {footer && <div className="search-select__footer">{footer(query, close)}</div>}
         </div>
       )}
       {error ? (

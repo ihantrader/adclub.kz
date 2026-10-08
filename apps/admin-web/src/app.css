@@ -1302,9 +1302,23 @@ code,
   padding: var(--ac-space-2) var(--ac-space-3);
 }
 
-.search-select__footer {
-  padding: var(--ac-space-1) var(--ac-space-2);
+/* «Новый двигатель «…»» (TASK-035.C): last, and in sight however long the list scrolls. */
+.search-select__option--create {
+  position: sticky;
+  bottom: calc(-1 * var(--ac-space-1));
   border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-accent);
+}
+
+.search-select__option--create.search-select__option--active {
+  background: var(--ac-color-fill);
+}
+
+.search-select__option--create .search-select__text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
 }
 
 .vehicle-fields .search-select__input {

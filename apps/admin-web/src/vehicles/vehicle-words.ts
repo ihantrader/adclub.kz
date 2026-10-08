@@ -8,7 +8,6 @@ import type {
   VehicleImportPlan,
   VehicleImportReason,
   VehicleImportStatus,
-  VehicleMarket,
   VehicleOptionKind,
   VehicleParentRef,
   VehicleYearsInvalidDetails,
@@ -29,11 +28,6 @@ export const OPTION_KIND_TEXT: Record<VehicleOptionKind, string> = {
   transmission: "КПП",
   drive: "Привод",
   fuel: "Топливо",
-};
-
-export const MARKET_TEXT: Record<VehicleMarket, string> = {
-  kz: "Казахстан",
-  global: "Другие рынки",
 };
 
 export const STATUS_TEXT: Record<VehicleEntryStatus, string> = {
@@ -77,6 +71,8 @@ export interface VehicleErrorView {
   link: { href: string; label: string } | null;
   /** `VEHICLE_VERSION_CONFLICT`: the version stored now. */
   currentVersion: number | null;
+  /** `VEHICLE_DUPLICATE`: the record that exists — «Выбрать существующий» in a nested form. */
+  existingId?: string | null;
 }
 
 const DUPLICATE_TEXT: Record<VehicleEntity, string> = {
@@ -208,6 +204,7 @@ export function vehicleErrorView(
         field: DUPLICATE_FIELD[entity],
         link: href ? { href, label: "Открыть" } : null,
         currentVersion: null,
+        existingId: existingId ?? null,
       };
     }
     case "VEHICLE_YEARS_INVALID": {
@@ -243,6 +240,11 @@ export function vehicleErrorView(
         Array.isArray(details) && typeof (details[0] as { path?: unknown })?.path === "string"
           ? ((details[0] as { path: string }).path.split(".")[0] ?? null)
           : null;
+      // A year later than the current one (D-071): the lists don't offer it,
+      // but a list drawn before New Year's midnight can still send it.
+      if ((path === "yearFrom" || path === "yearTo") && /current year/.test(error.message)) {
+        return view("Год выпуска не может быть позже текущего — обновите страницу", path);
+      }
       return view(validationText(error) ?? "Проверьте введённое", path);
     }
     case "NOT_FOUND":

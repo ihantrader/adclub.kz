@@ -34,7 +34,7 @@ import {
   useStatusFlow,
   usePaged,
 } from "./shared";
-import { countText, MARKET_TEXT, MODIFICATIONS, yearsText } from "./vehicle-words";
+import { countText, MODIFICATIONS, yearsText } from "./vehicle-words";
 
 /**
  * A model with its generations (A-CAR-01; TASK-035.B): the model's card —
@@ -334,7 +334,8 @@ export function ModelPage({ modelId }: { modelId: string }) {
 
 /**
  * A generation with its modifications (A-CAR-01; TASK-035.B): body,
- * engine, gearbox, drive, years within the generation's, market. Dozens of
+ * engine, gearbox, drive, years within the generation's (the market is the
+ * server's and the import file's — not shown, TASK-035.C). Dozens of
  * modifications fit a 1024 px table without scrolling sideways; an
  * archived engine or option is shown marked and is never lost by an edit.
  */
@@ -527,7 +528,6 @@ export function GenerationPage({ generationId }: { generationId: string }) {
                   <th scope="col">КПП</th>
                   <th scope="col">Привод</th>
                   <th scope="col">Годы</th>
-                  <th scope="col">Рынок</th>
                   <th scope="col">Статус</th>
                   <th scope="col" className="admin-table__actions">
                     Действия
@@ -572,9 +572,6 @@ export function GenerationPage({ generationId }: { generationId: string }) {
                     </td>
                     <td className="years ac-text-body-s">
                       {yearsText(modification.yearFrom, modification.yearTo)}
-                    </td>
-                    <td className="ac-text-body-s">
-                      {MARKET_TEXT[modification.market]}
                       {modification.source === "import" && (
                         <span className="ac-text-caption ac-muted"> · импорт</span>
                       )}

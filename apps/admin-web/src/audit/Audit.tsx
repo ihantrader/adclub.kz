@@ -16,6 +16,7 @@ import {
   actorText,
   almatyDayStart,
   changeLines,
+  hiddenFieldsOf,
   entityLink,
   entityText,
   knownActions,
@@ -245,7 +246,7 @@ export function Audit() {
 /** One entry of the journal; the item card's «История» shows the same rows (TASK-035). */
 export function AuditRow({ entry }: { entry: AuditLogEntry }) {
   const [open, setOpen] = useState(false);
-  const lines = changeLines(entry.before, entry.after);
+  const lines = changeLines(entry.before, entry.after, hiddenFieldsOf(entry.entityType));
   const shown = open ? lines : lines.slice(0, SHORT_LINES);
   const link = entityLink(entry.entityType, entry.entityId, entry);
   const follow = (event: MouseEvent) => {

@@ -5,6 +5,7 @@ import {
   actorText,
   almatyDayStart,
   changeLines,
+  hiddenFieldsOf,
   entityLink,
   knownActions,
 } from "./audit-words";
@@ -53,6 +54,17 @@ describe("the words of the journal", () => {
       { field: "Статус", before: "—", after: "closed" },
     ]);
     expect(changeLines(3, 4)).toEqual([{ field: null, before: "3", after: "4" }]);
+  });
+
+  it("doesn't show the market of a modification (TASK-035.C)", () => {
+    const hidden = hiddenFieldsOf("vehicle_modification");
+    expect(
+      changeLines(null, { yearFrom: 2024, market: "kz" }, hidden).map((line) => line.field),
+    ).toEqual(["yearFrom"]);
+    expect(
+      changeLines({ market: "kz", version: 1 }, { market: "global", version: 2 }, hidden),
+    ).toEqual([{ field: "Версия", before: "1", after: "2" }]);
+    expect(hiddenFieldsOf("vehicle_engine")).toEqual([]);
   });
 
   it("takes the period by the days of Almaty", () => {

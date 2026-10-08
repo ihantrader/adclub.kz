@@ -65,6 +65,28 @@ export function moveActive(active: number, count: number, key: MoveKey): number 
 }
 
 /**
+ * The text of the «new value» entry (TASK-035.C): «Новый двигатель «3G15»»
+ * with what is typed, the bare label while nothing is.
+ */
+export function createText(label: string, typed: string): string {
+  return typed ? `${label} «${typed}»` : label;
+}
+
+/**
+ * The entry highlighted when an answer comes. Typed — the best match, so
+ * Enter takes it; typed and nothing found — the «new value» entry (it is
+ * the only one, at index 0), so Enter opens its form; browsing — nothing.
+ */
+export function firstActive(options: {
+  typed: boolean;
+  found: number;
+  canCreate: boolean;
+}): number {
+  if (!options.typed) return -1;
+  return options.found > 0 || options.canCreate ? 0 : -1;
+}
+
+/**
  * The entries a list shows: `empty` (the «Любой» / «Все» entry, choosing
  * nothing) first while nothing is typed, then the found ones; the chosen
  * one stays findable even when it is not among them (archived, or beyond

@@ -324,15 +324,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * «было → стало», compactly: field by field when both sides are objects
- * (only the fields that differ, then the ones only one side has), else one
- * line. Nothing — no change to show.
+ * Fields of an entry that say nothing to an administrator and aren't
+ * shown: the market of a modification is kept by the server and the import
+ * file, but the admin panel doesn't offer it (TASK-035.C, D-071).
  */
-export function changeLines(before: unknown, after: unknown): ChangeLine[] {
+const HIDDEN_FIELDS: Record<string, readonly string[]> = {
+  vehicle_modification: ["market"],
+};
+
+/** The fields of `entityType`'s entries «было → стало» leaves out. */
+export function hiddenFieldsOf(entityType: string): readonly string[] {
+  return HIDDEN_FIELDS[entityType] ?? [];
+}
+
+/**
+ * «было → стало», compactly: field by field when both sides are objects
+ * (only the fields that differ, then the ones only one side has; never
+ * `hidden`), else one line. Nothing — no change to show.
+ */
+export function changeLines(
+  before: unknown,
+  after: unknown,
+  hidden: readonly string[] = [],
+): ChangeLine[] {
   if (before === null && after === null) return [];
   if (isRecord(before) && isRecord(after)) {
     const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])];
     return keys
+      .filter((key) => !hidden.includes(key))
       .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
       .map((key) => ({
         field: FIELD_TEXT[key] ?? key,
@@ -341,11 +360,13 @@ export function changeLines(before: unknown, after: unknown): ChangeLine[] {
       }));
   }
   if (isRecord(after) && (before === null || before === undefined)) {
-    return Object.entries(after).map(([key, value]) => ({
-      field: FIELD_TEXT[key] ?? key,
-      before: "—",
-      after: short(value),
-    }));
+    return Object.entries(after)
+      .filter(([key]) => !hidden.includes(key))
+      .map(([key, value]) => ({
+        field: FIELD_TEXT[key] ?? key,
+        before: "—",
+        after: short(value),
+      }));
   }
   return [{ field: null, before: short(before), after: short(after) }];
 }

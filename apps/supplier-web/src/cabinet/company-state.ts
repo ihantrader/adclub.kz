@@ -1,4 +1,5 @@
 import type { SupplierCard } from "@adclub/contracts";
+import { supplierMayInvite } from "@adclub/domain";
 import type { SupplierTextKey } from "@adclub/i18n";
 
 /**
@@ -24,6 +25,15 @@ export function companyBanners(card: Pick<SupplierCard, "state" | "pause">): Com
       : [{ kind: "paused_admin", tone: "warning", text: "banner.pausedAdmin" }];
   }
   return [];
+}
+
+/**
+ * Whether «Добавить сотрудника» is offered (D-070): a blocked company adds
+ * no employees. Only what the page shows — the server refuses the request
+ * itself (`SUPPLIER_BLOCKED`), even from a page opened before the blocking.
+ */
+export function canAddMembers(card: Pick<SupplierCard, "state">): boolean {
+  return supplierMayInvite({ blocked: card.state === "blocked" });
 }
 
 /** The «Состояние» line of S-COMP-01. */

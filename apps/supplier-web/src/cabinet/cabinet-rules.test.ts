@@ -3,8 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 // The modules under test import the API client only for their effects.
 vi.mock("../api", () => ({ apiClient: {}, onContextChanged: () => () => undefined, session: {} }));
 
-const { companyBanners, companyStateText } = await import("./company-state");
+const { canAddMembers, companyBanners, companyStateText } = await import("./company-state");
 const { defaultNotificationLanguage } = await import("./notification-language");
+
+describe("adding employees (D-070)", () => {
+  it("is offered unless the company is blocked; a pause doesn't matter", () => {
+    expect(canAddMembers({ state: "active" })).toBe(true);
+    expect(canAddMembers({ state: "paused" })).toBe(true);
+    expect(canAddMembers({ state: "blocked" })).toBe(false);
+  });
+});
 
 describe("banners of the company's state (SCREENS 6.0)", () => {
   it("shows nothing for a working company", () => {

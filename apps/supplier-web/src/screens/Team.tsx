@@ -23,7 +23,8 @@ import {
 } from "@adclub/ui";
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, session } from "../api";
-import { clearCabinet } from "../cabinet/cabinet-store";
+import { clearCabinet, refreshCompany, useCabinet } from "../cabinet/cabinet-store";
+import { canAddMembers } from "../cabinet/company-state";
 import { formatPhone, typePhone, useOnline } from "@adclub/web-session";
 import { rateLimitName, retryMinutes, saveErrorText } from "../errors";
 import { useT, type Translate } from "../i18n";
@@ -49,7 +50,15 @@ export function notificationNote(
 }
 
 /** What the server's refusal of a new colleague means for the person adding them. */
-function addErrorText(error: unknown, t: Translate): { field?: "phone"; text: string } {
+function addErrorText(
+  error: unknown,
+  t: Translate,
+): { field?: "phone"; text: string; companyChanged?: true } {
+  // D-070: the company was blocked while the page was open — said in words,
+  // and the page re-reads the company, so «Добавить» goes away.
+  if (isApiError(error) && error.code === "SUPPLIER_BLOCKED") {
+    return { text: t("team.blocked"), companyChanged: true };
+  }
   if (isApiError(error) && error.code === "SUPPLIER_MEMBER_EXISTS") {
     const details = supplierMemberExistsDetailsSchema.safeParse(error.details);
     return {
@@ -81,6 +90,8 @@ export function Team() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<SupplierMember | null>(null);
+  const cabinet = useCabinet();
+  const mayAdd = cabinet.status !== "ready" || canAddMembers(cabinet.company.company);
   const gate = useLoadingGate();
   const { begin, settle } = gate;
 
@@ -168,7 +179,7 @@ export function Team() {
     <>
       <div className="page__head">
         <h1 className="ac-text-title page__title">{t("team.title")}</h1>
-        {!adding && (
+        {!adding && mayAdd && (
           <Button variant="secondary" icon="plus" onClick={() => setAdding(true)}>
             {t("team.add")}
           </Button>
@@ -179,7 +190,8 @@ export function Team() {
           {t("team.explanation", { n: list.notifications.limit })}
         </p>
       )}
-      {adding && (
+      {!mayAdd && <Banner tone="warning">{t("team.blocked")}</Banner>}
+      {adding && mayAdd && (
         <AddMember
           onCancel={() => setAdding(false)}
           onAdded={() => {
@@ -339,6 +351,7 @@ function AddMember({ onCancel, onAdded }: { onCancel: () => void; onAdded: () =>
       const problem = addErrorText(thrown, t);
       if (problem.field === "phone") setPhoneError(problem.text);
       else setError(problem.text);
+      if (problem.companyChanged) void refreshCompany();
     }
   };
 

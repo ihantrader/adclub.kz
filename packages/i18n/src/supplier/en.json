@@ -117,6 +117,7 @@
   "team.exists": "This number is already among the employees",
   "team.removedBefore": "This employee was removed earlier. Only a club administrator can restore access",
   "team.addLimit": "Many employees have been added today. Try again in {hours} h",
+  "team.blocked": "The cabinet has been blocked by a club administrator: employees can't be added and invitations aren't sent. Employees' settings can still be changed",
   "team.remove": "Remove",
   "team.removeTitle": "Remove the employee?",
   "team.removeText": "{name} will lose access at once and stop receiving notifications. Only a club administrator can restore access",

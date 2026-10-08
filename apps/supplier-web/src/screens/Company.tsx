@@ -6,27 +6,24 @@ import {
   Badge,
   Banner,
   Button,
-  Checkbox,
-  IconButton,
-  Segments,
+  ClosedDatesEditor,
   Switch,
   TextField,
+  todayIn,
+  upcomingClosedDates,
   useToast,
+  WeekHoursEditor,
+  weekFormOf,
+  weeklyHoursOf,
+  type ClosedDatesTexts,
+  type DayForm,
+  type WeekForm,
+  type WeekHoursTexts,
 } from "@adclub/ui";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { refreshCompany, setCompanyCard, type CabinetState } from "../cabinet/cabinet-store";
 import { companyStateText } from "../cabinet/company-state";
-import {
-  closedDateProblem,
-  todayIn,
-  upcomingClosedDates,
-  weekFormOf,
-  weeklyHoursOf,
-  type DayForm,
-  type DayMode,
-  type WeekForm,
-} from "../company/schedule-form";
 import { formatPhone, typePhone, useOnline } from "@adclub/web-session";
 import { saveErrorText } from "../errors";
 import { useLanguage, useT, type Translate } from "../i18n";
@@ -301,23 +298,41 @@ function DeliveryDefaultForm({ card, version, onSaved, onConflict }: FormProps) 
   );
 }
 
-const MODES: DayMode[] = ["hours", "off", "allDay"];
-
-function modeLabel(mode: DayMode, t: Translate): string {
-  switch (mode) {
-    case "off":
-      return t("company.dayOff");
-    case "allDay":
-      return t("company.allDay");
-    case "custom":
-      return t("company.customHours");
-    default:
-      return t("company.workDay");
-  }
+/** The words of the shared hours editor, in the cabinet's language. */
+function weekTexts(t: Translate): WeekHoursTexts {
+  return {
+    days: [t("day.1"), t("day.2"), t("day.3"), t("day.4"), t("day.5"), t("day.6"), t("day.7")],
+    dayMode: t("company.dayMode"),
+    workDay: t("company.workDay"),
+    dayOff: t("company.dayOff"),
+    allDay: t("company.allDay"),
+    customHours: t("company.customHours"),
+    from: t("company.from"),
+    to: t("company.to"),
+    withBreak: t("company.withBreak"),
+    breakFrom: t("company.breakFrom"),
+    breakTo: t("company.breakTo"),
+    intervalInvalid: t("company.intervalInvalid"),
+  };
 }
 
+function closedDatesTexts(t: Translate): ClosedDatesTexts {
+  return {
+    date: t("company.date"),
+    note: t("company.note"),
+    notePlaceholder: t("company.notePlaceholder"),
+    addDate: t("company.addDate"),
+    removeDate: t("company.removeDate"),
+    empty: t("company.closedDatesEmpty"),
+    pastDate: t("company.pastDate"),
+    duplicateDate: t("company.duplicateDate"),
+  };
+}
+
+/** The hours and days off — the same editor the admin panel uses (`@adclub/ui`, TASK-036). */
 function ScheduleForm({ card, version, onSaved, onConflict }: FormProps) {
   const t = useT();
+  const { lang } = useLanguage();
   const toast = useToast();
   const today = todayIn(card.timeZone);
   const [week, setWeek] = useState<WeekForm>(() => weekFormOf(card.schedule.weeklyHours));
@@ -364,232 +379,25 @@ function ScheduleForm({ card, version, onSaved, onConflict }: FormProps) {
       ) : (
         <p className="ac-text-body-s ac-muted">{t("company.hoursHint")}</p>
       )}
-      <ul className="week">
-        {week.map((day) => (
-          <WeekDay
-            key={day.day}
-            day={day}
-            invalid={invalidDays.includes(day.day)}
-            onChange={(change) => setDay(day.day, change)}
-          />
-        ))}
-      </ul>
+      <WeekHoursEditor
+        week={week}
+        invalidDays={invalidDays}
+        onDayChange={setDay}
+        texts={weekTexts(t)}
+      />
       {noWorkingDay && <Banner tone="danger">{t("company.noWorkingDay")}</Banner>}
 
       <h2 className="ac-text-heading">{t("company.closedDates")}</h2>
       <p className="ac-text-body-s ac-muted">{t("company.closedDatesHint")}</p>
-      <ClosedDates dates={dates} today={today} onChange={setDates} />
+      <ClosedDatesEditor
+        dates={dates}
+        today={today}
+        onChange={setDates}
+        texts={closedDatesTexts(t)}
+        locale={lang === "kk" ? "kk-KZ" : lang}
+      />
 
       <SaveRow onSave={save} error={error} />
     </section>
-  );
-}
-
-function WeekDay({
-  day,
-  invalid,
-  onChange,
-}: {
-  day: DayForm;
-  invalid: boolean;
-  onChange: (change: Partial<DayForm>) => void;
-}) {
-  const t = useT();
-  const dayName = t(`day.${day.day}` as `day.${1 | 2 | 3 | 4 | 5 | 6 | 7}`);
-  const modes = day.mode === "custom" ? [...MODES, "custom" as const] : MODES;
-  return (
-    <li className="week__day">
-      <span className="ac-text-body-strong">{dayName}</span>
-      <Segments<DayMode>
-        label={`${dayName}: ${t("company.dayMode")}`}
-        value={day.mode}
-        onChange={(mode) => onChange({ mode })}
-        options={modes.map((mode) => ({ value: mode, label: modeLabel(mode, t) }))}
-      />
-      {day.mode === "custom" && (
-        <p className="ac-text-body-s num">
-          {day.custom.map((interval) => `${interval.from}–${interval.to}`).join(", ")}
-        </p>
-      )}
-      {day.mode === "hours" && (
-        <div className="week__hours">
-          <div className="time-range">
-            <TimeInput
-              label={`${dayName}: ${t("company.from")}`}
-              text={t("company.from")}
-              value={day.from}
-              invalid={invalid}
-              onChange={(from) => onChange({ from })}
-            />
-            <TimeInput
-              label={`${dayName}: ${t("company.to")}`}
-              text={t("company.to")}
-              value={day.to}
-              invalid={invalid}
-              onChange={(to) => onChange({ to })}
-            />
-          </div>
-          <Checkbox
-            label={t("company.withBreak")}
-            checked={day.withBreak}
-            onChange={(withBreak) => onChange({ withBreak })}
-          />
-          {day.withBreak && (
-            <div className="time-range">
-              <TimeInput
-                label={`${dayName}: ${t("company.breakFrom")}`}
-                text={t("company.breakFrom")}
-                value={day.breakFrom}
-                invalid={invalid}
-                onChange={(breakFrom) => onChange({ breakFrom })}
-              />
-              <TimeInput
-                label={`${dayName}: ${t("company.breakTo")}`}
-                text={t("company.breakTo")}
-                value={day.breakTo}
-                invalid={invalid}
-                onChange={(breakTo) => onChange({ breakTo })}
-              />
-            </div>
-          )}
-          {invalid && (
-            <p className="ac-field__help ac-field__help--error" role="alert">
-              {t("company.intervalInvalid")}
-            </p>
-          )}
-        </div>
-      )}
-    </li>
-  );
-}
-
-/** A native time picker (the phone's own wheel), 24-hour `HH:MM`. */
-function TimeInput({
-  label,
-  text,
-  value,
-  invalid,
-  onChange,
-}: {
-  label: string;
-  text: string;
-  value: string;
-  invalid: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="time-input">
-      <span className="field-block__label">{text}</span>
-      <input
-        type="time"
-        className={
-          invalid ? "time-input__control time-input__control--error" : "time-input__control"
-        }
-        aria-label={label}
-        aria-invalid={invalid || undefined}
-        value={value}
-        step={300}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
-}
-
-function ClosedDates({
-  dates,
-  today,
-  onChange,
-}: {
-  dates: ClosedDate[];
-  today: string;
-  onChange: (dates: ClosedDate[]) => void;
-}) {
-  const t = useT();
-  const { lang } = useLanguage();
-  const [date, setDate] = useState("");
-  const [note, setNote] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const format = new Intl.DateTimeFormat(lang === "kk" ? "kk-KZ" : lang, {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    weekday: "short",
-  });
-
-  const add = () => {
-    const reason = closedDateProblem(date, dates, today);
-    if (reason) {
-      setProblem(
-        reason === "past"
-          ? t("company.pastDate")
-          : reason === "duplicate"
-            ? t("company.duplicateDate")
-            : t("company.date"),
-      );
-      return;
-    }
-    onChange(upcomingClosedDates([...dates, { date, note: note.trim() || null }], today));
-    setDate("");
-    setNote("");
-    setProblem(null);
-  };
-
-  return (
-    <div className="stack-m">
-      {dates.length === 0 ? (
-        <p className="ac-text-body-s ac-muted">{t("company.closedDatesEmpty")}</p>
-      ) : (
-        <ul className="closed-dates">
-          {dates.map((item) => (
-            <li key={item.date} className="closed-dates__item">
-              <span className="closed-dates__text">
-                <span className="ac-text-body">
-                  {format.format(new Date(`${item.date}T12:00:00Z`))}
-                </span>
-                {item.note && <span className="ac-text-body-s ac-muted">{item.note}</span>}
-              </span>
-              <IconButton
-                icon="x"
-                label={`${t("company.removeDate")}: ${item.date}`}
-                onClick={() => onChange(dates.filter((other) => other.date !== item.date))}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="closed-dates__add">
-        <label className="time-input">
-          <span className="field-block__label">{t("company.date")}</span>
-          <input
-            type="date"
-            className={
-              problem ? "time-input__control time-input__control--error" : "time-input__control"
-            }
-            min={today}
-            value={date}
-            aria-invalid={problem ? true : undefined}
-            onChange={(event) => {
-              setDate(event.target.value);
-              setProblem(null);
-            }}
-          />
-        </label>
-        <TextField
-          label={t("company.note")}
-          value={note}
-          onChange={setNote}
-          maxLength={200}
-          placeholder={t("company.notePlaceholder")}
-        />
-        <Button variant="secondary" icon="calendarX" disabled={!date} onClick={add}>
-          {t("company.addDate")}
-        </Button>
-      </div>
-      {problem && (
-        <p className="ac-field__help ac-field__help--error" role="alert">
-          {problem}
-        </p>
-      )}
-    </div>
   );
 }

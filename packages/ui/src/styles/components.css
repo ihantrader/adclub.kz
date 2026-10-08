@@ -1389,3 +1389,125 @@ textarea {
     border-bottom-color: transparent;
   }
 }
+
+/* ---------- the hours and days off of a pickup point (cabinet and admin panel, TASK-036) ---------- */
+.ac-week,
+.ac-closed-dates {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ac-week {
+  gap: var(--ac-space-4);
+}
+
+.ac-week__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  padding-bottom: var(--ac-space-4);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.ac-week__day:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+/* Segments keep one line per option (DESIGN.md 7.7): too wide — they scroll sideways. */
+.ac-week__day .ac-segments {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ac-week__day .ac-segments__item {
+  flex: none;
+  white-space: nowrap;
+}
+
+.ac-week__custom {
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-week__hours {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+}
+
+.ac-time-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-3);
+}
+
+.ac-time-input {
+  display: flex;
+  flex: 1 1 120px;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ac-time-input__label {
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-time-input__control {
+  width: 100%;
+  min-height: var(--ac-field);
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font-size: 16px;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-time-input__control:focus {
+  border-color: var(--ac-color-accent);
+}
+
+.ac-time-input__control--error {
+  border-color: var(--ac-color-danger);
+}
+
+.ac-closed-dates-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+}
+
+.ac-closed-dates__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-2) 0;
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.ac-closed-dates__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ac-closed-dates__add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+}
+
+.ac-closed-dates__add > .ac-button {
+  align-self: flex-start;
+}

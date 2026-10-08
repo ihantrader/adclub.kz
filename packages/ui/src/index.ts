@@ -98,6 +98,28 @@ export {
   type TableRow,
 } from "./components/data";
 export {
+  ClosedDatesEditor,
+  WeekHoursEditor,
+  type ClosedDatesEditorProps,
+  type ClosedDatesTexts,
+  type WeekHoursEditorProps,
+  type WeekHoursTexts,
+} from "./components/schedule";
+export {
+  closedDateProblem,
+  dayIntervals,
+  todayIn,
+  upcomingClosedDates,
+  weekFormOf,
+  weeklyHoursOf,
+  type ClosedDate as ScheduleClosedDate,
+  type ClosedDateProblem,
+  type DayForm,
+  type DayMode,
+  type WeekForm,
+  type WeekResult,
+} from "./components/schedule-form";
+export {
   BottomTabs,
   Logo,
   Sidebar,

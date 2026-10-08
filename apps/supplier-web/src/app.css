@@ -100,8 +100,6 @@ ul {
 /* ---------- choice lists (companies) and menus ---------- */
 .choice-list,
 .member-list,
-.week,
-.closed-dates,
 .install__steps {
   display: flex;
   flex-direction: column;
@@ -470,7 +468,6 @@ ul {
 
 /* Segments keep one line per option (DESIGN.md 7.7): too wide — they scroll sideways. */
 .field-block .ac-segments,
-.week__day .ac-segments,
 .auth-footer .ac-segments {
   align-self: flex-start;
   max-width: 100%;
@@ -478,7 +475,6 @@ ul {
 }
 
 .field-block .ac-segments__item,
-.week__day .ac-segments__item,
 .auth-footer .ac-segments__item {
   flex: none;
   white-space: nowrap;
@@ -530,95 +526,6 @@ ul {
 .member__actions {
   display: flex;
   justify-content: flex-end;
-}
-
-/* ---------- company: hours and days off ---------- */
-.week {
-  gap: var(--ac-space-4);
-}
-
-.week__day {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-2);
-  padding-bottom: var(--ac-space-4);
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-}
-
-.week__day:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.week__hours {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-1);
-}
-
-.time-range {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ac-space-3);
-}
-
-.time-input {
-  display: flex;
-  flex: 1 1 120px;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.time-input__control {
-  width: 100%;
-  min-height: var(--ac-field);
-  padding: 0 var(--ac-space-3);
-  border: var(--ac-line) solid var(--ac-color-border-field);
-  border-radius: var(--ac-radius-s);
-  background: var(--ac-color-surface);
-  color: var(--ac-color-text);
-  font-size: 16px;
-  line-height: 22px;
-  font-variant-numeric: tabular-nums;
-}
-
-.time-input__control:focus {
-  border-color: var(--ac-color-accent);
-}
-
-.time-input__control--error {
-  border-color: var(--ac-color-danger);
-}
-
-.closed-dates {
-  gap: 0;
-}
-
-.closed-dates__item {
-  display: flex;
-  align-items: center;
-  gap: var(--ac-space-2);
-  padding: var(--ac-space-2) 0;
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-}
-
-.closed-dates__text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.closed-dates__add {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-3);
-}
-
-.closed-dates__add > .ac-button {
-  align-self: flex-start;
 }
 
 /* ---------- S-INST-01 ---------- */

@@ -1,12 +1,31 @@
-import type { ClosedDate, DayHours, HoursInterval, WeeklyHours } from "@adclub/contracts";
-
 /**
- * The hours of S-COMP-01 as a person edits them: per day of the week a day
- * off, «круглосуточно», or the hours with an optional break — and back to
- * the server's form (`PUT /supplier/company/schedule`: seven days of
- * intervals, ARCHITECTURE 4.26). A day the administrator gave more than one
- * break stays as it was until the supplier changes it here.
+ * The hours of a supplier's pickup point as a person edits them (S-COMP-01
+ * in the cabinet, A-SUP-03 «Профиль» in the admin panel — one form for
+ * both, TASK-036): per day of the week a day off, «круглосуточно», or the
+ * hours with an optional break — and back to the server's form
+ * (`PUT …/schedule`: seven days of intervals, ARCHITECTURE 4.26). A day
+ * with more than one break stays as it was until it is changed here.
+ *
+ * The shapes below are those of `@adclub/contracts` (`HoursInterval`,
+ * `DayHours`, `ClosedDate`), written out so the design system doesn't
+ * depend on the contract; the test checks the result against its schema.
  */
+export interface HoursInterval {
+  from: string;
+  to: string;
+}
+
+export interface DayHours {
+  day: number;
+  intervals: HoursInterval[];
+}
+
+export type WeeklyHours = DayHours[];
+
+export interface ClosedDate {
+  date: string;
+  note: string | null;
+}
 export type DayMode = "off" | "hours" | "allDay" | "custom";
 
 export interface DayForm {

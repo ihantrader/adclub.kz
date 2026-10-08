@@ -3,6 +3,8 @@ import {
   catalogItemPath,
   routePaths,
   settingHistoryPath,
+  supplierLeadPath,
+  supplierPath,
   vehicleGenerationPath,
   vehicleImportPath,
   vehicleMakePath,
@@ -285,6 +287,17 @@ export function entityLink(
     }
     case "vehicle_import":
       return UUID.test(entityId) ? vehicleImportPath(entityId) : null;
+    // Suppliers (TASK-036): the company opens its card, an employee and an
+    // invitation — the card's «Сотрудники», a request — its card.
+    case "supplier":
+      return UUID.test(entityId) ? supplierPath(entityId) : null;
+    case "supplier_member":
+    case "supplier_invitation": {
+      const supplierId = named(payload, "supplierId");
+      return supplierId && UUID.test(supplierId) ? supplierPath(supplierId, "members") : null;
+    }
+    case "supplier_lead":
+      return UUID.test(entityId) ? supplierLeadPath(entityId) : null;
     default:
       return null;
   }
@@ -309,13 +322,26 @@ const FIELD_TEXT: Record<string, string> = {
   sessionsEnded: "Завершено сессий",
 };
 
-function short(value: unknown): string {
+/**
+ * Fields whose numbers are codes, not amounts: a year, a БИН, the number of
+ * an order, a version — written as they are, «2025», never «2 025»
+ * (TASK-036; the remark of TASK-035.C).
+ */
+const CODE_FIELD = /year|number|bin|version|code|article|^id$|Id$/i;
+
+/** A number of the journal: an amount with the thousands apart, a code as it is. */
+export function numberText(value: number, field?: string | null): string {
+  if (field && CODE_FIELD.test(field)) return String(value);
+  return value.toLocaleString("ru-RU");
+}
+
+function short(value: unknown, field?: string): string {
   if (value === undefined) return "—";
   if (value === null) return "пусто";
   if (value === true) return "да";
   if (value === false) return "нет";
   if (typeof value === "string") return value;
-  if (typeof value === "number") return value.toLocaleString("ru-RU");
+  if (typeof value === "number") return numberText(value, field);
   return JSON.stringify(value);
 }
 
@@ -355,8 +381,8 @@ export function changeLines(
       .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
       .map((key) => ({
         field: FIELD_TEXT[key] ?? key,
-        before: short(before[key]),
-        after: short(after[key]),
+        before: short(before[key], key),
+        after: short(after[key], key),
       }));
   }
   if (isRecord(after) && (before === null || before === undefined)) {
@@ -365,7 +391,7 @@ export function changeLines(
       .map(([key, value]) => ({
         field: FIELD_TEXT[key] ?? key,
         before: "—",
-        after: short(value),
+        after: short(value, key),
       }));
   }
   return [{ field: null, before: short(before), after: short(after) }];

@@ -1,6 +1,6 @@
 import { adminSignalKindSchema, type AdminSignal } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
-import { conflictText, KIND_ORDER, KIND_TITLES, subjectText } from "./signal-words";
+import { conflictText, KIND_ORDER, KIND_TITLES, subjectLink, subjectText } from "./signal-words";
 
 const base: AdminSignal = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -50,6 +50,15 @@ describe("the words of signals", () => {
     expect(
       subjectText({ kind: "whatsapp_outage", payload: { affectedOrders: 1, failedMessages: 5 } }),
     ).toBe("1 заявка, не дошло 5 уведомлений");
+  });
+
+  it("opens a supplier's card on «Сотрудники», nothing else yet (TASK-036)", () => {
+    const id = "0b6c9f1e-2a3d-4c5b-8e7f-9a0b1c2d3e4f";
+    expect(subjectLink({ subjectType: "supplier", subjectId: id })).toBe(
+      `/suppliers/${id}?tab=members`,
+    );
+    expect(subjectLink({ subjectType: "order", subjectId: id })).toBeNull();
+    expect(subjectLink({ subjectType: "channel", subjectId: id })).toBeNull();
   });
 
   it("tells who closed it first", () => {

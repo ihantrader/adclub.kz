@@ -1427,3 +1427,117 @@ code,
 .row--highlight td {
   background: var(--ac-color-fill);
 }
+
+/* ---------- suppliers (TASK-036) ----------
+   Long Kazakh company names wrap; nothing has a fixed width text could break at 1024. */
+.status--danger {
+  color: var(--ac-color-danger);
+}
+
+.funnel-tabs {
+  align-items: center;
+}
+
+.funnel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: 32px;
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.funnel-tab:focus-visible {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: var(--ac-focus-offset);
+}
+
+.funnel-tab--on {
+  border-color: var(--ac-color-accent);
+  background: var(--ac-color-fill);
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+.funnel-tab__count {
+  color: var(--ac-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--ac-space-3) var(--ac-space-6);
+  max-width: 960px;
+  margin: 0;
+}
+
+.facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--ac-color-text-muted);
+  font-size: 13px;
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.plain-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 960px;
+  padding-bottom: var(--ac-space-2);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.notes-list p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.form-page {
+  max-width: 960px;
+}
+
+.supplier-head {
+  min-width: 0;
+}
+
+.supplier-head__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-4);
+}
+
+.supplier-head__line .cell-stack {
+  flex-direction: row;
+  gap: var(--ac-space-2);
+}
+
+.member-actions {
+  flex-wrap: wrap;
+  max-width: 360px;
+}

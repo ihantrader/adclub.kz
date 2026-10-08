@@ -201,7 +201,12 @@ export function MoreButton<T extends { id: string }>({ list }: { list: Paged<T> 
  * данные», which takes the stored version while what was typed stays (the
  * form then sends only what the administrator changed).
  */
-export function useSaver(entityType: string, context: Parameters<typeof vehicleErrorView>[1] = {}) {
+export function useSaver(
+  entityType: string,
+  context: Parameters<typeof vehicleErrorView>[1] = {},
+  /** What a refusal means — the vehicle catalog's words unless another section gives its own. */
+  toView: (error: unknown) => VehicleErrorView = (error) => vehicleErrorView(error, context),
+) {
   const [error, setError] = useState<VehicleErrorView | null>(null);
   const [version, setVersion] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -230,7 +235,7 @@ export function useSaver(entityType: string, context: Parameters<typeof vehicleE
         await action();
         return true;
       } catch (thrown) {
-        const view = vehicleErrorView(thrown, context);
+        const view = toView(thrown);
         if (view.currentVersion !== null && entityId) {
           view.text = conflictText(await whoChanged(entityType, entityId));
         }

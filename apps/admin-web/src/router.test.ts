@@ -3,6 +3,9 @@ import {
   locationOf,
   menuOf,
   settingHistoryPath,
+  supplierLeadPath,
+  supplierNewPath,
+  supplierPath,
   vehicleGenerationPath,
   vehicleImportPath,
   vehicleMakePath,
@@ -48,6 +51,23 @@ describe("admin addresses", () => {
       "vehicleImport",
     ] as const) {
       expect(menuOf(route)).toBe("vehicles");
+    }
+  });
+
+  it("knows the suppliers' pages: the list, the funnel, a request, a new one, a card on a tab (TASK-036)", () => {
+    const id = "0b6c9f1e-2a3d-4c5b-8e7f-9a0b1c2d3e4f";
+    expect(locationOf("/suppliers").route).toBe("suppliers");
+    expect(locationOf("/suppliers/leads").route).toBe("supplierLeads");
+    expect(locationOf("/suppliers/new").route).toBe("supplierNew");
+    expect(locationOf(supplierLeadPath(id))).toMatchObject({ route: "supplierLead", id });
+    expect(locationOf(supplierPath(id))).toMatchObject({ route: "supplier", id });
+    expect(supplierPath(id, "members")).toBe(`/suppliers/${id}?tab=members`);
+    expect(supplierPath(id, "profile")).toBe(`/suppliers/${id}`);
+    expect(supplierNewPath(id)).toBe(`/suppliers/new?leadId=${id}`);
+    expect(supplierNewPath()).toBe("/suppliers/new");
+    expect(locationOf("/suppliers/not-an-id").route).toBeNull();
+    for (const route of ["supplierLeads", "supplierNew", "supplier", "supplierLead"] as const) {
+      expect(menuOf(route)).toBe("suppliers");
     }
   });
 

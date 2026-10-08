@@ -179,8 +179,8 @@ function Cards({ home }: { home: AdminHome }) {
             title="Поставщики ждут ответа"
             value={home.newSupplierLeads}
             tone={home.newSupplierLeads > 0 ? "attention" : "plain"}
-            note="Воронка поставщиков появится в разделе «Поставщики» (TASK-036)"
-            onOpen={() => navigateTo(routePaths.suppliers)}
+            note="Заявки с формы на сайте и добавленные вручную на этапе «Новая»"
+            onOpen={() => navigateTo(withQuery(routePaths.supplierLeads, { status: "new" }))}
           />
         </div>
       </section>

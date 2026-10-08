@@ -22,6 +22,11 @@ import { ClientPolicy } from "./settings/ClientPolicy";
 import { SettingHistory } from "./settings/SettingHistory";
 import { Thresholds } from "./settings/Thresholds";
 import { Signals } from "./signals/Signals";
+import { LeadCard } from "./suppliers/LeadCard";
+import { Leads } from "./suppliers/Leads";
+import { SupplierCard } from "./suppliers/SupplierCard";
+import { SupplierNew } from "./suppliers/SupplierNew";
+import { Suppliers } from "./suppliers/Suppliers";
 import { Engines } from "./vehicles/Engines";
 import { GenerationPage, ModelPage } from "./vehicles/Generations";
 import { ImportReport } from "./vehicles/ImportReport";
@@ -163,7 +168,15 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
     case "vehicleImport":
       return id ? <ImportReport key={id} importId={id} /> : null;
     case "suppliers":
-      return <Coming title="Поставщики" icon="store" task={comingSections.suppliers!} />;
+      return <Suppliers />;
+    case "supplierLeads":
+      return <Leads />;
+    case "supplierNew":
+      return <SupplierNew />;
+    case "supplier":
+      return id ? <SupplierCard key={id} supplierId={id} /> : null;
+    case "supplierLead":
+      return id ? <LeadCard key={id} leadId={id} /> : null;
     case "orders":
       return <Coming title="Заявки" icon="receipt" task={comingSections.orders!} />;
     case "users":

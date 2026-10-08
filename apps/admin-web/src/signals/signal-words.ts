@@ -4,6 +4,7 @@ import type {
   AdminSignalKind,
   AdminSignalStatus,
 } from "@adclub/contracts";
+import { supplierPath } from "../router";
 
 /**
  * The words of A-HOME and A-SIG (TASK-034 requirement 3): what a signal is
@@ -83,6 +84,15 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
         .filter(Boolean)
         .join(" · ");
   }
+}
+
+/**
+ * «Открыть объект» (A-SIG): where the subject of a signal opens — a
+ * supplier its card on «Сотрудники» (who receives the notifications,
+ * TASK-036). An order opens with TASK-036.B; the channel has no page.
+ */
+export function subjectLink(signal: Pick<AdminSignal, "subjectType" | "subjectId">): string | null {
+  return signal.subjectType === "supplier" ? supplierPath(signal.subjectId, "members") : null;
 }
 
 /** What the administrator does about it — the hint under a card or a row. */

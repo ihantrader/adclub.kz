@@ -20,6 +20,7 @@ import {
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
+import { AppLink } from "../catalog/shared";
 import { actionErrorText, loadErrorText } from "../errors";
 import { formatMoment } from "../format";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
@@ -32,6 +33,7 @@ import {
   KIND_ORDER,
   KIND_TITLES,
   STATUS_TEXT,
+  subjectLink,
   subjectText,
 } from "./signal-words";
 
@@ -277,12 +279,18 @@ function SignalRow({
 }) {
   const online = useOnline();
   const subject = subjectText(signal);
+  const link = subjectLink(signal);
   return (
     <tr>
       <td>
         <div className="cell-stack">
           <span className="ac-text-body-strong">{KIND_TITLES[signal.kind]}</span>
           {subject && <span className="ac-text-body-s">{subject}</span>}
+          {link && (
+            <span className="ac-text-body-s">
+              <AppLink href={link}>Открыть объект</AppLink>
+            </span>
+          )}
           <span className="ac-text-caption ac-muted">{KIND_HINTS[signal.kind]}</span>
           {signal.closeComment && (
             <span className="ac-text-caption">Комментарий: {signal.closeComment}</span>

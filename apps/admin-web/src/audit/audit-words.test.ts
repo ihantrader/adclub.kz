@@ -8,7 +8,11 @@ import {
   hiddenFieldsOf,
   entityLink,
   knownActions,
+  numberText,
 } from "./audit-words";
+
+/** The thousands separator of ru-RU (a no-break space). */
+const GAP = (1000).toLocaleString("ru-RU").charAt(1);
 
 const actor = (overrides: Partial<AuditActor>): AuditActor => ({
   role: "admin",
@@ -65,6 +69,43 @@ describe("the words of the journal", () => {
       changeLines({ market: "kz", version: 1 }, { market: "global", version: 2 }, hidden),
     ).toEqual([{ field: "Версия", before: "1", after: "2" }]);
     expect(hiddenFieldsOf("vehicle_engine")).toEqual([]);
+  });
+
+  it("writes years, БИН, numbers and versions without the thousands apart, amounts with (TASK-036)", () => {
+    expect(changeLines({ yearFrom: 2019, yearTo: null }, { yearFrom: 2025, yearTo: 2026 })).toEqual(
+      [
+        { field: "yearFrom", before: "2019", after: "2025" },
+        { field: "yearTo", before: "пусто", after: "2026" },
+      ],
+    );
+    expect(changeLines(null, { orderNumber: 10421, version: 1203, price: 12500 })).toEqual([
+      { field: "orderNumber", before: "—", after: "10421" },
+      { field: "Версия", before: "—", after: "1203" },
+      { field: "price", before: "—", after: `12${GAP}500` },
+    ]);
+    expect(numberText(2025, "year")).toBe("2025");
+    expect(numberText(2025, "contractYear")).toBe("2025");
+    expect(numberText(2025, "itemId")).toBe("2025");
+    expect(numberText(2025, "sessionsEnded")).toBe(`2${GAP}025`);
+    expect(numberText(2025)).toBe(`2${GAP}025`);
+  });
+
+  it("opens a supplier, its employees and invitations, and a connection request (TASK-036)", () => {
+    const id = "0b6c9f1e-2a3d-4c5b-8e7f-9a0b1c2d3e4f";
+    const other = "1c7d0a2f-3b4e-4d6c-9f80-0b1c2d3e4f50";
+    expect(entityLink("supplier", id)).toBe(`/suppliers/${id}`);
+    expect(entityLink("supplier_member", other, { after: { supplierId: id } })).toBe(
+      `/suppliers/${id}?tab=members`,
+    );
+    expect(entityLink("supplier_member", other, { before: { supplierId: id } })).toBe(
+      `/suppliers/${id}?tab=members`,
+    );
+    expect(entityLink("supplier_invitation", other, { after: { supplierId: id } })).toBe(
+      `/suppliers/${id}?tab=members`,
+    );
+    expect(entityLink("supplier_member", other)).toBeNull();
+    expect(entityLink("supplier_lead", id)).toBe(`/suppliers/leads/${id}`);
+    expect(entityLink("supplier", "not-an-id")).toBeNull();
   });
 
   it("takes the period by the days of Almaty", () => {

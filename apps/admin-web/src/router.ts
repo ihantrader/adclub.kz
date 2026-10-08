@@ -25,8 +25,11 @@ export const routePaths = {
   vehicleEngines: "/vehicles/engines",
   vehicleOptions: "/vehicles/options",
   vehicleImports: "/vehicles/imports",
-  // Sections of the next tasks: an honest «появится» until then.
+  // Suppliers (TASK-036): the list, the funnel of connection requests, a new supplier.
   suppliers: "/suppliers",
+  supplierLeads: "/suppliers/leads",
+  supplierNew: "/suppliers/new",
+  // Sections of the next tasks: an honest «появится» until then.
   orders: "/orders",
   users: "/users",
 } as const;
@@ -39,7 +42,9 @@ export type StaticRoute = keyof typeof routePaths;
  * `/catalog/items/<id>`; `catalogFill` — the fill of a subcategory,
  * `/catalog/fill/<categoryId>`; `vehicleMake`, `vehicleModel`,
  * `vehicleGeneration` — a level of the vehicle catalog with what lies under
- * it, `vehicleImport` — the report of one import (TASK-035.B).
+ * it, `vehicleImport` — the report of one import (TASK-035.B);
+ * `supplier` — a supplier's card, `/suppliers/<id>`, `supplierLead` — a
+ * connection request, `/suppliers/leads/<id>` (TASK-036).
  */
 export type RouteKey =
   | StaticRoute
@@ -49,13 +54,14 @@ export type RouteKey =
   | "vehicleMake"
   | "vehicleModel"
   | "vehicleGeneration"
-  | "vehicleImport";
+  | "vehicleImport"
+  | "supplier"
+  | "supplierLead";
 
-/** The sections that come with TASK-036. */
-export const comingSections: Partial<Record<StaticRoute, "TASK-036">> = {
-  suppliers: "TASK-036",
-  orders: "TASK-036",
-  users: "TASK-036",
+/** The sections that come with TASK-036.B. */
+export const comingSections: Partial<Record<StaticRoute, "TASK-036.B">> = {
+  orders: "TASK-036.B",
+  users: "TASK-036.B",
 };
 
 const HISTORY_PATH = /^\/settings\/([a-z][a-z0-9_]{0,63})\/history$/;
@@ -67,7 +73,29 @@ const VEHICLE_PATHS: [RouteKey, RegExp][] = [
   ["vehicleModel", new RegExp(`^/vehicles/models/(${UUID})$`, "i")],
   ["vehicleGeneration", new RegExp(`^/vehicles/generations/(${UUID})$`, "i")],
   ["vehicleImport", new RegExp(`^/vehicles/imports/(${UUID})$`, "i")],
+  ["supplierLead", new RegExp(`^/suppliers/leads/(${UUID})$`, "i")],
+  ["supplier", new RegExp(`^/suppliers/(${UUID})$`, "i")],
 ];
+
+/** The tabs of a supplier's card (A-SUP-03). */
+export type SupplierTab = "profile" | "statuses" | "members" | "offers" | "orders" | "history";
+
+/** A supplier's card, on a tab (`profile` when left out). */
+export function supplierPath(supplierId: string, tab?: SupplierTab): string {
+  return tab && tab !== "profile"
+    ? `/suppliers/${supplierId}?tab=${tab}`
+    : `/suppliers/${supplierId}`;
+}
+
+/** A connection request of the funnel (A-SUP-01). */
+export function supplierLeadPath(leadId: string): string {
+  return `/suppliers/leads/${leadId}`;
+}
+
+/** A-SUP-04: a new supplier, from a request with a signed contract or by hand. */
+export function supplierNewPath(leadId?: string): string {
+  return withQuery(routePaths.supplierNew, { leadId });
+}
 
 export function settingHistoryPath(key: string): string {
   return `/settings/${key}/history`;
@@ -155,6 +183,14 @@ export function menuOf(route: RouteKey): StaticRoute {
     route === "vehicleImport"
   ) {
     return "vehicles";
+  }
+  if (
+    route === "supplierLeads" ||
+    route === "supplierNew" ||
+    route === "supplier" ||
+    route === "supplierLead"
+  ) {
+    return "suppliers";
   }
   return route;
 }

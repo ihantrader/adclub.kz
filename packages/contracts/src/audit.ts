@@ -381,6 +381,13 @@ export const auditLogQuerySchema = z.object({
    * `before`/`after`). Combines with the other filters.
    */
   itemId: z.uuid().optional(),
+  /**
+   * The history of one supplier (SCREENS A-SUP-03 «История»; TASK-036):
+   * entries about the company itself, about its employees and invitations
+   * (they name the company in `before`/`after`), and everything its
+   * cabinet did — its offers among them. Combines with the other filters.
+   */
+  supplierId: z.uuid().optional(),
   limit: z.coerce
     .number()
     .int()

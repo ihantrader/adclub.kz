@@ -1,7 +1,8 @@
-import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Optional, type OnModuleInit } from "@nestjs/common";
 import { inArray, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { CatalogItemListRules } from "../catalog";
+import { SupplierListCounts } from "../suppliers";
 
 /**
  * Statuses of an offer «в продаже» — the cabinet's tab «В продаже»
@@ -45,13 +46,48 @@ export async function offersOnSaleCounts(
   return counts;
 }
 
-/** Gives the catalog's items list this module's rule and counts (ARCHITECTURE 4.53). */
+interface SupplierCountRow extends Record<string, unknown> {
+  supplier_id: string;
+  n: number;
+}
+
+/** Offers on sale of each supplier, by the same statuses (A-SUP-02, TASK-036). */
+export async function supplierOffersOnSaleCounts(
+  executor: DbExecutor,
+  supplierIds: readonly string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (supplierIds.length === 0) {
+    return counts;
+  }
+  const rows = await executor.execute<SupplierCountRow>(sql`
+    SELECT o.supplier_id, count(*)::int AS n FROM offer o
+    WHERE ${inArray(sql`o.supplier_id`, [...supplierIds])} AND o.status IN (${onSaleList})
+    GROUP BY o.supplier_id
+  `);
+  for (const row of rows.rows) {
+    counts.set(row.supplier_id, Number(row.n));
+  }
+  return counts;
+}
+
+/**
+ * Gives the catalog's items list (ARCHITECTURE 4.53) and the suppliers'
+ * list (TASK-036) this module's rule and counts. The suppliers' registry is
+ * there only when the module is given the suppliers module.
+ */
 @Injectable()
 export class OfferListRule implements OnModuleInit {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(@Inject(CatalogItemListRules) private readonly rules: CatalogItemListRules) {}
+  constructor(
+    @Inject(CatalogItemListRules) private readonly rules: CatalogItemListRules,
+    @Optional()
+    @Inject(SupplierListCounts)
+    private readonly supplierCounts: SupplierListCounts | null,
+  ) {}
 
   onModuleInit(): void {
     this.rules.registerOffersOnSale(itemHasOffersOnSale, offersOnSaleCounts);
+    this.supplierCounts?.registerOffersOnSale(supplierOffersOnSaleCounts);
   }
 }

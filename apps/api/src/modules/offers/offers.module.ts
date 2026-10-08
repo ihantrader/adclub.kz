@@ -13,6 +13,12 @@ export interface OffersModuleOptions {
    * photos give the thumbnails of items); imported, not created again.
    */
   catalog: DynamicModule;
+  /**
+   * The suppliers module of the application, the very same instance: the
+   * suppliers' list counts offers on sale through this module's rule
+   * (TASK-036). Left out — nothing is registered there.
+   */
+  suppliers?: DynamicModule;
 }
 
 /**
@@ -26,7 +32,7 @@ export class OffersModule {
   static forRoot(options: OffersModuleOptions): DynamicModule {
     return {
       module: OffersModule,
-      imports: [options.catalog],
+      imports: [options.catalog, ...(options.suppliers ? [options.suppliers] : [])],
       controllers: options.http ? [OffersCabinetController, OffersAdminController] : [],
       providers: [OffersService, OfferItemSearch, OfferSnapshots, OfferListRule],
       exports: [OffersService, OfferSnapshots],

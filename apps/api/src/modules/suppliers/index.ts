@@ -4,6 +4,8 @@ export { CitiesService, localizedName as localizedCityName } from "./cities.serv
 export { SupplierMembersService } from "./supplier-members.service";
 export { SuppliersService } from "./suppliers.service";
 export { SupplierLeadsService } from "./supplier-leads.service";
+export { SupplierListCounts } from "./supplier-list-counts";
+export type { SupplierCounts } from "./supplier-list-counts";
 export {
   DevSupplierSeed,
   DevSupplierSeedError,

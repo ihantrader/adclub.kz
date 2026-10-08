@@ -162,6 +162,7 @@ export class AuditLog {
       actorAccountId: query.actorAccountId,
       actorRole: query.actorRole as AuditActorRole | undefined,
       itemId: query.itemId,
+      supplierId: query.supplierId,
       before: query.cursor ? parseCursor(query.cursor) : undefined,
       // One extra row tells whether another page follows.
       limit: limit + 1,

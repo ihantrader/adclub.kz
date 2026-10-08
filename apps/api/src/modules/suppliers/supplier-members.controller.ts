@@ -13,6 +13,7 @@ import {
   type AdminSupplierMemberAddedResponse,
   type AdminSupplierMemberListResponse,
   type AdminSupplierMemberResponse,
+  type AdminSupplierMemberRestoredResponse,
   type AdminSupplierSessionListResponse,
   type EndSupplierSessionsBody,
   type RestoreSupplierMemberBody,
@@ -116,7 +117,7 @@ export class SupplierMembersAdminController {
     @Param(new ZodValidationPipe(supplierMemberPathSchema)) params: SupplierMemberPath,
     @Body(new ZodValidationPipe(restoreSupplierMemberBodySchema)) body: RestoreSupplierMemberBody,
     @CurrentSession() session: AuthenticatedSession,
-  ): Promise<AdminSupplierMemberResponse> {
+  ): Promise<AdminSupplierMemberRestoredResponse> {
     return this.members.restore(
       params.supplierId,
       params.memberId,

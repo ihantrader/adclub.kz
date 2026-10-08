@@ -436,6 +436,16 @@
             }
           },
           {
+            "name": "supplierId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -6275,7 +6285,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminSupplierMemberResponse"
+                  "$ref": "#/components/schemas/AdminSupplierMemberRestoredResponse"
                 }
               }
             }
@@ -18227,6 +18237,16 @@
             "type": "string",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "offersOnSale": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": [
@@ -18238,7 +18258,9 @@
           "state",
           "verified",
           "visibleOnShowcase",
-          "createdAt"
+          "createdAt",
+          "memberCount",
+          "offersOnSale"
         ]
       },
       "AdminSupplierMember": {
@@ -18457,6 +18479,27 @@
         "required": [
           "member",
           "notifications"
+        ]
+      },
+      "AdminSupplierMemberRestoredResponse": {
+        "type": "object",
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/AdminSupplierMember"
+          },
+          "notifications": {
+            "$ref": "#/components/schemas/SupplierNotificationSummary"
+          },
+          "memberOfOtherSuppliers": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "member",
+          "notifications",
+          "memberOfOtherSuppliers"
         ]
       },
       "AdminSupplierPage": {

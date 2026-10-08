@@ -4,6 +4,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
   adminCatalogItemPageSchema,
   adminCityResponseSchema,
+  adminSupplierPageSchema,
   adminSupplierResponseSchema,
   apiErrorResponseSchema,
   offerExistsDetailsSchema,
@@ -1435,10 +1436,20 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       const own = await company();
       const pads = await itemBy(PADS);
       const created = await put(own, pads.id);
+      // The suppliers' list counts it among the offers on sale (A-SUP-02, TASK-036) ...
+      const onSale = async () =>
+        (
+          await ok(asAdmin("get", "/admin/suppliers?limit=100"), (body) =>
+            adminSupplierPageSchema.parse(body),
+          )
+        ).suppliers.find((entry) => entry.id === own.supplierId)!.offersOnSale;
+      expect(await onSale()).toBe(1);
       await ok(
         own.as("post", `/supplier/offers/${created.id}/withdraw`, { expectedVersion: 1 }),
         (body) => body,
       );
+      // ... and no more once it is withdrawn.
+      expect(await onSale()).toBe(0);
       const page = await ok(
         asAdmin("get", `/admin/suppliers/${own.supplierId}/offers?tab=withdrawn`),
         (body) => offerPageSchema.parse(body),

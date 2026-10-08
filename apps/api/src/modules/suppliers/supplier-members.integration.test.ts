@@ -6,6 +6,7 @@ import {
   adminSupplierMemberAddedResponseSchema,
   adminSupplierMemberListResponseSchema,
   adminSupplierMemberResponseSchema,
+  adminSupplierMemberRestoredResponseSchema,
   adminSupplierResponseSchema,
   adminSupplierSessionListResponseSchema,
   apiErrorResponseSchema,
@@ -953,7 +954,7 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
         asAdmin("post", `/admin/suppliers/${supplierId}/members/${added.member.id}/restore`, {
           reason: "Удалён по ошибке, обращение директора",
         }),
-        (body) => adminSupplierMemberResponseSchema.parse(body),
+        (body) => adminSupplierMemberRestoredResponseSchema.parse(body),
       );
       expect(restored.member).toMatchObject({
         status: "active",
@@ -961,6 +962,7 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
         notificationsEnabled: true,
         restore: { reason: "Удалён по ошибке, обращение директора" },
       });
+      expect(restored.memberOfOtherSuppliers).toBe(0);
       expectError(
         await asAdmin("post", `/admin/suppliers/${supplierId}/members/${added.member.id}/restore`, {
           reason: "Ещё раз",
@@ -997,6 +999,40 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
       await waitFor("the new invitation", () =>
         Promise.resolve(messages.sent.find((message) => message.phone === colleague)),
       );
+    });
+
+    it("restores an employee whose number works for another company meanwhile, and says so", async () => {
+      const first = phoneOf(181);
+      const { supplierId } = await supplierWith(first, "Автомаркет");
+      const other = await supplierWith(phoneOf(183), "Шины Юг");
+      const shared = phoneOf(182);
+      rememberCode(shared);
+      const added = await ok(
+        asAdmin("post", `/admin/suppliers/${supplierId}/members`, { name: "Ерлан", phone: shared }),
+        (body) => adminSupplierMemberAddedResponseSchema.parse(body),
+        201,
+      );
+      const me = await cabinet(first);
+      await ok(asSupplier(me.token, "delete", `/supplier/members/${added.member.id}`), (body) =>
+        supplierMemberRemovedResponseSchema.parse(body),
+      );
+      const elsewhere = await ok(
+        asAdmin("post", `/admin/suppliers/${other.supplierId}/members`, {
+          name: "Ерлан",
+          phone: shared,
+        }),
+        (body) => adminSupplierMemberAddedResponseSchema.parse(body),
+        201,
+      );
+      expect(elsewhere.memberOfOtherSuppliers).toBe(0);
+      const restored = await ok(
+        asAdmin("post", `/admin/suppliers/${supplierId}/members/${added.member.id}/restore`, {
+          reason: "Вернулся на работу",
+        }),
+        (body) => adminSupplierMemberRestoredResponseSchema.parse(body),
+      );
+      expect(restored.member.status).toBe("active");
+      expect(restored.memberOfOtherSuppliers).toBe(1);
     });
 
     it("adds an employee, appoints the contact person (one per company)", async () => {
@@ -1394,6 +1430,126 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
           )
         ).rows[0]!.status,
       ).toBe("cancelled");
+    });
+
+    it("a blocked company adds no employees and sends no invitations; lifting the blocking opens it again (D-070)", async () => {
+      const first = phoneOf(171);
+      const { supplierId, memberId } = await supplierWith(first);
+      await waitFor("the first invitation", () =>
+        Promise.resolve(messages.sent.find((message) => message.phone === first)),
+      );
+      const me = await cabinet(first);
+      // An invitation still on its way when the company is blocked: the
+      // channel fails first, the message waits for its retry.
+      messages.mode = "unavailable";
+      const waiting = await addColleague(me.token, phoneOf(172), "Марат");
+      await waitFor("a failed attempt", async () =>
+        (await count(
+          "outbound_message",
+          "subject_type = 'supplier_invitation' AND attempts > 0 AND status = 'queued'\n" +
+            " AND subject_id IN (SELECT id FROM supplier_invitation WHERE member_id = $1)",
+          [waiting.member.id],
+        )) > 0
+          ? true
+          : undefined,
+      );
+      const card = await ok(asAdmin("get", `/admin/suppliers/${supplierId}`), (body) =>
+        adminSupplierResponseSchema.parse(body),
+      );
+      const blocked = await ok(
+        asAdmin("post", `/admin/suppliers/${supplierId}/block`, {
+          expectedVersion: card.supplier.version,
+          blocked: true,
+          reason: "Проверка документов",
+        }),
+        (body) => adminSupplierResponseSchema.parse(body),
+      );
+      expect(blocked.supplier.state).toBe("blocked");
+
+      // The cabinet (its session opened before the blocking) and the administrator: refused.
+      rememberCode(phoneOf(173), phoneOf(174));
+      expectError(
+        await asSupplier(me.token, "post", "/supplier/members", {
+          name: "Ещё один",
+          phone: phoneOf(173),
+        }),
+        403,
+        "SUPPLIER_BLOCKED",
+      );
+      expectError(
+        await asAdmin("post", `/admin/suppliers/${supplierId}/members`, {
+          name: "От администратора",
+          phone: phoneOf(174),
+        }),
+        403,
+        "SUPPLIER_BLOCKED",
+      );
+      // The repeated invitation too, even when its interval has long passed.
+      await db.query(
+        "UPDATE supplier_invitation SET created_at = now() - interval '1 hour' WHERE member_id = $1",
+        [memberId],
+      );
+      expectError(
+        await asAdmin("post", `/admin/suppliers/${supplierId}/members/${memberId}/invitations`),
+        403,
+        "SUPPLIER_BLOCKED",
+      );
+      expect(await activeMembers(supplierId)).toBe(2);
+      expect(await count("supplier_invitation", "member_id = $1", [memberId])).toBe(1);
+      // What isn't writing outside stays open: the employees' settings.
+      await ok(
+        asSupplier(me.token, "patch", "/supplier/me", { notificationLanguage: "kk" }),
+        (body) => supplierMemberResponseSchema.parse(body),
+      );
+
+      // The waiting invitation's retry comes: it doesn't go out, it is cancelled.
+      messages.mode = "ok";
+      await sendQueuedMessages();
+      expect(messages.sent.filter((message) => message.phone === phoneOf(172))).toEqual([]);
+      const { rows: held } = await db.query<{ id: string; status: string }>(
+        "SELECT id, status FROM supplier_invitation WHERE member_id = $1",
+        [waiting.member.id],
+      );
+      expect(held.map((row) => row.status)).toEqual(["cancelled"]);
+      // The worker's own step, run again, writes no message either.
+      await worker.get(InvitationSender).run({ invitationId: held[0]!.id });
+      expect(
+        await count("outbound_message", "subject_id = $1 AND status = 'queued'", [held[0]!.id]),
+      ).toBe(0);
+
+      // Lifting the blocking: everything works again.
+      await ok(
+        asAdmin("post", `/admin/suppliers/${supplierId}/block`, {
+          expectedVersion: blocked.supplier.version,
+          blocked: false,
+          reason: "Документы в порядке",
+        }),
+        (body) => adminSupplierResponseSchema.parse(body),
+      );
+      const later = await addColleague(me.token, phoneOf(173), "Ещё один");
+      expect(later.invitation.status).toBe("queued");
+      await ok(
+        asAdmin("post", `/admin/suppliers/${supplierId}/members`, {
+          name: "От администратора",
+          phone: phoneOf(174),
+        }),
+        (body) => adminSupplierMemberAddedResponseSchema.parse(body),
+        201,
+      );
+      await db.query(
+        "UPDATE supplier_invitation SET created_at = now() - interval '1 hour' WHERE member_id = $1",
+        [waiting.member.id],
+      );
+      await ok(
+        asAdmin("post", `/admin/suppliers/${supplierId}/members/${waiting.member.id}/invitations`),
+        (body) => body,
+        202,
+      );
+      for (const phone of [phoneOf(173), phoneOf(174), phoneOf(172)]) {
+        await waitFor(`the invitation to ${phone}`, () =>
+          Promise.resolve(messages.sent.find((message) => message.phone === phone)),
+        );
+      }
     });
   });
 

@@ -52,10 +52,11 @@ export class AppModule implements NestModule {
     const clubAccess = ClubAccessModule.forRoot({ http: true });
     // One signals module: orders raise signals through this very instance.
     const signals = SignalsModule.forRoot({ http: true });
-    // One offers module: orders take the snapshot through this very instance.
-    const offers = OffersModule.forRoot({ http: true, catalog });
-    // One suppliers module: the queue of attention counts its funnel through it.
+    // One suppliers module: the queue of attention counts its funnel through
+    // it, and the offers module gives its list the offers on sale.
     const suppliers = SuppliersModule.forRoot({ http: true });
+    // One offers module: orders take the snapshot through this very instance.
+    const offers = OffersModule.forRoot({ http: true, catalog, suppliers });
     return {
       module: AppModule,
       imports: [

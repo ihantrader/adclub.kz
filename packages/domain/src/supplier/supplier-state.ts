@@ -32,3 +32,14 @@ export function supplierState(facts: SupplierStateFacts): SupplierState {
 export function supplierVisibleOnShowcase(facts: SupplierStateFacts): boolean {
   return supplierState(facts) === "active";
 }
+
+/**
+ * D-070: whether the supplier may add employees and send them invitations
+ * (W-08) — the one thing a company does that writes outside the platform
+ * on behalf of the club. A blocked company may not, neither from its
+ * cabinet nor through an administrator; a paused one may. Changing offers,
+ * the company, the schedule and the employees' settings stays open.
+ */
+export function supplierMayInvite(facts: Pick<SupplierStateFacts, "blocked">): boolean {
+  return !facts.blocked;
+}

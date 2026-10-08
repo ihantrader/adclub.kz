@@ -865,6 +865,19 @@ export const restoreSupplierMemberBodySchema = z.object({ reason: reasonSchema }
 export type RestoreSupplierMemberBody = z.infer<typeof restoreSupplierMemberBodySchema>;
 
 /**
+ * The restored employee (TASK-036): `memberOfOtherSuppliers` — how many
+ * other companies the number works for now; it keeps that access, the
+ * memberships don't affect each other.
+ */
+export const adminSupplierMemberRestoredResponseSchema = adminSupplierMemberResponseSchema.extend({
+  memberOfOtherSuppliers: z.number().int(),
+});
+
+export type AdminSupplierMemberRestoredResponse = z.infer<
+  typeof adminSupplierMemberRestoredResponseSchema
+>;
+
+/**
  * An active cabinet session of an employee (A-SUP-03): the device and the
  * times, never a token.
  */
@@ -928,6 +941,14 @@ export const adminSupplierListItemSchema = z.object({
   verified: z.boolean(),
   visibleOnShowcase: z.boolean(),
   createdAt: z.iso.datetime(),
+  /** Active employees (TASK-036, A-SUP-02). */
+  memberCount: z.number().int(),
+  /**
+   * Offers «в продаже» — the cabinet's tab of the same name: active or
+   * suspended by the system (TASK-036, A-SUP-02; whether clients see them
+   * is the showcase's rule, not this number).
+   */
+  offersOnSale: z.number().int(),
 });
 
 export type AdminSupplierListItem = z.infer<typeof adminSupplierListItemSchema>;

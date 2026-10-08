@@ -52,6 +52,8 @@ export interface AuditLogFilter {
   actorRole?: AuditActorRole;
   /** The history of one catalog item: see `itemHistory`. */
   itemId?: string;
+  /** The history of one supplier: see `supplierHistory`. */
+  supplierId?: string;
   /** Only entries older than this position (keyset paging, `position` of an entry). */
   before?: { position: string; id: string };
   limit: number;
@@ -107,6 +109,33 @@ function itemHistory(itemId: string): SQL {
 }
 
 /**
+ * Entity types whose entries belong to one supplier by naming it in
+ * `before`/`after` (`supplierId`): its employees and their invitations
+ * (TASK-016, TASK-017).
+ */
+const SUPPLIER_PART_ENTITIES = ["supplier_member", "supplier_invitation"] as const;
+
+/**
+ * The history of one supplier (SCREENS A-SUP-03 «История»; TASK-036): the
+ * entries about the company, those about its employees and invitations
+ * (they name it), and every entry its cabinet made — offers, the schedule,
+ * colleagues (`actor_supplier_id`). Read from the journal alone, like
+ * `itemHistory`.
+ */
+function supplierHistory(supplierId: string): SQL {
+  const parts = sql.join(
+    SUPPLIER_PART_ENTITIES.map((entity) => sql`${entity}`),
+    sql`, `,
+  );
+  return sql`(
+    (${auditLog.entityType} = 'supplier' AND ${auditLog.entityId} = ${supplierId})
+    OR (${auditLog.entityType} IN (${parts})
+      AND (${auditLog.after} ->> 'supplierId' = ${supplierId} OR ${auditLog.before} ->> 'supplierId' = ${supplierId}))
+    OR ${auditLog.actorSupplierId} = ${supplierId}
+  )`;
+}
+
+/**
  * Persistence of `audit_log` (ARCHITECTURE 4.13). Writing takes the
  * caller's executor: an entry belongs to the transaction of the action it
  * records. There is no update and no delete — the table refuses both.
@@ -134,6 +163,7 @@ export class AuditLogStore {
       filter.actorAccountId ? eq(auditLog.actorAccountId, filter.actorAccountId) : undefined,
       filter.actorRole ? eq(auditLog.actorRole, filter.actorRole) : undefined,
       filter.itemId ? itemHistory(filter.itemId) : undefined,
+      filter.supplierId ? supplierHistory(filter.supplierId) : undefined,
       // Keyset paging: everything strictly older than the last entry read.
       // Compared at the database's own precision (microseconds), never
       // through a JavaScript `Date`.

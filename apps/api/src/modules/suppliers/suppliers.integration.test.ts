@@ -7,6 +7,7 @@ import {
   adminSupplierLeadPageSchema,
   adminSupplierLeadResponseSchema,
   adminSupplierPageSchema,
+  auditLogPageSchema,
   adminSupplierResponseSchema,
   apiErrorResponseSchema,
   cityListResponseSchema,
@@ -1541,6 +1542,40 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
       expect((await list(`?q=${BIN_B.slice(2, 9)}`)).suppliers.map((s) => s.id)).toEqual([
         a.supplier.id,
       ]);
+      // A row counts the active employees and the offers on sale (A-SUP-02, TASK-036).
+      await asAdmin("post", `/admin/suppliers/${a.supplier.id}/members`, {
+        name: "Второй",
+        phone: "+77076660088",
+      });
+      const rows = (await list("")).suppliers;
+      expect(
+        rows.map((s) => [s.id === a.supplier.id, s.memberCount, s.offersOnSale]).sort(),
+      ).toEqual([
+        [false, 1, 0],
+        [false, 1, 0],
+        [true, 2, 0],
+      ]);
+      // The history of a supplier: the company, its employees and invitations, nobody else's.
+      const history = await ok(
+        asAdmin("get", `/admin/audit-log?supplierId=${a.supplier.id}&limit=100`),
+        (body) => auditLogPageSchema.parse(body),
+      );
+      const kinds = new Set(history.entries.map((entry) => entry.entityType));
+      expect([...kinds].sort()).toEqual(["supplier", "supplier_invitation", "supplier_member"]);
+      expect(
+        history.entries.every(
+          (entry) => entry.entityType !== "supplier" || entry.entityId === a.supplier.id,
+        ),
+      ).toBe(true);
+      expect(history.entries.some((entry) => entry.action === "supplier_member.added")).toBe(true);
+      const theirs = await ok(
+        asAdmin("get", `/admin/audit-log?supplierId=${b.supplier.id}&limit=100`),
+        (body) => auditLogPageSchema.parse(body),
+      );
+      expect(theirs.entries.some((entry) => entry.action === "supplier.pause_changed")).toBe(true);
+      expect(history.entries.some((entry) => entry.action === "supplier.pause_changed")).toBe(
+        false,
+      );
       const first = await list("?limit=2");
       expect(first.suppliers.map((s) => s.name)).toEqual(["Автомаркет", "Автосервис Плюс"]);
       const second = await list(`?limit=2&cursor=${first.nextCursor}`);

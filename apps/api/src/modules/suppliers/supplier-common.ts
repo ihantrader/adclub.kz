@@ -277,6 +277,19 @@ export function memberState(refusal: SupplierMemberStateDetails["refusal"]): Api
   );
 }
 
+/**
+ * 403 `SUPPLIER_BLOCKED` (D-070, TASK-036): a blocked company adds no
+ * employees and sends no invitations — neither from its cabinet nor
+ * through an administrator. Nothing changed.
+ */
+export function invitesBlocked(): ApiException {
+  return new ApiException(
+    403,
+    "SUPPLIER_BLOCKED",
+    "The company is blocked by the club administrator: employees can't be added and invitations aren't sent until the blocking is lifted",
+  );
+}
+
 export function notificationLimit(details: SupplierNotificationLimitDetails): ApiException {
   return new ApiException(
     409,

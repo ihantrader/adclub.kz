@@ -11,8 +11,10 @@ import { account, supplier, supplierMember } from "../identity";
 import { Messaging, MessageSubjects, type MessageOutcome, type MessageSubject } from "../messaging";
 import { AppSettings } from "../settings";
 import { supplierInvitation, type SupplierInvitationRow } from "./schema";
+import { supplierMayInvite } from "@adclub/domain";
 import {
   adminIdOf,
+  invitesBlocked,
   iso,
   notFound,
   type SupplierAdminActor,
@@ -93,6 +95,37 @@ async function targetOf(
 }
 
 /**
+ * Whether the company may add employees and invite them now (D-070):
+ * reads its row `FOR SHARE` in the caller's transaction, so a blocking that
+ * commits at the same moment either waits for the addition or is seen by
+ * it — an employee is never added "after" the administrator's decision.
+ * A missing company — 404; a blocked one — 403 `SUPPLIER_BLOCKED`.
+ */
+export async function assertMayInvite(tx: DbExecutor, supplierId: string): Promise<void> {
+  const [row] = await tx
+    .select({ blockedAt: supplier.blockedAt })
+    .from(supplier)
+    .where(eq(supplier.id, supplierId))
+    .for("share");
+  if (!row) {
+    throw notFound("supplier");
+  }
+  if (!supplierMayInvite({ blocked: row.blockedAt !== null })) {
+    throw invitesBlocked();
+  }
+}
+
+/** Whether the company of an invitation is blocked now (D-070): its invitations don't go out. */
+async function companyBlocked(tx: DbExecutor, supplierId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ blockedAt: supplier.blockedAt })
+    .from(supplier)
+    .where(eq(supplier.id, supplierId))
+    .for("share");
+  return !row || !supplierMayInvite({ blocked: row.blockedAt !== null });
+}
+
+/**
  * Invitations of employees (TASK-016 requirement 4): put on the queue in
  * the transaction that creates the employee (or asked again by an
  * administrator, limited in frequency — `supplier_invitation_resend_interval_minutes`
@@ -169,6 +202,7 @@ export class SupplierInvitations {
       if (!member) {
         throw notFound("employee");
       }
+      await assertMayInvite(tx, supplierId);
       const now = Date.now();
       const [latest] = await tx
         .select({ createdAt: supplierInvitation.createdAt })
@@ -290,6 +324,17 @@ export class InvitationSender implements JobHandler<{ invitationId: string }> {
         );
         return;
       }
+      // D-070: the company was blocked after the invitation was asked for.
+      if (await companyBlocked(tx, row.supplierId)) {
+        await tx
+          .update(supplierInvitation)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(eq(supplierInvitation.id, row.id));
+        this.logger.log(
+          `Invitation cancelled: the company is blocked invitation=${row.id} supplier=${row.supplierId}`,
+        );
+        return;
+      }
       if (!link) {
         // An invitation without the cabinet's address is of no use to
         // anybody; better a failure the operator sees than a message that
@@ -364,7 +409,11 @@ export class SupplierInvitationMessages implements MessageSubject, OnModuleInit 
       return false;
     }
     const [row] = await tx
-      .select({ status: supplierInvitation.status, memberId: supplierInvitation.memberId })
+      .select({
+        status: supplierInvitation.status,
+        memberId: supplierInvitation.memberId,
+        supplierId: supplierInvitation.supplierId,
+      })
       .from(supplierInvitation)
       .where(eq(supplierInvitation.id, subjectId));
     if (!row || (row.status !== "queued" && row.status !== "failed")) {
@@ -375,7 +424,13 @@ export class SupplierInvitationMessages implements MessageSubject, OnModuleInit 
       .from(supplierMember)
       .where(eq(supplierMember.id, row.memberId))
       .for("share");
-    return member?.status === "active";
+    if (member?.status !== "active") {
+      return false;
+    }
+    // D-070: an invitation queued before the company was blocked doesn't go
+    // out (the gateway cancels the message, and with it the invitation). The
+    // share lock makes a blocking at the same moment wait or be seen here.
+    return !(await companyBlocked(tx, row.supplierId));
   }
 
   async onResult(tx: DbExecutor, subjectId: string | null, outcome: MessageOutcome): Promise<void> {

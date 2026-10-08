@@ -49,6 +49,7 @@ import {
   type SupplierSelfActor,
 } from "./supplier-common";
 import { describeInvitation, SupplierInvitations } from "./supplier-invitations";
+import { activeMemberCounts, SupplierListCounts } from "./supplier-list-counts";
 import { SupplierMembersService } from "./supplier-members.service";
 
 type SupplierRow = typeof supplier.$inferSelect;
@@ -111,6 +112,7 @@ export class SuppliersService {
     @Inject(SupplierMembershipStore) private readonly memberships: SupplierMembershipStore,
     @Inject(SupplierInvitations) private readonly invitations: SupplierInvitations,
     @Inject(SupplierMembersService) private readonly members: SupplierMembersService,
+    @Inject(SupplierListCounts) private readonly listCounts: SupplierListCounts,
   ) {}
 
   // ---------------------------------------------------------------- create
@@ -286,10 +288,19 @@ export class SuppliersService {
       .from(supplier)
       .where(filters);
     const shown = page.slice(0, query.limit);
-    const cityRows = await this.citiesById(shown.map((row) => row.cityId));
+    const ids = shown.map((row) => row.id);
+    const [cityRows, members, offers] = await Promise.all([
+      this.citiesById(shown.map((row) => row.cityId)),
+      activeMemberCounts(this.database.db, ids),
+      this.listCounts.offersOnSale(this.database.db, ids),
+    ]);
     const last = shown.at(-1);
     return {
-      suppliers: shown.map((row) => this.listItem(row, cityRows.get(row.cityId)!)),
+      suppliers: shown.map((row) => ({
+        ...this.listItem(row, cityRows.get(row.cityId)!),
+        memberCount: members.get(row.id) ?? 0,
+        offersOnSale: offers.get(row.id) ?? 0,
+      })),
       total: counted?.total ?? 0,
       nextCursor:
         page.length > query.limit && last ? encodeCursor(last.name.toLowerCase(), last.id) : null,
@@ -752,7 +763,10 @@ export class SuppliersService {
     };
   }
 
-  private listItem(row: SupplierRow, cityRow: CityRow): AdminSupplierListItem {
+  private listItem(
+    row: SupplierRow,
+    cityRow: CityRow,
+  ): Omit<AdminSupplierListItem, "memberCount" | "offersOnSale"> {
     const facts = stateFacts(row);
     return {
       id: row.id,

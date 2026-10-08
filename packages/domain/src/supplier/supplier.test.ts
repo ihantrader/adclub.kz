@@ -5,7 +5,12 @@ import {
   supplierLeadTransition,
   supplierLeadWorkingStatuses,
 } from "./supplier-lead";
-import { supplierState, supplierVisibleOnShowcase } from "./supplier-state";
+import {
+  supplierMayInvite,
+  supplierState,
+  supplierVisibleOnShowcase,
+  type SupplierStateFacts,
+} from "./supplier-state";
 
 describe("the funnel of connection requests", () => {
   it("moves freely among the working statuses, without a reason", () => {
@@ -69,5 +74,14 @@ describe("the state of a supplier", () => {
       expect(supplierState(facts)).toBe(state);
       expect(supplierVisibleOnShowcase(facts)).toBe(visible);
     }
+  });
+
+  it("adds employees and invites them unless blocked, paused or not (D-070)", () => {
+    expect(supplierMayInvite({ blocked: false })).toBe(true);
+    expect(supplierMayInvite({ blocked: true })).toBe(false);
+    const paused: SupplierStateFacts = { pauseReason: "admin", blocked: false };
+    const both: SupplierStateFacts = { pauseReason: "billing", blocked: true };
+    expect(supplierMayInvite(paused)).toBe(true);
+    expect(supplierMayInvite(both)).toBe(false);
   });
 });

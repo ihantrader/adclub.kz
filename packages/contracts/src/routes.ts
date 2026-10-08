@@ -294,6 +294,7 @@ import {
   adminSupplierMemberAddedResponseSchema,
   adminSupplierMemberListResponseSchema,
   adminSupplierMemberResponseSchema,
+  adminSupplierMemberRestoredResponseSchema,
   adminSupplierSessionListResponseSchema,
   endSupplierSessionsBodySchema,
   restoreSupplierMemberBodySchema,
@@ -3127,7 +3128,7 @@ export const apiRoutes = {
     pathParams: supplierMemberPathSchema,
     requestBody: { description: "Why", schema: restoreSupplierMemberBodySchema },
     responses: {
-      200: { description: "The employee", schema: adminSupplierMemberResponseSchema },
+      200: { description: "The employee", schema: adminSupplierMemberRestoredResponseSchema },
     },
   }),
   setSupplierContactPerson: defineRoute({

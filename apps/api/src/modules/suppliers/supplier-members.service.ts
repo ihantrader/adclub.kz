@@ -7,6 +7,7 @@ import {
   type AdminSupplierMemberAddedResponse,
   type AdminSupplierMemberListResponse,
   type AdminSupplierMemberResponse,
+  type AdminSupplierMemberRestoredResponse,
   type AdminSupplierSession,
   type SupplierInvitation,
   type SupplierMemberAddedResponse,
@@ -43,7 +44,7 @@ import {
   type SupplierAdminActor,
   type SupplierSelfActor,
 } from "./supplier-common";
-import { describeInvitation, SupplierInvitations } from "./supplier-invitations";
+import { assertMayInvite, describeInvitation, SupplierInvitations } from "./supplier-invitations";
 import {
   adminMember,
   cabinetMember,
@@ -120,6 +121,7 @@ export class SupplierMembersService {
     const perDay = await this.settings.get("supplier_members_added_per_supplier_day");
     const { memberId, invitation } = await this.database.db.transaction(async (tx) => {
       await tx.execute(companyMembersLock(actor.supplierId));
+      await assertMayInvite(tx, actor.supplierId);
       const dayAgo = new Date(Date.now() - DAY_MS);
       const recent = await tx
         .select({ createdAt: supplierMember.createdAt })
@@ -340,8 +342,8 @@ export class SupplierMembersService {
     const phone = kzPhone("phone", input.phone);
     const name = normalizeText(input.name);
     const added = await this.database.db.transaction(async (tx) => {
-      await this.requireSupplier(tx, supplierId);
       await tx.execute(companyMembersLock(supplierId));
+      await assertMayInvite(tx, supplierId);
       return this.insert(tx, supplierId, { name, phone }, actor);
     });
     const member = await this.adminOne(supplierId, added.memberId);
@@ -364,10 +366,10 @@ export class SupplierMembersService {
     memberId: string,
     reason: string,
     actor: SupplierAdminActor,
-  ): Promise<AdminSupplierMemberResponse> {
+  ): Promise<AdminSupplierMemberRestoredResponse> {
     const limit = await this.settings.get("max_notified_members");
     const note = normalizeText(reason);
-    await this.database.db.transaction(async (tx) => {
+    const others = await this.database.db.transaction(async (tx) => {
       await this.requireSupplier(tx, supplierId);
       await tx.execute(companyMembersLock(supplierId));
       const rows = await memberRows(tx, supplierId);
@@ -412,9 +414,13 @@ export class SupplierMembersService {
         },
         tx,
       );
+      // The number may work for other companies meanwhile (one membership
+      // per company, several companies per number): it keeps them all.
+      const memberships = await this.memberships.listActive(row.accountId, tx);
+      return memberships.filter((membership) => membership.supplier.id !== supplierId).length;
     });
     this.logger.log(`Employee restored supplier=${supplierId} member=${memberId}`);
-    return this.adminOne(supplierId, memberId);
+    return { ...(await this.adminOne(supplierId, memberId)), memberOfOtherSuppliers: others };
   }
 
   /** «Назначить контактным лицом» — one per company; the previous one stops being it. */

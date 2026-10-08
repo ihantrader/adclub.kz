@@ -24,6 +24,7 @@ import { SupplierMembersService } from "./supplier-members.service";
 import { SupplierLeadForm } from "./supplier-lead-form.service";
 import { SupplierLeadsController } from "./supplier-leads.controller";
 import { SupplierLeadsService } from "./supplier-leads.service";
+import { SupplierListCounts } from "./supplier-list-counts";
 import { SupplierCabinetController, SuppliersAdminController } from "./suppliers.controller";
 import { SuppliersService } from "./suppliers.service";
 
@@ -49,6 +50,7 @@ const sharedProviders = [
   SupplierMembersService,
   SuppliersService,
   SupplierLeadsService,
+  SupplierListCounts,
   DevSupplierSeed,
 ];
 
@@ -74,7 +76,13 @@ export class SuppliersModule {
           ]
         : [],
       providers: [...sharedProviders, ...(options.http ? [SupplierLeadForm] : [])],
-      exports: [CitiesService, SuppliersService, SupplierLeadsService, DevSupplierSeed],
+      exports: [
+        CitiesService,
+        SuppliersService,
+        SupplierLeadsService,
+        SupplierListCounts,
+        DevSupplierSeed,
+      ],
     };
   }
 }

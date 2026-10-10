@@ -97,6 +97,30 @@ jobs:
       - name: Build the packages the API uses
         run: pnpm turbo run build --filter="@adclub/api^..."
 
+      # Five runners ask Docker Hub for the same images at once, and a test file
+      # that fails to pull its image fails with a registry timeout. The images are
+      # pulled here, with pauses between attempts, and the tests find them local.
+      # This retries the download of an image, never a test.
+      - name: Pull the images the tests start
+        run: |
+          RYUK=$(grep -rhoE 'testcontainers/ryuk:[0-9.]+' apps/api/node_modules/testcontainers/build | head -1)
+          pull() {
+            for attempt in 1 2 3 4; do
+              docker pull -q "$1" > /dev/null && return 0
+              sleep $((attempt * 5))
+            done
+            echo "Could not pull $1"
+            return 1
+          }
+          pids=""
+          for image in postgres:16 redis:7 bitnamilegacy/minio:2025.7.23-debian-12-r5 "$RYUK"; do
+            pull "$image" &
+            pids="$pids $!"
+          done
+          for pid in $pids; do
+            wait "$pid" || exit 1
+          done
+
       # The part is computed from the files on disk. Before it runs, the script
       # checks that all parts together hold every *.integration.test.ts once;
       # no retry: an unstable test fails honestly.

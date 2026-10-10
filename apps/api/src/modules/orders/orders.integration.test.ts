@@ -3988,6 +3988,14 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       } finally {
         await redisProxy.start();
       }
+      // The next test signs in, which needs Redis: let the API's connection
+      // come back through the proxy first, as the test of the scanner does.
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if ((await http().get("/ready")).status === 200) {
+          break;
+        }
+        await sleep(250);
+      }
     });
   });
 

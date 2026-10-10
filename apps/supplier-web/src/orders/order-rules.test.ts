@@ -16,9 +16,11 @@ import {
   formatWhen,
   journalLines,
   nextTimerTick,
+  noShowProblem,
   orderActions,
   formatTermDay,
   proposeProblem,
+  proposeTimeProblem,
   supplyOverdue,
   startOfDay,
   statusKey,
@@ -245,7 +247,7 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
     expect(orderActions(later, NOON, open)).toEqual({ primary: null, secondary: [] });
   });
 
-  it("gives a service the buttons it shares with goods until TASK-039.B (TASK-038)", () => {
+  it("gives a service the buttons of the table of SCREENS 1.9 (TASK-038, TASK-039.B)", () => {
     const service = (status: SupplierOrderSummary["status"], blocked = false) =>
       orderActions(
         summary({
@@ -257,14 +259,104 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
         NOON,
         { blocked },
       );
-    // «Подтвердить время» · «Отказать» — «Предложить другое время» comes with its screen.
-    expect(service("created")).toEqual({ primary: "accept", secondary: ["decline"] });
+    // «Подтвердить {дата} в {время}» · «Предложить другое время» · «Отказать».
+    expect(service("created")).toEqual({
+      primary: "accept",
+      secondary: ["proposeTime", "decline"],
+    });
+    expect(service("created", true)).toEqual({ primary: null, secondary: [] });
     expect(service("term_proposed")).toEqual({ primary: null, secondary: ["decline"] });
     // «Отметить выполнение по QR / коду» · «Отказать»; no «Готово к выдаче».
     expect(service("accepted")).toEqual({ primary: "giveOut", secondary: ["decline"] });
     expect(service("accepted", true)).toEqual({ primary: "giveOut", secondary: [] });
     expect(service("visit_unresolved")).toEqual({ primary: "closeLate", secondary: [] });
     expect(service("no_show")).toEqual({ primary: null, secondary: [] });
+  });
+
+  it("offers «Клиент не пришёл» only from the time of the visit to the end of its window", () => {
+    const confirmed = (visitAt: number, until: number, blocked = false) =>
+      orderActions(
+        summary({
+          kind: "service",
+          status: "accepted",
+          serviceVisit: {
+            car: {
+              make: { id: crypto.randomUUID(), label: "Geely" },
+              model: { id: crypto.randomUUID(), label: "Coolray" },
+              year: 2024,
+            },
+            timeZone: ALMATY,
+            desiredAt: new Date(visitAt).toISOString(),
+            proposed: null,
+            confirmed: {
+              visitAt: new Date(visitAt).toISOString(),
+              at: new Date(NOON - 600 * MINUTE).toISOString(),
+              until: new Date(until).toISOString(),
+            },
+          },
+        }),
+        NOON,
+        { blocked },
+      );
+    // Before the visit — no button (the server would say «too early»).
+    expect(confirmed(NOON + MINUTE, NOON + 120 * MINUTE).secondary).toEqual(["decline"]);
+    // At the visit's time and inside its window.
+    expect(confirmed(NOON, NOON + 120 * MINUTE)).toEqual({
+      primary: "giveOut",
+      secondary: ["noShow", "decline"],
+    });
+    expect(confirmed(NOON - 60 * MINUTE, NOON + MINUTE).secondary).toEqual(["noShow", "decline"]);
+    // The window is over: the visit is about to expire unresolved.
+    expect(confirmed(NOON - 120 * MINUTE, NOON).secondary).toEqual(["decline"]);
+    // A blocked company marks nothing.
+    expect(confirmed(NOON, NOON + 120 * MINUTE, true)).toEqual({
+      primary: "giveOut",
+      secondary: [],
+    });
+  });
+
+  it("says a refused «Клиент не пришёл» and a refused other time in words (TASK-039.B)", () => {
+    const format = (iso: string) => `[${iso}]`;
+    const tooEarly = new ApiError({
+      status: 409,
+      code: "ORDER_NO_SHOW_TOO_EARLY",
+      message: "early",
+      retryable: false,
+    });
+    expect(noShowProblem(tooEarly, "2026-10-06T10:00:00.000Z", format, t)).toEqual({
+      conflict: false,
+      text: "Время визита ещё не наступило ([2026-10-06T10:00:00.000Z]). Отметить неявку можно после него",
+    });
+    const closed = new ApiError({
+      status: 409,
+      code: "ORDER_STATE_CONFLICT",
+      message: "moved",
+      details: {
+        currentStatus: "completed",
+        version: 4,
+        lastAction: {
+          action: "close",
+          actor: { kind: "member", memberId: crypto.randomUUID(), name: "Марат", removed: false },
+          at: "2026-10-06T10:05:00.000Z",
+        },
+      },
+      retryable: false,
+    });
+    expect(noShowProblem(closed, null, format, t)).toMatchObject({ conflict: true });
+    expect(noShowProblem(closed, null, format, t).text).toContain("Марат");
+    const refused = new ApiError({
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "outside",
+      details: [{ path: "visitAt", message: "Outside the point's working hours" }],
+      retryable: false,
+    });
+    expect(proposeTimeProblem(refused, format, t)).toEqual({
+      conflict: false,
+      text: "Это время больше нельзя предложить. Выберите из обновлённого списка",
+      stale: true,
+    });
+    expect(proposeTimeProblem(closed, format, t)).toMatchObject({ conflict: true });
   });
 
   it("says a service in its own words and keeps confirmed visits apart by time (TASK-038)", () => {

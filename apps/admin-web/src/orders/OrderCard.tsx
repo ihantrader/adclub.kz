@@ -393,12 +393,20 @@ function OrderFacts({ order }: { order: AdminOrder }) {
             </span>
           </dd>
         </div>
-        <div>
-          <dt>Количество и сумма</dt>
-          <dd className="num">
-            {order.quantity} шт. × {moneyText(order.unitPrice)} = {moneyText(order.total)}
-          </dd>
-        </div>
+        {/* A visit for a service has no quantity (SCREENS M-ORD-01, TASK-039.B). */}
+        {order.kind === "service" ? (
+          <div>
+            <dt>Сумма</dt>
+            <dd className="num">{moneyText(order.total)}</dd>
+          </div>
+        ) : (
+          <div>
+            <dt>Количество и сумма</dt>
+            <dd className="num">
+              {order.quantity} шт. × {moneyText(order.unitPrice)} = {moneyText(order.total)}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Клиент</dt>
           <dd>

@@ -190,8 +190,13 @@ export function OrdersTable({
                     {order.item.name.text}
                   </span>
                   <span className="ac-text-caption ac-muted">
-                    {[order.item.brand, order.item.article].filter(Boolean).join(" · ")} ·{" "}
-                    {order.quantity} шт.
+                    {[
+                      order.item.brand,
+                      order.item.article,
+                      order.kind === "service" ? null : `${order.quantity} шт.`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </div>
               </td>

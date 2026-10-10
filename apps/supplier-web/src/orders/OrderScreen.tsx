@@ -4,6 +4,7 @@ import {
   Banner,
   Button,
   DelayedSkeleton,
+  Dialog,
   EmptyState,
   FadeSwap,
   Icon,
@@ -22,6 +23,7 @@ import { useLanguage, useT } from "../i18n";
 import { goBack, navigate, useRouteId } from "../router";
 import { DeclineDialog } from "./DeclineDialog";
 import { TermDialog } from "./TermDialog";
+import { TimeDialog } from "./TimeDialog";
 import { useNow, useVisiblePoll } from "./live";
 import {
   AnswerTimer,
@@ -41,6 +43,7 @@ import {
   declineReasonKey,
   formatDate,
   journalLines,
+  noShowProblem,
   orderActions,
   termWords,
   visitWords,
@@ -188,6 +191,10 @@ function OrderView({
   const [notice, setNotice] = useState<{ conflict: boolean; text: string } | null>(null);
   const [declining, setDeclining] = useState(false);
   const [proposing, setProposing] = useState(false);
+  /** TASK-039.B: «Предложить другое время» and «Клиент не пришёл» of a service. */
+  const [proposingTime, setProposingTime] = useState(false);
+  const [confirmNoShow, setConfirmNoShow] = useState(false);
+  const [markingNoShow, setMarkingNoShow] = useState(false);
   /**
    * «Подтвердить срок до {дата}» (S-ORD-02, TASK-039): the date the agreed
    * term gives if confirmed now — the server's (`…/term-options`); until it
@@ -278,6 +285,36 @@ function OrderView({
     }
   };
 
+  // «Клиент не пришёл» (SCREENS 1.9): only after «Отметить неявку?»; the
+  // server judges the time of the visit — too early is said with it.
+  const markNoShow = async () => {
+    busy.current = true;
+    setMarkingNoShow(true);
+    setNotice(null);
+    try {
+      const { order: marked } = await apiClient.markSupplierOrderNoShow(
+        { orderId: order.id },
+        { expectedVersion: order.version },
+      );
+      onOrder(marked);
+      toast.show(t("orders.noShow.done", { number: order.number }));
+    } catch (thrown) {
+      const problem = noShowProblem(
+        thrown,
+        order.serviceVisit?.confirmed?.visitAt ?? null,
+        when,
+        t,
+      );
+      setNotice(problem);
+      if (problem.companyChanged) void refreshCompany();
+      if (problem.conflict) await reread({ tell: false });
+    } finally {
+      setConfirmNoShow(false);
+      setMarkingNoShow(false);
+      busy.current = false;
+    }
+  };
+
   const press = (action: OrderAction) => {
     switch (action) {
       case "accept":
@@ -288,6 +325,12 @@ function OrderView({
         return undefined;
       case "proposeTerm":
         setProposing(true);
+        return undefined;
+      case "proposeTime":
+        setProposingTime(true);
+        return undefined;
+      case "noShow":
+        setConfirmNoShow(true);
         return undefined;
       case "giveOut":
         navigate("scan");
@@ -302,7 +345,10 @@ function OrderView({
   const label = (action: OrderAction) =>
     action === "accept" && order.kind === "on_order" && confirmOn
       ? t("orders.confirmTermUntil", { date: formatDate(confirmOn, lang) })
-      : t(actionLabel(action, order.kind));
+      : // TASK-039.B: «Подтвердить {дата} в {время}» — the time the customer asked for.
+        action === "accept" && order.kind === "service" && order.serviceVisit
+        ? t("orders.confirmTimeAt", { at: at(order.serviceVisit.desiredAt) })
+        : t(actionLabel(action, order.kind));
   const day = (date: string) => formatDate(date, lang);
   const journal = journalLines(order.events, when, t, day, order.kind);
   const term = termWords(order, day, when, t);
@@ -396,10 +442,13 @@ function OrderView({
           </div>
         </div>
         <dl className="facts">
-          <div>
-            <dt>{t("orders.quantity")}</dt>
-            <dd className="num">{order.quantity}</dd>
-          </div>
+          {/* A visit for a service has no quantity (SCREENS M-ORD-01, TASK-039.B). */}
+          {!visit && (
+            <div>
+              <dt>{t("orders.quantity")}</dt>
+              <dd className="num">{order.quantity}</dd>
+            </div>
+          )}
           <div>
             <dt>{t("orders.priceByOrder")}</dt>
             <dd>
@@ -515,6 +564,46 @@ function OrderView({
           void reread({ tell: false });
         }}
       />
+
+      <TimeDialog
+        target={
+          proposingTime ? { id: order.id, number: order.number, version: order.version } : null
+        }
+        format={when}
+        onClose={() => setProposingTime(false)}
+        onProposed={(proposed) => onOrder(proposed)}
+        onProblem={(problem) => {
+          setNotice(problem);
+          void reread({ tell: false });
+        }}
+      />
+
+      <Dialog
+        open={confirmNoShow}
+        onClose={() => setConfirmNoShow(false)}
+        title={t("orders.noShow.title")}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmNoShow(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!online || markingNoShow}
+              loading={markingNoShow}
+              onClick={() => void markNoShow()}
+            >
+              {t("orders.noShow.confirm")}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {t("orders.noShow.text", {
+            time: order.serviceVisit?.confirmed ? at(order.serviceVisit.confirmed.visitAt) : "",
+          })}
+        </p>
+      </Dialog>
 
       <DeclineDialog
         target={declining ? { id: order.id, number: order.number, version: order.version } : null}

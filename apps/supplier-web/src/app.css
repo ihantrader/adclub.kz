@@ -1292,6 +1292,11 @@ a.ac-button {
   overflow-y: auto;
 }
 
+/* S-ORD-04 for a service: the days and the times, one above the other (TASK-039.B). */
+.term-dates__grid--short {
+  max-height: 168px;
+}
+
 .order-actions {
   justify-content: flex-end;
 }

@@ -355,7 +355,11 @@ export type OrderAction =
   | "giveOut"
   | "closeLate"
   /** S-ORD-04 «Предложить другой срок» of a new order under order (TASK-039). */
-  | "proposeTerm";
+  | "proposeTerm"
+  /** S-ORD-04 «Предложить другое время» of a new order on a service (TASK-039.B). */
+  | "proposeTime"
+  /** «Клиент не пришёл» of a confirmed visit, once its time has come (TASK-039.B, SCREENS 1.9). */
+  | "noShow";
 
 export interface OrderActions {
   primary: OrderAction | null;
@@ -369,18 +373,20 @@ const NONE: OrderActions = { primary: null, secondary: [] };
  * allows from its status. An order under order (TASK-037, TASK-039): a new
  * one — «Подтвердить срок до {дата}» · «Предложить другой срок» · «Отказать»;
  * a confirmed term — the buttons of «Принята»; while the customer decides —
- * only «Отказать» (D-072). A service (TASK-038) — until the screens of
- * TASK-039.B, the buttons it shares with goods: a new one — «Подтвердить
- * время» · «Отказать»; a confirmed one — «Отметить выполнение по QR / коду»
- * · «Отказать»; while the customer decides — «Отказать»; an unresolved one
- * inside its window — «Закрыть по коду». A kind this version does not know
- * gets no buttons. A new order whose answer deadline passed by this
- * device's clock has none: the server is about to expire it. A blocked
- * company (SCREENS 6.0) keeps looking at its orders and giving them out by
- * the code, nothing else.
+ * only «Отказать» (D-072). A service (TASK-038, TASK-039.B): a new one —
+ * «Подтвердить {дата} в {время}» · «Предложить другое время» · «Отказать»;
+ * a confirmed one — «Отметить выполнение по QR / коду» · «Отказать», and
+ * from the time of the visit on «Клиент не пришёл» (SCREENS 1.9; until the
+ * end of its window, after which the server expires it unresolved); while
+ * the customer decides — «Отказать»; an unresolved one inside its window —
+ * «Закрыть по коду». A kind this version does not know gets no buttons. A
+ * new order whose answer deadline passed by this device's clock has none:
+ * the server is about to expire it. A blocked company (SCREENS 6.0) keeps
+ * looking at its orders and giving them out by the code, nothing else.
  */
 export function orderActions(
-  order: Pick<SupplierOrderSummary, "kind" | "status" | "respondBy" | "lateCloseUntil">,
+  order: Pick<SupplierOrderSummary, "kind" | "status" | "respondBy" | "lateCloseUntil"> &
+    Partial<Pick<SupplierOrderSummary, "serviceVisit">>,
   now: number,
   options: { blocked: boolean },
 ): OrderActions {
@@ -389,14 +395,23 @@ export function orderActions(
   }
   const { blocked } = options;
   if (order.kind === "service" && order.status === "accepted") {
-    return { primary: "giveOut", secondary: blocked ? [] : ["decline"] };
+    if (blocked) return { primary: "giveOut", secondary: [] };
+    const confirmed = order.serviceVisit?.confirmed;
+    const visitCame =
+      confirmed !== null &&
+      confirmed !== undefined &&
+      now >= Date.parse(confirmed.visitAt) &&
+      now < Date.parse(confirmed.until);
+    return { primary: "giveOut", secondary: visitCame ? ["noShow", "decline"] : ["decline"] };
   }
   switch (order.status) {
     case "created":
       if (blocked || answerTimer(order.respondBy, now).kind === "expired") return NONE;
       return order.kind === "on_order"
         ? { primary: "accept", secondary: ["proposeTerm", "decline"] }
-        : { primary: "accept", secondary: ["decline"] };
+        : order.kind === "service"
+          ? { primary: "accept", secondary: ["proposeTime", "decline"] }
+          : { primary: "accept", secondary: ["decline"] };
     case "term_proposed":
       // D-072: the goods won't come — no need to wait for the customer.
       return blocked ? NONE : { primary: null, secondary: ["decline"] };
@@ -665,6 +680,46 @@ export function proposeProblem(
     return { conflict: false, text: t("orders.termDialog.dateRefused"), stale: true };
   }
   return actionProblem(error, format, t);
+}
+
+/**
+ * What a refused «Отправить клиенту» of another time says (S-ORD-04 for a
+ * service, TASK-039.B): the time is no longer one to propose (the minute
+ * passed, the point closed that day) — at the times, which are loaded again
+ * (`stale: true`); anything else — as any refused press of a service.
+ */
+export function proposeTimeProblem(
+  error: unknown,
+  format: (iso: string) => string,
+  t: Translate,
+): { conflict: boolean; text: string; stale?: true; companyChanged?: true } {
+  if (isApiError(error) && error.code === "VALIDATION_ERROR") {
+    return { conflict: false, text: t("orders.timeDialog.timeRefused"), stale: true };
+  }
+  return actionProblem(error, format, t, "service");
+}
+
+/**
+ * What a refused «Клиент не пришёл» says (TASK-039.B): the visit's time has
+ * not come by the server's clock (409 `ORDER_NO_SHOW_TOO_EARLY`) — when it
+ * may be marked; the order moved meanwhile (a colleague closed it by the
+ * code, the window passed) — who and when, as any refused press.
+ */
+export function noShowProblem(
+  error: unknown,
+  visitAt: string | null,
+  format: (iso: string) => string,
+  t: Translate,
+): { conflict: boolean; text: string; companyChanged?: true } {
+  if (isApiError(error) && error.code === "ORDER_NO_SHOW_TOO_EARLY") {
+    return {
+      conflict: false,
+      text: visitAt
+        ? t("orders.noShow.tooEarly", { time: format(visitAt) })
+        : t("orders.noShow.tooEarlyNoTime"),
+    };
+  }
+  return actionProblem(error, format, t, "service");
 }
 
 // ---------------------------------------------------------------- journal

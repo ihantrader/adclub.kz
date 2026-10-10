@@ -206,6 +206,8 @@ const actionKeys = {
   giveOut: "orders.giveOut",
   closeLate: "orders.closeLate",
   proposeTerm: "orders.proposeTerm",
+  proposeTime: "orders.proposeTime",
+  noShow: "orders.noShow.action",
 } as const;
 
 /**

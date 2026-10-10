@@ -22,6 +22,20 @@ export {
   type IconButtonProps,
 } from "./components/Button";
 export { Spinner } from "./components/Spinner";
+export { SearchSelect } from "./components/SearchSelect";
+export type { SearchSelectProps, SearchSelectTexts } from "./components/SearchSelect";
+export {
+  createText,
+  firstActive,
+  isMoveKey,
+  listed,
+  moveActive,
+  SEARCH_DEBOUNCE_MS,
+  SEARCH_MIN_CHARS,
+  SEARCH_PAGE,
+  searchQuery,
+} from "./components/search-select-core";
+export type { Choice, ChoiceSource, MoveKey } from "./components/search-select-core";
 export {
   CodeCells,
   Keypad,

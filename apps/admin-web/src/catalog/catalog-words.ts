@@ -9,6 +9,7 @@ import type {
   ItemPhotoSourceType,
   ItemPhotoStatus,
   OfferHiddenReasonValue,
+  SupplierOffer,
   TranslationFailure,
 } from "@adclub/contracts";
 import { actionErrorText } from "../errors";
@@ -97,12 +98,48 @@ export const SHOWCASE_REASON_TEXT: Record<OfferHiddenReasonValue, string> = {
   offer_suspended: "приостановлено",
   supplier_blocked: "компания заблокирована",
   supplier_paused: "компания на паузе",
+  supplier_type_mismatch: "тип компании не позволяет (только товары или только услуги)",
   item_unavailable: "позиция недоступна",
   category_hidden: "категория скрыта",
   no_city: "у точки не указан город",
   hours_not_set: "у точки нет часов работы",
   no_working_day: "нет рабочих дней на ближайшее время",
 };
+
+/**
+ * The price of an offer as the admin views of offers show it (A-SUP-03,
+ * A-CAT-05): «12 500 ₸», or a service's prices by model (TASK-019) —
+ * «от 8 000 ₸: Geely Coolray 8 000, Geely Atlas 10 000».
+ */
+export function offerPriceText(offer: Pick<SupplierOffer, "price" | "pricing">): string {
+  const money = (value: number) => `${value.toLocaleString("ru-RU")} ₸`;
+  if (offer.pricing.mode === "single") return money(offer.price);
+  const models = offer.pricing.models
+    .map(
+      (row) =>
+        `${row.make.name} ${row.model.name} ${row.price.toLocaleString("ru-RU")}${
+          row.available ? "" : " (в архиве)"
+        }`,
+    )
+    .join(", ");
+  return `от ${money(offer.price)}: ${models}`;
+}
+
+/** «в наличии · самовывоз», «под заказ, 3 дн.», a service — «услуга в точке». */
+export function offerTermsText(
+  offer: Pick<SupplierOffer, "availability" | "leadDays" | "pickup" | "delivery"> & {
+    item: Pick<SupplierOffer["item"], "type">;
+  },
+): string {
+  if (offer.item.type === "service") return "услуга в точке";
+  return [
+    offer.availability === "in_stock" ? "в наличии" : `под заказ, ${offer.leadDays} дн.`,
+    offer.pickup ? "самовывоз" : null,
+    offer.delivery ? "доставка" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export function showcaseReasonText(reason: string): string {
   return (SHOWCASE_REASON_TEXT as Record<string, string | undefined>)[reason] ?? reason;

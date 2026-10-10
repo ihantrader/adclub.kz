@@ -1,6 +1,6 @@
 import type { OfferAvailability, SupplierOffer } from "@adclub/contracts";
 import { Badge, Button, Dialog, Icon, IconButton, useToast } from "@adclub/ui";
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { apiClient } from "../api";
 import { useOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
@@ -17,6 +17,7 @@ import {
   type RowDraft,
   type RowFields,
 } from "./offer-rules";
+import { servicePriceLine } from "./service-offer-rules";
 
 export interface OfferRowProps {
   offer: SupplierOffer;
@@ -164,10 +165,23 @@ function RowFields({
   editable: boolean;
 }) {
   const t = useT();
+  const { lang } = useLanguage();
   const name = itemName(offer);
   const leadInput = useRef<HTMLInputElement>(null);
   const { draft, setDraft, problem, commit, online, saving } = editor;
   const disabled = !editable || !online;
+  const service = offer.item.type === "service";
+
+  // A service (TASK-019): only its one price is edited here; prices by
+  // model are a table — on the card.
+  if (service && offer.pricing.mode === "by_model") {
+    return (
+      <p className="offer-fields offer-fields--service">
+        <span className="num">{servicePriceLine(offer, lang, t)}</span>
+        <TitleLink offer={offer}>{t("offers.byModelPrices")}</TitleLink>
+      </p>
+    );
+  }
 
   const setAvailability = (availability: OfferAvailability) => {
     const next = { ...draft, availability };
@@ -201,6 +215,50 @@ function RowFields({
           ₸
         </span>
       </label>
+      {service ? (
+        <span className="ac-text-caption ac-muted">{t("serviceForm.single")}</span>
+      ) : (
+        <GoodsTerms
+          name={name}
+          draft={draft}
+          disabled={disabled}
+          problem={problem}
+          leadInput={leadInput}
+          onAvailability={setAvailability}
+          onDraft={setDraft}
+          onCommit={commit}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Availability and the term of a row on goods (a service has neither). */
+function GoodsTerms({
+  name,
+  draft,
+  disabled,
+  problem,
+  leadInput,
+  onAvailability,
+  onDraft,
+  onCommit,
+}: {
+  name: string;
+  draft: RowDraft;
+  disabled: boolean;
+  problem: RowProblem | null;
+  leadInput: RefObject<HTMLInputElement | null>;
+  onAvailability: (availability: OfferAvailability) => void;
+  onDraft: (draft: RowDraft) => void;
+  onCommit: (draft: RowDraft) => Promise<void>;
+}) {
+  const t = useT();
+  const setDraft = onDraft;
+  const commit = onCommit;
+  const setAvailability = onAvailability;
+  return (
+    <>
       <label className="inline-field inline-field--select">
         <span className="ac-visually-hidden">{`${t("offers.availability")}: ${name}`}</span>
         <select
@@ -240,7 +298,7 @@ function RowFields({
           {t("offers.days")}
         </span>
       </label>
-    </div>
+    </>
   );
 }
 
@@ -435,14 +493,21 @@ function StatusButton({
 /** A row of S-OFF-01 on a phone: a card with the fields editable in place. */
 export function OfferCardRow({ offer, onChanged, onMoved }: OfferRowProps) {
   const t = useT();
+  const { lang } = useLanguage();
   const editor = useRowEditor(offer, onChanged);
   const actions = useStatusActions(offer, onMoved);
   const onSale = offer.status !== "withdrawn";
+  const service = offer.item.type === "service";
   return (
     <article className="offer-card">
       <div className="offer-card__head">
         <TitleLink offer={offer}>{itemName(offer)}</TitleLink>
-        {!offer.item.photo && (
+        {service && (
+          <Badge tone="neutral" icon="settings">
+            {t("offers.service")}
+          </Badge>
+        )}
+        {!service && !offer.item.photo && (
           <Badge tone="neutral" icon="package">
             {t("offers.noPhoto")}
           </Badge>
@@ -455,9 +520,13 @@ export function OfferCardRow({ offer, onChanged, onMoved }: OfferRowProps) {
       {onSale ? (
         <RowFields offer={offer} editor={editor} editable />
       ) : (
-        <p className="ac-text-body num">{`${formatAmount(offer.price)} ₸ · ${t(
-          offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder",
-        )}`}</p>
+        <p className="ac-text-body num">
+          {service
+            ? servicePriceLine(offer, lang, t)
+            : `${formatAmount(offer.price)} ₸ · ${t(
+                offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder",
+              )}`}
+        </p>
       )}
       <div className="offer-card__meta">
         <Receiving offer={offer} />
@@ -489,15 +558,25 @@ export function OfferCardRow({ offer, onChanged, onMoved }: OfferRowProps) {
 /** A row of S-OFF-01 from 1024 px: a line of the table, the same editing. */
 export function OfferTableRow({ offer, onChanged, onMoved }: OfferRowProps) {
   const t = useT();
+  const { lang } = useLanguage();
   const editor = useRowEditor(offer, onChanged);
   const actions = useStatusActions(offer, onMoved);
   const onSale = offer.status !== "withdrawn";
+  const service = offer.item.type === "service";
   const problem = editor.problem?.text ?? actions.error;
   return (
     <tr>
       <td className="offers-table__item">
         <TitleLink offer={offer}>{itemName(offer)}</TitleLink>
-        {!offer.item.photo && (
+        {service && (
+          <>
+            {" "}
+            <Badge tone="neutral" icon="settings">
+              {t("offers.service")}
+            </Badge>
+          </>
+        )}
+        {!service && !offer.item.photo && (
           <>
             {" "}
             <Badge tone="neutral" icon="package">
@@ -522,13 +601,19 @@ export function OfferTableRow({ offer, onChanged, onMoved }: OfferRowProps) {
         {onSale ? (
           <RowFields offer={offer} editor={editor} editable />
         ) : (
-          <span className="num">{`${formatAmount(offer.price)} ₸`}</span>
+          <span className="num">
+            {service ? servicePriceLine(offer, lang, t) : `${formatAmount(offer.price)} ₸`}
+          </span>
         )}
       </td>
       {!onSale && (
         <>
-          <td>{t(offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder")}</td>
-          <td className="num">{offer.leadDays}</td>
+          <td>
+            {service
+              ? "—"
+              : t(offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder")}
+          </td>
+          <td className="num">{service ? "—" : offer.leadDays}</td>
         </>
       )}
       <td>

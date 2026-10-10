@@ -229,12 +229,16 @@ function FoundItem({ result }: { result: OfferItemSearchResult }) {
           {item.photo ? (
             <img src={item.photo.thumbUrl} alt="" loading="lazy" />
           ) : (
-            <Icon name="package" size={24} />
+            <Icon name={item.type === "service" ? "settings" : "package"} size={24} />
           )}
         </span>
         <span className="found-item__text">
           <span className="ac-text-body-strong found-item__name">{item.name.text}</span>
-          <span className="ac-text-body-s ac-muted">{categoryLine(item)}</span>
+          <span className="ac-text-body-s ac-muted">
+            {item.type === "service"
+              ? `${t("offers.service")} · ${categoryLine(item)}`
+              : categoryLine(item)}
+          </span>
           {line && <span className="ac-text-body-s num">{line}</span>}
           {offer && (
             <span className="ac-text-body-s found-item__already">

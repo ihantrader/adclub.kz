@@ -3,7 +3,7 @@ import { Banner, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
 import { useLoad } from "../use-load";
-import { showcaseReasonText } from "./catalog-words";
+import { offerPriceText, offerTermsText, showcaseReasonText } from "./catalog-words";
 
 const STATUS_TEXT: Record<string, string> = {
   active: "в продаже",
@@ -72,14 +72,8 @@ export function ItemOffers({ itemId }: { itemId: string }) {
                         </span>
                       </div>
                     </td>
-                    <td className="num">{offer.price.toLocaleString("ru-RU")} ₸</td>
-                    <td className="ac-text-body-s">
-                      {offer.availability === "in_stock"
-                        ? "в наличии"
-                        : `под заказ, ${offer.leadDays} дн.`}
-                      {offer.pickup ? " · самовывоз" : ""}
-                      {offer.delivery ? " · доставка" : ""}
-                    </td>
+                    <td className="num">{offerPriceText(offer)}</td>
+                    <td className="ac-text-body-s">{offerTermsText(offer)}</td>
                     <td className="ac-text-body-s">
                       {offer.showcase.visible ? (
                         "видно клиентам"

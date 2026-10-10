@@ -39,6 +39,7 @@ import {
   useRouteState,
 } from "../router";
 import { ActiveOrders, HiddenNote, Receiving } from "./OfferRow";
+import { ServiceOfferEditor } from "./ServiceOfferEditor";
 import {
   activeOrdersWarningKey,
   categoryLine,
@@ -59,7 +60,7 @@ import {
 const PREVIEW_DELAY_MS = 300;
 
 /** The price field: «Проверьте цену» puts the cursor there. */
-const PRICE_FIELD = "offer-price";
+export const PRICE_FIELD = "offer-price";
 
 function focusPrice(): void {
   document.getElementById(PRICE_FIELD)?.focus();
@@ -81,7 +82,11 @@ export function NewOfferScreen({ company }: { company: SupplierCard }) {
     if (!item) navigate("offerSearch", { replace: true });
   }, [item]);
   if (!item) return null;
-  return <OfferEditor item={item} offer={null} company={company} />;
+  return item.type === "service" ? (
+    <ServiceOfferEditor item={item} offer={null} />
+  ) : (
+    <OfferEditor item={item} offer={null} company={company} />
+  );
 }
 
 type Loaded =
@@ -171,15 +176,23 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
       );
       break;
     default:
-      body = (
-        <OfferEditor
-          key={loaded.offer.id}
-          item={loaded.offer.item}
-          offer={loaded.offer}
-          company={company}
-          onOffer={(offer) => setLoaded({ status: "ready", offer })}
-        />
-      );
+      body =
+        loaded.offer.item.type === "service" ? (
+          <ServiceOfferEditor
+            key={loaded.offer.id}
+            item={loaded.offer.item}
+            offer={loaded.offer}
+            onOffer={(offer) => setLoaded({ status: "ready", offer })}
+          />
+        ) : (
+          <OfferEditor
+            key={loaded.offer.id}
+            item={loaded.offer.item}
+            offer={loaded.offer}
+            company={company}
+            onOffer={(offer) => setLoaded({ status: "ready", offer })}
+          />
+        );
   }
   // What the card shows fades in when it changes from loading to the offer,
   // the same 150 ms as the page around it.
@@ -190,7 +203,7 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
   );
 }
 
-function BackHead({ title }: { title: string }) {
+export function BackHead({ title }: { title: string }) {
   const t = useT();
   return (
     <div className="page__head page__head--back">
@@ -201,7 +214,7 @@ function BackHead({ title }: { title: string }) {
 }
 
 /** The item of an offer — read only (S-OFF-03). */
-function ItemBlock({ item }: { item: OfferItem }) {
+export function ItemBlock({ item }: { item: OfferItem }) {
   const line = [item.brand?.name, item.article].filter(Boolean).join(" · ");
   return (
     <section className="card item-block">
@@ -230,7 +243,7 @@ function FieldError({ problem, field }: { problem: OfferProblem | null; field: O
   );
 }
 
-function ProblemLink({ problem }: { problem: OfferProblem }) {
+export function ProblemLink({ problem }: { problem: Pick<OfferProblem, "link"> }) {
   const t = useT();
   if (!problem.link) return null;
   const link = problem.link;
@@ -368,7 +381,6 @@ function OfferEditor({
   onOffer?: (offer: SupplierOffer) => void;
 }) {
   const t = useT();
-  const { lang } = useLanguage();
   const toast = useToast();
   const online = useOnline();
   const opened = useRouteState() as OpenedWith | null;
@@ -378,7 +390,6 @@ function OfferEditor({
   const [problem, setProblem] = useState<OfferProblem | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [asking, setAsking] = useState(false);
   const checkPrice = offer !== null && opened?.checkPrice === true;
 
   // «Вернуть в продажу» opened the card to check the price: put the cursor there.
@@ -441,31 +452,6 @@ function OfferEditor({
     }
   };
 
-  const changeStatus = async (to: "withdraw" | "return") => {
-    if (!offer) return;
-    setAsking(false);
-    try {
-      const answer =
-        to === "withdraw"
-          ? await apiClient.withdrawSupplierOffer(
-              { offerId: offer.id },
-              { expectedVersion: offer.version },
-            )
-          : await apiClient.returnSupplierOffer(
-              { offerId: offer.id },
-              { expectedVersion: offer.version },
-            );
-      onOffer?.(answer.offer);
-      toast.show(t(to === "withdraw" ? "offers.withdrawn" : "offers.returned"));
-      if (to === "return") {
-        replaceRouteState({ checkPrice: true });
-        focusPrice();
-      }
-    } catch (error) {
-      setProblem(offerProblem(error));
-    }
-  };
-
   const field = (name: OfferField) =>
     problem?.field === name ? <FieldError problem={problem} field={name} /> : null;
   const fieldError = (name: OfferField) =>
@@ -487,43 +473,11 @@ function OfferEditor({
       <ItemBlock item={item} />
 
       {offer && (
-        <section className="card offer-state">
-          {withdrawn ? (
-            <Badge tone="neutral" icon="archive">
-              {t("offers.hidden.withdrawn")}
-            </Badge>
-          ) : offer.showcase.visible ? (
-            <Badge tone="success" icon="circleCheck">
-              {t("offerForm.visible")}
-            </Badge>
-          ) : null}
-          <HiddenNote offer={offer} withWithdrawn={false} />
-          <p className="ac-text-body-s">
-            <ActiveOrders count={offer.activeOrders} />
-          </p>
-          <div className="actions-row">
-            {withdrawn ? (
-              <Button
-                variant="secondary"
-                icon="refresh"
-                disabled={!online}
-                onClick={() => changeStatus("return")}
-              >
-                {t("offers.return")}
-              </Button>
-            ) : (
-              <Button
-                variant="secondary"
-                disabled={!online}
-                onClick={() =>
-                  offer.activeOrders > 0 ? setAsking(true) : changeStatus("withdraw")
-                }
-              >
-                {t("offers.withdraw")}
-              </Button>
-            )}
-          </div>
-        </section>
+        <OfferStatePanel
+          offer={offer}
+          onOffer={(next) => onOffer?.(next)}
+          onProblem={(error) => setProblem(offerProblem(error))}
+        />
       )}
 
       <form
@@ -657,17 +611,99 @@ function OfferEditor({
           {!online && <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>}
         </div>
       </form>
-
-      {offer && (
-        <WithdrawDialog
-          open={asking}
-          count={offer.activeOrders}
-          lang={lang}
-          onClose={() => setAsking(false)}
-          onWithdraw={() => changeStatus("withdraw")}
-        />
-      )}
     </>
+  );
+}
+
+/**
+ * The state of a saved offer on its card: on the showcase or why not,
+ * «Активные заявки: N», «Снять с продажи» (asking when orders are still
+ * going through) and «Вернуть в продажу» (then «Проверьте цену»). The same
+ * for an offer on goods and on a service.
+ */
+export function OfferStatePanel({
+  offer,
+  onOffer,
+  onProblem,
+}: {
+  offer: SupplierOffer;
+  onOffer: (offer: SupplierOffer) => void;
+  onProblem: (error: unknown) => void;
+}) {
+  const t = useT();
+  const { lang } = useLanguage();
+  const toast = useToast();
+  const online = useOnline();
+  const [asking, setAsking] = useState(false);
+  const withdrawn = offer.status === "withdrawn";
+
+  const changeStatus = async (to: "withdraw" | "return") => {
+    setAsking(false);
+    try {
+      const answer =
+        to === "withdraw"
+          ? await apiClient.withdrawSupplierOffer(
+              { offerId: offer.id },
+              { expectedVersion: offer.version },
+            )
+          : await apiClient.returnSupplierOffer(
+              { offerId: offer.id },
+              { expectedVersion: offer.version },
+            );
+      onOffer(answer.offer);
+      toast.show(t(to === "withdraw" ? "offers.withdrawn" : "offers.returned"));
+      if (to === "return") {
+        replaceRouteState({ checkPrice: true });
+        focusPrice();
+      }
+    } catch (error) {
+      onProblem(error);
+    }
+  };
+
+  return (
+    <section className="card offer-state">
+      {withdrawn ? (
+        <Badge tone="neutral" icon="archive">
+          {t("offers.hidden.withdrawn")}
+        </Badge>
+      ) : offer.showcase.visible ? (
+        <Badge tone="success" icon="circleCheck">
+          {t("offerForm.visible")}
+        </Badge>
+      ) : null}
+      <HiddenNote offer={offer} withWithdrawn={false} />
+      <p className="ac-text-body-s">
+        <ActiveOrders count={offer.activeOrders} />
+      </p>
+      <div className="actions-row">
+        {withdrawn ? (
+          <Button
+            variant="secondary"
+            icon="refresh"
+            disabled={!online}
+            onClick={() => changeStatus("return")}
+          >
+            {t("offers.return")}
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            disabled={!online}
+            onClick={() => (offer.activeOrders > 0 ? setAsking(true) : changeStatus("withdraw"))}
+          >
+            {t("offers.withdraw")}
+          </Button>
+        )}
+      </div>
+      <WithdrawDialog
+        open={asking}
+        count={offer.activeOrders}
+        lang={lang}
+        onClose={() => setAsking(false)}
+        onWithdraw={() => changeStatus("withdraw")}
+      />
+    </section>
   );
 }
 

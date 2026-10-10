@@ -6,7 +6,13 @@ import {
 } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
 import { locationOf, menuOf } from "../router";
-import { catalogErrorText, conflictText, errorField } from "./catalog-words";
+import {
+  catalogErrorText,
+  conflictText,
+  errorField,
+  offerPriceText,
+  offerTermsText,
+} from "./catalog-words";
 import { suggestCode } from "./codes";
 import { cellErrors, cellKey, fillCells, rowValue, withEdit } from "./fill-state";
 import { filtered, itemFiltersOf, itemsLink, listQueryOf } from "./item-filters";
@@ -237,5 +243,41 @@ describe("the words of refusals", () => {
       details: { reason: "not_an_image" },
     });
     expect(catalogErrorText(photo)).toBe("Это не изображение");
+  });
+});
+
+describe("offers in words (A-SUP-03, A-CAT-05; TASK-019)", () => {
+  const goods = {
+    item: { type: "part" as const },
+    price: 12_500,
+    pricing: { mode: "single" as const, models: [] },
+    availability: "on_order" as const,
+    leadDays: 3,
+    pickup: true,
+    delivery: false,
+  };
+
+  it("says a product's price and terms, and a service's prices by model", () => {
+    expect(offerPriceText(goods).replace(/\s/g, " ")).toBe("12 500 ₸");
+    expect(offerTermsText(goods)).toBe("под заказ, 3 дн. · самовывоз");
+    const row = (model: string, price: number, available = true) => ({
+      make: { id: "m", name: "Geely" },
+      model: { id: model, name: model },
+      price,
+      available,
+    });
+    const service = {
+      ...goods,
+      item: { type: "service" as const },
+      price: 8_000,
+      pricing: {
+        mode: "by_model" as const,
+        models: [row("Atlas", 10_000), row("Coolray", 8_000), row("Tugella", 15_000, false)],
+      },
+    };
+    expect(offerPriceText(service).replace(/\s/g, " ")).toBe(
+      "от 8 000 ₸: Geely Atlas 10 000, Geely Coolray 8 000, Geely Tugella 15 000 (в архиве)",
+    );
+    expect(offerTermsText(service)).toBe("услуга в точке");
   });
 });

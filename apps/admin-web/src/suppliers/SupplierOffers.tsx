@@ -2,7 +2,7 @@ import type { AdminSupplierCard, SupplierOffer } from "@adclub/contracts";
 import { Banner, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
 import { apiClient } from "../api";
 import { AppLink } from "../catalog/shared";
-import { showcaseReasonText } from "../catalog/catalog-words";
+import { offerPriceText, offerTermsText, showcaseReasonText } from "../catalog/catalog-words";
 import { formatMoment } from "../format";
 import { catalogItemPath, supplierPath } from "../router";
 import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
@@ -113,14 +113,8 @@ export function SupplierOffers({ card }: { card: AdminSupplierCard }) {
                         </span>
                       </div>
                     </td>
-                    <td className="num">{offer.price.toLocaleString("ru-RU")} ₸</td>
-                    <td className="ac-text-body-s">
-                      {offer.availability === "in_stock"
-                        ? "в наличии"
-                        : `под заказ, ${offer.leadDays} дн.`}
-                      {offer.pickup ? " · самовывоз" : ""}
-                      {offer.delivery ? " · доставка" : ""}
-                    </td>
+                    <td className="num">{offerPriceText(offer)}</td>
+                    <td className="ac-text-body-s">{offerTermsText(offer)}</td>
                     <td className="ac-text-body-s">
                       {offer.showcase.visible ? (
                         "да"

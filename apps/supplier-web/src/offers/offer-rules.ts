@@ -45,6 +45,7 @@ const HIDDEN_REASONS: Record<OfferHiddenReasonValue, HiddenReason> = {
   offer_suspended: { key: "offers.hidden.suspended", toCompany: false },
   supplier_blocked: { key: "offers.hidden.blocked", toCompany: false },
   supplier_paused: { key: "offers.hidden.paused", toCompany: false },
+  supplier_type_mismatch: { key: "offers.hidden.typeMismatch", toCompany: false },
   item_unavailable: { key: "offers.hidden.itemUnavailable", toCompany: false },
   category_hidden: { key: "offers.hidden.categoryHidden", toCompany: false },
   no_city: { key: "offers.hidden.noCity", toCompany: false },
@@ -217,6 +218,15 @@ export function offerProblem(error: unknown): OfferProblem {
       return { field: null, key: "offers.conflict", conflict: true };
     case "OFFER_ITEM_UNAVAILABLE":
       return { field: null, key: "offers.error.itemUnavailable" };
+    case "OFFER_NOT_APPLICABLE":
+      // The company's type (TASK-019): «только товары» or «только услуги».
+      return {
+        field: null,
+        key:
+          details.supplierType === "services"
+            ? "offers.error.servicesOnly"
+            : "offers.error.goodsOnly",
+      };
     case "OFFER_STATE":
       return { field: null, key: "offers.error.state", conflict: true };
     case "NOT_FOUND":

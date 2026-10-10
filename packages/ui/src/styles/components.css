@@ -1511,3 +1511,123 @@ textarea {
 .ac-closed-dates__add > .ac-button {
   align-self: flex-start;
 }
+
+/* ---------- «выбор с поиском» (TASK-035.B; shared since TASK-019) ---------- */
+.search-select {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}
+
+.search-select__box {
+  position: relative;
+}
+
+.search-select__input {
+  width: 100%;
+  min-width: 180px;
+  height: 40px;
+  padding: 0 var(--ac-space-8) 0 var(--ac-space-3);
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+.search-select__input:focus-visible {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: var(--ac-focus-offset);
+}
+
+.search-select__input[aria-invalid="true"] {
+  border-color: var(--ac-color-danger);
+}
+
+.search-select__input:disabled {
+  color: var(--ac-color-text-muted);
+  background: var(--ac-color-fill);
+}
+
+.search-select__busy {
+  position: absolute;
+  top: 50%;
+  right: var(--ac-space-3);
+  display: flex;
+  color: var(--ac-color-text-muted);
+  transform: translateY(-50%);
+}
+
+.search-select__panel {
+  position: absolute;
+  top: calc(100% + var(--ac-space-1));
+  /* As wide as the field: it never sticks out of a dialog or a table frame. */
+  right: 0;
+  left: 0;
+  z-index: 6;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  box-shadow: var(--ac-float-shadow);
+}
+
+.search-select__list {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--ac-space-1) 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.search-select__option {
+  display: flex;
+  flex-direction: column;
+  padding: var(--ac-space-2) var(--ac-space-3);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.search-select__option--active {
+  background: var(--ac-color-fill);
+}
+
+.search-select__option[aria-selected="true"] .search-select__text {
+  font-weight: var(--ac-font-weight-label);
+}
+
+.search-select__option--muted .search-select__text {
+  color: var(--ac-color-text-muted);
+}
+
+.search-select__message {
+  margin: 0;
+  padding: var(--ac-space-2) var(--ac-space-3);
+}
+
+/* «Новый двигатель «…»» (TASK-035.C): last, and in sight however long the list scrolls. */
+.search-select__option--create {
+  position: sticky;
+  bottom: calc(-1 * var(--ac-space-1));
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-accent);
+}
+
+.search-select__option--create.search-select__option--active {
+  background: var(--ac-color-fill);
+}
+
+.search-select__option--create .search-select__text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+}
+
+.search-select__error {
+  color: var(--ac-color-danger);
+  font-size: 14px;
+  line-height: 20px;
+}

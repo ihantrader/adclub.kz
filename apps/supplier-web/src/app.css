@@ -983,6 +983,49 @@ ul {
   max-width: 220px;
 }
 
+/* The table «марка — модель — цена» of a service (S-OFF-04, TASK-019):
+   on a phone each row stacks, from 720 px the four go in one line. */
+.model-prices__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-prices__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--ac-space-2);
+  align-items: end;
+  padding-bottom: var(--ac-space-3);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.model-prices__row > .search-select,
+.model-prices__row > .model-prices__price {
+  grid-column: 1 / 2;
+}
+
+.model-prices__row > .ac-icon-button {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+@media (min-width: 720px) {
+  .model-prices__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 160px auto;
+  }
+
+  .model-prices__row > .search-select,
+  .model-prices__row > .model-prices__price,
+  .model-prices__row > .ac-icon-button {
+    grid-row: 1;
+    grid-column: auto;
+  }
+}
+
 .preview {
   gap: var(--ac-space-1);
   background: var(--ac-color-surface-raised);

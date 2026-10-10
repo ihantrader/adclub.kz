@@ -26,9 +26,17 @@ interface ListQuery {
   q: string;
   availability: OfferAvailability | null;
   withoutPhoto: boolean;
+  /** «Услуги» (TASK-019): only offers on services. */
+  services: boolean;
 }
 
-const EMPTY_QUERY: ListQuery = { tab: "on_sale", q: "", availability: null, withoutPhoto: false };
+const EMPTY_QUERY: ListQuery = {
+  tab: "on_sale",
+  q: "",
+  availability: null,
+  withoutPhoto: false,
+  services: false,
+};
 
 function queryOf(state: unknown): ListQuery {
   const value = (state as { list?: Partial<ListQuery> } | null)?.list;
@@ -91,6 +99,7 @@ export function OffersList() {
             ...(next.q.trim() && { q: next.q.trim() }),
             ...(next.availability && { availability: next.availability }),
             ...(next.withoutPhoto && { withoutPhoto: "true" as const }),
+            ...(next.services && { kind: "services" as const }),
           },
           signal: controller.signal,
         });
@@ -127,6 +136,7 @@ export function OffersList() {
           ...(list.query.q.trim() && { q: list.query.q.trim() }),
           ...(list.query.availability && { availability: list.query.availability }),
           ...(list.query.withoutPhoto && { withoutPhoto: "true" as const }),
+          ...(list.query.services && { kind: "services" as const }),
           cursor: list.nextCursor,
         },
         signal: controller.signal,
@@ -278,6 +288,12 @@ export function OffersList() {
           >
             {t("offers.filterNoPhoto")}
           </Chip>
+          <Chip
+            selected={query.services}
+            onClick={() => setQuery((current) => ({ ...current, services: !current.services }))}
+          >
+            {t("offers.filterServices")}
+          </Chip>
         </div>
       </div>
 
@@ -370,7 +386,8 @@ function ListBody({
 }) {
   const t = useT();
   const { query, offers } = shown;
-  const filtered = query.q.trim() !== "" || query.availability !== null || query.withoutPhoto;
+  const filtered =
+    query.q.trim() !== "" || query.availability !== null || query.withoutPhoto || query.services;
 
   if (offers.length === 0) {
     if (filtered) {

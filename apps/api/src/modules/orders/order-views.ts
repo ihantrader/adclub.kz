@@ -924,6 +924,7 @@ export function scanOrderView(row: OrderRow, lang: CatalogLanguage): SupplierSca
   return {
     id: row.id,
     number: row.number,
+    kind: row.kind,
     status: row.status,
     version: row.version,
     isTest: row.isTest,

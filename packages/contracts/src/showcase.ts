@@ -424,6 +424,13 @@ export const showcaseItemResponseSchema = z.object({
   ordering: z.object({
     maxQuantity: z.number().int(),
     pickupReserveHours: z.number().int(),
+    /**
+     * An offer «Под заказ» (TASK-039): how long a pickup order is kept once
+     * the goods have come (`on_order_pickup_reserve_hours`, «После того как
+     * товар придёт, его держат для вас N суток»). Optional for an older
+     * server; the app then says nothing about it.
+     */
+    onOrderPickupReserveHours: z.number().int().optional(),
   }),
 });
 

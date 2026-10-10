@@ -1294,12 +1294,19 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
       expect((await card(w.frontPads)).ordering).toEqual({
         maxQuantity: 50,
         pickupReserveHours: 24,
+        // TASK-039: the reserve once the goods under order have come.
+        onOrderPickupReserveHours: 72,
       });
-      await settings.set({ order_max_quantity: 7, pickup_reserve_hours: 48 });
+      await settings.set({
+        order_max_quantity: 7,
+        pickup_reserve_hours: 48,
+        on_order_pickup_reserve_hours: 96,
+      });
       // The same values the order itself is checked against, for every viewer.
       expect((await card(w.frontPads)).ordering).toEqual({
         maxQuantity: 7,
         pickupReserveHours: 48,
+        onOrderPickupReserveHours: 96,
       });
     });
 

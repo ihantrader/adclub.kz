@@ -960,13 +960,47 @@ export type DeclineOrderBody = z.infer<typeof declineOrderBodySchema>;
  * and not the term the user already agreed to (that one is «Подтвердить
  * срок», `…/accept`). The user is asked; until they answer the order is
  * `term_proposed`, and their silence expires it after `term_agreement_hours`.
+ *
+ * The term is either `leadDays` or the date itself, `readyOn` (TASK-039:
+ * the cabinet picks a working day from `…/term-options`): the server finds
+ * the fewest working days that give exactly this date now, so the customer
+ * is offered the date the employee chose — a day that is not a working day
+ * of the point, or out of range, is 400 at `readyOn`. Exactly one of the two.
  */
-export const proposeOrderTermBodySchema = z.object({
-  expectedVersion: expectedVersionSchema,
-  leadDays: z.number().int().min(1).max(OFFER_LEAD_DAYS_LIMIT),
-});
+export const proposeOrderTermBodySchema = z
+  .object({
+    expectedVersion: expectedVersionSchema,
+    leadDays: z.number().int().min(1).max(OFFER_LEAD_DAYS_LIMIT).optional(),
+    readyOn: dateSchema.optional(),
+  })
+  .refine((body) => (body.leadDays === undefined) !== (body.readyOn === undefined), {
+    message: "Send either the term in working days or the date",
+  });
 
 export type ProposeOrderTermBody = z.infer<typeof proposeOrderTermBodySchema>;
+
+/**
+ * `GET /supplier/orders/{orderId}/term-options` (TASK-039; SCREENS S-ORD-02,
+ * S-ORD-04): what the term of a new order under order gives if the employee
+ * acts now, by the working days of the company's point (`receiptDate`, the
+ * one rule) — the cabinet counts no working days itself.
+ *
+ * - `confirm` — «Подтвердить срок до {дата}»: the term the customer agreed
+ *   to, counted from now (`readyOn: null` — the point has no working day to
+ *   count by);
+ * - `options` — the dates another term may be (S-ORD-04 «рабочие дни
+ *   компании»), nearest first: one per working day from 1 to
+ *   `offer_lead_days_max`, the agreed term left out;
+ * - `answerBy` — proposed now, the customer answers by then
+ *   («Клиент должен ответить до {время}»).
+ */
+export const supplierOrderTermOptionsSchema = z.object({
+  confirm: z.object({ leadDays: z.number().int(), readyOn: dateSchema.nullable() }),
+  options: z.array(z.object({ leadDays: z.number().int(), readyOn: dateSchema })),
+  answerBy: z.iso.datetime(),
+});
+
+export type SupplierOrderTermOptions = z.infer<typeof supplierOrderTermOptionsSchema>;
 
 /**
  * The declined order; with «Нет в наличии» and the offer still on sale —
@@ -1067,6 +1101,8 @@ export type OrderCredential = z.infer<typeof orderCredentialSchema>;
 export const supplierScanOrderSchema = z.object({
   id: z.uuid(),
   number: z.number().int(),
+  /** TASK-039: «Принята» of an order under order reads «Срок подтверждён». */
+  kind: orderKindSchema,
   status: orderStatusSchema,
   version: z.number().int(),
   isTest: z.boolean(),
@@ -1428,6 +1464,8 @@ export type AdminExtendOrdersResponse = z.infer<typeof adminExtendOrdersResponse
  */
 export const adminOrderListQuerySchema = z.object({
   status: orderStatusSchema.optional(),
+  /** A-ORD-01 «тип» (TASK-039): in stock or under order. */
+  kind: orderKindSchema.optional(),
   supplierId: z.uuid().optional(),
   accountId: z.uuid().optional(),
   cityId: z.uuid().optional(),

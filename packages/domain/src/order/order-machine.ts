@@ -23,7 +23,8 @@
  * (`propose_term` → `term_proposed`); only the user's own «yes» takes the
  * order on (`agree_term`), their «no» cancels it (`reject_term`), and
  * silence expires it (`expire_term` → `term_expired` — the user's silence,
- * never held against the supplier). The goods are not there until they
+ * never held against the supplier). While the user thinks it over, the
+ * supplier may still decline (D-072, TASK-039). The goods are not there until they
  * come: an order whose term is confirmed has no pickup reserve, «Готово к
  * выдаче» starts one (`on_order_pickup_reserve_hours`), and only that
  * reserve expires.
@@ -209,6 +210,13 @@ const onOrderMoves: Partial<Record<OrderAction, Move>> = {
   reject_term: { from: ["term_proposed"], to: "cancelled_by_user" },
   // The user's silence; never held against the supplier.
   expire_term: { from: ["term_proposed"], to: "term_expired" },
+  // D-072: the supplier may learn the goods won't come at all while the
+  // user is still thinking over the term — waiting for the answer would be
+  // pointless. Declined like any other order; the reason stays unseen.
+  decline: {
+    from: ["created", "term_proposed", "accepted", "ready"],
+    to: "declined_by_supplier",
+  },
   // The user may cancel while their answer is due, too (the same «no»).
   cancel: { from: ["created", "term_proposed", "accepted", "ready"], to: "cancelled_by_user" },
   admin_cancel: {

@@ -1,4 +1,4 @@
-import { localDateTime, nextDate } from "../offer/receipt-date";
+import { localDateTime, nextDate, receiptDate, type ReceiptSchedule } from "../offer/receipt-date";
 import { startOfLocalDate } from "./order-reserve";
 
 /**
@@ -45,6 +45,48 @@ export function termAnswerBy(at: Date, agreementHours: number): Date {
  */
 export function supplyOverdueAt(readyOn: string, timeZone: string): Date {
   return startOfLocalDate(nextDate(readyOn), timeZone);
+}
+
+/** One date another term may be: its working days and the date they give. */
+export interface TermOption {
+  leadDays: number;
+  readyOn: string;
+}
+
+/**
+ * The dates another term may be at `at` (TASK-039; SCREENS S-ORD-04
+ * «рабочие дни компании»): for every term from 1 to `maxLeadDays` working
+ * days, the date `receiptDate` gives — each term a working day of its own,
+ * nearest first. The agreed term is left out, and so is its date: proposing
+ * the date the customer has already agreed to is no other term. Empty — the
+ * point has no working day to count by.
+ */
+export function termOptions(
+  at: Date,
+  schedule: ReceiptSchedule,
+  agreedLeadDays: number,
+  maxLeadDays: number,
+): TermOption[] {
+  const agreed = receiptDate(at, Math.max(0, agreedLeadDays), schedule);
+  const agreedOn = agreed.ok ? agreed.date : null;
+  const options: TermOption[] = [];
+  for (let leadDays = 1; leadDays <= maxLeadDays; leadDays += 1) {
+    if (leadDays === agreedLeadDays) continue;
+    const receipt = receiptDate(at, leadDays, schedule);
+    if (!receipt.ok) return [];
+    if (receipt.date === agreedOn) continue;
+    options.push({ leadDays, readyOn: receipt.date });
+  }
+  return options;
+}
+
+/**
+ * The term in working days that gives exactly `readyOn` among `options`
+ * (`termOptions` of the same moment); `null` — the date is no option: not a
+ * working day of the point, past the bound, or the agreed one.
+ */
+export function leadDaysForDate(options: readonly TermOption[], readyOn: string): number | null {
+  return options.find((option) => option.readyOn === readyOn)?.leadDays ?? null;
 }
 
 /** Whether the promised date `readyOn` has passed at `at` in `timeZone`. */

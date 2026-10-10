@@ -4361,6 +4361,18 @@
             }
           },
           {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "stock",
+                "on_order"
+              ]
+            }
+          },
+          {
             "name": "supplierId",
             "in": "query",
             "required": false,
@@ -14349,7 +14361,7 @@
           "whenUnavailable": "allow"
         },
         "requestBody": {
-          "description": "The version seen and the term in working days",
+          "description": "The version seen and the term — in working days, or the date itself (one of `…/term-options`)",
           "required": true,
           "content": {
             "application/json": {
@@ -14434,6 +14446,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupplierOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/orders/{orderId}/term-options": {
+      "get": {
+        "operationId": "getSupplierOrderTermOptions",
+        "summary": "What the term of an order under order gives if the employee acts now (S-ORD-02, S-ORD-04, TASK-039): the date of «Подтвердить срок», the working days another term may be, and until when the customer would answer. An order in stock — 409 ORDER_KIND_NOT_SUPPORTED; another company's — 404",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The dates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOrderTermOptions"
                 }
               }
             }
@@ -18261,6 +18326,9 @@
         "properties": {
           "status": {
             "$ref": "#/components/schemas/OrderStatus"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OrderKind"
           },
           "supplierId": {
             "type": "string",
@@ -28265,11 +28333,14 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 365
+          },
+          "readyOn": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           }
         },
         "required": [
-          "expectedVersion",
-          "leadDays"
+          "expectedVersion"
         ]
       },
       "RateLimitName": {
@@ -30377,6 +30448,11 @@
                 "maximum": 9007199254740991
               },
               "pickupReserveHours": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "onOrderPickupReserveHours": {
                 "type": "integer",
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991
@@ -32799,6 +32875,67 @@
           "finished"
         ]
       },
+      "SupplierOrderTermOptions": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "object",
+            "properties": {
+              "leadDays": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "readyOn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "leadDays",
+              "readyOn"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "leadDays": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "readyOn": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              },
+              "required": [
+                "leadDays",
+                "readyOn"
+              ]
+            }
+          },
+          "answerBy": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "confirm",
+          "options",
+          "answerBy"
+        ]
+      },
       "SupplierPauseReason": {
         "type": "string",
         "enum": [
@@ -32818,6 +32955,9 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OrderKind"
           },
           "status": {
             "$ref": "#/components/schemas/OrderStatus"
@@ -32875,6 +33015,7 @@
         "required": [
           "id",
           "number",
+          "kind",
           "status",
           "version",
           "isTest",

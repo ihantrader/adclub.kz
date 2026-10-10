@@ -95,12 +95,14 @@ export type {
   OrderStatus,
 } from "./order/order-machine";
 export {
+  leadDaysForDate,
   proposedTermProblem,
   supplyOverdue,
   supplyOverdueAt,
   termAnswerBy,
+  termOptions,
 } from "./order/order-term";
-export type { ProposedTermProblem } from "./order/order-term";
+export type { ProposedTermProblem, TermOption } from "./order/order-term";
 export { countsInStatistics } from "./order/order-statistics";
 export type { OrderStatisticsFacts } from "./order/order-statistics";
 export { orderRepeatDecision } from "./order/order-repeat";

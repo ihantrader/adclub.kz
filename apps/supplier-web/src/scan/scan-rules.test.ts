@@ -26,6 +26,7 @@ const QR = "ADCLUB-ORDER:abcdefghijklmnopqrstuv";
 const scanOrder: SupplierScanOrder = {
   id: crypto.randomUUID(),
   number: 4821,
+  kind: "stock",
   status: "ready",
   version: 3,
   isTest: false,

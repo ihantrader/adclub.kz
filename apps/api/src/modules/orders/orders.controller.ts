@@ -54,6 +54,7 @@ import {
   type SupplierOrderListQuery,
   type SupplierOrderPage,
   type SupplierOrderResponse,
+  type SupplierOrderTermOptions,
   type UserOrderHistoryPage,
   type UserOrderHistoryQuery,
   type UserOrderListQuery,
@@ -296,6 +297,15 @@ export class SupplierOrdersController {
       body,
       pickLanguage(acceptLanguage),
     );
+  }
+
+  /** The dates of «Подтвердить срок» and «Предложить другой срок» now (TASK-039). */
+  @SessionRoute(apiRoutes.getSupplierOrderTermOptions)
+  async termOptions(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierOrderTermOptions> {
+    return this.orders.termOptions(supplierActor(session).supplierId, params.orderId);
   }
 
   /** S-ORD-04 «Предложить другой срок» for an order under order (TASK-037). */

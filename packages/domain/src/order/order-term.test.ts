@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { receiptDate, type ReceiptSchedule } from "../offer/receipt-date";
-import { proposedTermProblem, supplyOverdue, supplyOverdueAt, termAnswerBy } from "./order-term";
+import {
+  leadDaysForDate,
+  proposedTermProblem,
+  supplyOverdue,
+  supplyOverdueAt,
+  termAnswerBy,
+  termOptions,
+} from "./order-term";
 
 const ALMATY = "Asia/Almaty";
 
@@ -57,5 +64,56 @@ describe("the supply of an order under order", () => {
     expect(at.toISOString()).toBe("2026-10-12T19:00:00.000Z");
     expect(supplyOverdue("2026-10-12", ALMATY, new Date(at.getTime() - 1))).toBe(false);
     expect(supplyOverdue("2026-10-12", ALMATY, at)).toBe(true);
+  });
+});
+
+describe("termOptions (TASK-039)", () => {
+  // Monday 5 October 2026, 11:00 in Almaty.
+  const monday = new Date("2026-10-05T06:00:00Z");
+
+  it("gives one working day per term, nearest first, without the agreed term", () => {
+    const options = termOptions(monday, weekdays, 3, 7);
+    expect(options).toEqual([
+      { leadDays: 1, readyOn: "2026-10-06" },
+      { leadDays: 2, readyOn: "2026-10-07" },
+      // 3 — the agreed term (Thursday) — left out.
+      { leadDays: 4, readyOn: "2026-10-09" },
+      // The weekend is no working day.
+      { leadDays: 5, readyOn: "2026-10-12" },
+      { leadDays: 6, readyOn: "2026-10-13" },
+      { leadDays: 7, readyOn: "2026-10-14" },
+    ]);
+    // Every date is what `receiptDate` gives for its term — the one rule.
+    for (const option of options) {
+      expect(receiptDate(monday, option.leadDays, weekdays)).toMatchObject({
+        ok: true,
+        date: option.readyOn,
+      });
+    }
+  });
+
+  it("skips the closed dates of the point", () => {
+    const closed: ReceiptSchedule = {
+      ...weekdays,
+      closedDates: ["2026-10-07"],
+    };
+    const options = termOptions(monday, closed, 5, 3);
+    expect(options.map((option) => option.readyOn)).toEqual([
+      "2026-10-06",
+      "2026-10-08",
+      "2026-10-09",
+    ]);
+  });
+
+  it("is empty for a point without hours", () => {
+    expect(termOptions(monday, { ...weekdays, weeklyHours: null }, 3, 7)).toEqual([]);
+  });
+
+  it("finds the term of a chosen date, and nothing for a day off or the agreed date", () => {
+    const options = termOptions(monday, weekdays, 3, 7);
+    expect(leadDaysForDate(options, "2026-10-12")).toBe(5);
+    expect(leadDaysForDate(options, "2026-10-10")).toBeNull();
+    expect(leadDaysForDate(options, "2026-10-08")).toBeNull();
+    expect(leadDaysForDate(options, "2026-11-30")).toBeNull();
   });
 });

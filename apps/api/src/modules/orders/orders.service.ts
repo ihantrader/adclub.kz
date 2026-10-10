@@ -23,6 +23,7 @@ import {
   type SupplierOrder,
   type SupplierOrderListQuery,
   type SupplierOrderPage,
+  type SupplierOrderTermOptions,
   type UserOrder,
   type UserOrderHistoryPage,
   type UserOrderHistoryQuery,
@@ -33,11 +34,15 @@ import {
   activeOrderStatuses,
   isActiveOrderStatus,
   isRegistrationComplete,
+  leadDaysForDate,
   orderNeedsAnswer,
   proposedTermProblem,
   readAdminQuery,
   receiptDate,
+  termAnswerBy,
+  termOptions,
   type OrderKind,
+  type TermOption,
 } from "@adclub/domain";
 import {
   and,
@@ -882,6 +887,12 @@ export class OrdersService {
     lang: CatalogLanguage,
   ): Promise<SupplierOrder> {
     const maxLeadDays = await this.settings.get("offer_lead_days_max");
+    // The field the employee filled in: the term in working days, or the
+    // date itself (TASK-039) — a problem is told at that field.
+    const field = body.readyOn !== undefined ? "readyOn" : "leadDays";
+    // Filled in by the scope, in the transaction of the move (the request
+    // is read by the move after the scope).
+    const term = { leadDays: body.leadDays ?? 0 };
     const row = await this.run({
       scope: async (tx) => {
         const found = await this.supplierRow(tx, actor.supplierId, orderId);
@@ -889,27 +900,42 @@ export class OrdersService {
           // An order in stock has no term to talk about.
           throw kindNotSupported();
         }
+        const at = await databaseNow(tx);
+        if (body.readyOn !== undefined) {
+          // The fewest working days that give exactly the chosen date now:
+          // the customer is offered the date the employee saw.
+          const chosen = leadDaysForDate(
+            await this.termOptionsOf(tx, found, at, maxLeadDays),
+            body.readyOn,
+          );
+          if (chosen === null) {
+            throw validationError(
+              "readyOn",
+              "Not a date another term may be: a working day of the point within offer_lead_days_max, other than the agreed one",
+            );
+          }
+          term.leadDays = chosen;
+        }
         const problem = proposedTermProblem(
-          body.leadDays,
+          term.leadDays,
           found.offerSnapshot.leadDays,
           maxLeadDays,
         );
         if (problem === "same_term") {
           throw validationError(
-            "leadDays",
+            field,
             "This is the term the customer already agreed to: confirm it instead",
           );
         }
         if (problem === "out_of_range") {
           throw validationError(
-            "leadDays",
+            field,
             `From 1 to ${String(maxLeadDays)} working days (offer_lead_days_max)`,
           );
         }
-        const at = await databaseNow(tx);
-        if ((await this.readyOn(tx, found.offerSnapshot, at, body.leadDays)) === null) {
+        if ((await this.readyOn(tx, found.offerSnapshot, at, term.leadDays)) === null) {
           throw validationError(
-            "leadDays",
+            field,
             "The pickup point has no working day to count this term by: set its hours",
           );
         }
@@ -921,11 +947,47 @@ export class OrdersService {
         actor,
         channel: "supplier_web",
         expectedVersion: body.expectedVersion,
-        term: { leadDays: body.leadDays },
+        term,
       },
       forUser: false,
     });
     return supplierOrderView(this.database.db, row, lang, this.photos);
+  }
+
+  /**
+   * The dates of the term of an order under order if the employee acts now
+   * (TASK-039; S-ORD-02 «Подтвердить срок до {дата}», S-ORD-04): every one
+   * is `receiptDate` by the point's schedule — the cabinet counts nothing.
+   */
+  async termOptions(supplierId: string, orderId: string): Promise<SupplierOrderTermOptions> {
+    const db = this.database.db;
+    const found = await this.supplierRow(db, supplierId, orderId);
+    if (found.kind !== "on_order") {
+      throw kindNotSupported();
+    }
+    const [maxLeadDays, agreementHours, at] = await Promise.all([
+      this.settings.get("offer_lead_days_max"),
+      this.settings.get("term_agreement_hours"),
+      databaseNow(db),
+    ]);
+    return {
+      confirm: {
+        leadDays: found.offerSnapshot.leadDays,
+        readyOn: await this.readyOn(db, found.offerSnapshot, at),
+      },
+      options: await this.termOptionsOf(db, found, at, maxLeadDays),
+      answerBy: termAnswerBy(at, agreementHours).toISOString(),
+    };
+  }
+
+  private async termOptionsOf(
+    executor: DbExecutor,
+    row: OrderRow,
+    at: Date,
+    maxLeadDays: number,
+  ): Promise<TermOption[]> {
+    const schedule = (await receiptSchedules(executor, [row.locationId])).get(row.locationId);
+    return schedule ? termOptions(at, schedule, row.offerSnapshot.leadDays, maxLeadDays) : [];
   }
 
   private async supplierMove(
@@ -993,6 +1055,9 @@ export class OrdersService {
     const conditions: SQL[] = [];
     if (query.status) {
       conditions.push(eq(customerOrder.status, query.status));
+    }
+    if (query.kind) {
+      conditions.push(eq(customerOrder.kind, query.kind));
     }
     if (query.supplierId) {
       conditions.push(eq(customerOrder.supplierId, query.supplierId));

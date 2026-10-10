@@ -240,6 +240,7 @@ import {
   adminCancelOrderBodySchema,
   orderTermAnswerBodySchema,
   proposeOrderTermBodySchema,
+  supplierOrderTermOptionsSchema,
 } from "./orders";
 import {
   adminSearchQuerySchema,
@@ -3731,11 +3732,27 @@ export const apiRoutes = {
     rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
     pathParams: orderPathSchema,
     requestBody: {
-      description: "The version seen and the term in working days",
+      description:
+        "The version seen and the term — in working days, or the date itself (one of `…/term-options`)",
       schema: proposeOrderTermBodySchema,
     },
     responses: {
       200: { description: "The order", schema: supplierOrderResponseSchema },
+    },
+  }),
+  getSupplierOrderTermOptions: defineRoute({
+    operationId: "getSupplierOrderTermOptions",
+    method: "GET",
+    path: "/supplier/orders/{orderId}/term-options",
+    summary:
+      "What the term of an order under order gives if the employee acts now (S-ORD-02, S-ORD-04, TASK-039): the date of «Подтвердить срок», the working days another term may be, and until when the customer would answer. An order in stock — 409 ORDER_KIND_NOT_SUPPORTED; another company's — 404",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "The dates", schema: supplierOrderTermOptionsSchema },
     },
   }),
   listAdminOrders: defineRoute({

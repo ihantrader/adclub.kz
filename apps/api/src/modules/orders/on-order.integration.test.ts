@@ -10,6 +10,7 @@ import {
   adminSupplierResponseSchema,
   closeOrderResponseSchema,
   createOrderResponseSchema,
+  declineOrderResponseSchema,
   orderLookupResponseSchema,
   orderStateConflictDetailsSchema,
   ORDER_QR_PREFIX,
@@ -18,6 +19,7 @@ import {
   supplierOnboardedResponseSchema,
   supplierOrderPageSchema,
   supplierOrderResponseSchema,
+  supplierOrderTermOptionsSchema,
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
   totpStepRequiredDetailsSchema,
@@ -894,7 +896,8 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
       const code = (await userOrder(buyer, order.id)).confirmation!.code;
       expect(await lookup(shop, code)).toMatchObject({
         result: "ready",
-        order: { status: "accepted" },
+        // TASK-039: the kind, so the scanner says «Срок подтверждён».
+        order: { status: "accepted", kind: "on_order" },
       });
       expect(await giveOut(shop, code)).toMatchObject({ result: "given_out" });
     });
@@ -995,6 +998,48 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
       expect(cancel!.phone).toBe(shop.first.phone);
       // A second «no» is no error.
       await ok(answer(buyer, order.id, "reject", 2), (body) => body);
+    });
+
+    it("another term → the supplier declines while the user decides (D-072): declined, the user's «yes» is told so", async () => {
+      const shop = await company("Отказ при ожидании");
+      const offer = await putOnOrder(shop);
+      const buyer = await customer();
+      const order = await place(buyer, offer);
+      await sent(order.id, "order_new_on_order", 1);
+      await ok(propose(shop, order.id, 6), (body) => body);
+      const declined = await ok(
+        shop.as("post", `/supplier/orders/${order.id}/decline`, {
+          expectedVersion: 2,
+          reason: "cannot_meet_term",
+        }),
+        (body) => checked(declineOrderResponseSchema)(body).order,
+      );
+      expect(declined.status).toBe("declined_by_supplier");
+      const row = await orderRow(order.id);
+      expect(row.status).toBe("declined_by_supplier");
+      expect(row.code_released_at).not.toBeNull();
+      expect(row.phone_revealed_at).toBeNull();
+      // The user's «yes» comes too late: the order is the supplier's «no».
+      const late = await answer(buyer, order.id, "agree", 2);
+      expectError(late, 409, "ORDER_STATE_CONFLICT");
+      const details = orderStateConflictDetailsSchema.parse(late.body.details);
+      expect(details.currentStatus).toBe("declined_by_supplier");
+      // The user never learns who acted on the supplier's side.
+      expect(details.lastAction).toBeUndefined();
+      const seen = await userOrder(buyer, order.id);
+      expect(seen.status).toBe("declined_by_supplier");
+      expect(seen.confirmation).toBeUndefined();
+      // The reason stays the supplier's and the administrator's.
+      expect(JSON.stringify(seen)).not.toContain("cannot_meet_term");
+      expect((await events(order.id)).map((event) => event.action)).toEqual([
+        "create",
+        "propose_term",
+        "decline",
+      ]);
+      // No W-04 for the supplier's own decline.
+      expect(
+        await messages("subject_id = $1 AND template = 'order_cancelled_by_user'", [order.id]),
+      ).toHaveLength(0);
     });
 
     it("another term → the user cancels while deciding: cancelled by the user, W-04", async () => {
@@ -1098,6 +1143,77 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
       expectError(await propose(shop, order.id, 0), 400, "VALIDATION_ERROR");
       expect((await orderRow(order.id)).status).toBe("created");
       expect((await events(order.id)).map((event) => event.action)).toEqual(["create"]);
+    });
+
+    it("is offered as the working days of the point and proposed by its date (TASK-039)", async () => {
+      await configure({ offer_lead_days_max: 10, term_agreement_hours: 24 });
+      const shop = await company("Срок датой");
+      const offer = await putOnOrder(shop);
+      const order = await place(await customer(), offer);
+      const options = await ok(
+        shop.as("get", `/supplier/orders/${order.id}/term-options`),
+        checked(supplierOrderTermOptionsSchema),
+      );
+      // The point works every day: the N-th working day is today + N.
+      expect(options.confirm).toEqual({
+        leadDays: LEAD_DAYS,
+        readyOn: plusDays(almatyToday(), LEAD_DAYS),
+      });
+      expect(options.options.map((option) => option.leadDays)).toEqual([
+        1, 2, 4, 5, 6, 7, 8, 9, 10,
+      ]);
+      for (const option of options.options) {
+        expect(option.readyOn).toBe(plusDays(almatyToday(), option.leadDays));
+      }
+      const answerIn = Date.parse(options.answerBy) - Date.now();
+      expect(answerIn).toBeGreaterThan(23 * HOUR);
+      // The clock of the database, not of this process: a minute either way.
+      expect(answerIn).toBeLessThanOrEqual(24 * HOUR + 60_000);
+      // Not an option: the agreed date, past the bound — refused at `readyOn`.
+      for (const readyOn of [
+        plusDays(almatyToday(), LEAD_DAYS),
+        plusDays(almatyToday(), 11),
+        "2020-01-01",
+      ]) {
+        const response = await shop.as("post", `/supplier/orders/${order.id}/propose-term`, {
+          expectedVersion: 1,
+          readyOn,
+        });
+        expectError(response, 400, "VALIDATION_ERROR");
+        expect(JSON.stringify(response.body)).toContain("readyOn");
+      }
+      // Both or neither — refused by the contract.
+      expectError(
+        await shop.as("post", `/supplier/orders/${order.id}/propose-term`, { expectedVersion: 1 }),
+        400,
+        "VALIDATION_ERROR",
+      );
+      const chosen = options.options.find((option) => option.leadDays === 5)!;
+      const proposed = await ok(
+        shop.as("post", `/supplier/orders/${order.id}/propose-term`, {
+          expectedVersion: 1,
+          readyOn: chosen.readyOn,
+        }),
+        (body) => checked(supplierOrderResponseSchema)(body).order,
+      );
+      expect(proposed.status).toBe("term_proposed");
+      expect(proposed.onOrderTerm!.proposed).toMatchObject({
+        leadDays: 5,
+        readyOn: chosen.readyOn,
+      });
+      // Another company's order is missing; an order in stock has no term.
+      const other = await company("Чужой срок");
+      expectError(
+        await other.first.as("get", `/supplier/orders/${order.id}/term-options`),
+        404,
+        "NOT_FOUND",
+      );
+      const stock = await place(await customer(), await putInStock(other));
+      expectError(
+        await other.as("get", `/supplier/orders/${stock.id}/term-options`),
+        409,
+        "ORDER_KIND_NOT_SUPPORTED",
+      );
     });
 
     it("is not proposed for an order in stock", async () => {
@@ -1233,6 +1349,45 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
           journal.filter((event) => ["accept", "propose_term"].includes(event.action)),
         ).toHaveLength(1);
         expect(journal.filter((event) => event.action === "late_action_ignored")).toHaveLength(1);
+      }
+    });
+  });
+
+  describe("races of D-072", () => {
+    it("the user's «yes» against the supplier's «Отказать»: one outcome, the other is told (six rounds)", async () => {
+      const shop = await company("Гонка ответа");
+      const offer = await putOnOrder(shop);
+      for (let round = 0; round < 6; round++) {
+        const buyer = await customer();
+        const order = await place(buyer, offer);
+        await ok(propose(shop, order.id, 6), (body) => body);
+        const [agreed, declined] = await Promise.all([
+          answer(buyer, order.id, "agree", 2),
+          shop.as("post", `/supplier/orders/${order.id}/decline`, { expectedVersion: 2 }),
+        ]);
+        const row = await orderRow(order.id);
+        if (agreed.status === 200) {
+          expectError(declined, 409, "ORDER_STATE_CONFLICT");
+          const details = orderStateConflictDetailsSchema.parse(declined.body.details);
+          expect(details.currentStatus).toBe("accepted");
+          expect(details.lastAction).toMatchObject({
+            action: "agree_term",
+            actor: { kind: "user" },
+          });
+          expect(row.status).toBe("accepted");
+          expect(row.phone_revealed_at).not.toBeNull();
+        } else {
+          expect(declined.status, `round ${String(round)}`).toBe(200);
+          expectError(agreed, 409, "ORDER_STATE_CONFLICT");
+          const details = orderStateConflictDetailsSchema.parse(agreed.body.details);
+          expect(details.currentStatus).toBe("declined_by_supplier");
+          expect(row.status).toBe("declined_by_supplier");
+          expect(row.phone_revealed_at).toBeNull();
+        }
+        const journal = await events(order.id);
+        expect(
+          journal.filter((event) => ["agree_term", "decline"].includes(event.action)),
+        ).toHaveLength(1);
       }
     });
   });

@@ -199,6 +199,7 @@ describe("buildOpenApiDocument", () => {
       "/supplier/orders/{orderId}/decline",
       "/supplier/orders/{orderId}/propose-term",
       "/supplier/orders/{orderId}/ready",
+      "/supplier/orders/{orderId}/term-options",
       "/vehicles/generations/{generationId}/modifications",
       "/vehicles/makes",
       "/vehicles/makes/{makeId}/models",

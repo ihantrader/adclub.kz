@@ -60,6 +60,8 @@ const onOrderAllowed: Allowed = [
   ["term_proposed", "reject_term", "cancelled_by_user"],
   ["term_proposed", "expire_term", "term_expired"],
   ["created", "decline", "declined_by_supplier"],
+  // D-072 (TASK-039): while the user thinks the term over.
+  ["term_proposed", "decline", "declined_by_supplier"],
   ["accepted", "decline", "declined_by_supplier"],
   ["ready", "decline", "declined_by_supplier"],
   ["accepted", "mark_ready", "ready"],
@@ -177,6 +179,18 @@ describe("orderTransition", () => {
     expect(orderTransition("term_proposed", "propose_term", "on_order")).toBeNull();
     expect(orderTransition("term_proposed", "mark_ready", "on_order")).toBeNull();
     expect(orderTransition("term_proposed", "close", "on_order")).toBeNull();
+  });
+
+  it("lets the supplier decline while the user thinks the term over (D-072)", () => {
+    expect(orderTransition("term_proposed", "decline", "on_order")).toBe("declined_by_supplier");
+    // A WhatsApp button never reaches it: W-01a means «this new order» (`onlyFrom`).
+    expect(orderTransition("term_proposed", "decline", "stock")).toBeNull();
+    expect(orderActionSources("decline", "on_order")).toEqual([
+      "created",
+      "term_proposed",
+      "accepted",
+      "ready",
+    ]);
   });
 
   it("names the actor of each action", () => {

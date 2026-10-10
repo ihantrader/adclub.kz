@@ -27,6 +27,7 @@ import { useCarPicker } from "../../navigation/car-picker";
 import type { RootParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import {
+  canOrderOffer,
   checkoutFailure,
   createAttemptKeys,
   fulfillmentOptions,
@@ -145,6 +146,13 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
 
   const submit = async (options: { expectedPrice?: number; allowAnother?: boolean } = {}) => {
     if (!offer || !fulfillment || sending) return;
+    // The server takes orders under order since TASK-037; this version of the
+    // app has no screens for their term yet (TASK-039) — «Повторить» of an
+    // offer that is under order now must not place one blind.
+    if (!canOrderOffer(offer)) {
+      setNotice({ kind: "kind_not_supported" });
+      return;
+    }
     const allowAnotherActive = options.allowAnother ?? anotherAllowed;
     const body: CreateOrderBody = {
       offerId: offer.id,

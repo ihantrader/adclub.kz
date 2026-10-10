@@ -83,14 +83,20 @@ const finishedStatuses: readonly SupplierFinishedStatus[] = [
   "response_expired",
   "reserve_expired",
   "cancelled_by_admin",
+  "term_expired",
 ];
 
 const groupKeys: Record<
   WorkGroup,
-  "orders.group.awaitingPickup" | "orders.group.preparing" | "orders.group.lateClose"
+  | "orders.group.awaitingPickup"
+  | "orders.group.preparing"
+  | "orders.group.awaitingCustomer"
+  | "orders.group.lateClose"
 > = {
   awaitingPickup: "orders.group.awaitingPickup",
   preparing: "orders.group.preparing",
+  // TASK-037: another term of an order under order waits for the customer.
+  awaitingCustomer: "orders.group.awaitingCustomer",
   lateClose: "orders.group.lateClose",
 };
 

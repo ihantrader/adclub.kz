@@ -21,9 +21,16 @@ export function orderActiveOrders<T extends Pick<ActiveOrder, "needsAnswer" | "s
 
 /** «Резерв до 15:00, 15 марта» / «Ответит до 14:30» — the main date of a card, as the server chose it. */
 export interface MainDateText {
-  key: "orders.mainDate.respondBy" | "orders.mainDate.reserveUntil";
+  key: "orders.mainDate.respondBy" | "orders.mainDate.reserveUntil" | "orders.mainDate.answerBy";
   time: string;
 }
+
+const MAIN_DATE_KEYS: Record<ActiveOrderMainDate["kind"], MainDateText["key"]> = {
+  respond_by: "orders.mainDate.respondBy",
+  reserve_until: "orders.mainDate.reserveUntil",
+  // TASK-037: «Ответьте до …» while another term waits for the user.
+  answer_by: "orders.mainDate.answerBy",
+};
 
 export function mainDateText(
   mainDate: ActiveOrderMainDate | null,
@@ -34,11 +41,9 @@ export function mainDateText(
   if (!mainDate) return null;
   const time = deadlineText(mainDate.at, timeZone ?? CLUB_TIME_ZONE, now, monthName);
   if (time === null) return null;
-  return {
-    key:
-      mainDate.kind === "respond_by" ? "orders.mainDate.respondBy" : "orders.mainDate.reserveUntil",
-    time,
-  };
+  // A kind this version does not know (a newer server) says nothing rather than something wrong.
+  const key = MAIN_DATE_KEYS[mainDate.kind] as MainDateText["key"] | undefined;
+  return key ? { key, time } : null;
 }
 
 /**

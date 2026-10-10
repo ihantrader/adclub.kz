@@ -15,12 +15,14 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   duplicate_after_late_close: "Двойная заявка при позднем закрытии",
   frequent_admin_closes: "Частые закрытия администратором",
   supplier_unreachable: "Поставщик недостижим",
+  supply_overdue: "Просрочена поставка под заказ",
 };
 
 /** The kinds in the order of importance of A-HOME. */
 export const KIND_ORDER: readonly AdminSignalKind[] = [
   "whatsapp_outage",
   "supplier_unreachable",
+  "supply_overdue",
   "duplicate_after_late_close",
   "frequent_admin_closes",
 ];
@@ -83,6 +85,14 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
       ]
         .filter(Boolean)
         .join(" · ");
+    case "supply_overdue":
+      return [
+        payload.orderNumber !== undefined ? `№ ${payload.orderNumber}` : null,
+        payload.supplierName,
+        payload.readyOn ? `обещано на ${payload.readyOn.split("-").reverse().join(".")}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
   }
 }
 
@@ -122,6 +132,8 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "У поставщика часто закрывают заявки без кода. Проверьте, пользуется ли он сканером и настоящие ли заявки.",
   supplier_unreachable:
     "У всех, кто получает уведомления компании, нет WhatsApp — заявки до неё не доходят. Свяжитесь с поставщиком.",
+  supply_overdue:
+    "Подтверждённый срок поставки под заказ прошёл, а заявка ещё не готова к выдаче. Свяжитесь с поставщиком.",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

@@ -30,7 +30,64 @@ export const ORDER_STATUS_TEXT: Record<OrderStatusValue, string> = {
   response_expired: "Нет ответа вовремя",
   reserve_expired: "Срок резерва истёк",
   cancelled_by_admin: "Отменена администратором",
+  // TASK-037: an order under order.
+  term_proposed: "Ждёт ответа клиента на срок",
+  term_expired: "Клиент не ответил на срок",
 };
+
+/** «Принята» of an order under order is «Срок подтверждён» (TASK-037). */
+export function orderStatusText(order: Pick<AdminOrder, "status" | "kind">): string {
+  return order.status === "accepted" && order.kind === "on_order"
+    ? "Срок подтверждён"
+    : ORDER_STATUS_TEXT[order.status];
+}
+
+/** «Под заказ» next to the number (TASK-037); `null` — an item in stock. */
+export function orderKindText(kind: AdminOrder["kind"]): string | null {
+  return kind === "on_order" ? "Под заказ" : null;
+}
+
+/**
+ * The term of an order under order in one line (A-ORD-02, TASK-037):
+ * confirmed, proposed with the customer's deadline, or the one the customer
+ * agreed to by ordering; overdue said apart. `null` — an item in stock.
+ */
+export function orderTermText(order: Pick<AdminOrder, "status" | "onOrderTerm">): string | null {
+  const term = order.onOrderTerm;
+  if (!term) return null;
+  const day = (date: string | null) => (date ? formatDay(date) : "—");
+  const overdue = term.overdueSince
+    ? ` · поставка просрочена с ${formatMoment(term.overdueSince)}`
+    : "";
+  if (term.confirmed) {
+    return `Срок подтверждён: ${term.confirmed.leadDays} раб. дн., до ${day(term.confirmed.readyOn)}${overdue}`;
+  }
+  if (term.proposed && order.status === "term_proposed") {
+    return `Предложен другой срок: ${term.proposed.leadDays} раб. дн., до ${day(term.proposed.readyOn)}; клиент ответит до ${formatMoment(term.proposed.answerBy)}`;
+  }
+  return `Под заказ: ${term.expected.leadDays} раб. дн., до ${day(term.expected.readyOn)}`;
+}
+
+const MONTHS = [
+  "января",
+  "февраля",
+  "марта",
+  "апреля",
+  "мая",
+  "июня",
+  "июля",
+  "августа",
+  "сентября",
+  "октября",
+  "ноября",
+  "декабря",
+];
+
+/** «11 октября» of a calendar date `YYYY-MM-DD`. */
+function formatDay(date: string): string {
+  const [, month = 1, day = 1] = date.split("-").map(Number);
+  return `${String(day)} ${MONTHS[month - 1] ?? ""}`;
+}
 
 /** The statuses the filter offers, in the order of an order's life. */
 export const ORDER_STATUSES = Object.keys(ORDER_STATUS_TEXT) as OrderStatusValue[];
@@ -39,6 +96,7 @@ export const ORDER_STATUSES = Object.keys(ORDER_STATUS_TEXT) as OrderStatusValue
 export function statusTone(status: OrderStatusValue): string {
   switch (status) {
     case "created":
+    case "term_proposed":
       return "status--open";
     case "accepted":
     case "ready":
@@ -83,6 +141,9 @@ const ATTEMPT_TEXT: Partial<Record<OrderEventAction, string>> = {
   admin_close: "закрыть без кода",
   admin_cancel: "отменить",
   cancel: "отменить",
+  propose_term: "предложить другой срок",
+  agree_term: "согласиться на срок",
+  reject_term: "отказаться от срока",
 };
 
 /** One entry of the order's journal in words (A-ORD-02 «журнал с актором»). */
@@ -118,7 +179,24 @@ export function eventText(event: OrderEvent): string {
     case "late_action_ignored":
       return `Нажатие опоздало: пытались ${ATTEMPT_TEXT[details.attemptedAction ?? "accept"] ?? "изменить"}`;
     case "deadline_extended":
-      return `Продлён ${details.extendedDeadline === "reserve" ? "резерв" : "срок ответа"} на ${details.minutes ?? "?"} мин: ${formatMoment(details.previousDeadline)} → ${formatMoment(details.deadline)}`;
+      return `Продлён ${
+        details.extendedDeadline === "reserve"
+          ? "резерв"
+          : details.extendedDeadline === "term"
+            ? "срок ответа клиента"
+            : "срок ответа"
+      } на ${details.minutes ?? "?"} мин: ${formatMoment(details.previousDeadline)} → ${formatMoment(details.deadline)}`;
+    // TASK-037: the term of an order under order.
+    case "propose_term":
+      return `Предложен другой срок: ${details.leadDays ?? "?"} раб. дн., до ${details.readyOn ? formatDay(details.readyOn) : "—"}; клиент ответит до ${formatMoment(details.answerBy)}`;
+    case "agree_term":
+      return "Клиент согласился на срок";
+    case "reject_term":
+      return "Клиент отказался от срока";
+    case "expire_term":
+      return "Клиент не ответил на срок вовремя";
+    case "supply_overdue":
+      return `Срок поставки прошёл${details.readyOn ? ` (${formatDay(details.readyOn)})` : ""}, заявка не готова`;
   }
 }
 
@@ -128,7 +206,7 @@ export function channelText(event: OrderEvent): string | null {
 }
 
 /** Which manual actions the order offers now (the one table of moves). */
-export function orderActions(order: Pick<AdminOrder, "status" | "deadlines">): {
+export function orderActions(order: Pick<AdminOrder, "status" | "kind" | "deadlines">): {
   extendResponse: boolean;
   extendReserve: boolean;
   closeWithoutCode: boolean;
@@ -139,8 +217,8 @@ export function orderActions(order: Pick<AdminOrder, "status" | "deadlines">): {
     extendReserve:
       (order.status === "accepted" || order.status === "ready") &&
       order.deadlines.reserveUntil !== null,
-    closeWithoutCode: orderTransition(order.status, "admin_close") !== null,
-    cancel: orderTransition(order.status, "admin_cancel") !== null,
+    closeWithoutCode: orderTransition(order.status, "admin_close", order.kind) !== null,
+    cancel: orderTransition(order.status, "admin_cancel", order.kind) !== null,
   };
 }
 
@@ -163,6 +241,10 @@ const LAST_ACTION_TEXT: Partial<Record<OrderEventAction, string>> = {
   cancel: "отменил клиент",
   expire_no_response: "истекла: поставщик не ответил",
   expire_reserve: "истекла: клиент не пришёл",
+  propose_term: "предложили другой срок",
+  agree_term: "клиент согласился на срок",
+  reject_term: "клиент отказался от срока",
+  expire_term: "истекла: клиент не ответил на срок",
 };
 
 /**

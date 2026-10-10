@@ -1,4 +1,4 @@
-import type { OrderFulfillment, SupplierOrderSummary } from "@adclub/contracts";
+import type { OrderFulfillment, OrderKind, SupplierOrderSummary } from "@adclub/contracts";
 import { Badge, Button, Icon, StatusBadge } from "@adclub/ui";
 import { useCallback, type MouseEvent } from "react";
 import { useLanguage, useT } from "../i18n";
@@ -57,9 +57,13 @@ export function AnswerTimer({ respondBy }: { respondBy: string }) {
   );
 }
 
-export function OrderStatus({ order }: { order: Pick<SupplierOrderSummary, "status"> }) {
+export function OrderStatus({ order }: { order: Pick<SupplierOrderSummary, "status" | "kind"> }) {
   const t = useT();
-  return <StatusBadge group={statusGroup(order.status)}>{t(statusKey(order.status))}</StatusBadge>;
+  return (
+    <StatusBadge group={statusGroup(order.status)}>
+      {t(statusKey(order.status, order.kind))}
+    </StatusBadge>
+  );
 }
 
 export function FulfillmentLabel({ fulfillment }: { fulfillment: OrderFulfillment }) {
@@ -124,6 +128,15 @@ export function WorkDeadline({
       </span>
     );
   }
+  // TASK-037: the customer is to answer another term by then.
+  if (order.status === "term_proposed" && order.onOrderTerm?.proposed) {
+    return (
+      <span className="timer">
+        <Icon name="clock" size={16} />
+        {t("orders.customerAnswersBy", { time: when(order.onOrderTerm.proposed.answerBy) })}
+      </span>
+    );
+  }
   return null;
 }
 
@@ -135,8 +148,12 @@ const actionKeys = {
   closeLate: "orders.closeLate",
 } as const;
 
-export function actionLabel(action: OrderAction): (typeof actionKeys)[OrderAction] {
-  return actionKeys[action];
+/** The word of a button; «Принять» of an order under order is «Подтвердить срок» (TASK-037). */
+export function actionLabel(
+  action: OrderAction,
+  kind?: OrderKind,
+): (typeof actionKeys)[OrderAction] | "orders.confirmTerm" {
+  return action === "accept" && kind === "on_order" ? "orders.confirmTerm" : actionKeys[action];
 }
 
 /** Opens the card of an order in the cabinet (`/orders/<id>`), a modifier click — in a new tab. */
@@ -175,7 +192,7 @@ export function QuickActions({
         {t("orders.decline")}
       </Button>
       <Button size={size} disabled={!online} onClick={onAccept}>
-        {t("orders.accept")}
+        {t(actionLabel("accept", order.kind))}
       </Button>
     </div>
   );

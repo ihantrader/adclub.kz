@@ -179,7 +179,12 @@ export function reserveDuration(hours: number): { unit: "days" | "hours"; count:
     : { unit: "hours", count: hours };
 }
 
-/** An order may be placed from an offer «В наличии» only; «Под заказ» comes with stage C. */
+/**
+ * This app places an order from an offer «В наличии» only. The server takes
+ * «Под заказ» since TASK-037; the app gets the screens of its term (the
+ * date, «Нужен ваш ответ», «Согласиться» / «Отказаться») with TASK-039 and
+ * opens the button then.
+ */
 export function canOrderOffer(offer: { availability: string }): boolean {
   return offer.availability === "in_stock";
 }

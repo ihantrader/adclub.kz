@@ -3,7 +3,9 @@ import type {
   OrderConfirmation,
   OrderFulfillment,
   OrderGivenOut,
+  OnOrderTerm,
   OrderItemWithPhoto,
+  OrderKind,
   OrderStatusValue,
   UserOrder,
   UserOrderStep,
@@ -37,6 +39,9 @@ export interface OrderView {
   respondBy: string;
   reserveUntil: string | null;
   givenOut: OrderGivenOut | null;
+  /** TASK-037: an item in stock or under order, and the term of the latter (`null` — in stock). */
+  kind: OrderKind;
+  onOrderTerm: OnOrderTerm | null;
   /** «Ход заявки»; `null` — the copy does not carry it (it is not needed without a network). */
   history: UserOrderStep[] | null;
   /** Accepted or ready: the code is to be shown, the QR may go full-screen. */
@@ -63,6 +68,8 @@ export function orderViewOfServer(order: UserOrder): OrderView {
     respondBy: order.respondBy,
     reserveUntil: order.reserveUntil,
     givenOut: order.givenOut,
+    kind: order.kind,
+    onOrderTerm: order.onOrderTerm,
     history: order.history,
     awaitsReceipt: order.status === "accepted" || order.status === "ready",
     updatedAt: order.updatedAt,
@@ -86,6 +93,9 @@ export function orderViewOfCopy(order: ActiveOrder): OrderView {
     respondBy: order.respondBy,
     reserveUntil: order.reserveUntil,
     givenOut: null,
+    // A copy saved by a version before TASK-037 has neither: an order in stock.
+    kind: (order.kind as OrderKind | undefined) ?? "stock",
+    onOrderTerm: (order.onOrderTerm as OnOrderTerm | null | undefined) ?? null,
     history: null,
     awaitsReceipt: order.awaitsReceipt,
     updatedAt: order.updatedAt,

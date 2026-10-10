@@ -41,6 +41,7 @@ import {
   formatDate,
   journalLines,
   orderActions,
+  termWords,
   whatsappLink,
   type OrderAction,
 } from "./order-rules";
@@ -272,7 +273,9 @@ function OrderView({
   };
 
   const actions = orderActions(order, now, { blocked });
-  const journal = journalLines(order.events, when, t);
+  const day = (date: string) => formatDate(date, lang);
+  const journal = journalLines(order.events, when, t, day);
+  const term = termWords(order, day, when, t);
   const priceChanged =
     order.currentOfferPrice !== null && order.currentOfferPrice !== order.unitPrice;
 
@@ -389,6 +392,15 @@ function OrderView({
               )}
             </dd>
           </div>
+          {term && (
+            <div>
+              <dt>{t("orders.term")}</dt>
+              <dd>
+                {term.text}
+                {term.note && <span className="facts__note">{term.note}</span>}
+              </dd>
+            </div>
+          )}
         </dl>
         {order.comment && (
           <p className="ac-text-body-s">
@@ -431,14 +443,14 @@ function OrderView({
               disabled={held || (!online && needsNetwork(action))}
               onClick={() => press(action)}
             >
-              {t(actionLabel(action))}
+              {t(actionLabel(action, order.kind))}
             </Button>
           ))}
           <Button
             disabled={held || (!online && needsNetwork(actions.primary))}
             onClick={() => press(actions.primary!)}
           >
-            {t(actionLabel(actions.primary))}
+            {t(actionLabel(actions.primary, order.kind))}
           </Button>
           {!online && needsNetwork(actions.primary) && (
             <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>

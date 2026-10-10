@@ -48,6 +48,11 @@ export function useOrderTime() {
         ? { date: dayText(parts, monthName), time: clockText(parts) }
         : { date: "", time: "" };
     },
+    /** «15 марта» of a calendar date `YYYY-MM-DD` of the server (the term of an order under order). */
+    calendarDate: (date: string | null | undefined): string => {
+      const [, month, day] = (date ?? "").split("-").map(Number);
+      return month && day ? dayText({ month, day }, monthName) : "";
+    },
     /** «Обновлено в 10:12» / «Обновлено 3 октября»; the key family is the caller's. */
     updated: (
       serverTime: string,

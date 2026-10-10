@@ -24,6 +24,9 @@ import {
   orderActions,
   orderActorText,
   orderErrorText,
+  orderKindText,
+  orderStatusText,
+  orderTermText,
   statusTone,
 } from "./order-words";
 
@@ -160,10 +163,9 @@ export function OrderCard({ orderId }: { orderId: string }) {
           </h1>
           {order && (
             <span className="ac-text-body-s ac-muted supplier-head__line">
-              <span className={`status ${statusTone(order.status)}`}>
-                {ORDER_STATUS_TEXT[order.status]}
-              </span>
+              <span className={`status ${statusTone(order.status)}`}>{orderStatusText(order)}</span>
               <span>
+                {orderKindText(order.kind) ? `${orderKindText(order.kind)} · ` : ""}
                 оформлена {formatMoment(order.createdAt)}
                 {order.isTest ? " · тестовая" : ""}
               </span>
@@ -415,6 +417,12 @@ function OrderFacts({ order }: { order: AdminOrder }) {
           <dt>Срок ответа поставщика</dt>
           <dd className="num">до {formatMoment(order.deadlines.respondBy)}</dd>
         </div>
+        {orderTermText(order) && (
+          <div>
+            <dt>Срок поставки</dt>
+            <dd>{orderTermText(order)}</dd>
+          </div>
+        )}
         {order.deadlines.reserveUntil &&
           (order.status === "accepted" ||
             order.status === "ready" ||

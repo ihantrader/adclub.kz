@@ -86,6 +86,46 @@ describe("the state of an order on its screen", () => {
     });
   });
 
+  it("follows the rows of an order under order (TASK-037)", () => {
+    expect(
+      orderStatusView({ status: "accepted", fulfillment: "pickup", kind: "on_order" }),
+    ).toMatchObject({
+      title: "orderStatus.termConfirmed.title",
+      text: "orderStatus.termConfirmed.text",
+      deadline: null,
+      termDate: "confirmed",
+      code: "shown",
+      place: "full",
+      cancellable: true,
+    });
+    expect(orderStatusView({ status: "term_proposed", fulfillment: "pickup" })).toMatchObject({
+      title: "orderStatus.termProposed.title",
+      text: "orderStatus.termProposed.text",
+      deadline: "answerBy",
+      termDate: "proposed",
+      code: "dimmed",
+      place: "district",
+      finished: false,
+      cancellable: true,
+    });
+    expect(orderStatusView({ status: "term_expired", fulfillment: "pickup" })).toMatchObject({
+      title: "orderStatus.termExpired.title",
+      text: "orderStatus.termExpired.text",
+      code: "none",
+      finished: true,
+    });
+    // «Готово» of an order under order reads like one in stock.
+    expect(
+      orderStatusView({ status: "ready", fulfillment: "pickup", kind: "on_order" }),
+    ).toMatchObject({ title: "orderStatus.readyPickup.title" });
+    // The words fill their places in every language.
+    for (const lang of ["ru", "kk", "en"] as const) {
+      expect(mobileText(lang, "orderStatus.termProposed.text")).toContain("{date}");
+      expect(mobileText(lang, "orderStatus.termProposed.text")).toContain("{time}");
+      expect(mobileText(lang, "orderStatus.termConfirmed.text")).toContain("{date}");
+    }
+  });
+
   it("shows a code only while the order is active, and lets it be cancelled only until it is given out", () => {
     for (const status of orderStatusSchema.options) {
       const view = orderStatusView({ status, fulfillment: "pickup" });

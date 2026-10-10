@@ -12,12 +12,16 @@ import {
   durationText,
   finishedQuery,
   formatAt,
+  formatDate,
   formatWhen,
   journalLines,
   nextTimerTick,
   orderActions,
   startOfDay,
+  statusKey,
+  termWords,
   whatsappLink,
+  workGroupOf,
   workGroups,
 } from "./order-rules";
 
@@ -49,6 +53,7 @@ function summary(overrides: Partial<SupplierOrderSummary>): SupplierOrderSummary
     respondBy: new Date(NOON + 60 * MINUTE).toISOString(),
     reserveUntil: null,
     receiptOn: null,
+    onOrderTerm: null,
     createdAt: new Date(NOON - 10 * MINUTE).toISOString(),
     offerId: crypto.randomUUID(),
     handledBy: null,
@@ -230,9 +235,134 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
     });
   });
 
-  it("has no buttons for an order of a kind stage B doesn't know", () => {
+  it("has no buttons for an order of a kind this version doesn't know", () => {
     const later = summary({ kind: "service" as SupplierOrderSummary["kind"] });
     expect(orderActions(later, NOON, open)).toEqual({ primary: null, secondary: [] });
+  });
+
+  it("gives an order under order the buttons whose moves it shares, and none while the customer decides (TASK-037)", () => {
+    const onOrder = (status: SupplierOrderSummary["status"]) =>
+      orderActions(summary({ kind: "on_order", status }), NOON, open);
+    expect(onOrder("created")).toEqual({ primary: "accept", secondary: ["decline"] });
+    expect(onOrder("accepted")).toEqual({
+      primary: "markReady",
+      secondary: ["giveOut", "decline"],
+    });
+    expect(onOrder("ready")).toEqual({ primary: "giveOut", secondary: ["decline"] });
+    expect(onOrder("term_proposed")).toEqual({ primary: null, secondary: [] });
+    expect(onOrder("term_expired")).toEqual({ primary: null, secondary: [] });
+  });
+});
+
+describe("an order under order in words (TASK-037)", () => {
+  const format = (iso: string) => formatWhen(iso, ALMATY, "ru", t, NOON);
+  const day = (date: string) => formatDate(date, "ru");
+  const term = {
+    expected: { leadDays: 3, readyOn: "2026-10-09" },
+    proposed: null,
+    confirmed: null,
+    overdueSince: null,
+  };
+
+  it("names its statuses and puts the one waiting for the customer in its own group", () => {
+    expect(t(statusKey("accepted", "on_order"))).toBe("Срок подтверждён");
+    expect(t(statusKey("accepted", "stock"))).toBe("Принята");
+    expect(t(statusKey("term_proposed"))).toBe("Ждёт ответа клиента");
+    expect(t(statusKey("term_expired"))).toBe("Клиент не ответил на срок");
+    expect(workGroupOf(summary({ status: "term_proposed" }))).toBe("awaitingCustomer");
+  });
+
+  it("says the term: expected, proposed with the customer's deadline, confirmed, overdue", () => {
+    expect(termWords(summary({ onOrderTerm: null }), day, format, t)).toBeNull();
+    expect(termWords(summary({ kind: "on_order", onOrderTerm: term }), day, format, t)).toEqual({
+      text: "Под заказ: 3 раб. дн., до 9 октября",
+      note: null,
+    });
+    const proposed = {
+      ...term,
+      proposed: {
+        leadDays: 5,
+        readyOn: "2026-10-11",
+        at: "2026-10-06T07:00:00Z",
+        answerBy: "2026-10-06T10:00:00Z",
+      },
+    };
+    expect(
+      termWords(
+        summary({ kind: "on_order", status: "term_proposed", onOrderTerm: proposed }),
+        day,
+        format,
+        t,
+      )!.text,
+    ).toBe("Предложен другой срок: 5 раб. дн., до 11 октября. Клиент ответит до 15:00");
+    expect(
+      termWords(
+        summary({
+          kind: "on_order",
+          status: "accepted",
+          onOrderTerm: {
+            ...proposed,
+            confirmed: { leadDays: 5, readyOn: "2026-10-11", at: "2026-10-06T08:00:00Z" },
+            overdueSince: "2026-10-11T19:00:00Z",
+          },
+        }),
+        day,
+        format,
+        t,
+      ),
+    ).toEqual({
+      text: "Срок подтверждён: 5 раб. дн., до 11 октября",
+      note: "Срок поставки прошёл, а заявка ещё не готова к выдаче",
+    });
+  });
+
+  it("names the moves of the term in the journal and in a conflict", () => {
+    const lines = journalLines(
+      [
+        {
+          id: "e1",
+          action: "propose_term",
+          fromStatus: "created",
+          toStatus: "term_proposed",
+          at: "2026-10-06T07:02:00Z",
+          actor: { kind: "member", memberId: crypto.randomUUID(), name: "Ерлан", removed: false },
+          channel: "supplier_web",
+          details: { leadDays: 5, readyOn: "2026-10-11" },
+        },
+        {
+          id: "e2",
+          action: "agree_term",
+          fromStatus: "term_proposed",
+          toStatus: "accepted",
+          at: "2026-10-06T07:30:00Z",
+          actor: { kind: "user" },
+          channel: "app",
+          details: { leadDays: 5, readyOn: "2026-10-11" },
+        },
+      ],
+      format,
+      t,
+      day,
+    );
+    expect(lines.map((line) => line.text)).toEqual([
+      "Другой срок — Ерлан, 12:02: 5 раб. дн., до 11 октября",
+      "Клиент согласился на срок, 12:30",
+    ]);
+    expect(
+      conflictText(
+        {
+          currentStatus: "term_proposed",
+          version: 2,
+          lastAction: {
+            action: "propose_term",
+            at: "2026-10-06T07:02:00Z",
+            actor: { kind: "member", memberId: crypto.randomUUID(), name: "Ерлан", removed: false },
+          },
+        },
+        (iso) => formatAt(iso, ALMATY, "ru", t, NOON),
+        t,
+      ),
+    ).toBe("Другой срок уже предложил Ерлан в 12:02");
   });
 });
 

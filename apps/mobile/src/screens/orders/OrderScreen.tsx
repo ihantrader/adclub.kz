@@ -227,7 +227,17 @@ export function OrderScreen({ route, navigation }: Props) {
                         ? time.deadline(order.respondBy, timeZone, now)
                         : view.deadline === "reserveUntil" && order.reserveUntil
                           ? time.deadline(order.reserveUntil, timeZone, now)
-                          : "",
+                          : view.deadline === "answerBy" && order.onOrderTerm?.proposed
+                            ? time.deadline(order.onOrderTerm.proposed.answerBy, timeZone, now)
+                            : "",
+                    // TASK-037: the date of the term of an order under order.
+                    date: time.calendarDate(
+                      view.termDate === "proposed"
+                        ? order.onOrderTerm?.proposed?.readyOn
+                        : view.termDate === "confirmed"
+                          ? order.onOrderTerm?.confirmed?.readyOn
+                          : null,
+                    ),
                   })}
                 </Text>
               )}

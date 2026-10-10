@@ -63,6 +63,24 @@ describe("the main date of a card", () => {
         month,
       ),
     ).toEqual({ key: "orders.mainDate.respondBy", time: "14:30" });
+    // TASK-037: «Ответьте до …» while another term waits for the user.
+    expect(
+      mainDateText(
+        { kind: "answer_by", at: "2026-10-04T09:30:00.000Z" },
+        "Asia/Almaty",
+        now,
+        month,
+      ),
+    ).toEqual({ key: "orders.mainDate.answerBy", time: "14:30" });
+  });
+
+  it("reads a copy saved before orders under order existed as one in stock (TASK-037)", () => {
+    const old = activeOrder();
+    delete (old as Partial<typeof old>).onOrderTerm;
+    delete (old as Partial<typeof old>).kind;
+    const view = orderViewOfCopy(old);
+    expect(view.kind).toBe("stock");
+    expect(view.onOrderTerm).toBeNull();
   });
 
   it("has nothing to say when the server named no date (delivery)", () => {

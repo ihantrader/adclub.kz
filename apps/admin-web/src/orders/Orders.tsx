@@ -15,6 +15,8 @@ import {
   ORDER_STATUS_TEXT,
   ORDER_STATUSES,
   orderFiltersOf,
+  orderKindText,
+  orderStatusText,
   statusTone,
 } from "./order-words";
 
@@ -197,8 +199,11 @@ export function OrdersTable({
               <td>
                 <div className="cell-stack">
                   <span className={`status ${statusTone(order.status)}`}>
-                    {ORDER_STATUS_TEXT[order.status]}
+                    {orderStatusText(order)}
                   </span>
+                  {orderKindText(order.kind) && (
+                    <span className="ac-text-caption ac-muted">{orderKindText(order.kind)}</span>
+                  )}
                   {order.closure?.method === "admin" && (
                     <span className="ac-text-caption ac-muted">закрыта администратором</span>
                   )}

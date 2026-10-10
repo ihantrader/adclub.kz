@@ -8,12 +8,16 @@ import {
   orderActorText,
   orderErrorText,
   orderFiltersOf,
+  orderKindText,
+  orderStatusText,
+  orderTermText,
 } from "./order-words";
 
 const deadlines = (reserveUntil: string | null = null): AdminOrder["deadlines"] => ({
   respondBy: "2026-10-10T10:00:00.000Z",
   reserveUntil,
   lateCloseUntil: null,
+  termAnswerBy: null,
 });
 
 const conflict = (details: unknown) =>
@@ -34,19 +38,27 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
   });
 
   it("offers only the manual actions the one table of moves allows", () => {
-    expect(orderActions({ status: "created", deadlines: deadlines() })).toEqual({
+    expect(orderActions({ kind: "stock", status: "created", deadlines: deadlines() })).toEqual({
       extendResponse: true,
       extendReserve: false,
       closeWithoutCode: true,
       cancel: true,
     });
     expect(
-      orderActions({ status: "accepted", deadlines: deadlines("2026-10-11T10:00:00.000Z") }),
+      orderActions({
+        kind: "stock",
+        status: "accepted",
+        deadlines: deadlines("2026-10-11T10:00:00.000Z"),
+      }),
     ).toEqual({ extendResponse: false, extendReserve: true, closeWithoutCode: true, cancel: true });
     // Delivery: no reserve to extend.
-    expect(orderActions({ status: "ready", deadlines: deadlines() }).extendReserve).toBe(false);
+    expect(
+      orderActions({ kind: "stock", status: "ready", deadlines: deadlines() }).extendReserve,
+    ).toBe(false);
     // An expired order is closed by the administrator, never cancelled.
-    expect(orderActions({ status: "reserve_expired", deadlines: deadlines() })).toEqual({
+    expect(
+      orderActions({ kind: "stock", status: "reserve_expired", deadlines: deadlines() }),
+    ).toEqual({
       extendResponse: false,
       extendReserve: false,
       closeWithoutCode: true,
@@ -58,13 +70,67 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
       "declined_by_supplier",
       "cancelled_by_admin",
     ] as const) {
-      expect(Object.values(orderActions({ status, deadlines: deadlines() })), status).toEqual([
-        false,
-        false,
-        false,
-        false,
-      ]);
+      expect(
+        Object.values(orderActions({ kind: "stock", status, deadlines: deadlines() })),
+        status,
+      ).toEqual([false, false, false, false]);
     }
+  });
+
+  it("says an order under order in its own words (TASK-037)", () => {
+    expect(orderStatusText({ status: "accepted", kind: "on_order" })).toBe("Срок подтверждён");
+    expect(orderStatusText({ status: "accepted", kind: "stock" })).toBe("Принята");
+    expect(ORDER_STATUS_TEXT.term_proposed).toBe("Ждёт ответа клиента на срок");
+    expect(orderKindText("on_order")).toBe("Под заказ");
+    expect(orderKindText("stock")).toBeNull();
+    // The administrator may cancel or close it while the customer decides.
+    expect(
+      orderActions({ kind: "on_order", status: "term_proposed", deadlines: deadlines() }),
+    ).toEqual({
+      extendResponse: false,
+      extendReserve: false,
+      closeWithoutCode: true,
+      cancel: true,
+    });
+    const term = {
+      expected: { leadDays: 3, readyOn: "2026-10-13" },
+      proposed: {
+        leadDays: 5,
+        readyOn: "2026-10-15",
+        at: "2026-10-10T05:00:00.000Z",
+        answerBy: "2026-10-11T05:00:00.000Z",
+      },
+      confirmed: null,
+      overdueSince: null,
+    };
+    expect(orderTermText({ status: "created", onOrderTerm: null })).toBeNull();
+    expect(orderTermText({ status: "created", onOrderTerm: { ...term, proposed: null } })).toBe(
+      "Под заказ: 3 раб. дн., до 13 октября",
+    );
+    expect(orderTermText({ status: "term_proposed", onOrderTerm: term })).toMatch(
+      /^Предложен другой срок: 5 раб\. дн\., до 15 октября; клиент ответит до /,
+    );
+    expect(
+      orderTermText({
+        status: "accepted",
+        onOrderTerm: {
+          ...term,
+          confirmed: { leadDays: 5, readyOn: "2026-10-15", at: "2026-10-10T06:00:00.000Z" },
+        },
+      }),
+    ).toBe("Срок подтверждён: 5 раб. дн., до 15 октября");
+    expect(
+      eventText({
+        id: "e",
+        action: "propose_term",
+        fromStatus: "created",
+        toStatus: "term_proposed",
+        at: "2026-10-10T05:00:00.000Z",
+        actor: { kind: "member", memberId: "m", name: "Ерлан", removed: false },
+        channel: "supplier_web",
+        details: { leadDays: 5, readyOn: "2026-10-15", answerBy: "2026-10-11T05:00:00.000Z" },
+      }),
+    ).toMatch(/^Предложен другой срок: 5 раб\. дн\., до 15 октября/);
   });
 
   it("names who acted and what was done, «через WhatsApp» apart", () => {

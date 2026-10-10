@@ -3,6 +3,7 @@ import {
   orderStateConflictDetailsSchema,
   type OrderActor,
   type OrderEvent,
+  type OrderKind,
   type OrderStatusValue,
   type SupplierFinishedStatus,
   type SupplierOrderSummary,
@@ -180,12 +181,20 @@ export function nextTimerTick(respondBy: string, now: number): number {
 
 // ---------------------------------------------------------------- status
 
-export function statusKey(status: OrderStatusValue): SupplierTextKey {
+/**
+ * The word of a status; `kind` (TASK-037) — «Принята» of an order under
+ * order is «Срок подтверждён» (S-ORD-02).
+ */
+export function statusKey(status: OrderStatusValue, kind?: OrderKind): SupplierTextKey {
   switch (status) {
     case "created":
       return "orders.status.created";
     case "accepted":
-      return "orders.status.accepted";
+      return kind === "on_order" ? "orders.status.termConfirmed" : "orders.status.accepted";
+    case "term_proposed":
+      return "orders.status.termProposed";
+    case "term_expired":
+      return "orders.status.termExpired";
     case "ready":
       return "orders.status.ready";
     case "completed":
@@ -207,6 +216,7 @@ export function statusKey(status: OrderStatusValue): SupplierTextKey {
 export function statusGroup(status: OrderStatusValue): OrderStatusGroup {
   switch (status) {
     case "created":
+    case "term_proposed":
       return "waiting";
     case "accepted":
       return "inProgress";
@@ -219,14 +229,26 @@ export function statusGroup(status: OrderStatusValue): OrderStatusGroup {
 
 // ---------------------------------------------------------------- groups
 
-/** The groups of «В работе» (S-ORD-01); «Ждут ответа клиента» and services come with stage C. */
-export type WorkGroup = "awaitingPickup" | "preparing" | "lateClose";
+/**
+ * The groups of «В работе» (S-ORD-01); «Ждут ответа клиента» — orders under
+ * order whose other term waits for the customer (TASK-037); services come
+ * with TASK-038.
+ */
+export type WorkGroup = "awaitingPickup" | "preparing" | "awaitingCustomer" | "lateClose";
 
-export const workGroupOrder: readonly WorkGroup[] = ["awaitingPickup", "preparing", "lateClose"];
+export const workGroupOrder: readonly WorkGroup[] = [
+  "awaitingPickup",
+  "preparing",
+  "awaitingCustomer",
+  "lateClose",
+];
 
-export function workGroupOf(order: Pick<SupplierOrderSummary, "status" | "lateCloseUntil">) {
+export function workGroupOf(
+  order: Pick<SupplierOrderSummary, "status" | "lateCloseUntil">,
+): WorkGroup | null {
   if (order.status === "ready") return "awaitingPickup";
   if (order.status === "accepted") return "preparing";
+  if (order.status === "term_proposed") return "awaitingCustomer";
   if (order.status === "reserve_expired" && order.lateCloseUntil) return "lateClose";
   return null;
 }
@@ -300,18 +322,21 @@ const NONE: OrderActions = { primary: null, secondary: [] };
 
 /**
  * What an employee may press on an order now — exactly what the server
- * allows from its status (stage B: items in stock only; orders of other
- * kinds get no buttons until their rows are added). A new order whose
- * answer deadline passed by this device's clock has none: the server is
- * about to expire it. A blocked company (SCREENS 6.0) keeps looking at its
- * orders and giving them out by the code, nothing else.
+ * allows from its status. An order under order (TASK-037) has the same
+ * buttons where its moves are the same — «Принять» is «Подтвердить срок»,
+ * then «Готово к выдаче», «Выдать», «Отказать»; «Предложить другой срок»
+ * comes with its screen (TASK-039), and while the customer decides there is
+ * nothing to press. A kind this version does not know gets no buttons. A new
+ * order whose answer deadline passed by this device's clock has none: the
+ * server is about to expire it. A blocked company (SCREENS 6.0) keeps
+ * looking at its orders and giving them out by the code, nothing else.
  */
 export function orderActions(
   order: Pick<SupplierOrderSummary, "kind" | "status" | "respondBy" | "lateCloseUntil">,
   now: number,
   options: { blocked: boolean },
 ): OrderActions {
-  if (order.kind !== "stock") return NONE;
+  if (order.kind !== "stock" && order.kind !== "on_order") return NONE;
   const { blocked } = options;
   switch (order.status) {
     case "created":
@@ -330,6 +355,50 @@ export function orderActions(
     default:
       return NONE;
   }
+}
+
+/**
+ * «Срок» of an order under order in the card (S-ORD-02, TASK-037): the
+ * confirmed term once there is one; another term and until when the
+ * customer answers while they decide; otherwise the term the customer agreed
+ * to by ordering. `note` — the supply is overdue. `null` — an order in stock.
+ */
+export function termWords(
+  order: Pick<SupplierOrderSummary, "status" | "onOrderTerm">,
+  formatDay: (date: string) => string,
+  format: (iso: string) => string,
+  t: Translate,
+): { text: string; note: string | null } | null {
+  const term = order.onOrderTerm;
+  if (!term) return null;
+  const day = (date: string | null) => (date ? formatDay(date) : "—");
+  const note = term.overdueSince ? t("orders.term.overdue") : null;
+  if (term.confirmed) {
+    return {
+      text: t("orders.term.confirmed", {
+        days: term.confirmed.leadDays,
+        date: day(term.confirmed.readyOn),
+      }),
+      note,
+    };
+  }
+  if (term.proposed && order.status === "term_proposed") {
+    return {
+      text: t("orders.term.proposed", {
+        days: term.proposed.leadDays,
+        date: day(term.proposed.readyOn),
+        time: format(term.proposed.answerBy),
+      }),
+      note,
+    };
+  }
+  return {
+    text: t("orders.term.expected", {
+      days: term.expected.leadDays,
+      date: day(term.expected.readyOn),
+    }),
+    note,
+  };
 }
 
 // -------------------------------------------------------------- the people
@@ -389,6 +458,15 @@ export function conflictText(
       return t("orders.conflict.responseExpired", params);
     case "expire_reserve":
       return t("orders.conflict.reserveExpired", params);
+    // TASK-037: an order under order.
+    case "propose_term":
+      return t("orders.conflict.termProposed", params);
+    case "agree_term":
+      return t("orders.conflict.termAgreed", params);
+    case "reject_term":
+      return t("orders.conflict.termRejected", params);
+    case "expire_term":
+      return t("orders.conflict.termExpired", params);
     default:
       return t("orders.conflict.changed");
   }
@@ -477,6 +555,8 @@ export function journalLines(
   events: readonly OrderEvent[],
   format: (iso: string) => string,
   t: Translate,
+  /** A calendar date of the term in words («12 октября»); TASK-037. */
+  formatDay: (date: string) => string = (date) => date,
 ): { id: string; text: string }[] {
   const lines: { id: string; text: string }[] = [];
   for (const event of events) {
@@ -528,6 +608,26 @@ export function journalLines(
         text = event.details.deadline
           ? t("orders.journal.extended", { ...params, deadline: format(event.details.deadline) })
           : null;
+        break;
+      // TASK-037: the term of an order under order.
+      case "propose_term":
+        text = t("orders.journal.termProposed", {
+          ...params,
+          days: event.details.leadDays ?? 0,
+          date: event.details.readyOn ? formatDay(event.details.readyOn) : "",
+        });
+        break;
+      case "agree_term":
+        text = t("orders.journal.termAgreed", params);
+        break;
+      case "reject_term":
+        text = t("orders.journal.termRejected", params);
+        break;
+      case "expire_term":
+        text = t("orders.journal.termExpired", params);
+        break;
+      case "supply_overdue":
+        text = t("orders.journal.supplyOverdue", params);
         break;
       default:
         text = null;

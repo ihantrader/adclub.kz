@@ -1,12 +1,14 @@
-import type { OrderFulfillment, OrderStatusValue } from "@adclub/contracts";
+import type { OrderFulfillment, OrderKind, OrderStatusValue } from "@adclub/contracts";
 import type { OrderStatusGroup } from "@adclub/ui-core";
 
 /**
  * The state of an order on its screen (SCREENS M-ORD-03, the table of
  * states; DESIGN 7.8, 7.10) — one place for every status the server has
- * for an order on an item in stock. The screen only reads this: what the
- * heading says, what the line under it explains, which deadline it shows,
- * how the code is drawn and how much of the place is known.
+ * for an order on an item in stock and (TASK-037) under order. The screen
+ * only reads this: what the heading says, what the line under it explains,
+ * which deadline it shows, how the code is drawn and how much of the place
+ * is known. The answer to another term («Согласиться» / «Отказаться») is
+ * TASK-039; until then the card says what is going on.
  *
  * Texts are keys of the dictionary; what fills them in (`{time}`) is the
  * screen's, because it is a moment of the server in words.
@@ -40,7 +42,10 @@ export type OrderStatusTitleKey =
   | "orderStatus.cancelledByAdmin.title"
   | "orderStatus.declined.title"
   | "orderStatus.responseExpired.title"
-  | "orderStatus.reserveExpired.title";
+  | "orderStatus.reserveExpired.title"
+  | "orderStatus.termConfirmed.title"
+  | "orderStatus.termProposed.title"
+  | "orderStatus.termExpired.title";
 
 export type OrderStatusTextKey =
   | "orderStatus.created.text"
@@ -51,18 +56,25 @@ export type OrderStatusTextKey =
   | "orderStatus.declined.text"
   | "orderStatus.cancelledByAdmin.text"
   | "orderStatus.responseExpired.text"
-  | "orderStatus.reserveExpired.text";
+  | "orderStatus.reserveExpired.text"
+  | "orderStatus.termConfirmed.text"
+  | "orderStatus.termProposed.text"
+  | "orderStatus.termExpired.text";
 
 export interface OrderStatusView {
   group: OrderStatusGroup;
   title: OrderStatusTitleKey;
   /**
    * The line under the heading; `null` — the table has «—». Its `{time}` is
-   * `deadline` in words (the answer is due, the reserve ends).
+   * `deadline` in words (the answer is due, the reserve ends); its `{date}`
+   * (TASK-037) — the date of the term: the proposed one while the user's
+   * answer is due, the confirmed one once it is.
    */
   text: OrderStatusTextKey | null;
   /** The moment the line or the heading is about; `null` — none. */
-  deadline: "respondBy" | "reserveUntil" | "givenOut" | null;
+  deadline: "respondBy" | "reserveUntil" | "givenOut" | "answerBy" | null;
+  /** TASK-037: which date of the term `{date}` is; `null` — none. */
+  termDate: "proposed" | "confirmed" | null;
   code: CodeDisplay;
   place: PlaceDisplay;
   /** The order is over: no code, «Повторить заказ» instead of «Отменить заявку». */
@@ -75,6 +87,8 @@ export interface OrderStatusView {
 export interface OrderStateInput {
   status: OrderStatusValue;
   fulfillment: OrderFulfillment;
+  /** TASK-037: «Принята» of an order under order reads «Поставщик подтвердил срок». */
+  kind?: OrderKind;
 }
 
 /**
@@ -83,7 +97,7 @@ export interface OrderStateInput {
  * shown as a finished order without a code, never as an active one with a
  * code that might not be valid.
  */
-export function orderStatusView({ status, fulfillment }: OrderStateInput): OrderStatusView {
+export function orderStatusView({ status, fulfillment, kind }: OrderStateInput): OrderStatusView {
   const pickup = fulfillment === "pickup";
   switch (status) {
     case "created":
@@ -92,18 +106,49 @@ export function orderStatusView({ status, fulfillment }: OrderStateInput): Order
         title: "orderStatus.created.title",
         text: "orderStatus.created.text",
         deadline: "respondBy",
+        termDate: null,
+        code: "dimmed",
+        place: "district",
+        finished: false,
+        cancellable: true,
+      };
+    case "term_proposed":
+      // TASK-037: another term waits for the user's word (SCREENS M-ORD-03
+      // «Нужен ваш ответ»); the buttons of the answer come with TASK-039.
+      return {
+        group: "waiting",
+        title: "orderStatus.termProposed.title",
+        text: "orderStatus.termProposed.text",
+        deadline: "answerBy",
+        termDate: "proposed",
         code: "dimmed",
         place: "district",
         finished: false,
         cancellable: true,
       };
     case "accepted":
+      if (kind === "on_order") {
+        // «Срок подтверждён»: the goods are not there yet, so no reserve —
+        // the line says when the supplier brings them.
+        return {
+          group: "inProgress",
+          title: "orderStatus.termConfirmed.title",
+          text: "orderStatus.termConfirmed.text",
+          deadline: null,
+          termDate: "confirmed",
+          code: "shown",
+          place: "full",
+          finished: false,
+          cancellable: true,
+        };
+      }
       return {
         group: "inProgress",
         title: "orderStatus.accepted.title",
         text: pickup ? "orderStatus.acceptedPickup.text" : "orderStatus.acceptedDelivery.text",
         // The reserve of a pickup order starts when it is accepted (ARCHITECTURE 4.31 I315).
         deadline: pickup ? "reserveUntil" : null,
+        termDate: null,
         code: "shown",
         place: "full",
         finished: false,
@@ -116,6 +161,7 @@ export function orderStatusView({ status, fulfillment }: OrderStateInput): Order
             title: "orderStatus.readyPickup.title",
             text: "orderStatus.readyPickup.text",
             deadline: "reserveUntil",
+            termDate: null,
             code: "large",
             place: "full",
             finished: false,
@@ -126,6 +172,7 @@ export function orderStatusView({ status, fulfillment }: OrderStateInput): Order
             title: "orderStatus.readyDelivery.title",
             text: "orderStatus.readyDelivery.text",
             deadline: null,
+            termDate: null,
             code: "shown",
             place: "full",
             finished: false,
@@ -140,6 +187,7 @@ export function orderStatusView({ status, fulfillment }: OrderStateInput): Order
         title: "orderStatus.completed.title",
         text: null,
         deadline: "givenOut",
+        termDate: null,
         code: "none",
         place: "full",
         finished: true,
@@ -156,6 +204,9 @@ export function orderStatusView({ status, fulfillment }: OrderStateInput): Order
       return finished("orderStatus.responseExpired.title", "orderStatus.responseExpired.text");
     case "reserve_expired":
       return finished("orderStatus.reserveExpired.title", "orderStatus.reserveExpired.text");
+    case "term_expired":
+      // TASK-037: the user did not answer another term in time.
+      return finished("orderStatus.termExpired.title", "orderStatus.termExpired.text");
     default:
       return finished("orderStatus.cancelled.title", null);
   }
@@ -167,6 +218,7 @@ function finished(title: OrderStatusTitleKey, text: OrderStatusTextKey | null): 
     title,
     text,
     deadline: null,
+    termDate: null,
     code: "none",
     place: "none",
     finished: true,
@@ -201,7 +253,13 @@ export function orderMarkKey(input: OrderStateInput): OrderMarkKey {
 
 /** The statuses of an order still going on (the server's `activeOrderStatuses`). */
 export function isActiveStatus(status: OrderStatusValue): boolean {
-  return status === "created" || status === "accepted" || status === "ready";
+  return (
+    status === "created" ||
+    status === "accepted" ||
+    status === "ready" ||
+    // TASK-037: an order under order whose other term waits for the user.
+    status === "term_proposed"
+  );
 }
 
 /**

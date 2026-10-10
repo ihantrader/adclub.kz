@@ -142,7 +142,12 @@ function Cards({ home }: { home: AdminHome }) {
         </h2>
         <div className="home-grid">
           {(
-            ["supplier_unreachable", "duplicate_after_late_close", "frequent_admin_closes"] as const
+            [
+              "supplier_unreachable",
+              "supply_overdue",
+              "duplicate_after_late_close",
+              "frequent_admin_closes",
+            ] as const
           ).map((kind) => {
             const { open, acknowledged } = signal(kind);
             return (

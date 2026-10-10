@@ -268,6 +268,7 @@ const refusalTitle: Record<OrderCloseRefusalReason, SupplierTextKey> = {
   response_expired: "scan.result.cannotCloseTitle",
   late_window_passed: "scan.result.cannotCloseTitle",
   cancelled_by_admin: "scan.result.cancelledByAdminTitle",
+  term_expired: "scan.result.cannotCloseTitle",
 };
 
 /** The title (`titleL`) and the text under it. */
@@ -317,6 +318,9 @@ export function resultWords(
             return t("scan.result.lateWindowPassed", { n: result.lateCloseHours ?? 48 });
           case "cancelled_by_admin":
             return t("scan.result.cancelledByAdmin", { when });
+          // TASK-037: the customer never agreed to another term of an order under order.
+          case "term_expired":
+            return t("scan.result.termExpired", { when });
         }
       })();
       return { title: t(refusalTitle[result.reason]), text };

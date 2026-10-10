@@ -502,6 +502,7 @@ export * from "./users";
 export * from "./showcase";
 export * from "./account";
 export * from "./garage";
+export * from "./vehicle-document";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

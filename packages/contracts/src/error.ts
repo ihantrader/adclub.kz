@@ -260,6 +260,16 @@ import { clientPlatformSchema } from "./client";
  *   registration completion screen and retry after it.
  * - `GARAGE_LIMIT_REACHED` (409): the account already has as many cars as
  *   `garage_max_cars` allows.
+ * - `GARAGE_VIN_TAKEN` (409, TASK-057): another car of this garage already
+ *   has this VIN — one VIN is one car; `details.carId` is that car.
+ *
+ * A photographed vehicle registration certificate (TASK-057, D-064):
+ * - `VEHICLE_DOCUMENT_INVALID` (400): the bytes are not a picture the
+ *   server reads (JPEG, PNG or WebP by content); `details.reason` says why.
+ * - `VEHICLE_DOCUMENT_UNAVAILABLE` (503): recognition can't be done now
+ *   (the provider is down, or the day's AI budget is spent) — not the
+ *   person's fault and no attempt was counted; offer «Выбрать из списка».
+ *   `details` is `VehicleDocumentUnavailableDetails`.
  *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
@@ -400,6 +410,10 @@ export const errorCodeSchema = z.enum([
   // Profile and the account's own garage (TASK-029, ARCHITECTURE 4.41).
   "REGISTRATION_INCOMPLETE",
   "GARAGE_LIMIT_REACHED",
+  "GARAGE_VIN_TAKEN",
+  // A photographed vehicle registration certificate (TASK-057, D-064).
+  "VEHICLE_DOCUMENT_INVALID",
+  "VEHICLE_DOCUMENT_UNAVAILABLE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

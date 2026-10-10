@@ -16,7 +16,14 @@ import {
   saveGarageCarBodySchema,
   transferGarageBodySchema,
   transferGarageResponseSchema,
+  carDocumentSchema,
+  carDocumentInputSchema,
 } from "./garage";
+import {
+  vehicleDocumentAttemptsSchema,
+  vehicleDocumentResponseSchema,
+  vehicleDocumentUnavailableDetailsSchema,
+} from "./vehicle-document";
 import * as compatibilityContract from "./compatibility";
 import * as supplierContract from "./suppliers";
 import * as offerContract from "./offers";
@@ -431,6 +438,12 @@ const componentSchemas: Record<string, z.ZodType> = {
   AddGarageCarBody: addGarageCarBodySchema,
   TransferGarageBody: transferGarageBodySchema,
   TransferGarageResponse: transferGarageResponseSchema,
+  // A car read off a registration certificate (TASK-057, D-064).
+  CarDocument: carDocumentSchema,
+  CarDocumentInput: carDocumentInputSchema,
+  VehicleDocumentAttempts: vehicleDocumentAttemptsSchema,
+  VehicleDocumentResponse: vehicleDocumentResponseSchema,
+  VehicleDocumentUnavailableDetails: vehicleDocumentUnavailableDetailsSchema,
 };
 
 type JsonObject = Record<string, unknown>;

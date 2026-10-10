@@ -7589,6 +7589,17 @@
             }
           },
           {
+            "name": "unconfirmedCar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -11969,6 +11980,141 @@
         }
       }
     },
+    "/garage/vehicle-document": {
+      "post": {
+        "operationId": "recognizeVehicleDocument",
+        "summary": "Read a car off a photo of a Kazakhstan registration certificate (SCREENS M-GAR-04): the photo is stored nowhere, nothing is added to the garage",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {},
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The photo itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What the photo is and, for a certificate, its fields and their place in the vehicle catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleDocumentResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/garage/vehicle-document/attempts": {
+      "get": {
+        "operationId": "getVehicleDocumentAttempts",
+        "summary": "How many recognitions are left: a guest's trial ones on this device (T-GAR-04), or the account's for the day",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {},
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The attempts left",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleDocumentAttempts"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -14500,6 +14646,28 @@
               }
             ]
           },
+          "vin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "isPrimary": {
             "type": "boolean"
           },
@@ -14526,6 +14694,9 @@
           "drive",
           "modificationId",
           "color",
+          "vin",
+          "plate",
+          "document",
           "isPrimary",
           "createdAt",
           "updatedAt"
@@ -14819,6 +14990,31 @@
                 "type": "null"
               }
             ]
+          },
+          "vin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "document": {
+            "$ref": "#/components/schemas/CarDocumentInput"
           },
           "idempotencyKey": {
             "type": "string",
@@ -19844,6 +20040,12 @@
               "true"
             ]
           },
+          "unconfirmedCar": {
+            "type": "string",
+            "enum": [
+              "true"
+            ]
+          },
           "limit": {
             "default": 50,
             "type": "integer",
@@ -21547,6 +21749,61 @@
           "orange",
           "yellow",
           "burgundy"
+        ]
+      },
+      "CarDocument": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "shown",
+              "unconfirmed"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "status",
+          "at"
+        ]
+      },
+      "CarDocumentInput": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "shown"
+              },
+              "proof": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "status",
+              "proof"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "unconfirmed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
         ]
       },
       "CarLevelValue": {
@@ -25374,6 +25631,9 @@
           "DISCIPLINE_ALREADY_REVOKED",
           "REGISTRATION_INCOMPLETE",
           "GARAGE_LIMIT_REACHED",
+          "GARAGE_VIN_TAKEN",
+          "VEHICLE_DOCUMENT_INVALID",
+          "VEHICLE_DOCUMENT_UNAVAILABLE",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -27604,7 +27864,10 @@
           "active_orders_per_account",
           "whatsapp_webhook_per_ip",
           "admin_search_per_account",
-          "phone_reveal_per_account"
+          "phone_reveal_per_account",
+          "vehicle_document_per_device",
+          "vehicle_document_per_ip",
+          "vehicle_document_per_account"
         ]
       },
       "RateLimitedDetails": {
@@ -28362,6 +28625,31 @@
                 "type": "null"
               }
             ]
+          },
+          "vin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "document": {
+            "$ref": "#/components/schemas/CarDocumentInput"
           }
         },
         "required": [
@@ -32526,6 +32814,38 @@
                     }
                   ]
                 },
+                "vin": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "plate": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 20
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "document": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CarDocumentInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "isPrimary": {
                   "type": "boolean"
                 }
@@ -34530,6 +34850,323 @@
         "enum": [
           "active",
           "history"
+        ]
+      },
+      "VehicleDocumentAttempts": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "guest",
+              "account"
+            ]
+          },
+          "remaining": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "scope",
+          "remaining",
+          "limit"
+        ]
+      },
+      "VehicleDocumentResponse": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": [
+              "kz_registration",
+              "other_document",
+              "unreadable"
+            ]
+          },
+          "fields": {
+            "type": "object",
+            "properties": {
+              "make": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "year": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "vin": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "engineVolumeCc": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "make",
+              "model",
+              "year",
+              "vin",
+              "plate",
+              "engineVolumeCc",
+              "color"
+            ]
+          },
+          "match": {
+            "type": "object",
+            "properties": {
+              "make": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "generation": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "engine": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "color": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarColorId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "value"
+                ]
+              }
+            },
+            "required": [
+              "make",
+              "model",
+              "generation",
+              "engine",
+              "color"
+            ]
+          },
+          "documentProof": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/VehicleDocumentAttempts"
+          }
+        },
+        "required": [
+          "result",
+          "fields",
+          "match",
+          "documentProof",
+          "attempts"
+        ]
+      },
+      "VehicleDocumentUnavailableDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "budget"
+            ]
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/VehicleDocumentAttempts"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts"
         ]
       },
       "VehicleDuplicateDetails": {

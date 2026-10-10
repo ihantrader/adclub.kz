@@ -124,3 +124,14 @@ export type { CarIdentity, CarIdentityLevel, CarLevelRef, CarLevelsLike } from "
 export { sameCarCases } from "./garage/same-car-cases";
 export type { SameCarCase, SameCarCaseCar, SameCarCaseLevel } from "./garage/same-car-cases";
 export { latestVehicleYear, VEHICLE_YEAR_TIME_ZONE } from "./vehicle/vehicle-years";
+export {
+  checkVin,
+  engineMatchesVolume,
+  engineVolumeCc,
+  formatKzPlate,
+  maskKzPlate,
+  maskVin,
+  normalizeKzPlate,
+  normalizeVin,
+} from "./vehicle/vehicle-document";
+export type { VinCheck } from "./vehicle/vehicle-document";

@@ -173,6 +173,15 @@ export const rateLimitNameSchema = z.enum([
    */
   "admin_search_per_account",
   "phone_reveal_per_account",
+  /**
+   * Reading a vehicle registration certificate (TASK-057, D-064): a guest's
+   * trial recognitions per device (PRODUCT 6.6, `guest_limits`), and per
+   * day — a guest's address against a device id made anew, a signed-in
+   * person's account.
+   */
+  "vehicle_document_per_device",
+  "vehicle_document_per_ip",
+  "vehicle_document_per_account",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

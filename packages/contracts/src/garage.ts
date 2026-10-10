@@ -56,6 +56,46 @@ export const carColorIdSchema = z.enum(CAR_COLOR_IDS);
 
 export type CarColorId = z.infer<typeof carColorIdSchema>;
 
+/**
+ * The mark of a car about its document (D-064, TASK-057): `shown` — a
+ * Kazakhstan registration certificate was read when the car was added or
+ * later («Подтвердить техпаспортом»), at `at`; `unconfirmed` — the car was
+ * chosen from the list after recognition did not work, at `at`. A car added
+ * before TASK-057 has no mark at all (`null`). Never «владение
+ * подтверждено»: reading a document is not proof of owning the car.
+ */
+export const carDocumentSchema = z.object({
+  status: z.enum(["shown", "unconfirmed"]),
+  at: z.iso.datetime(),
+});
+
+export type CarDocument = z.infer<typeof carDocumentSchema>;
+
+/**
+ * What the app says about the document of a car it saves (TASK-057):
+ * `shown` with the `proof` the recognition answered (`documentProof` of
+ * `POST /garage/vehicle-document`) — the server checks its signature and
+ * takes the moment from it, a client cannot just claim it; `unconfirmed` —
+ * chosen from the list after recognition did not work. Left out — no mark
+ * (an app from before TASK-057; on a change — the mark stays as it is).
+ */
+export const carDocumentInputSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("shown"), proof: z.string().min(1).max(200) }),
+  z.object({ status: z.literal("unconfirmed") }),
+]);
+
+export type CarDocumentInput = z.infer<typeof carDocumentInputSchema>;
+
+/**
+ * The VIN and the plate as the person typed or the recognition read them
+ * (D-064). The server checks them (T-GAR-07: a VIN of 17 characters without
+ * I, O, Q; a plate as on a Kazakhstan plate) and keeps them compact and in
+ * upper case. Optional so an app from before TASK-057 keeps working: left
+ * out — unchanged (a new car — none); `null` — cleared.
+ */
+const vinField = z.string().max(40).nullable().optional();
+const plateField = z.string().max(20).nullable().optional();
+
 /** One car of the account's garage, as every read of it answers. */
 export const accountCarSchema = z.object({
   id: z.uuid(),
@@ -63,6 +103,11 @@ export const accountCarSchema = z.object({
   /** Known only when the levels named exactly one modification. */
   modificationId: z.uuid().nullable(),
   color: carColorIdSchema.nullable(),
+  /** 17 characters, upper case (TASK-057). */
+  vin: z.string().nullable(),
+  /** Compact, `123ABC02`; shown as on the plate, `123 ABC 02`. */
+  plate: z.string().nullable(),
+  document: carDocumentSchema.nullable(),
   /** The car the catalog filters by (M-GAR-01 «Основной»). */
   isPrimary: z.boolean(),
   createdAt: z.iso.datetime(),
@@ -92,6 +137,14 @@ export const saveGarageCarBodySchema = z.object({
   levels: carLevelsSchema,
   modificationId: modificationIdField,
   color: carColorIdSchema.nullable(),
+  vin: vinField,
+  plate: plateField,
+  /**
+   * On a change only `shown` with a proof does anything: the car is marked
+   * «документ показан» («Подтвердить техпаспортом»); a mark is never taken
+   * back by a change.
+   */
+  document: carDocumentInputSchema.optional(),
 });
 
 export type SaveGarageCarBody = z.infer<typeof saveGarageCarBodySchema>;
@@ -139,6 +192,14 @@ export const transferGarageBodySchema = z.object({
         levels: carLevelsSchema,
         modificationId: modificationIdField,
         color: carColorIdSchema.nullable(),
+        vin: vinField,
+        plate: plateField,
+        /**
+         * A proof that does not check out is not a reason to fail a sign-in:
+         * the car is then marked `unconfirmed`, as if it had been chosen from
+         * the list. A VIN or a plate that is not one is left out the same way.
+         */
+        document: carDocumentInputSchema.nullable().optional(),
         isPrimary: z.boolean(),
       }),
     )

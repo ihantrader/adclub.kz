@@ -31,7 +31,10 @@ export const ADMIN_SEARCH_GROUP_LIMIT = 8;
  * A-USR-01: `q` — the phone number, whole or in part, in any spelling
  * (`8 701`, `+7 (701) 12`, the last digits), or a part of the name; club
  * access now (`active`), none (`none`) or ending within `expiringDays`
- * (`expiring`); `noShows=true` — with a no-show mark that still stands.
+ * (`expiring`); `noShows=true` — with a no-show mark that still stands;
+ * `unconfirmedCar=true` — with a car whose registration certificate was not
+ * shown (marked «документ не подтверждён», or added before TASK-057 without
+ * any mark; D-064).
  * Newest accounts first. A user is an account of the app: it finished the
  * registration, signed in to the app, ordered, keeps cars or was given club
  * access — an account that only works in a cabinet or the admin panel is
@@ -42,6 +45,7 @@ export const adminUserListQuerySchema = z.object({
   clubAccess: z.enum(["active", "none", "expiring"]).optional(),
   expiringDays: z.coerce.number().int().min(1).max(366).default(USER_ACCESS_EXPIRING_DAYS_DEFAULT),
   noShows: z.enum(["true"]).optional(),
+  unconfirmedCar: z.enum(["true"]).optional(),
   limit: z.coerce.number().int().min(1).max(USER_PAGE_MAX_SIZE).default(USER_PAGE_DEFAULT_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });

@@ -195,6 +195,13 @@ import {
   transferGarageResponseSchema,
 } from "./garage";
 import {
+  VEHICLE_DOCUMENT_CONTENT_TYPES,
+  VEHICLE_DOCUMENT_MAX_BYTES,
+  vehicleDocumentAttemptsSchema,
+  vehicleDocumentQuerySchema,
+  vehicleDocumentResponseSchema,
+} from "./vehicle-document";
+import {
   activeOrdersResponseSchema,
   adminCloseOrderBodySchema,
   adminExtendOrderDeadlineBodySchema,
@@ -923,6 +930,50 @@ export const apiRoutes = {
         description: "The account's garage after the merge",
         schema: transferGarageResponseSchema,
       },
+    },
+  }),
+  // A car read off a photographed registration certificate (TASK-057, D-064).
+  // Open to a guest (the first run adds a car before any sign-in); the
+  // attempts are counted by hand, per device and address or per account,
+  // because the answer says how many are left and an attempt the provider
+  // could not serve is given back (ARCHITECTURE 4.58).
+  recognizeVehicleDocument: defineRoute({
+    operationId: "recognizeVehicleDocument",
+    method: "POST",
+    path: "/garage/vehicle-document",
+    summary:
+      "Read a car off a photo of a Kazakhstan registration certificate (SCREENS M-GAR-04): the photo is stored nowhere, nothing is added to the garage",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    query: vehicleDocumentQuerySchema,
+    upload: {
+      description: "The photo itself (JPEG, PNG or WebP)",
+      contentTypes: VEHICLE_DOCUMENT_CONTENT_TYPES,
+      maxBytes: VEHICLE_DOCUMENT_MAX_BYTES,
+    },
+    responses: {
+      200: {
+        description:
+          "What the photo is and, for a certificate, its fields and their place in the vehicle catalog",
+        schema: vehicleDocumentResponseSchema,
+      },
+    },
+  }),
+  getVehicleDocumentAttempts: defineRoute({
+    operationId: "getVehicleDocumentAttempts",
+    method: "GET",
+    path: "/garage/vehicle-document/attempts",
+    summary:
+      "How many recognitions are left: a guest's trial ones on this device (T-GAR-04), or the account's for the day",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    query: vehicleDocumentQuerySchema,
+    responses: {
+      200: { description: "The attempts left", schema: vehicleDocumentAttemptsSchema },
     },
   }),
   listMySuppliers: defineRoute({

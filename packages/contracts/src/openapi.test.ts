@@ -163,6 +163,8 @@ describe("buildOpenApiDocument", () => {
       "/garage/cars/{carId}",
       "/garage/cars/{carId}/primary",
       "/garage/transfer",
+      "/garage/vehicle-document",
+      "/garage/vehicle-document/attempts",
       "/health",
       "/meta/client-policy",
       "/order-history",

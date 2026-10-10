@@ -60,6 +60,31 @@ function apiError(status: number, code: string, details?: unknown) {
   return new ApiError({ status, code: code as never, message: code, details, retryable: false });
 }
 
+describe("the key of a visit for a service (TASK-039.B)", () => {
+  it("is another key for another car or time, and the same again for the same visit", () => {
+    const keys = createAttemptKeys(counter());
+    const visit = {
+      offerId: "offer-1",
+      quantity: 1,
+      fulfillment: "pickup" as const,
+      carId: "car-1",
+      desiredAt: "2026-10-12T06:00:00.000Z",
+    };
+    const first = keys.keyFor(visit);
+    expect(keys.keyFor({ ...visit, desiredAt: "2026-10-12T10:00:00.000Z" })).not.toBe(first);
+    expect(keys.keyFor({ ...visit, carId: "car-2" })).not.toBe(first);
+    expect(keys.keyFor({ ...visit })).toBe(first);
+  });
+
+  it("says a refused time at the time and a car gone from the garage at the car", () => {
+    const refused = (path: string) =>
+      checkoutFailure(apiError(400, "VALIDATION_ERROR", [{ path, message: "no" }]));
+    expect(refused("desiredAt")).toEqual({ kind: "time_refused" });
+    expect(refused("carId")).toEqual({ kind: "car_invalid" });
+    expect(refused("quantity")).toEqual({ kind: "quantity_invalid" });
+  });
+});
+
 describe("what each answer of POST /orders leads to", () => {
   it("names every case of TASK-030 requirement 1 with its own action", () => {
     expect(
@@ -156,12 +181,20 @@ describe("the offer on the checkout", () => {
     expect(reserveDuration(1)).toEqual({ unit: "hours", count: 1 });
   });
 
-  it("orders an offer in stock and under order (TASK-039), nothing else", () => {
+  it("orders an offer in stock, under order (TASK-039) and a service (TASK-039.B), nothing else", () => {
     expect(canOrderOffer({ availability: "in_stock" })).toBe(true);
     expect(canOrderOffer({ availability: "on_order" })).toBe(true);
     expect(canOrderOffer({ availability: "service" })).toBe(false);
+    // A service's offer has the neutral availability of goods (ARCHITECTURE 4.61 I627).
+    expect(canOrderOffer({ availability: "in_stock" }, "service")).toBe(true);
     expect(checkoutKind({ availability: "on_order" })).toBe("on_order");
     expect(checkoutKind({ availability: "in_stock" })).toBe("stock");
+    expect(checkoutKind({ availability: "in_stock" }, "service")).toBe("service");
+    expect(checkoutKind({ availability: "in_stock" }, "part")).toBe("stock");
+  });
+
+  it("promises no reserve of a visit", () => {
+    expect(checkoutReserve("service", { pickupReserveHours: 24 })).toBeNull();
   });
 
   it("promises the reserve of the kind: once ready, or once the goods have come", () => {

@@ -202,9 +202,10 @@ function SignedInOrders() {
                 {orderActiveOrders(copy.orders).map((order) => {
                   const main = mainDateText(
                     order.mainDate,
-                    order.pickupPoint?.timeZone ?? CLUB_TIME_ZONE,
+                    order.pickupPoint?.timeZone ?? order.serviceVisit?.timeZone ?? CLUB_TIME_ZONE,
                     now,
                     (month) => t(`month.${month}` as MobileTextKey),
+                    (date, time) => t("order.visitAt", { date, time }),
                   );
                   return (
                     <OrderRow

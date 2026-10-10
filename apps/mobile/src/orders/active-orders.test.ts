@@ -74,6 +74,22 @@ describe("the main date of a card", () => {
     ).toEqual({ key: "orders.mainDate.answerBy", time: "14:30" });
   });
 
+  it("says a confirmed visit with its date always — «Ждём вас 4 октября в 15:00» (TASK-039.B)", () => {
+    const words = (date: string, time: string) => `${date} в ${time}`;
+    expect(
+      mainDateText(
+        { kind: "visit_at", at: "2026-10-04T10:00:00.000Z" },
+        "Asia/Almaty",
+        now,
+        month,
+        words,
+      ),
+    ).toEqual({ key: "orders.mainDate.visitAt", time: "4 октября в 15:00" });
+    expect(
+      mainDateText({ kind: "visit_at", at: "not a time" }, "Asia/Almaty", now, month, words),
+    ).toBeNull();
+  });
+
   it("reads a copy saved before orders under order existed as one in stock (TASK-037)", () => {
     const old = activeOrder();
     delete (old as Partial<typeof old>).onOrderTerm;

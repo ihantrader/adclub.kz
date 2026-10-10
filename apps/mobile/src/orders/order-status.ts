@@ -131,8 +131,8 @@ export function orderStatusView(input: OrderStateInput): OrderStatusView {
  * A visit for a service (TASK-038; SCREENS M-ORD-03, the states of a
  * service): the statuses whose words differ from those of goods; `null` —
  * the same words as goods (cancelled, declined, given out — «Получено»).
- * The answer to another time (its buttons) comes with TASK-039.B: until
- * then the line only says what the supplier proposed and until when.
+ * The answer to another time is the block of M-ORD-03 (`timeAnswer`,
+ * TASK-039.B); a confirmed visit reads «Ждём вас {дата} в {время}».
  */
 function serviceStatusView(status: OrderStatusValue): OrderStatusView | null {
   switch (status) {
@@ -368,14 +368,16 @@ export function isActiveStatus(status: OrderStatusValue): boolean {
 /**
  * The short status of a card in «Мои заявки» (M-ORD-02): the same words as
  * the heading of the order, except that a given-out order in the history
- * reads «Получено» without its date — the date is a line of its own there.
+ * reads «Получено» without its date — the date is a line of its own there;
+ * a confirmed visit for a service reads «Запись подтверждена»: its heading
+ * «Ждём вас {дата} в {время}» is the main date of the card (TASK-039.B).
  */
 export function listStatusKey(
   input: OrderStateInput,
-): OrderStatusTitleKey | "orderStatus.completed.short" {
-  return input.status === "completed"
-    ? "orderStatus.completed.short"
-    : orderStatusView(input).title;
+): OrderStatusTitleKey | "orderStatus.completed.short" | "orderStatus.timeConfirmed.short" {
+  if (input.status === "completed") return "orderStatus.completed.short";
+  const title = orderStatusView(input).title;
+  return title === "orderStatus.timeConfirmed.title" ? "orderStatus.timeConfirmed.short" : title;
 }
 
 /**

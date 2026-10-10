@@ -9,11 +9,16 @@ import type { OrderFulfillment } from "@adclub/contracts";
 
 // ---------------------------------------------------------- the key of an attempt
 
-/** What one order is: another offer, quantity or way to get it is another order. */
+/**
+ * What one order is: another offer, quantity or way to get it is another
+ * order; of a service (TASK-039.B) — another car or time asked for.
+ */
 export interface CheckoutAttempt {
   offerId: string;
   quantity: number;
   fulfillment: OrderFulfillment;
+  carId?: string;
+  desiredAt?: string;
 }
 
 /**
@@ -40,7 +45,13 @@ export function createAttemptKeys(newKey: () => string): AttemptKeys {
   const keys = new Map<string, string>();
   return {
     keyFor(attempt) {
-      const id = `${attempt.offerId}|${attempt.quantity}|${attempt.fulfillment}`;
+      const id = [
+        attempt.offerId,
+        attempt.quantity,
+        attempt.fulfillment,
+        attempt.carId ?? "",
+        attempt.desiredAt ?? "",
+      ].join("|");
       let key = keys.get(id);
       if (key === undefined) {
         key = newKey();
@@ -71,6 +82,14 @@ export type CheckoutFailure =
   | { kind: "kind_not_supported" }
   /** More than the server allows now (the limit was lowered): the offer is loaded again. */
   | { kind: "quantity_invalid" }
+  /**
+   * TASK-039.B, a service: the time asked for is no longer one (the point
+   * closed that day, the hours changed, the minute passed) — said at the
+   * time, whose choices are loaded again.
+   */
+  | { kind: "time_refused" }
+  /** The car is not one of the user's garage any more (removed on another device). */
+  | { kind: "car_invalid" }
   /** 429: «Слишком много попыток» with the minutes, and «Повторить». */
   | { kind: "rate_limited"; minutes: number }
   /** The session is over: the app is already a guest; the screen leaves. */
@@ -116,8 +135,19 @@ export function checkoutFailure(error: unknown): CheckoutFailure {
       return { kind: "club_access_required" };
     case "ORDER_KIND_NOT_SUPPORTED":
       return { kind: "kind_not_supported" };
-    case "VALIDATION_ERROR":
+    case "VALIDATION_ERROR": {
+      // The field the server refused (`details: [{ path, message }]`).
+      const paths = Array.isArray(error.details)
+        ? (error.details as unknown[]).map((entry) =>
+            typeof entry === "object" && entry !== null
+              ? String((entry as { path?: unknown }).path ?? "")
+              : "",
+          )
+        : [];
+      if (paths.includes("desiredAt")) return { kind: "time_refused" };
+      if (paths.includes("carId")) return { kind: "car_invalid" };
       return { kind: "quantity_invalid" };
+    }
     case "RATE_LIMITED": {
       const seconds = Number(details.retryAfterSeconds);
       return {
@@ -180,18 +210,21 @@ export function reserveDuration(hours: number): { unit: "days" | "hours"; count:
 }
 
 /**
- * The offers this app places an order from: «В наличии» and, since TASK-039,
- * «Под заказ» — the server takes both (`POST /orders`); a kind this version
- * does not know (a service, TASK-038) is not ordered here.
+ * The offers this app places an order from: «В наличии», since TASK-039
+ * «Под заказ», since TASK-039.B a service («Записаться») — the server takes
+ * all three (`POST /orders`). An offer on goods of an availability this
+ * version does not know is not ordered here.
  */
-export function canOrderOffer(offer: { availability: string }): boolean {
+export function canOrderOffer(offer: { availability: string }, itemType?: string): boolean {
+  if (itemType === "service") return true;
   return offer.availability === "in_stock" || offer.availability === "on_order";
 }
 
-/** M-ORD-01 — the checkout of an offer «В наличии» or «Под заказ». */
-export type CheckoutKind = "stock" | "on_order";
+/** M-ORD-01 — the checkout of an offer «В наличии», «Под заказ» or of a service. */
+export type CheckoutKind = "stock" | "on_order" | "service";
 
-export function checkoutKind(offer: { availability: string }): CheckoutKind {
+export function checkoutKind(offer: { availability: string }, itemType?: string): CheckoutKind {
+  if (itemType === "service") return "service";
   return offer.availability === "on_order" ? "on_order" : "stock";
 }
 
@@ -209,6 +242,8 @@ export function checkoutReserve(
   if (kind === "stock") {
     return { onOrder: false, ...reserveDuration(ordering.pickupReserveHours) };
   }
+  // A visit is not kept for anybody: there is no reserve to promise.
+  if (kind === "service") return null;
   return ordering.onOrderPickupReserveHours === undefined
     ? null
     : { onOrder: true, ...reserveDuration(ordering.onOrderPickupReserveHours) };

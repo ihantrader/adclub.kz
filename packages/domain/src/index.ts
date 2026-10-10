@@ -115,7 +115,10 @@ export {
   noShowVerdict,
   serviceRespondBy,
   timeAnswerBy,
+  VISIT_SLOT_MINUTES,
   visitDays,
+  visitInstant,
+  visitSlots,
   visitTimeProblem,
   visitUntil,
 } from "./order/order-visit";

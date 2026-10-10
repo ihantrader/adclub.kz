@@ -3,10 +3,12 @@ import { layout, radius } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { randomUUID } from "expo-crypto";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
+import type { MobileTextKey } from "@adclub/i18n";
 import {
   Banner,
   Button,
+  Chip,
   DataState,
   Dialog,
   OfflineBanner,
@@ -18,6 +20,7 @@ import {
   SkeletonList,
   Text,
   useTheme,
+  useToast,
 } from "../../design-system";
 import { catalogEntry } from "../../catalog/catalog-gate";
 import { formatTenge } from "../../catalog/format";
@@ -37,10 +40,21 @@ import {
   settleQuantity,
   type CheckoutFailure,
 } from "../../orders/checkout";
+import { CLUB_TIME_ZONE, zonedParts } from "../../orders/order-time";
+import {
+  desiredAtOf,
+  settleVisitChoice,
+  visitChoiceDays,
+  visitDayLabel,
+  type VisitChoice,
+} from "../../orders/visit-choice";
 import { apiClient } from "../../services/api";
 import { catalogRefresh } from "../../services/catalog-refresh";
 import { useShowcaseItem } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
+import { useRequest } from "../../services/use-request";
+import { CarSheet } from "../catalog/CarSheet";
+import { garageErrorText } from "../garage/garage-errors";
 import { cityIdOf } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useGarage } from "../../state/garage-provider";
@@ -80,6 +94,8 @@ export function CheckoutScreen(props: Props) {
 type Notice =
   | { kind: "fulfillment_unavailable" }
   | { kind: "quantity_invalid" }
+  | { kind: "time_refused" }
+  | { kind: "car_invalid" }
   | { kind: "kind_not_supported" }
   | { kind: "rate_limited"; minutes: number }
   | { kind: "network" }
@@ -122,8 +138,44 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
   const [clubSheet, setClubSheet] = useState(false);
   const [sending, setSending] = useState(false);
 
+  // TASK-039.B, a service (M-ORD-01 «Услуга»): the car is the one of the
+  // header — the price of the card is for its model — changed from the
+  // garage; the day and the time are chosen from what the server offers.
+  const service = data?.item.type === "service";
+  const garage = useGarage();
+  const toast = useToast();
+  const carPicker = useCarPicker();
+  const [carSheet, setCarSheet] = useState(false);
+  const [visitChoice, setVisitChoice] = useState<VisitChoice | null>(null);
+  const visitOptions = useRequest(
+    service ? `visit-options:${offerId}` : null,
+    (signal) => apiClient.getOfferVisitOptions({ signal, query: { offerId } }),
+    { staleAfterMs: 60_000 },
+  );
+  const visitZone = visitOptions.data?.timeZone ?? CLUB_TIME_ZONE;
+  const visitDays = visitOptions.data ? visitChoiceDays(visitOptions.data) : [];
+  const visit = settleVisitChoice(visitChoice, visitDays);
+  const desiredAt = desiredAtOf(visit, visitZone);
+  // Today at the point, for «Сегодня» / «Завтра» on the day chips.
+  const now = zonedParts(new Date().toISOString(), visitZone);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const today = now ? `${now.year}-${pad(now.month)}-${pad(now.day)}` : "";
+
+  const chooseCar = async (carId: string) => {
+    if (carId === car.id) return;
+    try {
+      await garage.makePrimary(carId);
+    } catch (error) {
+      toast.show(garageErrorText(error, t));
+    }
+  };
+
   const quantity = settleQuantity(quantityChoice, maxQuantity);
-  const fulfillment = offer ? settleFulfillment(fulfillmentChoice, offer) : null;
+  const fulfillment = service
+    ? "pickup"
+    : offer
+      ? settleFulfillment(fulfillmentChoice, offer)
+      : null;
 
   // «Поставщик снял это предложение» → the card of the item, its offers
   // loaded afresh. From «Повторить заказ» the card was not under this
@@ -147,21 +199,38 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
 
   const submit = async (options: { expectedPrice?: number; allowAnother?: boolean } = {}) => {
     if (!offer || !fulfillment || sending) return;
-    // A kind this version has no checkout for (a service, TASK-038) is not
-    // placed blind — «Повторить» could open the checkout of one.
-    if (!canOrderOffer(offer)) {
+    // An offer of a kind this version has no checkout for is not placed
+    // blind — «Повторить» could open the checkout of one.
+    if (!canOrderOffer(offer, data?.item.type)) {
       setNotice({ kind: "kind_not_supported" });
       return;
     }
+    if (service && desiredAt === null) return;
     const allowAnotherActive = options.allowAnother ?? anotherAllowed;
-    const body: CreateOrderBody = {
-      offerId: offer.id,
-      quantity,
-      fulfillment,
-      expectedPrice: options.expectedPrice ?? offer.price,
-      idempotencyKey: keys.keyFor({ offerId: offer.id, quantity, fulfillment }),
-      allowAnotherActive,
-    };
+    const body: CreateOrderBody =
+      service && desiredAt !== null
+        ? {
+            offerId: offer.id,
+            carId: car.id,
+            desiredAt,
+            expectedPrice: options.expectedPrice ?? offer.price,
+            idempotencyKey: keys.keyFor({
+              offerId: offer.id,
+              quantity: 1,
+              fulfillment: "pickup",
+              carId: car.id,
+              desiredAt,
+            }),
+            allowAnotherActive,
+          }
+        : {
+            offerId: offer.id,
+            quantity,
+            fulfillment,
+            expectedPrice: options.expectedPrice ?? offer.price,
+            idempotencyKey: keys.keyFor({ offerId: offer.id, quantity, fulfillment }),
+            allowAnotherActive,
+          };
     setNotice(null);
     setSending(true);
     try {
@@ -197,6 +266,16 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
         request.reload();
         setNotice(failure);
         return;
+      case "time_refused":
+        // The point closed that day, or the minute passed: the times are
+        // asked for again and the time is chosen anew.
+        setVisitChoice(visit ? { date: visit.date, time: null } : null);
+        visitOptions.reload();
+        setNotice(failure);
+        return;
+      case "car_invalid":
+        setNotice(failure);
+        return;
       case "registration_incomplete":
         navigation.push("auth-register");
         return;
@@ -219,36 +298,61 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
         : request.status === "error"
           ? "error"
           : data && !offer
-            ? "empty"
+            ? service && (visitOptions.status === "loading" || visitOptions.status === "idle")
+              ? "loading"
+              : "empty"
             : "ready";
 
-  const receipt = offer ? receiptText(offer.receipt, "withDate") : null;
+  const receipt = offer && !service ? receiptText(offer.receipt, "withDate") : null;
   // TASK-039: «Под заказ» — the date the supplier brings it by, the
   // agreement to the term (T-ORD-02, T-ORD-03) and its own reserve.
-  const kind = offer ? checkoutKind(offer) : "stock";
+  const kind = offer ? checkoutKind(offer, data?.item.type) : "stock";
   const onOrder = kind === "on_order";
   const reserve = data ? checkoutReserve(kind, data.ordering) : null;
   const options = offer ? fulfillmentOptions(offer) : [];
   const priceWas = previousPrice !== undefined && offer && previousPrice !== offer.price;
+  // A service whose offer the card no longer has: the offer is there (the
+  // server gave its times) but has no price for this car's model — another
+  // car may have one; otherwise the supplier took it off.
+  const noPriceForCar = service && !offer && visitOptions.status === "ready";
+  const visitDay = visit ? visitDays.find((day) => day.date === visit.date) : undefined;
+
+  const dayLabel = (date: string) => {
+    const label = visitDayLabel(date, today);
+    if (label.kind === "today") return t("catalog.today");
+    if (label.kind === "tomorrow") return t("catalog.tomorrow");
+    return t("checkout.visitDay", {
+      weekday: t(`day.${label.weekday}` as MobileTextKey),
+      date: `${label.day} ${t(`month.${label.month}` as MobileTextKey)}`,
+    });
+  };
 
   return (
     <Screen
-      title={t("checkout.title")}
+      title={t(service ? "checkout.serviceTitle" : "checkout.title")}
       back={{ label: t("common.back"), onPress: navigation.goBack }}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={request.refreshing}
       refreshingLabel={t("common.loading")}
       bottomInset
       footer={
-        offer && fulfillment ? (
+        offer && fulfillment && (!service || visitDays.length > 0) ? (
           <>
-            {!online && (
+            {!online ? (
               <Text variant="caption" color="textMuted" style={styles.center}>
                 {t("order.needsNetwork")}
               </Text>
-            )}
-            <Button onPress={() => submit()} loading={sending} disabled={!online}>
-              {t("checkout.submit")}
+            ) : service && desiredAt === null ? (
+              <Text variant="caption" color="textMuted" style={styles.center}>
+                {t("checkout.chooseTime")}
+              </Text>
+            ) : null}
+            <Button
+              onPress={() => submit()}
+              loading={sending}
+              disabled={!online || (service && desiredAt === null)}
+            >
+              {t(service ? "checkout.book" : "checkout.submit")}
             </Button>
           </>
         ) : null
@@ -263,15 +367,27 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
           retry: { label: t("common.retry"), onRetry: request.reload },
         }}
         offline={{ title: t("state.offline"), text: t("state.offlineText") }}
-        empty={{
-          icon: "package",
-          title: t("checkout.offerGone"),
-          action: (
-            <Button variant="secondary" onPress={leaveToCard}>
-              {t("common.back")}
-            </Button>
-          ),
-        }}
+        empty={
+          noPriceForCar
+            ? {
+                icon: "car",
+                title: t("checkout.noPriceForCar", { model: carTitle(car) }),
+                action: (
+                  <Button variant="secondary" onPress={() => setCarSheet(true)}>
+                    {t("checkout.chooseCar")}
+                  </Button>
+                ),
+              }
+            : {
+                icon: "package",
+                title: t("checkout.offerGone"),
+                action: (
+                  <Button variant="secondary" onPress={leaveToCard}>
+                    {t("common.back")}
+                  </Button>
+                ),
+              }
+        }
       >
         {data && offer && (
           <View style={styles.body}>
@@ -287,7 +403,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
               </View>
             </View>
             {/* The mark is the server's (D-029), the same line as on the card. */}
-            {data.compatibility.mark !== "fits" && (
+            {!service && data.compatibility.mark !== "fits" && (
               <CompatibilityLine
                 result={data.compatibility}
                 carName={carTitle(car)}
@@ -298,7 +414,9 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
             <Section title={t("checkout.offer")}>
               <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                 <Text variant="caption" color="accent">
-                  {t("item.clubPrice")}
+                  {service
+                    ? t("item.servicePriceFor", { model: car.model.label })
+                    : t("item.clubPrice")}
                 </Text>
                 <Text variant="price">{formatTenge(offer.price)}</Text>
                 {priceWas && (
@@ -347,76 +465,166 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
               </Section>
             )}
 
-            <Section title={t("checkout.quantity")}>
-              <View style={styles.quantityRow}>
-                <Quantity
-                  value={quantity}
-                  onChange={setQuantity}
-                  min={1}
-                  max={maxQuantity}
-                  label={t("checkout.quantity")}
-                  decreaseLabel={t("checkout.decrease")}
-                  increaseLabel={t("checkout.increase")}
-                />
-                <Text variant="bodyStrong" style={styles.grow}>
-                  {t("checkout.total", {
-                    n: quantity,
-                    price: formatTenge(offer.price),
-                    total: formatTenge(offer.price * quantity),
-                  })}
-                </Text>
-              </View>
-              <Text variant="bodyS" color="textMuted">
-                {t("checkout.phoneNotice")}
-              </Text>
-            </Section>
+            {service && (
+              <>
+                {/* M-ORD-01 «Услуга»: the car is required — the one of the header. */}
+                <Section title={t("checkout.car")}>
+                  <View
+                    style={[styles.card, styles.carRow, { backgroundColor: theme.colors.surface }]}
+                  >
+                    <Text variant="bodyStrong" style={styles.grow}>
+                      {carTitle(car)}
+                    </Text>
+                    <Button variant="text" size="m" onPress={() => setCarSheet(true)}>
+                      {t("checkout.changeCar")}
+                    </Button>
+                  </View>
+                </Section>
 
-            <Section title={t("checkout.receiving")}>
-              {options.length > 1 ? (
-                options.map((way) => (
-                  <Radio
-                    key={way}
-                    checked={fulfillment === way}
-                    onSelect={() => setFulfillment(way)}
-                    label={way === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
-                    {...(receipt && !onOrder
-                      ? {
-                          description:
-                            way === "pickup"
-                              ? t("item.pickupDate", { date: receipt })
-                              : t("item.deliveryDate", { date: receipt }),
-                        }
-                      : {})}
-                  />
-                ))
-              ) : (
-                <Text variant="bodyStrong">
-                  {receipt && !onOrder
-                    ? fulfillment === "pickup"
-                      ? t("item.pickupDate", { date: receipt })
-                      : t("item.deliveryDate", { date: receipt })
-                    : fulfillment === "pickup"
-                      ? t("catalog.pickup")
-                      : t("catalog.delivery")}
-                </Text>
-              )}
-              {fulfillment === "pickup" && reserve && (
-                <Text variant="bodyS" color="textMuted">
-                  {reserve.onOrder
-                    ? reserve.unit === "days"
-                      ? tn("checkout.onOrderReserveDays", reserve.count)
-                      : tn("checkout.onOrderReserveHours", reserve.count)
-                    : reserve.unit === "days"
-                      ? tn("checkout.reserveDays", reserve.count)
-                      : tn("checkout.reserveHours", reserve.count)}
-                </Text>
-              )}
-              {fulfillment === "delivery" && (
-                <Text variant="bodyS" color="textMuted">
-                  {t("checkout.deliveryNote")}
-                </Text>
-              )}
-            </Section>
+                {/* The days and hours are the server's; the app counts no schedule. */}
+                <Section title={t("checkout.visit")}>
+                  {visitOptions.status === "error" ? (
+                    <Banner
+                      tone="warning"
+                      action={
+                        <Button
+                          variant="text"
+                          size="m"
+                          icon="refresh"
+                          onPress={visitOptions.reload}
+                        >
+                          {t("common.retry")}
+                        </Button>
+                      }
+                    >
+                      {t("checkout.visitOptionsFailed")}
+                    </Banner>
+                  ) : !visitOptions.data ? (
+                    <SkeletonList rows={1} label={t("common.loading")} />
+                  ) : visitDays.length === 0 ? (
+                    <Text color="textMuted">{t("checkout.noVisitDays")}</Text>
+                  ) : (
+                    <>
+                      <Text variant="caption" color="textMuted">
+                        {t("checkout.visitDate")}
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.chips}
+                      >
+                        {visitDays.map((day) => (
+                          <Chip
+                            key={day.date}
+                            selected={visit?.date === day.date}
+                            onPress={() => setVisitChoice({ date: day.date, time: null })}
+                          >
+                            {dayLabel(day.date)}
+                          </Chip>
+                        ))}
+                      </ScrollView>
+                      <Text variant="caption" color="textMuted">
+                        {t("checkout.visitTime")}
+                      </Text>
+                      <View style={styles.times}>
+                        {(visitDay?.times ?? []).map((slot) => (
+                          <Chip
+                            key={slot}
+                            selected={visit?.time === slot}
+                            onPress={() =>
+                              visit && setVisitChoice({ date: visit.date, time: slot })
+                            }
+                          >
+                            {slot}
+                          </Chip>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                  <Text variant="bodyS" color="textMuted">
+                    {t("checkout.visitHint")}
+                  </Text>
+                  <Text variant="bodyS" color="textMuted">
+                    {t("checkout.phoneNotice")}
+                  </Text>
+                </Section>
+              </>
+            )}
+
+            {!service && (
+              <>
+                <Section title={t("checkout.quantity")}>
+                  <View style={styles.quantityRow}>
+                    <Quantity
+                      value={quantity}
+                      onChange={setQuantity}
+                      min={1}
+                      max={maxQuantity}
+                      label={t("checkout.quantity")}
+                      decreaseLabel={t("checkout.decrease")}
+                      increaseLabel={t("checkout.increase")}
+                    />
+                    <Text variant="bodyStrong" style={styles.grow}>
+                      {t("checkout.total", {
+                        n: quantity,
+                        price: formatTenge(offer.price),
+                        total: formatTenge(offer.price * quantity),
+                      })}
+                    </Text>
+                  </View>
+                  <Text variant="bodyS" color="textMuted">
+                    {t("checkout.phoneNotice")}
+                  </Text>
+                </Section>
+
+                <Section title={t("checkout.receiving")}>
+                  {options.length > 1 ? (
+                    options.map((way) => (
+                      <Radio
+                        key={way}
+                        checked={fulfillment === way}
+                        onSelect={() => setFulfillment(way)}
+                        label={way === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
+                        {...(receipt && !onOrder
+                          ? {
+                              description:
+                                way === "pickup"
+                                  ? t("item.pickupDate", { date: receipt })
+                                  : t("item.deliveryDate", { date: receipt }),
+                            }
+                          : {})}
+                      />
+                    ))
+                  ) : (
+                    <Text variant="bodyStrong">
+                      {receipt && !onOrder
+                        ? fulfillment === "pickup"
+                          ? t("item.pickupDate", { date: receipt })
+                          : t("item.deliveryDate", { date: receipt })
+                        : fulfillment === "pickup"
+                          ? t("catalog.pickup")
+                          : t("catalog.delivery")}
+                    </Text>
+                  )}
+                  {fulfillment === "pickup" && reserve && (
+                    <Text variant="bodyS" color="textMuted">
+                      {reserve.onOrder
+                        ? reserve.unit === "days"
+                          ? tn("checkout.onOrderReserveDays", reserve.count)
+                          : tn("checkout.onOrderReserveHours", reserve.count)
+                        : reserve.unit === "days"
+                          ? tn("checkout.reserveDays", reserve.count)
+                          : tn("checkout.reserveHours", reserve.count)}
+                    </Text>
+                  )}
+                  {fulfillment === "delivery" && (
+                    <Text variant="bodyS" color="textMuted">
+                      {t("checkout.deliveryNote")}
+                    </Text>
+                  )}
+                </Section>
+              </>
+            )}
 
             {notice && (
               <Banner
@@ -519,6 +727,14 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
       />
 
       <ClubAccessSheet visible={clubSheet} onClose={() => setClubSheet(false)} />
+      {/* The car of a visit: the same switch as the header of the catalog —
+          the chosen one becomes the main car, the card is asked for it. */}
+      <CarSheet
+        visible={carSheet}
+        onClose={() => setCarSheet(false)}
+        onPickCar={chooseCar}
+        onAddCar={carPicker.add}
+      />
     </Screen>
   );
 
@@ -528,6 +744,10 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
         return t("checkout.fulfillmentGone");
       case "quantity_invalid":
         return t("checkout.quantityChanged", { n: maxQuantity });
+      case "time_refused":
+        return t("checkout.timeRefused");
+      case "car_invalid":
+        return t("checkout.carInvalid");
       case "kind_not_supported":
         return t("item.orderLater");
       case "rate_limited":
@@ -547,5 +767,8 @@ const styles = StyleSheet.create({
   // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
   card: { borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
   quantityRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  carRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  chips: { gap: 8, paddingVertical: 4 },
+  times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   center: { textAlign: "center" },
 });

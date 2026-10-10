@@ -32,6 +32,7 @@ import { rememberOpenedOrder } from "../../orders/opened-orders";
 import {
   supplyOverdue,
   termAnswer,
+  timeAnswer,
   termAnswerProblem,
   termAnswerProblemKeys,
 } from "../../orders/order-answer";
@@ -151,7 +152,15 @@ export function OrderScreen({ route, navigation }: Props) {
       } else {
         await apiClient.rejectUserOrderTerm({ orderId }, { expectedVersion: version });
       }
-      toast.show(t(how === "agree" ? "order.answer.agreed" : "order.answer.rejected"));
+      toast.show(
+        t(
+          how === "reject"
+            ? "order.answer.rejected"
+            : order?.kind === "service"
+              ? "order.answer.timeAgreed"
+              : "order.answer.agreed",
+        ),
+      );
     } catch (error) {
       const problem = termAnswerProblem(error);
       // A session that ended has taken the user out already.
@@ -187,6 +196,12 @@ export function OrderScreen({ route, navigation }: Props) {
 
   const view = order ? orderStatusView(order) : null;
   const answer = order ? termAnswer(order) : null;
+  // TASK-039.B: the same answer to another time of a visit for a service.
+  const visitAnswer = order ? timeAnswer(order) : null;
+  const waitsForAnswer = answer !== null || visitAnswer !== null;
+  // A visit for a service is not repeated yet (the server answers
+  // `kind_not_supported`, ARCHITECTURE 4.63): no button that only refuses.
+  const repeatable = view !== null && view.finished && order?.kind !== "service";
   // A visit for a service knows its point's zone from the first moment (TASK-038).
   const timeZone = order?.pickupPoint?.timeZone ?? order?.serviceVisit?.timeZone ?? null;
   const offlineNote =
@@ -196,6 +211,23 @@ export function OrderScreen({ route, navigation }: Props) {
           date: "order.offlineNoteDate",
         })
       : null;
+
+  // The time of a visit the status speaks of — asked for, proposed or
+  // confirmed — «12 октября в 15:00» (TASK-038, TASK-039.B).
+  const visitAt = (() => {
+    const visit = order?.serviceVisit;
+    switch (view?.visit) {
+      case "desired":
+        return visit?.desiredAt ?? null;
+      case "proposed":
+        return visit?.proposed?.visitAt ?? null;
+      case "confirmed":
+        return visit?.confirmed?.visitAt ?? null;
+      default:
+        return null;
+    }
+  })();
+  const visitLine = visitAt ? time.visit(visitAt, timeZone) : "";
 
   const status =
     order !== null
@@ -258,7 +290,8 @@ export function OrderScreen({ route, navigation }: Props) {
                   ? t(view.title, time.dateAndTime(order.givenOut.at, timeZone))
                   : view.title === "orderStatus.completed.title"
                     ? t("orderStatus.completed.short")
-                    : t(view.title)}
+                    : // TASK-039.B: «Ждём вас {дата} в {время}» of a confirmed visit.
+                      t(view.title, { visit: visitLine })}
               </Text>
               {view.text && (
                 <Text color="textMuted">
@@ -274,18 +307,7 @@ export function OrderScreen({ route, navigation }: Props) {
                               ? time.deadline(order.serviceVisit.proposed.answerBy, timeZone, now)
                               : "",
                     // TASK-038: the time of a visit for a service.
-                    visit: (() => {
-                      const visit = order.serviceVisit;
-                      const at =
-                        view.visit === "desired"
-                          ? visit?.desiredAt
-                          : view.visit === "proposed"
-                            ? visit?.proposed?.visitAt
-                            : view.visit === "confirmed"
-                              ? visit?.confirmed?.visitAt
-                              : null;
-                      return at ? time.deadline(at, timeZone, now) : "";
-                    })(),
+                    visit: visitLine,
                     // TASK-037: the date of the term of an order under order.
                     date: time.calendarDate(
                       view.termDate === "proposed"
@@ -312,15 +334,24 @@ export function OrderScreen({ route, navigation }: Props) {
             </View>
 
             {/* 2. The user's answer to another term (TASK-039, SCREENS M-ORD-03 block 2). */}
-            {answer && (
+            {waitsForAnswer && (
               <Section title={t("order.answer.title")}>
                 <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                   <Text>
-                    {t(answer.was ? "order.answer.text" : "order.answer.textNoWas", {
-                      date: time.calendarDate(answer.readyOn),
-                      was: time.calendarDate(answer.was),
-                      time: time.deadline(answer.answerBy, timeZone, now),
-                    })}
+                    {answer
+                      ? t(answer.was ? "order.answer.text" : "order.answer.textNoWas", {
+                          date: time.calendarDate(answer.readyOn),
+                          was: time.calendarDate(answer.was),
+                          time: time.deadline(answer.answerBy, timeZone, now),
+                        })
+                      : visitAnswer
+                        ? // TASK-039.B: «Поставщик предлагает другое время: {дата} в {время} (было …)».
+                          t("order.answer.timeText", {
+                            visit: time.visit(visitAnswer.visitAt, timeZone),
+                            was: time.visit(visitAnswer.was, timeZone),
+                            time: time.deadline(visitAnswer.answerBy, timeZone, now),
+                          })
+                        : null}
                   </Text>
                   {serverActions && (
                     <>
@@ -428,10 +459,9 @@ export function OrderScreen({ route, navigation }: Props) {
                     {/* TASK-038: the car and the time of a visit for a service. */}
                     <Term label={t("order.carLabel")}>{carText(order.serviceVisit.car)}</Term>
                     <Term label={t("order.visitLabel")}>
-                      {time.deadline(
+                      {time.visit(
                         order.serviceVisit.confirmed?.visitAt ?? order.serviceVisit.desiredAt,
                         timeZone,
-                        now,
                       )}
                     </Term>
                     <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
@@ -479,7 +509,7 @@ export function OrderScreen({ route, navigation }: Props) {
             {/* 7. The actions. «Оценить» and «Пожаловаться» are stage C and are not drawn. */}
             {serverActions && (
               <View style={styles.actions}>
-                {view.cancellable && !answer && (
+                {view.cancellable && !waitsForAnswer && (
                   <Button
                     variant="secondary"
                     destructive
@@ -490,7 +520,7 @@ export function OrderScreen({ route, navigation }: Props) {
                     {t("order.cancel")}
                   </Button>
                 )}
-                {view.finished && (
+                {repeatable && (
                   <Button
                     variant="secondary"
                     icon="refresh"
@@ -501,7 +531,7 @@ export function OrderScreen({ route, navigation }: Props) {
                     {t("order.repeat")}
                   </Button>
                 )}
-                {!actionsLive && ((view.cancellable && !answer) || view.finished) && (
+                {!actionsLive && ((view.cancellable && !waitsForAnswer) || repeatable) && (
                   <Text variant="caption" color="textMuted" style={styles.center}>
                     {t("order.needsNetwork")}
                   </Text>
@@ -532,7 +562,9 @@ export function OrderScreen({ route, navigation }: Props) {
       <Dialog
         visible={confirmReject}
         onClose={() => setConfirmReject(false)}
-        title={t("order.answer.rejectTitle")}
+        title={t(
+          order?.kind === "service" ? "order.answer.timeRejectTitle" : "order.answer.rejectTitle",
+        )}
         actions={
           <>
             <Button variant="danger" onPress={() => void answerTerm("reject")}>

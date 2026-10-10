@@ -1,7 +1,7 @@
 import { ApiError } from "@adclub/api-client";
-import type { OnOrderTerm } from "@adclub/contracts";
+import type { OnOrderTerm, ServiceVisit } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
-import { supplyOverdue, termAnswer, termAnswerProblem } from "./order-answer";
+import { supplyOverdue, termAnswer, termAnswerProblem, timeAnswer } from "./order-answer";
 
 const term: OnOrderTerm = {
   expected: { leadDays: 3, readyOn: "2026-03-20" },
@@ -43,6 +43,43 @@ describe("termAnswer (M-ORD-03 «Ответ пользователя»)", () => 
     ] as const) {
       expect(termAnswer({ status, onOrderTerm: term }), status).toBeNull();
     }
+    expect(termAnswer({ status: "term_proposed", onOrderTerm: null })).toBeNull();
+  });
+});
+
+describe("timeAnswer (M-ORD-03 for a service, TASK-039.B)", () => {
+  const visit: ServiceVisit = {
+    car: {
+      make: { id: "00000000-0000-4000-8000-000000000001", label: "Geely" },
+      model: { id: "00000000-0000-4000-8000-000000000002", label: "Coolray" },
+      year: 2024,
+    },
+    timeZone: "Asia/Almaty",
+    desiredAt: "2026-10-12T06:00:00.000Z",
+    proposed: {
+      visitAt: "2026-10-12T10:00:00.000Z",
+      at: "2026-10-10T08:00:00.000Z",
+      answerBy: "2026-10-11T08:00:00.000Z",
+    },
+    confirmed: null,
+  };
+
+  it("says the proposed time, the one asked for and the deadline while the answer is due", () => {
+    expect(timeAnswer({ status: "term_proposed", serviceVisit: visit })).toEqual({
+      visitAt: "2026-10-12T10:00:00.000Z",
+      was: "2026-10-12T06:00:00.000Z",
+      answerBy: "2026-10-11T08:00:00.000Z",
+    });
+  });
+
+  it("is gone once the order moved on, and for goods", () => {
+    for (const status of ["accepted", "cancelled_by_user", "term_expired"] as const) {
+      expect(timeAnswer({ status, serviceVisit: visit }), status).toBeNull();
+    }
+    expect(timeAnswer({ status: "term_proposed", serviceVisit: null })).toBeNull();
+    expect(
+      timeAnswer({ status: "term_proposed", serviceVisit: { ...visit, proposed: null } }),
+    ).toBeNull();
     expect(termAnswer({ status: "term_proposed", onOrderTerm: null })).toBeNull();
   });
 });

@@ -129,6 +129,76 @@ export function visitDays(at: Date, schedule: ReceiptSchedule, horizonDays: numb
   return days;
 }
 
+/** The step of the times the screens offer inside the point's hours (TASK-039.B). */
+export const VISIT_SLOT_MINUTES = 30;
+
+/** The finest a time falls back to when no whole step fits an interval: «18:50», not «18:47». */
+const VISIT_SLOT_FALLBACK_MINUTES = 5;
+
+/**
+ * The times a screen offers on one day of `visitDays` (SCREENS M-ORD-01 for
+ * a service, S-ORD-04 for a service; TASK-039.B): every `step` minutes inside
+ * each working interval the server gave, `from` rounded up to the step, `to`
+ * exclusive. An interval no whole step fits (today's last minutes before
+ * closing, a short interval) still offers its start, rounded up to five
+ * minutes, if that is inside it — the remaining hours are offered, nothing
+ * outside them. Every time returned is inside the server's intervals, so it
+ * passes `visitTimeProblem` as long as the day is still what the server said;
+ * the server judges the time again when it is sent.
+ */
+export function visitSlots(
+  intervals: readonly { from: string; to: string }[],
+  step: number = VISIT_SLOT_MINUTES,
+): string[] {
+  const times = new Set<number>();
+  for (const interval of intervals) {
+    const from = minutesOf(interval.from);
+    const to = minutesOf(interval.to);
+    const first = Math.ceil(from / step) * step;
+    if (first < to) {
+      for (let minute = first; minute < to; minute += step) {
+        times.add(minute);
+      }
+      continue;
+    }
+    const fallback = Math.ceil(from / VISIT_SLOT_FALLBACK_MINUTES) * VISIT_SLOT_FALLBACK_MINUTES;
+    if (fallback < to) {
+      times.add(fallback);
+    }
+  }
+  return [...times].sort((a, b) => a - b).map(timeOf);
+}
+
+function daysSinceEpoch(date: string): number {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  return Date.UTC(year, month - 1, day) / (24 * HOUR_MS);
+}
+
+/**
+ * The instant of a wall-clock time at the point — `date` (`YYYY-MM-DD`) and
+ * `time` (`HH:MM`) in `timeZone` — as the ISO string `POST /orders`
+ * (`desiredAt`) and `…/propose-time` (`visitAt`) take. The offset is found
+ * from the zone itself (two passes: right across a change of the offset);
+ * an engine that can't convert zones reads the time on the device's clock —
+ * every city of Kazakhstan is in one zone, so that is the same answer there.
+ */
+export function visitInstant(date: string, time: string, timeZone: string): string {
+  const target = daysSinceEpoch(date) * 24 * 60 + minutesOf(time);
+  let instant = target * MINUTE_MS;
+  try {
+    for (let pass = 0; pass < 2; pass += 1) {
+      const local = localDateTime(new Date(instant), timeZone);
+      const shown = daysSinceEpoch(local.date) * 24 * 60 + local.minutes;
+      instant -= (shown - target) * MINUTE_MS;
+    }
+  } catch {
+    const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+    const minutes = minutesOf(time);
+    instant = new Date(year, month - 1, day, Math.floor(minutes / 60), minutes % 60).getTime();
+  }
+  return new Date(instant).toISOString();
+}
+
 function earlier(a: Date, b: Date): Date {
   return a.getTime() <= b.getTime() ? a : b;
 }

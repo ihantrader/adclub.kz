@@ -48,6 +48,16 @@ export function useOrderTime() {
         ? { date: dayText(parts, monthName), time: clockText(parts) }
         : { date: "", time: "" };
     },
+    /**
+     * «12 октября в 15:00» — the time of a visit for a service (TASK-039.B;
+     * SCREENS M-ORD-02 «Ждём вас 14 марта в 10:00»), always with its date.
+     */
+    visit: (iso: string, timeZone: string | null) => {
+      const parts = zonedParts(iso, timeZone ?? CLUB_TIME_ZONE);
+      return parts
+        ? t("order.visitAt", { date: dayText(parts, monthName), time: clockText(parts) })
+        : "";
+    },
     /** «15 марта» of a calendar date `YYYY-MM-DD` of the server (the term of an order under order). */
     calendarDate: (date: string | null | undefined): string => {
       const [, month, day] = (date ?? "").split("-").map(Number);

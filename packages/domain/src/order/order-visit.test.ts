@@ -6,6 +6,8 @@ import {
   serviceRespondBy,
   timeAnswerBy,
   visitDays,
+  visitInstant,
+  visitSlots,
   visitTimeProblem,
   visitUntil,
 } from "./order-visit";
@@ -171,5 +173,58 @@ describe("the deadlines of a visit", () => {
     expect(isLateCancel(visitAt, almaty("2026-10-06", "13:01"), 2)).toBe(true);
     expect(isLateCancel(visitAt, almaty("2026-10-06", "16:00"), 2)).toBe(true);
     expect(isLateCancel(visitAt, almaty("2026-10-06", "14:59"), 0)).toBe(false);
+  });
+});
+
+describe("visitSlots", () => {
+  it("offers every half hour inside each interval, the end exclusive", () => {
+    expect(
+      visitSlots([
+        { from: "09:00", to: "11:00" },
+        { from: "14:00", to: "15:30" },
+      ]),
+    ).toEqual(["09:00", "09:30", "10:00", "10:30", "14:00", "14:30", "15:00"]);
+  });
+
+  it("rounds a start inside a step up to the next step (today, from the next minute)", () => {
+    expect(visitSlots([{ from: "14:37", to: "16:00" }])).toEqual(["15:00", "15:30"]);
+  });
+
+  it("offers only the minutes that are left before closing", () => {
+    expect(visitSlots([{ from: "17:46", to: "18:00" }])).toEqual(["17:50"]);
+    expect(visitSlots([{ from: "17:56", to: "18:00" }])).toEqual([]);
+  });
+
+  it("takes another step and keeps the times in order without repeats", () => {
+    expect(
+      visitSlots(
+        [
+          { from: "10:00", to: "11:00" },
+          { from: "10:00", to: "10:30" },
+        ],
+        15,
+      ),
+    ).toEqual(["10:00", "10:15", "10:30", "10:45"]);
+    expect(visitSlots([])).toEqual([]);
+  });
+
+  it("gives times every one of which passes the check of the server", () => {
+    const at = almaty("2026-10-06", "14:37");
+    for (const day of visitDays(at, point, 14)) {
+      for (const time of visitSlots(day.intervals)) {
+        expect(
+          visitTimeProblem(new Date(visitInstant(day.date, time, ALMATY)), at, point, 14),
+        ).toBe(null);
+      }
+    }
+  });
+});
+
+describe("visitInstant", () => {
+  it("reads a wall-clock time of the point in its zone", () => {
+    expect(visitInstant("2026-10-12", "11:00", ALMATY)).toBe("2026-10-12T06:00:00.000Z");
+    expect(visitInstant("2026-10-12", "00:30", ALMATY)).toBe("2026-10-11T19:30:00.000Z");
+    expect(visitInstant("2026-10-12", "15:00", "Europe/Moscow")).toBe("2026-10-12T12:00:00.000Z");
+    expect(visitInstant("2026-03-29", "12:00", "Europe/Berlin")).toBe("2026-03-29T10:00:00.000Z");
   });
 });

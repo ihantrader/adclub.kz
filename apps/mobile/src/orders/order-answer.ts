@@ -1,5 +1,5 @@
 import { isApiError } from "@adclub/api-client";
-import type { OnOrderTerm, OrderStatusValue } from "@adclub/contracts";
+import type { OnOrderTerm, OrderStatusValue, ServiceVisit } from "@adclub/contracts";
 
 /**
  * The user's answer to another term of an order under order (TASK-039;
@@ -35,6 +35,30 @@ export function termAnswer(order: {
     was: order.onOrderTerm?.expected.readyOn ?? null,
     answerBy: proposed.answerBy,
   };
+}
+
+/**
+ * «Поставщик предлагает другое время: {дата} в {время} (было {дата} в
+ * {время}). Ответьте до {время}» — the same block for a visit for a service
+ * (TASK-039.B; SCREENS M-ORD-03, F6), drawn only while the order waits for
+ * the user's word; the answer is the same «Согласиться» / «Отказаться».
+ */
+export interface TimeAnswer {
+  /** The time the supplier proposes. */
+  visitAt: string;
+  /** The time the user asked for. */
+  was: string;
+  answerBy: string;
+}
+
+export function timeAnswer(order: {
+  status: OrderStatusValue;
+  serviceVisit?: ServiceVisit | null;
+}): TimeAnswer | null {
+  const visit = order.serviceVisit;
+  const proposed = visit?.proposed;
+  if (order.status !== "term_proposed" || !visit || !proposed) return null;
+  return { visitAt: proposed.visitAt, was: visit.desiredAt, answerBy: proposed.answerBy };
 }
 
 /**

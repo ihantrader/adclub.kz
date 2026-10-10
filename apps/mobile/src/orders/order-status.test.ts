@@ -236,6 +236,26 @@ describe("the state of an order on its screen", () => {
     );
   });
 
+  it("reads a confirmed visit as «Ждём вас {дата} в {время}» on its screen and short in a list (TASK-039.B)", () => {
+    const visit = {
+      status: "accepted" as const,
+      fulfillment: "pickup" as const,
+      kind: "service" as const,
+    };
+    expect(orderStatusView(visit).title).toBe("orderStatus.timeConfirmed.title");
+    expect(mobileText("ru", "orderStatus.timeConfirmed.title")).toBe("Ждём вас {visit}");
+    expect(mobileText("ru", "orderStatus.timeConfirmed.text")).toBe("Покажите код на месте");
+    expect(listStatusKey(visit)).toBe("orderStatus.timeConfirmed.short");
+    expect(mobileText("ru", "orderStatus.timeConfirmed.short")).toBe("Запись подтверждена");
+    // A no-show and an unresolved visit say nothing of discipline (SCREENS M-ORD-03 «Правила»).
+    for (const status of ["no_show", "visit_unresolved"] as const) {
+      const view = orderStatusView({ status, fulfillment: "pickup", kind: "service" });
+      for (const key of [view.title, view.text]) {
+        expect(key && mobileText("ru", key).toLowerCase()).not.toMatch(/дисциплин|штраф|блокир/);
+      }
+    }
+  });
+
   it("tells the steps of a term by their move (TASK-039)", () => {
     const onOrder = { fulfillment: "pickup" as const, kind: "on_order" as const };
     expect(orderStepKey({ action: "accept", status: "accepted" }, onOrder)).toBe(

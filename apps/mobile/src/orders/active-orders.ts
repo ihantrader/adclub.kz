@@ -1,5 +1,5 @@
 import type { ActiveOrder, ActiveOrderMainDate } from "@adclub/contracts";
-import { CLUB_TIME_ZONE, deadlineText } from "./order-time";
+import { CLUB_TIME_ZONE, clockText, dayText, deadlineText, zonedParts } from "./order-time";
 
 /**
  * The list «Активные» of M-ORD-02 (TASK-030). The server already answers in
@@ -43,8 +43,20 @@ export function mainDateText(
   timeZone: string | null,
   now: Date,
   monthName: (month: number) => string,
+  /**
+   * TASK-039.B: a visit reads with its date always — «Ждём вас 14 марта в
+   * 10:00» (SCREENS M-ORD-02); the words joining the date and the clock are
+   * the language's («{date} в {time}»).
+   */
+  visitWords: (date: string, time: string) => string = (date, time) => `${date}, ${time}`,
 ): MainDateText | null {
   if (!mainDate) return null;
+  if (mainDate.kind === "visit_at") {
+    const at = zonedParts(mainDate.at, timeZone ?? CLUB_TIME_ZONE);
+    return at
+      ? { key: MAIN_DATE_KEYS.visit_at, time: visitWords(dayText(at, monthName), clockText(at)) }
+      : null;
+  }
   const time = deadlineText(mainDate.at, timeZone ?? CLUB_TIME_ZONE, now, monthName);
   if (time === null) return null;
   // A kind this version does not know (a newer server) says nothing rather than something wrong.

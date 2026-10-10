@@ -535,7 +535,7 @@ function OfferCard({
   offer: ShowcaseOffer;
   /**
    * An offer on a service (TASK-019): the model its price is for; no
-   * availability, no dates, and «Записаться» comes later (TASK-038).
+   * availability, no dates; «Записаться» opens the booking (TASK-039.B).
    */
   serviceModel?: string;
   onOrder: (offerId: string) => void;
@@ -650,10 +650,11 @@ function OfferCard({
         </Text>
       ) : null}
       {service ? (
-        // «Записаться» — TASK-038, TASK-039.B; until then nothing is pressed in vain.
-        <Text variant="bodyS" color="textMuted" style={styles.orderLater}>
-          {t("item.serviceLater")}
-        </Text>
+        // «Записаться» (TASK-039.B, M-CAT-08): the same way through the state
+        // of the person as «Оформить» — sign-in, club access, the checkout.
+        <Button size="m" onPress={() => onOrder(offer.id)} style={styles.orderButton}>
+          {t("item.book")}
+        </Button>
       ) : canOrderOffer(offer) ? (
         <Button size="m" onPress={() => onOrder(offer.id)} style={styles.orderButton}>
           {t("item.order")}

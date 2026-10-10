@@ -238,6 +238,8 @@ import {
   userOrderPageSchema,
   userOrderResponseSchema,
   adminCancelOrderBodySchema,
+  orderTermAnswerBodySchema,
+  proposeOrderTermBodySchema,
 } from "./orders";
 import {
   adminSearchQuerySchema,
@@ -3602,6 +3604,39 @@ export const apiRoutes = {
       200: { description: "The order", schema: userOrderResponseSchema },
     },
   }),
+  // ------------------------------------------------ orders under order (TASK-037)
+  agreeUserOrderTerm: defineRoute({
+    operationId: "agreeUserOrderTerm",
+    method: "POST",
+    path: "/orders/{orderId}/term/agree",
+    summary:
+      "Agree to the other term the supplier proposed for an order under order (M-ORD-03 «Согласиться»): the order is taken on with that term — «Срок подтверждён» — and the supplier sees the customer's phone. Only the user of the order; after the answer deadline the order has expired — 409 ORDER_STATE_CONFLICT with `term_expired`",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderPathSchema,
+    requestBody: { description: "The version seen", schema: orderTermAnswerBodySchema },
+    responses: {
+      200: { description: "The order", schema: userOrderResponseSchema },
+    },
+  }),
+  rejectUserOrderTerm: defineRoute({
+    operationId: "rejectUserOrderTerm",
+    method: "POST",
+    path: "/orders/{orderId}/term/reject",
+    summary:
+      "Say no to the other term the supplier proposed (M-ORD-03 «Отказаться»): the order is cancelled by the user and the supplier is told so. Only the user of the order",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderPathSchema,
+    requestBody: { description: "The version seen", schema: orderTermAnswerBodySchema },
+    responses: {
+      200: { description: "The order", schema: userOrderResponseSchema },
+    },
+  }),
   listSupplierOrders: defineRoute({
     operationId: "listSupplierOrders",
     method: "GET",
@@ -3637,7 +3672,7 @@ export const apiRoutes = {
     method: "POST",
     path: "/supplier/orders/{orderId}/accept",
     summary:
-      "Accept a new order: the customer's phone opens, the pickup reserve starts. A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
+      "Accept a new order: the customer's phone opens, the pickup reserve starts. For an order under order this is «Подтвердить срок» — the term the customer agreed to, no reserve until it is ready (TASK-037). A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
     tag: "supplier",
     clientVersionCheck: "enforced",
     auth: "session",
@@ -3681,6 +3716,26 @@ export const apiRoutes = {
     requestBody: { description: "The version seen and the reason", schema: declineOrderBodySchema },
     responses: {
       200: { description: "The declined order", schema: declineOrderResponseSchema },
+    },
+  }),
+  proposeSupplierOrderTerm: defineRoute({
+    operationId: "proposeSupplierOrderTerm",
+    method: "POST",
+    path: "/supplier/orders/{orderId}/propose-term",
+    summary:
+      "Propose another term for a new order under order (S-ORD-04, TASK-037): working days of the company, at least 1, at most the setting, not the term already agreed; the answer has the date it gives and until when the customer answers. Confirming the agreed term is `…/accept`. A colleague who acted first — 409 ORDER_STATE_CONFLICT naming them",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
+    pathParams: orderPathSchema,
+    requestBody: {
+      description: "The version seen and the term in working days",
+      schema: proposeOrderTermBodySchema,
+    },
+    responses: {
+      200: { description: "The order", schema: supplierOrderResponseSchema },
     },
   }),
   listAdminOrders: defineRoute({

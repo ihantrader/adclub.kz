@@ -35,6 +35,12 @@ import type { CatalogItemListQuery } from "./catalog-items";
  * a comment (`POST /admin/signals/{id}/acknowledge`, `…/close`), with the
  * version they saw.
  *
+ * TASK-037 adds `supply_overdue` (ARCHITECTURE 6.2): an order under order
+ * whose confirmed date has passed is still not ready to be given out. One
+ * signal per order (the subject is the order), raised once; a test order of
+ * an employee raises none (`countsInStatistics`). The status of the order
+ * does not change — the administrator calls the supplier.
+ *
  * Later tasks add the others (a low rating, a spike of complaints, a failed
  * payment).
  */
@@ -44,6 +50,7 @@ export const adminSignalKindSchema = z.enum([
   "frequent_admin_closes",
   "whatsapp_outage",
   "supplier_unreachable",
+  "supply_overdue",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -106,6 +113,13 @@ export const adminSignalPayloadSchema = z.object({
    */
   recipients: z.number().int().optional(),
   recipientsWithoutWhatsapp: z.number().int().optional(),
+  /**
+   * `supply_overdue` (TASK-037): the date the goods were promised on (the
+   * point's own calendar date) and the confirmed term in working days; the
+   * order and its supplier are `orderId`, `orderNumber`, `supplierId`.
+   */
+  readyOn: z.string().optional(),
+  leadDays: z.number().int().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

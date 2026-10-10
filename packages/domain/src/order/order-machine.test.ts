@@ -1,20 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
   activeOrderStatuses,
+  answerAwaitingOrderStatuses,
   awaitingReceiptOrderStatuses,
   isActiveOrderStatus,
   orderActionActor,
   orderActions,
   orderActionSources,
   orderAwaitsReceipt,
+  orderKinds,
+  orderNeedsAnswer,
   orderStatuses,
   orderTransition,
   type OrderAction,
+  type OrderKind,
   type OrderStatus,
 } from "./order-machine";
 
-/** Every allowed move (PRODUCT 10.2, ARCHITECTURE 6.1); anything else is refused. */
-const allowed: [OrderStatus, OrderAction, OrderStatus][] = [
+type Allowed = [OrderStatus, OrderAction, OrderStatus][];
+
+/** Every allowed move of an order on an item in stock (PRODUCT 10.2, ARCHITECTURE 6.1); anything else is refused. */
+const stockAllowed: Allowed = [
   ["created", "accept", "accepted"],
   ["created", "decline", "declined_by_supplier"],
   ["accepted", "decline", "declined_by_supplier"],
@@ -42,79 +48,166 @@ const allowed: [OrderStatus, OrderAction, OrderStatus][] = [
   ["ready", "admin_cancel", "cancelled_by_admin"],
 ];
 
+/**
+ * Every allowed move of an order on an item to order (PRODUCT 10.3,
+ * ARCHITECTURE 6.2, TASK-037); anything else is refused.
+ */
+const onOrderAllowed: Allowed = [
+  // «Подтвердить срок» — the term the user agreed to when ordering.
+  ["created", "accept", "accepted"],
+  ["created", "propose_term", "term_proposed"],
+  ["term_proposed", "agree_term", "accepted"],
+  ["term_proposed", "reject_term", "cancelled_by_user"],
+  ["term_proposed", "expire_term", "term_expired"],
+  ["created", "decline", "declined_by_supplier"],
+  ["accepted", "decline", "declined_by_supplier"],
+  ["ready", "decline", "declined_by_supplier"],
+  ["accepted", "mark_ready", "ready"],
+  ["accepted", "close", "completed"],
+  ["ready", "close", "completed"],
+  ["created", "cancel", "cancelled_by_user"],
+  ["term_proposed", "cancel", "cancelled_by_user"],
+  ["accepted", "cancel", "cancelled_by_user"],
+  ["ready", "cancel", "cancelled_by_user"],
+  ["created", "expire_no_response", "response_expired"],
+  // Only the reserve «Готово к выдаче» starts expires.
+  ["ready", "expire_reserve", "reserve_expired"],
+  ["reserve_expired", "close_late", "completed"],
+  ["created", "admin_close", "completed"],
+  ["term_proposed", "admin_close", "completed"],
+  ["accepted", "admin_close", "completed"],
+  ["ready", "admin_close", "completed"],
+  ["response_expired", "admin_close", "completed"],
+  ["term_expired", "admin_close", "completed"],
+  ["reserve_expired", "admin_close", "completed"],
+  ["created", "admin_cancel", "cancelled_by_admin"],
+  ["term_proposed", "admin_cancel", "cancelled_by_admin"],
+  ["accepted", "admin_cancel", "cancelled_by_admin"],
+  ["ready", "admin_cancel", "cancelled_by_admin"],
+];
+
+const allowedByKind: Record<OrderKind, Allowed> = {
+  stock: stockAllowed,
+  on_order: onOrderAllowed,
+};
+
 describe("orderTransition", () => {
-  it.each(allowed)("%s --%s--> %s", (from, action, to) => {
-    expect(orderTransition(from, action)).toBe(to);
-  });
+  describe.each(orderKinds)("%s", (kind) => {
+    it.each(allowedByKind[kind])("%s --%s--> %s", (from, action, to) => {
+      expect(orderTransition(from, action, kind)).toBe(to);
+    });
 
-  it("refuses every other move", () => {
-    const key = (from: string, action: string) => `${from}/${action}`;
-    const known = new Set(allowed.map(([from, action]) => key(from, action)));
-    for (const from of orderStatuses) {
-      for (const action of orderActions) {
-        if (!known.has(key(from, action))) {
-          expect(orderTransition(from, action), key(from, action)).toBeNull();
+    it("refuses every other pair of a status and an action", () => {
+      const key = (from: string, action: string) => `${from}/${action}`;
+      const known = new Set(allowedByKind[kind].map(([from, action]) => key(from, action)));
+      for (const from of orderStatuses) {
+        for (const action of orderActions) {
+          if (!known.has(key(from, action))) {
+            expect(orderTransition(from, action, kind), key(from, action)).toBeNull();
+          }
         }
       }
-    }
+    });
+
+    it("moves an order out of a final status only by a late close or the administrator", () => {
+      for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
+        for (const action of orderActions) {
+          if (action === "close_late" || action === "admin_close") {
+            continue;
+          }
+          expect(orderTransition(status, action, kind), `${status}/${action}`).toBeNull();
+        }
+      }
+      // Neither of the two touches an order already given out, cancelled or declined.
+      for (const status of [
+        "completed",
+        "cancelled_by_user",
+        "declined_by_supplier",
+        "cancelled_by_admin",
+      ] as const) {
+        expect(orderTransition(status, "close_late", kind)).toBeNull();
+        expect(orderTransition(status, "admin_close", kind)).toBeNull();
+      }
+      // An order that is over is never cancelled by the administrator.
+      for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
+        expect(orderTransition(status, "admin_cancel", kind), status).toBeNull();
+      }
+      // An order the supplier never answered, or whose term the user never
+      // agreed to, is never closed late (PRODUCT 10.7).
+      expect(orderTransition("response_expired", "close_late", kind)).toBeNull();
+      expect(orderTransition("term_expired", "close_late", kind)).toBeNull();
+    });
+
+    it("gives no way to «completed» but the code, the late code and the administrator", () => {
+      const toCompleted = orderActions.filter((action) =>
+        orderStatuses.some((from) => orderTransition(from, action, kind) === "completed"),
+      );
+      expect([...toCompleted]).toEqual(["close", "close_late", "admin_close"]);
+      expect(orderTransition("created", "close", kind)).toBeNull();
+    });
+
+    it("lets the administrator cancel exactly what the user may cancel", () => {
+      expect(orderActionSources("admin_cancel", kind)).toEqual(orderActionSources("cancel", kind));
+    });
   });
 
-  it("moves an order out of a final status only by a late close or the administrator", () => {
-    for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
-      for (const action of orderActions) {
-        if (action === "close_late" || action === "admin_close") {
-          continue;
-        }
-        expect(orderTransition(status, action), `${status}/${action}`).toBeNull();
+  it("knows no talk of a term for an item in stock", () => {
+    for (const action of ["propose_term", "agree_term", "reject_term", "expire_term"] as const) {
+      expect(orderActionSources(action, "stock"), action).toEqual([]);
+      for (const from of orderStatuses) {
+        expect(orderTransition(from, action, "stock"), `${from}/${action}`).toBeNull();
       }
     }
-    // Neither of the two touches an order already given out, cancelled or declined.
-    for (const status of [
-      "completed",
-      "cancelled_by_user",
-      "declined_by_supplier",
-      "cancelled_by_admin",
-    ] as const) {
-      expect(orderTransition(status, "close_late")).toBeNull();
-      expect(orderTransition(status, "admin_close")).toBeNull();
-    }
-    // An order that is over is never cancelled by the administrator: the
-    // expired ones are settled by `admin_close` if there is a dispute.
-    for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
-      expect(orderTransition(status, "admin_cancel"), status).toBeNull();
-    }
-    // An order the supplier never answered is never closed late (PRODUCT 10.7).
-    expect(orderTransition("response_expired", "close_late")).toBeNull();
+    expect(orderTransition("term_proposed", "cancel", "stock")).toBeNull();
   });
 
-  it("closes straight from «accepted» (D-040) and gives no other way to «completed»", () => {
-    expect(orderTransition("accepted", "close")).toBe("completed");
-    expect(orderTransition("created", "close")).toBeNull();
-    // Exactly three moves reach «completed»: the code or the QR of the
-    // company's own employee (in time or late) and the administrator.
-    const toCompleted = orderActions.filter((action) =>
-      orderStatuses.some((from) => orderTransition(from, action) === "completed"),
+  it("gives an order under order a reserve only once it is ready", () => {
+    expect(orderTransition("accepted", "expire_reserve", "on_order")).toBeNull();
+    expect(orderTransition("ready", "expire_reserve", "on_order")).toBe("reserve_expired");
+    expect(orderTransition("accepted", "expire_reserve", "stock")).toBe("reserve_expired");
+  });
+
+  it("takes an order under order on only by the supplier's confirmation or the user's «yes»", () => {
+    const toAccepted = orderActions.filter((action) =>
+      orderStatuses.some((from) => orderTransition(from, action, "on_order") === "accepted"),
     );
-    expect([...toCompleted]).toEqual(["close", "close_late", "admin_close"]);
+    expect([...toAccepted]).toEqual(["accept", "agree_term"]);
+    // The supplier can't skip the user's answer, nor propose again.
+    expect(orderTransition("term_proposed", "accept", "on_order")).toBeNull();
+    expect(orderTransition("term_proposed", "propose_term", "on_order")).toBeNull();
+    expect(orderTransition("term_proposed", "mark_ready", "on_order")).toBeNull();
+    expect(orderTransition("term_proposed", "close", "on_order")).toBeNull();
   });
 
-  it("names the sources and the actor of each action", () => {
-    expect(orderActionSources("accept")).toEqual(["created"]);
-    expect(orderActionSources("cancel")).toEqual(["created", "accepted", "ready"]);
-    expect(orderActionSources("close_late")).toEqual(["reserve_expired"]);
+  it("names the actor of each action", () => {
     expect(orderActionActor.accept).toBe("supplier");
     expect(orderActionActor.cancel).toBe("user");
     expect(orderActionActor.expire_reserve).toBe("system");
     expect(orderActionActor.close_late).toBe("supplier");
     expect(orderActionActor.admin_close).toBe("admin");
-    expect(orderActionSources("admin_cancel")).toEqual(orderActionSources("cancel"));
     expect(orderActionActor.admin_cancel).toBe("admin");
+    expect(orderActionActor.propose_term).toBe("supplier");
+    expect(orderActionActor.agree_term).toBe("user");
+    expect(orderActionActor.reject_term).toBe("user");
+    expect(orderActionActor.expire_term).toBe("system");
+    expect(orderActionSources("accept", "stock")).toEqual(["created"]);
+    expect(orderActionSources("close_late", "on_order")).toEqual(["reserve_expired"]);
   });
 
   it("keeps the active statuses those an order still goes through", () => {
-    expect([...activeOrderStatuses]).toEqual(["created", "accepted", "ready"]);
+    expect([...activeOrderStatuses]).toEqual(["created", "accepted", "ready", "term_proposed"]);
     expect(isActiveOrderStatus("ready")).toBe(true);
+    expect(isActiveOrderStatus("term_proposed")).toBe(true);
     expect(isActiveOrderStatus("reserve_expired")).toBe(false);
+    expect(isActiveOrderStatus("term_expired")).toBe(false);
+    // Every active status has a move out of it for some kind; a final one has
+    // none but the two exceptions.
+    for (const status of activeOrderStatuses) {
+      const out = orderKinds.some((kind) =>
+        orderActions.some((action) => orderTransition(status, action, kind) !== null),
+      );
+      expect(out, status).toBe(true);
+    }
   });
 
   it("marks apart the active orders awaiting a receipt (PRODUCT 6.7)", () => {
@@ -124,10 +217,27 @@ describe("orderTransition", () => {
       expect(isActiveOrderStatus(status), status).toBe(true);
     }
     expect(orderAwaitsReceipt("created")).toBe(false);
+    expect(orderAwaitsReceipt("term_proposed")).toBe(false);
     expect(orderAwaitsReceipt("accepted")).toBe(true);
     expect(orderAwaitsReceipt("completed")).toBe(false);
     for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
       expect(orderAwaitsReceipt(status), status).toBe(false);
+    }
+  });
+
+  it("asks the user for an answer only while another term waits for it", () => {
+    expect([...answerAwaitingOrderStatuses]).toEqual(["term_proposed"]);
+    for (const status of orderStatuses) {
+      expect(orderNeedsAnswer(status), status).toBe(status === "term_proposed");
+    }
+    // The user's answer is exactly the moves out of these statuses that are theirs.
+    for (const status of answerAwaitingOrderStatuses) {
+      const userMoves = orderActions.filter(
+        (action) =>
+          orderActionActor[action] === "user" &&
+          orderTransition(status, action, "on_order") !== null,
+      );
+      expect(userMoves).toEqual(["cancel", "agree_term", "reject_term"]);
     }
   });
 });

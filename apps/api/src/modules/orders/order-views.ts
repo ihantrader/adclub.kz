@@ -8,6 +8,7 @@ import type {
   DisciplineMark,
   ItemPhotoImage,
   LocalizedText,
+  OnOrderTerm,
   OrderActor,
   OrderClosure,
   OrderEvent,
@@ -24,7 +25,13 @@ import type {
   UserOrderStep,
   UserOrderSummary,
 } from "@adclub/contracts";
-import { hidePhone, isActiveOrderStatus, localDateTime, orderAwaitsReceipt } from "@adclub/domain";
+import {
+  hidePhone,
+  isActiveOrderStatus,
+  localDateTime,
+  orderAwaitsReceipt,
+  orderNeedsAnswer,
+} from "@adclub/domain";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { account, adminUser, supplier, supplierMember } from "../identity";
@@ -54,6 +61,13 @@ import { orderEvent, type OrderEventRow, type OrderRow } from "./schema";
  * A field a side mustn't have is absent from its answer, not empty, and
  * each variant is built field by field here — nothing spreads a row into
  * an answer, so a new column never leaks by itself.
+ *
+ * TASK-037: an order under order shows every side the same term
+ * (`onOrderTerm`: expected, proposed with «ответьте до», confirmed,
+ * overdue); the customer's phone reaches the supplier once the term is
+ * confirmed — by «Подтвердить срок» or by the user's «yes» to another term
+ * (`phone_revealed_at` is set by exactly those two moves) — never while the
+ * user is still deciding.
  *
  * TASK-023 adds two more views of the user's own orders, built by the
  * same hand: the saved copy of the active ones (`activeCopyEntries` — the
@@ -136,6 +150,41 @@ function iso(date: Date): string {
   return date.toISOString();
 }
 
+/**
+ * The term of an order under order (TASK-037) — the same for the user, the
+ * supplier and the administrator: what was expected, what was proposed and
+ * until when the user answers, what is confirmed, and whether the supply is
+ * overdue. An order in stock has none.
+ */
+function onOrderTermOf(row: OrderRow): OnOrderTerm | null {
+  if (row.kind !== "on_order") {
+    return null;
+  }
+  return {
+    expected: { leadDays: row.offerSnapshot.leadDays, readyOn: row.expectedReadyOn },
+    proposed:
+      row.proposedLeadDays !== null &&
+      row.proposedReadyOn !== null &&
+      row.termProposedAt !== null &&
+      row.termAnswerBy !== null
+        ? {
+            leadDays: row.proposedLeadDays,
+            readyOn: row.proposedReadyOn,
+            at: iso(row.termProposedAt),
+            answerBy: iso(row.termAnswerBy),
+          }
+        : null,
+    confirmed:
+      row.confirmedLeadDays !== null && row.acceptedAt !== null
+        ? { leadDays: row.confirmedLeadDays, readyOn: row.receiptOn, at: iso(row.acceptedAt) }
+        : null,
+    overdueSince:
+      row.supplyOverdueNotedAt !== null && row.supplyOverdueAt !== null
+        ? iso(row.supplyOverdueAt)
+        : null,
+  };
+}
+
 function baseOf(row: OrderRow, lang: CatalogLanguage) {
   return {
     id: row.id,
@@ -152,6 +201,7 @@ function baseOf(row: OrderRow, lang: CatalogLanguage) {
     respondBy: iso(row.respondBy),
     reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
     receiptOn: row.receiptOn,
+    onOrderTerm: onOrderTermOf(row),
     createdAt: iso(row.createdAt),
   };
 }
@@ -174,6 +224,9 @@ function detailsOf(payload: Record<string, unknown>): OrderEventDetails {
     "previousDeadline",
     "minutes",
     "adminNote",
+    "leadDays",
+    "readyOn",
+    "answerBy",
   ] as const) {
     if (payload[key] !== undefined && payload[key] !== null) {
       details[key] = payload[key];
@@ -526,6 +579,10 @@ function mainDateOf(row: OrderRow): ActiveOrderMainDate | null {
   if (row.expiresAt) {
     return { kind: "reserve_until", at: iso(row.expiresAt) };
   }
+  // TASK-037: «Ответьте до {время}, иначе заявка отменится» (M-ORD-03).
+  if (row.status === "term_proposed" && row.termAnswerBy) {
+    return { kind: "answer_by", at: iso(row.termAnswerBy) };
+  }
   return row.status === "created" ? { kind: "respond_by", at: iso(row.respondBy) } : null;
 }
 
@@ -578,11 +635,12 @@ export async function activeCopyEntries(
       confirmation: { code: row.confirmationCode, qrPayload: qrPayload(row.qrToken) },
       mainDate: mainDateOf(row),
       awaitsReceipt: orderAwaitsReceipt(row.status),
-      // An order in stock never waits for the user's word; EPIC-13 (another
-      // term, another time for a service) does.
-      needsAnswer: false,
+      // An order in stock never waits for the user's word; another term of an
+      // order under order does (TASK-037), another time of a service will.
+      needsAnswer: orderNeedsAnswer(row.status),
       respondBy: iso(row.respondBy),
       reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
+      onOrderTerm: onOrderTermOf(row),
       createdAt: iso(row.createdAt),
       updatedAt: iso(row.updatedAt),
     };
@@ -649,7 +707,7 @@ export async function historyMonths(
       // (SCREENS M-ORD-03 «Правила», D-043).
       givenOut: givenOutOf(row),
       // Whether the same offer can be had right now is `GET /orders/{id}/repeat`.
-      canRepeat: row.kind === "stock",
+      canRepeat: row.kind === "stock" || row.kind === "on_order",
       canReview: reviewable(row),
       createdAt: iso(row.createdAt),
     });
@@ -820,6 +878,8 @@ export async function adminOrderView(
       reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
       lateCloseUntil:
         row.status === "reserve_expired" && row.lateCloseUntil ? iso(row.lateCloseUntil) : null,
+      termAnswerBy:
+        row.status === "term_proposed" && row.termAnswerBy ? iso(row.termAnswerBy) : null,
     },
     cancellation:
       row.status === "cancelled_by_admin" && row.cancelledByAdminId && row.finishedAt

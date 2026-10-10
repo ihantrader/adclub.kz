@@ -18,6 +18,7 @@ export {
 } from "./order-deadlines";
 export { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
 export {
+  activeOrderStatusList,
   customerOrder,
   inSupplierStatistics,
   orderEvent,

@@ -53,7 +53,9 @@ describe("PostgreSQL: migrations and readiness", () => {
    * migration too — this keeps that from shifting the ones that follow.
    */
   async function walkDownPast(stillThere: () => Promise<boolean>): Promise<void> {
-    for (let step = 0; step < 20; step += 1) {
+    // A guard against a walk that never ends, not a check: it must exceed
+    // the number of migrations above the oldest one a test walks down to.
+    for (let step = 0; step < EXPECTED_MIGRATIONS.length; step += 1) {
       runMigrate("down", container.getConnectionUri());
       if (!(await stillThere())) {
         return;
@@ -94,6 +96,181 @@ describe("PostgreSQL: migrations and readiness", () => {
   it("records the applied migrations in the tracking table (status)", async () => {
     const { rows } = await client.query<{ name: string }>('SELECT name FROM "pgmigrations"');
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
+  });
+
+  it("holds the term of an order under order in the database, and rolls back keeping the orders (on order orders)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000137') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('on-order-city', 'Город под заказ') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Под заказ', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const location = await client.query<{ id: string }>(
+      "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+      [supplierId, city.rows[0]!.id],
+    );
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('on_order_node', 'goods', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('on_order_sub', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+      [subcategory.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const offer = await client.query<{ id: string }>(
+      "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, lead_days, pickup, delivery) VALUES ($1, $2, $3, 'generic', 1000, 'on_order', 3, true, false) RETURNING id",
+      [supplierId, location.rows[0]!.id, item.rows[0]!.id],
+    );
+    let code = 400_100;
+    const insert = (values: Record<string, unknown>) => {
+      code += 1;
+      const row = {
+        kind: "on_order",
+        user_account_id: accountId,
+        supplier_id: supplierId,
+        location_id: location.rows[0]!.id,
+        offer_id: offer.rows[0]!.id,
+        item_id: item.rows[0]!.id,
+        offer_snapshot: "{}",
+        unit_price: 1000,
+        quantity: 1,
+        total: 1000,
+        fulfillment: "pickup",
+        confirmation_code: String(code),
+        qr_token: `qr-on-order-${randomUUID()}`,
+        idempotency_key: randomUUID(),
+        respond_by: new Date(Date.now() + 3_600_000),
+        expected_ready_on: "2026-10-13",
+        status: "term_proposed",
+        proposed_lead_days: 5,
+        proposed_ready_on: "2026-10-15",
+        term_proposed_at: new Date(),
+        term_answer_by: new Date(Date.now() + 24 * 3_600_000),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO customer_order (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    // A proposal is whole; waiting for the user's answer needs one; only an
+    // order under order has a term; the phone stays closed while the user decides.
+    await expect(insert({ term_answer_by: null })).rejects.toThrow(/customer_order_term_check/);
+    await expect(
+      insert({
+        proposed_lead_days: null,
+        proposed_ready_on: null,
+        term_proposed_at: null,
+        term_answer_by: null,
+      }),
+    ).rejects.toThrow(/customer_order_term_check/);
+    await expect(insert({ kind: "stock" })).rejects.toThrow(/customer_order_term_check/);
+    await expect(insert({ proposed_lead_days: 0 })).rejects.toThrow(/customer_order_term_check/);
+    await expect(
+      insert({ accepted_at: new Date(), phone_revealed_at: new Date() }),
+    ).rejects.toThrow(/customer_order_accepted_check/);
+    // An order whose term waits for the user is going on: no finish, its code held.
+    await expect(insert({ finished_at: new Date() })).rejects.toThrow(
+      /customer_order_finished_check/,
+    );
+    const waiting = (await insert({})).rows[0]!.id;
+    const expired = (
+      await insert({
+        status: "term_expired",
+        finished_at: new Date(),
+        code_released_at: new Date(),
+      })
+    ).rows[0]!.id;
+    const confirmed = (
+      await insert({
+        status: "accepted",
+        accepted_at: new Date(),
+        phone_revealed_at: new Date(),
+        proposed_lead_days: null,
+        proposed_ready_on: null,
+        term_proposed_at: null,
+        term_answer_by: null,
+        confirmed_lead_days: 3,
+        receipt_on: "2026-10-13",
+        supply_overdue_at: new Date(),
+        supply_overdue_noted_at: new Date(),
+      })
+    ).rows[0]!.id;
+    const event = (orderId: string, action: string, from: string | null, to: string | null) =>
+      client.query(
+        `INSERT INTO order_event (order_id, action, from_status, to_status, actor_type, channel, payload)
+         VALUES ($1, $2, $3, $4, 'system', 'timer', '{}')`,
+        [orderId, action, from, to],
+      );
+    await event(waiting, "propose_term", "created", "term_proposed");
+    await event(expired, "expire_term", "term_proposed", "term_expired");
+    // The overdue supply is a note: it names no status.
+    await expect(event(confirmed, "supply_overdue", "accepted", "accepted")).rejects.toThrow(
+      /order_event_move_check/,
+    );
+    await event(confirmed, "supply_overdue", null, null);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The old rules know orders in stock only: what was still to be agreed
+    // reads as cancelled by the user, the rest keeps going; nothing is lost.
+    const orders = await client.query<{ id: string; kind: string; status: string }>(
+      "SELECT id, kind, status FROM customer_order WHERE id = ANY($1) ORDER BY status",
+      [[waiting, expired, confirmed]],
+    );
+    expect(orders.rows.map((row) => [row.kind, row.status]).sort()).toEqual([
+      ["stock", "accepted"],
+      ["stock", "cancelled_by_user"],
+      ["stock", "cancelled_by_user"],
+    ]);
+    const journal = await client.query<{
+      action: string;
+      from_status: string | null;
+      to_status: string | null;
+    }>(
+      "SELECT action, from_status, to_status FROM order_event WHERE order_id = ANY($1) ORDER BY seq",
+      [[waiting, expired, confirmed]],
+    );
+    expect(journal.rows).toEqual([
+      { action: "deadline_extended", from_status: null, to_status: null },
+      { action: "cancel", from_status: "created", to_status: "cancelled_by_user" },
+      { action: "deadline_extended", from_status: null, to_status: null },
+    ]);
+    expect(await columnExists(client, "customer_order", "term_answer_by")).toBe(false);
+    await expect(
+      client.query("UPDATE order_event SET channel = 'app' WHERE order_id = $1", [waiting]),
+    ).rejects.toThrow(/append-only/);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await columnExists(client, "customer_order", "term_answer_by")).toBe(true);
+    // What this test put in leaves with it.
+    const ids = [waiting, expired, confirmed];
+    await client.query("ALTER TABLE order_event DISABLE TRIGGER order_event_immutable");
+    await client.query("DELETE FROM order_event WHERE order_id = ANY($1)", [ids]);
+    await client.query("ALTER TABLE order_event ENABLE TRIGGER order_event_immutable");
+    await client.query("DELETE FROM customer_order WHERE id = ANY($1)", [ids]);
+    await client.query("DELETE FROM offer WHERE id = $1", [offer.rows[0]!.id]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [item.rows[0]!.id]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brand.rows[0]!.id]);
+    await client.query("DELETE FROM category WHERE code = 'on_order_sub'");
+    await client.query("DELETE FROM category WHERE code = 'on_order_node'");
+    await client.query("DELETE FROM supplier_location WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+    await walkDownPast(() => columnExists(client, "customer_order", "term_answer_by"));
   });
 
   it("holds VIN, plate and the mark of the document of a car, one VIN to a garage, and rolls back keeping the cars (account car document)", async () => {

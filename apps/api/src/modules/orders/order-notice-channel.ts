@@ -165,7 +165,7 @@ export async function noticeStatesOf(
       SELECT m.subject_id AS order_id, m.phone, ${failedAt} AS failed_at, ${deliveredAt} AS delivered_at
       FROM outbound_message m
       WHERE m.subject_type = ${ORDER_SUBJECT}
-        AND m.template = 'order_new'
+        AND m.template IN ('order_new', 'order_new_on_order')
         AND m.status <> 'cancelled'
         AND m.subject_id = ANY(${`{${orderIds.join(",")}}`}::uuid[])
     ) notices

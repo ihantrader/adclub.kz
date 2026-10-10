@@ -23,12 +23,14 @@ describe("orderCloseVerdict", () => {
     }
   });
 
-  it("asks to accept an order first", () => {
-    expect(orderCloseVerdict(facts({ status: "created", finishedAt: null }), now)).toEqual({
-      kind: "refused",
-      reason: "not_accepted",
-      at: null,
-    });
+  it("asks to accept an order first, and to wait for the user's answer to another term", () => {
+    for (const status of ["created", "term_proposed"] as const) {
+      expect(orderCloseVerdict(facts({ status, finishedAt: null }), now)).toEqual({
+        kind: "refused",
+        reason: "not_accepted",
+        at: null,
+      });
+    }
   });
 
   it("says an order already given out is closed", () => {
@@ -41,6 +43,8 @@ describe("orderCloseVerdict", () => {
       "cancelled_by_admin",
       "declined_by_supplier",
       "response_expired",
+      // TASK-037: the user never agreed to the proposed term.
+      "term_expired",
     ] as const) {
       expect(orderCloseVerdict(facts({ status }), now)).toEqual({
         kind: "refused",

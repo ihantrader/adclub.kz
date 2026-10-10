@@ -17,6 +17,7 @@
   "src/modules/identity/session/session.integration.test.ts": 32,
   "src/modules/messaging/messaging.integration.test.ts": 109,
   "src/modules/offers/offers.integration.test.ts": 23,
+  "src/modules/orders/on-order.integration.test.ts": 124,
   "src/modules/orders/order-notices.integration.test.ts": 98,
   "src/modules/orders/orders.integration.test.ts": 83,
   "src/modules/settings/settings.integration.test.ts": 33,

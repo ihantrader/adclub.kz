@@ -1,4 +1,5 @@
 import type { OfferHiddenReason } from "../offer/offer-visibility";
+import { orderKinds, type OrderKind } from "./order-machine";
 
 /**
  * «Повторить заказ» on a finished order (PRODUCT 6.5; SCREENS M-ORD-02,
@@ -17,7 +18,7 @@ import type { OfferHiddenReason } from "../offer/offer-visibility";
  * - **nothing to repeat** — the item itself left the catalog (archived, or
  *   its category hidden), the user has no club access to order with
  *   (D-059), or the order is of a kind the server can't create yet
- *   (services and orders under order — EPIC-13, stage C).
+ *   (services — TASK-038).
  *
  * The order is then placed by the ordinary `POST /orders`: repeating never
  * becomes a second way to create an order.
@@ -25,7 +26,7 @@ import type { OfferHiddenReason } from "../offer/offer-visibility";
 
 /** The facts the decision is made from; everything else is presentation. */
 export interface OrderRepeatFacts {
-  /** The kind of the finished order; only `stock` can be placed today. */
+  /** The kind of the finished order; `stock` and `on_order` can be placed today. */
   orderKind: string;
   /** The user has club access now (D-059). */
   hasClubAccess: boolean;
@@ -49,6 +50,9 @@ export type OrderRepeatDecision =
   | { kind: "catalog"; reason: OrderRepeatBlocked }
   | { kind: "unavailable"; reason: OrderRepeatImpossible };
 
+/** The kinds of orders the server creates (TASK-037 adds under order; services — TASK-038). */
+const REPEATABLE_KINDS: readonly OrderKind[] = orderKinds;
+
 /** The hidden reasons that mean the item itself is no longer in the catalog. */
 const ITEM_GONE: readonly OfferHiddenReason[] = ["item_unavailable", "category_hidden"];
 
@@ -58,7 +62,7 @@ export function orderRepeatDecision(facts: OrderRepeatFacts): OrderRepeatDecisio
   if (!facts.hasClubAccess) {
     return { kind: "unavailable", reason: "club_access_required" };
   }
-  if (facts.orderKind !== "stock") {
+  if (!(REPEATABLE_KINDS as readonly string[]).includes(facts.orderKind)) {
     return { kind: "unavailable", reason: "kind_not_supported" };
   }
   if (facts.offerVisible) {

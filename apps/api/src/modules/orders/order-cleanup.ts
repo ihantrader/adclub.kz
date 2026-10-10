@@ -3,7 +3,7 @@ import { and, asc, inArray, isNotNull, lt, notInArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { defineSweeperJob, JobRegistry, type Sweeper, type SweepResult } from "../../jobs";
 import { AppSettings } from "../settings";
-import { customerOrder } from "./schema";
+import { activeOrderStatusList, customerOrder } from "./schema";
 
 /**
  * The key of a creation request doesn't live for ever (TASK-022, debt 7 of
@@ -79,7 +79,7 @@ export class OrderIdempotencyCleanup implements Sweeper<Date>, OnModuleInit {
           inArray(customerOrder.id, ids),
           isNotNull(customerOrder.finishedAt),
           lt(customerOrder.finishedAt, cutoff),
-          sql`${customerOrder.status} NOT IN ('created', 'accepted', 'ready')`,
+          sql`${customerOrder.status} NOT IN (${activeOrderStatusList()})`,
         ),
       );
   }

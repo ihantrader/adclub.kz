@@ -220,8 +220,9 @@ import { clientPlatformSchema } from "./client";
  * - `ORDER_OFFER_UNAVAILABLE` (409): the offer isn't on the showcase any
  *   more (withdrawn, the supplier paused, the item archived…) or never
  *   was — «Поставщик снял это предложение».
- * - `ORDER_KIND_NOT_SUPPORTED` (409): the offer is under order — such
- *   orders come with EPIC-13.
+ * - `ORDER_KIND_NOT_SUPPORTED` (409): the offer is of a kind the server
+ *   can't order yet. Since TASK-037 an offer under order is ordered (an
+ *   order with a term, ARCHITECTURE 6.2); services come with TASK-038.
  * - `ORDER_FULFILLMENT_UNAVAILABLE` (409): the offer doesn't give the
  *   chosen way to get it (pickup or delivery).
  * - `ORDER_PRICE_CHANGED` (409): the price isn't the one the user saw;

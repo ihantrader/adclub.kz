@@ -4354,7 +4354,9 @@
                 "declined_by_supplier",
                 "response_expired",
                 "reserve_expired",
-                "cancelled_by_admin"
+                "cancelled_by_admin",
+                "term_proposed",
+                "term_expired"
               ]
             }
           },
@@ -5148,7 +5150,8 @@
                 "duplicate_after_late_close",
                 "frequent_admin_closes",
                 "whatsapp_outage",
-                "supplier_unreachable"
+                "supplier_unreachable",
+                "supply_overdue"
               ]
             }
           },
@@ -12531,6 +12534,134 @@
         }
       }
     },
+    "/orders/{orderId}/term/agree": {
+      "post": {
+        "operationId": "agreeUserOrderTerm",
+        "summary": "Agree to the other term the supplier proposed for an order under order (M-ORD-03 «Согласиться»): the order is taken on with that term — «Срок подтверждён» — and the supplier sees the customer's phone. Only the user of the order; after the answer deadline the order has expired — 409 ORDER_STATE_CONFLICT with `term_expired`",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The version seen",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderTermAnswerBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/term/reject": {
+      "post": {
+        "operationId": "rejectUserOrderTerm",
+        "summary": "Say no to the other term the supplier proposed (M-ORD-03 «Отказаться»): the order is cancelled by the user and the supplier is told so. Only the user of the order",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The version seen",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderTermAnswerBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/ready": {
       "get": {
         "operationId": "getReadiness",
@@ -13910,7 +14041,8 @@
                 "declined_by_supplier",
                 "response_expired",
                 "reserve_expired",
-                "cancelled_by_admin"
+                "cancelled_by_admin",
+                "term_expired"
               ]
             }
           },
@@ -14046,7 +14178,7 @@
     "/supplier/orders/{orderId}/accept": {
       "post": {
         "operationId": "acceptSupplierOrder",
-        "summary": "Accept a new order: the customer's phone opens, the pickup reserve starts. A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
+        "summary": "Accept a new order: the customer's phone opens, the pickup reserve starts. For an order under order this is «Подтвердить срок» — the term the customer agreed to, no reserve until it is ready (TASK-037). A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
         "tags": [
           "supplier"
         ],
@@ -14166,6 +14298,74 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeclineOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/orders/{orderId}/propose-term": {
+      "post": {
+        "operationId": "proposeSupplierOrderTerm",
+        "summary": "Propose another term for a new order under order (S-ORD-04, TASK-037): working days of the company, at least 1, at most the setting, not the term already agreed; the answer has the date it gives and until when the customer answers. Confirming the agreed term is `…/accept`. A colleague who acted first — 409 ORDER_STATE_CONFLICT naming them",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perMember": "order_actions_per_member",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "The version seen and the term in working days",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeOrderTermBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOrderResponse"
                 }
               }
             }
@@ -14869,6 +15069,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -14898,6 +15108,7 @@
           "needsAnswer",
           "respondBy",
           "reserveUntil",
+          "onOrderTerm",
           "createdAt",
           "updatedAt"
         ]
@@ -14909,7 +15120,8 @@
             "type": "string",
             "enum": [
               "respond_by",
-              "reserve_until"
+              "reserve_until",
+              "answer_by"
             ]
           },
           "at": {
@@ -17714,6 +17926,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -17907,12 +18129,25 @@
                     "type": "null"
                   }
                 ]
+              },
+              "termAnswerBy": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "respondBy",
               "reserveUntil",
-              "lateCloseUntil"
+              "lateCloseUntil",
+              "termAnswerBy"
             ]
           },
           "cancellation": {
@@ -17968,6 +18203,7 @@
           "respondBy",
           "reserveUntil",
           "receiptOn",
+          "onOrderTerm",
           "createdAt",
           "offerId",
           "handledBy",
@@ -18218,6 +18454,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -18318,6 +18564,7 @@
           "respondBy",
           "reserveUntil",
           "receiptOn",
+          "onOrderTerm",
           "createdAt",
           "offerId",
           "handledBy",
@@ -18797,7 +19044,8 @@
           "duplicate_after_late_close",
           "frequent_admin_closes",
           "whatsapp_outage",
-          "supplier_unreachable"
+          "supplier_unreachable",
+          "supply_overdue"
         ]
       },
       "AdminSignalListQuery": {
@@ -18976,6 +19224,14 @@
             "maximum": 9007199254740991
           },
           "recipientsWithoutWhatsapp": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "readyOn": {
+            "type": "string"
+          },
+          "leadDays": {
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
@@ -26861,6 +27117,129 @@
           "missing_in_import"
         ]
       },
+      "OnOrderTerm": {
+        "type": "object",
+        "properties": {
+          "expected": {
+            "type": "object",
+            "properties": {
+              "leadDays": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "readyOn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "leadDays",
+              "readyOn"
+            ]
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "leadDays": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "readyOn": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "answerBy": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "leadDays",
+                  "readyOn",
+                  "at",
+                  "answerBy"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "leadDays": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "readyOn": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "leadDays",
+                  "readyOn",
+                  "at"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overdueSince": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "expected",
+          "proposed",
+          "confirmed",
+          "overdueSince"
+        ]
+      },
       "OnboardSupplierLeadBody": {
         "type": "object",
         "properties": {
@@ -27027,7 +27406,10 @@
           "close_late",
           "admin_close",
           "cancel",
-          "admin_cancel"
+          "admin_cancel",
+          "propose_term",
+          "agree_term",
+          "reject_term"
         ]
       },
       "OrderCloseMethod": {
@@ -27046,7 +27428,8 @@
           "declined_by_supplier",
           "response_expired",
           "late_window_passed",
-          "cancelled_by_admin"
+          "cancelled_by_admin",
+          "term_expired"
         ]
       },
       "OrderClosure": {
@@ -27153,7 +27536,8 @@
         "type": "string",
         "enum": [
           "response",
-          "reserve"
+          "reserve",
+          "term"
         ]
       },
       "OrderDeclineReason": {
@@ -27263,7 +27647,12 @@
           "reserve_expiring",
           "late_action_ignored",
           "deadline_extended",
-          "admin_cancel"
+          "admin_cancel",
+          "propose_term",
+          "agree_term",
+          "reject_term",
+          "expire_term",
+          "supply_overdue"
         ]
       },
       "OrderEventDetails": {
@@ -27312,7 +27701,8 @@
             "type": "string",
             "enum": [
               "response",
-              "reserve"
+              "reserve",
+              "term"
             ]
           },
           "previousDeadline": {
@@ -27324,6 +27714,20 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "leadDays": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "readyOn": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "answerBy": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
           "adminNote": {
             "type": "string"
@@ -27455,7 +27859,8 @@
       "OrderKind": {
         "type": "string",
         "enum": [
-          "stock"
+          "stock",
+          "on_order"
         ]
       },
       "OrderLookupResponse": {
@@ -27739,7 +28144,22 @@
           "declined_by_supplier",
           "response_expired",
           "reserve_expired",
-          "cancelled_by_admin"
+          "cancelled_by_admin",
+          "term_proposed",
+          "term_expired"
+        ]
+      },
+      "OrderTermAnswerBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "expectedVersion"
         ]
       },
       "OrderTerms": {
@@ -27831,6 +28251,25 @@
         },
         "required": [
           "minSupportedVersion"
+        ]
+      },
+      "ProposeOrderTermBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "leadDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "leadDays"
         ]
       },
       "RateLimitName": {
@@ -31030,7 +31469,8 @@
           "declined_by_supplier",
           "response_expired",
           "reserve_expired",
-          "cancelled_by_admin"
+          "cancelled_by_admin",
+          "term_expired"
         ]
       },
       "SupplierInvitation": {
@@ -31913,6 +32353,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -32055,6 +32505,7 @@
           "respondBy",
           "reserveUntil",
           "receiptOn",
+          "onOrderTerm",
           "createdAt",
           "offerId",
           "handledBy",
@@ -32245,6 +32696,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -32320,6 +32781,7 @@
           "respondBy",
           "reserveUntil",
           "receiptOn",
+          "onOrderTerm",
           "createdAt",
           "offerId",
           "handledBy",
@@ -34421,6 +34883,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -34486,6 +34958,7 @@
           "respondBy",
           "reserveUntil",
           "receiptOn",
+          "onOrderTerm",
           "createdAt",
           "supplier",
           "version",
@@ -34789,6 +35262,16 @@
               }
             ]
           },
+          "onOrderTerm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnOrderTerm"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -34813,6 +35296,7 @@
           "respondBy",
           "reserveUntil",
           "receiptOn",
+          "onOrderTerm",
           "createdAt",
           "supplier"
         ]

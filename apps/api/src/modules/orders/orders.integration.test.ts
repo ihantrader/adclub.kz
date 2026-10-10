@@ -948,13 +948,8 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
         "ORDER_OFFER_UNAVAILABLE",
       );
 
-      // Under order — EPIC-13; pickup only — no delivery.
-      const onOrder = await put(shop, padsId, { availability: "on_order", leadDays: 3 });
-      expectError(
-        await buyer.as("post", "/orders", orderBody(onOrder)),
-        409,
-        "ORDER_KIND_NOT_SUPPORTED",
-      );
+      // Pickup only — no delivery. (An offer under order is ordered since
+      // TASK-037: on-order.integration.test.ts.)
       const pickupOnly = await put(shop, rearPadsId, { delivery: false });
       expectError(
         await buyer.as("post", "/orders", orderBody(pickupOnly, { fulfillment: "delivery" })),

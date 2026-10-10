@@ -8,6 +8,7 @@ import {
   oneLine,
   orderStateText,
   phoneText,
+  termText,
 } from "./order-notice-texts";
 
 const item = (
@@ -85,10 +86,22 @@ describe("the values of the notices of orders (TASK-025, SCREENS 8.5)", () => {
         now,
       ),
     ).toBe("отменена клиентом");
-    for (const status of ["response_expired", "reserve_expired"] as const) {
+    for (const status of ["response_expired", "reserve_expired", "term_expired"] as const) {
       expect(orderStateText({ ...facts, status }, "ru", now)).toBe("истекла");
       expect(orderStateText({ ...facts, status }, "kk", now)).toBe("мерзімі өткен");
     }
+    // TASK-037: a colleague proposed another term.
+    expect(orderStateText({ ...facts, status: "term_proposed" }, "ru", now)).toBe(
+      "предложен другой срок: Марат, 12:40",
+    );
     expect(ACCESS_CLOSED_TEXT.ru).toBe("недоступна: доступ к кабинету закрыт");
+  });
+
+  it("says the term of W-01a by its date, or by its working days without one (TASK-037)", () => {
+    expect(termText("2026-03-14", 3, "ru")).toBe("14 марта");
+    expect(termText("2026-03-14", 3, "kk")).toBe("14 наурыз");
+    expect(termText("2026-12-01", 3, "ru")).toBe("1 декабря");
+    expect(termText(null, 3, "ru")).toBe("3 раб. дн.");
+    expect(termText(null, 3, "kk")).toBe("3 жұмыс күні");
   });
 });

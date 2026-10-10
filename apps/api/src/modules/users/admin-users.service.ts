@@ -9,7 +9,12 @@ import {
   type AdminUserSessionListResponse,
   type AdminUserSummary,
 } from "@adclub/contracts";
-import { hidePhone, isRegistrationComplete, phoneSearchDigits } from "@adclub/domain";
+import {
+  activeOrderStatuses,
+  hidePhone,
+  isRegistrationComplete,
+  phoneSearchDigits,
+} from "@adclub/domain";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
@@ -27,6 +32,12 @@ export interface AdminActor {
 }
 
 const DAY_MS = 86_400_000;
+
+/** «Активные заявки» of a user: the one list of active statuses (TASK-037 added `term_proposed`). */
+const ACTIVE_ORDER_STATUSES = sql.join(
+  activeOrderStatuses.map((status) => sql`${status}`),
+  sql`, `,
+);
 
 export function userNotFound(): ApiException {
   return new ApiException(404, "NOT_FOUND", "No such user");
@@ -228,7 +239,7 @@ export class AdminUsersService {
       }>(sql`SELECT
           (SELECT count(*)::int FROM customer_order WHERE user_account_id = ${accountId}) AS orders,
           (SELECT count(*)::int FROM customer_order WHERE user_account_id = ${accountId}
-            AND status IN ('created', 'accepted', 'ready')) AS active_orders,
+            AND status IN (${ACTIVE_ORDER_STATUSES})) AS active_orders,
           (SELECT count(*)::int FROM user_discipline_event WHERE user_account_id = ${accountId}
             AND revoked_at IS NULL) AS no_shows,
           (SELECT count(*)::int FROM user_discipline_event WHERE user_account_id = ${accountId}

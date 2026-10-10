@@ -35,6 +35,7 @@ export type OrderCloseRefusal =
   | "cancelled_by_admin"
   | "declined_by_supplier"
   | "response_expired"
+  | "term_expired"
   | "late_window_passed";
 
 export type OrderCloseVerdict =
@@ -58,14 +59,20 @@ export function orderCloseVerdict(facts: OrderCloseFacts, at: Date): OrderCloseV
     case "accepted":
     case "ready":
       return { kind: "now" };
+    // Under order (TASK-037), another term waiting for the user's answer is
+    // not accepted yet either: there is nothing to give out.
     case "created":
+    case "term_proposed":
       return { kind: "refused", reason: "not_accepted", at: null };
     case "completed":
       return { kind: "closed" };
+    // The user never agreed to the proposed term: as an order the supplier
+    // never answered, it is never closed late (PRODUCT 10.7).
     case "cancelled_by_user":
     case "cancelled_by_admin":
     case "declined_by_supplier":
     case "response_expired":
+    case "term_expired":
       return { kind: "refused", reason: facts.status, at: facts.finishedAt };
     case "reserve_expired": {
       const until = facts.lateCloseUntil;

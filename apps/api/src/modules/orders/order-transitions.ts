@@ -12,6 +12,7 @@ import {
 } from "@adclub/contracts";
 import {
   acceptedReserveEnd,
+  countsInStatistics,
   lateCloseUntil,
   orderTransition,
   readyReserveEnd,
@@ -19,6 +20,8 @@ import {
   reserveWarningAt,
   supplierOrderMoveVerdict,
   supplierState,
+  supplyOverdueAt,
+  termAnswerBy,
   type OrderAction,
 } from "@adclub/domain";
 import { and, desc, eq, gte, isNotNull, ne, sql, type SQL } from "drizzle-orm";
@@ -104,6 +107,12 @@ export interface MoveRequest {
   close?: { method: OrderCloseMethod; reason?: string };
   /** The administrator's cancel (TASK-036.B): why — always. */
   cancel?: { reason: string };
+  /**
+   * Another term of an order under order (TASK-037), in working days; the
+   * caller has checked it (`proposedTermProblem`) and that the point's
+   * schedule gives a date for it in this transaction.
+   */
+  term?: { leadDays: number };
 }
 
 export type MoveOutcome =
@@ -144,10 +153,15 @@ export type ExtensionOutcome =
       reason: "changed" | "not_waiting" | "expired" | "not_found";
     };
 
-type DeadlineAction = "expire_no_response" | "expire_reserve";
+type DeadlineAction = "expire_no_response" | "expire_reserve" | "expire_term";
+
+function isExpiry(due: ReturnType<typeof dueDeadline>): due is DeadlineAction {
+  return due === "expire_no_response" || due === "expire_reserve" || due === "expire_term";
+}
 
 /** What the sweeper did to one order. */
-export type DeadlineOutcome = DeadlineAction | "reserve_warned" | "code_released" | null;
+export type DeadlineOutcome =
+  DeadlineAction | "reserve_warned" | "code_released" | "supply_overdue" | null;
 
 /** How many times a lost race is decided again before giving up with a conflict. */
 const MAX_ATTEMPTS = 5;
@@ -162,9 +176,23 @@ function iso(date: Date | null | undefined): string | undefined {
 export function dueDeadline(
   row: OrderRow,
   at: Date,
-): DeadlineAction | "warn" | "release_code" | null {
+): DeadlineAction | "warn" | "release_code" | "supply_overdue" | null {
   if (row.status === "created" && row.respondBy <= at) {
     return "expire_no_response";
+  }
+  // TASK-037: the user did not answer another term in time.
+  if (row.status === "term_proposed" && row.termAnswerBy !== null && row.termAnswerBy <= at) {
+    return "expire_term";
+  }
+  // TASK-037: the confirmed date has passed and the goods are not ready — a
+  // note, once per order; the status stays (ARCHITECTURE 6.2).
+  if (
+    row.status === "accepted" &&
+    row.supplyOverdueAt !== null &&
+    row.supplyOverdueNotedAt === null &&
+    row.supplyOverdueAt <= at
+  ) {
+    return "supply_overdue";
   }
   if (row.status === "accepted" || row.status === "ready") {
     if (row.expiresAt && row.expiresAt <= at) {
@@ -236,6 +264,11 @@ function sameParameters(row: OrderRow, request: MoveRequest): boolean {
   if (request.action === "admin_cancel") {
     return row.cancelReason === (request.cancel?.reason ?? null);
   }
+  // Another term proposed again: the same term is a double tap, another
+  // one is not quietly dropped (TASK-037).
+  if (request.action === "propose_term") {
+    return row.proposedLeadDays === (request.term?.leadDays ?? null);
+  }
   return true;
 }
 
@@ -262,7 +295,7 @@ export class OrderTransitions {
       const at = await databaseNow(tx);
       const row = await this.read(tx, request.orderId);
       const due = dueDeadline(row, at);
-      if (due === "expire_no_response" || due === "expire_reserve") {
+      if (isExpiry(due)) {
         await this.apply(tx, row, due, { type: "system" }, "timer", at);
         continue;
       }
@@ -270,13 +303,14 @@ export class OrderTransitions {
         (request.expectedVersion !== undefined && row.version !== request.expectedVersion) ||
         (request.onlyFrom !== undefined && !request.onlyFrom.includes(row.status));
       const action = this.wanted(row, request);
-      if (stale || orderTransition(row.status, action) === null) {
+      if (stale || orderTransition(row.status, action, row.kind) === null) {
         return this.refuse(tx, row, request, at);
       }
       const moved = await this.apply(tx, row, action, request.actor, request.channel, at, {
         decline: request.decline,
         close: request.close,
         cancel: request.cancel,
+        term: request.term,
       });
       if (moved) {
         return { kind: "moved", order: moved };
@@ -330,10 +364,10 @@ export class OrderTransitions {
    * walking to the counter gives it out late, not «nothing to do here».
    */
   private wanted(row: OrderRow, request: MoveRequest): PersonAction {
-    if (orderTransition(row.status, request.action) !== null) {
+    if (orderTransition(row.status, request.action, row.kind) !== null) {
       return request.action;
     }
-    if (request.orElse && orderTransition(row.status, request.orElse) !== null) {
+    if (request.orElse && orderTransition(row.status, request.orElse, row.kind) !== null) {
       return request.orElse;
     }
     return request.action;
@@ -350,8 +384,11 @@ export class OrderTransitions {
     const at = await databaseNow(tx);
     const row = await this.read(tx, orderId);
     const due = dueDeadline(row, at);
-    if (due === "expire_no_response" || due === "expire_reserve") {
+    if (isExpiry(due)) {
       return (await this.apply(tx, row, due, { type: "system" }, "timer", at)) ? due : null;
+    }
+    if (due === "supply_overdue") {
+      return (await this.noteSupplyOverdue(tx, row, at)) ? "supply_overdue" : null;
     }
     if (due === "warn") {
       return (await this.warn(tx, row, at)) ? "reserve_warned" : null;
@@ -387,17 +424,31 @@ export class OrderTransitions {
         return { kind: "refused", order: null, reason: "not_found" };
       }
       const due = dueDeadline(row, at);
-      if (due === "expire_no_response" || due === "expire_reserve") {
+      if (isExpiry(due)) {
         await this.apply(tx, row, due, { type: "system" }, "timer", at);
         continue;
       }
-      const current = request.deadline === "response" ? row.respondBy : row.expiresAt;
+      // TASK-037: the user's answer to another term is the third deadline an
+      // administrator may move — the user hears of a proposal only in the app
+      // (no push before TASK-051), and a user who could not answer is the same
+      // case as a supplier the channel did not reach (ARCHITECTURE 4.59).
+      const current =
+        request.deadline === "response"
+          ? row.respondBy
+          : request.deadline === "term"
+            ? row.termAnswerBy
+            : row.expiresAt;
       const waiting =
         request.deadline === "response"
           ? row.status === "created"
-          : (row.status === "accepted" || row.status === "ready") && row.expiresAt !== null;
+          : request.deadline === "term"
+            ? row.status === "term_proposed"
+            : (row.status === "accepted" || row.status === "ready") && row.expiresAt !== null;
       if (!waiting || current === null) {
-        const expired = row.status === "response_expired" || row.status === "reserve_expired";
+        const expired =
+          row.status === "response_expired" ||
+          row.status === "reserve_expired" ||
+          row.status === "term_expired";
         return { kind: "refused", order: row, reason: expired ? "expired" : "not_waiting" };
       }
       if (row.version !== request.expectedVersion) {
@@ -410,6 +461,8 @@ export class OrderTransitions {
       };
       if (request.deadline === "response") {
         set.respondBy = until;
+      } else if (request.deadline === "term") {
+        set.termAnswerBy = until;
       } else {
         const warningHours = await this.settings.get("reserve_warning_hours");
         Object.assign(set, {
@@ -589,9 +642,10 @@ export class OrderTransitions {
       decline?: MoveRequest["decline"];
       close?: MoveRequest["close"];
       cancel?: MoveRequest["cancel"];
+      term?: MoveRequest["term"];
     } = {},
   ): Promise<OrderRow | null> {
-    const to = orderTransition(row.status, action);
+    const to = orderTransition(row.status, action, row.kind);
     if (to === null) {
       return null;
     }
@@ -617,7 +671,18 @@ export class OrderTransitions {
           receiptOn: receipt?.ok ? receipt.date : null,
         });
         details.receiptOn = receipt?.ok ? receipt.date : undefined;
-        if (row.fulfillment === "pickup") {
+        if (row.kind === "on_order") {
+          // «Подтвердить срок» (TASK-037): the term the user agreed to by
+          // ordering, counted from this confirmation by the point's working
+          // days. The goods are not there yet — no reserve until «Готово».
+          Object.assign(set, {
+            confirmedLeadDays: leadDays,
+            supplyOverdueAt:
+              schedule && receipt?.ok ? supplyOverdueAt(receipt.date, schedule.timeZone) : null,
+          });
+          details.leadDays = leadDays;
+          details.readyOn = receipt?.ok ? receipt.date : undefined;
+        } else if (row.fulfillment === "pickup") {
           const [reserveHours, warningHours] = await Promise.all([
             this.settings.get("pickup_reserve_hours"),
             this.settings.get("reserve_warning_hours"),
@@ -635,8 +700,13 @@ export class OrderTransitions {
       case "mark_ready": {
         set.readyAt = at;
         if (row.fulfillment === "pickup") {
+          // The goods of an order under order have come: the user may have
+          // paid in advance outside the platform, so the reserve is its own
+          // and longer (ARCHITECTURE 6.2, `on_order_pickup_reserve_hours`).
           const [reserveHours, warningHours] = await Promise.all([
-            this.settings.get("pickup_reserve_hours"),
+            this.settings.get(
+              row.kind === "on_order" ? "on_order_pickup_reserve_hours" : "pickup_reserve_hours",
+            ),
             this.settings.get("reserve_warning_hours"),
           ]);
           const end = readyReserveEnd(row.expiresAt, at, reserveHours);
@@ -666,8 +736,58 @@ export class OrderTransitions {
         details.note = extra.decline?.note ?? undefined;
         break;
       }
+      case "propose_term": {
+        if (actor.type !== "supplier_member") {
+          throw new Error("Only an employee proposes another term");
+        }
+        const leadDays = extra.term?.leadDays;
+        const schedule = (await receiptSchedules(tx, [row.locationId])).get(row.locationId) ?? null;
+        const receipt =
+          leadDays !== undefined && schedule ? receiptDate(at, leadDays, schedule) : null;
+        if (leadDays === undefined || !receipt?.ok) {
+          // The caller checked both in this very transaction (`now()` stands still in it).
+          throw new Error("Another term needs its working days and a date to give");
+        }
+        const answerBy = termAnswerBy(at, await this.settings.get("term_agreement_hours"));
+        Object.assign(set, {
+          handledByMemberId: actor.memberId,
+          handledAt: at,
+          proposedLeadDays: leadDays,
+          proposedReadyOn: receipt.date,
+          termProposedAt: at,
+          termAnswerBy: answerBy,
+        });
+        details.leadDays = leadDays;
+        details.readyOn = receipt.date;
+        details.answerBy = answerBy.toISOString();
+        break;
+      }
+      case "agree_term": {
+        // The user's «yes»: the order is taken on with the proposed term and
+        // the date shown with it — the date the supplier committed to when
+        // proposing, not one counted again from the moment of the answer.
+        // The customer's phone opens now (ARCHITECTURE 6.2).
+        const readyOn = row.proposedReadyOn;
+        Object.assign(set, {
+          acceptedAt: at,
+          phoneRevealedAt: at,
+          confirmedLeadDays: row.proposedLeadDays,
+          receiptOn: readyOn,
+          supplyOverdueAt: readyOn
+            ? supplyOverdueAt(readyOn, row.offerSnapshot.location.timeZone)
+            : null,
+        });
+        details.leadDays = row.proposedLeadDays ?? undefined;
+        details.readyOn = readyOn ?? undefined;
+        break;
+      }
       case "cancel":
+      case "reject_term":
         set.finishedAt = at;
+        break;
+      case "expire_term":
+        set.finishedAt = at;
+        details.deadline = iso(row.termAnswerBy);
         break;
       case "expire_no_response":
         set.finishedAt = at;
@@ -745,7 +865,9 @@ export class OrderTransitions {
       action === "decline" ||
       action === "cancel" ||
       action === "admin_cancel" ||
-      action === "expire_no_response"
+      action === "expire_no_response" ||
+      action === "reject_term" ||
+      action === "expire_term"
     ) {
       // Nothing more will ever be given out on this code.
       set.codeReleasedAt = at;
@@ -766,9 +888,26 @@ export class OrderTransitions {
       return null;
     }
     await this.record(tx, updated, action, row.status, to, actor, channel, at, details);
-    if (action === "cancel") {
-      // W-04 to the supplier's employees, in this very transaction (TASK-025).
+    if (action === "cancel" || action === "reject_term") {
+      // W-04 to the supplier's employees, in this very transaction (TASK-025);
+      // the user's «no» to another term is their cancel (TASK-037).
       await this.notices.cancelled(tx, updated);
+    }
+    if (action === "agree_term" && actor.type === "user") {
+      // The customer's phone opened to the supplier by the user's own «yes»
+      // (ARCHITECTURE 8.4), and the employee who proposed the term hears it
+      // with the phone — W-02, the one notice that follows a taking on.
+      await this.audit.record(
+        {
+          action: auditActions.orderPhoneRevealed,
+          actor: { role: "user", accountId: actor.accountId },
+          entityType: auditEntities.order,
+          entityId: updated.id,
+          after: { number: updated.number },
+        },
+        tx,
+      );
+      await this.notices.termAgreed(tx, updated);
     }
     if (action === "expire_reserve") {
       // Nobody came for an item the supplier had put aside: the club's own
@@ -851,6 +990,9 @@ export class OrderTransitions {
     if (action === "expire_reserve") {
       return sql`(${customerOrder.expiresAt} IS NOT NULL AND ${customerOrder.expiresAt} <= ${now})`;
     }
+    if (action === "expire_term") {
+      return sql`(${customerOrder.termAnswerBy} IS NOT NULL AND ${customerOrder.termAnswerBy} <= ${now})`;
+    }
     if (action === "close_late") {
       return sql`(${customerOrder.lateCloseUntil} IS NOT NULL AND ${customerOrder.lateCloseUntil} > ${now}
         AND ${customerOrder.codeReleasedAt} IS NULL)`;
@@ -864,7 +1006,59 @@ export class OrderTransitions {
     }
     return sql`NOT (${customerOrder.status} = 'created' AND ${customerOrder.respondBy} <= ${now})
       AND NOT (${customerOrder.status} IN ('accepted', 'ready')
-        AND ${customerOrder.expiresAt} IS NOT NULL AND ${customerOrder.expiresAt} <= ${now})`;
+        AND ${customerOrder.expiresAt} IS NOT NULL AND ${customerOrder.expiresAt} <= ${now})
+      AND NOT (${customerOrder.status} = 'term_proposed'
+        AND ${customerOrder.termAnswerBy} IS NOT NULL AND ${customerOrder.termAnswerBy} <= ${now})`;
+  }
+
+  /**
+   * TASK-037 (ARCHITECTURE 6.2 «overdue»): the confirmed date of an order
+   * under order has passed and it is not ready — a note in its journal and a
+   * signal to the administrator, once per order (the row keeps when it was
+   * noted; the update is conditional, so two sweepers never note it twice).
+   * The status stays. A test order of an employee judges nobody
+   * (`countsInStatistics`): its journal has the note, the administrator gets
+   * no signal.
+   */
+  private async noteSupplyOverdue(tx: DbExecutor, row: OrderRow, at: Date): Promise<boolean> {
+    const now = sql`${at.toISOString()}::timestamptz`;
+    const [updated] = await tx
+      .update(customerOrder)
+      .set({ supplyOverdueNotedAt: at })
+      .where(
+        and(
+          eq(customerOrder.id, row.id),
+          eq(customerOrder.status, "accepted"),
+          sql`${customerOrder.supplyOverdueNotedAt} IS NULL`,
+          sql`${customerOrder.supplyOverdueAt} IS NOT NULL AND ${customerOrder.supplyOverdueAt} <= ${now}`,
+        ),
+      )
+      .returning();
+    if (!updated) {
+      return false;
+    }
+    await this.record(tx, updated, "supply_overdue", null, null, { type: "system" }, "timer", at, {
+      readyOn: updated.receiptOn ?? undefined,
+      leadDays: updated.confirmedLeadDays ?? undefined,
+    });
+    if (countsInStatistics(updated)) {
+      await this.signals.raise(tx, {
+        kind: "supply_overdue",
+        subjectType: "order",
+        subjectId: updated.id,
+        payload: {
+          orderId: updated.id,
+          orderNumber: updated.number,
+          supplierId: updated.supplierId,
+          supplierName: updated.offerSnapshot.supplier.name,
+          ...(updated.receiptOn ? { readyOn: updated.receiptOn } : {}),
+          ...(updated.confirmedLeadDays !== null ? { leadDays: updated.confirmedLeadDays } : {}),
+        },
+        at,
+      });
+    }
+    this.logger.log(`Order supply overdue order=${updated.id} test=${String(updated.isTest)}`);
+    return true;
   }
 
   /**

@@ -37,4 +37,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1790800000000_admin-signal-actions",
   "1790850000000_admin-cancel-order",
   "1790900000000_account-car-document",
+  "1790950000000_on-order-orders",
 ];

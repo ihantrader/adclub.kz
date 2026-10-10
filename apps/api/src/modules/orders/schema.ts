@@ -19,6 +19,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { activeOrderStatuses } from "@adclub/domain";
 import { sql, type SQL } from "drizzle-orm";
 import { account, adminUser, supplier, supplierMember } from "../identity";
 
@@ -89,6 +90,20 @@ export const customerOrder = pgTable("customer_order", {
   /** TASK-036.B: the administrator who cancelled the order, and why — their view only. */
   cancelledByAdminId: uuid("cancelled_by_admin_id").references(() => adminUser.id),
   cancelReason: text("cancel_reason"),
+  /**
+   * TASK-037, an order under order: the date the offer's term gave when
+   * ordering; another term an employee proposed, its date and until when the
+   * user answers; the term the order is held to once confirmed (its date is
+   * `receiptOn`); and when the supply became overdue and when that was noted.
+   */
+  expectedReadyOn: date("expected_ready_on"),
+  proposedLeadDays: integer("proposed_lead_days"),
+  proposedReadyOn: date("proposed_ready_on"),
+  termProposedAt: timestamp("term_proposed_at", { withTimezone: true }),
+  termAnswerBy: timestamp("term_answer_by", { withTimezone: true }),
+  confirmedLeadDays: integer("confirmed_lead_days"),
+  supplyOverdueAt: timestamp("supply_overdue_at", { withTimezone: true }),
+  supplyOverdueNotedAt: timestamp("supply_overdue_noted_at", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -161,6 +176,20 @@ export type DisciplineRow = typeof userDisciplineEvent.$inferSelect;
  */
 export function inSupplierStatistics(): SQL {
   return sql`${customerOrder.isTest} = false`;
+}
+
+/**
+ * The active statuses (`activeOrderStatuses` of `@adclub/domain`, the one
+ * definition of «активная заявка») as a list of SQL values, for the queries
+ * that count or skip them: `status IN (${activeOrderStatusList()})`. TASK-037
+ * grew the list by `term_proposed`; a query that wrote it out by hand would
+ * have missed it.
+ */
+export function activeOrderStatusList(): SQL {
+  return sql.join(
+    activeOrderStatuses.map((status) => sql`${status}`),
+    sql`, `,
+  );
 }
 
 /** Every table this module owns — checked against the migrated database. */

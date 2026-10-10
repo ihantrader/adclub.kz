@@ -25,6 +25,7 @@ import {
   oneLine,
   orderStateText,
   phoneText,
+  termText,
   type NoticeLang,
 } from "./order-notice-texts";
 import { customerOrder, type OrderRow } from "./schema";
@@ -62,8 +63,14 @@ import { customerOrder, type OrderRow } from "./schema";
 /** What every message about an order is about (`MessageSubjects`). */
 export const ORDER_SUBJECT = "order";
 
-/** The buttons of W-01 the server acts on. */
+/** The buttons of W-01 (and W-01a, TASK-037) the server acts on. */
 export const ORDER_BUTTONS = ["confirm", "decline"] as const;
+
+/**
+ * The notices of a new order: W-01 (in stock) and W-01a (under order,
+ * TASK-037) — the same buttons, the same payloads, the same key of the event.
+ */
+export const NEW_ORDER_TEMPLATES = ["order_new", "order_new_on_order"] as const;
 export type OrderButton = (typeof ORDER_BUTTONS)[number];
 
 /** An employee as a notice needs them. */
@@ -138,28 +145,44 @@ export class OrderNotices {
   }
 
   /**
-   * W-01 to every recipient — at the creation of the order (its version 1)
-   * and after the administrator extends its answer deadline (the new
-   * version, the new deadline): «после подтверждения уведомления
-   * поставщикам отправляются повторно» (A-ORD-03).
+   * W-01 (W-01a for an order under order, TASK-037) to every recipient — at
+   * the creation of the order (its version 1) and after the administrator
+   * extends its answer deadline (the new version, the new deadline): «после
+   * подтверждения уведомления поставщикам отправляются повторно» (A-ORD-03).
    */
   async newOrder(tx: DbExecutor, order: OrderRow, at: Date): Promise<number> {
     const hours = await this.settings.get("order_button_valid_hours");
     const expiresAt = new Date(at.getTime() + hours * 3_600_000);
     const recipients = await this.recipients(tx, order.supplierId);
+    const timeZone = order.offerSnapshot.location.timeZone;
     for (const member of recipients) {
+      const common = {
+        number: String(order.number),
+        item: itemText(order.offerSnapshot.item, member.lang),
+        quantity: String(order.quantity),
+        respondBy: momentText(order.respondBy, timeZone, at),
+      };
       await this.messaging.enqueue(tx, {
-        template: "order_new",
+        // W-01a for an order under order (TASK-037): «срок до {дата}» and
+        // «Подтвердить срок» — the same buttons, the same payloads.
+        ...(order.kind === "on_order"
+          ? {
+              template: "order_new_on_order" as const,
+              variables: {
+                ...common,
+                term: termText(order.expectedReadyOn, order.offerSnapshot.leadDays, member.lang),
+              },
+            }
+          : {
+              template: "order_new" as const,
+              variables: {
+                ...common,
+                total: moneyText(order.total),
+                fulfillment: fulfillmentText(order.fulfillment, member.lang),
+              },
+            }),
         phone: member.phone,
         lang: member.lang,
-        variables: {
-          number: String(order.number),
-          item: itemText(order.offerSnapshot.item, member.lang),
-          quantity: String(order.quantity),
-          total: moneyText(order.total),
-          fulfillment: fulfillmentText(order.fulfillment, member.lang),
-          respondBy: momentText(order.respondBy, order.offerSnapshot.location.timeZone, at),
-        },
         buttons: Object.fromEntries(
           ORDER_BUTTONS.map((button) => [
             button,
@@ -234,6 +257,25 @@ export class OrderNotices {
       dedupeKey: `order_accepted:${order.id}`,
     });
     return true;
+  }
+
+  /**
+   * W-02 after the user agreed to another term (TASK-037; ARCHITECTURE 6.2
+   * «поставщику — WhatsApp „пользователь согласился“»): to the employee who
+   * proposed it — the order is taken on now, with the customer's phone. No
+   * new template: W-02 says exactly «Заявка № … принята. Клиент: …» (the
+   * texts of W-* change only with Meta's approval). An employee removed
+   * meanwhile is not written to (`stillSend`); the cabinet has the order.
+   */
+  async termAgreed(tx: DbExecutor, order: OrderRow): Promise<boolean> {
+    if (!order.handledByMemberId) {
+      return false;
+    }
+    const [member] = await noticeMembers(tx, { memberIds: [order.handledByMemberId] });
+    if (!member || member.supplierId !== order.supplierId) {
+      return false;
+    }
+    return this.accepted(tx, order, member);
   }
 
   /**
@@ -362,6 +404,7 @@ export class OrderMessages implements MessageSubject, OnModuleInit {
     }
     switch (template) {
       case "order_new":
+      case "order_new_on_order":
         return (
           order.status === "created" &&
           member.notificationsEnabledAt !== null &&
@@ -378,7 +421,7 @@ export class OrderMessages implements MessageSubject, OnModuleInit {
             and(
               eq(outboundMessage.subjectType, ORDER_SUBJECT),
               eq(outboundMessage.subjectId, orderId),
-              eq(outboundMessage.template, "order_new"),
+              inArray(outboundMessage.template, [...NEW_ORDER_TEMPLATES]),
               eq(outboundMessage.phone, message.phone),
               sql`${outboundMessage.status} IN (${sql.join(
                 WENT_OUT.map((status) => sql`${status}`),

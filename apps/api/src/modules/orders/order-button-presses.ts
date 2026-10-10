@@ -8,14 +8,22 @@ import {
   type ButtonPressHandler,
   type ButtonPressOutcome,
 } from "../messaging";
-import { noticeMembers, ORDER_BUTTONS, ORDER_SUBJECT, OrderNotices } from "./order-notices";
+import {
+  NEW_ORDER_TEMPLATES,
+  noticeMembers,
+  ORDER_BUTTONS,
+  ORDER_SUBJECT,
+  OrderNotices,
+} from "./order-notices";
 import { databaseNow, OrderTransitions } from "./order-transitions";
 import { customerOrder } from "./schema";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * «Подтвердить» and «Отказать» of W-01 pressed in WhatsApp (TASK-025
+ * «Подтвердить» and «Отказать» of W-01 pressed in WhatsApp — and, since
+ * TASK-037, «Подтвердить срок» and «Отказать» of W-01a: confirming the term
+ * of an order under order is its `accept` (ARCHITECTURE 6.2) (TASK-025
  * requirements 2 and 3; PRODUCT 10.1, 12.6, 15; SCREENS 8.5). **A press is
  * the same action as the button of the cabinet, taken by the same state
  * machine**: it reaches the order only through `OrderTransitions.move`, as
@@ -100,7 +108,7 @@ export class OrderButtonPresses implements ButtonPressHandler, OnModuleInit {
       if (
         message.subjectType !== ORDER_SUBJECT ||
         message.subjectId !== orderId ||
-        message.template !== "order_new"
+        !(NEW_ORDER_TEMPLATES as readonly string[]).includes(message.template)
       ) {
         return "foreign_message";
       }

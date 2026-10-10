@@ -15,6 +15,8 @@ import {
   orderActionBodySchema,
   orderCredentialSchema,
   orderPathSchema,
+  orderTermAnswerBodySchema,
+  proposeOrderTermBodySchema,
   revokeDisciplineBodySchema,
   supplierOrderListQuerySchema,
   userOrderHistoryQuerySchema,
@@ -45,6 +47,8 @@ import {
   type OrderCredential,
   type OrderLookupResponse,
   type OrderPath,
+  type OrderTermAnswerBody,
+  type ProposeOrderTermBody,
   type RepeatOrderResponse,
   type RevokeDisciplineBody,
   type SupplierOrderListQuery,
@@ -166,6 +170,44 @@ export class UserOrdersController {
       ),
     };
   }
+
+  /** M-ORD-03 «Согласиться» with another term of an order under order (TASK-037). */
+  @SessionRoute(apiRoutes.agreeUserOrderTerm)
+  async agreeTerm(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(orderTermAnswerBodySchema)) body: OrderTermAnswerBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<UserOrderResponse> {
+    return {
+      order: await this.orders.answerTerm(
+        session.accountId,
+        params.orderId,
+        "agree_term",
+        body.expectedVersion,
+        pickLanguage(acceptLanguage),
+      ),
+    };
+  }
+
+  /** M-ORD-03 «Отказаться» from another term (TASK-037): the order is cancelled. */
+  @SessionRoute(apiRoutes.rejectUserOrderTerm)
+  async rejectTerm(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(orderTermAnswerBodySchema)) body: OrderTermAnswerBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<UserOrderResponse> {
+    return {
+      order: await this.orders.answerTerm(
+        session.accountId,
+        params.orderId,
+        "reject_term",
+        body.expectedVersion,
+        pickLanguage(acceptLanguage),
+      ),
+    };
+  }
 }
 
 /**
@@ -254,6 +296,24 @@ export class SupplierOrdersController {
       body,
       pickLanguage(acceptLanguage),
     );
+  }
+
+  /** S-ORD-04 «Предложить другой срок» for an order under order (TASK-037). */
+  @RateLimitedRoute(apiRoutes.proposeSupplierOrderTerm)
+  async proposeTerm(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(proposeOrderTermBodySchema)) body: ProposeOrderTermBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierOrderResponse> {
+    return {
+      order: await this.orders.proposeTerm(
+        supplierActor(session),
+        params.orderId,
+        body,
+        pickLanguage(acceptLanguage),
+      ),
+    };
   }
 }
 

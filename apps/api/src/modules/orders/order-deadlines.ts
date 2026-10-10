@@ -20,8 +20,11 @@ import { SupplierReachWatch, supplierReachWatchJob } from "./supplier-reach";
  * with the discipline mark of the user and the late close window),
  * the time to warn that the reserve ends, and the end of the late close
  * window, after which the order lets go of its confirmation code
- * (TASK-022) — in batches, and applies the move through the same state
- * machine as people (`OrderTransitions.applyDue`).
+ * (TASK-022), and — under order (TASK-037) — the user's silence about
+ * another term (→ `term_expired`) and a confirmed date passed without
+ * «Готово» (the note `supply_overdue` and a signal, once) — in batches, and
+ * applies the move through the same state machine as people
+ * (`OrderTransitions.applyDue`).
  *
  * The deadlines live in the orders, not in the queue: a worker that was
  * down for hours finds everything that fell due and applies it once
@@ -93,6 +96,15 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
           SELECT id FROM customer_order
           WHERE status = 'reserve_expired' AND code_released_at IS NULL
             AND late_close_until <= ${now}
+          UNION ALL
+          -- Under order (TASK-037): the user's answer to another term is
+          -- due, and the confirmed date has passed without «Готово».
+          SELECT id FROM customer_order
+          WHERE status = 'term_proposed' AND term_answer_by <= ${now}
+          UNION ALL
+          SELECT id FROM customer_order
+          WHERE status = 'accepted' AND supply_overdue_noted_at IS NULL
+            AND supply_overdue_at IS NOT NULL AND supply_overdue_at <= ${now}
         )
         ${excluded}
       ORDER BY least(
@@ -100,7 +112,10 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
         CASE WHEN o.status IN ('accepted', 'ready') THEN o.expires_at END,
         CASE WHEN o.status IN ('accepted', 'ready') AND o.reserve_warned_at IS NULL
           THEN o.reserve_warn_at END,
-        CASE WHEN o.status = 'reserve_expired' THEN o.late_close_until END
+        CASE WHEN o.status = 'reserve_expired' THEN o.late_close_until END,
+        CASE WHEN o.status = 'term_proposed' THEN o.term_answer_by END,
+        CASE WHEN o.status = 'accepted' AND o.supply_overdue_noted_at IS NULL
+          THEN o.supply_overdue_at END
       ), o.id
       LIMIT ${batch.limit}
       FOR UPDATE OF o SKIP LOCKED

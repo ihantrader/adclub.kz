@@ -26,6 +26,7 @@ const table: Record<
       mark_ready: "allowed",
       close: "allowed",
       close_late: "allowed",
+      propose_term: "allowed",
     },
     whatsapp: {
       accept: "allowed",
@@ -33,6 +34,7 @@ const table: Record<
       mark_ready: "not_in_channel",
       close: "not_in_channel",
       close_late: "not_in_channel",
+      propose_term: "not_in_channel",
     },
   },
   // A pause takes the offers off the showcase, not the orders out of the hands.
@@ -43,6 +45,7 @@ const table: Record<
       mark_ready: "allowed",
       close: "allowed",
       close_late: "allowed",
+      propose_term: "allowed",
     },
     whatsapp: {
       accept: "allowed",
@@ -50,6 +53,7 @@ const table: Record<
       mark_ready: "not_in_channel",
       close: "not_in_channel",
       close_late: "not_in_channel",
+      propose_term: "not_in_channel",
     },
   },
   // SCREENS 6.0: only looking at the orders and giving them out by the code.
@@ -60,6 +64,7 @@ const table: Record<
       mark_ready: "supplier_blocked",
       close: "allowed",
       close_late: "allowed",
+      propose_term: "supplier_blocked",
     },
     whatsapp: {
       accept: "supplier_blocked",
@@ -67,6 +72,7 @@ const table: Record<
       mark_ready: "not_in_channel",
       close: "not_in_channel",
       close_late: "not_in_channel",
+      propose_term: "not_in_channel",
     },
   },
 };

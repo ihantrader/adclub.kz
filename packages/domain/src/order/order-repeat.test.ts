@@ -64,14 +64,14 @@ describe("orderRepeatDecision", () => {
     ).toEqual({ kind: "unavailable", reason: "club_access_required" });
   });
 
-  it("refuses a kind the server can't create yet (services, under order — EPIC-13)", () => {
+  it("refuses a kind the server can't create yet (services — TASK-038)", () => {
     expect(orderRepeatDecision(facts({ orderKind: "service" }))).toEqual({
       kind: "unavailable",
       reason: "kind_not_supported",
     });
-    expect(orderRepeatDecision(facts({ orderKind: "on_order" }))).toEqual({
-      kind: "unavailable",
-      reason: "kind_not_supported",
-    });
+  });
+
+  it("repeats an order under order like one in stock (TASK-037)", () => {
+    expect(orderRepeatDecision(facts({ orderKind: "on_order" }))).toEqual({ kind: "offer" });
   });
 });

@@ -2,7 +2,12 @@ import { z } from "zod";
 import { hiddenPhoneSchema } from "./account";
 import { catalogLanguageSchema, localizedTextSchema } from "./catalog";
 import { itemPhotoImageSchema } from "./catalog-photos";
-import { OFFER_PRICE_LIMIT, offerAvailabilitySchema, offerReceiptSchema } from "./offers";
+import {
+  OFFER_LEAD_DAYS_LIMIT,
+  OFFER_PRICE_LIMIT,
+  offerAvailabilitySchema,
+  offerReceiptSchema,
+} from "./offers";
 import { dayHoursSchema } from "./suppliers";
 
 /**
@@ -80,7 +85,13 @@ const expectedVersionSchema = z.number().int().min(1);
  * `declined_by_supplier`; `response_expired` — the supplier didn't answer
  * in time; `reserve_expired` — the user didn't come for it in time
  * (pickup); `cancelled_by_admin` — the administrator cancelled it, with a
- * reason (TASK-036.B). The last six are final.
+ * reason (TASK-036.B). TASK-037, an order under order: `accepted` means
+ * «срок подтверждён» (the supplier confirmed the term, or the user agreed
+ * to another one); `term_proposed` — the supplier proposed another term and
+ * the user's answer is due (until `term.proposed.answerBy`); `term_expired`
+ * — the user did not answer in time. Final: `completed`,
+ * `cancelled_by_user`, `declined_by_supplier`, `response_expired`,
+ * `reserve_expired`, `cancelled_by_admin`, `term_expired`.
  */
 export const orderStatusSchema = z.enum([
   "created",
@@ -92,12 +103,17 @@ export const orderStatusSchema = z.enum([
   "response_expired",
   "reserve_expired",
   "cancelled_by_admin",
+  "term_proposed",
+  "term_expired",
 ]);
 
 export type OrderStatusValue = z.infer<typeof orderStatusSchema>;
 
-/** `stock` — an item in stock (the only kind until EPIC-13: under order and services). */
-export const orderKindSchema = z.enum(["stock"]);
+/**
+ * `stock` — an item in stock; `on_order` — an item the supplier orders for
+ * the user, with a term (TASK-037, PRODUCT 10.3). Services — TASK-038.
+ */
+export const orderKindSchema = z.enum(["stock", "on_order"]);
 
 export type OrderKind = z.infer<typeof orderKindSchema>;
 
@@ -126,7 +142,11 @@ export type OrderDeclineReason = z.infer<typeof orderDeclineReasonSchema>;
  * an administrator moved the answer deadline or the end of the reserve,
  * with a reason (A-ORD-02, A-ORD-03; PRODUCT 10.4 — a timer is never
  * extended by itself). TASK-036.B: `admin_cancel` — the administrator
- * cancelled the order, with a reason.
+ * cancelled the order, with a reason. TASK-037, under order:
+ * `propose_term` — an employee proposed another term; `agree_term` and
+ * `reject_term` — the user's answer; `expire_term` — the user did not
+ * answer in time; and the note `supply_overdue` — the confirmed date has
+ * passed and the order is still not ready (the status does not change).
  */
 export const orderEventActionSchema = z.enum([
   "create",
@@ -143,6 +163,11 @@ export const orderEventActionSchema = z.enum([
   "late_action_ignored",
   "deadline_extended",
   "admin_cancel",
+  "propose_term",
+  "agree_term",
+  "reject_term",
+  "expire_term",
+  "supply_overdue",
 ]);
 
 export type OrderEventAction = z.infer<typeof orderEventActionSchema>;
@@ -157,6 +182,9 @@ export const orderAttemptedActionSchema = z.enum([
   "admin_close",
   "cancel",
   "admin_cancel",
+  "propose_term",
+  "agree_term",
+  "reject_term",
 ]);
 
 export type OrderAttemptedAction = z.infer<typeof orderAttemptedActionSchema>;
@@ -256,9 +284,18 @@ export const orderEventDetailsSchema = z.object({
    * supplier's answer) or `reserve` (the pickup reserve) — from when
    * (`previousDeadline`) to when (`deadline`) and by how many minutes.
    */
-  extendedDeadline: z.enum(["response", "reserve"]).optional(),
+  extendedDeadline: z.enum(["response", "reserve", "term"]).optional(),
   previousDeadline: z.iso.datetime().optional(),
   minutes: z.number().int().optional(),
+  /**
+   * TASK-037, under order: the term in working days (`propose_term` — the
+   * one proposed; `accept`, `agree_term` — the one confirmed) and the date
+   * it gives by the point's schedule (`readyOn`); `answerBy` — until when the
+   * user may answer a proposed term.
+   */
+  leadDays: z.number().int().optional(),
+  readyOn: dateSchema.optional(),
+  answerBy: z.iso.datetime().optional(),
   /**
    * `deadline_extended`, `admin_cancel`: why the administrator did it
    * (A-ORD-02 — every manual action has a reason). **The administrator's
@@ -375,6 +412,47 @@ export const userOrderStepSchema = z.object({
 
 export type UserOrderStep = z.infer<typeof userOrderStepSchema>;
 
+/**
+ * The term of an order under order (TASK-037; PRODUCT 10.3; SCREENS
+ * M-ORD-03, S-ORD-02, S-ORD-04) — the same for every side that sees the
+ * order. Every date is the point's own calendar date by its working days
+ * (`receiptDate`, the one rule of TASK-018).
+ *
+ * - `expected` — the offer's term the user agreed to by ordering, and the
+ *   date it gave then («Поставщик привезёт до {дата}»);
+ * - `proposed` — another term the supplier proposed, the date it gives
+ *   from the moment of the proposal, and until when the user may answer
+ *   («Нужен ваш ответ до …»); kept after the answer, so «было — стало» can be
+ *   told; `null` — none was proposed;
+ * - `confirmed` — the term the order is held to: confirmed by the supplier
+ *   («Подтвердить срок») or by the user's «yes» to the proposed one, and
+ *   the date the goods are promised on (`null` — the point had no working
+ *   hours to count by); `null` — not confirmed yet;
+ * - `overdueSince` — the confirmed date has passed and the order was not
+ *   ready by then (the status stays; PRODUCT 10.5); `null` — not overdue.
+ */
+export const onOrderTermSchema = z.object({
+  expected: z.object({ leadDays: z.number().int(), readyOn: dateSchema.nullable() }),
+  proposed: z
+    .object({
+      leadDays: z.number().int(),
+      readyOn: dateSchema,
+      at: z.iso.datetime(),
+      answerBy: z.iso.datetime(),
+    })
+    .nullable(),
+  confirmed: z
+    .object({
+      leadDays: z.number().int(),
+      readyOn: dateSchema.nullable(),
+      at: z.iso.datetime(),
+    })
+    .nullable(),
+  overdueSince: z.iso.datetime().nullable(),
+});
+
+export type OnOrderTerm = z.infer<typeof onOrderTermSchema>;
+
 const moneyFields = {
   quantity: z.number().int(),
   /** The price of one item when the order was created, whole tenge. */
@@ -404,6 +482,8 @@ const orderBaseFields = {
   reserveUntil: z.iso.datetime().nullable(),
   /** The receipt date promised when accepted, in the point's time zone; `null` — not accepted. */
   receiptOn: dateSchema.nullable(),
+  /** The term of an order under order (TASK-037); `null` — an item in stock. */
+  onOrderTerm: onOrderTermSchema.nullable(),
   createdAt: z.iso.datetime(),
 };
 
@@ -520,6 +600,17 @@ export const userOrderResponseSchema = z.object({ order: userOrderSchema });
 
 export type UserOrderResponse = z.infer<typeof userOrderResponseSchema>;
 
+/**
+ * `POST /orders/{orderId}/term/agree` and `…/term/reject` (TASK-037; SCREENS
+ * M-ORD-03 «Согласиться» / «Отказаться»): the user's answer to another term,
+ * with the version of the order they saw. Only the user of the order
+ * answers; the answer is due by `onOrderTerm.proposed.answerBy` — after it
+ * the order has expired (409 `ORDER_STATE_CONFLICT`, `term_expired`).
+ */
+export const orderTermAnswerBodySchema = z.object({ expectedVersion: expectedVersionSchema });
+
+export type OrderTermAnswerBody = z.infer<typeof orderTermAnswerBodySchema>;
+
 /** M-ORD-02: «Активные» (going on) and «История» (final); newest first. */
 export const userOrderTabSchema = z.enum(["active", "history"]);
 
@@ -547,11 +638,12 @@ export type UserOrderPage = z.infer<typeof userOrderPageSchema>;
  * hasn't answered; `reserve_until` — «Резерв до 15:00, 15 марта» once the
  * order is accepted or ready for pickup. `null` — there is no date to
  * lead with (delivery, which lives until it is handed over — PRODUCT
- * 10.4). EPIC-13 adds a kind for the time of a service and the term of an
- * order under order.
+ * 10.4). TASK-037: `answer_by` — «Ответьте до {время}» while the user's
+ * answer to another term is due (the date itself is in `onOrderTerm`).
+ * EPIC-13 adds a kind for the time of a service.
  */
 export const activeOrderMainDateSchema = z.object({
-  kind: z.enum(["respond_by", "reserve_until"]),
+  kind: z.enum(["respond_by", "reserve_until", "answer_by"]),
   at: z.iso.datetime(),
 });
 
@@ -574,7 +666,9 @@ export type ActiveOrderMainDate = z.infer<typeof activeOrderMainDateSchema>;
  * - `awaitsReceipt` — PRODUCT 6.7 «предстоит получение»: the supplier has
  *   taken the order on and the item waits;
  * - `needsAnswer` — SCREENS M-ORD-02 «Нужен ваш ответ»: an order in stock
- *   never asks for one; EPIC-13 (another term, another time) does.
+ *   never asks for one; an order under order does while another term waits
+ *   for the user (TASK-037; `onOrderTerm.proposed`); EPIC-13 adds another
+ *   time of a service.
  */
 export const activeOrderSchema = z.object({
   id: z.uuid(),
@@ -592,6 +686,8 @@ export const activeOrderSchema = z.object({
   needsAnswer: z.boolean(),
   respondBy: z.iso.datetime(),
   reserveUntil: z.iso.datetime().nullable(),
+  /** The term of an order under order (TASK-037); `null` — an item in stock. */
+  onOrderTerm: onOrderTermSchema.nullable(),
   createdAt: z.iso.datetime(),
   /** The order last changed then: the app merges a copy by it. */
   updatedAt: z.iso.datetime(),
@@ -735,7 +831,7 @@ export const repeatUnavailableReasonSchema = z.enum([
   "item_unavailable",
   /** No club access to order with (D-059): the app shows the subscription. */
   "club_access_required",
-  /** Services and orders under order — EPIC-13. */
+  /** Services — TASK-038 (orders under order are repeated since TASK-037). */
   "kind_not_supported",
 ]);
 
@@ -858,6 +954,21 @@ export const declineOrderBodySchema = z.object({
 export type DeclineOrderBody = z.infer<typeof declineOrderBodySchema>;
 
 /**
+ * `POST /supplier/orders/{orderId}/propose-term` (TASK-037; SCREENS S-ORD-04
+ * «Другой срок»): another term for a new order under order, in working days
+ * of the company — at least 1, at most the setting `offer_lead_days_max`,
+ * and not the term the user already agreed to (that one is «Подтвердить
+ * срок», `…/accept`). The user is asked; until they answer the order is
+ * `term_proposed`, and their silence expires it after `term_agreement_hours`.
+ */
+export const proposeOrderTermBodySchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  leadDays: z.number().int().min(1).max(OFFER_LEAD_DAYS_LIMIT),
+});
+
+export type ProposeOrderTermBody = z.infer<typeof proposeOrderTermBodySchema>;
+
+/**
  * The declined order; with «Нет в наличии» and the offer still on sale —
  * `withdrawOffer`: the offer to take off sale if the employee agrees
  * («Снять это предложение с продажи?»; `POST /supplier/offers/{offerId}/withdraw`
@@ -872,7 +983,9 @@ export type DeclineOrderResponse = z.infer<typeof declineOrderResponseSchema>;
 
 /**
  * S-ORD-01: «Новые» (waiting for an answer, the nearest deadline first),
- * «В работе» (accepted and ready), «Завершённые» (final, newest first).
+ * «В работе» (accepted and ready, and — TASK-037 — orders under order whose
+ * other term waits for the customer, «Ждут ответа клиента»), «Завершённые»
+ * (final, newest first).
  */
 export const supplierOrderTabSchema = z.enum(["new", "in_progress", "finished"]);
 
@@ -884,6 +997,7 @@ export const supplierFinishedStatusSchema = z.enum([
   "response_expired",
   "reserve_expired",
   "cancelled_by_admin",
+  "term_expired",
 ]);
 
 export type SupplierFinishedStatus = z.infer<typeof supplierFinishedStatusSchema>;
@@ -979,6 +1093,8 @@ export const orderCloseRefusalSchema = z.enum([
   "late_window_passed",
   /** «Заявку отменил администратор клуба {когда}» (TASK-036.B). */
   "cancelled_by_admin",
+  /** «Клиент не ответил на предложенный срок — заявка истекла» (TASK-037). */
+  "term_expired",
 ]);
 
 export type OrderCloseRefusalReason = z.infer<typeof orderCloseRefusalSchema>;
@@ -1104,6 +1220,8 @@ export const adminOrderSchema = adminOrderSummarySchema.extend({
     reserveUntil: z.iso.datetime().nullable(),
     /** The late close window of an expired reserve; `null` — none. */
     lateCloseUntil: z.iso.datetime().nullable(),
+    /** TASK-037: until when the user answers another term; `null` — no answer is due. */
+    termAnswerBy: z.iso.datetime().nullable(),
   }),
   /** TASK-036.B: who of the administrators cancelled it, when and why; `null` — not cancelled so. */
   cancellation: z
@@ -1159,8 +1277,12 @@ export const ORDER_EXTENSION_MINUTES_LIMIT = 7 * 24 * 60;
 /** How many orders one extension «Продлить все» takes at once (A-ORD-03). */
 export const ORDER_EXTENSION_BATCH_LIMIT = 500;
 
-/** `response` — the supplier's answer deadline; `reserve` — the end of the pickup reserve. */
-export const orderDeadlineKindSchema = z.enum(["response", "reserve"]);
+/**
+ * `response` — the supplier's answer deadline; `reserve` — the end of the
+ * pickup reserve; `term` (TASK-037) — the user's answer to another term of
+ * an order under order.
+ */
+export const orderDeadlineKindSchema = z.enum(["response", "reserve", "term"]);
 
 export type OrderDeadlineKind = z.infer<typeof orderDeadlineKindSchema>;
 
@@ -1170,7 +1292,9 @@ const extensionMinutesSchema = z.number().int().min(1).max(ORDER_EXTENSION_MINUT
  * `POST /admin/orders/{orderId}/extend-deadline` (A-ORD-02 «Продлить срок
  * ответа» / «Продлить резерв»): the deadline moves by `minutes` from where it
  * is, only with a reason, only while the order still waits on it (the answer
- * — «Создана»; the reserve — «Принята» or «Готова» with pickup). A deadline
+ * — «Создана»; the reserve — «Принята» or «Готова» with pickup; the term —
+ * «Предложен другой срок», TASK-037: the user hears of a proposal only in
+ * the app, and a slow user is the same case as a silent channel). A deadline
  * that has already passed can't be extended: the order has expired
  * (PRODUCT 10.4 — nothing brings it back but the administrator's own
  * decision about the dispute).

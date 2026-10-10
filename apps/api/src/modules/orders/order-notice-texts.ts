@@ -62,6 +62,51 @@ export function fulfillmentText(fulfillment: OrderFulfillment, lang: NoticeLang)
   return FULFILLMENT[fulfillment][lang];
 }
 
+const MONTHS: Record<NoticeLang, readonly string[]> = {
+  ru: [
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+  ],
+  kk: [
+    "қаңтар",
+    "ақпан",
+    "наурыз",
+    "сәуір",
+    "мамыр",
+    "маусым",
+    "шілде",
+    "тамыз",
+    "қыркүйек",
+    "қазан",
+    "қараша",
+    "желтоқсан",
+  ],
+};
+
+/**
+ * The term of an order under order for W-01a «срок до {term}» (TASK-037):
+ * the date it gives by the point's working days — «14 марта», «14 наурыз»;
+ * without a date (the point had no hours to count by) — the working days
+ * themselves.
+ */
+export function termText(readyOn: string | null, leadDays: number, lang: NoticeLang): string {
+  if (readyOn) {
+    const [, month = 1, day = 1] = readyOn.split("-").map(Number);
+    return `${String(day)} ${MONTHS[lang][month - 1] ?? ""}`.trim();
+  }
+  return lang === "kk" ? `${String(leadDays)} жұмыс күні` : `${String(leadDays)} раб. дн.`;
+}
+
 /**
  * A moment in the time zone of the pickup point: «18:30» when it is today
  * there, «27.09 18:30» otherwise — the deadline of a notice read late at
@@ -124,9 +169,13 @@ export function orderStateText(order: OrderStateFacts, lang: NoticeLang, now: Da
       return lang === "kk" ? "клуб әкімшісі тоқтатқан" : "отменена администратором клуба";
     case "response_expired":
     case "reserve_expired":
+    case "term_expired":
       return lang === "kk" ? "мерзімі өткен" : "истекла";
     case "created":
       return lang === "kk" ? "жауап күтуде" : "ждёт ответа";
+    // TASK-037: a colleague proposed another term, the customer is to answer.
+    case "term_proposed":
+      return who({ ru: "предложен другой срок", kk: "басқа мерзім ұсынылған" });
   }
 }
 

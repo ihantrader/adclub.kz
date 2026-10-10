@@ -171,7 +171,7 @@ export const messageTemplates = {
       kk: "№ {number} тапсырыс бойынша өтінім: {item} × {quantity}, мерзімі {term} дейін. {respondBy} дейін жауап беріңіз",
     },
     sample: pick("number", "item", "quantity", "term", "respondBy"),
-    sentBy: null,
+    sentBy: "orders (OrderNotices.newOrder, TASK-037)",
   },
   /** W-01b — a new booking of a service. */
   order_new_service: {

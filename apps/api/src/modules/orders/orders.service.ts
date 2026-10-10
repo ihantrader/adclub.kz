@@ -16,7 +16,9 @@ import {
   type CreateOrderResponse,
   type DeclineOrderBody,
   type DeclineOrderResponse,
+  type OfferSnapshot,
   type OrderStatusValue,
+  type ProposeOrderTermBody,
   type RepeatOrderResponse,
   type SupplierOrder,
   type SupplierOrderListQuery,
@@ -31,7 +33,11 @@ import {
   activeOrderStatuses,
   isActiveOrderStatus,
   isRegistrationComplete,
+  orderNeedsAnswer,
+  proposedTermProblem,
   readAdminQuery,
+  receiptDate,
+  type OrderKind,
 } from "@adclub/domain";
 import {
   and,
@@ -56,7 +62,7 @@ import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { CatalogPhotosService, decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
 import { AccountStore, supplier, supplierMember } from "../identity";
-import { offer, offerShowcase, OfferSnapshots } from "../offers";
+import { offer, offerShowcase, OfferSnapshots, receiptSchedules } from "../offers";
 import { AppSettings } from "../settings";
 import { newConfirmationCode, newQrToken } from "./order-code";
 import {
@@ -98,7 +104,7 @@ import {
   userOrderView,
   userSummaries,
 } from "./order-views";
-import { customerOrder, type OrderRow } from "./schema";
+import { activeOrderStatusList, customerOrder, type OrderRow } from "./schema";
 
 /** An employee acting for the company of the session. */
 export type OrderSupplierActor = Extract<OrderActorRef, { type: "supplier_member" }>;
@@ -110,13 +116,24 @@ const CODE_ATTEMPTS = 20;
 
 const ACTIVE = [...activeOrderStatuses] as OrderStatusValue[];
 
+/** The kind of order an offer makes (TASK-037); `null` — none the server can make yet. */
+function orderKindOf(availability: string): OrderKind | null {
+  if (availability === "in_stock") {
+    return "stock";
+  }
+  return availability === "on_order" ? "on_order" : null;
+}
+
 /**
  * The deadline of an active order: the end of its pickup reserve once
- * there is one, the supplier's answer deadline while there isn't. The
- * saved copy is cut by it — a user with more active orders than fit gets
- * the ones that run out first (TASK-023 requirement 1).
+ * there is one, the user's answer to another term while it is due
+ * (TASK-037), the supplier's answer deadline otherwise. The saved copy is
+ * cut by it — a user with more active orders than fit gets the ones that
+ * run out first (TASK-023 requirement 1).
  */
-const DEADLINE_AT = sql`coalesce(${customerOrder.expiresAt}, ${customerOrder.respondBy})`;
+const DEADLINE_AT = sql`CASE WHEN ${customerOrder.status} = 'term_proposed'
+  THEN ${customerOrder.termAnswerBy}
+  ELSE coalesce(${customerOrder.expiresAt}, ${customerOrder.respondBy}) END`;
 
 /**
  * How many orders above the limit are read for the copy: some of them may
@@ -126,14 +143,19 @@ const DEADLINE_AT = sql`coalesce(${customerOrder.expiresAt}, ${customerOrder.res
 const EXPIRY_HEADROOM = 11;
 
 /**
- * The order of the cards of M-ORD-02: «Нужен ваш ответ» first (EPIC-13
- * brings the orders that ask for one), then «Можно забирать», then by
+ * The order of the cards of M-ORD-02: «Нужен ваш ответ» first (another
+ * term of an order under order, TASK-037), then «Можно забирать», then by
  * date — the nearest deadline first, the id settling a tie so two
  * refreshes never disagree.
  */
 function inCardOrder(rows: readonly OrderRow[]): OrderRow[] {
-  const rank = (row: OrderRow) => (row.status === "ready" ? 0 : 1);
-  const deadline = (row: OrderRow) => (row.expiresAt ?? row.respondBy).getTime();
+  const rank = (row: OrderRow) =>
+    orderNeedsAnswer(row.status) ? 0 : row.status === "ready" ? 1 : 2;
+  const deadline = (row: OrderRow) =>
+    (row.status === "term_proposed" && row.termAnswerBy
+      ? row.termAnswerBy
+      : (row.expiresAt ?? row.respondBy)
+    ).getTime();
   return [...rows].sort(
     (a, b) => rank(a) - rank(b) || deadline(a) - deadline(b) || (a.id < b.id ? -1 : 1),
   );
@@ -307,7 +329,11 @@ export class OrdersService {
     if (!current || !(await offerShowcase(tx, [current.id], at)).get(current.id)?.visible) {
       throw offerUnavailable();
     }
-    if (current.availability !== "in_stock") {
+    // TASK-037: an offer under order makes an order under order — the same
+    // order with a term (ARCHITECTURE 6.2). A kind the server can't order yet
+    // (services, TASK-038) would still be refused here.
+    const kind = orderKindOf(current.availability);
+    if (kind === null) {
       throw kindNotSupported();
     }
     if (!(input.fulfillment === "pickup" ? current.pickup : current.delivery)) {
@@ -348,10 +374,15 @@ export class OrdersService {
         ),
       );
     const respondBy = respondByOf(at, await this.settings.get("supplier_response_hours"));
+    // The user agrees to the offer's term by ordering (PRODUCT 10.3); the
+    // date it gives now is what «Поставщик привезёт до {дата}» showed.
+    const expectedReadyOn = kind === "on_order" ? await this.readyOn(tx, snapshot, at) : null;
     for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
       const [row] = await tx
         .insert(customerOrder)
         .values({
+          kind,
+          expectedReadyOn,
           userAccountId: accountId,
           supplierId: current.supplierId,
           locationId: current.locationId,
@@ -399,6 +430,22 @@ export class OrdersService {
       }
     }
     throw new Error("No free confirmation code after many draws");
+  }
+
+  /**
+   * The date a term of the offer gives when confirmed at `at`, by the
+   * point's working days — `receiptDate`, the one rule (TASK-018); `null` —
+   * the point has no working day to count by.
+   */
+  private async readyOn(
+    tx: DbExecutor,
+    snapshot: OfferSnapshot,
+    at: Date,
+    leadDays: number = snapshot.leadDays,
+  ): Promise<string | null> {
+    const schedule = (await receiptSchedules(tx, [snapshot.location.id])).get(snapshot.location.id);
+    const receipt = schedule ? receiptDate(at, leadDays, schedule) : null;
+    return receipt?.ok ? receipt.date : null;
   }
 
   private async byKey(
@@ -631,6 +678,34 @@ export class OrdersService {
     return userOrderView(this.database.db, row, lang, this.photos);
   }
 
+  /**
+   * The user's answer to another term of an order under order (TASK-037;
+   * SCREENS M-ORD-03 «Согласиться» / «Отказаться»): `agree_term` takes the
+   * order on with that term, `reject_term` cancels it. Only the user of the
+   * order (another user's order — 404); the answer deadline passed — the
+   * order has expired first and the answer is 409 with `term_expired`.
+   */
+  async answerTerm(
+    accountId: string,
+    orderId: string,
+    answer: "agree_term" | "reject_term",
+    expectedVersion: number,
+    lang: CatalogLanguage,
+  ): Promise<UserOrder> {
+    const row = await this.run({
+      scope: (tx) => this.userRow(tx, accountId, orderId),
+      request: {
+        orderId,
+        action: answer,
+        actor: { type: "user", accountId },
+        channel: "app",
+        expectedVersion,
+      },
+      forUser: true,
+    });
+    return userOrderView(this.database.db, row, lang, this.photos);
+  }
+
   private async userRow(executor: DbExecutor, accountId: string, orderId: string) {
     const [row] = await executor
       .select()
@@ -659,7 +734,9 @@ export class OrdersService {
       AND ${customerOrder.lateCloseUntil} IS NOT NULL
       AND ${customerOrder.lateCloseUntil} > ${at.toISOString()}::timestamptz
       AND ${customerOrder.codeReleasedAt} IS NULL)`;
-    const inProgress = sql`(${customerOrder.status} IN ('accepted', 'ready') OR ${lateWindowOpen})`;
+    // TASK-037: an order under order whose other term waits for the customer
+    // is in work too — «Ждут ответа клиента» (S-ORD-01).
+    const inProgress = sql`(${customerOrder.status} IN ('accepted', 'ready', 'term_proposed') OR ${lateWindowOpen})`;
     let page: { rows: OrderRow[]; nextCursor: string | null };
     if (query.tab === "new") {
       page = await this.soonestAnswerFirst(and(own, eq(customerOrder.status, "created"))!, query);
@@ -682,7 +759,7 @@ export class OrdersService {
       .select({
         created: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} = 'created')::int`,
         inProgress: sql<number>`count(*) FILTER (WHERE ${inProgress})::int`,
-        finished: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} NOT IN ('created', 'accepted', 'ready') AND NOT ${lateWindowOpen})::int`,
+        finished: sql<number>`count(*) FILTER (WHERE ${customerOrder.status} NOT IN (${activeOrderStatusList()}) AND NOT ${lateWindowOpen})::int`,
       })
       .from(customerOrder)
       .where(own);
@@ -787,6 +864,68 @@ export class OrdersService {
       order: await supplierOrderView(this.database.db, row, lang, this.photos),
       withdrawOffer,
     };
+  }
+
+  /**
+   * «Предложить другой срок» (TASK-037; SCREENS S-ORD-04; ARCHITECTURE 6.2):
+   * a new order under order gets another term in working days of the
+   * company. The term is checked here, in the transaction of the move — not
+   * the term already agreed, from 1 to `offer_lead_days_max` — and so is the
+   * date it gives by the point's schedule (`receiptDate` with the clock of
+   * this transaction, the same the move then counts by). The user is asked;
+   * a colleague who acted first — 409 naming them.
+   */
+  async proposeTerm(
+    actor: OrderSupplierActor,
+    orderId: string,
+    body: ProposeOrderTermBody,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    const maxLeadDays = await this.settings.get("offer_lead_days_max");
+    const row = await this.run({
+      scope: async (tx) => {
+        const found = await this.supplierRow(tx, actor.supplierId, orderId);
+        if (found.kind !== "on_order") {
+          // An order in stock has no term to talk about.
+          throw kindNotSupported();
+        }
+        const problem = proposedTermProblem(
+          body.leadDays,
+          found.offerSnapshot.leadDays,
+          maxLeadDays,
+        );
+        if (problem === "same_term") {
+          throw validationError(
+            "leadDays",
+            "This is the term the customer already agreed to: confirm it instead",
+          );
+        }
+        if (problem === "out_of_range") {
+          throw validationError(
+            "leadDays",
+            `From 1 to ${String(maxLeadDays)} working days (offer_lead_days_max)`,
+          );
+        }
+        const at = await databaseNow(tx);
+        if ((await this.readyOn(tx, found.offerSnapshot, at, body.leadDays)) === null) {
+          throw validationError(
+            "leadDays",
+            "The pickup point has no working day to count this term by: set its hours",
+          );
+        }
+        return found;
+      },
+      request: {
+        orderId,
+        action: "propose_term",
+        actor,
+        channel: "supplier_web",
+        expectedVersion: body.expectedVersion,
+        term: { leadDays: body.leadDays },
+      },
+      forUser: false,
+    });
+    return supplierOrderView(this.database.db, row, lang, this.photos);
   }
 
   private async supplierMove(

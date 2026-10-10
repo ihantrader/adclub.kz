@@ -35,6 +35,9 @@ export const supplierOrderMoves = [
   "mark_ready",
   "close",
   "close_late",
+  // TASK-037: another term for an order under order — from the cabinet only
+  // (S-ORD-04; W-01a has «Подтвердить срок» and «Отказать»).
+  "propose_term",
 ] as const satisfies readonly OrderAction[];
 
 export type SupplierOrderMove = (typeof supplierOrderMoves)[number];

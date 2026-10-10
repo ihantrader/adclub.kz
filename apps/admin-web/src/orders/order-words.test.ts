@@ -10,7 +10,7 @@ import {
   orderFiltersOf,
   orderKindText,
   orderStatusText,
-  orderTermText,
+  orderTermLines,
 } from "./order-words";
 
 const deadlines = (reserveUntil: string | null = null): AdminOrder["deadlines"] => ({
@@ -41,6 +41,7 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
     expect(orderActions({ kind: "stock", status: "created", deadlines: deadlines() })).toEqual({
       extendResponse: true,
       extendReserve: false,
+      extendTerm: false,
       closeWithoutCode: true,
       cancel: true,
     });
@@ -50,7 +51,13 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
         status: "accepted",
         deadlines: deadlines("2026-10-11T10:00:00.000Z"),
       }),
-    ).toEqual({ extendResponse: false, extendReserve: true, closeWithoutCode: true, cancel: true });
+    ).toEqual({
+      extendResponse: false,
+      extendReserve: true,
+      extendTerm: false,
+      closeWithoutCode: true,
+      cancel: true,
+    });
     // Delivery: no reserve to extend.
     expect(
       orderActions({ kind: "stock", status: "ready", deadlines: deadlines() }).extendReserve,
@@ -61,6 +68,7 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
     ).toEqual({
       extendResponse: false,
       extendReserve: false,
+      extendTerm: false,
       closeWithoutCode: true,
       cancel: false,
     });
@@ -73,7 +81,7 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
       expect(
         Object.values(orderActions({ kind: "stock", status, deadlines: deadlines() })),
         status,
-      ).toEqual([false, false, false, false]);
+      ).toEqual([false, false, false, false, false]);
     }
   });
 
@@ -83,12 +91,18 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
     expect(ORDER_STATUS_TEXT.term_proposed).toBe("Ждёт ответа клиента на срок");
     expect(orderKindText("on_order")).toBe("Под заказ");
     expect(orderKindText("stock")).toBeNull();
-    // The administrator may cancel or close it while the customer decides.
+    // The administrator may extend the customer's answer (TASK-039), cancel
+    // or close it while the customer decides.
     expect(
-      orderActions({ kind: "on_order", status: "term_proposed", deadlines: deadlines() }),
+      orderActions({
+        kind: "on_order",
+        status: "term_proposed",
+        deadlines: { ...deadlines(), termAnswerBy: "2026-10-11T05:00:00.000Z" },
+      }),
     ).toEqual({
       extendResponse: false,
       extendReserve: false,
+      extendTerm: true,
       closeWithoutCode: true,
       cancel: true,
     });
@@ -103,22 +117,36 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
       confirmed: null,
       overdueSince: null,
     };
-    expect(orderTermText({ status: "created", onOrderTerm: null })).toBeNull();
-    expect(orderTermText({ status: "created", onOrderTerm: { ...term, proposed: null } })).toBe(
-      "Под заказ: 3 раб. дн., до 13 октября",
+    // TASK-039: the term line by line — expected, proposed, confirmed, overdue.
+    expect(orderTermLines({ status: "created", onOrderTerm: null })).toEqual([]);
+    expect(orderTermLines({ status: "created", onOrderTerm: { ...term, proposed: null } })).toEqual(
+      [{ label: "Срок при оформлении", text: "3 раб. дн., до 13 октября" }],
     );
-    expect(orderTermText({ status: "term_proposed", onOrderTerm: term })).toMatch(
-      /^Предложен другой срок: 5 раб\. дн\., до 15 октября; клиент ответит до /,
+    const waiting = orderTermLines({ status: "term_proposed", onOrderTerm: term });
+    expect(waiting.map((line) => line.label)).toEqual([
+      "Срок при оформлении",
+      "Предложен другой срок",
+    ]);
+    expect(waiting[1]!.text).toMatch(
+      /^5 раб\. дн\., до 15 октября; предложен .+; клиент ответит до /,
     );
-    expect(
-      orderTermText({
-        status: "accepted",
-        onOrderTerm: {
-          ...term,
-          confirmed: { leadDays: 5, readyOn: "2026-10-15", at: "2026-10-10T06:00:00.000Z" },
-        },
-      }),
-    ).toBe("Срок подтверждён: 5 раб. дн., до 15 октября");
+    const confirmed = orderTermLines({
+      status: "accepted",
+      onOrderTerm: {
+        ...term,
+        confirmed: { leadDays: 5, readyOn: "2026-10-15", at: "2026-10-10T06:00:00.000Z" },
+        overdueSince: "2026-10-15T19:00:00.000Z",
+      },
+    });
+    expect(confirmed.map((line) => line.label)).toEqual([
+      "Срок при оформлении",
+      "Предложен другой срок",
+      "Срок подтверждён",
+      "Срок поставки прошёл",
+    ]);
+    // Once answered, the customer's deadline is no longer said.
+    expect(confirmed[1]!.text).not.toMatch(/клиент ответит/);
+    expect(confirmed[2]!.text).toMatch(/^5 раб\. дн\., до 15 октября/);
     expect(
       eventText({
         id: "e",
@@ -210,17 +238,19 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
   it("keeps the filters of the list in the address, the period by the days of Almaty", () => {
     const filters = orderFiltersOf(
       new URLSearchParams(
-        "q=1028&status=cancelled_by_admin&from=2026-10-07&test=include&closedLate=true",
+        "q=1028&status=cancelled_by_admin&kind=on_order&from=2026-10-07&test=include&closedLate=true",
       ),
     );
     expect(filters).toMatchObject({
       q: "1028",
       status: "cancelled_by_admin",
+      kind: "on_order",
       from: "2026-10-06T19:00:00.000Z",
       test: "include",
       closedLate: "true",
     });
     expect(orderFiltersOf(new URLSearchParams("status=nonsense")).status).toBeUndefined();
+    expect(orderFiltersOf(new URLSearchParams("kind=service")).kind).toBeUndefined();
     expect(orderFiltersOf(new URLSearchParams("")).test).toBe("exclude");
   });
 });

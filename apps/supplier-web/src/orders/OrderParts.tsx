@@ -13,6 +13,7 @@ import {
   orderActions,
   statusGroup,
   statusKey,
+  supplyOverdue,
   type OrderAction,
 } from "./order-rules";
 
@@ -76,11 +77,28 @@ export function FulfillmentLabel({ fulfillment }: { fulfillment: OrderFulfillmen
   );
 }
 
-/** «Тестовый», «Закрыта администратором», «Закрыта после срока». */
-export function OrderMarks({ order }: { order: Pick<SupplierOrderSummary, "isTest" | "closure"> }) {
+/**
+ * «Под заказ» and «Срок поставки прошёл» (S-ORD-01, TASK-039), «Тестовый»,
+ * «Закрыта администратором», «Закрыта после срока».
+ */
+export function OrderMarks({
+  order,
+}: {
+  order: Pick<SupplierOrderSummary, "isTest" | "closure" | "kind" | "status" | "onOrderTerm">;
+}) {
   const t = useT();
   return (
     <>
+      {order.kind === "on_order" && (
+        <Badge tone="neutral" icon="package">
+          {t("orders.mark.onOrder")}
+        </Badge>
+      )}
+      {supplyOverdue(order) && (
+        <Badge tone="warning" icon="alertTriangle">
+          {t("orders.mark.supplyOverdue")}
+        </Badge>
+      )}
       {order.isTest && (
         <Badge tone="neutral" icon="info">
           {t("orders.mark.test")}
@@ -146,6 +164,7 @@ const actionKeys = {
   markReady: "orders.markReady",
   giveOut: "orders.giveOut",
   closeLate: "orders.closeLate",
+  proposeTerm: "orders.proposeTerm",
 } as const;
 
 /** The word of a button; «Принять» of an order under order is «Подтвердить срок» (TASK-037). */

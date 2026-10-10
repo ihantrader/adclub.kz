@@ -1,5 +1,4 @@
 import { isApiError } from "@adclub/api-client";
-import type { UserOrderStep } from "@adclub/contracts";
 import type { MobileTextKey } from "@adclub/i18n";
 import { formatOrderCode, layout, radius } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
@@ -30,8 +29,19 @@ import { runEnvironment } from "../../config/environment";
 import type { RootParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { rememberOpenedOrder } from "../../orders/opened-orders";
+import {
+  supplyOverdue,
+  termAnswer,
+  termAnswerProblem,
+  termAnswerProblemKeys,
+} from "../../orders/order-answer";
 import { copyIsBehind } from "../../orders/order-copy";
-import { isActiveStatus, orderMarkKey, orderStatusView } from "../../orders/order-status";
+import {
+  isActiveStatus,
+  orderMarkKey,
+  orderStatusView,
+  orderStepKey,
+} from "../../orders/order-status";
 import { orderViewOfCopy, orderViewOfServer, type OrderView } from "../../orders/order-view";
 import {
   callOptions,
@@ -123,6 +133,35 @@ export function OrderScreen({ route, navigation }: Props) {
 
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
+  const [answering, setAnswering] = useState<"agree" | "reject" | null>(null);
+
+  // M-ORD-03 «Ответ пользователя» (TASK-039): «Согласиться» at once,
+  // «Отказаться» after «Заявка будет отменена». The server decides — the
+  // version is the one the user saw, and a refusal (the deadline passed,
+  // the supplier declined first) is said in words over the order as it is now.
+  const answerTerm = async (how: "agree" | "reject") => {
+    const version = request.data?.order.version;
+    setConfirmReject(false);
+    if (version === undefined) return;
+    setAnswering(how);
+    try {
+      if (how === "agree") {
+        await apiClient.agreeUserOrderTerm({ orderId }, { expectedVersion: version });
+      } else {
+        await apiClient.rejectUserOrderTerm({ orderId }, { expectedVersion: version });
+      }
+      toast.show(t(how === "agree" ? "order.answer.agreed" : "order.answer.rejected"));
+    } catch (error) {
+      const problem = termAnswerProblem(error);
+      // A session that ended has taken the user out already.
+      if (problem !== "session_ended") toast.show(t(termAnswerProblemKeys[problem]));
+    } finally {
+      setAnswering(null);
+      request.reload();
+      void orders.refresh();
+    }
+  };
 
   const cancel = async () => {
     setConfirmCancel(false);
@@ -147,6 +186,7 @@ export function OrderScreen({ route, navigation }: Props) {
   };
 
   const view = order ? orderStatusView(order) : null;
+  const answer = order ? termAnswer(order) : null;
   const timeZone = order?.pickupPoint?.timeZone ?? null;
   const offlineNote =
     fromCopy && orders.copy
@@ -241,6 +281,11 @@ export function OrderScreen({ route, navigation }: Props) {
                   })}
                 </Text>
               )}
+              {supplyOverdue(order) && (
+                <Text variant="bodyS" color="warning">
+                  {t("order.supplyOverdue")}
+                </Text>
+              )}
               {order.status === "accepted" && order.reserveUntil && (
                 <Text variant="bodyS">
                   {t("orders.mainDate.reserveUntil", {
@@ -250,7 +295,51 @@ export function OrderScreen({ route, navigation }: Props) {
               )}
             </View>
 
-            {/* 2. The code and the QR — while the order is active, for its user only. */}
+            {/* 2. The user's answer to another term (TASK-039, SCREENS M-ORD-03 block 2). */}
+            {answer && (
+              <Section title={t("order.answer.title")}>
+                <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                  <Text>
+                    {t(answer.was ? "order.answer.text" : "order.answer.textNoWas", {
+                      date: time.calendarDate(answer.readyOn),
+                      was: time.calendarDate(answer.was),
+                      time: time.deadline(answer.answerBy, timeZone, now),
+                    })}
+                  </Text>
+                  {serverActions && (
+                    <>
+                      <ButtonRow>
+                        <Button
+                          size="m"
+                          disabled={!actionsLive || answering !== null}
+                          loading={answering === "agree"}
+                          onPress={() => void answerTerm("agree")}
+                        >
+                          {t("order.answer.agree")}
+                        </Button>
+                        <Button
+                          size="m"
+                          variant="secondary"
+                          destructive
+                          disabled={!actionsLive || answering !== null}
+                          loading={answering === "reject"}
+                          onPress={() => setConfirmReject(true)}
+                        >
+                          {t("order.answer.reject")}
+                        </Button>
+                      </ButtonRow>
+                      {!actionsLive && (
+                        <Text variant="caption" color="textMuted" style={styles.center}>
+                          {t("order.needsNetwork")}
+                        </Text>
+                      )}
+                    </>
+                  )}
+                </View>
+              </Section>
+            )}
+
+            {/* 3. The code and the QR — while the order is active, for its user only. */}
             {view.code !== "none" && order.confirmation && (
               <View style={styles.block}>
                 <Pressable
@@ -276,7 +365,7 @@ export function OrderScreen({ route, navigation }: Props) {
               </View>
             )}
 
-            {/* 3. The supplier and the place — exactly as the server gave them:
+            {/* 4. The supplier and the place — exactly as the server gave them:
                 «Где забрать» for a pickup, «Поставщик» for a delivery (TASK-030.A). */}
             {view.place !== "none" && (
               <Section
@@ -299,7 +388,7 @@ export function OrderScreen({ route, navigation }: Props) {
               </Section>
             )}
 
-            {/* 4. The item. */}
+            {/* 5. The item. */}
             <Section title={t("order.item")}>
               <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.itemRow}>
@@ -327,7 +416,7 @@ export function OrderScreen({ route, navigation }: Props) {
               </View>
             </Section>
 
-            {/* 5. The course of the order — moves and times, never an employee's name. */}
+            {/* 6. The course of the order — moves and times, never an employee's name. */}
             {order.history && order.history.length > 0 && (
               <Section title={t("order.history")}>
                 <ListGroup>
@@ -335,7 +424,7 @@ export function OrderScreen({ route, navigation }: Props) {
                     <ListRow
                       key={`${step.at}-${index}`}
                       first={index === 0}
-                      title={<Text variant="body">{t(stepKey(step, order.fulfillment))}</Text>}
+                      title={<Text variant="body">{t(orderStepKey(step, order))}</Text>}
                       trailing={
                         <Text variant="caption" color="textMuted">
                           {(() => {
@@ -350,10 +439,10 @@ export function OrderScreen({ route, navigation }: Props) {
               </Section>
             )}
 
-            {/* 6. The actions. «Оценить» and «Пожаловаться» are stage C and are not drawn. */}
+            {/* 7. The actions. «Оценить» and «Пожаловаться» are stage C and are not drawn. */}
             {serverActions && (
               <View style={styles.actions}>
-                {view.cancellable && (
+                {view.cancellable && !answer && (
                   <Button
                     variant="secondary"
                     destructive
@@ -375,7 +464,7 @@ export function OrderScreen({ route, navigation }: Props) {
                     {t("order.repeat")}
                   </Button>
                 )}
-                {!actionsLive && (view.cancellable || view.finished) && (
+                {!actionsLive && ((view.cancellable && !answer) || view.finished) && (
                   <Text variant="caption" color="textMuted" style={styles.center}>
                     {t("order.needsNetwork")}
                   </Text>
@@ -402,6 +491,23 @@ export function OrderScreen({ route, navigation }: Props) {
         }
       >
         <Text>{t("order.cancelConfirmText")}</Text>
+      </Dialog>
+      <Dialog
+        visible={confirmReject}
+        onClose={() => setConfirmReject(false)}
+        title={t("order.answer.rejectTitle")}
+        actions={
+          <>
+            <Button variant="danger" onPress={() => void answerTerm("reject")}>
+              {t("order.answer.reject")}
+            </Button>
+            <Button variant="text" onPress={() => setConfirmReject(false)}>
+              {t("order.answer.rejectKeep")}
+            </Button>
+          </>
+        }
+      >
+        <Text>{t("order.answer.rejectText")}</Text>
       </Dialog>
       {repeat.sheet}
     </Screen>
@@ -528,34 +634,6 @@ function Term({
       </Text>
     </View>
   );
-}
-
-/** A step of «Ход заявки» by the status it led to. */
-function stepKey(step: UserOrderStep, fulfillment: OrderView["fulfillment"]): MobileTextKey {
-  switch (step.status) {
-    case "created":
-      return "order.step.created";
-    case "accepted":
-      return "orderStatus.accepted.title";
-    case "ready":
-      return fulfillment === "pickup"
-        ? "orderStatus.readyPickup.title"
-        : "orderStatus.readyDelivery.title";
-    case "completed":
-      return "orderStatus.completed.short";
-    case "cancelled_by_user":
-      return "orderStatus.cancelled.title";
-    case "cancelled_by_admin":
-      return "orderStatus.cancelledByAdmin.title";
-    case "declined_by_supplier":
-      return "orderStatus.declined.title";
-    case "response_expired":
-      return "orderStatus.responseExpired.title";
-    case "reserve_expired":
-      return "orderStatus.reserveExpired.title";
-    default:
-      return "order.step.changed";
-  }
 }
 
 const styles = StyleSheet.create({

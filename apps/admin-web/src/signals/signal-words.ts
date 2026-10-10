@@ -15,7 +15,7 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   duplicate_after_late_close: "Двойная заявка при позднем закрытии",
   frequent_admin_closes: "Частые закрытия администратором",
   supplier_unreachable: "Поставщик недостижим",
-  supply_overdue: "Просрочена поставка под заказ",
+  supply_overdue: "Срок поставки прошёл",
 };
 
 /** The kinds in the order of importance of A-HOME. */

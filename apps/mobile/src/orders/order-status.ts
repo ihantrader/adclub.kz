@@ -1,4 +1,10 @@
-import type { OrderFulfillment, OrderKind, OrderStatusValue } from "@adclub/contracts";
+import type {
+  OrderFulfillment,
+  OrderKind,
+  OrderStatusValue,
+  UserOrderStep,
+} from "@adclub/contracts";
+import type { MobileTextKey } from "@adclub/i18n";
 import type { OrderStatusGroup } from "@adclub/ui-core";
 
 /**
@@ -7,8 +13,8 @@ import type { OrderStatusGroup } from "@adclub/ui-core";
  * for an order on an item in stock and (TASK-037) under order. The screen
  * only reads this: what the heading says, what the line under it explains,
  * which deadline it shows, how the code is drawn and how much of the place
- * is known. The answer to another term («Согласиться» / «Отказаться») is
- * TASK-039; until then the card says what is going on.
+ * is known. The answer to another term («Согласиться» / «Отказаться») is a
+ * block of its own (`order-answer.ts`, TASK-039).
  *
  * Texts are keys of the dictionary; what fills them in (`{time}`) is the
  * screen's, because it is a moment of the server in words.
@@ -114,7 +120,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
       };
     case "term_proposed":
       // TASK-037: another term waits for the user's word (SCREENS M-ORD-03
-      // «Нужен ваш ответ»); the buttons of the answer come with TASK-039.
+      // «Нужен ваш ответ»); the buttons of the answer are `termAnswer` (TASK-039).
       return {
         group: "waiting",
         title: "orderStatus.termProposed.title",
@@ -273,4 +279,55 @@ export function listStatusKey(
   return input.status === "completed"
     ? "orderStatus.completed.short"
     : orderStatusView(input).title;
+}
+
+/**
+ * A step of «Ход заявки» (M-ORD-03) by the move that made it and the status
+ * it led to — never an employee's name. The steps of a term of an order
+ * under order (TASK-039) are told by their move: the supplier confirmed it,
+ * proposed another, the user agreed or said no.
+ */
+export function orderStepKey(
+  step: Pick<UserOrderStep, "action" | "status">,
+  order: { fulfillment: OrderFulfillment; kind?: OrderKind },
+): MobileTextKey {
+  switch (step.action) {
+    case "propose_term":
+      return "order.step.termProposed";
+    case "agree_term":
+      return "order.step.termAgreed";
+    case "reject_term":
+      return "order.step.termRejected";
+    case "accept":
+      if (order.kind === "on_order") return "order.step.termConfirmed";
+      break;
+    default:
+      break;
+  }
+  switch (step.status) {
+    case "created":
+      return "order.step.created";
+    case "accepted":
+      return "orderStatus.accepted.title";
+    case "ready":
+      return order.fulfillment === "pickup"
+        ? "orderStatus.readyPickup.title"
+        : "orderStatus.readyDelivery.title";
+    case "completed":
+      return "orderStatus.completed.short";
+    case "cancelled_by_user":
+      return "orderStatus.cancelled.title";
+    case "cancelled_by_admin":
+      return "orderStatus.cancelledByAdmin.title";
+    case "declined_by_supplier":
+      return "orderStatus.declined.title";
+    case "response_expired":
+      return "orderStatus.responseExpired.title";
+    case "reserve_expired":
+      return "orderStatus.reserveExpired.title";
+    case "term_expired":
+      return "orderStatus.termExpired.title";
+    default:
+      return "order.step.changed";
+  }
 }

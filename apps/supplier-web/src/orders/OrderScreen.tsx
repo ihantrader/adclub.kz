@@ -21,6 +21,7 @@ import { formatPhone, useOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
 import { goBack, navigate, useRouteId } from "../router";
 import { DeclineDialog } from "./DeclineDialog";
+import { TermDialog } from "./TermDialog";
 import { useNow, useVisiblePoll } from "./live";
 import {
   AnswerTimer,
@@ -185,6 +186,13 @@ function OrderView({
   const at = useAt(timeZone);
   const [notice, setNotice] = useState<{ conflict: boolean; text: string } | null>(null);
   const [declining, setDeclining] = useState(false);
+  const [proposing, setProposing] = useState(false);
+  /**
+   * «Подтвердить срок до {дата}» (S-ORD-02, TASK-039): the date the agreed
+   * term gives if confirmed now — the server's (`…/term-options`); until it
+   * comes, the button says «Подтвердить срок».
+   */
+  const [confirmOn, setConfirmOn] = useState<string | null>(null);
   /** The order just changed under the employee's finger: the buttons wait a moment. */
   const [held, setHeld] = useState(false);
   const busy = useRef(false);
@@ -213,6 +221,20 @@ function OrderView({
       if (isApiError(error) && error.code === "NOT_FOUND") onMissing();
     }
   };
+
+  useEffect(() => {
+    if (order.kind !== "on_order" || order.status !== "created") return;
+    let live = true;
+    apiClient
+      .getSupplierOrderTermOptions({ orderId: order.id })
+      .then((answer) => {
+        if (live) setConfirmOn(answer.confirm.readyOn);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [order.id, order.kind, order.status]);
 
   useVisiblePoll(() => {
     if (!busy.current) void reread();
@@ -263,6 +285,9 @@ function OrderView({
       case "decline":
         setDeclining(true);
         return undefined;
+      case "proposeTerm":
+        setProposing(true);
+        return undefined;
       case "giveOut":
         navigate("scan");
         return undefined;
@@ -273,8 +298,12 @@ function OrderView({
   };
 
   const actions = orderActions(order, now, { blocked });
+  const label = (action: OrderAction) =>
+    action === "accept" && order.kind === "on_order" && confirmOn
+      ? t("orders.confirmTermUntil", { date: formatDate(confirmOn, lang) })
+      : t(actionLabel(action, order.kind));
   const day = (date: string) => formatDate(date, lang);
-  const journal = journalLines(order.events, when, t, day);
+  const journal = journalLines(order.events, when, t, day, order.kind);
   const term = termWords(order, day, when, t);
   const priceChanged =
     order.currentOfferPrice !== null && order.currentOfferPrice !== order.unitPrice;
@@ -301,7 +330,7 @@ function OrderView({
           {notice.text}
         </Banner>
       )}
-      {blocked && actions.primary !== null && (
+      {blocked && (actions.primary !== null || actions.secondary.length > 0) && (
         <Banner tone="warning">{t("orders.blockedNote")}</Banner>
       )}
 
@@ -433,7 +462,7 @@ function OrderView({
         </section>
       )}
 
-      {actions.primary && (
+      {(actions.primary || actions.secondary.length > 0) && (
         <div className="save-bar order-actions" {...toastObstacle}>
           {actions.secondary.map((action) => (
             <Button
@@ -443,20 +472,33 @@ function OrderView({
               disabled={held || (!online && needsNetwork(action))}
               onClick={() => press(action)}
             >
-              {t(actionLabel(action, order.kind))}
+              {label(action)}
             </Button>
           ))}
-          <Button
-            disabled={held || (!online && needsNetwork(actions.primary))}
-            onClick={() => press(actions.primary!)}
-          >
-            {t(actionLabel(actions.primary, order.kind))}
-          </Button>
-          {!online && needsNetwork(actions.primary) && (
+          {actions.primary && (
+            <Button
+              disabled={held || (!online && needsNetwork(actions.primary))}
+              onClick={() => press(actions.primary!)}
+            >
+              {label(actions.primary)}
+            </Button>
+          )}
+          {!online && needsNetwork(actions.primary ?? actions.secondary[0]!) && (
             <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>
           )}
         </div>
       )}
+
+      <TermDialog
+        target={proposing ? { id: order.id, number: order.number, version: order.version } : null}
+        format={when}
+        onClose={() => setProposing(false)}
+        onProposed={(proposed) => onOrder(proposed)}
+        onProblem={(problem) => {
+          setNotice(problem);
+          void reread({ tell: false });
+        }}
+      />
 
       <DeclineDialog
         target={declining ? { id: order.id, number: order.number, version: order.version } : null}

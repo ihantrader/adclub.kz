@@ -12,6 +12,8 @@ import { CitySelect, SearchBox, useAddressFilters, useCities } from "../supplier
 import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
 import {
   moneyText,
+  ORDER_KIND_TEXT,
+  ORDER_KINDS,
   ORDER_STATUS_TEXT,
   ORDER_STATUSES,
   orderFiltersOf,
@@ -26,7 +28,7 @@ const supplierSearch = createChoiceSources(apiClient).suppliers();
  * A-ORD-01 «Заявки» (SCREENS 7.5; TASK-036.B): the search by the number
  * («1028», «№ 1028») and by the customer's phone (the server matches the
  * full number; the list shows it partly hidden), the filters — status,
- * supplier, city, period, «Закрыта поздно», «Закрыта администратором»,
+ * kind (TASK-039), supplier, city, period, «Закрыта поздно», «Закрыта администратором»,
  * «Показывать тестовые» — in the address, «Всего N», «Показать ещё». Never
  * the code or the QR. «Есть жалоба» is stage C.
  */
@@ -57,6 +59,20 @@ export function Orders() {
             {ORDER_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {ORDER_STATUS_TEXT[status]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="select">
+          <span className="ac-text-caption ac-muted">Тип</span>
+          <select
+            value={filters.kind ?? ""}
+            onChange={(event) => set({ kind: event.target.value || undefined })}
+          >
+            <option value="">Все</option>
+            {ORDER_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {ORDER_KIND_TEXT[kind]}
               </option>
             ))}
           </select>

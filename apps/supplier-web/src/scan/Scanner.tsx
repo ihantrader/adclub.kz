@@ -767,7 +767,7 @@ function Found({
       <div className="found">
         <h1 className="ac-text-title-l">{t("scan.foundTitle")}</h1>
         <p className="ac-text-caption ac-muted num">
-          {t("orders.number", { number: order.number })} · {t(statusKey(order.status))}
+          {t("orders.number", { number: order.number })} · {t(statusKey(order.status, order.kind))}
           {order.isTest && ` · ${t("orders.mark.test")}`}
         </p>
         <p className="ac-text-heading found__item">

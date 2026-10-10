@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   canOrderOffer,
   checkoutFailure,
+  checkoutKind,
+  checkoutReserve,
   createAttemptKeys,
   fulfillmentOptions,
   reserveDuration,
@@ -154,8 +156,26 @@ describe("the offer on the checkout", () => {
     expect(reserveDuration(1)).toEqual({ unit: "hours", count: 1 });
   });
 
-  it("orders only an offer in stock: «под заказ» comes with stage C", () => {
+  it("orders an offer in stock and under order (TASK-039), nothing else", () => {
     expect(canOrderOffer({ availability: "in_stock" })).toBe(true);
-    expect(canOrderOffer({ availability: "on_order" })).toBe(false);
+    expect(canOrderOffer({ availability: "on_order" })).toBe(true);
+    expect(canOrderOffer({ availability: "service" })).toBe(false);
+    expect(checkoutKind({ availability: "on_order" })).toBe("on_order");
+    expect(checkoutKind({ availability: "in_stock" })).toBe("stock");
+  });
+
+  it("promises the reserve of the kind: once ready, or once the goods have come", () => {
+    const ordering = { pickupReserveHours: 24, onOrderPickupReserveHours: 72 };
+    expect(checkoutReserve("stock", ordering)).toEqual({ onOrder: false, unit: "days", count: 1 });
+    expect(checkoutReserve("on_order", ordering)).toEqual({
+      onOrder: true,
+      unit: "days",
+      count: 3,
+    });
+    expect(
+      checkoutReserve("on_order", { pickupReserveHours: 24, onOrderPickupReserveHours: 36 }),
+    ).toEqual({ onOrder: true, unit: "hours", count: 36 });
+    // An older server says nothing of it: nothing is promised.
+    expect(checkoutReserve("on_order", { pickupReserveHours: 24 })).toBeNull();
   });
 });

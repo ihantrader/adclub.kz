@@ -29,9 +29,10 @@ import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-ou
 import {
   canOrderOffer,
   checkoutFailure,
+  checkoutKind,
+  checkoutReserve,
   createAttemptKeys,
   fulfillmentOptions,
-  reserveDuration,
   settleFulfillment,
   settleQuantity,
   type CheckoutFailure,
@@ -146,9 +147,8 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
 
   const submit = async (options: { expectedPrice?: number; allowAnother?: boolean } = {}) => {
     if (!offer || !fulfillment || sending) return;
-    // The server takes orders under order since TASK-037; this version of the
-    // app has no screens for their term yet (TASK-039) — «Повторить» of an
-    // offer that is under order now must not place one blind.
+    // A kind this version has no checkout for (a service, TASK-038) is not
+    // placed blind — «Повторить» could open the checkout of one.
     if (!canOrderOffer(offer)) {
       setNotice({ kind: "kind_not_supported" });
       return;
@@ -223,7 +223,11 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
             : "ready";
 
   const receipt = offer ? receiptText(offer.receipt, "withDate") : null;
-  const reserve = data ? reserveDuration(data.ordering.pickupReserveHours) : null;
+  // TASK-039: «Под заказ» — the date the supplier brings it by, the
+  // agreement to the term (T-ORD-02, T-ORD-03) and its own reserve.
+  const kind = offer ? checkoutKind(offer) : "stock";
+  const onOrder = kind === "on_order";
+  const reserve = data ? checkoutReserve(kind, data.ordering) : null;
   const options = offer ? fulfillmentOptions(offer) : [];
   const priceWas = previousPrice !== undefined && offer && previousPrice !== offer.price;
 
@@ -329,6 +333,20 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
               </View>
             </Section>
 
+            {onOrder && (
+              <Section title={t("checkout.term")}>
+                {receipt && (
+                  <Text variant="bodyStrong">{t("checkout.onOrderTerm", { date: receipt })}</Text>
+                )}
+                <Text variant="bodyS" color="textMuted">
+                  {t("checkout.onOrderAgree")}
+                </Text>
+                <Text variant="bodyS" color="textMuted">
+                  {t("checkout.onOrderPrepay")}
+                </Text>
+              </Section>
+            )}
+
             <Section title={t("checkout.quantity")}>
               <View style={styles.quantityRow}>
                 <Quantity
@@ -361,7 +379,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                     checked={fulfillment === way}
                     onSelect={() => setFulfillment(way)}
                     label={way === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
-                    {...(receipt
+                    {...(receipt && !onOrder
                       ? {
                           description:
                             way === "pickup"
@@ -373,7 +391,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                 ))
               ) : (
                 <Text variant="bodyStrong">
-                  {receipt
+                  {receipt && !onOrder
                     ? fulfillment === "pickup"
                       ? t("item.pickupDate", { date: receipt })
                       : t("item.deliveryDate", { date: receipt })
@@ -384,9 +402,13 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
               )}
               {fulfillment === "pickup" && reserve && (
                 <Text variant="bodyS" color="textMuted">
-                  {reserve.unit === "days"
-                    ? tn("checkout.reserveDays", reserve.count)
-                    : tn("checkout.reserveHours", reserve.count)}
+                  {reserve.onOrder
+                    ? reserve.unit === "days"
+                      ? tn("checkout.onOrderReserveDays", reserve.count)
+                      : tn("checkout.onOrderReserveHours", reserve.count)
+                    : reserve.unit === "days"
+                      ? tn("checkout.reserveDays", reserve.count)
+                      : tn("checkout.reserveHours", reserve.count)}
                 </Text>
               )}
               {fulfillment === "delivery" && (
@@ -507,7 +529,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
       case "quantity_invalid":
         return t("checkout.quantityChanged", { n: maxQuantity });
       case "kind_not_supported":
-        return t("item.onOrderLater");
+        return t("item.orderLater");
       case "rate_limited":
         return t("checkout.tooMany", { minutes: current.minutes });
       case "network":

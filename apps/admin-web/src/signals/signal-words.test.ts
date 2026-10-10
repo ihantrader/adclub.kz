@@ -71,6 +71,11 @@ describe("the words of signals", () => {
         payload: { since: "2026-10-07T08:00:00.000Z" },
       }),
     ).toBe("/orders/extensions?from=2026-10-07T08%3A00%3A00.000Z");
+    // TASK-039: «Срок поставки прошёл» opens the order.
+    expect(KIND_TITLES.supply_overdue).toBe("Срок поставки прошёл");
+    expect(subjectLink({ subjectType: "order", subjectId: id, kind: "supply_overdue" })).toBe(
+      `/orders/${id}`,
+    );
   });
 
   it("tells who closed it first", () => {

@@ -132,6 +132,16 @@ export function formatDate(date: string, lang: Lang): string {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
+/** «пн, 13 окт.» — a date of the term to choose (S-ORD-04), as the server gave it. */
+export function formatTermDay(date: string, lang: Lang): string {
+  return new Intl.DateTimeFormat(localeOf(lang), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
 /** The start of today in `timeZone` (Kazakhstan has no daylight saving time). */
 export function startOfDay(timeZone: string, now: number = Date.now()): number {
   const { time } = wallClock(now, timeZone);
@@ -310,8 +320,15 @@ export function finishedQuery(
 
 // --------------------------------------------------------------- actions
 
-/** The buttons of an order (the table of S-ORD-02: rows «Наличие» and «Любой»). */
-export type OrderAction = "accept" | "decline" | "markReady" | "giveOut" | "closeLate";
+/** The buttons of an order (the table of S-ORD-02: rows «Наличие», «Под заказ» and «Любой»). */
+export type OrderAction =
+  | "accept"
+  | "decline"
+  | "markReady"
+  | "giveOut"
+  | "closeLate"
+  /** S-ORD-04 «Предложить другой срок» of a new order under order (TASK-039). */
+  | "proposeTerm";
 
 export interface OrderActions {
   primary: OrderAction | null;
@@ -322,11 +339,10 @@ const NONE: OrderActions = { primary: null, secondary: [] };
 
 /**
  * What an employee may press on an order now — exactly what the server
- * allows from its status. An order under order (TASK-037) has the same
- * buttons where its moves are the same — «Принять» is «Подтвердить срок»,
- * then «Готово к выдаче», «Выдать», «Отказать»; «Предложить другой срок»
- * comes with its screen (TASK-039), and while the customer decides there is
- * nothing to press. A kind this version does not know gets no buttons. A new
+ * allows from its status. An order under order (TASK-037, TASK-039): a new
+ * one — «Подтвердить срок до {дата}» · «Предложить другой срок» · «Отказать»;
+ * a confirmed term — the buttons of «Принята»; while the customer decides —
+ * only «Отказать» (D-072). A kind this version does not know gets no buttons. A new
  * order whose answer deadline passed by this device's clock has none: the
  * server is about to expire it. A blocked company (SCREENS 6.0) keeps
  * looking at its orders and giving them out by the code, nothing else.
@@ -341,7 +357,12 @@ export function orderActions(
   switch (order.status) {
     case "created":
       if (blocked || answerTimer(order.respondBy, now).kind === "expired") return NONE;
-      return { primary: "accept", secondary: ["decline"] };
+      return order.kind === "on_order"
+        ? { primary: "accept", secondary: ["proposeTerm", "decline"] }
+        : { primary: "accept", secondary: ["decline"] };
+    case "term_proposed":
+      // D-072: the goods won't come — no need to wait for the customer.
+      return blocked ? NONE : { primary: null, secondary: ["decline"] };
     case "accepted":
       return blocked
         ? { primary: "giveOut", secondary: [] }
@@ -399,6 +420,17 @@ export function termWords(
     }),
     note,
   };
+}
+
+/**
+ * «Срок поставки прошёл» — the mark of the list and the card (S-ORD-01,
+ * TASK-039): the server said the confirmed date passed (`overdueSince`)
+ * and the order is still not ready; once ready or over, nothing to mark.
+ */
+export function supplyOverdue(
+  order: Pick<SupplierOrderSummary, "status" | "onOrderTerm">,
+): boolean {
+  return order.status === "accepted" && Boolean(order.onOrderTerm?.overdueSince);
 }
 
 // -------------------------------------------------------------- the people
@@ -533,6 +565,23 @@ export function actionProblem(
   }
 }
 
+/**
+ * What a refused «Отправить клиенту» says (S-ORD-04, TASK-039): the date is
+ * no longer one to propose (a day has turned, the hours changed) — at the
+ * dates, which are loaded again (`stale: true`); anything else — as any
+ * refused press (a colleague or the button of WhatsApp was first).
+ */
+export function proposeProblem(
+  error: unknown,
+  format: (iso: string) => string,
+  t: Translate,
+): { conflict: boolean; text: string; stale?: true; companyChanged?: true } {
+  if (isApiError(error) && error.code === "VALIDATION_ERROR") {
+    return { conflict: false, text: t("orders.termDialog.dateRefused"), stale: true };
+  }
+  return actionProblem(error, format, t);
+}
+
 // ---------------------------------------------------------------- journal
 
 const declineReasonKeys = {
@@ -557,6 +606,8 @@ export function journalLines(
   t: Translate,
   /** A calendar date of the term in words («12 октября»); TASK-037. */
   formatDay: (date: string) => string = (date) => date,
+  /** TASK-039: «Принял» of an order under order reads «Подтвердил срок». */
+  kind?: OrderKind,
 ): { id: string; text: string }[] {
   const lines: { id: string; text: string }[] = [];
   for (const event of events) {
@@ -567,7 +618,10 @@ export function journalLines(
         text = t("orders.journal.created", params);
         break;
       case "accept":
-        text = t("orders.journal.accepted", params);
+        text = t(
+          kind === "on_order" ? "orders.journal.termConfirmed" : "orders.journal.accepted",
+          params,
+        );
         break;
       case "decline":
         text = t("orders.journal.declined", params);

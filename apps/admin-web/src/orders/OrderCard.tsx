@@ -26,11 +26,11 @@ import {
   orderErrorText,
   orderKindText,
   orderStatusText,
-  orderTermText,
+  orderTermLines,
   statusTone,
 } from "./order-words";
 
-type Action = "extendResponse" | "extendReserve" | "close" | "cancel";
+type Action = "extendResponse" | "extendReserve" | "extendTerm" | "close" | "cancel";
 
 /** The steps an extension offers, minutes (the server caps one at `deadline_extension_max_hours`). */
 const MINUTES = [15, 30, 60, 120, 240, 480, 1440] as const;
@@ -91,10 +91,16 @@ export function OrderCard({ orderId }: { orderId: string }) {
     try {
       switch (action) {
         case "extendResponse":
-        case "extendReserve": {
+        case "extendReserve":
+        case "extendTerm": {
           const answer = await apiClient.extendAdminOrderDeadline(params, {
             expectedVersion,
-            deadline: action === "extendResponse" ? "response" : "reserve",
+            deadline:
+              action === "extendResponse"
+                ? "response"
+                : action === "extendTerm"
+                  ? "term"
+                  : "reserve",
             minutes,
             reason,
           });
@@ -144,11 +150,14 @@ export function OrderCard({ orderId }: { orderId: string }) {
       ? order.deadlines.respondBy
       : order && action === "extendReserve"
         ? order.deadlines.reserveUntil
-        : null;
+        : order && action === "extendTerm"
+          ? order.deadlines.termAnswerBy
+          : null;
   const extended = current ? new Date(new Date(current).getTime() + minutes * 60_000) : null;
   const dialog: Record<Action, { title: string; confirm: string }> = {
     extendResponse: { title: "Продлить срок ответа поставщика", confirm: "Продлить" },
     extendReserve: { title: "Продлить резерв", confirm: "Продлить" },
+    extendTerm: { title: "Продлить ответ клиента", confirm: "Продлить" },
     close: { title: "Закрыть заявку без кода", confirm: "Закрыть без кода" },
     cancel: { title: "Отменить заявку", confirm: "Отменить заявку" },
   };
@@ -193,6 +202,11 @@ export function OrderCard({ orderId }: { orderId: string }) {
                   onClick={() => open("extendResponse")}
                 >
                   Продлить срок ответа…
+                </Button>
+              )}
+              {actions.extendTerm && (
+                <Button variant="secondary" disabled={!online} onClick={() => open("extendTerm")}>
+                  Продлить ответ клиента…
                 </Button>
               )}
               {actions.extendReserve && (
@@ -298,7 +312,9 @@ export function OrderCard({ orderId }: { orderId: string }) {
           busy={busy}
           error={error && <p className="dialog-error">{error}</p>}
         >
-          {(action === "extendResponse" || action === "extendReserve") && (
+          {(action === "extendResponse" ||
+            action === "extendReserve" ||
+            action === "extendTerm") && (
             <>
               <label className="select">
                 <span className="ac-text-caption ac-muted">На сколько продлить</span>
@@ -320,7 +336,9 @@ export function OrderCard({ orderId }: { orderId: string }) {
               <p className="ac-text-body-s">
                 {action === "extendResponse"
                   ? "Поставщику уйдёт уведомление о заявке с новым сроком."
-                  : "Клиент увидит новый срок резерва в приложении."}
+                  : action === "extendTerm"
+                    ? "Клиент увидит новый срок ответа в приложении, поставщик — в кабинете. Уведомлений не отправляется."
+                    : "Клиент увидит новый срок резерва в приложении."}
               </p>
             </>
           )}
@@ -417,12 +435,12 @@ function OrderFacts({ order }: { order: AdminOrder }) {
           <dt>Срок ответа поставщика</dt>
           <dd className="num">до {formatMoment(order.deadlines.respondBy)}</dd>
         </div>
-        {orderTermText(order) && (
-          <div>
-            <dt>Срок поставки</dt>
-            <dd>{orderTermText(order)}</dd>
+        {orderTermLines(order).map((line) => (
+          <div key={line.label}>
+            <dt>{line.label}</dt>
+            <dd>{line.text}</dd>
           </div>
-        )}
+        ))}
         {order.deadlines.reserveUntil &&
           (order.status === "accepted" ||
             order.status === "ready" ||

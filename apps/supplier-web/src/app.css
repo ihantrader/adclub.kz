@@ -1230,6 +1230,25 @@ a.ac-button {
   border: 0;
 }
 
+/* S-ORD-04: the working days to choose from (TASK-039). */
+.term-dates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.term-dates__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
 .order-actions {
   justify-content: flex-end;
 }

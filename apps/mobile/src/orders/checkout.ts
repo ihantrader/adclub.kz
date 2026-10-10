@@ -180,11 +180,36 @@ export function reserveDuration(hours: number): { unit: "days" | "hours"; count:
 }
 
 /**
- * This app places an order from an offer «В наличии» only. The server takes
- * «Под заказ» since TASK-037; the app gets the screens of its term (the
- * date, «Нужен ваш ответ», «Согласиться» / «Отказаться») with TASK-039 and
- * opens the button then.
+ * The offers this app places an order from: «В наличии» and, since TASK-039,
+ * «Под заказ» — the server takes both (`POST /orders`); a kind this version
+ * does not know (a service, TASK-038) is not ordered here.
  */
 export function canOrderOffer(offer: { availability: string }): boolean {
-  return offer.availability === "in_stock";
+  return offer.availability === "in_stock" || offer.availability === "on_order";
+}
+
+/** M-ORD-01 — the checkout of an offer «В наличии» or «Под заказ». */
+export type CheckoutKind = "stock" | "on_order";
+
+export function checkoutKind(offer: { availability: string }): CheckoutKind {
+  return offer.availability === "on_order" ? "on_order" : "stock";
+}
+
+/**
+ * The pickup reserve the checkout promises (M-ORD-01): «После готовности
+ * заказ держат для вас N суток» of an item in stock (`pickup_reserve_hours`);
+ * «После того как товар придёт, его держат для вас N суток» of an item under
+ * order — its own, longer setting (`on_order_pickup_reserve_hours`). `null` —
+ * nothing to promise: the server did not say it (an older one).
+ */
+export function checkoutReserve(
+  kind: CheckoutKind,
+  ordering: { pickupReserveHours: number; onOrderPickupReserveHours?: number | undefined },
+): ({ onOrder: boolean } & ReturnType<typeof reserveDuration>) | null {
+  if (kind === "stock") {
+    return { onOrder: false, ...reserveDuration(ordering.pickupReserveHours) };
+  }
+  return ordering.onOrderPickupReserveHours === undefined
+    ? null
+    : { onOrder: true, ...reserveDuration(ordering.onOrderPickupReserveHours) };
 }

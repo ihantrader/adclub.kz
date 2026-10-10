@@ -48,24 +48,46 @@ export function orderKindText(kind: AdminOrder["kind"]): string | null {
 }
 
 /**
- * The term of an order under order in one line (A-ORD-02, TASK-037):
- * confirmed, proposed with the customer's deadline, or the one the customer
- * agreed to by ordering; overdue said apart. `null` — an item in stock.
+ * The term of an order under order line by line (A-ORD-02, TASK-039): the
+ * one the customer agreed to by ordering, another one the supplier
+ * proposed (and until when the customer answers, while they decide), the
+ * confirmed one, and an overdue supply. Empty — an item in stock.
  */
-export function orderTermText(order: Pick<AdminOrder, "status" | "onOrderTerm">): string | null {
+export function orderTermLines(
+  order: Pick<AdminOrder, "status" | "onOrderTerm">,
+): { label: string; text: string }[] {
   const term = order.onOrderTerm;
-  if (!term) return null;
+  if (!term) return [];
   const day = (date: string | null) => (date ? formatDay(date) : "—");
-  const overdue = term.overdueSince
-    ? ` · поставка просрочена с ${formatMoment(term.overdueSince)}`
-    : "";
+  const lines = [
+    {
+      label: "Срок при оформлении",
+      text: `${term.expected.leadDays} раб. дн., до ${day(term.expected.readyOn)}`,
+    },
+  ];
+  if (term.proposed) {
+    lines.push({
+      label: "Предложен другой срок",
+      text:
+        `${term.proposed.leadDays} раб. дн., до ${day(term.proposed.readyOn)}; предложен ${formatMoment(term.proposed.at)}` +
+        (order.status === "term_proposed"
+          ? `; клиент ответит до ${formatMoment(term.proposed.answerBy)}`
+          : ""),
+    });
+  }
   if (term.confirmed) {
-    return `Срок подтверждён: ${term.confirmed.leadDays} раб. дн., до ${day(term.confirmed.readyOn)}${overdue}`;
+    lines.push({
+      label: "Срок подтверждён",
+      text: `${term.confirmed.leadDays} раб. дн., до ${day(term.confirmed.readyOn)}; ${formatMoment(term.confirmed.at)}`,
+    });
   }
-  if (term.proposed && order.status === "term_proposed") {
-    return `Предложен другой срок: ${term.proposed.leadDays} раб. дн., до ${day(term.proposed.readyOn)}; клиент ответит до ${formatMoment(term.proposed.answerBy)}`;
+  if (term.overdueSince) {
+    lines.push({
+      label: "Срок поставки прошёл",
+      text: `поставка просрочена с ${formatMoment(term.overdueSince)}`,
+    });
   }
-  return `Под заказ: ${term.expected.leadDays} раб. дн., до ${day(term.expected.readyOn)}`;
+  return lines;
 }
 
 const MONTHS = [
@@ -209,11 +231,14 @@ export function channelText(event: OrderEvent): string | null {
 export function orderActions(order: Pick<AdminOrder, "status" | "kind" | "deadlines">): {
   extendResponse: boolean;
   extendReserve: boolean;
+  /** TASK-039: the customer's answer to another term (deadline «term»). */
+  extendTerm: boolean;
   closeWithoutCode: boolean;
   cancel: boolean;
 } {
   return {
     extendResponse: order.status === "created",
+    extendTerm: order.status === "term_proposed" && order.deadlines.termAnswerBy !== null,
     extendReserve:
       (order.status === "accepted" || order.status === "ready") &&
       order.deadlines.reserveUntil !== null,
@@ -281,6 +306,16 @@ export const SKIP_REASON_TEXT = {
   not_found: "заявки нет",
 } as const;
 
+type OrderKindValue = AdminOrder["kind"];
+
+/** The kinds of A-ORD-01 «тип» and their words (TASK-039). */
+export const ORDER_KINDS: readonly OrderKindValue[] = ["stock", "on_order"];
+
+export const ORDER_KIND_TEXT: Record<OrderKindValue, string> = {
+  stock: "В наличии",
+  on_order: "Под заказ",
+};
+
 /** The filters of A-ORD-01 kept in the address, for the server. */
 export function orderFiltersOf(query: URLSearchParams): Omit<AdminOrderListQuery, "limit"> {
   const status = query.get("status");
@@ -289,6 +324,10 @@ export function orderFiltersOf(query: URLSearchParams): Omit<AdminOrderListQuery
     q: value("q"),
     status: ORDER_STATUSES.includes(status as OrderStatusValue)
       ? (status as OrderStatusValue)
+      : undefined,
+    // A-ORD-01 «тип» (TASK-039).
+    kind: ORDER_KINDS.includes(query.get("kind") as OrderKindValue)
+      ? (query.get("kind") as OrderKindValue)
       : undefined,
     supplierId: value("supplierId"),
     accountId: value("accountId"),

@@ -17,6 +17,9 @@ import {
   journalLines,
   nextTimerTick,
   orderActions,
+  formatTermDay,
+  proposeProblem,
+  supplyOverdue,
   startOfDay,
   statusKey,
   termWords,
@@ -240,17 +243,90 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
     expect(orderActions(later, NOON, open)).toEqual({ primary: null, secondary: [] });
   });
 
-  it("gives an order under order the buttons whose moves it shares, and none while the customer decides (TASK-037)", () => {
+  it("gives an order under order its buttons of S-ORD-02 (TASK-037, TASK-039, D-072)", () => {
     const onOrder = (status: SupplierOrderSummary["status"]) =>
       orderActions(summary({ kind: "on_order", status }), NOON, open);
-    expect(onOrder("created")).toEqual({ primary: "accept", secondary: ["decline"] });
+    expect(onOrder("created")).toEqual({
+      primary: "accept",
+      secondary: ["proposeTerm", "decline"],
+    });
     expect(onOrder("accepted")).toEqual({
       primary: "markReady",
       secondary: ["giveOut", "decline"],
     });
     expect(onOrder("ready")).toEqual({ primary: "giveOut", secondary: ["decline"] });
-    expect(onOrder("term_proposed")).toEqual({ primary: null, secondary: [] });
+    // D-072: while the customer decides — only «Отказать».
+    expect(onOrder("term_proposed")).toEqual({ primary: null, secondary: ["decline"] });
     expect(onOrder("term_expired")).toEqual({ primary: null, secondary: [] });
+    // A blocked company gives out by the code, nothing else.
+    const blocked = { blocked: true };
+    expect(
+      orderActions(summary({ kind: "on_order", status: "term_proposed" }), NOON, blocked),
+    ).toEqual({ primary: null, secondary: [] });
+    expect(orderActions(summary({ kind: "on_order", status: "created" }), NOON, blocked)).toEqual({
+      primary: null,
+      secondary: [],
+    });
+  });
+
+  it("marks an overdue supply only while the term is confirmed and not ready (TASK-039)", () => {
+    const overdue = {
+      expected: { leadDays: 3, readyOn: "2026-10-09" },
+      proposed: null,
+      confirmed: { leadDays: 3, readyOn: "2026-10-09", at: "2026-10-06T07:00:00Z" },
+      overdueSince: "2026-10-09T19:00:00Z",
+    };
+    expect(
+      supplyOverdue(summary({ kind: "on_order", status: "accepted", onOrderTerm: overdue })),
+    ).toBe(true);
+    expect(
+      supplyOverdue(summary({ kind: "on_order", status: "ready", onOrderTerm: overdue })),
+    ).toBe(false);
+    expect(
+      supplyOverdue(
+        summary({
+          kind: "on_order",
+          status: "accepted",
+          onOrderTerm: { ...overdue, overdueSince: null },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("says the dates of another term short, and a refused date apart from a conflict", () => {
+    expect(formatTermDay("2026-10-12", "ru")).toMatch(/12/);
+    expect(formatTermDay("2026-10-12", "ru")).toMatch(/пн/i);
+    const refused = proposeProblem(
+      new ApiError({ status: 400, code: "VALIDATION_ERROR", message: "no", retryable: false }),
+      () => "",
+      t,
+    );
+    expect(refused).toEqual({
+      conflict: false,
+      stale: true,
+      text: "Эту дату больше нельзя предложить. Выберите дату из обновлённого списка",
+    });
+    const conflict = proposeProblem(
+      new ApiError({
+        status: 409,
+        code: "ORDER_STATE_CONFLICT",
+        message: "moved",
+        retryable: false,
+        details: {
+          currentStatus: "accepted",
+          version: 2,
+          lastAction: {
+            action: "accept",
+            at: "2026-10-06T09:02:00Z",
+            actor: { kind: "member", memberId: crypto.randomUUID(), name: "Марат", removed: false },
+          },
+        },
+      }),
+      () => "в 14:02",
+      t,
+    );
+    expect(conflict.conflict).toBe(true);
+    expect(conflict.text).toContain("Марат");
   });
 });
 
@@ -548,6 +624,22 @@ describe("the journal in words (S-ORD-02)", () => {
       "Готово — Айжан, 16:10",
       "Выдана по QR — Айжан, 16:30",
     ]);
+    // TASK-039: the same accept of an order under order is «Подтвердил срок».
+    const onOrder = journalLines(
+      [
+        event({
+          action: "accept",
+          at: "2026-10-06T07:02:00Z",
+          actor: erlan,
+          channel: "supplier_web",
+        }),
+      ],
+      format,
+      t,
+      (date) => date,
+      "on_order",
+    ).map((line) => line.text);
+    expect(onOrder).toEqual(["Подтвердил срок Ерлан, 12:02"]);
   });
 
   it("names the administrator's close and the reason of a decline", () => {

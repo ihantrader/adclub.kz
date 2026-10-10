@@ -1,7 +1,13 @@
 import { orderStatusSchema } from "@adclub/contracts";
 import { mobileText } from "@adclub/i18n";
 import { describe, expect, it } from "vitest";
-import { isActiveStatus, listStatusKey, orderMarkKey, orderStatusView } from "./order-status";
+import {
+  isActiveStatus,
+  listStatusKey,
+  orderMarkKey,
+  orderStatusView,
+  orderStepKey,
+} from "./order-status";
 
 // Plain Node checks of the table of states of M-ORD-03 (TASK-030 requirement 3, AC-4).
 
@@ -173,6 +179,32 @@ describe("the state of an order on its screen", () => {
     );
     expect(listStatusKey({ status: "created", fulfillment: "pickup" })).toBe(
       "orderStatus.created.title",
+    );
+  });
+
+  it("tells the steps of a term by their move (TASK-039)", () => {
+    const onOrder = { fulfillment: "pickup" as const, kind: "on_order" as const };
+    expect(orderStepKey({ action: "accept", status: "accepted" }, onOrder)).toBe(
+      "order.step.termConfirmed",
+    );
+    expect(orderStepKey({ action: "propose_term", status: "term_proposed" }, onOrder)).toBe(
+      "order.step.termProposed",
+    );
+    expect(orderStepKey({ action: "agree_term", status: "accepted" }, onOrder)).toBe(
+      "order.step.termAgreed",
+    );
+    expect(orderStepKey({ action: "reject_term", status: "cancelled_by_user" }, onOrder)).toBe(
+      "order.step.termRejected",
+    );
+    expect(orderStepKey({ action: "expire_term", status: "term_expired" }, onOrder)).toBe(
+      "orderStatus.termExpired.title",
+    );
+    expect(orderStepKey({ action: "decline", status: "declined_by_supplier" }, onOrder)).toBe(
+      "orderStatus.declined.title",
+    );
+    // An order in stock: «Поставщик принял заявку», as before.
+    expect(orderStepKey({ action: "accept", status: "accepted" }, { fulfillment: "pickup" })).toBe(
+      "orderStatus.accepted.title",
     );
   });
 });

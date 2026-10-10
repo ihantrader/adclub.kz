@@ -600,7 +600,7 @@ function OfferCard({
         </Button>
       ) : (
         <Text variant="bodyS" color="textMuted" style={styles.orderLater}>
-          {t("item.onOrderLater")}
+          {t("item.orderLater")}
         </Text>
       )}
     </View>

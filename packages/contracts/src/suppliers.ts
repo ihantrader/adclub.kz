@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hiddenPhoneSchema } from "./account";
 import { catalogLanguageSchema, localizedTextSchema } from "./catalog";
 
 /**
@@ -287,8 +288,8 @@ export const adminSupplierLeadSchema = z.object({
   city: cityRefSchema,
   type: supplierTypeSchema,
   contactName: z.string(),
-  /** `+77XXXXXXXXX`: the administrator calls it. */
-  phone: z.string(),
+  /** Partly hidden (TASK-036.B): the administrator opens it by «Показать номер» to call. */
+  phone: hiddenPhoneSchema,
   source: supplierLeadSourceSchema,
   status: supplierLeadStatusSchema,
   /** The reason of the last rejection, while the request is rejected. */
@@ -804,7 +805,8 @@ export type SupplierColleagueRef = z.infer<typeof supplierColleagueRefSchema>;
 export const adminSupplierMemberSchema = z.object({
   id: z.uuid(),
   displayName: z.string(),
-  phone: z.string(),
+  /** Partly hidden (TASK-036.B); «Показать номер» opens it. */
+  phone: hiddenPhoneSchema,
   status: z.enum(["active", "removed"]),
   /** The latest invitation sent to this employee. */
   lastInvitation: supplierInvitationSchema.nullable(),

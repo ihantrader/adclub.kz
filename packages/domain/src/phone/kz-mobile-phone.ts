@@ -35,6 +35,22 @@ export function normalizeKzMobilePhone(input: string): string | null {
 }
 
 /**
+ * A person's number as the admin panel shows it (SCREENS 7.0; TASK-036.B):
+ * partly hidden, «+7 777 *** ** 12» — the operator's prefix and the last
+ * two digits, enough to tell two people apart on a call, not enough to
+ * call. Every admin answer carries a person's number this way; the full
+ * number goes out only on the explicit «Показать номер», which is written
+ * to the journal. Anything that isn't eleven digits — «***».
+ */
+export function hidePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length !== 11) {
+    return "***";
+  }
+  return `+${digits.slice(0, 1)} ${digits.slice(1, 4)} *** ** ${digits.slice(9)}`;
+}
+
+/**
  * Log-safe form of a phone number (ARCHITECTURE 15.3): only the last four
  * digits survive, e.g. `+7***4567`; the number can't be restored from it.
  */

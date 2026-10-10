@@ -166,6 +166,13 @@ export const rateLimitNameSchema = z.enum([
    * client contract (ARCHITECTURE 4.35).
    */
   "whatsapp_webhook_per_ip",
+  /**
+   * The admin panel (TASK-036.B): the search of the header and «Показать
+   * номер», per administrator — against a loop and against reading the
+   * club's numbers out one by one.
+   */
+  "admin_search_per_account",
+  "phone_reveal_per_account",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

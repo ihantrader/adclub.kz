@@ -54,6 +54,8 @@ export interface AuditLogFilter {
   itemId?: string;
   /** The history of one supplier: see `supplierHistory`. */
   supplierId?: string;
+  /** The history of one user: see `accountHistory`. */
+  accountId?: string;
   /** Only entries older than this position (keyset paging, `position` of an entry). */
   before?: { position: string; id: string };
   limit: number;
@@ -136,6 +138,34 @@ function supplierHistory(supplierId: string): SQL {
 }
 
 /**
+ * Entity types whose entries belong to one user by naming the account in
+ * `after` (`accountId`): its club access grants, its discipline marks, the
+ * numbers opened on its orders (TASK-020, TASK-022, TASK-036.B).
+ */
+const ACCOUNT_PART_ENTITIES = ["club_access_grant", "user_discipline_event", "order"] as const;
+
+/**
+ * The history of one user (SCREENS A-USR-02 «История»; TASK-036.B): the
+ * entries about the account itself (registration, profile, sessions ended,
+ * its number opened), those about its grants, marks and orders that name
+ * it, and what the user did themselves (`actor_account_id` with the role
+ * `user` — an employee's work in a cabinet is the supplier's history).
+ * Read from the journal alone, like `itemHistory`.
+ */
+function accountHistory(accountId: string): SQL {
+  const parts = sql.join(
+    ACCOUNT_PART_ENTITIES.map((entity) => sql`${entity}`),
+    sql`, `,
+  );
+  return sql`(
+    (${auditLog.entityType} = 'account' AND ${auditLog.entityId} = ${accountId})
+    OR (${auditLog.entityType} IN (${parts})
+      AND (${auditLog.after} ->> 'accountId' = ${accountId} OR ${auditLog.before} ->> 'accountId' = ${accountId}))
+    OR (${auditLog.actorRole} = 'user' AND ${auditLog.actorAccountId} = ${accountId})
+  )`;
+}
+
+/**
  * Persistence of `audit_log` (ARCHITECTURE 4.13). Writing takes the
  * caller's executor: an entry belongs to the transaction of the action it
  * records. There is no update and no delete — the table refuses both.
@@ -164,6 +194,7 @@ export class AuditLogStore {
       filter.actorRole ? eq(auditLog.actorRole, filter.actorRole) : undefined,
       filter.itemId ? itemHistory(filter.itemId) : undefined,
       filter.supplierId ? supplierHistory(filter.supplierId) : undefined,
+      filter.accountId ? accountHistory(filter.accountId) : undefined,
       // Keyset paging: everything strictly older than the last entry read.
       // Compared at the database's own precision (microseconds), never
       // through a JavaScript `Date`.

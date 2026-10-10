@@ -82,6 +82,7 @@ const finishedStatuses: readonly SupplierFinishedStatus[] = [
   "declined_by_supplier",
   "response_expired",
   "reserve_expired",
+  "cancelled_by_admin",
 ];
 
 const groupKeys: Record<

@@ -6,7 +6,7 @@ import type {
   SupplierMemberAddedBy,
   SupplierNotificationSummary,
 } from "@adclub/contracts";
-import { notificationRecipients } from "@adclub/domain";
+import { hidePhone, notificationRecipients } from "@adclub/domain";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { DbExecutor } from "../../database";
@@ -156,7 +156,8 @@ export function adminMember(
   return {
     id: row.id,
     displayName: row.displayName,
-    phone: row.phone,
+    // Partly hidden (TASK-036.B): the cabinet shows colleagues in full, the admin panel does not.
+    phone: hidePhone(row.phone),
     status: row.status,
     lastInvitation,
     createdAt: row.createdAt.toISOString(),

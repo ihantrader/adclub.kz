@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ClubAccessState } from "@adclub/contracts";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { clubAccessGrant } from "./schema";
 
@@ -50,4 +50,55 @@ export class ClubAccess {
   async has(accountId: string | null, executor?: DbExecutor): Promise<boolean> {
     return (await this.stateOf(accountId, executor)).granted;
   }
+
+  /** `stateOf` of several accounts at once (the admin list of users, TASK-036.B). */
+  async statesOf(
+    accountIds: readonly string[],
+    executor: DbExecutor = this.database.db,
+    at: Date = new Date(),
+  ): Promise<Map<string, ClubAccessState>> {
+    const states = new Map<string, ClubAccessState>();
+    const ids = [...new Set(accountIds)];
+    for (const id of ids) states.set(id, NONE);
+    if (ids.length === 0) {
+      return states;
+    }
+    const rows = await executor
+      .select({
+        accountId: clubAccessGrant.accountId,
+        validUntil: clubAccessGrant.validUntil,
+        source: clubAccessGrant.source,
+      })
+      .from(clubAccessGrant)
+      .where(
+        and(
+          inArray(clubAccessGrant.accountId, ids),
+          isNull(clubAccessGrant.endedAt),
+          gt(clubAccessGrant.validUntil, at),
+        ),
+      )
+      .orderBy(desc(clubAccessGrant.validUntil));
+    for (const row of rows) {
+      if (states.get(row.accountId)?.granted) continue;
+      states.set(row.accountId, {
+        granted: true,
+        source: row.source,
+        validUntil: row.validUntil.toISOString(),
+      });
+    }
+    return states;
+  }
+}
+
+/**
+ * The SQL twin of `ClubAccess.stateOf` for lists that filter by it (the
+ * admin list of users, TASK-036.B): the end of the account's club access
+ * now, `NULL` — none. **The same rule**, so TASK-040 changes both together
+ * (as `offerShowcase` and `shownOffers`, 4.28).
+ */
+export function clubAccessUntil(accountId: SQL | AnyColumn, at: Date): SQL<Date | null> {
+  return sql<Date | null>`(SELECT max(${clubAccessGrant.validUntil}) FROM ${clubAccessGrant}
+    WHERE ${clubAccessGrant.accountId} = ${accountId}
+      AND ${clubAccessGrant.endedAt} IS NULL
+      AND ${clubAccessGrant.validUntil} > ${at.toISOString()}::timestamptz)`;
 }

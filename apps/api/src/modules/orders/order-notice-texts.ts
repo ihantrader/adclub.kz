@@ -120,6 +120,8 @@ export function orderStateText(order: OrderStateFacts, lang: NoticeLang, now: Da
       return lang === "kk" ? "берілген" : "выдана";
     case "cancelled_by_user":
       return lang === "kk" ? "клиент бас тартқан" : "отменена клиентом";
+    case "cancelled_by_admin":
+      return lang === "kk" ? "клуб әкімшісі тоқтатқан" : "отменена администратором клуба";
     case "response_expired":
     case "reserve_expired":
       return lang === "kk" ? "мерзімі өткен" : "истекла";

@@ -24,10 +24,10 @@ import type {
   UserOrderStep,
   UserOrderSummary,
 } from "@adclub/contracts";
-import { isActiveOrderStatus, localDateTime, orderAwaitsReceipt } from "@adclub/domain";
+import { hidePhone, isActiveOrderStatus, localDateTime, orderAwaitsReceipt } from "@adclub/domain";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
-import { account, supplier, supplierMember } from "../identity";
+import { account, adminUser, supplier, supplierMember } from "../identity";
 import { offer } from "../offers";
 import { city, supplierClosedDate, supplierLocation } from "../suppliers";
 import { qrPayload } from "./order-code";
@@ -771,7 +771,8 @@ export async function adminSummaries(
       supplier: { id: row.supplierId, name: supplierNamesById.get(row.supplierId) ?? "" },
       customer: {
         accountId: row.userAccountId,
-        phone: phones.get(row.userAccountId) ?? "",
+        // Partly hidden (TASK-036.B): the full number is «Показать номер».
+        phone: hidePhone(phones.get(row.userAccountId) ?? ""),
         name: customerNames.get(row.userAccountId) ?? null,
       },
       // Only the administrator sees why an order was closed without a code.
@@ -799,6 +800,9 @@ export async function adminOrderView(
     .from(supplierLocation)
     .innerJoin(city, eq(city.id, supplierLocation.cityId))
     .where(eq(supplierLocation.id, row.locationId));
+  const cancelledBy = row.cancelledByAdminId
+    ? (await adminNames(executor, [row.cancelledByAdminId])).get(row.cancelledByAdminId)
+    : undefined;
   return {
     ...summary!,
     item: withPhoto(row, lang, await photosOf(executor, photos, [row])),
@@ -811,7 +815,43 @@ export async function adminOrderView(
     decline: declineOf(row),
     discipline,
     events: events.map((event) => eventOf(event, members, "admin")),
+    deadlines: {
+      respondBy: iso(row.respondBy),
+      reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
+      lateCloseUntil:
+        row.status === "reserve_expired" && row.lateCloseUntil ? iso(row.lateCloseUntil) : null,
+    },
+    cancellation:
+      row.status === "cancelled_by_admin" && row.cancelledByAdminId && row.finishedAt
+        ? {
+            at: iso(row.finishedAt),
+            adminId: row.cancelledByAdminId,
+            adminName: cancelledBy ?? null,
+            reason: row.cancelReason ?? "",
+          }
+        : null,
   };
+}
+
+/** The names of administrators (their account's name; `null` — none given). */
+async function adminNames(
+  executor: DbExecutor,
+  adminIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  const ids = [...new Set(adminIds)];
+  const names = new Map<string, string | null>();
+  if (ids.length === 0) {
+    return names;
+  }
+  const rows = await executor
+    .select({ id: adminUser.id, name: account.name })
+    .from(adminUser)
+    .innerJoin(account, eq(account.id, adminUser.accountId))
+    .where(inArray(adminUser.id, ids));
+  for (const row of rows) {
+    names.set(row.id, row.name);
+  }
+  return names;
 }
 
 /**

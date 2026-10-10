@@ -6,7 +6,10 @@ export {
   parseAppVersion,
 } from "./version/app-version";
 export type { AppVersion } from "./version/app-version";
-export { maskPhone, normalizeKzMobilePhone } from "./phone/kz-mobile-phone";
+export { hidePhone, maskPhone, normalizeKzMobilePhone } from "./phone/kz-mobile-phone";
+export { PHONE_SEARCH_MIN_DIGITS, phoneSearchDigits } from "./phone/phone-search";
+export { readAdminQuery } from "./search/admin-query";
+export type { AdminQueryReading } from "./search/admin-query";
 export { decideAccess, resolveAccessContext } from "./access/access-predicate";
 export type {
   AccessContext,

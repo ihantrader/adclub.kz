@@ -12,13 +12,22 @@ import {
 } from "@adclub/contracts";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
-import { ClubAccessGrants, type ClubAccessChanger } from "./club-access-grants.service";
+import {
+  ClubAccessGrants,
+  type ClubAccessChanger,
+  type ClubAccessOwner,
+} from "./club-access-grants.service";
 
 function adminChanger(session: AuthenticatedSession): ClubAccessChanger {
   if (!session.adminUserId) {
     throw new Error("An admin route reached without an administrator");
   }
   return { role: "admin", adminId: session.adminUserId, accountId: session.accountId };
+}
+
+/** The contract lets exactly one of the two through. */
+function ownerOf(body: { phone?: string; accountId?: string }): ClubAccessOwner {
+  return body.accountId !== undefined ? { accountId: body.accountId } : { phone: body.phone! };
 }
 
 /** Club access given by hand in the admin panel (context `admin`; D-059, TASK-020). */
@@ -40,7 +49,7 @@ export class ClubAccessAdminController {
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<ClubAccessGrantResponse> {
     return this.grants.grant(
-      { phone: body.phone, validUntil: new Date(body.validUntil), reason: body.reason },
+      { ...ownerOf(body), validUntil: new Date(body.validUntil), reason: body.reason },
       adminChanger(session),
     );
   }
@@ -50,6 +59,6 @@ export class ClubAccessAdminController {
     @Body(new ZodValidationPipe(revokeClubAccessBodySchema)) body: RevokeClubAccessBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<ClubAccessGrantResponse> {
-    return this.grants.revoke(body, adminChanger(session));
+    return this.grants.revoke({ ...ownerOf(body), reason: body.reason }, adminChanger(session));
   }
 }

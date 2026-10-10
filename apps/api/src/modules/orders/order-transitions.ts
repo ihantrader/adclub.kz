@@ -102,6 +102,8 @@ export interface MoveRequest {
   decline?: { reason: OrderDeclineReason | null; note: string | null };
   /** Giving it out: against the QR, against the code, or by the administrator with a reason. */
   close?: { method: OrderCloseMethod; reason?: string };
+  /** The administrator's cancel (TASK-036.B): why — always. */
+  cancel?: { reason: string };
 }
 
 export type MoveOutcome =
@@ -231,6 +233,9 @@ function sameParameters(row: OrderRow, request: MoveRequest): boolean {
   if (request.action === "admin_close") {
     return row.closeReason === (request.close?.reason ?? null);
   }
+  if (request.action === "admin_cancel") {
+    return row.cancelReason === (request.cancel?.reason ?? null);
+  }
   return true;
 }
 
@@ -271,6 +276,7 @@ export class OrderTransitions {
       const moved = await this.apply(tx, row, action, request.actor, request.channel, at, {
         decline: request.decline,
         close: request.close,
+        cancel: request.cancel,
       });
       if (moved) {
         return { kind: "moved", order: moved };
@@ -579,7 +585,11 @@ export class OrderTransitions {
     actor: OrderActorRef,
     channel: OrderEventChannel,
     at: Date,
-    extra: { decline?: MoveRequest["decline"]; close?: MoveRequest["close"] } = {},
+    extra: {
+      decline?: MoveRequest["decline"];
+      close?: MoveRequest["close"];
+      cancel?: MoveRequest["cancel"];
+    } = {},
   ): Promise<OrderRow | null> {
     const to = orderTransition(row.status, action);
     if (to === null) {
@@ -712,8 +722,31 @@ export class OrderTransitions {
         details.closeMethod = "admin";
         break;
       }
+      case "admin_cancel": {
+        if (actor.type !== "admin") {
+          throw new Error("Only an administrator cancels an order this way");
+        }
+        const reason = extra.cancel?.reason;
+        if (!reason) {
+          throw new Error("An administrator's cancel always says why (TASK-036.B)");
+        }
+        Object.assign(set, {
+          finishedAt: at,
+          cancelledByAdminId: actor.adminId,
+          cancelReason: reason,
+        });
+        // The words are the administrator's: the journal keeps them, and only
+        // their own view shows them (`eventOf`).
+        details.adminNote = reason;
+        break;
+      }
     }
-    if (action === "decline" || action === "cancel" || action === "expire_no_response") {
+    if (
+      action === "decline" ||
+      action === "cancel" ||
+      action === "admin_cancel" ||
+      action === "expire_no_response"
+    ) {
       // Nothing more will ever be given out on this code.
       set.codeReleasedAt = at;
     }
@@ -762,6 +795,23 @@ export class OrderTransitions {
         tx,
       );
       await this.signalFrequentAdminCloses(tx, updated, at);
+    }
+    if (action === "admin_cancel" && actor.type === "admin") {
+      // No message goes out (TASK-036.B): W-04 says «Клиент отменил», which
+      // this is not, and a new template needs Meta's approval. The supplier
+      // sees it in the cabinet, the user — in the app.
+      await this.audit.record(
+        {
+          action: auditActions.orderCancelledByAdmin,
+          actor: { role: "admin", accountId: actor.accountId, adminId: actor.adminId },
+          entityType: auditEntities.order,
+          entityId: updated.id,
+          before: { status: row.status },
+          after: { number: updated.number, status: updated.status },
+          reason: extra.cancel?.reason ?? null,
+        },
+        tx,
+      );
     }
     if (action === "accept" && actor.type === "supplier_member") {
       // The customer's phone opened to the supplier (ARCHITECTURE 8.4).

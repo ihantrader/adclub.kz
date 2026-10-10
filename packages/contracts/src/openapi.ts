@@ -23,6 +23,7 @@ import * as offerContract from "./offers";
 import * as clubAccessContract from "./club-access";
 import * as orderContract from "./orders";
 import * as signalContract from "./signals";
+import * as userContract from "./users";
 import * as showcaseContract from "./showcase";
 import * as vehicleContract from "./vehicles";
 import {
@@ -247,6 +248,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(clubAccessContract),
   ...moduleComponentSchemas(orderContract),
   ...moduleComponentSchemas(signalContract),
+  ...moduleComponentSchemas(userContract),
   ...moduleComponentSchemas(showcaseContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,

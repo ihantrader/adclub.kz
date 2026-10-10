@@ -38,6 +38,7 @@ describe("orderCloseVerdict", () => {
   it("never closes a cancelled, a declined or an unanswered order", () => {
     for (const status of [
       "cancelled_by_user",
+      "cancelled_by_admin",
       "declined_by_supplier",
       "response_expired",
     ] as const) {

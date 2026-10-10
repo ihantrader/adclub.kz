@@ -26,6 +26,8 @@ export const orderStatuses = [
   "declined_by_supplier",
   "response_expired",
   "reserve_expired",
+  // TASK-036.B: the administrator cancelled it, with a reason (A-ORD-02).
+  "cancelled_by_admin",
 ] as const;
 
 export type OrderStatus = (typeof orderStatuses)[number];
@@ -76,7 +78,8 @@ export function orderAwaitsReceipt(status: OrderStatus): boolean {
  * The moves. `accept`, `decline`, `mark_ready`, `close`, `close_late` — an
  * employee of the supplier (`close` and `close_late` only by the code or
  * the QR); `cancel` — the user; `admin_close` — the administrator, with a
- * reason (D-043); `expire_no_response`, `expire_reserve` — the deadline
+ * reason (D-043); `admin_cancel` — the administrator, with a reason
+ * (TASK-036.B); `expire_no_response`, `expire_reserve` — the deadline
  * sweeper.
  */
 export const orderActions = [
@@ -86,6 +89,7 @@ export const orderActions = [
   "close",
   "close_late",
   "admin_close",
+  "admin_cancel",
   "cancel",
   "expire_no_response",
   "expire_reserve",
@@ -101,6 +105,7 @@ export const orderActionActor = {
   close: "supplier",
   close_late: "supplier",
   admin_close: "admin",
+  admin_cancel: "admin",
   cancel: "user",
   expire_no_response: "system",
   expire_reserve: "system",
@@ -122,6 +127,11 @@ const moves: Record<OrderAction, { from: readonly OrderStatus[]; to: OrderStatus
     from: ["created", "accepted", "ready", "response_expired", "reserve_expired"],
     to: "completed",
   },
+  // TASK-036.B: an order still going on — the same statuses the user may
+  // cancel from. An expired order is over already: nothing is left to
+  // cancel (its late close window is the supplier's, and the
+  // administrator settles a dispute about it with `admin_close`).
+  admin_cancel: { from: ["created", "accepted", "ready"], to: "cancelled_by_admin" },
   // Until the order is given out, after accepting too.
   cancel: { from: ["created", "accepted", "ready"], to: "cancelled_by_user" },
   expire_no_response: { from: ["created"], to: "response_expired" },

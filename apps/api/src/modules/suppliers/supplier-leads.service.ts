@@ -15,7 +15,13 @@ import {
   type SupplierOnboardedResponse,
   type UpdateSupplierLeadBody,
 } from "@adclub/contracts";
-import { canOnboardLead, maskBin, maskPhone, supplierLeadTransition } from "@adclub/domain";
+import {
+  canOnboardLead,
+  hidePhone,
+  maskBin,
+  maskPhone,
+  supplierLeadTransition,
+} from "@adclub/domain";
 import { and, desc, eq, gte, ilike, lte, ne, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
@@ -539,7 +545,8 @@ export class SupplierLeadsService {
       city: cityRef(cityRow),
       type: lead.type,
       contactName: lead.contactName,
-      phone: lead.phone,
+      // Partly hidden (TASK-036.B): «Показать номер» opens it, with a trace.
+      phone: hidePhone(lead.phone),
       source: lead.source,
       status: lead.status,
       rejectReason: lead.rejectReason,

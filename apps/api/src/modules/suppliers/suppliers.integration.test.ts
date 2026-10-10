@@ -24,7 +24,7 @@ import {
   type DayHours,
   type ErrorCode,
 } from "@adclub/contracts";
-import { kzBinCheckDigit } from "@adclub/domain";
+import { hidePhone, kzBinCheckDigit } from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
@@ -971,7 +971,8 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
       expect(manual.lead).toMatchObject({
         source: "admin",
         status: "new",
-        phone: "+77051112233",
+        // Partly hidden in every admin answer (TASK-036.B): the database keeps it whole.
+        phone: "+7 705 *** ** 33",
         consentAt: null,
         language: null,
       });
@@ -1107,7 +1108,11 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
         isAdministrator: false,
       });
       expect(created.supplier.members).toEqual([
-        expect.objectContaining({ displayName: "Айгерим", phone, status: "active" }),
+        expect.objectContaining({
+          displayName: "Айгерим",
+          phone: hidePhone(phone),
+          status: "active",
+        }),
       ]);
       expect(created.invitation.status).toBe("queued");
 

@@ -64,6 +64,14 @@ describe("the state of an order on its screen", () => {
       text: null,
       place: "none",
     });
+    // TASK-036.B: the club's administrator cancelled it, not the user.
+    expect(orderStatusView({ status: "cancelled_by_admin", fulfillment: "pickup" })).toMatchObject({
+      title: "orderStatus.cancelledByAdmin.title",
+      text: "orderStatus.cancelledByAdmin.text",
+      code: "none",
+      finished: true,
+      cancellable: false,
+    });
     expect(
       orderStatusView({ status: "declined_by_supplier", fulfillment: "pickup" }),
     ).toMatchObject({

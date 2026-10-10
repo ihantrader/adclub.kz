@@ -17,13 +17,16 @@ import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
-import { account, AccountStore } from "../identity";
+import { account, AccountStore, type AccountRecord } from "../identity";
 import { ClubAccess } from "./club-access";
 import { clubAccessGrant, type ClubAccessGrantRow } from "./schema";
 
 /** Who gives or ends a grant. */
 export type ClubAccessChanger =
   { role: "admin"; adminId: string; accountId: string } | { role: "operator" };
+
+/** Whose access: a phone number's account, or an account named directly (TASK-036.B). */
+export type ClubAccessOwner = { phone: string } | { accountId: string };
 
 const DAY_MS = 86_400_000;
 
@@ -86,11 +89,41 @@ export class ClubAccessGrants {
     @Inject(ClubAccess) private readonly access: ClubAccess,
   ) {}
 
+  /**
+   * The account a grant or a revocation is about: by the phone number
+   * (created on a grant, D-046 — the person gets access when they sign in)
+   * or, from the admin panel's card of a user (TASK-036.B), by the account
+   * itself — an unknown account is a validation error, never created.
+   */
+  private async ownerOf(
+    tx: DbExecutor,
+    who: ClubAccessOwner,
+    create: boolean,
+  ): Promise<(AccountRecord & { created: boolean }) | undefined> {
+    if ("accountId" in who) {
+      const [row] = await tx
+        .select({ id: account.id })
+        .from(account)
+        .where(eq(account.id, who.accountId));
+      if (!row) {
+        throw validationError("accountId", "No such account");
+      }
+      return { ...(await this.accounts.findById(row.id, tx)), created: false };
+    }
+    const phone = phoneOf(who.phone);
+    if (create) {
+      return this.accounts.findOrCreateByPhone(phone, tx);
+    }
+    const found = await this.accounts.findByPhone(phone, tx);
+    return found ? { ...found, created: false } : undefined;
+  }
+
   async grant(
-    input: { phone: string; validUntil: Date; reason: string },
+    input: ClubAccessOwner & { validUntil: Date; reason: string },
     changer: ClubAccessChanger,
   ): Promise<ClubAccessGrantResponse> {
-    const phone = phoneOf(input.phone);
+    // A malformed number is refused before anything else.
+    if ("phone" in input) phoneOf(input.phone);
     const reason = input.reason.trim();
     const now = new Date();
     if (Number.isNaN(input.validUntil.getTime()) || input.validUntil.getTime() <= now.getTime()) {
@@ -103,7 +136,8 @@ export class ClubAccessGrants {
     // Known before the insert: the grant it replaces names it.
     const grantId = randomUUID();
     const result = await this.database.db.transaction(async (tx) => {
-      const owner = await this.accounts.findOrCreateByPhone(phone, tx);
+      const owner = (await this.ownerOf(tx, input, true))!;
+      const phone = owner.phone;
       // One change of an account's grants at a time: two grants at once
       // would both find no open grant, and one would fail on the key.
       await tx.execute(sql`SELECT id FROM account WHERE id = ${owner.id} FOR UPDATE`);
@@ -149,30 +183,31 @@ export class ClubAccessGrants {
         },
         tx,
       );
-      return { row: row!, accessNow: await this.access.stateOf(owner.id, tx) };
+      return { row: row!, phone, accessNow: await this.access.stateOf(owner.id, tx) };
     });
     this.logger.log(
-      `Club access granted grant=${result.row.id} account=${result.row.accountId} phone=${maskPhone(phone)} until=${result.row.validUntil.toISOString()} by=${changer.role}`,
+      `Club access granted grant=${result.row.id} account=${result.row.accountId} phone=${maskPhone(result.phone)} until=${result.row.validUntil.toISOString()} by=${changer.role}`,
     );
     return {
-      grant: this.describe(result.row, maskPhone(phone), now),
+      grant: this.describe(result.row, maskPhone(result.phone), now),
       access: result.accessNow,
     };
   }
 
   async revoke(
-    input: { phone: string; reason: string },
+    input: ClubAccessOwner & { reason: string },
     changer: ClubAccessChanger,
   ): Promise<ClubAccessGrantResponse> {
-    const phone = phoneOf(input.phone);
+    if ("phone" in input) phoneOf(input.phone);
     const reason = input.reason.trim();
     const now = new Date();
     const adminId = changer.role === "admin" ? changer.adminId : null;
     const result = await this.database.db.transaction(async (tx) => {
-      const owner = await this.accounts.findByPhone(phone, tx);
+      const owner = await this.ownerOf(tx, input, false);
       if (!owner) {
         throw notGranted();
       }
+      const phone = owner.phone;
       await tx.execute(sql`SELECT id FROM account WHERE id = ${owner.id} FOR UPDATE`);
       const [row] = await tx
         .update(clubAccessGrant)
@@ -206,13 +241,13 @@ export class ClubAccessGrants {
         },
         tx,
       );
-      return { row, accessNow: await this.access.stateOf(owner.id, tx) };
+      return { row, phone, accessNow: await this.access.stateOf(owner.id, tx) };
     });
     this.logger.log(
-      `Club access revoked grant=${result.row.id} account=${result.row.accountId} phone=${maskPhone(phone)} by=${changer.role}`,
+      `Club access revoked grant=${result.row.id} account=${result.row.accountId} phone=${maskPhone(result.phone)} by=${changer.role}`,
     );
     return {
-      grant: this.describe(result.row, maskPhone(phone), now),
+      grant: this.describe(result.row, maskPhone(result.phone), now),
       access: result.accessNow,
     };
   }

@@ -535,6 +535,8 @@ function stepKey(step: UserOrderStep, fulfillment: OrderView["fulfillment"]): Mo
       return "orderStatus.completed.short";
     case "cancelled_by_user":
       return "orderStatus.cancelled.title";
+    case "cancelled_by_admin":
+      return "orderStatus.cancelledByAdmin.title";
     case "declined_by_supplier":
       return "orderStatus.declined.title";
     case "response_expired":

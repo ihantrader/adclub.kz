@@ -1133,6 +1133,45 @@ const clients = group({
   },
 });
 
+/** The admin panel's own limits (TASK-036.B): per administrator. */
+const adminPanel = group({
+  id: "admin_panel",
+  title: "Админка",
+  editableBy: "admin",
+  settings: {
+    admin_search_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 120,
+      description:
+        "Сколько поисков строки шапки админки один администратор может сделать за окно (поиск идёт по мере набора).",
+    }),
+    admin_search_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: DAY,
+      default: 60,
+      description: "Окно предела поиска в шапке админки.",
+    }),
+    phone_reveal_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 60,
+      description:
+        "Сколько полных номеров (кнопка «Показать номер») один администратор может открыть за окно — против выписывания номеров клуба подряд.",
+    }),
+    phone_reveal_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела «Показать номер».",
+    }),
+  },
+});
+
 const cleanup = group({
   id: "cleanup",
   title: "Очистка",
@@ -1440,6 +1479,7 @@ export const settingGroups = [
   messages,
   billing,
   clients,
+  adminPanel,
   cleanup,
   loginCode,
   session,
@@ -1466,6 +1506,7 @@ export const settingDefinitions = {
   ...messages.settings,
   ...billing.settings,
   ...clients.settings,
+  ...adminPanel.settings,
   ...cleanup.settings,
   ...loginCode.settings,
   ...session.settings,

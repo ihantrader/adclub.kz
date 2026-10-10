@@ -9,9 +9,10 @@ import {
   type AdminDisciplineUsersQuery,
   type DisciplineMark,
 } from "@adclub/contracts";
-import { countsInStatistics } from "@adclub/domain";
+import { countsInStatistics, hidePhone } from "@adclub/domain";
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -146,7 +147,8 @@ export class Discipline {
           entityType: auditEntities.disciplineEvent,
           entityId: markId,
           before: { kind: updated.kind, orderId: updated.orderId },
-          after: { revoked: true },
+          // The account the mark is of: the user's history finds it (TASK-036.B).
+          after: { revoked: true, accountId: updated.userAccountId },
           reason,
         },
         tx,
@@ -253,10 +255,12 @@ export class Discipline {
     }
     const filter = period.length > 0 ? and(...period)! : sql`true`;
     const standing = sql<number>`count(*) FILTER (WHERE ${userDisciplineEvent.revokedAt} IS NULL)::int`;
+    const lastAt = sql`max(${userDisciplineEvent.occurredAt})`;
     const rows = await this.database.db
       .select({
         accountId: userDisciplineEvent.userAccountId,
         phone: account.phone,
+        name: account.name,
         count: standing,
         revokedCount: sql<number>`count(*) FILTER (WHERE ${userDisciplineEvent.revokedAt} IS NOT NULL)::int`,
         lastAt: sql<Date>`max(${userDisciplineEvent.occurredAt})`,
@@ -264,9 +268,14 @@ export class Discipline {
       .from(userDisciplineEvent)
       .innerJoin(account, eq(account.id, userDisciplineEvent.userAccountId))
       .where(filter)
-      .groupBy(userDisciplineEvent.userAccountId, account.phone)
+      .groupBy(userDisciplineEvent.userAccountId, account.phone, account.name)
       .having(sql`count(*) FILTER (WHERE ${userDisciplineEvent.revokedAt} IS NULL) > 0`)
-      .orderBy(desc(standing), desc(sql`max(${userDisciplineEvent.occurredAt})`))
+      .orderBy(
+        ...(query.sort === "last"
+          ? [desc(lastAt), desc(standing)]
+          : [desc(standing), desc(lastAt)]),
+        asc(userDisciplineEvent.userAccountId),
+      )
       .limit(query.limit + 1)
       .offset(query.offset);
     const [total] = await this.database.db.select({ value: sql<number>`count(*)::int` }).from(
@@ -282,7 +291,8 @@ export class Discipline {
     return {
       users: page.map((row) => ({
         accountId: row.accountId,
-        phone: row.phone,
+        phone: hidePhone(row.phone),
+        name: row.name,
         count: row.count,
         revokedCount: row.revokedCount,
         lastAt: new Date(row.lastAt).toISOString(),
@@ -326,7 +336,7 @@ export class Discipline {
       supplier: { id: row.supplierId, name: names.get(row.supplierId) ?? "" },
       customer: {
         accountId: row.userAccountId,
-        phone: byAccount.get(row.userAccountId) ?? "",
+        phone: hidePhone(byAccount.get(row.userAccountId) ?? ""),
       },
       revocation:
         row.revokedAt && row.revokedBy

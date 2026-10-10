@@ -32,6 +32,7 @@ export interface OrderCloseFacts {
 export type OrderCloseRefusal =
   | "not_accepted"
   | "cancelled_by_user"
+  | "cancelled_by_admin"
   | "declined_by_supplier"
   | "response_expired"
   | "late_window_passed";
@@ -62,6 +63,7 @@ export function orderCloseVerdict(facts: OrderCloseFacts, at: Date): OrderCloseV
     case "completed":
       return { kind: "closed" };
     case "cancelled_by_user":
+    case "cancelled_by_admin":
     case "declined_by_supplier":
     case "response_expired":
       return { kind: "refused", reason: facts.status, at: facts.finishedAt };

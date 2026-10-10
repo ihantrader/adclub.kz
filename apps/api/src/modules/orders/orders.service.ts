@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   type ActiveOrdersResponse,
+  type AdminCancelOrderBody,
   type AdminCloseOrderBody,
   type AdminExtendOrderDeadlineBody,
   type AdminExtendOrdersBody,
@@ -26,7 +27,12 @@ import {
   type UserOrderListQuery,
   type UserOrderPage,
 } from "@adclub/contracts";
-import { activeOrderStatuses, isActiveOrderStatus, isRegistrationComplete } from "@adclub/domain";
+import {
+  activeOrderStatuses,
+  isActiveOrderStatus,
+  isRegistrationComplete,
+  readAdminQuery,
+} from "@adclub/domain";
 import {
   and,
   asc,
@@ -136,6 +142,37 @@ function inCardOrder(rows: readonly OrderRow[]): OrderRow[] {
 /** A time column to the microsecond: the position of a row in a list. */
 function positionOf(column: PgColumn): SQL<string> {
   return sql<string>`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
+
+/**
+ * A-ORD-01 «поиск по номеру и телефону» (TASK-036.B): the line read the
+ * way the header's search reads it (`readAdminQuery`) — the number of the
+ * order, a part of the customer's phone (matched against the full stored
+ * number; the answer hides it all the same) or, with letters, the
+ * customer's name. A line that is none of these finds nothing.
+ */
+function adminOrderSearch(q: string): SQL {
+  const reading = readAdminQuery(q);
+  const found: SQL[] = [];
+  if (reading.orderNumber !== null) {
+    found.push(eq(customerOrder.number, reading.orderNumber));
+  }
+  for (const digits of reading.phoneDigits ?? []) {
+    found.push(
+      sql`EXISTS (SELECT 1 FROM account AS customer WHERE customer.id = ${customerOrder.userAccountId} AND customer.phone LIKE ${`%${digits}%`})`,
+    );
+  }
+  if (reading.text !== null) {
+    found.push(
+      sql`EXISTS (SELECT 1 FROM account AS customer WHERE customer.id = ${customerOrder.userAccountId} AND customer.name ILIKE ${`%${likeEscaped(reading.text)}%`})`,
+    );
+  }
+  return found.length > 0 ? sql`(${sql.join(found, sql` OR `)})` : sql`false`;
+}
+
+/** A text inside a LIKE pattern: its own `%`, `_` and `\` mean themselves. */
+function likeEscaped(text: string): string {
+  return text.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
 function cursorAt(cursor: string | undefined): { position: string; id: string } | null {
@@ -843,6 +880,17 @@ export class OrdersService {
           : sql`${customerOrder.closeMethod} IS DISTINCT FROM 'admin'`,
       );
     }
+    if (query.accountId) {
+      conditions.push(eq(customerOrder.userAccountId, query.accountId));
+    }
+    if (query.cityId) {
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM supplier_location AS point WHERE point.id = ${customerOrder.locationId} AND point.city_id = ${query.cityId}::uuid)`,
+      );
+    }
+    if (query.q) {
+      conditions.push(adminOrderSearch(query.q));
+    }
     const filter = conditions.length > 0 ? and(...conditions)! : sql`true`;
     const [{ rows, nextCursor }, [total]] = await Promise.all([
       this.newestFirst(filter, query),
@@ -897,6 +945,40 @@ export class OrdersService {
         channel: "admin",
         expectedVersion: body.expectedVersion,
         close: { method: "admin", reason: body.reason },
+      },
+      forUser: false,
+    });
+    return adminOrderView(this.database.db, row, lang, this.photos, await this.marksOf(row.id));
+  }
+
+  /**
+   * A-ORD-02 «Отменить заявку» (TASK-036.B): an order still going on is
+   * cancelled by the administrator, with a reason — the move `admin_cancel`
+   * of the one table of moves, applied by `OrderTransitions` like every
+   * other. Another administrator (or the supplier) acted first, or the
+   * deadline has just passed — 409 naming what happened.
+   */
+  async adminCancel(
+    admin: { accountId: string; adminId: string },
+    orderId: string,
+    body: AdminCancelOrderBody,
+    lang: CatalogLanguage,
+  ): Promise<AdminOrder> {
+    const row = await this.run({
+      scope: async (tx) => {
+        const [found] = await tx.select().from(customerOrder).where(eq(customerOrder.id, orderId));
+        if (!found) {
+          throw notFound();
+        }
+        return found;
+      },
+      request: {
+        orderId,
+        action: "admin_cancel",
+        actor: { type: "admin", ...admin },
+        channel: "admin",
+        expectedVersion: body.expectedVersion,
+        cancel: { reason: body.reason },
       },
       forUser: false,
     });

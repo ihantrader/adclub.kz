@@ -123,7 +123,132 @@ describe("PostgreSQL: migrations and readiness", () => {
       "1790700000000_supplier-delivery-by-default",
       "1790750000000_button-press-supplier-blocked",
       "1790800000000_admin-signal-actions",
+      "1790850000000_admin-cancel-order",
     ]);
+  });
+
+  it("holds the administrator's cancel of an order in the database, and rolls back keeping the order (admin cancel order)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000188') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const admin = await client.query<{ id: string }>(
+      "INSERT INTO admin_user (account_id) VALUES ($1) RETURNING id",
+      [accountId],
+    );
+    const adminId = admin.rows[0]!.id;
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('admin-cancel-city', 'Город отмены') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Отмена', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const location = await client.query<{ id: string }>(
+      "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+      [supplierId, city.rows[0]!.id],
+    );
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('cancel_node', 'goods', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('cancel_sub', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+      [subcategory.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const offer = await client.query<{ id: string }>(
+      "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery) VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, true) RETURNING id",
+      [supplierId, location.rows[0]!.id, item.rows[0]!.id],
+    );
+    const insert = (values: Record<string, unknown>) => {
+      const row = {
+        user_account_id: accountId,
+        supplier_id: supplierId,
+        location_id: location.rows[0]!.id,
+        offer_id: offer.rows[0]!.id,
+        item_id: item.rows[0]!.id,
+        offer_snapshot: "{}",
+        unit_price: 1000,
+        quantity: 1,
+        total: 1000,
+        fulfillment: "pickup",
+        confirmation_code: "731846",
+        qr_token: `qr-cancel-${randomUUID()}`,
+        idempotency_key: randomUUID(),
+        respond_by: new Date(Date.now() + 3_600_000),
+        status: "cancelled_by_admin",
+        finished_at: new Date(),
+        code_released_at: new Date(),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO customer_order (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    // The status and only it has who cancelled and why; the reason is never blank.
+    await expect(insert({})).rejects.toThrow(/customer_order_admin_cancel_check/);
+    await expect(insert({ cancelled_by_admin_id: adminId, cancel_reason: "  " })).rejects.toThrow(
+      /customer_order_admin_cancel_check/,
+    );
+    await expect(
+      insert({
+        status: "cancelled_by_user",
+        cancelled_by_admin_id: adminId,
+        cancel_reason: "Причина",
+      }),
+    ).rejects.toThrow(/customer_order_admin_cancel_check/);
+    const cancelled = await insert({ cancelled_by_admin_id: adminId, cancel_reason: "Причина" });
+    const orderId = cancelled.rows[0]!.id;
+    await client.query(
+      `INSERT INTO order_event (order_id, action, from_status, to_status, actor_type, actor_account_id, actor_admin_id, channel, payload)
+       VALUES ($1, 'admin_cancel', 'created', 'cancelled_by_admin', 'admin', $2, $3, 'admin', '{"adminNote":"Причина"}')`,
+      [orderId, accountId, adminId],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The old rules know one cancel: the order and its journal read so, nothing is lost.
+    const order = await client.query<{ status: string }>(
+      "SELECT status FROM customer_order WHERE id = $1",
+      [orderId],
+    );
+    expect(order.rows[0]?.status).toBe("cancelled_by_user");
+    const journal = await client.query<{ action: string; to_status: string }>(
+      "SELECT action, to_status FROM order_event WHERE order_id = $1",
+      [orderId],
+    );
+    expect(journal.rows).toEqual([{ action: "cancel", to_status: "cancelled_by_user" }]);
+    expect(await columnExists(client, "customer_order", "cancel_reason")).toBe(false);
+    // The journal is append-only again after the rewrite.
+    await expect(
+      client.query("UPDATE order_event SET channel = 'app' WHERE order_id = $1", [orderId]),
+    ).rejects.toThrow(/append-only/);
+
+    runMigrate("up", container.getConnectionUri());
+    // What this test put in leaves with it.
+    await client.query("ALTER TABLE order_event DISABLE TRIGGER order_event_immutable");
+    await client.query("DELETE FROM order_event WHERE order_id = $1", [orderId]);
+    await client.query("ALTER TABLE order_event ENABLE TRIGGER order_event_immutable");
+    await client.query("DELETE FROM customer_order WHERE id = $1", [orderId]);
+    await client.query("DELETE FROM offer WHERE id = $1", [offer.rows[0]!.id]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [item.rows[0]!.id]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brand.rows[0]!.id]);
+    await client.query("DELETE FROM category WHERE code = 'cancel_sub'");
+    await client.query("DELETE FROM category WHERE code = 'cancel_node'");
+    await client.query("DELETE FROM supplier_location WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM admin_user WHERE id = $1", [adminId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+    await walkDownPast(() => columnExists(client, "customer_order", "cancel_reason"));
   });
 
   it("keeps one signal of a subject that is not closed, an administrator's close with a comment, and rolls back keeping the signals (admin signal actions)", async () => {

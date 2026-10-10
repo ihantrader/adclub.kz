@@ -3,6 +3,7 @@ import { AccountDirectory, ActionJournal } from "../identity";
 import { AuditLogController } from "./audit-log.controller";
 import { AuditLog } from "./audit-log.service";
 import { AuditLogStore } from "./audit-log.store";
+import { AuditNames } from "./audit-names";
 
 export interface AuditModuleOptions {
   /** Serve the admin route that reads the journal (the API process only). */
@@ -25,6 +26,7 @@ export class AuditModule {
       providers: [
         AccountDirectory,
         AuditLogStore,
+        AuditNames,
         AuditLog,
         // The identity module records through its own port (ActionJournal);
         // this is what stands behind it.

@@ -11,6 +11,7 @@ import { getRequestId, getRequestOrigin } from "../../common/logging";
 import { afterCommit, type DbExecutor } from "../../database";
 import { AccountDirectory, type ShownPerson } from "../identity";
 import { AuditLogStore, type AuditLogRow } from "./audit-log.store";
+import { AuditNames, referencesOf, type EntryNames } from "./audit-names";
 
 /** Who acted, as the journal records it. */
 export type AuditActorRecord =
@@ -109,6 +110,7 @@ export class AuditLog {
   constructor(
     @Inject(AuditLogStore) private readonly store: AuditLogStore,
     @Inject(AccountDirectory) private readonly accounts: AccountDirectory,
+    @Inject(AuditNames) private readonly names: AuditNames,
   ) {}
 
   /**
@@ -163,22 +165,24 @@ export class AuditLog {
       actorRole: query.actorRole as AuditActorRole | undefined,
       itemId: query.itemId,
       supplierId: query.supplierId,
+      accountId: query.accountId,
       before: query.cursor ? parseCursor(query.cursor) : undefined,
       // One extra row tells whether another page follows.
       limit: limit + 1,
     });
     const page = rows.slice(0, limit);
-    const [people, members] = await Promise.all([
+    const [people, members, names] = await Promise.all([
       this.accounts.accounts(
         page.flatMap((row) => (row.actorAccountId ? [row.actorAccountId] : [])),
       ),
       this.accounts.memberNames(
         page.flatMap((row) => (row.actorMemberId ? [row.actorMemberId] : [])),
       ),
+      this.names.of(page),
     ]);
     const last = page.at(-1);
     return {
-      entries: page.map((row) => this.toEntry(row, people, members)),
+      entries: page.map((row) => this.toEntry(row, people, members, names)),
       nextCursor: rows.length > limit && last ? cursorOf(last) : null,
     };
   }
@@ -187,6 +191,7 @@ export class AuditLog {
     row: AuditLogRow,
     people: Map<string, ShownPerson>,
     members: Map<string, string>,
+    names: EntryNames,
   ): AuditLogEntry {
     const person = row.actorAccountId ? people.get(row.actorAccountId) : undefined;
     // An employee is known in the journal by the name their company gave them.
@@ -212,6 +217,17 @@ export class AuditLog {
       userAgent: row.userAgent,
       requestId: row.requestId,
       at: row.createdAt.toISOString(),
+      // A setting is known by its key; other objects by their name now.
+      entityName:
+        row.entityType === "setting"
+          ? row.entityId
+          : (names.entity.get(`${row.entityType}:${row.entityId}`) ?? null),
+      names: Object.fromEntries(
+        referencesOf(row).flatMap(([, id]) => {
+          const name = names.refs.get(id);
+          return name ? [[id, name]] : [];
+        }),
+      ),
     };
   }
 

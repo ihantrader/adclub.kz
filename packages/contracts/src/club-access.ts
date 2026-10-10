@@ -64,7 +64,7 @@ export type ClubAccessGrantStatus = z.infer<typeof clubAccessGrantStatusSchema>;
 export const clubAccessGrantSchema = z.object({
   id: z.uuid(),
   accountId: z.uuid(),
-  /** The phone number masked (`+7 701 ••• •• 67`): the full number never leaves the server here. */
+  /** The phone number masked (`+7***4567`): the full number never leaves the server here. */
   phoneMasked: z.string(),
   source: clubAccessSourceSchema,
   status: clubAccessGrantStatusSchema,
@@ -86,19 +86,37 @@ export type ClubAccessGrant = z.infer<typeof clubAccessGrantSchema>;
  * the person gets access when they do). A current grant of the account is
  * replaced by the new one.
  */
-export const grantClubAccessBodySchema = z.object({
-  phone: z.string().trim().min(1).max(32),
-  validUntil: z.iso.datetime({ offset: true }),
-  reason: plainText(CLUB_ACCESS_REASON_MAX_LENGTH),
-});
+export const grantClubAccessBodySchema = z
+  .object({
+    phone: z.string().trim().min(1).max(32).optional(),
+    /**
+     * TASK-036.B: the account itself, from its card in the admin panel —
+     * whose number the card shows only partly hidden. Exactly one of
+     * `phone` and `accountId`.
+     */
+    accountId: z.uuid().optional(),
+    validUntil: z.iso.datetime({ offset: true }),
+    reason: plainText(CLUB_ACCESS_REASON_MAX_LENGTH),
+  })
+  .refine((body) => (body.phone === undefined) !== (body.accountId === undefined), {
+    message: "Send either a phone number or an account",
+    path: ["phone"],
+  });
 
 export type GrantClubAccessBody = z.infer<typeof grantClubAccessBodySchema>;
 
-/** `POST /admin/club-access/revoke` — end the current grant of the phone number's account now. */
-export const revokeClubAccessBodySchema = z.object({
-  phone: z.string().trim().min(1).max(32),
-  reason: plainText(CLUB_ACCESS_REASON_MAX_LENGTH),
-});
+/** `POST /admin/club-access/revoke` — end the current grant of the phone number's (or the account's) account now. */
+export const revokeClubAccessBodySchema = z
+  .object({
+    phone: z.string().trim().min(1).max(32).optional(),
+    /** TASK-036.B: as in the grant — exactly one of `phone` and `accountId`. */
+    accountId: z.uuid().optional(),
+    reason: plainText(CLUB_ACCESS_REASON_MAX_LENGTH),
+  })
+  .refine((body) => (body.phone === undefined) !== (body.accountId === undefined), {
+    message: "Send either a phone number or an account",
+    path: ["phone"],
+  });
 
 export type RevokeClubAccessBody = z.infer<typeof revokeClubAccessBodySchema>;
 

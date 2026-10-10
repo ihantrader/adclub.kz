@@ -37,6 +37,7 @@ export type OrderStatusTitleKey =
   | "orderStatus.readyDelivery.title"
   | "orderStatus.completed.title"
   | "orderStatus.cancelled.title"
+  | "orderStatus.cancelledByAdmin.title"
   | "orderStatus.declined.title"
   | "orderStatus.responseExpired.title"
   | "orderStatus.reserveExpired.title";
@@ -48,6 +49,7 @@ export type OrderStatusTextKey =
   | "orderStatus.readyPickup.text"
   | "orderStatus.readyDelivery.text"
   | "orderStatus.declined.text"
+  | "orderStatus.cancelledByAdmin.text"
   | "orderStatus.responseExpired.text"
   | "orderStatus.reserveExpired.text";
 
@@ -145,6 +147,9 @@ export function orderStatusView({ status, fulfillment }: OrderStateInput): Order
       };
     case "cancelled_by_user":
       return finished("orderStatus.cancelled.title", null);
+    case "cancelled_by_admin":
+      // TASK-036.B: never «Вы отменили» — the club's administrator did.
+      return finished("orderStatus.cancelledByAdmin.title", "orderStatus.cancelledByAdmin.text");
     case "declined_by_supplier":
       return finished("orderStatus.declined.title", "orderStatus.declined.text");
     case "response_expired":

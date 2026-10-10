@@ -1,5 +1,6 @@
 import { Body, Controller, Headers, Inject, Param, Query, Res } from "@nestjs/common";
 import {
+  adminCancelOrderBodySchema,
   adminCloseOrderBodySchema,
   adminExtendOrderDeadlineBodySchema,
   adminExtendOrdersBodySchema,
@@ -19,6 +20,7 @@ import {
   userOrderHistoryQuerySchema,
   userOrderListQuerySchema,
   type ActiveOrdersResponse,
+  type AdminCancelOrderBody,
   type AdminCloseOrderBody,
   type AdminExtendOrderDeadlineBody,
   type AdminExtendOrdersBody,
@@ -329,6 +331,23 @@ export class AdminOrdersController {
   ): Promise<AdminOrderResponse> {
     return {
       order: await this.orders.adminClose(
+        adminActor(session),
+        params.orderId,
+        body,
+        pickLanguage(acceptLanguage),
+      ),
+    };
+  }
+
+  @SessionRoute(apiRoutes.cancelAdminOrder)
+  async cancel(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(adminCancelOrderBodySchema)) body: AdminCancelOrderBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminOrderResponse> {
+    return {
+      order: await this.orders.adminCancel(
         adminActor(session),
         params.orderId,
         body,

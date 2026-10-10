@@ -41,7 +41,7 @@ import {
   type SupplierOffer,
   type UserOrder,
 } from "@adclub/contracts";
-import { kzBinCheckDigit, normalizeArticle } from "@adclub/domain";
+import { hidePhone, kzBinCheckDigit, normalizeArticle } from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
@@ -1742,7 +1742,11 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       const byAdmin = await adminOrder(order.id);
       expect(byAdmin.events).toEqual(bySupplier.events);
       expect(byAdmin).toMatchObject({
-        customer: { accountId: buyer.accountId, phone: buyer.phone, name: TEST_CUSTOMER_NAME },
+        customer: {
+          accountId: buyer.accountId,
+          phone: hidePhone(buyer.phone),
+          name: TEST_CUSTOMER_NAME,
+        },
         supplier: { id: shop.supplierId, name: "Журнал" },
         decline: { reason: "out_of_stock", note: "Закончились" },
         handledBy: { memberId: shop.first.memberId, name: "Айгерим" },
@@ -2818,7 +2822,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
           kind: "pickup_no_show",
           order: { id: order.id, number: order.number },
           supplier: { id: shop.supplierId, name: "Позднее" },
-          customer: { accountId: buyer.accountId, phone: buyer.phone },
+          customer: { accountId: buyer.accountId, phone: hidePhone(buyer.phone) },
           revocation: null,
         },
       ]);

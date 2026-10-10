@@ -392,6 +392,7 @@ describe("settings (PostgreSQL + Redis)", () => {
         "messages",
         "billing",
         "clients",
+        "admin_panel",
         "cleanup",
         "login_code",
         "session",

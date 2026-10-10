@@ -22,6 +22,7 @@ import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
 import { SignalsModule } from "./modules/signals";
 import { AdminHomeModule } from "./modules/admin-home";
+import { UsersModule } from "./modules/users";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -99,6 +100,7 @@ export class AppModule implements NestModule {
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
         OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
         AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers }),
+        UsersModule.forRoot({ catalog, clubAccess, suppliers }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { maskPhone, normalizeKzMobilePhone } from "./kz-mobile-phone";
+import { hidePhone, maskPhone, normalizeKzMobilePhone } from "./kz-mobile-phone";
 
 const NO_BREAK_SPACE = String.fromCharCode(0xa0);
 
@@ -44,6 +44,17 @@ describe("normalizeKzMobilePhone", () => {
     ["unicode digits", "+٧٧٠١١٢٣٤٥٦٧"],
   ])("rejects %s", (_label, input) => {
     expect(normalizeKzMobilePhone(input)).toBeNull();
+  });
+});
+
+describe("hidePhone", () => {
+  it("shows the prefix and the last two digits, as SCREENS 7.0 does", () => {
+    expect(hidePhone("+77011234567")).toBe("+7 701 *** ** 67");
+  });
+
+  it("never gives back more of a number that isn't eleven digits", () => {
+    expect(hidePhone("12345")).toBe("***");
+    expect(hidePhone("+7 701 *** ** 67")).toBe("***");
   });
 });
 

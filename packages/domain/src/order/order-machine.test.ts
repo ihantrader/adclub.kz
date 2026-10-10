@@ -36,6 +36,10 @@ const allowed: [OrderStatus, OrderAction, OrderStatus][] = [
   ["ready", "admin_close", "completed"],
   ["response_expired", "admin_close", "completed"],
   ["reserve_expired", "admin_close", "completed"],
+  // TASK-036.B: the administrator cancels an order still going on.
+  ["created", "admin_cancel", "cancelled_by_admin"],
+  ["accepted", "admin_cancel", "cancelled_by_admin"],
+  ["ready", "admin_cancel", "cancelled_by_admin"],
 ];
 
 describe("orderTransition", () => {
@@ -65,9 +69,19 @@ describe("orderTransition", () => {
       }
     }
     // Neither of the two touches an order already given out, cancelled or declined.
-    for (const status of ["completed", "cancelled_by_user", "declined_by_supplier"] as const) {
+    for (const status of [
+      "completed",
+      "cancelled_by_user",
+      "declined_by_supplier",
+      "cancelled_by_admin",
+    ] as const) {
       expect(orderTransition(status, "close_late")).toBeNull();
       expect(orderTransition(status, "admin_close")).toBeNull();
+    }
+    // An order that is over is never cancelled by the administrator: the
+    // expired ones are settled by `admin_close` if there is a dispute.
+    for (const status of orderStatuses.filter((entry) => !isActiveOrderStatus(entry))) {
+      expect(orderTransition(status, "admin_cancel"), status).toBeNull();
     }
     // An order the supplier never answered is never closed late (PRODUCT 10.7).
     expect(orderTransition("response_expired", "close_late")).toBeNull();
@@ -93,6 +107,8 @@ describe("orderTransition", () => {
     expect(orderActionActor.expire_reserve).toBe("system");
     expect(orderActionActor.close_late).toBe("supplier");
     expect(orderActionActor.admin_close).toBe("admin");
+    expect(orderActionSources("admin_cancel")).toEqual(orderActionSources("cancel"));
+    expect(orderActionActor.admin_cancel).toBe("admin");
   });
 
   it("keeps the active statuses those an order still goes through", () => {

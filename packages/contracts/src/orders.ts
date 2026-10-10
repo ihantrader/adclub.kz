@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hiddenPhoneSchema } from "./account";
 import { catalogLanguageSchema, localizedTextSchema } from "./catalog";
 import { itemPhotoImageSchema } from "./catalog-photos";
 import { OFFER_PRICE_LIMIT, offerAvailabilitySchema, offerReceiptSchema } from "./offers";
@@ -78,7 +79,8 @@ const expectedVersionSchema = z.number().int().min(1);
  * `cancelled_by_user`;
  * `declined_by_supplier`; `response_expired` — the supplier didn't answer
  * in time; `reserve_expired` — the user didn't come for it in time
- * (pickup). The last five are final.
+ * (pickup); `cancelled_by_admin` — the administrator cancelled it, with a
+ * reason (TASK-036.B). The last six are final.
  */
 export const orderStatusSchema = z.enum([
   "created",
@@ -89,6 +91,7 @@ export const orderStatusSchema = z.enum([
   "declined_by_supplier",
   "response_expired",
   "reserve_expired",
+  "cancelled_by_admin",
 ]);
 
 export type OrderStatusValue = z.infer<typeof orderStatusSchema>;
@@ -122,7 +125,8 @@ export type OrderDeclineReason = z.infer<typeof orderDeclineReasonSchema>;
  * already dealt with; nothing changed — and (TASK-025) `deadline_extended`:
  * an administrator moved the answer deadline or the end of the reserve,
  * with a reason (A-ORD-02, A-ORD-03; PRODUCT 10.4 — a timer is never
- * extended by itself).
+ * extended by itself). TASK-036.B: `admin_cancel` — the administrator
+ * cancelled the order, with a reason.
  */
 export const orderEventActionSchema = z.enum([
   "create",
@@ -138,6 +142,7 @@ export const orderEventActionSchema = z.enum([
   "reserve_expiring",
   "late_action_ignored",
   "deadline_extended",
+  "admin_cancel",
 ]);
 
 export type OrderEventAction = z.infer<typeof orderEventActionSchema>;
@@ -151,6 +156,7 @@ export const orderAttemptedActionSchema = z.enum([
   "close_late",
   "admin_close",
   "cancel",
+  "admin_cancel",
 ]);
 
 export type OrderAttemptedAction = z.infer<typeof orderAttemptedActionSchema>;
@@ -254,9 +260,9 @@ export const orderEventDetailsSchema = z.object({
   previousDeadline: z.iso.datetime().optional(),
   minutes: z.number().int().optional(),
   /**
-   * `deadline_extended`: why the administrator extended it (A-ORD-02 — every
-   * manual action has a reason). **The administrator's view only**: the
-   * supplier sees that and until when, never the words.
+   * `deadline_extended`, `admin_cancel`: why the administrator did it
+   * (A-ORD-02 — every manual action has a reason). **The administrator's
+   * view only**: the supplier sees what happened, never the words.
    */
   adminNote: z.string().optional(),
 });
@@ -877,6 +883,7 @@ export const supplierFinishedStatusSchema = z.enum([
   "declined_by_supplier",
   "response_expired",
   "reserve_expired",
+  "cancelled_by_admin",
 ]);
 
 export type SupplierFinishedStatus = z.infer<typeof supplierFinishedStatusSchema>;
@@ -970,6 +977,8 @@ export const orderCloseRefusalSchema = z.enum([
   "response_expired",
   /** «Закрыть нельзя: прошло больше {N} часов после истечения». */
   "late_window_passed",
+  /** «Заявку отменил администратор клуба {когда}» (TASK-036.B). */
+  "cancelled_by_admin",
 ]);
 
 export type OrderCloseRefusalReason = z.infer<typeof orderCloseRefusalSchema>;
@@ -1051,8 +1060,15 @@ export type CloseOrderResponse = z.infer<typeof closeOrderResponseSchema>;
 
 const adminSideFields = {
   supplier: z.object({ id: z.uuid(), name: z.string() }),
-  /** The customer's account, phone number and name (A-ORD-02 «Клиент»); `name` — `null` before TASK-029. */
-  customer: z.object({ accountId: z.uuid(), phone: z.string(), name: z.string().nullable() }),
+  /**
+   * The customer's account, phone number (partly hidden) and name (A-ORD-02
+   * «Клиент»); `name` — `null` before TASK-029.
+   */
+  customer: z.object({
+    accountId: z.uuid(),
+    phone: hiddenPhoneSchema,
+    name: z.string().nullable(),
+  }),
   /** As the supplier's, with the reason an administrator's close carries. */
   closure: adminOrderClosureSchema.nullable(),
 };
@@ -1081,9 +1097,41 @@ export const adminOrderSchema = adminOrderSummarySchema.extend({
   /** The discipline marks of this order, lifted ones too (A-ORD-02). */
   discipline: z.array(disciplineMarkSchema),
   events: z.array(orderEventSchema),
+  /** The deadlines of the order (A-ORD-02 «Сроки»): the answer, the reserve, the late close window. */
+  deadlines: z.object({
+    respondBy: z.iso.datetime(),
+    /** The end of the pickup reserve; `null` — not accepted yet, or delivery. */
+    reserveUntil: z.iso.datetime().nullable(),
+    /** The late close window of an expired reserve; `null` — none. */
+    lateCloseUntil: z.iso.datetime().nullable(),
+  }),
+  /** TASK-036.B: who of the administrators cancelled it, when and why; `null` — not cancelled so. */
+  cancellation: z
+    .object({
+      at: z.iso.datetime(),
+      adminId: z.uuid(),
+      adminName: z.string().nullable(),
+      reason: z.string(),
+    })
+    .nullable(),
 });
 
 export type AdminOrder = z.infer<typeof adminOrderSchema>;
+
+/**
+ * `POST /admin/orders/{orderId}/cancel` (A-ORD-02 «Отменить заявку»,
+ * TASK-036.B): an order still going on (created, accepted, ready) is
+ * cancelled, only with a reason and the version the administrator saw. The
+ * supplier sees «Отменена администратором» in the cabinet, the user — in
+ * the app; the reason stays the administrator's. No message goes out: W-04
+ * says «Клиент отменил», which this is not, and a new template needs Meta.
+ */
+export const adminCancelOrderBodySchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  reason: freeText(ORDER_REASON_MAX_LENGTH),
+});
+
+export type AdminCancelOrderBody = z.infer<typeof adminCancelOrderBodySchema>;
 
 /**
  * `POST /admin/orders/{orderId}/close` (A-ORD-02 «Закрыть без кода»,
@@ -1249,11 +1297,17 @@ export type AdminExtendOrdersResponse = z.infer<typeof adminExtendOrdersResponse
  * `to` exclusive), number, «Закрыта поздно» (`closedLate`) and «Закрыта
  * администратором» (`closedByAdmin`); test orders are left out by default
  * (`test=exclude`), shown alone (`only`) or with the others (`include`).
- * Newest first.
+ * Newest first. TASK-036.B: `q` — the number («1028», «№ 1028») or the
+ * customer's phone, whole or in part, in any spelling (the server matches
+ * the full number; the answer still hides it); `accountId` — the orders of
+ * one user (A-USR-02); `cityId` — the city of the order's pickup point.
  */
 export const adminOrderListQuerySchema = z.object({
   status: orderStatusSchema.optional(),
   supplierId: z.uuid().optional(),
+  accountId: z.uuid().optional(),
+  cityId: z.uuid().optional(),
+  q: z.string().trim().min(1).max(40).optional(),
   from: z.iso.datetime({ offset: true }).optional(),
   to: z.iso.datetime({ offset: true }).optional(),
   number: z.coerce.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
@@ -1294,8 +1348,8 @@ export const adminDisciplineListQuerySchema = z.object({
 export type AdminDisciplineListQuery = z.infer<typeof adminDisciplineListQuerySchema>;
 
 export const adminDisciplineMarkSchema = disciplineMarkSchema.extend({
-  /** Whose mark it is: the account and its phone number (A-USR-02). */
-  customer: z.object({ accountId: z.uuid(), phone: z.string() }),
+  /** Whose mark it is: the account and its phone number, partly hidden (A-USR-02). */
+  customer: z.object({ accountId: z.uuid(), phone: hiddenPhoneSchema }),
 });
 
 export type AdminDisciplineMark = z.infer<typeof adminDisciplineMarkSchema>;
@@ -1315,6 +1369,8 @@ export type AdminDisciplinePage = z.infer<typeof adminDisciplinePageSchema>;
 export const adminDisciplineUsersQuerySchema = z.object({
   from: z.iso.datetime({ offset: true }).optional(),
   to: z.iso.datetime({ offset: true }).optional(),
+  /** TASK-036.B: most no-shows first (`count`, the default) or the latest no-show first (`last`). */
+  sort: z.enum(["count", "last"]).default("count"),
   limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
   offset: z.coerce.number().int().min(0).max(10_000).default(0),
 });
@@ -1323,7 +1379,10 @@ export type AdminDisciplineUsersQuery = z.infer<typeof adminDisciplineUsersQuery
 
 export const adminDisciplineUserSchema = z.object({
   accountId: z.uuid(),
-  phone: z.string(),
+  /** Partly hidden (TASK-036.B). */
+  phone: hiddenPhoneSchema,
+  /** The account's name; `null` — registration not finished (TASK-036.B). */
+  name: z.string().nullable(),
   /** Marks that still stand in the period. */
   count: z.number().int(),
   /** Marks lifted in the period (they are kept, not deleted). */

@@ -268,6 +268,22 @@ export const auditActions = {
    */
   adminSignalAcknowledged: "admin_signal.acknowledged",
   adminSignalClosed: "admin_signal.closed",
+  /**
+   * TASK-036.B (A-ORD-02 «Отменить заявку»): an administrator cancelled an
+   * order still going on. `reason` — why; `before`/`after` — the status,
+   * the order's number.
+   */
+  orderCancelledByAdmin: "order.cancelled_by_admin",
+  /**
+   * TASK-036.B (SCREENS 7.0 «Показать номер»): an administrator opened a
+   * person's full phone number. The entry is about the object the number
+   * was opened on (an account, an employee, a connection request, an
+   * order); `after.subject` names which. **The number itself is never
+   * written.**
+   */
+  phoneRevealed: "phone.revealed",
+  /** TASK-036.B (A-USR-02): an administrator ended sessions of a user's app; `after.ended` — how many. */
+  accountSessionsEnded: "account.sessions_ended",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -308,6 +324,8 @@ export const auditEntities = {
   disciplineEvent: "user_discipline_event",
   /** A signal to the administrator (TASK-034). */
   adminSignal: "admin_signal",
+  /** A user's account (TASK-029; named here with TASK-036.B). */
+  account: "account",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];
@@ -350,6 +368,19 @@ export const auditLogEntrySchema = z.object({
   userAgent: z.string().nullable(),
   requestId: z.string().nullable(),
   at: z.string(),
+  /**
+   * TASK-036.B: the object by its name **now** — a company by its name, an
+   * employee or a user by theirs, an order «№ 1028», an item by its name,
+   * a setting by its key; `null` — the object is gone or has no name.
+   */
+  entityName: z.string().nullable(),
+  /**
+   * TASK-036.B: the names of the things `before`/`after` refer to by id
+   * (a city, a company, an item, an account…), id → name, so «было →
+   * стало» reads «Город: Алматы → Астана» rather than two ids. Ids the
+   * server can't name are left out.
+   */
+  names: z.record(z.string(), z.string()),
 });
 
 export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
@@ -388,6 +419,13 @@ export const auditLogQuerySchema = z.object({
    * cabinet did — its offers among them. Combines with the other filters.
    */
   supplierId: z.uuid().optional(),
+  /**
+   * The history of one user (SCREENS A-USR-02 «История»; TASK-036.B):
+   * entries about the account itself (its registration, profile, sessions
+   * ended, its number opened), its club access grants and discipline marks
+   * (they name the account in `before`/`after`), and what the user did.
+   */
+  accountId: z.uuid().optional(),
   limit: z.coerce
     .number()
     .int()

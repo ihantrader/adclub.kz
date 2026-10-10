@@ -50,6 +50,7 @@ export type { MembershipStatus, SupplierStatus } from "./schema";
 export { AccountStore } from "./account/account.store";
 export type {
   AccountProfileRow,
+  AccountRecord,
   RegistrationFactsRow,
   UpdateAccountProfileInput,
 } from "./account/account.store";

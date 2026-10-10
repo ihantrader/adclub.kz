@@ -18,6 +18,13 @@ import { catalogLanguageSchema } from "./catalog";
 export const ACCOUNT_NAME_MAX_LENGTH = 80;
 
 /**
+ * A person's phone number in an admin answer (TASK-036.B; SCREENS 7.0):
+ * always partly hidden, «+7 701 *** ** 67». The full number comes only
+ * from `POST /admin/phone-reveals`, which is written to the journal.
+ */
+export const hiddenPhoneSchema = z.string().describe('Partly hidden, e.g. "+7 701 *** ** 67"');
+
+/**
  * A letter of any script (so the Kazakh letters ә ғ қ ң ө ұ ү h і pass, as
  * SCREENS M-AUTH-03 calls for explicitly), then letters, single spaces,
  * hyphens and apostrophes — no digits, no emoji, no control characters.

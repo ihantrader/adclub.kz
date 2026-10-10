@@ -86,6 +86,9 @@ export const customerOrder = pgTable("customer_order", {
   closeReason: text("close_reason"),
   /** Until when an expired pickup reserve may still be given out (PRODUCT 10.7). */
   lateCloseUntil: timestamp("late_close_until", { withTimezone: true }),
+  /** TASK-036.B: the administrator who cancelled the order, and why — their view only. */
+  cancelledByAdminId: uuid("cancelled_by_admin_id").references(() => adminUser.id),
+  cancelReason: text("cancel_reason"),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

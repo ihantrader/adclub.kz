@@ -303,6 +303,53 @@ export class SessionStore {
   }
 
   /**
+   * Active sessions of the app of one account (the administrator's view of
+   * a user, TASK-036.B), most recently used first. A cabinet or admin panel
+   * session of the same account is not the app's.
+   */
+  async listAppSessions(accountId: string, now: Date): Promise<SupplierSessionRow[]> {
+    return this.database.db
+      .select({
+        id: session.id,
+        deviceName: session.deviceName,
+        clientPlatform: session.clientPlatform,
+        clientVersion: session.clientVersion,
+        lastIp: session.lastIp,
+        createdAt: session.createdAt,
+        lastUsedAt: session.lastUsedAt,
+        expiresAt: session.expiresAt,
+      })
+      .from(session)
+      .where(and(eq(session.accountId, accountId), eq(session.kind, "mobile"), isActive(now)))
+      .orderBy(desc(session.lastUsedAt), desc(session.createdAt));
+  }
+
+  /**
+   * Ends active sessions of the app of one account — one, or all — in the
+   * caller's transaction (TASK-036.B); never another account's, never a
+   * cabinet or admin panel session. The app gets `SESSION_ENDED`.
+   */
+  async revokeAppSessions(
+    accountId: string,
+    sessionId: string | null,
+    now: Date,
+    tx: DbExecutor,
+  ): Promise<{ id: string }[]> {
+    return tx
+      .update(session)
+      .set({ revokedAt: now, revokedReason: "ended_by_admin", updatedAt: now })
+      .where(
+        and(
+          eq(session.accountId, accountId),
+          eq(session.kind, "mobile"),
+          isActive(now),
+          sessionId ? eq(session.id, sessionId) : undefined,
+        ),
+      )
+      .returning({ id: session.id });
+  }
+
+  /**
    * Moves an active cabinet session of `accountId` to another membership
    * of the same account; `false` if the session is no longer active.
    */

@@ -230,7 +230,22 @@ import {
   userOrderListQuerySchema,
   userOrderPageSchema,
   userOrderResponseSchema,
+  adminCancelOrderBodySchema,
 } from "./orders";
+import {
+  adminSearchQuerySchema,
+  adminSearchResponseSchema,
+  adminUserGarageResponseSchema,
+  adminUserListQuerySchema,
+  adminUserPageSchema,
+  adminUserPathSchema,
+  adminUserResponseSchema,
+  adminUserSessionListResponseSchema,
+  adminUserSessionPathSchema,
+  adminUserSessionsEndedResponseSchema,
+  revealPhoneBodySchema,
+  revealPhoneResponseSchema,
+} from "./users";
 import {
   acknowledgeAdminSignalBodySchema,
   adminHomeSchema,
@@ -3697,6 +3712,25 @@ export const apiRoutes = {
       200: { description: "The closed order", schema: adminOrderResponseSchema },
     },
   }),
+  cancelAdminOrder: defineRoute({
+    operationId: "cancelAdminOrder",
+    method: "POST",
+    path: "/admin/orders/{orderId}/cancel",
+    summary:
+      "Cancel an order still going on (created, accepted, ready), only with a reason and the version seen (A-ORD-02, TASK-036.B): «Отменена администратором» for the supplier and the user, the reason for the administrator only. Another administrator or the supplier acted first, or the deadline passed — 409 ORDER_STATE_CONFLICT naming what happened",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: orderPathSchema,
+    requestBody: {
+      description: "The version seen and the reason",
+      schema: adminCancelOrderBodySchema,
+    },
+    responses: {
+      200: { description: "The cancelled order", schema: adminOrderResponseSchema },
+    },
+  }),
   extendAdminOrderDeadline: defineRoute({
     operationId: "extendAdminOrderDeadline",
     method: "POST",
@@ -3862,6 +3896,127 @@ export const apiRoutes = {
     contexts: ["admin"],
     responses: {
       200: { description: "The counters", schema: adminHomeSchema },
+    },
+  }),
+  // -------------------------------------------- users, numbers, search (TASK-036.B)
+  listAdminUsers: defineRoute({
+    operationId: "listAdminUsers",
+    method: "GET",
+    path: "/admin/users",
+    summary:
+      "Users of the app (A-USR-01): by phone (any spelling, a part of it) or name, by club access (now, none, ending soon) and no-shows; numbers partly hidden",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminUserListQuerySchema,
+    responses: {
+      200: { description: "The users", schema: adminUserPageSchema },
+    },
+  }),
+  getAdminUser: defineRoute({
+    operationId: "getAdminUser",
+    method: "GET",
+    path: "/admin/users/{accountId}",
+    summary:
+      "The card of a user (A-USR-02): the profile and consents, club access now, employments at suppliers, the counts of the card's blocks; the number partly hidden",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserPathSchema,
+    responses: {
+      200: { description: "The user", schema: adminUserResponseSchema },
+    },
+  }),
+  getAdminUserGarage: defineRoute({
+    operationId: "getAdminUserGarage",
+    method: "GET",
+    path: "/admin/users/{accountId}/garage",
+    summary: "The garage of a user, to look at only (A-USR-02)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserPathSchema,
+    responses: {
+      200: { description: "The cars", schema: adminUserGarageResponseSchema },
+    },
+  }),
+  listAdminUserSessions: defineRoute({
+    operationId: "listAdminUserSessions",
+    method: "GET",
+    path: "/admin/users/{accountId}/sessions",
+    summary: "Active sessions of a user's app: device and times, no tokens (A-USR-02)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserPathSchema,
+    responses: {
+      200: { description: "The sessions", schema: adminUserSessionListResponseSchema },
+    },
+  }),
+  endAdminUserSession: defineRoute({
+    operationId: "endAdminUserSession",
+    method: "POST",
+    path: "/admin/users/{accountId}/sessions/{sessionId}/end",
+    summary:
+      "End one session of a user's app; the app gets SESSION_ENDED on its next request. Recorded in the journal",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserSessionPathSchema,
+    responses: {
+      200: { description: "How many ended", schema: adminUserSessionsEndedResponseSchema },
+    },
+  }),
+  endAdminUserSessions: defineRoute({
+    operationId: "endAdminUserSessions",
+    method: "POST",
+    path: "/admin/users/{accountId}/sessions/end",
+    summary:
+      "End every session of a user's app (A-USR-02 «Завершить все сессии»); a cabinet or admin session of the same account is not the app's and stays. Recorded in the journal",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserPathSchema,
+    responses: {
+      200: { description: "How many ended", schema: adminUserSessionsEndedResponseSchema },
+    },
+  }),
+  revealPhone: defineRoute({
+    operationId: "revealPhone",
+    method: "POST",
+    path: "/admin/phone-reveals",
+    summary:
+      "«Показать номер» (SCREENS 7.0): the full number of a user, an employee, the contact of a connection request or the customer of an order. Every answer is written to the action journal — who opened whose number on which object, never the number",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    rateLimit: { perAccount: "phone_reveal_per_account", whenUnavailable: "allow" },
+    requestBody: { description: "Whose number, by which object", schema: revealPhoneBodySchema },
+    responses: {
+      200: { description: "The number in full", schema: revealPhoneResponseSchema },
+    },
+  }),
+  searchAdmin: defineRoute({
+    operationId: "searchAdmin",
+    method: "GET",
+    path: "/admin/search",
+    summary:
+      "One line of the header (A-SEARCH): a phone — users and employees; «№ 4821» or a number — orders; 12 digits — a supplier and connection requests by БИН; an article in any spelling — items; a text — suppliers, items and users by name. Groups, numbers partly hidden; limited per administrator",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminSearchQuerySchema,
+    rateLimit: { perAccount: "admin_search_per_account", whenUnavailable: "allow" },
+    responses: {
+      200: { description: "What was found, by kind", schema: adminSearchResponseSchema },
     },
   }),
 } as const;

@@ -198,6 +198,8 @@ export function statusKey(status: OrderStatusValue): SupplierTextKey {
       return "orders.status.responseExpired";
     case "reserve_expired":
       return "orders.status.reserveExpired";
+    case "cancelled_by_admin":
+      return "orders.status.cancelledByAdmin";
   }
 }
 
@@ -379,6 +381,8 @@ export function conflictText(
       return t("orders.conflict.givenOut", params);
     case "admin_close":
       return t("orders.conflict.adminClosed", params);
+    case "admin_cancel":
+      return t("orders.conflict.adminCancelled", params);
     case "cancel":
       return t("orders.conflict.cancelled", params);
     case "expire_no_response":
@@ -507,6 +511,9 @@ export function journalLines(
         break;
       case "admin_close":
         text = t("orders.journal.adminClosed", params);
+        break;
+      case "admin_cancel":
+        text = t("orders.journal.adminCancelled", params);
         break;
       case "cancel":
         text = t("orders.journal.cancelled", params);

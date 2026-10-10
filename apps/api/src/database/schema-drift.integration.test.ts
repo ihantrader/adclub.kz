@@ -27,6 +27,7 @@ describe("ORM schema vs migrated database", () => {
   });
 
   it("describes exactly the tables and columns the migrations create", async () => {
+    expect(1, "deliberately broken for TASK-076 (temporary branch)").toBe(2);
     const problems = compareSchemas(describeOrmTables(ormTables), await readDatabaseColumns(pool));
     expect(problems, `ORM schema and migrations disagree:\n${problems.join("\n")}`).toEqual([]);
   });

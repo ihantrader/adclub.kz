@@ -1,16 +1,15 @@
 import type { AdminOrderSummary } from "@adclub/contracts";
-import { EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
+import { Button, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
 import { apiClient } from "../api";
-import { formatMoment } from "../format";
+import { OrdersTable } from "../orders/Orders";
+import { navigateTo, routePaths, withQuery } from "../router";
 import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
-import { ORDER_STATUS_TEXT } from "./supplier-words";
 
 /**
- * «Заявки» of A-SUP-03 (TASK-036), read only: the company's orders — the
- * number, the item, the status, when — newest first, test orders too
- * (marked). The full section with the card and its actions is TASK-036.B;
- * until then the number is not a link. Never the code (SCREENS 7.0), and
- * no customer data here.
+ * «Заявки» of A-SUP-03 (SCREENS 7.4: «A-ORD-01 с отбором»; TASK-036,
+ * TASK-036.B): the company's orders newest first, test ones too (marked),
+ * each opening its card (A-ORD-02); the whole list with every filter is
+ * «Заявки» with this supplier chosen. Never the code (SCREENS 7.0).
  */
 export function SupplierOrders({ supplierId }: { supplierId: string }) {
   const list = usePaged<AdminOrderSummary>(async (cursor) => {
@@ -21,9 +20,15 @@ export function SupplierOrders({ supplierId }: { supplierId: string }) {
   }, `orders:${supplierId}`);
   return (
     <div className="detail-stack">
-      <p className="ac-text-body-s ac-muted">
-        Карточка заявки и действия с ней появятся в разделе «Заявки» (TASK-036.B).
-      </p>
+      <div className="button-row">
+        <Button
+          variant="secondary"
+          size="s"
+          onClick={() => navigateTo(withQuery(routePaths.orders, { supplierId, test: "include" }))}
+        >
+          Все отборы в разделе «Заявки»
+        </Button>
+      </div>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent
         ready={list.first.data !== undefined}
@@ -35,47 +40,7 @@ export function SupplierOrders({ supplierId }: { supplierId: string }) {
         {list.items.length === 0 ? (
           <EmptyState icon="receipt" title="Заявок пока нет" />
         ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Номер</th>
-                  <th scope="col">Позиция</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="num">
-                    Сумма
-                  </th>
-                  <th scope="col">Оформлена</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((order) => (
-                  <tr key={order.id}>
-                    <td className="num nowrap">
-                      № {order.number}
-                      {order.isTest && (
-                        <span className="ac-text-caption ac-muted"> · тестовая</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="cell-stack">
-                        <span className="long-text" title={order.item.name.text}>
-                          {order.item.name.text}
-                        </span>
-                        <span className="ac-text-caption ac-muted">
-                          {[order.item.brand, order.item.article].filter(Boolean).join(" · ")} ·{" "}
-                          {order.quantity} шт.
-                        </span>
-                      </div>
-                    </td>
-                    <td className="ac-text-body-s">{ORDER_STATUS_TEXT[order.status]}</td>
-                    <td className="num">{order.total.toLocaleString("ru-RU")} ₸</td>
-                    <td className="ac-text-body-s num">{formatMoment(order.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <OrdersTable orders={list.items} hide={["supplier"]} />
         )}
         <MoreButton list={list} />
       </LoadingContent>

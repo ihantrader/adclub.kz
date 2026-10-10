@@ -25,6 +25,7 @@ import {
   type RouteKey,
   type StaticRoute,
 } from "../router";
+import { HeaderSearch } from "../search/HeaderSearch";
 import { BACKUP_CODES_LOW, useBackupCodesRemaining } from "../security/backup-reminder";
 
 const MENU: NavItem<StaticRoute>[] = [
@@ -32,16 +33,12 @@ const MENU: NavItem<StaticRoute>[] = [
   { key: "signals", label: "Сигналы", icon: "alertTriangle", href: routePaths.signals },
   { key: "catalog", label: "Справочник", icon: "category", href: routePaths.catalog },
   { key: "vehicles", label: "Автомобили", icon: "car", href: routePaths.vehicles },
+  { key: "orders", label: "Заявки", icon: "receipt", href: routePaths.orders },
+  { key: "users", label: "Пользователи", icon: "users", href: routePaths.users },
   { key: "suppliers", label: "Поставщики", icon: "store", href: routePaths.suppliers },
   { key: "settings", label: "Настройки", icon: "settings", href: routePaths.settings },
   { key: "audit", label: "Журнал", icon: "clock", href: routePaths.audit },
   { key: "security", label: "Безопасность", icon: "lock", href: routePaths.security },
-];
-
-/** The sections of TASK-036.B, shown as such. */
-const NEXT: NavItem<StaticRoute>[] = [
-  { key: "orders", label: "Заявки", icon: "receipt", href: routePaths.orders },
-  { key: "users", label: "Пользователи", icon: "users", href: routePaths.users },
 ];
 
 const THEMES: { value: ThemeMode; label: string }[] = [
@@ -97,7 +94,7 @@ export function Shell({
       <div className="shell__sidebar">
         <Sidebar<StaticRoute>
           label="Разделы админки"
-          items={[...MENU, ...NEXT]}
+          items={MENU}
           active={menuOf(route)}
           onSelect={(key) => navigate(key)}
           header={
@@ -116,6 +113,7 @@ export function Shell({
             <span className="topbar__name">{who}</span>
             {phone && <span className="ac-text-body-s ac-muted num">{phone}</span>}
           </div>
+          <HeaderSearch />
           <div className="topbar__actions">
             <Segments<ThemeMode> label="Тема" options={THEMES} value={mode} onChange={setMode} />
             <Button

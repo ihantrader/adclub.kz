@@ -1,7 +1,6 @@
 import { isApiError } from "@adclub/api-client";
 import type {
   AdminSupplierMember,
-  OrderStatusValue,
   SupplierInvitationStatus,
   SupplierLeadStatusValue,
   SupplierLeadSource,
@@ -64,23 +63,14 @@ export const INVITATION_TEXT: Record<SupplierInvitationStatus, string> = {
   cancelled: "отменено",
 };
 
-export const ORDER_STATUS_TEXT: Record<OrderStatusValue, string> = {
-  created: "Ждёт ответа",
-  accepted: "Принята",
-  ready: "Готова к выдаче",
-  completed: "Выдана",
-  cancelled_by_user: "Отменена клиентом",
-  declined_by_supplier: "Отклонена поставщиком",
-  response_expired: "Нет ответа вовремя",
-  reserve_expired: "Срок резерва истёк",
-};
-
 /**
  * A number partly hidden, as SCREENS 7.0 shows people's numbers:
  * «+7 777 *** ** 12». Revealing it in full (with the journal) is TASK-036.B.
  */
 export function hiddenPhone(phone: string | null | undefined): string {
   if (!phone) return "—";
+  // TASK-036.B: the server hides people's numbers itself; such a value is shown as it came.
+  if (phone.includes("*")) return phone;
   const digits = phone.replace(/\D/g, "");
   if (digits.length !== 11) return "***";
   return `+${digits[0]} ${digits.slice(1, 4)} *** ** ${digits.slice(9)}`;

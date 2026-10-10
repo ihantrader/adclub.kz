@@ -29,9 +29,11 @@ export const routePaths = {
   suppliers: "/suppliers",
   supplierLeads: "/suppliers/leads",
   supplierNew: "/suppliers/new",
-  // Sections of the next tasks: an honest «появится» until then.
+  // Orders and users (TASK-036.B): the lists, the mass extension, the no-shows.
   orders: "/orders",
+  orderExtensions: "/orders/extensions",
   users: "/users",
+  userNoShows: "/users/no-shows",
 } as const;
 
 export type StaticRoute = keyof typeof routePaths;
@@ -44,7 +46,9 @@ export type StaticRoute = keyof typeof routePaths;
  * `vehicleGeneration` — a level of the vehicle catalog with what lies under
  * it, `vehicleImport` — the report of one import (TASK-035.B);
  * `supplier` — a supplier's card, `/suppliers/<id>`, `supplierLead` — a
- * connection request, `/suppliers/leads/<id>` (TASK-036).
+ * connection request, `/suppliers/leads/<id>` (TASK-036); `order` — the
+ * card of an order, `/orders/<id>`, `user` — the card of a user,
+ * `/users/<id>` (TASK-036.B).
  */
 export type RouteKey =
   | StaticRoute
@@ -56,13 +60,9 @@ export type RouteKey =
   | "vehicleGeneration"
   | "vehicleImport"
   | "supplier"
-  | "supplierLead";
-
-/** The sections that come with TASK-036.B. */
-export const comingSections: Partial<Record<StaticRoute, "TASK-036.B">> = {
-  orders: "TASK-036.B",
-  users: "TASK-036.B",
-};
+  | "supplierLead"
+  | "order"
+  | "user";
 
 const HISTORY_PATH = /^\/settings\/([a-z][a-z0-9_]{0,63})\/history$/;
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -75,7 +75,28 @@ const VEHICLE_PATHS: [RouteKey, RegExp][] = [
   ["vehicleImport", new RegExp(`^/vehicles/imports/(${UUID})$`, "i")],
   ["supplierLead", new RegExp(`^/suppliers/leads/(${UUID})$`, "i")],
   ["supplier", new RegExp(`^/suppliers/(${UUID})$`, "i")],
+  ["order", new RegExp(`^/orders/(${UUID})$`, "i")],
+  ["user", new RegExp(`^/users/(${UUID})$`, "i")],
 ];
+
+/** The card of an order (A-ORD-02). */
+export function orderPath(orderId: string): string {
+  return `/orders/${orderId}`;
+}
+
+/** A-ORD-03: the orders of an outage from `from` (the signal's `since`). */
+export function orderExtensionsPath(from?: string): string {
+  return withQuery(routePaths.orderExtensions, { from });
+}
+
+/** The tabs of a user's card (A-USR-02). */
+export type UserTab =
+  "profile" | "access" | "garage" | "orders" | "discipline" | "sessions" | "history";
+
+/** A user's card, on a tab (`profile` when left out). */
+export function userPath(accountId: string, tab?: UserTab): string {
+  return tab && tab !== "profile" ? `/users/${accountId}?tab=${tab}` : `/users/${accountId}`;
+}
 
 /** The tabs of a supplier's card (A-SUP-03). */
 export type SupplierTab = "profile" | "statuses" | "members" | "offers" | "orders" | "history";
@@ -191,6 +212,12 @@ export function menuOf(route: RouteKey): StaticRoute {
     route === "supplierLead"
   ) {
     return "suppliers";
+  }
+  if (route === "order" || route === "orderExtensions") {
+    return "orders";
+  }
+  if (route === "user" || route === "userNoShows") {
+    return "users";
   }
   return route;
 }

@@ -4,7 +4,7 @@ import type {
   AdminSignalKind,
   AdminSignalStatus,
 } from "@adclub/contracts";
-import { supplierPath } from "../router";
+import { orderExtensionsPath, orderPath, supplierPath } from "../router";
 
 /**
  * The words of A-HOME and A-SIG (TASK-034 requirement 3): what a signal is
@@ -87,12 +87,29 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
 }
 
 /**
- * «Открыть объект» (A-SIG): where the subject of a signal opens — a
- * supplier its card on «Сотрудники» (who receives the notifications,
- * TASK-036). An order opens with TASK-036.B; the channel has no page.
+ * «Открыть объект» (A-SIG): where the subject of a signal opens — an order
+ * its card (TASK-036.B: «Двойная заявка при позднем закрытии»); a supplier
+ * with frequent closes without a code — its orders, an unreachable one —
+ * «Сотрудники» (who receives the notifications, TASK-036); the channel's
+ * outage — the orders to extend (A-ORD-03) from when it began.
  */
-export function subjectLink(signal: Pick<AdminSignal, "subjectType" | "subjectId">): string | null {
-  return signal.subjectType === "supplier" ? supplierPath(signal.subjectId, "members") : null;
+export function subjectLink(
+  signal: Pick<AdminSignal, "subjectType" | "subjectId"> &
+    Partial<Pick<AdminSignal, "kind" | "payload">>,
+): string | null {
+  switch (signal.subjectType) {
+    case "order":
+      return orderPath(signal.subjectId);
+    case "supplier":
+      return supplierPath(
+        signal.subjectId,
+        signal.kind === "frequent_admin_closes" ? "orders" : "members",
+      );
+    case "channel":
+      return signal.kind === "whatsapp_outage"
+        ? orderExtensionsPath(signal.payload?.since ?? undefined)
+        : null;
+  }
 }
 
 /** What the administrator does about it — the hint under a card or a row. */

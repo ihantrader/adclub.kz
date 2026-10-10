@@ -131,6 +131,15 @@ export function createChoiceSources(client: ApiClient) {
         (
           await client.listAdminBrands({ query: { ...q(query), status, limit: SEARCH_PAGE } })
         ).brands.map(brandChoice),
+    /** Suppliers by a part of the name or the БИН (TASK-036.B: the filter of A-ORD-01). */
+    suppliers: (): ChoiceSource => async (query) =>
+      (await client.listSuppliers({ query: { ...q(query), limit: SEARCH_PAGE } })).suppliers.map(
+        (supplier) => ({
+          id: supplier.id,
+          label: supplier.name,
+          note: joined(supplier.city.names.ru, supplier.bin ? `БИН ${supplier.bin}` : null),
+        }),
+      ),
   };
 }
 

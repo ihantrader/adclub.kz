@@ -23,6 +23,8 @@ describe("the words of «Поставщики» (TASK-036)", () => {
     expect(hiddenPhone("+77055550101")).toBe("+7 705 *** ** 01");
     expect(hiddenPhone(null)).toBe("—");
     expect(hiddenPhone("123")).toBe("***");
+    // TASK-036.B: a number the server already hid is shown as it came.
+    expect(hiddenPhone("+7 705 *** ** 01")).toBe("+7 705 *** ** 01");
   });
 
   it("offers only the funnel's moves the domain allows, a reason where it asks", () => {

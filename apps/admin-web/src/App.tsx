@@ -11,8 +11,11 @@ import { ItemCreate } from "./catalog/ItemMain";
 import { Items } from "./catalog/Items";
 import { Proposals } from "./catalog/Proposals";
 import { Home } from "./home/Home";
-import { comingSections, useLocation, useRoute, type RouteKey } from "./router";
-import { Coming } from "./screens/Coming";
+import { Extensions } from "./orders/Extensions";
+import { OrderCard } from "./orders/OrderCard";
+import { Orders } from "./orders/Orders";
+import { useLocation, useRoute, type RouteKey } from "./router";
+
 import { Shell } from "./screens/Shell";
 import { SignIn } from "./screens/SignIn";
 import { NarrowNotice, Starting, Unreachable, UpdateRequired } from "./screens/Starting";
@@ -33,6 +36,9 @@ import { ImportReport } from "./vehicles/ImportReport";
 import { Imports } from "./vehicles/Imports";
 import { MakePage, Makes } from "./vehicles/Makes";
 import { Options } from "./vehicles/Options";
+import { NoShows } from "./users/NoShows";
+import { UserCard } from "./users/UserCard";
+import { Users } from "./users/Users";
 
 /**
  * The admin panel (TASK-034): which screen the page shows follows only from
@@ -178,9 +184,17 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
     case "supplierLead":
       return id ? <LeadCard key={id} leadId={id} /> : null;
     case "orders":
-      return <Coming title="Заявки" icon="receipt" task={comingSections.orders!} />;
+      return <Orders />;
+    case "orderExtensions":
+      return <Extensions />;
+    case "order":
+      return id ? <OrderCard key={id} orderId={id} /> : null;
     case "users":
-      return <Coming title="Пользователи" icon="users" task={comingSections.users!} />;
+      return <Users />;
+    case "userNoShows":
+      return <NoShows />;
+    case "user":
+      return id ? <UserCard key={id} accountId={id} /> : null;
     default:
       return <Home />;
   }

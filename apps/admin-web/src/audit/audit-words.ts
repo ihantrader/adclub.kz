@@ -1,16 +1,26 @@
 import type { AuditActor, AuditActorRole } from "@adclub/contracts";
+import { formatMoment } from "../format";
+import { ORDER_STATUS_TEXT } from "../orders/order-words";
 import {
   catalogItemPath,
+  orderPath,
   routePaths,
   settingHistoryPath,
   supplierLeadPath,
   supplierPath,
+  userPath,
   vehicleGenerationPath,
   vehicleImportPath,
   vehicleMakePath,
   vehicleModelPath,
   withQuery,
 } from "../router";
+import {
+  INVITATION_TEXT,
+  LEAD_SOURCE_TEXT,
+  LEAD_STATUS_TEXT,
+  SUPPLIER_TYPE_TEXT,
+} from "../suppliers/supplier-words";
 
 /**
  * The words of A-AUD (TASK-034 requirement 5): an action of the journal in
@@ -118,6 +128,9 @@ const ACTIONS: Record<string, string> = {
   "user_discipline_event.revoked": "Снята дисциплинарная отметка",
   "account.registration_completed": "Пользователь завершил регистрацию",
   "account.profile_updated": "Пользователь изменил свои данные",
+  "order.cancelled_by_admin": "Заявка отменена администратором",
+  "phone.revealed": "Открыт полный номер",
+  "account.sessions_ended": "Завершены сессии приложения пользователя",
 };
 
 /** The actions the filter offers, in the order of the dictionary. */
@@ -298,29 +311,234 @@ export function entityLink(
     }
     case "supplier_lead":
       return UUID.test(entityId) ? supplierLeadPath(entityId) : null;
+    // Orders and users (TASK-036.B): an order its card, an account its card;
+    // a grant of club access — its user's «Клубный доступ», a discipline
+    // mark — its order (the user's «Дисциплина» when the order isn't named).
+    case "order":
+      return UUID.test(entityId) ? orderPath(entityId) : null;
+    case "account":
+      return UUID.test(entityId) ? userPath(entityId) : null;
+    case "club_access_grant": {
+      const accountId = named(payload, "accountId");
+      return accountId && UUID.test(accountId) ? userPath(accountId, "access") : null;
+    }
+    case "user_discipline_event": {
+      const orderId = named(payload, "orderId");
+      if (orderId && UUID.test(orderId)) return orderPath(orderId);
+      const accountId = named(payload, "accountId");
+      return accountId && UUID.test(accountId) ? userPath(accountId, "discipline") : null;
+    }
     default:
       return null;
   }
 }
 
-/** One line of «было → стало». */
+/**
+ * One line of «было → стало». `technical` — a field that says nothing to an
+ * administrator (an id, a version, a service mark): only «Подробнее» shows it.
+ */
 export interface ChangeLine {
   field: string | null;
   before: string;
   after: string;
+  technical?: true;
 }
 
+/** What a line needs besides the two values: whose entry it is and the names of the ids. */
+export interface ChangeContext {
+  entityType?: string;
+  /** The server's names of the ids `before`/`after` refer to (TASK-036.B). */
+  names?: Record<string, string>;
+}
+
+/**
+ * The fields of the journal in words (TASK-036.B: «поля — словами»). A field
+ * this dictionary doesn't know is shown by its key — and a test keeps the
+ * fields of the entries the admin panel writes in it.
+ */
 const FIELD_TEXT: Record<string, string> = {
   value: "Значение",
   isDefault: "По умолчанию",
   version: "Версия",
   status: "Статус",
+  state: "Состояние",
   names: "Названия",
   name: "Название",
+  displayName: "Имя",
+  companyName: "Компания",
   reason: "Причина",
+  note: "Заметка",
   totpConfigured: "Второй фактор настроен",
   sessionsEnded: "Завершено сессий",
+  invitationsCancelled: "Отменено приглашений",
+  ended: "Завершено сессий",
+  cityId: "Город",
+  supplierId: "Компания",
+  itemId: "Позиция",
+  analogItemId: "Аналог",
+  fromItemId: "Скопировано с позиции",
+  categoryId: "Категория",
+  parentId: "Узел",
+  attributeId: "Характеристика",
+  optionId: "Вариант",
+  brandId: "Бренд",
+  makeId: "Марка",
+  modelId: "Модель",
+  generationId: "Поколение",
+  engineId: "Двигатель",
+  modificationId: "Модификация",
+  bodyTypeId: "Кузов",
+  transmissionTypeId: "Коробка передач",
+  driveTypeId: "Привод",
+  fuelId: "Топливо",
+  orderId: "Заявка",
+  otherOrderId: "Другая заявка",
+  offerId: "Предложение",
+  leadId: "Заявка на подключение",
+  contactPersonMemberId: "Контактное лицо",
+  removedAt: "Удалён",
+  restored: "Восстановлен",
+  again: "Повторно",
+  type: "Тип",
+  bin: "БИН",
+  binMasked: "БИН",
+  phoneMasked: "Телефон",
+  source: "Откуда",
+  contactName: "Контактное лицо",
+  contactPhone: "Телефон компании",
+  address: "Адрес",
+  district: "Район",
+  timeZone: "Часовой пояс",
+  deliveryByDefault: "Доставка по умолчанию",
+  notificationsEnabled: "Получает уведомления",
+  notificationLanguage: "Язык уведомлений",
+  blocked: "Блокировка",
+  paused: "Пауза",
+  pauseReason: "Причина паузы",
+  verified: "Проверенный партнёр",
+  visibleOnShowcase: "Видно клиентам",
+  contractSignedOn: "Договор подписан",
+  weeklyHours: "Часы работы",
+  closedDates: "Нерабочие даты",
+  price: "Цена",
+  availability: "Наличие",
+  leadDays: "Срок, дней",
+  pickup: "Самовывоз",
+  delivery: "Доставка",
+  warrantyMonths: "Гарантия, мес.",
+  warrantyText: "Гарантия",
+  supplierSku: "Свой артикул",
+  supplierName: "Своё название",
+  validUntil: "До",
+  endedAt: "Завершена",
+  number: "Номер",
+  deadline: "Срок",
+  until: "До",
+  minutes: "Минут",
+  subject: "Чей номер",
+  revoked: "Снята",
+  kind: "Вид",
+  accountCreated: "Учётная запись создана",
+  email: "E-mail",
+  emailNewsConsent: "Новости на e-mail",
+  language: "Язык",
+  consentVersion: "Версия согласия",
+  article: "Артикул",
+  yearFrom: "Год с",
+  yearTo: "Год по",
+  code: "Код",
+  icon: "Значок",
+  compatibilityRequired: "Совместимость обязательна",
+  isRequiredForComplete: "Участвует в полноте",
+  isFilterable: "В фильтрах",
+  unit: "Единица",
+  aliases: "Написания",
+  evidence: "Источник",
+  fileName: "Файл",
+  comment: "Комментарий",
 };
+
+/**
+ * Fields that say nothing to an administrator in the line itself — ids
+ * whose object the entry is anyway, versions, service marks — shown only
+ * under «Подробнее» (TASK-036.B).
+ */
+const TECHNICAL_FIELDS = new Set([
+  "accountId",
+  "memberId",
+  "noteId",
+  "adminId",
+  "grantId",
+  "sessionId",
+  "sessionIds",
+  "removedByMemberId",
+  "version",
+  "self",
+  "one",
+  "id",
+  "requestId",
+  "entityType",
+  "field",
+  "lang",
+]);
+
+const ACTIVE_ARCHIVED: Record<string, string> = {
+  active: "Активна",
+  hidden: "Скрыта",
+  archived: "В архиве",
+  draft: "Черновик",
+};
+
+/** The values of a status by the kind of object. */
+const STATUS_WORDS: Record<string, Record<string, string>> = {
+  supplier_lead: LEAD_STATUS_TEXT,
+  supplier_member: { active: "Активен", removed: "Удалён" },
+  order: ORDER_STATUS_TEXT,
+  admin_signal: { open: "Новый", acknowledged: "В работе", closed: "Закрыт" },
+  offer: { active: "В продаже", withdrawn: "Снято с продажи", suspended: "Приостановлено" },
+  supplier_invitation: INVITATION_TEXT,
+  catalog_item_photo: {
+    proposed: "Предложено",
+    approved: "Подтверждено",
+    rejected: "Отклонено",
+    deleted: "Убрано",
+  },
+  item_compatibility_proposal: {
+    pending: "Ждёт решения",
+    approved: "Подтверждено",
+    rejected: "Отклонено",
+  },
+};
+
+/** The values of other coded fields, whatever the object. */
+const VALUE_WORDS: Record<string, Record<string, string>> = {
+  state: { draft: "Черновик", active: "Активен", paused: "Пауза", blocked: "Блокировка" },
+  type: { ...SUPPLIER_TYPE_TEXT, part: "Запчасть", generic: "Товар", service: "Услуга" },
+  source: LEAD_SOURCE_TEXT,
+  deadline: { response: "срок ответа", reserve: "резерв" },
+  subject: {
+    account: "пользователь",
+    supplier_member: "сотрудник поставщика",
+    supplier_lead: "заявка на подключение",
+    order: "клиент заявки",
+  },
+  availability: { in_stock: "В наличии", on_order: "Под заказ" },
+  language: { kk: "Қазақша", ru: "Русский", en: "English" },
+  notificationLanguage: { kk: "Қазақша", ru: "Русский" },
+  pauseReason: { admin: "решение администратора", billing: "не оплачена подписка" },
+  fulfillment: { pickup: "Самовывоз", delivery: "Доставка" },
+  kind: {
+    pickup_no_show: "Неявка",
+    body: "Кузов",
+    transmission: "Коробка передач",
+    drive: "Привод",
+    fuel: "Топливо",
+    goods: "Товары",
+    services: "Услуги",
+  },
+};
+
+const DAY_SHORT = ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 /**
  * Fields whose numbers are codes, not amounts: a year, a БИН, the number of
@@ -335,24 +553,82 @@ export function numberText(value: number, field?: string | null): string {
   return value.toLocaleString("ru-RU");
 }
 
-function short(value: unknown, field?: string): string {
-  if (value === undefined) return "—";
-  if (value === null) return "пусто";
-  if (value === true) return "да";
-  if (value === false) return "нет";
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return numberText(value, field);
-  return JSON.stringify(value);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const ISO_MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** «Пн 09:00–13:00, 14:00–18:00; Вт выходной» — the hours of a week. */
+function weekText(days: unknown[]): string | null {
+  const parts: string[] = [];
+  for (const day of days) {
+    if (!isRecord(day) || typeof day.day !== "number" || !Array.isArray(day.intervals)) return null;
+    const intervals = day.intervals
+      .filter(isRecord)
+      .map((interval) => `${String(interval.from)}–${String(interval.to)}`);
+    parts.push(
+      `${DAY_SHORT[day.day] ?? day.day} ${intervals.length ? intervals.join(", ") : "выходной"}`,
+    );
+  }
+  return parts.join("; ");
+}
+
+/** One value of the journal in words (TASK-036.B: «значения — словами»). */
+export function valueText(
+  value: unknown,
+  field?: string | null,
+  context: ChangeContext = {},
+): string {
+  if (value === undefined) return "—";
+  if (value === null) return "пусто";
+  if (value === true) return "да";
+  if (value === false) return "нет";
+  if (typeof value === "number") return numberText(value, field);
+  if (typeof value === "string") {
+    if (UUID.test(value)) {
+      const name = context.names?.[value];
+      if (name) return name;
+      return field && FIELD_TEXT[field] && !TECHNICAL_FIELDS.has(field) ? "не найден" : value;
+    }
+    const words =
+      field === "status" && context.entityType
+        ? (STATUS_WORDS[context.entityType] ?? ACTIVE_ARCHIVED)
+        : field
+          ? VALUE_WORDS[field]
+          : undefined;
+    if (words?.[value]) return words[value]!;
+    if (field === "status" && ACTIVE_ARCHIVED[value]) return ACTIVE_ARCHIVED[value]!;
+    if (ISO_MOMENT.test(value) && !Number.isNaN(Date.parse(value))) return formatMoment(value);
+    if (ISO_DATE.test(value)) return value.split("-").reverse().join(".");
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "пусто";
+    if (field === "weeklyHours") return weekText(value) ?? `${value.length} дн.`;
+    if (value.every((entry) => isRecord(entry) && typeof entry.date === "string")) {
+      return value
+        .map((entry) => (entry as { date: string }).date.split("-").reverse().join("."))
+        .join(", ");
+    }
+    if (value.every((entry) => typeof entry !== "object" || entry === null)) {
+      return value.map((entry) => valueText(entry, field, context)).join(", ");
+    }
+    return `${value.length} шт.`;
+  }
+  if (isRecord(value)) {
+    const text = value.ru ?? value.text ?? value.kk ?? value.en;
+    if (typeof text === "string") return text;
+    if (isRecord(text) && typeof text.text === "string") return text.text;
+  }
+  return JSON.stringify(value);
+}
+
 /**
  * Fields of an entry that say nothing to an administrator and aren't
- * shown: the market of a modification is kept by the server and the import
- * file, but the admin panel doesn't offer it (TASK-035.C, D-071).
+ * shown at all: the market of a modification is kept by the server and the
+ * import file, but the admin panel doesn't offer it (TASK-035.C, D-071).
  */
 const HIDDEN_FIELDS: Record<string, readonly string[]> = {
   vehicle_modification: ["market"],
@@ -363,15 +639,27 @@ export function hiddenFieldsOf(entityType: string): readonly string[] {
   return HIDDEN_FIELDS[entityType] ?? [];
 }
 
+function line(key: string, before: unknown, after: unknown, context: ChangeContext): ChangeLine {
+  const entry: ChangeLine = {
+    field: FIELD_TEXT[key] ?? key,
+    before: valueText(before, key, context),
+    after: valueText(after, key, context),
+  };
+  if (TECHNICAL_FIELDS.has(key)) entry.technical = true;
+  return entry;
+}
+
 /**
  * «было → стало», compactly: field by field when both sides are objects
  * (only the fields that differ, then the ones only one side has; never
- * `hidden`), else one line. Nothing — no change to show.
+ * `hidden`), else one line. Fields and values in words; the technical ones
+ * marked (only «Подробнее» shows them). Nothing — no change to show.
  */
 export function changeLines(
   before: unknown,
   after: unknown,
   hidden: readonly string[] = [],
+  context: ChangeContext = {},
 ): ChangeLine[] {
   if (before === null && after === null) return [];
   if (isRecord(before) && isRecord(after)) {
@@ -379,22 +667,28 @@ export function changeLines(
     return keys
       .filter((key) => !hidden.includes(key))
       .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-      .map((key) => ({
-        field: FIELD_TEXT[key] ?? key,
-        before: short(before[key], key),
-        after: short(after[key], key),
-      }));
+      .map((key) => line(key, before[key], after[key], context));
   }
   if (isRecord(after) && (before === null || before === undefined)) {
     return Object.entries(after)
       .filter(([key]) => !hidden.includes(key))
-      .map(([key, value]) => ({
-        field: FIELD_TEXT[key] ?? key,
-        before: "—",
-        after: short(value, key),
-      }));
+      .map(([key, value]) => line(key, undefined, value, context));
   }
-  return [{ field: null, before: short(before), after: short(after) }];
+  if (isRecord(before) && (after === null || after === undefined)) {
+    return Object.entries(before)
+      .filter(([key]) => !hidden.includes(key))
+      .map(([key, value]) => line(key, value, undefined, context));
+  }
+  return [{ field: null, before: valueText(before), after: valueText(after) }];
+}
+
+/**
+ * The object of an entry by its name now (the server's `entityName`), with
+ * its kind; an object the server can't find — the kind and «не найден», never
+ * an id (the id is under «Подробнее»).
+ */
+export function entityTitle(entry: { entityType: string; entityName: string | null }): string {
+  return `${entityText(entry.entityType)}: ${entry.entityName ?? "не найден"}`;
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;

@@ -57,8 +57,20 @@ describe("the words of signals", () => {
     expect(subjectLink({ subjectType: "supplier", subjectId: id })).toBe(
       `/suppliers/${id}?tab=members`,
     );
-    expect(subjectLink({ subjectType: "order", subjectId: id })).toBeNull();
-    expect(subjectLink({ subjectType: "channel", subjectId: id })).toBeNull();
+    // TASK-036.B: an order opens its card, frequent closes — the supplier's orders,
+    // the outage — the orders to extend from when it began.
+    expect(subjectLink({ subjectType: "order", subjectId: id })).toBe(`/orders/${id}`);
+    expect(
+      subjectLink({ subjectType: "supplier", subjectId: id, kind: "frequent_admin_closes" }),
+    ).toBe(`/suppliers/${id}?tab=orders`);
+    expect(
+      subjectLink({
+        subjectType: "channel",
+        subjectId: id,
+        kind: "whatsapp_outage",
+        payload: { since: "2026-10-07T08:00:00.000Z" },
+      }),
+    ).toBe("/orders/extensions?from=2026-10-07T08%3A00%3A00.000Z");
   });
 
   it("tells who closed it first", () => {

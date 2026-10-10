@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   locationOf,
   menuOf,
+  orderExtensionsPath,
+  orderPath,
   settingHistoryPath,
   supplierLeadPath,
   supplierNewPath,
   supplierPath,
+  userPath,
   vehicleGenerationPath,
   vehicleImportPath,
   vehicleMakePath,
@@ -69,6 +72,24 @@ describe("admin addresses", () => {
     for (const route of ["supplierLeads", "supplierNew", "supplier", "supplierLead"] as const) {
       expect(menuOf(route)).toBe("suppliers");
     }
+  });
+
+  it("knows the orders and the users: lists, cards on a tab, the extension, the no-shows (TASK-036.B)", () => {
+    const id = "0b6c9f1e-2a3d-4c5b-8e7f-9a0b1c2d3e4f";
+    expect(locationOf("/orders").route).toBe("orders");
+    expect(locationOf("/orders/extensions").route).toBe("orderExtensions");
+    expect(locationOf(orderPath(id))).toMatchObject({ route: "order", id });
+    expect(orderExtensionsPath("2026-10-07T08:00:00.000Z")).toBe(
+      "/orders/extensions?from=2026-10-07T08%3A00%3A00.000Z",
+    );
+    expect(locationOf("/users").route).toBe("users");
+    expect(locationOf("/users/no-shows").route).toBe("userNoShows");
+    expect(locationOf(userPath(id))).toMatchObject({ route: "user", id });
+    expect(userPath(id, "access")).toBe(`/users/${id}?tab=access`);
+    expect(userPath(id, "profile")).toBe(`/users/${id}`);
+    expect(locationOf("/orders/not-an-id").route).toBeNull();
+    for (const route of ["order", "orderExtensions"] as const) expect(menuOf(route)).toBe("orders");
+    for (const route of ["user", "userNoShows"] as const) expect(menuOf(route)).toBe("users");
   });
 
   it("reads the history of one setting by its key, and nothing that isn't a key", () => {

@@ -18,6 +18,7 @@ import {
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
+import { PhoneReveal } from "../people/PhoneReveal";
 import { formatMoment } from "../format";
 import { useLoad } from "../use-load";
 import { FormError, LoadError } from "../vehicles/shared";
@@ -159,8 +160,12 @@ export function SupplierMembers({
                             <span className="long-text" title={member.displayName}>
                               {member.displayName}
                             </span>
-                            <span className="ac-text-caption ac-muted num">
-                              {hiddenPhone(member.phone)}
+                            <span className="ac-text-caption ac-muted">
+                              <PhoneReveal
+                                phone={hiddenPhone(member.phone)}
+                                subject="supplier_member"
+                                id={member.id}
+                              />
                             </span>
                             {member.isContactPerson && (
                               <span className="ac-text-caption">контактное лицо</span>

@@ -1541,3 +1541,107 @@ code,
   flex-wrap: wrap;
   max-width: 360px;
 }
+
+/* ---------- orders, users, the header's search (TASK-036.B) ---------- */
+.status--done {
+  color: var(--ac-color-success);
+}
+
+/* The search of the header: grows into the free space between the name and the actions. */
+.header-search {
+  position: relative;
+  flex: 1 1 320px;
+  max-width: 560px;
+  min-width: 0;
+}
+
+.header-search__field {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  height: 40px;
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text-muted);
+}
+
+.header-search__field:focus-within {
+  border-color: var(--ac-color-accent);
+}
+
+.header-search__field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ac-color-text);
+  font: inherit;
+}
+
+.header-search__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 20;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: var(--ac-space-1) 0;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 16%);
+}
+
+.header-search__group {
+  padding: var(--ac-space-2) var(--ac-space-3) var(--ac-space-1);
+}
+
+.header-search__note {
+  margin: 0;
+  padding: var(--ac-space-3);
+}
+
+.header-search__entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--ac-space-2) var(--ac-space-3);
+  color: var(--ac-color-text);
+  text-decoration: none;
+}
+
+.header-search__entry--active {
+  background: var(--ac-color-fill);
+}
+
+/* A person's number partly hidden and «Показать номер». */
+.phone-reveal {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.phone-reveal__error {
+  flex-basis: 100%;
+  color: var(--ac-color-danger);
+}
+
+.select--narrow input {
+  min-width: 0;
+  width: 96px;
+}
+
+.filters__select-search {
+  min-width: 240px;
+}
+
+.orders-table td {
+  vertical-align: top;
+}

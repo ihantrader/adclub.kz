@@ -6,7 +6,7 @@ import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
 import { itemsLink } from "../catalog/item-filters";
-import { navigateTo, routePaths, withQuery } from "../router";
+import { navigateTo, orderExtensionsPath, routePaths, withQuery } from "../router";
 import { count, KIND_HINTS, KIND_TITLES } from "../signals/signal-words";
 import { useLoad } from "../use-load";
 
@@ -111,12 +111,13 @@ function Cards({ home }: { home: AdminHome }) {
               {count(outage.failedMessages, "уведомление", "уведомления", "уведомлений")}.{" "}
               {KIND_HINTS.whatsapp_outage}
             </p>
-            <p className="ac-text-body-s ac-muted">
-              Продлить сроки: список заявок появится в разделе «Заявки» (TASK-036). Сейчас — запрос{" "}
-              <code>GET /admin/order-extension-candidates?from={outage.since ?? ""}</code>,
-              продление — <code>POST /admin/order-extensions</code> с причиной.
-            </p>
             <div className="button-row">
+              <Button
+                size="s"
+                onClick={() => navigateTo(orderExtensionsPath(outage.since ?? undefined))}
+              >
+                Продлить сроки
+              </Button>
               <Button
                 variant="secondary"
                 size="s"

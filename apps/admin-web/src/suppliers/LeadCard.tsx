@@ -7,6 +7,7 @@ import { Banner, Button, IconButton, LoadingContent, SkeletonList, useToast } fr
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
+import { PhoneReveal } from "../people/PhoneReveal";
 import { JournalHistory } from "../audit/JournalHistory";
 import { AppLink } from "../catalog/shared";
 import { formatMoment } from "../format";
@@ -139,7 +140,9 @@ function LeadFacts({ card }: { card: AdminSupplierLeadCard }) {
         </div>
         <div>
           <dt>Телефон</dt>
-          <dd className="num">{hiddenPhone(lead.phone)}</dd>
+          <dd>
+            <PhoneReveal phone={hiddenPhone(lead.phone)} subject="supplier_lead" id={lead.id} />
+          </dd>
         </div>
         <div>
           <dt>Откуда</dt>

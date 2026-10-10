@@ -246,8 +246,14 @@ export function Audit() {
 /** One entry of the journal; the item card's «История» shows the same rows (TASK-035). */
 export function AuditRow({ entry }: { entry: AuditLogEntry }) {
   const [open, setOpen] = useState(false);
-  const lines = changeLines(entry.before, entry.after, hiddenFieldsOf(entry.entityType));
-  const shown = open ? lines : lines.slice(0, SHORT_LINES);
+  const all = changeLines(entry.before, entry.after, hiddenFieldsOf(entry.entityType), {
+    entityType: entry.entityType,
+    names: entry.names,
+  });
+  // Ids, versions and service marks only under «Подробнее» (TASK-036.B), with the object's id.
+  const lines = all.filter((line) => !line.technical);
+  const shown = open ? all : lines.slice(0, SHORT_LINES);
+  const hiddenCount = all.length - Math.min(lines.length, SHORT_LINES);
   const link = entityLink(entry.entityType, entry.entityId, entry);
   const follow = (event: MouseEvent) => {
     if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -273,34 +279,34 @@ export function AuditRow({ entry }: { entry: AuditLogEntry }) {
             {": "}
             {link ? (
               <a href={link} onClick={follow}>
-                {entry.entityId}
+                {entry.entityName ?? "открыть"}
               </a>
             ) : (
-              <span className="entity-id">{entry.entityId}</span>
+              <span>{entry.entityName ?? "не найден"}</span>
             )}
           </span>
         </div>
       </td>
       <td>
-        {lines.length === 0 ? (
-          <span className="ac-text-caption ac-muted">—</span>
-        ) : (
-          <div className="cell-stack change-lines">
-            {shown.map((line, index) => (
-              <span key={index} className="ac-text-caption change-line">
-                {line.field && <span className="ac-muted">{line.field}: </span>}
-                <span className="change-line__value">{line.before}</span>
-                {" → "}
-                <span className="change-line__value change-line__value--new">{line.after}</span>
-              </span>
-            ))}
-            {lines.length > SHORT_LINES && (
-              <Button variant="text" size="s" onClick={() => setOpen(!open)}>
-                {open ? "Свернуть" : `Подробнее (${lines.length})`}
-              </Button>
-            )}
-          </div>
-        )}
+        <div className="cell-stack change-lines">
+          {shown.length === 0 && !open && <span className="ac-text-caption ac-muted">—</span>}
+          {shown.map((line, index) => (
+            <span key={index} className="ac-text-caption change-line">
+              {line.field && <span className="ac-muted">{line.field}: </span>}
+              <span className="change-line__value">{line.before}</span>
+              {" → "}
+              <span className="change-line__value change-line__value--new">{line.after}</span>
+            </span>
+          ))}
+          {open && (
+            <span className="ac-text-caption ac-muted entity-id">
+              Идентификатор: {entry.entityId}
+            </span>
+          )}
+          <Button variant="text" size="s" onClick={() => setOpen(!open)}>
+            {open ? "Свернуть" : hiddenCount > 0 ? `Подробнее (${hiddenCount})` : "Подробнее"}
+          </Button>
+        </div>
       </td>
       <td className="ac-text-body-s reason-cell">
         {entry.reason ?? <span className="ac-muted">—</span>}

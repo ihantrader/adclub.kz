@@ -9,8 +9,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The fast checks and the integration tests run side by side (TASK-076). The
+# integration tests are split into the parts of the matrix below; every file
+# is in exactly one part (apps/api/src/testing/integration-shards.ts). The
+# last job, `ci`, is the one result of the run: green only when everything
+# above is green.
 jobs:
-  ci:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,11 +47,10 @@ jobs:
       - name: Icons are generated from design/icons
         run: pnpm icons --check
 
+      # Includes the checks of the complete lists (routes, jobs, migrations) and
+      # of the split of the integration tests (apps/api/src/testing).
       - name: Test
         run: pnpm test
-
-      - name: Integration test
-        run: pnpm test:integration
 
       # Also exports the mobile JS bundle for iOS and Android (apps/mobile build).
       - name: Build
@@ -67,3 +71,50 @@ jobs:
 
       - name: Verify API and worker shut down gracefully on SIGTERM (Linux)
         run: pnpm --filter api run verify:graceful-shutdown
+
+  integration:
+    name: integration (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Every part runs to its end, so one run shows all the failures at once.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The packages the API imports from their built form.
+      - name: Build the packages the API uses
+        run: pnpm turbo run build --filter="@adclub/api^..."
+
+      # The part is computed from the files on disk. Before it runs, the script
+      # checks that all parts together hold every *.integration.test.ts once;
+      # no retry: an unstable test fails honestly.
+      - name: Integration tests, part ${{ matrix.shard }} of ${{ strategy.job-total }}
+        run: pnpm --filter @adclub/api test:integration:shard ${{ matrix.shard }}/${{ strategy.job-total }}
+
+  ci:
+    name: ci
+    needs: [checks, integration]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Everything is green
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          INTEGRATION: ${{ needs.integration.result }}
+        run: |
+          echo "checks=$CHECKS integration=$INTEGRATION"
+          if [ "$CHECKS" != "success" ] || [ "$INTEGRATION" != "success" ]; then
+            exit 1
+          fi

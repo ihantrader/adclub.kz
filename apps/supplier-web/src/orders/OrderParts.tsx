@@ -14,6 +14,7 @@ import {
   statusGroup,
   statusKey,
   supplyOverdue,
+  visitWords,
   type OrderAction,
 } from "./order-rules";
 
@@ -78,7 +79,29 @@ export function FulfillmentLabel({ fulfillment }: { fulfillment: OrderFulfillmen
 }
 
 /**
- * «Под заказ» and «Срок поставки прошёл» (S-ORD-01, TASK-039), «Тестовый»,
+ * How the order is received: pickup or delivery; a service (TASK-038) — the
+ * car and the time of the visit instead (S-ORD-01 «тип», S-ORD-02).
+ */
+export function OrderReceiving({
+  order,
+  when,
+}: {
+  order: Pick<SupplierOrderSummary, "fulfillment" | "status" | "serviceVisit">;
+  when: (iso: string) => string;
+}) {
+  const t = useT();
+  const visit = visitWords(order, when, t);
+  if (!visit) return <FulfillmentLabel fulfillment={order.fulfillment} />;
+  return (
+    <span className="receiving">
+      <Icon name="car" size={16} />
+      {visit.car} · {visit.time}
+    </span>
+  );
+}
+
+/**
+ * «Под заказ» and «Срок поставки прошёл» (S-ORD-01, TASK-039), «Услуга» (TASK-038), «Тестовый»,
  * «Закрыта администратором», «Закрыта после срока».
  */
 export function OrderMarks({
@@ -92,6 +115,11 @@ export function OrderMarks({
       {order.kind === "on_order" && (
         <Badge tone="neutral" icon="package">
           {t("orders.mark.onOrder")}
+        </Badge>
+      )}
+      {order.kind === "service" && (
+        <Badge tone="neutral" icon="car">
+          {t("orders.mark.service")}
         </Badge>
       )}
       {supplyOverdue(order) && (
@@ -130,7 +158,10 @@ export function WorkDeadline({
   when: (iso: string) => string;
 }) {
   const t = useT();
-  if (order.status === "reserve_expired" && order.lateCloseUntil) {
+  if (
+    (order.status === "reserve_expired" || order.status === "visit_unresolved") &&
+    order.lateCloseUntil
+  ) {
     return (
       <span className="timer timer--urgent">
         <Icon name="alertTriangle" size={16} />
@@ -146,12 +177,22 @@ export function WorkDeadline({
       </span>
     );
   }
-  // TASK-037: the customer is to answer another term by then.
-  if (order.status === "term_proposed" && order.onOrderTerm?.proposed) {
+  // TASK-037, TASK-038: the customer is to answer another term or time by then.
+  const proposed = order.onOrderTerm?.proposed ?? order.serviceVisit?.proposed;
+  if (order.status === "term_proposed" && proposed) {
     return (
       <span className="timer">
         <Icon name="clock" size={16} />
-        {t("orders.customerAnswersBy", { time: when(order.onOrderTerm.proposed.answerBy) })}
+        {t("orders.customerAnswersBy", { time: when(proposed.answerBy) })}
+      </span>
+    );
+  }
+  // TASK-038: a confirmed visit — its time.
+  if (order.status === "accepted" && order.serviceVisit?.confirmed) {
+    return (
+      <span className="timer">
+        <Icon name="clock" size={16} />
+        {t("orders.visitAt", { time: when(order.serviceVisit.confirmed.visitAt) })}
       </span>
     );
   }
@@ -167,11 +208,21 @@ const actionKeys = {
   proposeTerm: "orders.proposeTerm",
 } as const;
 
-/** The word of a button; «Принять» of an order under order is «Подтвердить срок» (TASK-037). */
+/**
+ * The word of a button; «Принять» of an order under order is «Подтвердить
+ * срок» (TASK-037), of a service — «Подтвердить время», and its «Выдать» is
+ * «Отметить выполнение» (TASK-038; S-ORD-02).
+ */
 export function actionLabel(
   action: OrderAction,
   kind?: OrderKind,
-): (typeof actionKeys)[OrderAction] | "orders.confirmTerm" {
+):
+  | (typeof actionKeys)[OrderAction]
+  | "orders.confirmTerm"
+  | "orders.confirmTime"
+  | "orders.markDone" {
+  if (kind === "service" && action === "accept") return "orders.confirmTime";
+  if (kind === "service" && action === "giveOut") return "orders.markDone";
   return action === "accept" && kind === "on_order" ? "orders.confirmTerm" : actionKeys[action];
 }
 

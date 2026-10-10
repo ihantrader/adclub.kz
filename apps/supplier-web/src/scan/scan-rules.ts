@@ -133,6 +133,8 @@ export type ScanResult =
       quantity: number;
       customerName: string | null;
       late: boolean;
+      /** TASK-038: a visit for a service is done, not given out — and has no quantity. */
+      service?: boolean;
     }
   | { kind: "otherSupplier"; supplier: { id: string; name: string } | null }
   | { kind: "notFound" }
@@ -197,6 +199,7 @@ export function answerOfClose(response: CloseOrderResponse): ScanAnswer {
       quantity: order.quantity,
       customerName: order.customer.kind === "revealed" ? order.customer.name : null,
       late: response.late,
+      service: order.kind === "service",
     };
   }
   return settled(response);
@@ -269,6 +272,8 @@ const refusalTitle: Record<OrderCloseRefusalReason, SupplierTextKey> = {
   late_window_passed: "scan.result.cannotCloseTitle",
   cancelled_by_admin: "scan.result.cancelledByAdminTitle",
   term_expired: "scan.result.cannotCloseTitle",
+  // TASK-038: a visit the employee marked a no-show.
+  no_show: "scan.result.noShowTitle",
 };
 
 /** The title (`titleL`) and the text under it. */
@@ -279,9 +284,11 @@ export function resultWords(
 ): { title: string; text: string | null } {
   switch (result.kind) {
     case "givenOut": {
-      const line = t("scan.result.givenOutText", { item: result.itemName, n: result.quantity });
+      const line = result.service
+        ? result.itemName
+        : t("scan.result.givenOutText", { item: result.itemName, n: result.quantity });
       return {
-        title: t("scan.result.givenOutTitle"),
+        title: t(result.service ? "scan.result.doneTitle" : "scan.result.givenOutTitle"),
         text: result.customerName ? `${line} · ${result.customerName}` : line,
       };
     }
@@ -321,6 +328,9 @@ export function resultWords(
           // TASK-037: the customer never agreed to another term of an order under order.
           case "term_expired":
             return t("scan.result.termExpired", { when });
+          // TASK-038: the customer was marked as not having come to the visit.
+          case "no_show":
+            return t("scan.result.noShow", { when });
         }
       })();
       return { title: t(refusalTitle[result.reason]), text };

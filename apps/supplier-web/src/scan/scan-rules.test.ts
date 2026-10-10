@@ -43,6 +43,7 @@ const scanOrder: SupplierScanOrder = {
     brand: "Geely",
   },
   receiptOn: "2026-10-06",
+  serviceVisit: null,
   createdAt: "2026-10-06T06:00:00Z",
 };
 
@@ -130,6 +131,17 @@ describe("the answers of the server (S-SCAN-03, S-SCAN-04)", () => {
       words({ kind: "givenOut", itemName: "Колодки", quantity: 2, customerName: null, late: false })
         .text,
     ).toBe("Колодки × 2");
+    // TASK-038: a visit is done, and has no quantity.
+    expect(
+      words({
+        kind: "givenOut",
+        itemName: "Замена моторного масла",
+        quantity: 1,
+        customerName: "Әлия",
+        late: false,
+        service: true,
+      }),
+    ).toEqual({ title: "Выполнено", text: "Замена моторного масла · Әлия" });
     expect(words({ kind: "otherSupplier", supplier: null }).text).toBe(
       "Эта заявка оформлена у другого поставщика",
     );
@@ -188,6 +200,7 @@ describe("the answers of the server (S-SCAN-03, S-SCAN-04)", () => {
       quantity: 1,
       customerName: "Әлия",
       late: true,
+      service: false,
     });
     expect(answerOfClose({ result: "not_found" })).toEqual({ kind: "notFound" });
   });

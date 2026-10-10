@@ -43,6 +43,7 @@ import {
   journalLines,
   orderActions,
   termWords,
+  visitWords,
   whatsappLink,
   type OrderAction,
 } from "./order-rules";
@@ -268,7 +269,7 @@ function OrderView({
         }),
       );
     } catch (thrown) {
-      const problem = actionProblem(thrown, at, t);
+      const problem = actionProblem(thrown, at, t, order.kind);
       setNotice(problem);
       if (problem.companyChanged) void refreshCompany();
       if (problem.conflict) await reread({ tell: false });
@@ -305,6 +306,8 @@ function OrderView({
   const day = (date: string) => formatDate(date, lang);
   const journal = journalLines(order.events, when, t, day, order.kind);
   const term = termWords(order, day, when, t);
+  // TASK-038: the car and the time of a visit for a service.
+  const visit = visitWords(order, when, t);
   const priceChanged =
     order.currentOfferPrice !== null && order.currentOfferPrice !== order.unitPrice;
 
@@ -410,17 +413,30 @@ function OrderView({
               <Money value={order.total} />
             </dd>
           </div>
-          <div>
-            <dt>{t("orders.receiving")}</dt>
-            <dd>
-              <FulfillmentLabel fulfillment={order.fulfillment} />
-              {order.receiptOn && (
-                <span className="facts__note">
-                  {t("orders.receiptOn", { date: formatDate(order.receiptOn, lang) })}
-                </span>
-              )}
-            </dd>
-          </div>
+          {visit ? (
+            <>
+              <div>
+                <dt>{t("orders.car")}</dt>
+                <dd>{visit.car}</dd>
+              </div>
+              <div>
+                <dt>{t("orders.visitTime")}</dt>
+                <dd>{visit.time}</dd>
+              </div>
+            </>
+          ) : (
+            <div>
+              <dt>{t("orders.receiving")}</dt>
+              <dd>
+                <FulfillmentLabel fulfillment={order.fulfillment} />
+                {order.receiptOn && (
+                  <span className="facts__note">
+                    {t("orders.receiptOn", { date: formatDate(order.receiptOn, lang) })}
+                  </span>
+                )}
+              </dd>
+            </div>
+          )}
           {term && (
             <div>
               <dt>{t("orders.term")}</dt>

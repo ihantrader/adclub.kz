@@ -26,9 +26,9 @@ import { DeclineDialog, type DeclineTarget } from "./DeclineDialog";
 import { reportNewOrders, useVisiblePoll } from "./live";
 import {
   AnswerTimer,
-  FulfillmentLabel,
   Money,
   OrderMarks,
+  OrderReceiving,
   OrderStatus,
   QuickActions,
   WorkDeadline,
@@ -84,6 +84,9 @@ const finishedStatuses: readonly SupplierFinishedStatus[] = [
   "reserve_expired",
   "cancelled_by_admin",
   "term_expired",
+  // TASK-038: a service.
+  "no_show",
+  "visit_unresolved",
 ];
 
 const groupKeys: Record<
@@ -91,12 +94,15 @@ const groupKeys: Record<
   | "orders.group.awaitingPickup"
   | "orders.group.preparing"
   | "orders.group.awaitingCustomer"
+  | "orders.group.services"
   | "orders.group.lateClose"
 > = {
   awaitingPickup: "orders.group.awaitingPickup",
   preparing: "orders.group.preparing",
   // TASK-037: another term of an order under order waits for the customer.
   awaitingCustomer: "orders.group.awaitingCustomer",
+  // TASK-038: confirmed visits, by their time.
+  services: "orders.group.services",
   lateClose: "orders.group.lateClose",
 };
 
@@ -283,7 +289,7 @@ export function OrdersList({
         action: { label: t("orders.open"), onAction: () => navigateTo(orderPath(order.id)) },
       });
     } catch (thrown) {
-      const problem = actionProblem(thrown, at, t);
+      const problem = actionProblem(thrown, at, t, order.kind);
       setNotice(problem);
       if (problem.companyChanged) void refreshCompany();
     }
@@ -592,7 +598,9 @@ function OrderRow({
   onDecline: () => void;
 }) {
   const t = useT();
-  const title = `${order.item.name.text} × ${order.quantity}`;
+  // A service is one visit: no «× 1» (TASK-038).
+  const title =
+    order.kind === "service" ? order.item.name.text : `${order.item.name.text} × ${order.quantity}`;
   const state: ReactNode =
     order.status === "created" ? (
       <AnswerTimer respondBy={order.respondBy} />
@@ -619,7 +627,7 @@ function OrderRow({
         <td className="offers-table__item">
           <div>{title}</div>
           <div className="offer-card__meta">
-            <FulfillmentLabel fulfillment={order.fulfillment} />
+            <OrderReceiving order={order} when={when} />
             <OrderMarks order={order} />
           </div>
         </td>
@@ -662,7 +670,7 @@ function OrderRow({
         <span className="ac-text-body-strong">
           <Money value={order.total} />
         </span>
-        <FulfillmentLabel fulfillment={order.fulfillment} />
+        <OrderReceiving order={order} when={when} />
         <OrderMarks order={order} />
       </div>
       <QuickActions

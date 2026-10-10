@@ -279,7 +279,7 @@ export function OrderCard({ orderId }: { orderId: string }) {
                             <span className="ac-muted"> {channelText(event)}</span>
                           )}
                         </td>
-                        <td className="ac-text-body-s">{eventText(event)}</td>
+                        <td className="ac-text-body-s">{eventText(event, order.kind)}</td>
                         <td className="ac-text-body-s reason-cell">
                           {event.details.adminNote ?? <span className="ac-muted">—</span>}
                         </td>
@@ -425,7 +425,7 @@ function OrderFacts({ order }: { order: AdminOrder }) {
         <div>
           <dt>Получение</dt>
           <dd>
-            {FULFILLMENT_TEXT[order.fulfillment]}
+            {order.kind === "service" ? "Визит в точку" : FULFILLMENT_TEXT[order.fulfillment]}
             {order.receiptOn
               ? `, дата получения ${order.receiptOn.split("-").reverse().join(".")}`
               : ""}

@@ -4,6 +4,7 @@ import type {
   AdminSignalKind,
   AdminSignalStatus,
 } from "@adclub/contracts";
+import { formatMoment } from "../format";
 import { orderExtensionsPath, orderPath, supplierPath } from "../router";
 
 /**
@@ -16,6 +17,8 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   frequent_admin_closes: "Частые закрытия администратором",
   supplier_unreachable: "Поставщик недостижим",
   supply_overdue: "Срок поставки прошёл",
+  // TASK-038.
+  visit_unresolved: "Запись не разобрана",
 };
 
 /** The kinds in the order of importance of A-HOME. */
@@ -23,6 +26,7 @@ export const KIND_ORDER: readonly AdminSignalKind[] = [
   "whatsapp_outage",
   "supplier_unreachable",
   "supply_overdue",
+  "visit_unresolved",
   "duplicate_after_late_close",
   "frequent_admin_closes",
 ];
@@ -93,6 +97,14 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
       ]
         .filter(Boolean)
         .join(" · ");
+    case "visit_unresolved":
+      return [
+        payload.orderNumber !== undefined ? `№ ${payload.orderNumber}` : null,
+        payload.supplierName,
+        payload.visitAt ? `визит ${formatMoment(payload.visitAt)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
   }
 }
 
@@ -134,6 +146,8 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "У всех, кто получает уведомления компании, нет WhatsApp — заявки до неё не доходят. Свяжитесь с поставщиком.",
   supply_overdue:
     "Подтверждённый срок поставки под заказ прошёл, а заявка ещё не готова к выдаче. Свяжитесь с поставщиком.",
+  visit_unresolved:
+    "Время записи на услугу прошло, а поставщик не отметил ни выполнение, ни неявку. Непонятно, кто кого подвёл — свяжитесь с поставщиком и клиентом.",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

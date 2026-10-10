@@ -59,7 +59,7 @@ import { useOrdersCopy, useOrdersReadOnly } from "../../state/orders-provider";
 import { ItemPhoto } from "../catalog/parts";
 import { CallSheet } from "./CallSheet";
 import { NavigatorSheet } from "./NavigatorSheet";
-import { useNow, useOrderTime } from "./parts";
+import { carText, useNow, useOrderTime } from "./parts";
 import { useRepeatOrder } from "./use-repeat-order";
 
 type Props = NativeStackScreenProps<RootParams, "order">;
@@ -187,7 +187,8 @@ export function OrderScreen({ route, navigation }: Props) {
 
   const view = order ? orderStatusView(order) : null;
   const answer = order ? termAnswer(order) : null;
-  const timeZone = order?.pickupPoint?.timeZone ?? null;
+  // A visit for a service knows its point's zone from the first moment (TASK-038).
+  const timeZone = order?.pickupPoint?.timeZone ?? order?.serviceVisit?.timeZone ?? null;
   const offlineNote =
     fromCopy && orders.copy
       ? time.updated(orders.copy.serverTime, now, {
@@ -269,7 +270,22 @@ export function OrderScreen({ route, navigation }: Props) {
                           ? time.deadline(order.reserveUntil, timeZone, now)
                           : view.deadline === "answerBy" && order.onOrderTerm?.proposed
                             ? time.deadline(order.onOrderTerm.proposed.answerBy, timeZone, now)
-                            : "",
+                            : view.deadline === "answerBy" && order.serviceVisit?.proposed
+                              ? time.deadline(order.serviceVisit.proposed.answerBy, timeZone, now)
+                              : "",
+                    // TASK-038: the time of a visit for a service.
+                    visit: (() => {
+                      const visit = order.serviceVisit;
+                      const at =
+                        view.visit === "desired"
+                          ? visit?.desiredAt
+                          : view.visit === "proposed"
+                            ? visit?.proposed?.visitAt
+                            : view.visit === "confirmed"
+                              ? visit?.confirmed?.visitAt
+                              : null;
+                      return at ? time.deadline(at, timeZone, now) : "";
+                    })(),
                     // TASK-037: the date of the term of an order under order.
                     date: time.calendarDate(
                       view.termDate === "proposed"
@@ -370,7 +386,11 @@ export function OrderScreen({ route, navigation }: Props) {
             {view.place !== "none" && (
               <Section
                 title={t(
-                  order.fulfillment === "pickup" ? "order.placePickup" : "order.placeDelivery",
+                  order.kind === "service"
+                    ? "order.placeService"
+                    : order.fulfillment === "pickup"
+                      ? "order.placePickup"
+                      : "order.placeDelivery",
                 )}
               >
                 <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
@@ -403,13 +423,30 @@ export function OrderScreen({ route, navigation }: Props) {
                   </View>
                 </View>
                 <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-                <Term label={t("order.quantityLabel")}>
-                  {t("orders.quantityShort", { n: order.quantity })}
-                </Term>
-                <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
-                <Term label={t("order.fulfillmentLabel")}>
-                  {order.fulfillment === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
-                </Term>
+                {order.serviceVisit ? (
+                  <>
+                    {/* TASK-038: the car and the time of a visit for a service. */}
+                    <Term label={t("order.carLabel")}>{carText(order.serviceVisit.car)}</Term>
+                    <Term label={t("order.visitLabel")}>
+                      {time.deadline(
+                        order.serviceVisit.confirmed?.visitAt ?? order.serviceVisit.desiredAt,
+                        timeZone,
+                        now,
+                      )}
+                    </Term>
+                    <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
+                  </>
+                ) : (
+                  <>
+                    <Term label={t("order.quantityLabel")}>
+                      {t("orders.quantityShort", { n: order.quantity })}
+                    </Term>
+                    <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
+                    <Term label={t("order.fulfillmentLabel")}>
+                      {order.fulfillment === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
+                    </Term>
+                  </>
+                )}
                 <Term label={t("order.totalLabel")} strong>
                   {formatTenge(order.total)}
                 </Term>

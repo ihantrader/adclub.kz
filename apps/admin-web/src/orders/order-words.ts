@@ -33,18 +33,30 @@ export const ORDER_STATUS_TEXT: Record<OrderStatusValue, string> = {
   // TASK-037: an order under order.
   term_proposed: "Ждёт ответа клиента на срок",
   term_expired: "Клиент не ответил на срок",
+  // TASK-038: a service.
+  no_show: "Неявка клиента",
+  visit_unresolved: "Запись не разобрана",
 };
 
-/** «Принята» of an order under order is «Срок подтверждён» (TASK-037). */
+/**
+ * «Принята» of an order under order is «Срок подтверждён» (TASK-037); of a
+ * service — «Подтверждена на время», and its talk is of a time, not a term
+ * (TASK-038).
+ */
 export function orderStatusText(order: Pick<AdminOrder, "status" | "kind">): string {
+  if (order.kind === "service") {
+    if (order.status === "accepted") return "Подтверждена на время";
+    if (order.status === "term_proposed") return "Ждёт ответа клиента на время";
+    if (order.status === "term_expired") return "Клиент не ответил на время";
+  }
   return order.status === "accepted" && order.kind === "on_order"
     ? "Срок подтверждён"
     : ORDER_STATUS_TEXT[order.status];
 }
 
-/** «Под заказ» next to the number (TASK-037); `null` — an item in stock. */
+/** «Под заказ» (TASK-037) or «Услуга» (TASK-038) next to the number; `null` — an item in stock. */
 export function orderKindText(kind: AdminOrder["kind"]): string | null {
-  return kind === "on_order" ? "Под заказ" : null;
+  return kind === "on_order" ? "Под заказ" : kind === "service" ? "Услуга" : null;
 }
 
 /**
@@ -54,8 +66,9 @@ export function orderKindText(kind: AdminOrder["kind"]): string | null {
  * confirmed one, and an overdue supply. Empty — an item in stock.
  */
 export function orderTermLines(
-  order: Pick<AdminOrder, "status" | "onOrderTerm">,
+  order: Pick<AdminOrder, "status" | "onOrderTerm"> & Partial<Pick<AdminOrder, "serviceVisit">>,
 ): { label: string; text: string }[] {
+  if (order.serviceVisit) return visitLines(order.status, order.serviceVisit);
   const term = order.onOrderTerm;
   if (!term) return [];
   const day = (date: string | null) => (date ? formatDay(date) : "—");
@@ -85,6 +98,40 @@ export function orderTermLines(
     lines.push({
       label: "Срок поставки прошёл",
       text: `поставка просрочена с ${formatMoment(term.overdueSince)}`,
+    });
+  }
+  return lines;
+}
+
+/**
+ * The visit of an order on a service line by line (A-ORD-02, TASK-038): the
+ * car, the time the customer asked for, another time the supplier proposed
+ * (and until when the customer answers, while they decide), the confirmed
+ * time and the end of its window.
+ */
+function visitLines(
+  status: AdminOrder["status"],
+  visit: NonNullable<AdminOrder["serviceVisit"]>,
+): { label: string; text: string }[] {
+  const car = [visit.car.make.label, visit.car.model.label, visit.car.year ?? ""].join(" ").trim();
+  const lines = [
+    { label: "Автомобиль", text: car },
+    { label: "Желаемое время", text: formatMoment(visit.desiredAt) },
+  ];
+  if (visit.proposed) {
+    lines.push({
+      label: "Предложено другое время",
+      text:
+        `${formatMoment(visit.proposed.visitAt)}; предложено ${formatMoment(visit.proposed.at)}` +
+        (status === "term_proposed"
+          ? `; клиент ответит до ${formatMoment(visit.proposed.answerBy)}`
+          : ""),
+    });
+  }
+  if (visit.confirmed) {
+    lines.push({
+      label: "Время визита",
+      text: `${formatMoment(visit.confirmed.visitAt)}; подтверждено ${formatMoment(visit.confirmed.at)}; неявку можно отметить до ${formatMoment(visit.confirmed.until)}`,
     });
   }
   return lines;
@@ -166,16 +213,26 @@ const ATTEMPT_TEXT: Partial<Record<OrderEventAction, string>> = {
   propose_term: "предложить другой срок",
   agree_term: "согласиться на срок",
   reject_term: "отказаться от срока",
+  propose_time: "предложить другое время",
+  mark_no_show: "отметить неявку",
 };
 
-/** One entry of the order's journal in words (A-ORD-02 «журнал с актором»). */
-export function eventText(event: OrderEvent): string {
+/**
+ * One entry of the order's journal in words (A-ORD-02 «журнал с актором»);
+ * `kind` — the order's: a service talks of a time (TASK-038).
+ */
+export function eventText(event: OrderEvent, kind: AdminOrder["kind"] = "stock"): string {
   const details = event.details;
+  const service = kind === "service";
   switch (event.action) {
     case "create":
-      return "Заявка оформлена";
+      return service && details.visitAt
+        ? `Запись оформлена на ${formatMoment(details.visitAt)}`
+        : "Заявка оформлена";
     case "accept":
-      return "Принята";
+      return service
+        ? `Время подтверждено${details.visitAt ? `: ${formatMoment(details.visitAt)}` : ""}`
+        : "Принята";
     case "decline":
       return details.reason
         ? `Отклонена: ${DECLINE_REASON_TEXT[details.reason]}${details.note ? ` («${details.note}»)` : ""}`
@@ -212,11 +269,22 @@ export function eventText(event: OrderEvent): string {
     case "propose_term":
       return `Предложен другой срок: ${details.leadDays ?? "?"} раб. дн., до ${details.readyOn ? formatDay(details.readyOn) : "—"}; клиент ответит до ${formatMoment(details.answerBy)}`;
     case "agree_term":
-      return "Клиент согласился на срок";
+      return service
+        ? `Клиент согласился на время${details.visitAt ? ` ${formatMoment(details.visitAt)}` : ""}`
+        : "Клиент согласился на срок";
     case "reject_term":
-      return "Клиент отказался от срока";
+      return service ? "Клиент отказался от времени" : "Клиент отказался от срока";
     case "expire_term":
-      return "Клиент не ответил на срок вовремя";
+      return service ? "Клиент не ответил на время вовремя" : "Клиент не ответил на срок вовремя";
+    // TASK-038: a service.
+    case "propose_time":
+      return `Предложено другое время: ${formatMoment(details.visitAt)}; клиент ответит до ${formatMoment(details.answerBy)}`;
+    case "mark_no_show":
+      return "Отмечена неявка клиента";
+    case "expire_visit":
+      return "Запись не разобрана: никто не отметил выполнение или неявку";
+    case "late_cancel":
+      return `Поздняя отмена: меньше установленного срока до визита${details.visitAt ? ` (${formatMoment(details.visitAt)})` : ""}`;
     case "supply_overdue":
       return `Срок поставки прошёл${details.readyOn ? ` (${formatDay(details.readyOn)})` : ""}, заявка не готова`;
   }
@@ -270,6 +338,9 @@ const LAST_ACTION_TEXT: Partial<Record<OrderEventAction, string>> = {
   agree_term: "клиент согласился на срок",
   reject_term: "клиент отказался от срока",
   expire_term: "истекла: клиент не ответил на срок",
+  propose_time: "предложили другое время",
+  mark_no_show: "отметили неявку",
+  expire_visit: "истекла: запись не разобрана",
 };
 
 /**
@@ -309,11 +380,13 @@ export const SKIP_REASON_TEXT = {
 type OrderKindValue = AdminOrder["kind"];
 
 /** The kinds of A-ORD-01 «тип» and their words (TASK-039). */
-export const ORDER_KINDS: readonly OrderKindValue[] = ["stock", "on_order"];
+export const ORDER_KINDS: readonly OrderKindValue[] = ["stock", "on_order", "service"];
 
 export const ORDER_KIND_TEXT: Record<OrderKindValue, string> = {
   stock: "В наличии",
   on_order: "Под заказ",
+  // TASK-038.
+  service: "Услуга",
 };
 
 /** The filters of A-ORD-01 kept in the address, for the server. */

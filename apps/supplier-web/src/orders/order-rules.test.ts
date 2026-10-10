@@ -26,6 +26,7 @@ import {
   whatsappLink,
   workGroupOf,
   workGroups,
+  visitWords,
 } from "./order-rules";
 
 const t: Translate = (key, params) => supplierText("ru", key, params);
@@ -57,6 +58,7 @@ function summary(overrides: Partial<SupplierOrderSummary>): SupplierOrderSummary
     reserveUntil: null,
     receiptOn: null,
     onOrderTerm: null,
+    serviceVisit: null,
     createdAt: new Date(NOON - 10 * MINUTE).toISOString(),
     offerId: crypto.randomUUID(),
     handledBy: null,
@@ -239,8 +241,115 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
   });
 
   it("has no buttons for an order of a kind this version doesn't know", () => {
-    const later = summary({ kind: "service" as SupplierOrderSummary["kind"] });
+    const later = summary({ kind: "rental" as SupplierOrderSummary["kind"] });
     expect(orderActions(later, NOON, open)).toEqual({ primary: null, secondary: [] });
+  });
+
+  it("gives a service the buttons it shares with goods until TASK-039.B (TASK-038)", () => {
+    const service = (status: SupplierOrderSummary["status"], blocked = false) =>
+      orderActions(
+        summary({
+          kind: "service",
+          status,
+          lateCloseUntil:
+            status === "visit_unresolved" ? new Date(NOON + 60 * MINUTE).toISOString() : null,
+        }),
+        NOON,
+        { blocked },
+      );
+    // «Подтвердить время» · «Отказать» — «Предложить другое время» comes with its screen.
+    expect(service("created")).toEqual({ primary: "accept", secondary: ["decline"] });
+    expect(service("term_proposed")).toEqual({ primary: null, secondary: ["decline"] });
+    // «Отметить выполнение по QR / коду» · «Отказать»; no «Готово к выдаче».
+    expect(service("accepted")).toEqual({ primary: "giveOut", secondary: ["decline"] });
+    expect(service("accepted", true)).toEqual({ primary: "giveOut", secondary: [] });
+    expect(service("visit_unresolved")).toEqual({ primary: "closeLate", secondary: [] });
+    expect(service("no_show")).toEqual({ primary: null, secondary: [] });
+  });
+
+  it("says a service in its own words and keeps confirmed visits apart by time (TASK-038)", () => {
+    expect(t(statusKey("accepted", "service"))).toBe("Подтверждена");
+    expect(t(statusKey("no_show", "service"))).toBe("Неявка клиента");
+    expect(t(statusKey("visit_unresolved", "service"))).toBe("Запись не разобрана");
+    const visit = (visitAt: string) => ({
+      car: {
+        make: { id: crypto.randomUUID(), label: "Geely" },
+        model: { id: crypto.randomUUID(), label: "Coolray" },
+        year: 2024,
+      },
+      timeZone: ALMATY,
+      desiredAt: visitAt,
+      proposed: null,
+      confirmed: { visitAt, at: new Date(NOON).toISOString(), until: visitAt },
+    });
+    const later = summary({
+      kind: "service",
+      status: "accepted",
+      serviceVisit: visit("2026-10-07T10:00:00.000Z"),
+    });
+    const sooner = summary({
+      kind: "service",
+      status: "accepted",
+      serviceVisit: visit("2026-10-06T10:00:00.000Z"),
+    });
+    const goods = summary({ status: "accepted" });
+    expect(workGroupOf(later)).toBe("services");
+    expect(workGroupOf(goods)).toBe("preparing");
+    const groups = workGroups([later, goods, sooner]);
+    expect(groups.map((group) => group.group)).toEqual(["preparing", "services"]);
+    expect(groups[1]!.orders.map((order) => order.id)).toEqual([sooner.id, later.id]);
+    const words = visitWords(later, () => "7 октября, 15:00", t);
+    expect(words).toEqual({ car: "Geely Coolray 2024", time: "Подтверждено: 7 октября, 15:00" });
+    expect(visitWords(goods, () => "", t)).toBeNull();
+    const proposed = visitWords(
+      {
+        status: "term_proposed",
+        serviceVisit: {
+          ...visit("2026-10-07T10:00:00.000Z"),
+          confirmed: null,
+          proposed: {
+            visitAt: "2026-10-07T10:00:00.000Z",
+            at: new Date(NOON).toISOString(),
+            answerBy: "2026-10-07T05:00:00.000Z",
+          },
+        },
+      },
+      () => "завтра, 15:00",
+      t,
+    );
+    expect(proposed?.time).toMatch(/^Предложено другое время: .+ Клиент ответит до /);
+    const lines = journalLines(
+      [
+        {
+          id: "e1",
+          action: "accept",
+          fromStatus: "created",
+          toStatus: "accepted",
+          at: new Date(NOON).toISOString(),
+          actor: { kind: "member", memberId: crypto.randomUUID(), name: "Ерлан", removed: false },
+          channel: "whatsapp",
+          details: {},
+        },
+        {
+          id: "e2",
+          action: "mark_no_show",
+          fromStatus: "accepted",
+          toStatus: "no_show",
+          at: new Date(NOON).toISOString(),
+          actor: { kind: "member", memberId: crypto.randomUUID(), name: "Айжан", removed: false },
+          channel: "supplier_web",
+          details: {},
+        },
+      ],
+      () => "12:00",
+      t,
+      (date) => date,
+      "service",
+    );
+    expect(lines.map((line) => line.text)).toEqual([
+      "Подтвердил время Ерлан, 12:00 (через WhatsApp)",
+      "Неявка клиента — Айжан, 12:00",
+    ]);
   });
 
   it("gives an order under order its buttons of S-ORD-02 (TASK-037, TASK-039, D-072)", () => {

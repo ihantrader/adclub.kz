@@ -18,6 +18,7 @@ const deadlines = (reserveUntil: string | null = null): AdminOrder["deadlines"] 
   reserveUntil,
   lateCloseUntil: null,
   termAnswerBy: null,
+  visitUntil: null,
 });
 
 const conflict = (details: unknown) =>
@@ -83,6 +84,95 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
         status,
       ).toEqual([false, false, false, false, false]);
     }
+  });
+
+  it("says an order on a service in its own words (TASK-038)", () => {
+    expect(orderStatusText({ status: "accepted", kind: "service" })).toBe("Подтверждена на время");
+    expect(orderStatusText({ status: "term_proposed", kind: "service" })).toBe(
+      "Ждёт ответа клиента на время",
+    );
+    expect(orderStatusText({ status: "no_show", kind: "service" })).toBe("Неявка клиента");
+    expect(orderStatusText({ status: "visit_unresolved", kind: "service" })).toBe(
+      "Запись не разобрана",
+    );
+    expect(orderKindText("service")).toBe("Услуга");
+    const serviceVisit = {
+      car: {
+        make: { id: "00000000-0000-4000-8000-000000000001", label: "Geely" },
+        model: { id: "00000000-0000-4000-8000-000000000002", label: "Coolray" },
+        year: 2024,
+      },
+      timeZone: "Asia/Almaty",
+      desiredAt: "2026-10-11T06:00:00.000Z",
+      proposed: {
+        visitAt: "2026-10-11T10:00:00.000Z",
+        at: "2026-10-10T05:00:00.000Z",
+        answerBy: "2026-10-11T05:00:00.000Z",
+      },
+      confirmed: null,
+    };
+    const waiting = orderTermLines({ status: "term_proposed", onOrderTerm: null, serviceVisit });
+    expect(waiting.map((line) => line.label)).toEqual([
+      "Автомобиль",
+      "Желаемое время",
+      "Предложено другое время",
+    ]);
+    expect(waiting[0]!.text).toBe("Geely Coolray 2024");
+    expect(waiting[2]!.text).toMatch(/клиент ответит до/);
+    const confirmed = orderTermLines({
+      status: "accepted",
+      onOrderTerm: null,
+      serviceVisit: {
+        ...serviceVisit,
+        confirmed: {
+          visitAt: "2026-10-11T10:00:00.000Z",
+          at: "2026-10-10T07:00:00.000Z",
+          until: "2026-10-11T12:00:00.000Z",
+        },
+      },
+    });
+    expect(confirmed.at(-1)!.label).toBe("Время визита");
+    expect(confirmed[2]!.text).not.toMatch(/клиент ответит/);
+    const event = (action: OrderEvent["action"], details: OrderEvent["details"] = {}) => ({
+      id: "e",
+      action,
+      fromStatus: null,
+      toStatus: null,
+      at: "2026-10-10T05:00:00.000Z",
+      actor: { kind: "system" as const },
+      channel: "timer" as const,
+      details,
+    });
+    expect(eventText(event("accept"), "service")).toBe("Время подтверждено");
+    expect(eventText(event("accept"), "stock")).toBe("Принята");
+    expect(eventText(event("agree_term"), "service")).toBe("Клиент согласился на время");
+    expect(eventText(event("mark_no_show"), "service")).toBe("Отмечена неявка клиента");
+    expect(eventText(event("expire_visit"), "service")).toMatch(/^Запись не разобрана/);
+    expect(eventText(event("late_cancel"), "service")).toMatch(/^Поздняя отмена/);
+    expect(
+      eventText(
+        event("propose_time", {
+          visitAt: "2026-10-11T10:00:00.000Z",
+          answerBy: "2026-10-11T05:00:00.000Z",
+        }),
+        "service",
+      ),
+    ).toMatch(/^Предложено другое время: .+; клиент ответит до /);
+    // The customer's answer to another time is extended like a term's.
+    expect(
+      orderActions({
+        kind: "service",
+        status: "term_proposed",
+        deadlines: { ...deadlines(), termAnswerBy: "2026-10-11T05:00:00.000Z" },
+      }),
+    ).toMatchObject({ extendTerm: true, cancel: true, closeWithoutCode: true });
+    expect(orderActions({ kind: "service", status: "no_show", deadlines: deadlines() })).toEqual({
+      extendResponse: false,
+      extendReserve: false,
+      extendTerm: false,
+      closeWithoutCode: true,
+      cancel: false,
+    });
   });
 
   it("says an order under order in its own words (TASK-037)", () => {
@@ -250,7 +340,9 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
       closedLate: "true",
     });
     expect(orderFiltersOf(new URLSearchParams("status=nonsense")).status).toBeUndefined();
-    expect(orderFiltersOf(new URLSearchParams("kind=service")).kind).toBeUndefined();
+    // TASK-038: «Тип: Услуга».
+    expect(orderFiltersOf(new URLSearchParams("kind=service")).kind).toBe("service");
+    expect(orderFiltersOf(new URLSearchParams("kind=nonsense")).kind).toBeUndefined();
     expect(orderFiltersOf(new URLSearchParams("")).test).toBe("exclude");
   });
 });

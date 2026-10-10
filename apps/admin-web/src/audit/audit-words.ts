@@ -529,6 +529,7 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
   fulfillment: { pickup: "Самовывоз", delivery: "Доставка" },
   kind: {
     pickup_no_show: "Неявка",
+    service_no_show: "Неявка на услугу",
     body: "Кузов",
     transmission: "Коробка передач",
     drive: "Привод",

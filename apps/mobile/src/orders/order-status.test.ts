@@ -132,6 +132,60 @@ describe("the state of an order on its screen", () => {
     }
   });
 
+  it("shows a visit for a service in its own words, with its time and no answer buttons yet (TASK-038)", () => {
+    const service = (status: (typeof orderStatusSchema.options)[number]) =>
+      orderStatusView({ status, fulfillment: "pickup", kind: "service" });
+    expect(service("created")).toMatchObject({
+      text: "orderStatus.serviceCreated.text",
+      deadline: "respondBy",
+      visit: "desired",
+      code: "dimmed",
+    });
+    expect(service("term_proposed")).toMatchObject({
+      title: "orderStatus.timeProposed.title",
+      deadline: "answerBy",
+      visit: "proposed",
+      cancellable: true,
+    });
+    expect(service("accepted")).toMatchObject({
+      title: "orderStatus.timeConfirmed.title",
+      visit: "confirmed",
+      code: "shown",
+      place: "full",
+    });
+    for (const status of ["term_expired", "no_show", "visit_unresolved"] as const) {
+      const view = service(status);
+      expect(view.finished, status).toBe(true);
+      expect(view.code, status).toBe("none");
+    }
+    expect(service("no_show").title).toBe("orderStatus.noShow.title");
+    // Cancelled, declined, given out — the same words as goods.
+    expect(service("completed").title).toBe("orderStatus.completed.title");
+    for (const status of orderStatusSchema.options) {
+      for (const lang of ["ru", "kk", "en"] as const) {
+        const view = service(status);
+        expect(mobileText(lang, view.title), `${status}/${lang}`).toBeTruthy();
+        if (view.text) {
+          // The screen fills in `{time}`, `{visit}` and `{date}` and nothing else.
+          const placeholders = mobileText(lang, view.text).match(/\{(\w+)\}/g) ?? [];
+          for (const placeholder of placeholders) {
+            expect(["{time}", "{visit}", "{date}"], `${status}/${lang}`).toContain(placeholder);
+          }
+        }
+      }
+    }
+    const order = { fulfillment: "pickup" as const, kind: "service" as const };
+    expect(orderStepKey({ action: "accept", status: "accepted" }, order)).toBe(
+      "order.step.timeConfirmed",
+    );
+    expect(orderStepKey({ action: "propose_time", status: "term_proposed" }, order)).toBe(
+      "order.step.timeProposed",
+    );
+    expect(orderStepKey({ action: "mark_no_show", status: "no_show" }, order)).toBe(
+      "orderStatus.noShow.title",
+    );
+  });
+
   it("shows a code only while the order is active, and lets it be cancelled only until it is given out", () => {
     for (const status of orderStatusSchema.options) {
       const view = orderStatusView({ status, fulfillment: "pickup" });

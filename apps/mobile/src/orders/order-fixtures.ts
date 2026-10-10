@@ -48,6 +48,7 @@ export function activeOrder(overrides: Partial<ActiveOrder> = {}): ActiveOrder {
     respondBy: "2026-10-04T12:00:00.000Z",
     reserveUntil: "2026-10-05T10:00:00.000Z",
     onOrderTerm: null,
+    serviceVisit: null,
     createdAt: "2026-10-04T10:00:00.000Z",
     updatedAt: "2026-10-04T10:30:00.000Z",
     ...overrides,

@@ -51,7 +51,12 @@ export type OrderStatusTitleKey =
   | "orderStatus.reserveExpired.title"
   | "orderStatus.termConfirmed.title"
   | "orderStatus.termProposed.title"
-  | "orderStatus.termExpired.title";
+  | "orderStatus.termExpired.title"
+  | "orderStatus.timeProposed.title"
+  | "orderStatus.timeConfirmed.title"
+  | "orderStatus.timeExpired.title"
+  | "orderStatus.noShow.title"
+  | "orderStatus.visitUnresolved.title";
 
 export type OrderStatusTextKey =
   | "orderStatus.created.text"
@@ -65,7 +70,13 @@ export type OrderStatusTextKey =
   | "orderStatus.reserveExpired.text"
   | "orderStatus.termConfirmed.text"
   | "orderStatus.termProposed.text"
-  | "orderStatus.termExpired.text";
+  | "orderStatus.termExpired.text"
+  | "orderStatus.serviceCreated.text"
+  | "orderStatus.timeProposed.text"
+  | "orderStatus.timeConfirmed.text"
+  | "orderStatus.timeExpired.text"
+  | "orderStatus.noShow.text"
+  | "orderStatus.visitUnresolved.text";
 
 export interface OrderStatusView {
   group: OrderStatusGroup;
@@ -81,6 +92,11 @@ export interface OrderStatusView {
   deadline: "respondBy" | "reserveUntil" | "givenOut" | "answerBy" | null;
   /** TASK-037: which date of the term `{date}` is; `null` — none. */
   termDate: "proposed" | "confirmed" | null;
+  /**
+   * TASK-038: which time of a visit for a service `{visit}` is — the one
+   * asked for, another one proposed, the confirmed one; `null` — none.
+   */
+  visit: "desired" | "proposed" | "confirmed" | null;
   code: CodeDisplay;
   place: PlaceDisplay;
   /** The order is over: no code, «Повторить заказ» instead of «Отменить заявку». */
@@ -93,7 +109,10 @@ export interface OrderStatusView {
 export interface OrderStateInput {
   status: OrderStatusValue;
   fulfillment: OrderFulfillment;
-  /** TASK-037: «Принята» of an order under order reads «Поставщик подтвердил срок». */
+  /**
+   * TASK-037: «Принята» of an order under order reads «Поставщик подтвердил
+   * срок»; TASK-038: of a service — «Запись подтверждена».
+   */
   kind?: OrderKind;
 }
 
@@ -103,7 +122,77 @@ export interface OrderStateInput {
  * shown as a finished order without a code, never as an active one with a
  * code that might not be valid.
  */
-export function orderStatusView({ status, fulfillment, kind }: OrderStateInput): OrderStatusView {
+export function orderStatusView(input: OrderStateInput): OrderStatusView {
+  const service = input.kind === "service" ? serviceStatusView(input.status) : null;
+  return service ?? goodsStatusView(input);
+}
+
+/**
+ * A visit for a service (TASK-038; SCREENS M-ORD-03, the states of a
+ * service): the statuses whose words differ from those of goods; `null` —
+ * the same words as goods (cancelled, declined, given out — «Получено»).
+ * The answer to another time (its buttons) comes with TASK-039.B: until
+ * then the line only says what the supplier proposed and until when.
+ */
+function serviceStatusView(status: OrderStatusValue): OrderStatusView | null {
+  switch (status) {
+    case "created":
+      return {
+        ...base,
+        group: "waiting",
+        title: "orderStatus.created.title",
+        text: "orderStatus.serviceCreated.text",
+        deadline: "respondBy",
+        visit: "desired",
+        code: "dimmed",
+        place: "district",
+        finished: false,
+        cancellable: true,
+      };
+    case "term_proposed":
+      return {
+        ...base,
+        group: "waiting",
+        title: "orderStatus.timeProposed.title",
+        text: "orderStatus.timeProposed.text",
+        deadline: "answerBy",
+        visit: "proposed",
+        code: "dimmed",
+        place: "district",
+        finished: false,
+        cancellable: true,
+      };
+    case "accepted":
+      return {
+        ...base,
+        group: "inProgress",
+        title: "orderStatus.timeConfirmed.title",
+        text: "orderStatus.timeConfirmed.text",
+        visit: "confirmed",
+        code: "shown",
+        place: "full",
+        finished: false,
+        cancellable: true,
+      };
+    case "term_expired":
+      return finished("orderStatus.timeExpired.title", "orderStatus.timeExpired.text");
+    case "no_show":
+      return finished("orderStatus.noShow.title", "orderStatus.noShow.text");
+    case "visit_unresolved":
+      return finished("orderStatus.visitUnresolved.title", "orderStatus.visitUnresolved.text");
+    default:
+      return null;
+  }
+}
+
+/** What every view has unless it says otherwise. */
+const base = {
+  deadline: null,
+  termDate: null,
+  visit: null,
+} satisfies Pick<OrderStatusView, "deadline" | "termDate" | "visit">;
+
+function goodsStatusView({ status, fulfillment, kind }: OrderStateInput): OrderStatusView {
   const pickup = fulfillment === "pickup";
   switch (status) {
     case "created":
@@ -113,6 +202,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
         text: "orderStatus.created.text",
         deadline: "respondBy",
         termDate: null,
+        visit: null,
         code: "dimmed",
         place: "district",
         finished: false,
@@ -127,6 +217,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
         text: "orderStatus.termProposed.text",
         deadline: "answerBy",
         termDate: "proposed",
+        visit: null,
         code: "dimmed",
         place: "district",
         finished: false,
@@ -142,6 +233,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
           text: "orderStatus.termConfirmed.text",
           deadline: null,
           termDate: "confirmed",
+          visit: null,
           code: "shown",
           place: "full",
           finished: false,
@@ -155,6 +247,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
         // The reserve of a pickup order starts when it is accepted (ARCHITECTURE 4.31 I315).
         deadline: pickup ? "reserveUntil" : null,
         termDate: null,
+        visit: null,
         code: "shown",
         place: "full",
         finished: false,
@@ -168,6 +261,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
             text: "orderStatus.readyPickup.text",
             deadline: "reserveUntil",
             termDate: null,
+            visit: null,
             code: "large",
             place: "full",
             finished: false,
@@ -179,6 +273,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
             text: "orderStatus.readyDelivery.text",
             deadline: null,
             termDate: null,
+            visit: null,
             code: "shown",
             place: "full",
             finished: false,
@@ -194,6 +289,7 @@ export function orderStatusView({ status, fulfillment, kind }: OrderStateInput):
         text: null,
         deadline: "givenOut",
         termDate: null,
+        visit: null,
         code: "none",
         place: "full",
         finished: true,
@@ -225,6 +321,7 @@ function finished(title: OrderStatusTitleKey, text: OrderStatusTextKey | null): 
     text,
     deadline: null,
     termDate: null,
+    visit: null,
     code: "none",
     place: "none",
     finished: true,
@@ -291,15 +388,20 @@ export function orderStepKey(
   step: Pick<UserOrderStep, "action" | "status">,
   order: { fulfillment: OrderFulfillment; kind?: OrderKind },
 ): MobileTextKey {
+  const service = order.kind === "service";
   switch (step.action) {
     case "propose_term":
       return "order.step.termProposed";
+    // TASK-038: the time of a visit for a service.
+    case "propose_time":
+      return "order.step.timeProposed";
     case "agree_term":
-      return "order.step.termAgreed";
+      return service ? "order.step.timeAgreed" : "order.step.termAgreed";
     case "reject_term":
-      return "order.step.termRejected";
+      return service ? "order.step.timeRejected" : "order.step.termRejected";
     case "accept":
       if (order.kind === "on_order") return "order.step.termConfirmed";
+      if (service) return "order.step.timeConfirmed";
       break;
     default:
       break;
@@ -326,7 +428,11 @@ export function orderStepKey(
     case "reserve_expired":
       return "orderStatus.reserveExpired.title";
     case "term_expired":
-      return "orderStatus.termExpired.title";
+      return service ? "orderStatus.timeExpired.title" : "orderStatus.termExpired.title";
+    case "no_show":
+      return "orderStatus.noShow.title";
+    case "visit_unresolved":
+      return "orderStatus.visitUnresolved.title";
     default:
       return "order.step.changed";
   }

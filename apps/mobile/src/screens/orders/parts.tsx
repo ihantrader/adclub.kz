@@ -1,4 +1,4 @@
-import type { ItemPhotoImage } from "@adclub/contracts";
+import type { ItemPhotoImage, OrderCar } from "@adclub/contracts";
 import type { MobileTextKey } from "@adclub/i18n";
 import { layout, radius } from "@adclub/ui-core";
 import { useEffect, useState } from "react";
@@ -75,6 +75,11 @@ export function OrderStatusMark({ order }: { order: OrderStateInput }) {
   return <StatusBadge group={view.group}>{t(listStatusKey(order))}</StatusBadge>;
 }
 
+/** «Geely Coolray 2024» — the car of a visit for a service, as its order keeps it (TASK-038). */
+export function carText(car: OrderCar): string {
+  return [car.make.label, car.model.label, car.year ?? ""].join(" ").trim();
+}
+
 export interface OrderRowProps {
   order: OrderStateInput & {
     id: string;
@@ -82,6 +87,8 @@ export interface OrderRowProps {
     total: number;
     item: { name: { text: string }; photo: ItemPhotoImage | null };
     supplier: { name: string };
+    /** TASK-038: the car of a visit for a service; absent — goods (or a copy from before). */
+    serviceVisit?: { car: OrderCar } | null;
   };
   /** The line under the item: the main date of an active order, the date of a finished one. */
   dateLine?: string | null;
@@ -121,9 +128,10 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
             {order.item.name.text}
           </Text>
           <Text variant="bodyS" color="textMuted">
-            {[t("orders.quantityShort", { n: order.quantity }), formatTenge(order.total)].join(
-              " · ",
-            )}
+            {(order.serviceVisit
+              ? [carText(order.serviceVisit.car), formatTenge(order.total)]
+              : [t("orders.quantityShort", { n: order.quantity }), formatTenge(order.total)]
+            ).join(" · ")}
           </Text>
           <Text variant="bodyS">{order.supplier.name}</Text>
           {dateLine ? (

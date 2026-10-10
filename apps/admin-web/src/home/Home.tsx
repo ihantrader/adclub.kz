@@ -145,6 +145,7 @@ function Cards({ home }: { home: AdminHome }) {
             [
               "supplier_unreachable",
               "supply_overdue",
+              "visit_unresolved",
               "duplicate_after_late_close",
               "frequent_admin_closes",
             ] as const

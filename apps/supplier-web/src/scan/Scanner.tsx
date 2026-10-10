@@ -23,7 +23,7 @@ import { switchCompany } from "../cabinet/cabinet-store";
 import { isOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
 import { Money, useAt } from "../orders/OrderParts";
-import { formatDate, statusKey } from "../orders/order-rules";
+import { formatDate, statusKey, visitWords } from "../orders/order-rules";
 import { goBack, navigate, useRouteState } from "../router";
 import {
   browserCameraProblem,
@@ -762,6 +762,8 @@ function Found({
 }) {
   const t = useT();
   const { lang } = useLanguage();
+  // TASK-038: the car and the time of a visit for a service (S-SCAN-03).
+  const visit = visitWords(order, when, t);
   return (
     <Panel companyName={companyName} onClose={onClose}>
       <div className="found">
@@ -771,7 +773,9 @@ function Found({
           {order.isTest && ` · ${t("orders.mark.test")}`}
         </p>
         <p className="ac-text-heading found__item">
-          {order.item.name.text} × {order.quantity}
+          {order.kind === "service"
+            ? order.item.name.text
+            : `${order.item.name.text} × ${order.quantity}`}
         </p>
         {(order.item.brand || order.item.article) && (
           <p className="ac-text-body-s ac-muted">
@@ -797,13 +801,31 @@ function Found({
               <dd>{formatDate(order.receiptOn, lang)}</dd>
             </div>
           )}
+          {visit && (
+            <>
+              <div>
+                <dt>{t("orders.car")}</dt>
+                <dd>{visit.car}</dd>
+              </div>
+              <div>
+                <dt>{t("orders.visitTime")}</dt>
+                <dd>{visit.time}</dd>
+              </div>
+            </>
+          )}
         </dl>
         {late && (
           <Banner tone="warning">{t("scan.lateText", { when: when(late.expiredAt) })}</Banner>
         )}
         <div className="scanner__actions">
           <Button size="l" block onClick={onGiveOut}>
-            {t(late ? "scan.closeOrder" : "scan.giveOut")}
+            {t(
+              late
+                ? "scan.closeOrder"
+                : order.kind === "service"
+                  ? "scan.markDone"
+                  : "scan.giveOut",
+            )}
           </Button>
           <Button size="l" variant="secondary" block onClick={onCancel}>
             {t("common.cancel")}

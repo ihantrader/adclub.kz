@@ -193,18 +193,28 @@ export function nextTimerTick(respondBy: string, now: number): number {
 
 /**
  * The word of a status; `kind` (TASK-037) — «Принята» of an order under
- * order is «Срок подтверждён» (S-ORD-02).
+ * order is «Срок подтверждён» (S-ORD-02), of a service — «Подтверждена»
+ * (TASK-038).
  */
 export function statusKey(status: OrderStatusValue, kind?: OrderKind): SupplierTextKey {
   switch (status) {
     case "created":
       return "orders.status.created";
     case "accepted":
-      return kind === "on_order" ? "orders.status.termConfirmed" : "orders.status.accepted";
+      return kind === "on_order"
+        ? "orders.status.termConfirmed"
+        : kind === "service"
+          ? "orders.status.timeConfirmed"
+          : "orders.status.accepted";
     case "term_proposed":
       return "orders.status.termProposed";
     case "term_expired":
-      return "orders.status.termExpired";
+      return kind === "service" ? "orders.status.timeExpired" : "orders.status.termExpired";
+    // TASK-038: a service.
+    case "no_show":
+      return "orders.status.noShow";
+    case "visit_unresolved":
+      return "orders.status.visitUnresolved";
     case "ready":
       return "orders.status.ready";
     case "completed":
@@ -241,31 +251,47 @@ export function statusGroup(status: OrderStatusValue): OrderStatusGroup {
 
 /**
  * The groups of «В работе» (S-ORD-01); «Ждут ответа клиента» — orders under
- * order whose other term waits for the customer (TASK-037); services come
- * with TASK-038.
+ * order whose other term, or services whose other time, waits for the
+ * customer (TASK-037, TASK-038); «Записи на услуги» — confirmed visits, by
+ * their time (TASK-038).
  */
-export type WorkGroup = "awaitingPickup" | "preparing" | "awaitingCustomer" | "lateClose";
+export type WorkGroup =
+  "awaitingPickup" | "preparing" | "awaitingCustomer" | "services" | "lateClose";
 
 export const workGroupOrder: readonly WorkGroup[] = [
   "awaitingPickup",
   "preparing",
   "awaitingCustomer",
+  "services",
   "lateClose",
 ];
 
 export function workGroupOf(
-  order: Pick<SupplierOrderSummary, "status" | "lateCloseUntil">,
+  order: Pick<SupplierOrderSummary, "status" | "lateCloseUntil"> &
+    Partial<Pick<SupplierOrderSummary, "kind">>,
 ): WorkGroup | null {
   if (order.status === "ready") return "awaitingPickup";
-  if (order.status === "accepted") return "preparing";
+  if (order.status === "accepted") return order.kind === "service" ? "services" : "preparing";
   if (order.status === "term_proposed") return "awaitingCustomer";
-  if (order.status === "reserve_expired" && order.lateCloseUntil) return "lateClose";
+  if (
+    (order.status === "reserve_expired" || order.status === "visit_unresolved") &&
+    order.lateCloseUntil
+  ) {
+    return "lateClose";
+  }
   return null;
+}
+
+/** The time of a confirmed visit (TASK-038); none — the end of time. */
+function visitTime(order: SupplierOrderSummary): number {
+  const at = order.serviceVisit?.confirmed?.visitAt;
+  return at ? Date.parse(at) : Number.POSITIVE_INFINITY;
 }
 
 /**
  * The orders of «В работе» in their groups: ready ones by the end of their
- * reserve (the nearest first), the rest as the server ordered them.
+ * reserve (the nearest first), visits by their time, the rest as the server
+ * ordered them.
  */
 export function workGroups<T extends SupplierOrderSummary>(
   orders: readonly T[],
@@ -278,6 +304,7 @@ export function workGroups<T extends SupplierOrderSummary>(
   const reserveEnd = (order: T) =>
     order.reserveUntil ? Date.parse(order.reserveUntil) : Number.POSITIVE_INFINITY;
   byGroup.get("awaitingPickup")!.sort((a, b) => reserveEnd(a) - reserveEnd(b));
+  byGroup.get("services")!.sort((a, b) => visitTime(a) - visitTime(b));
   byGroup
     .get("lateClose")!
     .sort((a, b) => Date.parse(a.lateCloseUntil!) - Date.parse(b.lateCloseUntil!));
@@ -342,18 +369,28 @@ const NONE: OrderActions = { primary: null, secondary: [] };
  * allows from its status. An order under order (TASK-037, TASK-039): a new
  * one — «Подтвердить срок до {дата}» · «Предложить другой срок» · «Отказать»;
  * a confirmed term — the buttons of «Принята»; while the customer decides —
- * only «Отказать» (D-072). A kind this version does not know gets no buttons. A new
- * order whose answer deadline passed by this device's clock has none: the
- * server is about to expire it. A blocked company (SCREENS 6.0) keeps
- * looking at its orders and giving them out by the code, nothing else.
+ * only «Отказать» (D-072). A service (TASK-038) — until the screens of
+ * TASK-039.B, the buttons it shares with goods: a new one — «Подтвердить
+ * время» · «Отказать»; a confirmed one — «Отметить выполнение по QR / коду»
+ * · «Отказать»; while the customer decides — «Отказать»; an unresolved one
+ * inside its window — «Закрыть по коду». A kind this version does not know
+ * gets no buttons. A new order whose answer deadline passed by this
+ * device's clock has none: the server is about to expire it. A blocked
+ * company (SCREENS 6.0) keeps looking at its orders and giving them out by
+ * the code, nothing else.
  */
 export function orderActions(
   order: Pick<SupplierOrderSummary, "kind" | "status" | "respondBy" | "lateCloseUntil">,
   now: number,
   options: { blocked: boolean },
 ): OrderActions {
-  if (order.kind !== "stock" && order.kind !== "on_order") return NONE;
+  if (order.kind !== "stock" && order.kind !== "on_order" && order.kind !== "service") {
+    return NONE;
+  }
   const { blocked } = options;
+  if (order.kind === "service" && order.status === "accepted") {
+    return { primary: "giveOut", secondary: blocked ? [] : ["decline"] };
+  }
   switch (order.status) {
     case "created":
       if (blocked || answerTimer(order.respondBy, now).kind === "expired") return NONE;
@@ -370,6 +407,7 @@ export function orderActions(
     case "ready":
       return { primary: "giveOut", secondary: blocked ? [] : ["decline"] };
     case "reserve_expired":
+    case "visit_unresolved":
       return order.lateCloseUntil && Date.parse(order.lateCloseUntil) > now
         ? { primary: "closeLate", secondary: [] }
         : NONE;
@@ -423,6 +461,35 @@ export function termWords(
 }
 
 /**
+ * The car and the time of an order on a service (S-ORD-02 «модель
+ * автомобиля, желаемые дата и время», TASK-038): the confirmed time once
+ * there is one; another time and until when the customer answers while
+ * they decide; otherwise the time the customer asked for. `null` — goods.
+ */
+export function visitWords(
+  order: Pick<SupplierOrderSummary, "status" | "serviceVisit">,
+  format: (iso: string) => string,
+  t: Translate,
+): { car: string; time: string } | null {
+  const visit = order.serviceVisit;
+  if (!visit) return null;
+  const car = [visit.car.make.label, visit.car.model.label, visit.car.year ?? ""].join(" ").trim();
+  if (visit.confirmed) {
+    return { car, time: t("orders.visit.confirmed", { time: format(visit.confirmed.visitAt) }) };
+  }
+  if (visit.proposed && order.status === "term_proposed") {
+    return {
+      car,
+      time: t("orders.visit.proposed", {
+        time: format(visit.proposed.visitAt),
+        answer: format(visit.proposed.answerBy),
+      }),
+    };
+  }
+  return { car, time: t("orders.visit.desired", { time: format(visit.desiredAt) }) };
+}
+
+/**
  * «Срок поставки прошёл» — the mark of the list and the card (S-ORD-01,
  * TASK-039): the server said the confirmed date passed (`overdueSince`)
  * and the order is still not ready; once ready or over, nothing to mark.
@@ -465,14 +532,17 @@ export function conflictText(
   details: unknown,
   format: (iso: string) => string,
   t: Translate,
+  /** The order's kind: a service talks of a time (TASK-038). */
+  kind?: OrderKind,
 ): string {
   const parsed = orderStateConflictDetailsSchema.safeParse(details);
   const last = parsed.success ? parsed.data.lastAction : undefined;
   if (!last) return t("orders.conflict.changed");
   const params = { who: actorName(last.actor, t), when: format(last.at) };
+  const service = kind === "service";
   switch (last.action) {
     case "accept":
-      return t("orders.conflict.accepted", params);
+      return t(service ? "orders.conflict.timeConfirmed" : "orders.conflict.accepted", params);
     case "decline":
       return t("orders.conflict.declined", params);
     case "mark_ready":
@@ -494,11 +564,18 @@ export function conflictText(
     case "propose_term":
       return t("orders.conflict.termProposed", params);
     case "agree_term":
-      return t("orders.conflict.termAgreed", params);
+      return t(service ? "orders.conflict.timeAgreed" : "orders.conflict.termAgreed", params);
     case "reject_term":
-      return t("orders.conflict.termRejected", params);
+      return t(service ? "orders.conflict.timeRejected" : "orders.conflict.termRejected", params);
     case "expire_term":
-      return t("orders.conflict.termExpired", params);
+      return t(service ? "orders.conflict.timeExpired" : "orders.conflict.termExpired", params);
+    // TASK-038: a service.
+    case "propose_time":
+      return t("orders.conflict.timeProposed", params);
+    case "mark_no_show":
+      return t("orders.conflict.noShow", params);
+    case "expire_visit":
+      return t("orders.conflict.visitUnresolved", params);
     default:
       return t("orders.conflict.changed");
   }
@@ -515,7 +592,12 @@ export const SETTLE_MS = 1_500;
  */
 export function changeNotice(
   before: { status: OrderStatusValue },
-  after: { status: OrderStatusValue; version: number; events: readonly OrderEvent[] },
+  after: {
+    status: OrderStatusValue;
+    version: number;
+    events: readonly OrderEvent[];
+    kind?: OrderKind;
+  },
   format: (iso: string) => string,
   t: Translate,
 ): string | null {
@@ -529,6 +611,7 @@ export function changeNotice(
     },
     format,
     t,
+    after.kind,
   );
 }
 
@@ -544,11 +627,13 @@ export function actionProblem(
   error: unknown,
   format: (iso: string) => string,
   t: Translate,
+  /** The order's kind (TASK-038: a service talks of a time). */
+  kind?: OrderKind,
 ): { conflict: boolean; text: string; companyChanged?: true } {
   if (!isApiError(error)) return { conflict: false, text: t("common.saveFailed") };
   switch (error.code) {
     case "ORDER_STATE_CONFLICT":
-      return { conflict: true, text: conflictText(error.details, format, t) };
+      return { conflict: true, text: conflictText(error.details, format, t, kind) };
     case "SUPPLIER_BLOCKED":
       return { conflict: true, text: t("orders.blockedRefused"), companyChanged: true };
     case "NOT_FOUND":
@@ -619,7 +704,11 @@ export function journalLines(
         break;
       case "accept":
         text = t(
-          kind === "on_order" ? "orders.journal.termConfirmed" : "orders.journal.accepted",
+          kind === "on_order"
+            ? "orders.journal.termConfirmed"
+            : kind === "service"
+              ? "orders.journal.timeConfirmed"
+              : "orders.journal.accepted",
           params,
         );
         break;
@@ -672,13 +761,38 @@ export function journalLines(
         });
         break;
       case "agree_term":
-        text = t("orders.journal.termAgreed", params);
+        text = t(
+          kind === "service" ? "orders.journal.timeAgreed" : "orders.journal.termAgreed",
+          params,
+        );
         break;
       case "reject_term":
-        text = t("orders.journal.termRejected", params);
+        text = t(
+          kind === "service" ? "orders.journal.timeRejected" : "orders.journal.termRejected",
+          params,
+        );
         break;
       case "expire_term":
-        text = t("orders.journal.termExpired", params);
+        text = t(
+          kind === "service" ? "orders.journal.timeExpired" : "orders.journal.termExpired",
+          params,
+        );
+        break;
+      // TASK-038: a service.
+      case "propose_time":
+        text = t("orders.journal.timeProposed", {
+          ...params,
+          visit: event.details.visitAt ? format(event.details.visitAt) : "",
+        });
+        break;
+      case "mark_no_show":
+        text = t("orders.journal.noShow", params);
+        break;
+      case "expire_visit":
+        text = t("orders.journal.visitUnresolved", params);
+        break;
+      case "late_cancel":
+        text = t("orders.journal.lateCancel", params);
         break;
       case "supply_overdue":
         text = t("orders.journal.supplyOverdue", params);

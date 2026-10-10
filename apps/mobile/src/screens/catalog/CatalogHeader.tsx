@@ -19,7 +19,14 @@ import { CarSheet } from "./CarSheet";
  * The two are equal buttons, half the width each (TASK-030.A): one line,
  * a long car name ends in an ellipsis instead of wrapping.
  */
-export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
+export function CatalogHeader({
+  onAddCar,
+  services = false,
+}: {
+  onAddCar: () => void;
+  /** A screen of services: the city sheet doesn't offer «Весь Казахстан» (T-CITY-01). */
+  services?: boolean;
+}) {
   const t = useT();
   const { selection } = useCity();
   const { car, chooseCar } = useCatalogCar();
@@ -48,7 +55,7 @@ export function CatalogHeader({ onAddCar }: { onAddCar: () => void }) {
         onPickCar={chooseCar}
         onAddCar={onAddCar}
       />
-      <CitySheet visible={sheet === "city"} onClose={() => setSheet(null)} />
+      <CitySheet visible={sheet === "city"} onClose={() => setSheet(null)} services={services} />
     </View>
   );
 }

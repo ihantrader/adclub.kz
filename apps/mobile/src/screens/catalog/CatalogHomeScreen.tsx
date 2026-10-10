@@ -1,5 +1,6 @@
-import type { CategoryNode } from "@adclub/contracts";
+import type { CategoryNode, CategorySubcategory } from "@adclub/contracts";
 import { layout, radius } from "@adclub/ui-core";
+import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   Banner,
@@ -18,11 +19,15 @@ import { tileRows } from "../../catalog/tile-rows";
 import type { GarageCar } from "../../garage/garage";
 import { useCategoryTree } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
+import { useCity } from "../../state/city-provider";
 import { useT } from "../../state/language";
+import { CitySheet } from "../CitySheet";
 import { CatalogHeader } from "./CatalogHeader";
 
 export interface CatalogHomeScreenProps {
   onOpenNode: (node: CategoryNode) => void;
+  /** «Услуги в {город}»: a subcategory of services opens its list (M-CAT-08 behind it). */
+  onOpenServices: (subcategory: CategorySubcategory) => void;
   onAddCar: () => void;
   /** «Уточните двигатель» opens the car at that step. */
   onCompleteEngine: (car: GarageCar) => void;
@@ -30,13 +35,17 @@ export interface CatalogHomeScreenProps {
 
 /**
  * M-CAT-01 — the main screen of the catalog: the car and the city in the
- * header, one hint card, and the top-level categories of goods as tiles.
- * Services are stage C; there is no advertising anywhere. The catalog is
- * for a car (D-062), so the card that used to ask for one is gone — the only
- * hint left is to say which engine it has.
+ * header, one hint card, the top-level categories of goods as tiles and
+ * «Услуги в {город}» — the subcategories of services as tiles (TASK-019).
+ * Services are shown only by a city (PRODUCT 11): with «Весь Казахстан» the
+ * block says so (T-CITY-01) and offers to choose one. There is no
+ * advertising anywhere. The catalog is for a car (D-062), so the card that
+ * used to ask for one is gone — the only hint left is to say which engine
+ * it has.
  */
 export function CatalogHomeScreen({
   onOpenNode,
+  onOpenServices,
   onAddCar,
   onCompleteEngine,
 }: CatalogHomeScreenProps) {
@@ -44,8 +53,13 @@ export function CatalogHomeScreen({
   const online = useOnline();
   const tree = useCategoryTree();
   const { car } = useCatalogCar();
+  const { selection } = useCity();
+  const [citySheet, setCitySheet] = useState(false);
 
   const nodes = (tree.data?.categories ?? []).filter((node) => node.kind === "goods");
+  const services = (tree.data?.categories ?? [])
+    .filter((node) => node.kind === "services")
+    .flatMap((node) => node.children);
 
   const status =
     !online && tree.data === null
@@ -125,8 +139,54 @@ export function CatalogHomeScreen({
               ))}
             </View>
           </Section>
+          {services.length > 0 && (
+            <Section
+              title={
+                selection.kind === "city"
+                  ? t("catalog.servicesIn", { city: selection.name })
+                  : t("catalog.services")
+              }
+            >
+              {selection.kind === "city" ? (
+                <View style={styles.tiles}>
+                  {tileRows(services).map((row) => (
+                    <View
+                      key={row.map((node) => node?.id ?? "spacer").join(":")}
+                      style={styles.tileRow}
+                    >
+                      {row.map((node) =>
+                        node ? (
+                          <CategoryTile
+                            key={node.id}
+                            node={node}
+                            onPress={() => onOpenServices(node)}
+                          />
+                        ) : (
+                          <View key="spacer" style={styles.spacer} />
+                        ),
+                      )}
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                // «Весь Казахстан»: services are only by a city (T-CITY-01).
+                <Banner
+                  tone="neutral"
+                  icon="mapPin"
+                  action={
+                    <Button variant="text" size="m" onPress={() => setCitySheet(true)}>
+                      {t("catalog.chooseCity")}
+                    </Button>
+                  }
+                >
+                  {t("city.servicesNote")}
+                </Banner>
+              )}
+            </Section>
+          )}
         </DataState>
       </View>
+      <CitySheet visible={citySheet} onClose={() => setCitySheet(false)} services />
     </Screen>
   );
 }
@@ -137,7 +197,13 @@ export function CatalogHomeScreen({
  * grows). Tiles of one row are as tall as the tallest of them, and their
  * icons stand on one line.
  */
-function CategoryTile({ node, onPress }: { node: CategoryNode; onPress: () => void }) {
+function CategoryTile({
+  node,
+  onPress,
+}: {
+  node: Pick<CategoryNode, "icon" | "name">;
+  onPress: () => void;
+}) {
   const { theme } = useTheme();
   return (
     <Pressable

@@ -23,8 +23,11 @@ export type CatalogStackParams = {
    * screen slides in and the real name arrives with the data.
    */
   "catalog-node": { categoryId: string; title?: string };
-  /** M-CAT-02: the items of a subcategory. */
-  "catalog-items": { categoryId: string; title?: string };
+  /**
+   * M-CAT-02: the items of a subcategory. `kind: "services"` — a
+   * subcategory of services (TASK-019): shown by a city, at a model's price.
+   */
+  "catalog-items": { categoryId: string; title?: string; kind?: "goods" | "services" };
   /**
    * M-CAT-07. `notice` — why the card was opened by «Повторить заказ»
    * instead of the checkout (TASK-030): the offer was withdrawn, or the

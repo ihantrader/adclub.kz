@@ -19,7 +19,8 @@ export interface SubcategoriesScreenProps {
   categoryId: string;
   /** The name the previous screen already showed: the top bar has it before the data does. */
   title?: string;
-  onOpen: (subcategory: CategorySubcategory) => void;
+  /** `kind` — of the node: a subcategory of services is listed by a city (TASK-019). */
+  onOpen: (subcategory: CategorySubcategory, kind: "goods" | "services") => void;
   onBack: () => void;
 }
 
@@ -90,7 +91,7 @@ export function SubcategoriesScreen({
                 first={index === 0}
                 title={child.name.text}
                 navigates
-                onPress={() => onOpen(child)}
+                onPress={() => onOpen(child, node?.kind ?? "goods")}
                 trailing={
                   // A subcategory without an icon of its own shows none — the
                   // generic grid next to every row said nothing (TASK-030.A).

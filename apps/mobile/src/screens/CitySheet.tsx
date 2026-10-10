@@ -33,11 +33,17 @@ export function CitySheet({
   visible,
   onClose,
   onChosen,
+  services = false,
 }: {
   visible: boolean;
   onClose: () => void;
   /** Called after a choice, once the sheet has gone (the first run continues, a sheet just closes). */
   onChosen?: () => void;
+  /**
+   * Opened from the services (M-CITY-01, TASK-019): services are shown only
+   * by a city, so «Весь Казахстан» can't be chosen and says why (T-CITY-01).
+   */
+  services?: boolean;
 }) {
   const t = useT();
   const { selection, choose, reconcile } = useCity();
@@ -173,15 +179,27 @@ export function CitySheet({
           empty={{ icon: "mapPin", title: t("city.listEmpty") }}
         >
           <ScrollView style={{ height: listHeight }} keyboardShouldPersistTaps="handled">
-            {query === "" && (
-              <ListRow
-                first
-                title={t("city.all")}
-                icon="mapPin"
-                onPress={() => pick(null)}
-                trailing={selection.kind === "all" ? <Icon name="check" color="accent" /> : null}
-              />
-            )}
+            {query === "" &&
+              (services ? (
+                <ListRow
+                  first
+                  title={
+                    <Text variant="bodyStrong" color="textMuted">
+                      {t("city.all")}
+                    </Text>
+                  }
+                  subtitle={t("city.servicesNote")}
+                  icon="mapPin"
+                />
+              ) : (
+                <ListRow
+                  first
+                  title={t("city.all")}
+                  icon="mapPin"
+                  onPress={() => pick(null)}
+                  trailing={selection.kind === "all" ? <Icon name="check" color="accent" /> : null}
+                />
+              ))}
             {visibleCities.map((city, index) => (
               <ListRow
                 key={city.id}
@@ -204,9 +222,11 @@ export function CitySheet({
         </DataState>
 
         {/* The list is per-city for services (T-CITY-01). */}
-        <Text variant="caption" color="textMuted">
-          {t("city.servicesNote")}
-        </Text>
+        {!services && (
+          <Text variant="caption" color="textMuted">
+            {t("city.servicesNote")}
+          </Text>
+        )}
       </View>
     </Sheet>
   );

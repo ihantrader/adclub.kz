@@ -199,6 +199,11 @@ export interface ItemRowProps {
   carName: string | null;
   offers: ShowcaseOfferSummary;
   cityName: string | null;
+  /**
+   * A service (TASK-019): the model of the car the price is for — «от 8 000 ₸
+   * для Coolray»; no compatibility, no receipt date, no brand.
+   */
+  serviceModel?: string;
   first?: boolean;
   onPress: () => void;
 }
@@ -215,6 +220,7 @@ export function ItemRow({
   carName,
   offers,
   cityName,
+  serviceModel,
   first,
   onPress,
 }: ItemRowProps) {
@@ -224,6 +230,7 @@ export function ItemRow({
   const subtitle = [brand, article].filter((part): part is string => Boolean(part)).join(" · ");
   const characteristics = keyAttributes.map((value) => value.display.text).join(" · ");
   const nearest = receiptText(offers.nearestReceipt);
+  const service = serviceModel !== undefined;
 
   return (
     <Pressable
@@ -253,21 +260,30 @@ export function ItemRow({
             {characteristics}
           </Text>
         )}
-        <CompatibilityLine result={compatibility} carName={carName} variant="list" />
+        {!service && <CompatibilityLine result={compatibility} carName={carName} variant="list" />}
         <View style={styles.priceLine}>
           <Text variant="priceS">
-            {t("catalog.priceFrom", { price: formatTenge(offers.minPrice) })}
+            {service
+              ? t("catalog.servicePriceFor", {
+                  price: formatTenge(offers.minPrice),
+                  model: serviceModel,
+                })
+              : t("catalog.priceFrom", { price: formatTenge(offers.minPrice) })}
           </Text>
           <Text variant="bodyS" color="textMuted">
             · {tn("catalog.offersCount", offers.count)}
           </Text>
         </View>
-        <View style={styles.receiptLine}>
-          <Icon name="clock" size={16} color="textMuted" />
-          <Text variant="caption" color="textMuted">
-            {offers.inCity && cityName ? t("catalog.inCity", { city: cityName }) : (nearest ?? "")}
-          </Text>
-        </View>
+        {!service && (
+          <View style={styles.receiptLine}>
+            <Icon name="clock" size={16} color="textMuted" />
+            <Text variant="caption" color="textMuted">
+              {offers.inCity && cityName
+                ? t("catalog.inCity", { city: cityName })
+                : (nearest ?? "")}
+            </Text>
+          </View>
+        )}
       </View>
     </Pressable>
   );

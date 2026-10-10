@@ -84,6 +84,13 @@ function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, 
       onOpenNode={(node) =>
         navigation.navigate("catalog-node", { categoryId: node.id, title: node.name.text })
       }
+      onOpenServices={(subcategory) =>
+        navigation.navigate("catalog-items", {
+          categoryId: subcategory.id,
+          title: subcategory.name.text,
+          kind: "services",
+        })
+      }
       onAddCar={addCar}
       onCompleteEngine={completeEngine}
     />
@@ -99,10 +106,11 @@ function CatalogNode({
       categoryId={route.params.categoryId}
       {...(route.params.title ? { title: route.params.title } : {})}
       onBack={navigation.goBack}
-      onOpen={(subcategory) =>
+      onOpen={(subcategory, kind) =>
         navigation.navigate("catalog-items", {
           categoryId: subcategory.id,
           title: subcategory.name.text,
+          kind,
         })
       }
     />
@@ -118,6 +126,7 @@ function CatalogItems({
     <ItemListScreen
       categoryId={route.params.categoryId}
       {...(route.params.title ? { title: route.params.title } : {})}
+      {...(route.params.kind ? { kind: route.params.kind } : {})}
       onBack={navigation.goBack}
       onOpenItem={(item) =>
         navigation.navigate("catalog-item", { itemId: item.id, title: item.name })

@@ -47,6 +47,7 @@ import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useLanguage } from "../../state/language";
+import { CitySheet } from "../CitySheet";
 import { CompatibilityLine, SORT_HINT, SORT_TEXT, useReceiptText } from "./parts";
 
 const OFFER_SORTS: ShowcaseOfferSort[] = ["recommended", "cheaper", "faster", "rating"];
@@ -114,6 +115,10 @@ export function ItemScreen({
   const tree = useCategoryTree();
   const ordering = useOrderButton(itemId, data?.viewer ?? null, request.reload);
   const carName = carTitle(car);
+  // M-CAT-08 (TASK-019): a service — by the chosen city, at the price for the
+  // car's model; no compatibility, availability or receipt date.
+  const service = data?.item.type === "service";
+  const [citySheet, setCitySheet] = useState(false);
 
   const status =
     !online && data === null
@@ -170,11 +175,14 @@ export function ItemScreen({
                   : t("item.noticeSupplierUnavailable")}
               </Banner>
             )}
-            <Photos
-              photos={data.item.photos}
-              icon={categoryIconOf(tree.data?.categories, data.item.category.id)}
-              placeholder={t("item.photoPlaceholder")}
-            />
+            {/* A service without pictures has nothing to wait for: no placeholder (M-CAT-08). */}
+            {(!service || data.item.photos.length > 0) && (
+              <Photos
+                photos={data.item.photos}
+                icon={categoryIconOf(tree.data?.categories, data.item.category.id)}
+                placeholder={t("item.photoPlaceholder")}
+              />
+            )}
 
             <View style={styles.head}>
               <Text variant="heading" accessibilityRole="header">
@@ -203,15 +211,41 @@ export function ItemScreen({
                 )
               )}
 
-              <CompatibilityLine
-                result={data.compatibility}
-                carName={carName}
-                variant="card"
-                onComplete={() => onCompleteCar(car)}
-              />
+              {service ? (
+                <View style={styles.offerLine}>
+                  <Icon name="mapPin" size={16} color="textMuted" />
+                  <Text variant="bodyS" color="textMuted" style={styles.grow}>
+                    {data.city
+                      ? t("item.serviceCity", { city: data.city.name.text })
+                      : t("city.servicesNote")}
+                  </Text>
+                </View>
+              ) : (
+                <CompatibilityLine
+                  result={data.compatibility}
+                  carName={carName}
+                  variant="card"
+                  onComplete={() => onCompleteCar(car)}
+                />
+              )}
             </View>
 
-            {data.fitsFor.length > 0 && (
+            {service && data.city === null && (
+              // «Весь Казахстан» — services are by a city: first choose one (M-CAT-08).
+              <Banner
+                tone="neutral"
+                icon="mapPin"
+                action={
+                  <Button variant="text" size="m" onPress={() => setCitySheet(true)}>
+                    {t("catalog.chooseCity")}
+                  </Button>
+                }
+              >
+                {t("city.servicesNote")}
+              </Banner>
+            )}
+
+            {!service && data.fitsFor.length > 0 && (
               <Section>
                 <Pressable
                   accessibilityRole="button"
@@ -256,7 +290,14 @@ export function ItemScreen({
 
             <Section title={t("item.offers")}>
               {data.noOffers ? (
-                <Text color="textMuted">{t("item.noOffers")}</Text>
+                <Text color="textMuted">
+                  {service && data.city
+                    ? t("item.noServiceOffers", {
+                        model: car.model.label,
+                        city: data.city.name.text,
+                      })
+                    : t("item.noOffers")}
+                </Text>
               ) : (
                 <>
                   {/* The same control as the list (TASK-030.A), with «Рейтинг». */}
@@ -265,7 +306,10 @@ export function ItemScreen({
                       label={t("catalog.sort")}
                       value={sort}
                       onChange={setSort}
-                      options={OFFER_SORTS.map((value) => ({
+                      options={(service
+                        ? OFFER_SORTS.filter((value) => value !== "faster")
+                        : OFFER_SORTS
+                      ).map((value) => ({
                         value,
                         label: t(SORT_TEXT[value]),
                         hint: t(SORT_HINT[value]),
@@ -277,6 +321,7 @@ export function ItemScreen({
                       <OfferCard
                         key={offer.id}
                         offer={offer}
+                        {...(service ? { serviceModel: car.model.label } : {})}
                         onOrder={ordering.press}
                         onSupplierSignIn={ordering.askSupplierSignIn}
                       />
@@ -310,6 +355,7 @@ export function ItemScreen({
       </DataState>
 
       {ordering.sheets}
+      <CitySheet visible={citySheet} onClose={() => setCitySheet(false)} services />
     </Screen>
   );
 }
@@ -482,10 +528,16 @@ function useOrderButton(
 
 function OfferCard({
   offer,
+  serviceModel,
   onOrder,
   onSupplierSignIn,
 }: {
   offer: ShowcaseOffer;
+  /**
+   * An offer on a service (TASK-019): the model its price is for; no
+   * availability, no dates, and «Записаться» comes later (TASK-038).
+   */
+  serviceModel?: string;
   onOrder: (offerId: string) => void;
   /** A guest taps «Поставщик клуба»: the card's one sign-in sheet opens. */
   onSupplierSignIn: () => void;
@@ -493,7 +545,8 @@ function OfferCard({
   const { t, lang } = useLanguage();
   const { theme } = useTheme();
   const receiptText = useReceiptText();
-  const date = receiptText(offer.receipt, "withDate");
+  const service = serviceModel !== undefined;
+  const date = service ? null : receiptText(offer.receipt, "withDate");
   // A guest taps «Поставщик клуба» to sign in (T-GATE-02, SCREENS M-AUTH-00);
   // a signed-in user without club access sees the same line, but nothing
   // here can get them access yet (a subscription — EPIC-14), so it stays inert.
@@ -510,16 +563,18 @@ function OfferCard({
       <View style={styles.offerTop}>
         <View style={styles.grow}>
           <Text variant="caption" color="accent">
-            {t("item.clubPrice")}
+            {service ? t("item.servicePriceFor", { model: serviceModel }) : t("item.clubPrice")}
           </Text>
           <Text variant="price">{formatTenge(offer.price)}</Text>
         </View>
-        <Badge
-          tone={offer.availability === "in_stock" ? "success" : "neutral"}
-          icon={offer.availability === "in_stock" ? "package" : "clock"}
-        >
-          {offer.availability === "in_stock" ? t("catalog.inStock") : t("catalog.onOrder")}
-        </Badge>
+        {!service && (
+          <Badge
+            tone={offer.availability === "in_stock" ? "success" : "neutral"}
+            icon={offer.availability === "in_stock" ? "package" : "clock"}
+          >
+            {offer.availability === "in_stock" ? t("catalog.inStock") : t("catalog.onOrder")}
+          </Badge>
+        )}
       </View>
       {date && (offer.pickup || offer.delivery) && (
         <View style={styles.offerDates}>
@@ -594,7 +649,12 @@ function OfferCard({
           {offer.warrantyText}
         </Text>
       ) : null}
-      {canOrderOffer(offer) ? (
+      {service ? (
+        // «Записаться» — TASK-038, TASK-039.B; until then nothing is pressed in vain.
+        <Text variant="bodyS" color="textMuted" style={styles.orderLater}>
+          {t("item.serviceLater")}
+        </Text>
+      ) : canOrderOffer(offer) ? (
         <Button size="m" onPress={() => onOrder(offer.id)} style={styles.orderButton}>
           {t("item.order")}
         </Button>

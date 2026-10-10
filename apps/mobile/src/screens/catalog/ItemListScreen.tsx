@@ -33,6 +33,7 @@ import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useLanguage } from "../../state/language";
+import { CitySheet } from "../CitySheet";
 import { CatalogHeader } from "./CatalogHeader";
 import { FiltersSheet } from "./FiltersSheet";
 import { ItemRow, SORT_HINT, SORT_TEXT } from "./parts";
@@ -43,6 +44,8 @@ export interface ItemListScreenProps {
   categoryId: string;
   /** The name the previous screen already showed: the top bar has it before the data does. */
   title?: string;
+  /** What the previous screen knew of the subcategory; the answer's `category.kind` decides. */
+  kind?: "goods" | "services";
   /** The name is passed on so the card's top bar has it while the card loads. */
   onOpenItem: (item: { id: string; name: string }) => void;
   onAddCar: () => void;
@@ -65,6 +68,7 @@ export interface ItemListScreenProps {
 export function ItemListScreen({
   categoryId,
   title,
+  kind,
   onOpenItem,
   onAddCar,
   onCheckCar,
@@ -75,6 +79,7 @@ export function ItemListScreen({
   const online = useOnline();
   const { selection } = useCity();
   const { car } = useCatalogCar();
+  const [citySheet, setCitySheet] = useState(false);
   const [sort, setSort] = useState<ShowcaseListSort>("recommended");
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   // The filters being edited live here, not in the sheet: opening the sheet
@@ -122,6 +127,10 @@ export function ItemListScreen({
   const count = filterCount(filters);
   const carName = carTitle(car);
   const cityName = page?.city?.name.text ?? null;
+  // Services (TASK-019): by a city, at the price for the car's model; no
+  // availability, receipt or brand — so no filters and no «Быстрее».
+  const services = (page?.category.kind ?? kind) === "services";
+  const sorts = services ? LIST_SORTS.filter((value) => value !== "faster") : LIST_SORTS;
 
   const status =
     !online && page === null
@@ -146,28 +155,30 @@ export function ItemListScreen({
       scroll={false}
       header={
         <>
-          <CatalogHeader onAddCar={onAddCar} />
+          <CatalogHeader onAddCar={onAddCar} services={services} />
           <View style={styles.controls}>
             <Segments
               label={t("catalog.sort")}
               value={sort}
               onChange={setSort}
-              options={LIST_SORTS.map((value) => ({
+              options={sorts.map((value) => ({
                 value,
                 label: t(SORT_TEXT[value]),
                 hint: t(SORT_HINT[value]),
               }))}
             />
-            <View style={styles.filterRow}>
-              <Chip icon="filters" selected={count > 0} onPress={openFilters}>
-                {count > 0 ? t("catalog.filtersCount", { n: count }) : t("catalog.filters")}
-              </Chip>
-              {count > 0 && (
-                <Button variant="text" size="m" onPress={() => setFilters(EMPTY_FILTERS)}>
-                  {t("catalog.reset")}
-                </Button>
-              )}
-            </View>
+            {!services && (
+              <View style={styles.filterRow}>
+                <Chip icon="filters" selected={count > 0} onPress={openFilters}>
+                  {count > 0 ? t("catalog.filtersCount", { n: count }) : t("catalog.filters")}
+                </Chip>
+                {count > 0 && (
+                  <Button variant="text" size="m" onPress={() => setFilters(EMPTY_FILTERS)}>
+                    {t("catalog.reset")}
+                  </Button>
+                )}
+              </View>
+            )}
           </View>
         </>
       }
@@ -200,6 +211,7 @@ export function ItemListScreen({
           }
           renderItem={({ item, index }) => (
             <ItemRow
+              {...(services ? { serviceModel: car.model.label } : {})}
               first={index === 0}
               name={item.name.text}
               brand={item.brand?.name ?? null}
@@ -229,6 +241,7 @@ export function ItemListScreen({
         onDraftChange={setDraftFilters}
         onApply={setFilters}
       />
+      <CitySheet visible={citySheet} onClose={() => setCitySheet(false)} services />
     </Screen>
   );
 
@@ -289,6 +302,30 @@ export function ItemListScreen({
           icon: "mapPin" as const,
           title: t("catalog.emptyCity"),
           text: t("city.servicesNote"),
+          action: (
+            <Button variant="secondary" size="m" onPress={() => setCitySheet(true)}>
+              {t("catalog.chooseCity")}
+            </Button>
+          ),
+        };
+      case "no_items":
+        // A service that no point of the city offers (SCREENS 2.2: «Пусто в
+        // выбранном городе — Выбрать другой город»).
+        if (services && cityName) {
+          return {
+            icon: "mapPin" as const,
+            title: t("catalog.emptyServiceCity", { city: cityName }),
+            action: (
+              <Button variant="secondary" size="m" onPress={() => setCitySheet(true)}>
+                {t("catalog.chooseOtherCity")}
+              </Button>
+            ),
+          };
+        }
+        return {
+          icon: "package" as const,
+          title: t("catalog.emptyItems"),
+          text: t("catalog.emptyItemsText"),
         };
       default:
         return {

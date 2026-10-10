@@ -174,6 +174,45 @@ export const translateOutputSchema = z.object({
 
 export type TranslateOutput = z.infer<typeof translateOutputSchema>;
 
+// ------------------------------------------------- vehicle document (OCR)
+
+/**
+ * A photo of a vehicle registration certificate to read (TASK-057, D-064):
+ * already made smaller and stripped of metadata by the server. It lives in
+ * memory for this one call — no gateway keeps it, logs it or writes it
+ * anywhere (`AiService` records only its size in `ai_job.input_ref`).
+ */
+export interface VehicleDocumentInput {
+  image: Uint8Array;
+  contentType: "image/jpeg";
+}
+
+/**
+ * What the model answers about the photo. Only the fields the garage needs:
+ * the owner, the address, the series and the number of the certificate are
+ * not in the schema at all, so a strict answer cannot carry them, and
+ * whatever a provider adds anyway is dropped when the answer is checked
+ * (a zod object keeps only its own keys).
+ *
+ * `documentKind`: `kz_registration` — a Kazakhstan vehicle registration
+ * certificate, old or new form; `other_document` — a document of another
+ * kind or country; `not_document` — not a document at all; `unreadable` —
+ * a document that can't be read. Values are copied as written; a field
+ * that is not clearly legible is `null`, never a guess.
+ */
+export const vehicleDocumentOutputSchema = z.object({
+  documentKind: z.enum(["kz_registration", "other_document", "not_document", "unreadable"]),
+  make: z.string().nullable(),
+  model: z.string().nullable(),
+  year: z.number().int().nullable(),
+  vin: z.string().nullable(),
+  plate: z.string().nullable(),
+  engineVolumeCc: z.number().int().nullable(),
+  color: z.string().nullable(),
+});
+
+export type VehicleDocumentOutput = z.infer<typeof vehicleDocumentOutputSchema>;
+
 /**
  * The provider behind the interface. `model` is the one `AiService` chose
  * from the settings of the operation; `signal` is aborted when the call
@@ -183,6 +222,12 @@ export abstract class AiGateway {
   abstract readonly provider: AiProviderName;
 
   abstract translate(input: TranslateInput, model: string, signal: AbortSignal): Promise<AiResult>;
+
+  abstract readVehicleDocument(
+    input: VehicleDocumentInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult>;
 }
 
 /**
@@ -212,4 +257,15 @@ export const translateOperation: AiOperation<TranslateInput, TranslateOutput> = 
   models: { primary: "ai_model_translate_primary", fallback: "ai_model_translate_fallback" },
   outputSchema: translateOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.translate(input, model, signal),
+};
+
+/** Reading a registration certificate (TASK-057): `ai_job.kind` is `passport_ocr` (ARCHITECTURE 5.12). */
+export const vehicleDocumentOperation: AiOperation<VehicleDocumentInput, VehicleDocumentOutput> = {
+  kind: "passport_ocr",
+  models: {
+    primary: "ai_model_vehicle_document_primary",
+    fallback: "ai_model_vehicle_document_fallback",
+  },
+  outputSchema: vehicleDocumentOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.readVehicleDocument(input, model, signal),
 };

@@ -20,6 +20,27 @@ export function garageLimitReached(limit: number): ApiException {
   );
 }
 
+/** One VIN is one car (TASK-057, ARCHITECTURE 4.58): another car of this garage has it. */
+export function garageVinTaken(carId: string | null): ApiException {
+  return new ApiException(
+    409,
+    "GARAGE_VIN_TAKEN",
+    "Another car of this garage already has this VIN",
+    { details: { carId } },
+  );
+}
+
+/** The database refused a second car with one VIN in one garage (a race the service lost). */
+export function isVinTakenViolation(error: unknown): boolean {
+  const pgError = postgresError(error);
+  return pgError?.code === "23505" && pgError.constraint === "account_car_vin_key";
+}
+
+/** A field of the body that does not hold what it says (T-GAR-07, a proof the server never signed). */
+export function garageFieldInvalid(path: string, message: string): ApiException {
+  return new ApiException(400, "VALIDATION_ERROR", message, { details: [{ path, message }] });
+}
+
 /** Which level a car's foreign key names, from the constraint Postgres refused. */
 const LEVEL_BY_CONSTRAINT: Record<string, string> = {
   account_car_make_id_fkey: "levels.make.id",

@@ -36,4 +36,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1790750000000_button-press-supplier-blocked",
   "1790800000000_admin-signal-actions",
   "1790850000000_admin-cancel-order",
+  "1790900000000_account-car-document",
 ];

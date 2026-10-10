@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { GarageService, GarageStore } from "../garage";
 import { SessionStore } from "../identity";
+import { DocumentProofs } from "../vehicle-document";
 import { AdminSearch } from "./admin-search.service";
 import { AdminUsersService } from "./admin-users.service";
 import { PhoneReveals } from "./phone-reveals.service";
@@ -34,6 +35,7 @@ export class UsersModule {
         AdminSearch,
         GarageStore,
         GarageService,
+        DocumentProofs,
         SessionStore,
       ],
     };

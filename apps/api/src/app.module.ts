@@ -14,6 +14,7 @@ import { MessagingModule } from "./modules/messaging";
 import { AuditModule } from "./modules/audit";
 import { CatalogModule } from "./modules/catalog";
 import { VehiclesModule } from "./modules/vehicles";
+import { VehicleDocumentModule } from "./modules/vehicle-document";
 import { CompatibilityModule } from "./modules/compatibility";
 import { SuppliersModule } from "./modules/suppliers";
 import { OffersModule } from "./modules/offers";
@@ -58,6 +59,8 @@ export class AppModule implements NestModule {
     const suppliers = SuppliersModule.forRoot({ http: true });
     // One offers module: orders take the snapshot through this very instance.
     const offers = OffersModule.forRoot({ http: true, catalog, suppliers });
+    // One vehicle catalog: a recognised certificate is placed in this very instance.
+    const vehicles = VehiclesModule.forRoot({ http: true });
     return {
       module: AppModule,
       imports: [
@@ -91,7 +94,8 @@ export class AppModule implements NestModule {
         IdentityModule.forRoot(config),
         GarageModule.forRoot({ http: true }),
         catalog,
-        VehiclesModule.forRoot({ http: true }),
+        vehicles,
+        VehicleDocumentModule.forRoot({ vehicles }),
         compatibility,
         suppliers,
         offers,

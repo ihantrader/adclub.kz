@@ -11,11 +11,14 @@ import {
   FALLBACK_WORTHY,
   NOT_BILLED,
   translateOperation,
+  vehicleDocumentOperation,
   type AiFailureKind,
   type AiOperation,
   type AiResult,
   type TranslateInput,
   type TranslateOutput,
+  type VehicleDocumentInput,
+  type VehicleDocumentOutput,
 } from "./ai-gateway";
 import { aiJob, type AiJobRow } from "./schema";
 
@@ -126,6 +129,27 @@ export class AiService {
 
   translate(input: TranslateInput, meta: AiCallMeta): Promise<AiCallResult<TranslateOutput>> {
     return this.call(translateOperation, input, meta);
+  }
+
+  /** A photographed registration certificate (TASK-057); the photo itself is never recorded. */
+  readVehicleDocument(
+    input: VehicleDocumentInput,
+    meta: AiCallMeta,
+  ): Promise<AiCallResult<VehicleDocumentOutput>> {
+    return this.call(vehicleDocumentOperation, input, meta);
+  }
+
+  /**
+   * What the calls made for guests have cost since the start of the Almaty
+   * day, holds of running ones included — checked against
+   * `guest_ai_daily_budget_usd` before a guest's call (PRODUCT 6.6).
+   */
+  async guestSpentToday(): Promise<number> {
+    const result = await this.database.db.execute<{ spent: string }>(
+      sql`SELECT COALESCE(sum(${aiJob.costUsd}), 0)::text AS spent FROM ${aiJob}
+          WHERE ${aiJob.createdAt} >= ${ALMATY_DAY_START} AND ${aiJob.initiatorType} = 'guest_device'`,
+    );
+    return Number(result.rows[0]?.spent ?? 0);
   }
 
   /**

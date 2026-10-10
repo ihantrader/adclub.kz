@@ -38,3 +38,4 @@ export {
   translation,
 } from "./schema";
 export type { AttributeRow, CatalogItemRow, CategoryRow } from "./schema";
+export { detectFormat } from "./photo-image";

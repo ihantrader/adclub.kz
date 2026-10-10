@@ -118,6 +118,13 @@ export class AdminUsersService {
     if (query.noShows === "true") {
       conditions.push(sql`${STANDING_NO_SHOWS} > 0`);
     }
+    if (query.unconfirmedCar === "true") {
+      // D-064: a car without «документ показан» — marked «не подтверждён»,
+      // or added before TASK-057 with no mark at all.
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM account_car AS car WHERE car.account_id = ${account.id} AND car.document_status IS DISTINCT FROM 'shown')`,
+      );
+    }
     const filter = and(...conditions)!;
     const position = sql<string>`to_char(${account.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
     let after: SQL | undefined;

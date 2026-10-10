@@ -36,3 +36,4 @@ export {
   vehicleModification,
   vehicleOption,
 } from "./schema";
+export { spellingKey } from "./vehicle-common";

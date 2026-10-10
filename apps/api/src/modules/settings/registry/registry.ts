@@ -471,6 +471,20 @@ const ai = group({
       description:
         "Запасная модель автоперевода: используется, когда основная недоступна или её нет у OpenRouter. Другой поставщик, чем основная, — иначе сбой у одного остановит обе (TASK-053.B). Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
+    ai_model_vehicle_document_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-3.1-flash-lite",
+      description:
+        "Модель OpenRouter для распознавания фото техпаспорта (TASK-057, D-064). Должна понимать изображения; запросы уходят только провайдерам без хранения (D-057). Выбрана замером на синтетическом наборе (D-058, ARCHITECTURE 4.58): самая дешёвая из прошедших порог (VIN и госномер 17 из 17, вид документа 24 из 24), около $0.0006 за скан, медиана 1,6 с. Меняется без релиза, действует не позже чем через 30 секунд.",
+    }),
+    ai_model_vehicle_document_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "openai/gpt-4.1-mini",
+      description:
+        "Запасная модель распознавания техпаспорта: используется, когда основная недоступна. Другой поставщик, чем основная, и тоже прошла порог замера (около $0.0008 за скан). Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
     ai_call_reservation_usd: define.number({
       unit: "usd",
       min: 0.001,
@@ -725,6 +739,44 @@ const garage = group({
       default: 30,
       description:
         "Наибольшее число автомобилей в гараже учётной записи (TASK-029); щедрый предел от случайного переполнения, не от обычного использования.",
+    }),
+    vehicle_document_max_size_mb: define.integer({
+      unit: "megabytes",
+      min: 1,
+      max: 20,
+      default: 10,
+      description:
+        "Предельный размер фото техпаспорта, которое принимает сервер (TASK-057); приложение уменьшает снимок до отправки, так что обычный снимок много меньше.",
+    }),
+    vehicle_document_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 30,
+      description:
+        "Сколько распознаваний техпаспорта гости могут сделать с одного адреса за окно — против обхода пробного лимита устройства (guest_limits) новым устройством. Адрес мобильного оператора бывает общим у многих людей, поэтому предел щедрый.",
+    }),
+    vehicle_document_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: 7 * DAY,
+      default: DAY,
+      description: "Окно предела распознаваний техпаспорта гостями с одного адреса.",
+    }),
+    vehicle_document_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 20,
+      description:
+        "Сколько распознаваний техпаспорта вошедший пользователь может сделать за окно (сутки по умолчанию).",
+    }),
+    vehicle_document_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: 7 * DAY,
+      default: DAY,
+      description: "Окно предела распознаваний техпаспорта одной учётной записи.",
     }),
   },
 });

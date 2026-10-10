@@ -6,7 +6,8 @@
  * parameters of a failed statement.
  *
  * What is removed or masked: phone numbers (in any shape, inside free text
- * too — only `+7***1234` remains), names, e-mail addresses, postal
+ * too — only `+7***1234` remains), VINs and registration plates (TASK-057:
+ * `LB3**********3456`, `*** *** 02`), names, e-mail addresses, postal
  * addresses, IP addresses, login and order codes, tokens and secrets,
  * request and response bodies, the query string of a URL.
  *
@@ -16,8 +17,11 @@
  *
  * Pure and dependency-free on purpose: it is unit-tested on fixtures
  * (`sanitizer.test.ts`) and used from the logger, so it must not need Nest,
- * configuration or the database.
+ * configuration or the database. The masks of a VIN and a plate are the
+ * domain's own (`@adclub/domain`, pure functions as well).
  */
+
+import { maskKzPlate, maskVin } from "@adclub/domain";
 
 export const REDACTED = "[redacted]";
 export const REDACTED_IP = "[ip]";
@@ -253,8 +257,22 @@ export function sanitizeText(value: string): string {
   return cleaned.length > MAX_STRING ? `${cleaned.slice(0, MAX_STRING)}…[cut]` : cleaned;
 }
 
+/**
+ * A VIN in a text (TASK-057, D-064): 17 letters and digits without I, O, Q,
+ * with at least one letter and one digit, standing on its own. Kept only as
+ * its mask (`maskVin`), as a phone number is. Before the identifiers are
+ * held: a 17-character run is no hash or id of ours.
+ */
+const VIN_TEXT =
+  /(?<![A-Za-z0-9])(?=[A-HJ-NPR-Z0-9]*[A-HJ-NPR-Z])(?=[A-HJ-NPR-Z0-9]*\d)[A-HJ-NPR-Z0-9]{17}(?![A-Za-z0-9])/g;
+
+/** A Kazakhstan plate in a text, compact or spaced: `123ABC02`, `123 ABC 02`, `A 123 BCD`. */
+const PLATE_TEXT =
+  /(?<![A-Za-z0-9])(?:\d{3} ?[A-Z]{2,3} ?(?:0[1-9]|1\d|20)|[A-Z] ?\d{3} ?[A-Z]{3})(?![A-Za-z0-9])/g;
+
 function cleanText(value: string): string {
-  let text = value;
+  let text = value.replace(VIN_TEXT, (match) => maskVin(match));
+  text = text.replace(PLATE_TEXT, (match) => maskKzPlate(match));
   for (const pattern of TOKEN_LIKE) {
     text = text.replace(pattern, REDACTED);
   }
@@ -274,12 +292,22 @@ function isIdentifierKey(key: string): boolean {
   return IDENTIFIER_KEY.test(key);
 }
 
-function keyVerdict(key: string): "keep" | "phone" | "drop" {
+/** A key whose value is a VIN or a registration plate (TASK-057): only the mask is kept. */
+const VIN_KEY = /^vin$|(^|_)vin$|Vin$/;
+const PLATE_KEY = /^plate$|(^|_)plate$|Plate$/;
+
+function keyVerdict(key: string): "keep" | "phone" | "vin" | "plate" | "drop" {
   if (SAFE_KEY.test(key) || isIdentifierKey(key)) {
     return "keep";
   }
   if (PHONE_KEY.test(key)) {
     return "phone";
+  }
+  if (VIN_KEY.test(key)) {
+    return "vin";
+  }
+  if (PLATE_KEY.test(key)) {
+    return "plate";
   }
   if (NAME_KEY.test(key)) {
     return TECHNICAL_NAME_KEY.test(key) ? "keep" : "drop";
@@ -409,6 +437,10 @@ function walk(value: unknown, depth: number, seen: WeakSet<object>): unknown {
         result[key] = REDACTED;
       } else if (verdict === "phone") {
         result[key] = typeof item === "string" ? maskPhoneText(item) : REDACTED;
+      } else if (verdict === "vin") {
+        result[key] = typeof item === "string" ? maskVin(item) : REDACTED;
+      } else if (verdict === "plate") {
+        result[key] = typeof item === "string" ? maskKzPlate(item) : REDACTED;
       } else {
         result[key] = walk(item, depth + 1, seen);
       }

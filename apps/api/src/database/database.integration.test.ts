@@ -96,6 +96,74 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds VIN, plate and the mark of the document of a car, one VIN to a garage, and rolls back keeping the cars (account car document)", async () => {
+    const accounts = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77005550571'), ('+77005550572') RETURNING id",
+      )
+    ).rows.map((row) => row.id);
+    const make = (
+      await client.query<{ id: string }>("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const model = (
+      await client.query<{ id: string }>(
+        "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+        [make],
+      )
+    ).rows[0]!.id;
+    const car = (
+      accountId: string,
+      fields: { vin?: string; plate?: string; status?: string; at?: Date | null },
+    ) =>
+      client.query(
+        `INSERT INTO account_car (account_id, make_id, make_label, model_id, model_label, vin, plate, document_status, document_at)
+         VALUES ($1, $2, 'Geely', $3, 'Coolray', $4, $5, $6, $7)`,
+        [
+          accountId,
+          make,
+          model,
+          fields.vin ?? null,
+          fields.plate ?? null,
+          fields.status ?? null,
+          fields.status ? (fields.at ?? new Date()) : null,
+        ],
+      );
+    await car(accounts[0]!, { vin: "L6T7844Z0RN001234", plate: "777ABC02", status: "shown" });
+    await car(accounts[0]!, { plate: "A123BCD", status: "unconfirmed" });
+    // A car from before TASK-057: no mark at all.
+    await car(accounts[0]!, {});
+    // One VIN is one car in a garage; another account may have it.
+    await expect(car(accounts[0]!, { vin: "L6T7844Z0RN001234" })).rejects.toThrow(
+      /account_car_vin_key/,
+    );
+    await car(accounts[1]!, { vin: "L6T7844Z0RN001234" });
+    // The database holds the shapes and the pair of the mark too.
+    await expect(car(accounts[0]!, { vin: "L6T7844Z0RNO01234" })).rejects.toThrow(/check/i);
+    await expect(car(accounts[0]!, { plate: "А123ВС77" })).rejects.toThrow(/check/i);
+    await expect(car(accounts[0]!, { status: "owned" })).rejects.toThrow(/check/i);
+    await expect(
+      client.query(
+        `INSERT INTO account_car (account_id, make_id, make_label, model_id, model_label, document_status)
+         VALUES ($1, $2, 'Geely', $3, 'Coolray', 'shown')`,
+        [accounts[0], make, model],
+      ),
+    ).rejects.toThrow(/account_car_document_at_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await columnExists(client, "account_car", "vin")).toBe(false);
+    expect(await columnExists(client, "account_car", "document_status")).toBe(false);
+    // The cars stay; only the new columns are gone.
+    expect((await client.query("SELECT 1 FROM account_car")).rowCount).toBe(4);
+
+    runMigrate("up", container.getConnectionUri());
+    expect(await columnExists(client, "account_car", "vin")).toBe(true);
+    await client.query("DELETE FROM account_car");
+    await client.query("DELETE FROM vehicle_model");
+    await client.query("DELETE FROM vehicle_make");
+    await client.query("DELETE FROM account WHERE id = ANY($1)", [accounts]);
+    await walkDownPast(() => columnExists(client, "account_car", "vin"));
+  });
+
   it("holds the administrator's cancel of an order in the database, and rolls back keeping the order (admin cancel order)", async () => {
     const account = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77470000188') RETURNING id",

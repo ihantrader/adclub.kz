@@ -34,6 +34,11 @@ import {
 import { SettingsChangeService, SettingsModule } from "./modules/settings";
 import { DevVehicleSeed, DevVehicleSeedError, VehiclesModule } from "./modules/vehicles";
 import {
+  DocumentEvalBudgetError,
+  saveDocumentEvalRun,
+  VehicleDocumentEval,
+} from "./modules/vehicle-document";
+import {
   CompatibilityModule,
   DevCompatibilitySeed,
   DevCompatibilitySeedError,
@@ -103,6 +108,14 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   ai:eval:recheck <name>       run the checks over a saved result again (the texts
  *                                are in the file): nothing is called and nothing is
  *                                spent, and a sharper check applies to past runs too
+ *   ai:eval:vehicle-document --models <a,b,…> --confirm-spend <usd> [--label <text>]
+ *                                read every synthetic certificate of
+ *                                `ai-eval/vehicle-document` once with each model
+ *                                (TASK-057): accuracy by field (VIN and plate
+ *                                strictly), the kind of document, the refusal of
+ *                                another document, time and the price of a scan;
+ *                                written to `ai-eval/vehicle-document/results/`.
+ *                                The spend is stated as for translations.
  *
  * Messages to suppliers (ARCHITECTURE 4.35) — never the values of the
  * placeholders, and never a whole number:
@@ -176,7 +189,12 @@ class OperatorModule {
           startOnBoot: false,
         }),
       ],
-      providers: [JsonLoggerService, ...identityOperatorProviders, TranslationEval],
+      providers: [
+        JsonLoggerService,
+        ...identityOperatorProviders,
+        TranslationEval,
+        VehicleDocumentEval,
+      ],
     };
   }
 }
@@ -208,6 +226,7 @@ const USAGE = `Usage: operator <command> [arguments]
   translations:retry-failed
   ai:eval:translate --models <a,b,...> --confirm-spend <usd> [--glossary] [--batch-size <n>] [--label <text>]
   ai:eval:recheck <result file name>
+  ai:eval:vehicle-document --models <a,b,...> --confirm-spend <usd> [--label <text>]
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
@@ -288,6 +307,7 @@ interface Services {
   ai: AiService;
   translations: TranslationQueue;
   translationEval: TranslationEval;
+  documentEval: VehicleDocumentEval;
   devCommands: boolean;
 }
 
@@ -307,6 +327,7 @@ async function run(
     ai,
     translations,
     translationEval,
+    documentEval,
     devCommands,
   }: Services,
   argv: string[],
@@ -492,6 +513,61 @@ async function run(
         })),
       };
     }
+    case "ai:eval:vehicle-document": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "ai:eval:vehicle-document is available in development and tests only",
+        );
+      }
+      const models = required(values.models, "--models")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0);
+      if (models.length === 0) {
+        throw new OperatorCommandError("--models lists no model");
+      }
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.5");
+      }
+      // As for translations: the daily budget is what stops the run, so the
+      // stated spend must fit in what is left of it.
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const run = await documentEval.run({
+        models,
+        ...(values.label === undefined ? {} : { label: values.label }),
+      });
+      const path = saveDocumentEvalRun(
+        run,
+        `${run.startedAt.slice(0, 10)}-${values.label ?? "models"}`,
+      );
+      return {
+        saved: path,
+        dataVersion: run.dataVersion,
+        samples: run.samples,
+        // What each model read is in the saved file; here only the numbers.
+        results: run.results.map((result) => ({
+          model: result.model,
+          passes: result.score.passes,
+          kind: result.score.kind,
+          vin: result.score.fields.vin,
+          plate: result.score.fields.plate,
+          foreign: result.score.foreign,
+          guessedHiddenVin: result.score.guessedHiddenVin,
+          costUsd: result.costUsd,
+          costPerScanUsd: result.costPerScanUsd,
+          latencyMs: result.latencyMs,
+          failures: result.failures.length,
+          failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
+        })),
+      };
+    }
     case "dev:jobs:fail": {
       if (!devJobs) {
         throw new OperatorCommandError("dev:jobs:fail is available in development and tests only");
@@ -581,6 +657,7 @@ async function main(): Promise<void> {
         ai: app.get(AiService),
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),
+        documentEval: app.get(VehicleDocumentEval),
         devCommands: hasDevJobs(config),
       },
       process.argv.slice(2),
@@ -600,7 +677,8 @@ main().catch((error: unknown) => {
     error instanceof DevCompatibilitySeedError ||
     error instanceof DevSupplierSeedError ||
     error instanceof JobAdminError ||
-    error instanceof MessagingCommandError
+    error instanceof MessagingCommandError ||
+    error instanceof DocumentEvalBudgetError
   ) {
     console.error(error.message);
   } else if (error instanceof ApiException) {

@@ -7,6 +7,8 @@ export {
   FALLBACK_WORTHY,
   translateOperation,
   translateOutputSchema,
+  vehicleDocumentOperation,
+  vehicleDocumentOutputSchema,
 } from "./ai-gateway";
 export type {
   AiFailureKind,
@@ -19,6 +21,8 @@ export type {
   TranslateInput,
   TranslateItem,
   TranslateOutput,
+  VehicleDocumentInput,
+  VehicleDocumentOutput,
 } from "./ai-gateway";
 export { AiService } from "./ai.service";
 export type {
@@ -33,3 +37,4 @@ export { OpenRouterAiGateway } from "./openrouter-ai-gateway";
 export { MISSING_MODEL_PREFIX, TestAiGateway, testTranslation } from "./test-ai-gateway";
 export { aiJob, aiTables } from "./schema";
 export type { AiJobRow } from "./schema";
+export { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";

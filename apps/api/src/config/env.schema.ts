@@ -101,7 +101,10 @@ export type AiProviderName = (typeof aiProviders)[number];
  * `incomplete` — leaves the last text of the batch out, like a provider
  * that answered only partly; `no_cost` — answers without saying what the
  * call cost; `empty`, `too_long`, `control_characters`, `wrong_language` —
- * answers with a text the checks refuse.
+ * answers with a text the checks refuse; `unreadable`, `other_document` —
+ * reads every photo of a registration certificate as unreadable or as
+ * another document (TASK-057; otherwise the synthetic samples are read by
+ * their control strip, `test-vehicle-documents.ts`).
  */
 /**
  * Where messages to suppliers are sent from (TASK-024, ARCHITECTURE 9.1,
@@ -166,6 +169,10 @@ export const aiTestModes = [
   "too_long",
   "control_characters",
   "wrong_language",
+  // Reading a registration certificate (TASK-057): every photo is unreadable,
+  // or every photo is some other document.
+  "unreadable",
+  "other_document",
 ] as const;
 export type AiTestMode = (typeof aiTestModes)[number];
 

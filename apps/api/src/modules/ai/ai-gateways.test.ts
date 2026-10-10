@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { AiGatewayError, FALLBACK_WORTHY, translateOutputSchema } from "./ai-gateway";
+import {
+  AiGatewayError,
+  FALLBACK_WORTHY,
+  translateOutputSchema,
+  vehicleDocumentOutputSchema,
+} from "./ai-gateway";
 import { OpenRouterAiGateway, failureOf, strictJsonSchema } from "./openrouter-ai-gateway";
 import { MISSING_MODEL_PREFIX, TestAiGateway, testTranslation } from "./test-ai-gateway";
 
@@ -209,6 +214,47 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
       "provider",
       "response_format",
     ]);
+  });
+
+  it("sends a certificate photo inline, privately, with a schema that has no owner or address (TASK-057)", async () => {
+    const fields = {
+      documentKind: "kz_registration",
+      make: "GEELY",
+      model: "COOLRAY",
+      year: 2024,
+      vin: "L6T7844Z0RN001234",
+      plate: "777ABC02",
+      engineVolumeCc: 1477,
+      color: "СЕРЫЙ",
+    };
+    const { gateway, seen } = gatewayWith(() =>
+      answer({
+        model: MODEL,
+        usage: { prompt_tokens: 1200, completion_tokens: 60, cost: 0.0004 },
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(fields) } }],
+      }),
+    );
+    const image = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    const result = await gateway.readVehicleDocument(
+      { image, contentType: "image/jpeg" },
+      MODEL,
+      SIGNAL,
+    );
+    expect(vehicleDocumentOutputSchema.parse(result.output)).toEqual(fields);
+    const body = seen[0]!.body;
+    expect(body).toMatchObject({
+      model: MODEL,
+      provider: { zdr: true, data_collection: "deny", require_parameters: true },
+      response_format: { type: "json_schema", json_schema: { strict: true } },
+    });
+    const schema = JSON.stringify((body.response_format as { json_schema: unknown }).json_schema);
+    expect(schema).not.toMatch(/owner|address|series/i);
+    const user = (body.messages as { role: string; content: unknown }[]).find(
+      (message) => message.role === "user",
+    )!.content as { type: string; image_url?: { url: string } }[];
+    expect(user.find((part) => part.type === "image_url")?.image_url?.url).toBe(
+      `data:image/jpeg;base64,${Buffer.from(image).toString("base64")}`,
+    );
   });
 
   it("carries the term glossary with the texts, and sends nothing about terms without one", async () => {

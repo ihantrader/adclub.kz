@@ -24,6 +24,7 @@
   "src/modules/suppliers/supplier-members.integration.test.ts": 37,
   "src/modules/suppliers/suppliers.integration.test.ts": 20,
   "src/modules/users/admin-users.integration.test.ts": 13,
+  "src/modules/vehicle-document/vehicle-document.integration.test.ts": 40,
   "src/modules/vehicles/vehicles.integration.test.ts": 25,
   "src/observability/observability.integration.test.ts": 11
 }

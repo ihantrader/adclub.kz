@@ -22,6 +22,10 @@ export interface NewAccountCar {
   driveTypeLabel: string | null;
   modificationId: string | null;
   color: string | null;
+  vin?: string | null;
+  plate?: string | null;
+  documentStatus?: "shown" | "unconfirmed" | null;
+  documentAt?: Date | null;
   isPrimary: boolean;
   /** The key of the adding (`POST /garage/cars`); absent — none. */
   idempotencyKey?: string | null;
@@ -112,6 +116,19 @@ export class GarageStore {
       .set({ ...input, updatedAt: new Date() })
       .where(and(eq(accountCar.id, carId), eq(accountCar.accountId, accountId)))
       .returning();
+    return row;
+  }
+
+  /** Another car of the account with this VIN, if there is one. */
+  async findByVin(
+    accountId: string,
+    vin: string,
+    executor: DbExecutor,
+  ): Promise<AccountCarRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(accountCar)
+      .where(and(eq(accountCar.accountId, accountId), eq(accountCar.vin, vin)));
     return row;
   }
 

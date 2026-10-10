@@ -368,3 +368,32 @@ describe("TASK-009.A: a number in any position, and what is not a number", () =>
     expect(text).not.toMatch(/7011/);
   });
 });
+
+describe("VIN and registration plate (TASK-057)", () => {
+  const VIN = "L6T7844Z0RN001234";
+
+  it("masks a VIN and a plate inside free text", () => {
+    const text = sanitizeText(`car ${VIN} read; plate 777ABC02 or 777 ABC 02`);
+    expect(text).not.toContain(VIN);
+    expect(text).toContain("L6T**********1234");
+    expect(text).not.toContain("777ABC02");
+    expect(text).not.toContain("777 ABC 02");
+    expect(text).toContain("*** *** 02");
+  });
+
+  it("masks the values of vin and plate keys at any depth", () => {
+    const result = JSON.stringify(
+      sanitizeValue({ car: { vin: VIN, plate: "777 ABC 02", carVin: VIN, statePlate: "A123BCD" } }),
+    );
+    expect(result).not.toContain(VIN);
+    expect(result).not.toContain("777 ABC 02");
+    expect(result).not.toContain("A123BCD");
+  });
+
+  it("keeps identifiers and hashes that only look long", () => {
+    const uuid = "0b7f2c1e-9a3d-4e5f-8a6b-7c8d9e0f1a2b";
+    expect(sanitizeText(`car ${uuid}`)).toBe(`car ${uuid}`);
+    const hash = "ab12cd34ef56ab78cd90ef12ab34cd56";
+    expect(sanitizeText(`checksum ${hash}`)).toBe(`checksum ${hash}`);
+  });
+});

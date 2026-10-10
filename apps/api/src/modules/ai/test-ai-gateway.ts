@@ -6,7 +6,9 @@ import {
   type AiResult,
   type TranslateInput,
   type TranslateItem,
+  type VehicleDocumentInput,
 } from "./ai-gateway";
+import { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 
 const TRANSLITERATION: Readonly<Record<string, string>> = {
   а: "a",
@@ -109,6 +111,8 @@ export class TestAiGateway extends AiGateway {
   override: ((item: TranslateItem, lang: "kk" | "en") => string | undefined) | undefined;
   /** Models the provider refuses, beyond `missing/…` (tests of the fallback). */
   failingModels = new Set<string>();
+  /** Every certificate photo received: its size and the model, never the picture (TASK-057). */
+  readonly documentRequests: { bytes: number; model: string }[] = [];
 
   async translate(input: TranslateInput, model: string, signal: AbortSignal): Promise<AiResult> {
     this.requests.push({ input, model });
@@ -154,6 +158,72 @@ export class TestAiGateway extends AiGateway {
         tokensIn,
         tokensOut,
         // `no_cost`: a provider that did not say what the call cost.
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
+  }
+
+  /**
+   * Reads a synthetic sample by its control strip (`test-vehicle-documents.ts`):
+   * the fields of that sample, `unreadable` for a photo without a strip. The
+   * photo is looked at and dropped — only its size is remembered, for tests.
+   */
+  async readVehicleDocument(
+    input: VehicleDocumentInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    this.documentRequests.push({ bytes: input.image.length, model });
+    if (model.startsWith(MISSING_MODEL_PREFIX) || this.failingModels.has(model)) {
+      throw new AiGatewayError("model_unavailable", `The test AI provider has no model ${model}`);
+    }
+    switch (this.mode) {
+      case "unavailable":
+        throw new AiGatewayError("unavailable", "The test AI provider is unavailable");
+      case "rejected":
+        throw new AiGatewayError("rejected", "The test AI provider refuses the request");
+      case "no_private_provider":
+        throw new AiGatewayError(
+          "no_private_provider",
+          "No provider of this model keeps requests unstored, so nothing was sent",
+        );
+      case "slow":
+        await this.wait(this.delayMs, signal);
+        break;
+      default:
+        break;
+    }
+    const none = {
+      make: null,
+      model: null,
+      year: null,
+      vin: null,
+      plate: null,
+      engineVolumeCc: null,
+      color: null,
+    };
+    let output: Record<string, unknown>;
+    if (this.mode === "unreadable") {
+      output = { documentKind: "unreadable", ...none };
+    } else if (this.mode === "other_document") {
+      output = { documentKind: "other_document", ...none };
+    } else {
+      const code = await readSampleMarker(input.image);
+      const sample = code === null ? undefined : TEST_VEHICLE_DOCUMENTS[code];
+      output = sample ? { ...sample } : { documentKind: "unreadable", ...none };
+    }
+    // A picture is about a thousand tokens for a vision model; the price is make-believe.
+    const tokensIn = 1_100;
+    const tokensOut = 80;
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    return {
+      output,
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
         costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
       },
     };

@@ -76,6 +76,22 @@ export class RateLimiterService {
     };
   }
 
+  /**
+   * The count of a window without counting anything (TASK-057: «осталось
+   * попыток» is shown before the first attempt): 0 — no window is open.
+   */
+  async peek(key: string): Promise<{ count: number; retryAfterSeconds: number }> {
+    const fullKey = KEY_PREFIX + key;
+    const [value, ttlMs] = await this.run(() =>
+      Promise.all([this.redis.client.get(fullKey), this.redis.client.pttl(fullKey)]),
+    );
+    const count = value === null ? 0 : Number(value);
+    return {
+      count: Number.isFinite(count) ? count : 0,
+      retryAfterSeconds: ttlMs > 0 ? Math.ceil(ttlMs / 1000) : 0,
+    };
+  }
+
   /** Takes back one hit, e.g. when the counted action didn't happen. */
   async refund(key: string): Promise<void> {
     await this.run(() => this.redis.client.eval(REFUND_SCRIPT, 1, KEY_PREFIX + key));

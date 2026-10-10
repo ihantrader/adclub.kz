@@ -34,7 +34,17 @@ const TRAILER = "Contract-Breaking-Change";
 const repoRoot = resolve(__dirname, "..", "..", "..");
 
 function git(args: string[]): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
+  // The document outgrew the 1 MB default of `maxBuffer` (TASK-057): `git show`
+  // of it then failed, and a failure read as «no document at the base» — the
+  // check skipped itself without a word. Room for the document to keep growing.
+  const result = spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.error) {
+    throw result.error;
+  }
   return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
 }
 

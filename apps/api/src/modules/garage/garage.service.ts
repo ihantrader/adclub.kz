@@ -3,18 +3,24 @@ import {
   CAR_COLOR_IDS,
   type AccountCar,
   type AddGarageCarBody,
+  type CarDocumentInput,
   type CarLevels,
   type GarageCarsResponse,
   type SaveGarageCarBody,
   type TransferGarageBody,
   type TransferGarageResponse,
 } from "@adclub/contracts";
+import { checkVin, normalizeKzPlate, normalizeVin } from "@adclub/domain";
 import { DatabaseService } from "../../database";
 import { AppSettings } from "../settings";
+import { DocumentProofs } from "../vehicle-document";
 import {
   garageCarNotFound,
+  garageFieldInvalid,
   garageLimitReached,
+  garageVinTaken,
   isVehicleReferenceViolation,
+  isVinTakenViolation,
   vehicleReferenceInvalid,
 } from "./garage-errors";
 import { sameLevels } from "./garage-merge";
@@ -70,10 +76,52 @@ function toAccountCar(row: AccountCarRow): AccountCar {
     drive: row.driveTypeId ? { id: row.driveTypeId, label: row.driveTypeLabel ?? "" } : null,
     modificationId: row.modificationId,
     color,
+    vin: row.vin,
+    plate: row.plate,
+    document:
+      row.documentStatus && row.documentAt
+        ? { status: row.documentStatus, at: row.documentAt.toISOString() }
+        : null,
     isPrimary: row.isPrimary,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/**
+ * A VIN of the body (T-GAR-07): left out — `undefined` (unchanged), `null`
+ * or empty — cleared, otherwise checked and kept compact in upper case. A
+ * VIN that is not one is refused, never corrected.
+ */
+function vinOf(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim() === "") return null;
+  const checked = checkVin(value);
+  if (!checked.ok) {
+    throw garageFieldInvalid(
+      "vin",
+      checked.reason === "length"
+        ? "A VIN is 17 characters"
+        : "A VIN is letters and digits without I, O and Q",
+    );
+  }
+  return checked.vin;
+}
+
+/** A plate of the body: as on a Kazakhstan plate, kept compact (T-GAR-07). */
+function plateOf(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim() === "") return null;
+  const plate = normalizeKzPlate(value);
+  if (plate === null) {
+    throw garageFieldInvalid("plate", "Not a Kazakhstan registration plate");
+  }
+  return plate;
+}
+
+interface DocumentMark {
+  documentStatus: "shown" | "unconfirmed";
+  documentAt: Date;
 }
 
 /**
@@ -83,6 +131,11 @@ function toAccountCar(row: AccountCarRow): AccountCar {
  * method takes the account id from the authenticated session
  * (`@CurrentSession()`), never from the request body — a car cannot be
  * added to, or read from, anyone else's garage.
+ *
+ * With TASK-057 (D-064, ARCHITECTURE 4.58) a car carries its VIN, its plate
+ * and the mark about its document: «документ показан» only with a proof the
+ * recognition signed, «документ не подтверждён» for a car chosen from the
+ * list. One VIN is one car within a garage.
  */
 @Injectable()
 export class GarageService {
@@ -91,6 +144,7 @@ export class GarageService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(GarageStore) private readonly store: GarageStore,
     @Inject(AppSettings) private readonly settings: AppSettings,
+    @Inject(DocumentProofs) private readonly proofs: DocumentProofs,
   ) {}
 
   async list(accountId: string): Promise<GarageCarsResponse> {
@@ -103,17 +157,44 @@ export class GarageService {
    * vehicle catalog (the migration's own comment explains why the other
    * levels aren't); a client that names one that doesn't (or no longer)
    * exist gets a plain `VALIDATION_ERROR` naming the level, not a raw
-   * database error.
+   * database error. A VIN another car took in a race the lock did not
+   * cover is the same `GARAGE_VIN_TAKEN` as one found beforehand.
    */
-  private async withVehicleReferenceCheck<T>(action: () => Promise<T>): Promise<T> {
+  private async withReferenceChecks<T>(action: () => Promise<T>): Promise<T> {
     try {
       return await action();
     } catch (error) {
       if (isVehicleReferenceViolation(error)) {
         throw vehicleReferenceInvalid(error);
       }
+      if (isVinTakenViolation(error)) {
+        throw garageVinTaken(null);
+      }
       throw error;
     }
+  }
+
+  /**
+   * The mark a new car gets from what the app said: `shown` with a proof
+   * the server signed (the moment is the proof's), `unconfirmed` now, or
+   * none. A proof that does not check out is refused (`strict`), or — in a
+   * transfer, which must never fail a sign-in — read as `unconfirmed`.
+   */
+  private markOf(
+    input: CarDocumentInput | null | undefined,
+    path: string,
+    strict: boolean,
+  ): DocumentMark | null {
+    if (!input) return null;
+    if (input.status === "unconfirmed") {
+      return { documentStatus: "unconfirmed", documentAt: new Date() };
+    }
+    const at = this.proofs.read(input.proof);
+    if (at) return { documentStatus: "shown", documentAt: at };
+    if (strict) {
+      throw garageFieldInvalid(path, "The proof of the document was not issued by this server");
+    }
+    return { documentStatus: "unconfirmed", documentAt: new Date() };
   }
 
   /**
@@ -126,8 +207,11 @@ export class GarageService {
    * `account_car_idempotency_key` holds the rule in the database as well.
    */
   async add(accountId: string, body: AddGarageCarBody): Promise<AccountCar> {
+    const vin = vinOf(body.vin) ?? null;
+    const plate = plateOf(body.plate) ?? null;
+    const mark = this.markOf(body.document, "document.proof", true);
     const limit = await this.settings.get("garage_max_cars");
-    return this.withVehicleReferenceCheck(() =>
+    return this.withReferenceChecks(() =>
       this.database.db.transaction(async (tx) => {
         await this.store.lockAccount(accountId, tx);
         if (body.idempotencyKey) {
@@ -138,11 +222,18 @@ export class GarageService {
         if (count >= limit) {
           throw garageLimitReached(limit);
         }
+        if (vin) {
+          const holder = await this.store.findByVin(accountId, vin, tx);
+          if (holder) throw garageVinTaken(holder.id);
+        }
         const row = await this.store.insert(
           {
             accountId,
             ...levelsOf(body.levels, body.modificationId),
             color: body.color,
+            vin,
+            plate,
+            ...(mark ?? {}),
             idempotencyKey: body.idempotencyKey ?? null,
             // The first car of an empty garage is primary by itself — the
             // same rule as the device (mobile ARCHITECTURE 4.38 I397).
@@ -155,14 +246,38 @@ export class GarageService {
     );
   }
 
+  /**
+   * A change of a car: the levels and the colour are replaced; the VIN and
+   * the plate only when the body names them (an app from before TASK-057
+   * does not, and must not wipe them); the mark only rises — a proof makes
+   * it «документ показан» («Подтвердить техпаспортом»), nothing takes it
+   * back.
+   */
   async update(accountId: string, carId: string, body: SaveGarageCarBody): Promise<AccountCar> {
-    const row = await this.withVehicleReferenceCheck(() =>
-      this.store.updateLevels(
-        accountId,
-        carId,
-        { ...levelsOf(body.levels, body.modificationId), color: body.color },
-        this.database.db,
-      ),
+    const vin = vinOf(body.vin);
+    const plate = plateOf(body.plate);
+    const mark =
+      body.document?.status === "shown" ? this.markOf(body.document, "document.proof", true) : null;
+    const row = await this.withReferenceChecks(() =>
+      this.database.db.transaction(async (tx) => {
+        await this.store.lockAccount(accountId, tx);
+        if (vin) {
+          const holder = await this.store.findByVin(accountId, vin, tx);
+          if (holder && holder.id !== carId) throw garageVinTaken(holder.id);
+        }
+        return this.store.updateLevels(
+          accountId,
+          carId,
+          {
+            ...levelsOf(body.levels, body.modificationId),
+            color: body.color,
+            ...(vin === undefined ? {} : { vin }),
+            ...(plate === undefined ? {} : { plate }),
+            ...(mark ?? {}),
+          },
+          tx,
+        );
+      }),
     );
     if (!row) {
       throw garageCarNotFound();
@@ -208,12 +323,16 @@ export class GarageService {
   /**
    * Merges a device's guest garage into the account's own, without
    * duplicates (requirement 2), idempotent (calling it again with the same
-   * cars changes nothing): each submitted car is compared, by levels only
-   * (never colour), against every car the account already has and every
-   * car this same call has already added; a match adds nothing. The
-   * account row is locked for the whole transaction, so two devices of one
-   * person transferring at the same moment merge one after the other, not
-   * into two racing copies (edge case, TASK-029).
+   * cars changes nothing): each submitted car is compared against every car
+   * the account already has and every car this same call has already added;
+   * a match adds nothing. «The same car» is the same VIN when both cars
+   * have one (TASK-057), and otherwise the same levels (never colour) —
+   * unless the two VINs differ, which makes them two cars. A match takes
+   * what the account's car lacks: a VIN and a plate it has none of, and a
+   * mark that rises («документ показан» over none or «не подтверждён»).
+   * The account row is locked for the whole transaction, so two devices of
+   * one person transferring at the same moment merge one after the other,
+   * not into two racing copies (edge case, TASK-029).
    *
    * The primary stays whatever the account already had (the device's
    * choice counts only while the account has none); only an account with none yet
@@ -221,14 +340,15 @@ export class GarageService {
    * marked primary — the first one merged, so a garage that gains its first
    * car always ends up with exactly one primary.
    *
-   * Never refuses for the size limit: a sign-in must not fail over it
-   * (`garage_max_cars` is meant to be generous). If the account is already
-   * at the limit, cars beyond it are simply left untransferred; the device
-   * keeps them and a later transfer (after some are removed) picks them up.
+   * Never refuses — not for the size limit, not for a VIN, a plate or a
+   * proof that does not check out: a sign-in must not fail over a guest's
+   * car. If the account is already at the limit, cars beyond it are simply
+   * left untransferred; the device keeps them and a later transfer (after
+   * some are removed) picks them up.
    */
   async transfer(accountId: string, body: TransferGarageBody): Promise<TransferGarageResponse> {
     const limit = await this.settings.get("garage_max_cars");
-    return this.withVehicleReferenceCheck(() =>
+    return this.withReferenceChecks(() =>
       this.database.db.transaction(async (tx) => {
         await this.store.lockAccount(accountId, tx);
         const existing = await this.store.listByAccount(accountId, tx);
@@ -238,10 +358,21 @@ export class GarageService {
         let primaryCandidateId: string | null = null;
 
         for (const car of body.cars) {
-          const match = merged.find((row) => sameLevels(row, car.levels));
+          const vin = normalizeVin(car.vin);
+          const plate = normalizeKzPlate(car.plate);
+          const mark = this.markOf(car.document, "document.proof", false);
+          const match =
+            (vin ? merged.find((row) => row.vin === vin) : undefined) ??
+            merged.find(
+              (row) => sameLevels(row, car.levels) && !(row.vin && vin && row.vin !== vin),
+            );
           let resolvedId: string;
           if (match) {
             resolvedId = match.id;
+            const enriched = await this.enrich(accountId, match, merged, { vin, plate, mark }, tx);
+            if (enriched) {
+              merged[merged.indexOf(match)] = enriched;
+            }
           } else {
             if (merged.length >= limit) {
               // Generous limit reached mid-merge: leave the rest on the
@@ -253,6 +384,9 @@ export class GarageService {
                 accountId,
                 ...levelsOf(car.levels, car.modificationId),
                 color: car.color,
+                vin,
+                plate,
+                ...(mark ?? {}),
                 isPrimary: false,
               },
               tx,
@@ -279,4 +413,63 @@ export class GarageService {
       }),
     );
   }
+
+  /**
+   * What a guest's car brings to the account's same car in a transfer: a
+   * VIN and a plate it has none of (a VIN no other car of the account holds),
+   * and a mark that rises. `null` — nothing to change.
+   */
+  private async enrich(
+    accountId: string,
+    row: AccountCarRow,
+    merged: readonly AccountCarRow[],
+    guest: { vin: string | null; plate: string | null; mark: DocumentMark | null },
+    tx: Parameters<GarageStore["updateLevels"]>[3],
+  ): Promise<AccountCarRow | null> {
+    const changes: Partial<NewAccountCar> = {};
+    if (!row.vin && guest.vin && !merged.some((other) => other.vin === guest.vin)) {
+      changes.vin = guest.vin;
+    }
+    if (!row.plate && guest.plate) {
+      changes.plate = guest.plate;
+    }
+    const rises =
+      guest.mark &&
+      (row.documentStatus === null ||
+        (row.documentStatus === "unconfirmed" && guest.mark.documentStatus === "shown"));
+    if (rises && guest.mark) {
+      changes.documentStatus = guest.mark.documentStatus;
+      changes.documentAt = guest.mark.documentAt;
+    }
+    if (Object.keys(changes).length === 0) return null;
+    const updated = await this.store.updateLevels(
+      accountId,
+      row.id,
+      { ...levelsOfRow(row), color: row.color, ...changes },
+      tx,
+    );
+    return updated ?? null;
+  }
+}
+
+/** A row's own levels, to write back unchanged next to the fields a transfer adds. */
+function levelsOfRow(row: AccountCarRow): Omit<NewAccountCar, "accountId" | "isPrimary" | "color"> {
+  return {
+    makeId: row.makeId,
+    makeLabel: row.makeLabel,
+    modelId: row.modelId,
+    modelLabel: row.modelLabel,
+    year: row.year,
+    generationId: row.generationId,
+    generationLabel: row.generationLabel,
+    bodyTypeId: row.bodyTypeId,
+    bodyTypeLabel: row.bodyTypeLabel,
+    engineId: row.engineId,
+    engineLabel: row.engineLabel,
+    transmissionTypeId: row.transmissionTypeId,
+    transmissionTypeLabel: row.transmissionTypeLabel,
+    driveTypeId: row.driveTypeId,
+    driveTypeLabel: row.driveTypeLabel,
+    modificationId: row.modificationId,
+  };
 }

@@ -1,4 +1,5 @@
 import { Module, type DynamicModule } from "@nestjs/common";
+import { DocumentProofs } from "../vehicle-document";
 import { GarageController } from "./garage.controller";
 import { GarageService } from "./garage.service";
 import { GarageStore } from "./garage.store";
@@ -17,7 +18,9 @@ export class GarageModule {
     return {
       module: GarageModule,
       controllers: options.http ? [GarageController] : [],
-      providers: [GarageStore, GarageService],
+      // `DocumentProofs` has no state but a key derived from the config: the
+      // garage checks the proof a car is saved with (TASK-057) with its own.
+      providers: [GarageStore, GarageService, DocumentProofs],
       exports: [GarageService],
     };
   }

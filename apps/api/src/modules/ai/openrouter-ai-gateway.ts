@@ -3,11 +3,13 @@ import {
   AiGateway,
   AiGatewayError,
   translateOutputSchema,
+  vehicleDocumentOutputSchema,
   type AiFailureKind,
   type AiResult,
   type AiUsage,
   type TranslateGlossaryEntry,
   type TranslateInput,
+  type VehicleDocumentInput,
 } from "./ai-gateway";
 
 /**
@@ -150,6 +152,36 @@ const TRANSLATE_FORMAT = {
   },
 } as const;
 
+const VEHICLE_DOCUMENT_SYSTEM = `You read a photo of a vehicle registration certificate of the Republic of Kazakhstan (Russian: «Свидетельство о регистрации транспортного средства», Kazakh: «Көлік құралын тіркеу туралы куәлік») — the card form issued since 2018 or the older paper form. The labels are in Kazakh and Russian.
+
+Decide documentKind first:
+- kz_registration — a Kazakhstan vehicle registration certificate (either form) with its vehicle data visible;
+- other_document — any other document: a driving licence, an identity card, a passport, insurance, or a vehicle registration certificate of another country (for example the Russian «СТС», whose plates look like А123ВС77);
+- not_document — not a document at all;
+- unreadable — it may be the certificate, but it cannot be read.
+
+Only when documentKind is kz_registration, copy these fields exactly as written; otherwise every field is null:
+- make and model — the field «Марка, модель / Маркасы, моделі», split into the manufacturer (make) and the model;
+- year — the year of manufacture («Год выпуска / Шығарылған жылы»);
+- vin — the VIN / identification number, 17 characters, copied character by character. A VIN never contains the letters I, O or Q: a round character in it is the digit 0, a vertical stroke is the digit 1. Tell Z from 2 and S from 5 by their shape; if any character can't be told for sure, vin is null;
+- plate — the state registration number («Государственный регистрационный номер / Мемлекеттік тіркеу нөмірі»), e.g. 123ABC02;
+- engineVolumeCc — the engine capacity in cm³ («Объём двигателя / Қозғалтқыштың көлемі»), as a whole number;
+- color — the colour («Цвет / Түсі») as written.
+
+A field that is absent, covered, cut off or not clearly legible is null — never guess a character, and never fill a field from another one. Do not report the owner, the address, the series or number of the certificate or any other field.`;
+
+/** The longest answer reading a certificate may produce (a reasoning model thinks within it). */
+const VEHICLE_DOCUMENT_MAX_TOKENS = 4_000;
+
+const VEHICLE_DOCUMENT_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "vehicle_registration_certificate",
+    strict: true,
+    schema: strictJsonSchema(vehicleDocumentOutputSchema),
+  },
+} as const;
+
 export interface OpenRouterOptions {
   /** Tests give their own HTTP layer; nothing in development, tests or CI calls the real service. */
   fetch?: typeof fetch;
@@ -191,6 +223,38 @@ export class OpenRouterAiGateway extends AiGateway {
           {
             role: "user",
             content: `${glossaryText(input.glossary)}Translate these items:\n${JSON.stringify(request)}`,
+          },
+        ],
+      },
+      signal,
+    );
+  }
+
+  /**
+   * The photo goes inline as a data URL, in this one request and nowhere
+   * else (TASK-057): OpenRouter routes it only to an endpoint that keeps
+   * nothing (D-057, `PRIVATE_ROUTING`), and `require_parameters` keeps it
+   * away from an endpoint of the model that does not take images.
+   */
+  async readVehicleDocument(
+    input: VehicleDocumentInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    const dataUrl = `data:${input.contentType};base64,${Buffer.from(input.image).toString("base64")}`;
+    return this.complete(
+      {
+        model,
+        max_tokens: VEHICLE_DOCUMENT_MAX_TOKENS,
+        response_format: VEHICLE_DOCUMENT_FORMAT,
+        messages: [
+          { role: "system", content: VEHICLE_DOCUMENT_SYSTEM },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Read this photo." },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
           },
         ],
       },

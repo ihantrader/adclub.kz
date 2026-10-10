@@ -29,6 +29,13 @@ export const accountCar = pgTable("account_car", {
   driveTypeLabel: text("drive_type_label"),
   modificationId: uuid("modification_id"),
   color: text("color"),
+  /** 17 characters, upper case (TASK-057, D-064). */
+  vin: text("vin"),
+  /** Compact, `123ABC02` / `A123BCD`. */
+  plate: text("plate"),
+  /** `shown` / `unconfirmed`; `null` — a car added before TASK-057. */
+  documentStatus: text("document_status").$type<"shown" | "unconfirmed">(),
+  documentAt: timestamp("document_at", { withTimezone: true }),
   /** The key of the adding that made this car (TASK-029.B); `null` — added without one. */
   idempotencyKey: uuid("idempotency_key"),
   isPrimary: boolean("is_primary").notNull().default(false),

@@ -17,6 +17,7 @@ import type {
   OrderItem,
   OrderItemWithPhoto,
   OrderTerms,
+  ServiceVisit,
   SupplierOrder,
   SupplierOrderSummary,
   SupplierScanOrder,
@@ -69,6 +70,12 @@ import { orderEvent, type OrderEventRow, type OrderRow } from "./schema";
  * (`phone_revealed_at` is set by exactly those two moves) — never while the
  * user is still deciding.
  *
+ * TASK-038: an order on a service shows every side the same visit
+ * (`serviceVisit`: the car of the snapshot, the time asked for, another time
+ * proposed with «ответьте до», the confirmed time and its window); the
+ * customer's phone reaches the supplier by «Подтвердить время» or by the
+ * user's «yes» to another time — the same two moves as under order.
+ *
  * TASK-023 adds two more views of the user's own orders, built by the
  * same hand: the saved copy of the active ones (`activeCopyEntries` — the
  * code, the QR and the way to the supplier, and nothing of the catalog)
@@ -91,11 +98,9 @@ function localizedName(
 }
 
 export function itemOf(row: OrderRow, lang: CatalogLanguage): OrderItem {
+  // A service is an item of its own type since TASK-038; its article and
+  // brand are `null` in the snapshot.
   const item = row.offerSnapshot.item;
-  if (item.type === "service") {
-    // Orders refuse offers on services until TASK-038 brings their own kind.
-    throw new Error(`The order ${row.id} holds a service, which orders don't take yet`);
-  }
   return {
     id: item.id,
     type: item.type,
@@ -189,6 +194,35 @@ function onOrderTermOf(row: OrderRow): OnOrderTerm | null {
   };
 }
 
+/**
+ * The visit of an order on a service (TASK-038) — the same for the user,
+ * the supplier and the administrator: the car of the snapshot, the time
+ * asked for, another time proposed and until when the user answers, the
+ * confirmed time and the end of its window. Goods have none.
+ */
+function serviceVisitOf(row: OrderRow): ServiceVisit | null {
+  if (row.kind !== "service" || !row.carSnapshot || !row.desiredAt) {
+    return null;
+  }
+  return {
+    car: row.carSnapshot,
+    timeZone: row.offerSnapshot.location.timeZone,
+    desiredAt: iso(row.desiredAt),
+    proposed:
+      row.proposedAt !== null && row.termProposedAt !== null && row.termAnswerBy !== null
+        ? {
+            visitAt: iso(row.proposedAt),
+            at: iso(row.termProposedAt),
+            answerBy: iso(row.termAnswerBy),
+          }
+        : null,
+    confirmed:
+      row.visitAt !== null && row.visitUntil !== null && row.acceptedAt !== null
+        ? { visitAt: iso(row.visitAt), at: iso(row.acceptedAt), until: iso(row.visitUntil) }
+        : null,
+  };
+}
+
 function baseOf(row: OrderRow, lang: CatalogLanguage) {
   return {
     id: row.id,
@@ -206,6 +240,7 @@ function baseOf(row: OrderRow, lang: CatalogLanguage) {
     reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
     receiptOn: row.receiptOn,
     onOrderTerm: onOrderTermOf(row),
+    serviceVisit: serviceVisitOf(row),
     createdAt: iso(row.createdAt),
   };
 }
@@ -231,6 +266,7 @@ function detailsOf(payload: Record<string, unknown>): OrderEventDetails {
     "leadDays",
     "readyOn",
     "answerBy",
+    "visitAt",
   ] as const) {
     if (payload[key] !== undefined && payload[key] !== null) {
       details[key] = payload[key];
@@ -587,6 +623,10 @@ function mainDateOf(row: OrderRow): ActiveOrderMainDate | null {
   if (row.status === "term_proposed" && row.termAnswerBy) {
     return { kind: "answer_by", at: iso(row.termAnswerBy) };
   }
+  // TASK-038: a confirmed visit leads with its time.
+  if (row.status === "accepted" && row.visitAt) {
+    return { kind: "visit_at", at: iso(row.visitAt) };
+  }
   return row.status === "created" ? { kind: "respond_by", at: iso(row.respondBy) } : null;
 }
 
@@ -645,6 +685,7 @@ export async function activeCopyEntries(
       respondBy: iso(row.respondBy),
       reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
       onOrderTerm: onOrderTermOf(row),
+      serviceVisit: serviceVisitOf(row),
       createdAt: iso(row.createdAt),
       updatedAt: iso(row.updatedAt),
     };
@@ -711,8 +752,10 @@ export async function historyMonths(
       // (SCREENS M-ORD-03 «Правила», D-043).
       givenOut: givenOutOf(row),
       // Whether the same offer can be had right now is `GET /orders/{id}/repeat`.
+      // A service is not repeated until the checkout of TASK-039.B (`orderRepeatDecision`).
       canRepeat: row.kind === "stock" || row.kind === "on_order",
       canReview: reviewable(row),
+      serviceVisit: serviceVisitOf(row),
       createdAt: iso(row.createdAt),
     });
   }
@@ -728,7 +771,8 @@ export async function historyMonths(
  * `late_close_until`, and only while the order still holds its code).
  */
 function openLateCloseUntil(row: OrderRow, at: Date): string | null {
-  return row.status === "reserve_expired" &&
+  // TASK-038: an unresolved visit has the same window.
+  return (row.status === "reserve_expired" || row.status === "visit_unresolved") &&
     row.lateCloseUntil !== null &&
     row.codeReleasedAt === null &&
     at < row.lateCloseUntil
@@ -881,9 +925,13 @@ export async function adminOrderView(
       respondBy: iso(row.respondBy),
       reserveUntil: row.expiresAt ? iso(row.expiresAt) : null,
       lateCloseUntil:
-        row.status === "reserve_expired" && row.lateCloseUntil ? iso(row.lateCloseUntil) : null,
+        (row.status === "reserve_expired" || row.status === "visit_unresolved") &&
+        row.lateCloseUntil
+          ? iso(row.lateCloseUntil)
+          : null,
       termAnswerBy:
         row.status === "term_proposed" && row.termAnswerBy ? iso(row.termAnswerBy) : null,
+      visitUntil: row.status === "accepted" && row.visitUntil ? iso(row.visitUntil) : null,
     },
     cancellation:
       row.status === "cancelled_by_admin" && row.cancelledByAdminId && row.finishedAt
@@ -939,6 +987,7 @@ export function scanOrderView(row: OrderRow, lang: CatalogLanguage): SupplierSca
     fulfillment: row.fulfillment,
     item: itemOf(row, lang),
     receiptOn: row.receiptOn,
+    serviceVisit: serviceVisitOf(row),
     createdAt: iso(row.createdAt),
   };
 }

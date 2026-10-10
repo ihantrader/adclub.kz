@@ -1,4 +1,10 @@
-import type { OfferSnapshot, OrderFulfillment, OrderStatusValue } from "@adclub/contracts";
+import type {
+  OfferSnapshot,
+  OrderCar,
+  OrderFulfillment,
+  OrderKind,
+  OrderStatusValue,
+} from "@adclub/contracts";
 import { localDateTime } from "@adclub/domain";
 
 /**
@@ -108,6 +114,36 @@ export function termText(readyOn: string | null, leadDays: number, lang: NoticeL
 }
 
 /**
+ * The car of an order on a service for W-01b «{модель}» (TASK-038): make
+ * and model as the snapshot keeps them, the year when known — «Geely
+ * Coolray 2024».
+ */
+export function carText(car: OrderCar | null): string {
+  if (!car) {
+    return "—";
+  }
+  const text = oneLine(
+    [car.make.label, car.model.label, car.year === null ? "" : String(car.year)].join(" "),
+  );
+  return cut(text || "—", ITEM_MAX_LENGTH);
+}
+
+/**
+ * The date and the time of a visit for W-01b «{дата} в {время}» (TASK-038),
+ * in the point's time zone: «6 октября» / «6 қазан» and «15:00».
+ */
+export function visitTexts(
+  at: Date,
+  timeZone: string,
+  lang: NoticeLang,
+): { date: string; time: string } {
+  const local = localDateTime(at, timeZone);
+  const hours = String(Math.floor(local.minutes / 60)).padStart(2, "0");
+  const minutes = String(local.minutes % 60).padStart(2, "0");
+  return { date: termText(local.date, 0, lang), time: `${hours}:${minutes}` };
+}
+
+/**
  * A moment in the time zone of the pickup point: «18:30» when it is today
  * there, «27.09 18:30» otherwise — the deadline of a notice read late at
  * night must not look like the same evening.
@@ -148,6 +184,8 @@ export interface OrderStateFacts {
   handledBy: string | null;
   handledAt: Date | null;
   timeZone: string;
+  /** The kind of the order (TASK-038: «принята» of a service reads «время подтверждено»). */
+  kind?: OrderKind;
 }
 
 export function orderStateText(order: OrderStateFacts, lang: NoticeLang, now: Date): string {
@@ -155,10 +193,13 @@ export function orderStateText(order: OrderStateFacts, lang: NoticeLang, now: Da
     order.handledBy && order.handledAt
       ? `${verb[lang]}: ${cut(oneLine(order.handledBy), 60)}, ${momentText(order.handledAt, order.timeZone, now)}`
       : verb[lang];
+  const service = order.kind === "service";
   switch (order.status) {
     case "accepted":
     case "ready":
-      return who({ ru: "принята", kk: "қабылданған" });
+      return service
+        ? who({ ru: "время подтверждено", kk: "уақыты расталған" })
+        : who({ ru: "принята", kk: "қабылданған" });
     case "declined_by_supplier":
       return who({ ru: "отклонена", kk: "қабылданбаған" });
     case "completed":
@@ -170,12 +211,19 @@ export function orderStateText(order: OrderStateFacts, lang: NoticeLang, now: Da
     case "response_expired":
     case "reserve_expired":
     case "term_expired":
+    case "visit_unresolved":
       return lang === "kk" ? "мерзімі өткен" : "истекла";
+    // TASK-038: a colleague marked that the customer did not come.
+    case "no_show":
+      return lang === "kk" ? "клиент келмеген" : "отмечена неявка клиента";
     case "created":
       return lang === "kk" ? "жауап күтуде" : "ждёт ответа";
-    // TASK-037: a colleague proposed another term, the customer is to answer.
+    // TASK-037: a colleague proposed another term (TASK-038: another time),
+    // the customer is to answer.
     case "term_proposed":
-      return who({ ru: "предложен другой срок", kk: "басқа мерзім ұсынылған" });
+      return service
+        ? who({ ru: "предложено другое время", kk: "басқа уақыт ұсынылған" })
+        : who({ ru: "предложен другой срок", kk: "басқа мерзім ұсынылған" });
   }
 }
 

@@ -36,6 +36,7 @@ export type OrderCloseRefusal =
   | "declined_by_supplier"
   | "response_expired"
   | "term_expired"
+  | "no_show"
   | "late_window_passed";
 
 export type OrderCloseVerdict =
@@ -67,13 +68,18 @@ export function orderCloseVerdict(facts: OrderCloseFacts, at: Date): OrderCloseV
     case "completed":
       return { kind: "closed" };
     // The user never agreed to the proposed term: as an order the supplier
-    // never answered, it is never closed late (PRODUCT 10.7).
+    // never answered, it is never closed late (PRODUCT 10.7). TASK-038: nor
+    // is a visit the employee marked a no-show.
     case "cancelled_by_user":
     case "cancelled_by_admin":
     case "declined_by_supplier":
     case "response_expired":
     case "term_expired":
+    case "no_show":
       return { kind: "refused", reason: facts.status, at: facts.finishedAt };
+    // TASK-038: a visit nobody closed in its window has a late close window
+    // of its own, as an expired reserve (PRODUCT 10.7, ARCHITECTURE 6.5).
+    case "visit_unresolved":
     case "reserve_expired": {
       const until = facts.lateCloseUntil;
       // The window is a stored deadline, as every other one (13.4): a

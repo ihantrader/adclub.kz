@@ -38,6 +38,10 @@ export const supplierOrderMoves = [
   // TASK-037: another term for an order under order — from the cabinet only
   // (S-ORD-04; W-01a has «Подтвердить срок» and «Отказать»).
   "propose_term",
+  // TASK-038: another time of a service and a no-show — from the cabinet only
+  // (W-01b has «Подтвердить время» and «Отказать»).
+  "propose_time",
+  "mark_no_show",
 ] as const satisfies readonly OrderAction[];
 
 export type SupplierOrderMove = (typeof supplierOrderMoves)[number];

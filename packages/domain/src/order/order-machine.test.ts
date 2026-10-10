@@ -88,9 +88,45 @@ const onOrderAllowed: Allowed = [
   ["ready", "admin_cancel", "cancelled_by_admin"],
 ];
 
+/**
+ * Every allowed move of an order on a service (PRODUCT 11, ARCHITECTURE
+ * 6.3, TASK-038); anything else is refused.
+ */
+const serviceAllowed: Allowed = [
+  // «Подтвердить время» — the time the user asked for.
+  ["created", "accept", "accepted"],
+  ["created", "propose_time", "term_proposed"],
+  ["term_proposed", "agree_term", "accepted"],
+  ["term_proposed", "reject_term", "cancelled_by_user"],
+  ["term_proposed", "expire_term", "term_expired"],
+  ["created", "expire_no_response", "response_expired"],
+  ["created", "decline", "declined_by_supplier"],
+  // D-072 carried over, and `decline_after_confirm`.
+  ["term_proposed", "decline", "declined_by_supplier"],
+  ["accepted", "decline", "declined_by_supplier"],
+  ["created", "cancel", "cancelled_by_user"],
+  ["term_proposed", "cancel", "cancelled_by_user"],
+  ["accepted", "cancel", "cancelled_by_user"],
+  ["created", "admin_cancel", "cancelled_by_admin"],
+  ["term_proposed", "admin_cancel", "cancelled_by_admin"],
+  ["accepted", "admin_cancel", "cancelled_by_admin"],
+  ["accepted", "close", "completed"],
+  ["accepted", "mark_no_show", "no_show"],
+  ["accepted", "expire_visit", "visit_unresolved"],
+  ["visit_unresolved", "close_late", "completed"],
+  ["created", "admin_close", "completed"],
+  ["term_proposed", "admin_close", "completed"],
+  ["accepted", "admin_close", "completed"],
+  ["response_expired", "admin_close", "completed"],
+  ["term_expired", "admin_close", "completed"],
+  ["no_show", "admin_close", "completed"],
+  ["visit_unresolved", "admin_close", "completed"],
+];
+
 const allowedByKind: Record<OrderKind, Allowed> = {
   stock: stockAllowed,
   on_order: onOrderAllowed,
+  service: serviceAllowed,
 };
 
 describe("orderTransition", () => {
@@ -193,7 +229,40 @@ describe("orderTransition", () => {
     ]);
   });
 
+  it("knows no visit, no-show nor «ready» but for a service, and no other talk of time", () => {
+    for (const action of ["propose_time", "mark_no_show", "expire_visit"] as const) {
+      expect(orderActionSources(action, "stock"), action).toEqual([]);
+      expect(orderActionSources(action, "on_order"), action).toEqual([]);
+    }
+    // A service is never «ready» and has no reserve; it never proposes a term.
+    for (const action of ["mark_ready", "expire_reserve", "propose_term"] as const) {
+      expect(orderActionSources(action, "service"), action).toEqual([]);
+    }
+    for (const status of ["no_show", "visit_unresolved"] as const) {
+      expect(orderTransition(status, "close_late", "stock"), status).toBeNull();
+      expect(orderTransition(status, "admin_close", "on_order"), status).toBeNull();
+    }
+  });
+
+  it("confirms a service's time only by the supplier or the user's «yes»", () => {
+    const toAccepted = orderActions.filter((action) =>
+      orderStatuses.some((from) => orderTransition(from, action, "service") === "accepted"),
+    );
+    expect([...toAccepted]).toEqual(["accept", "agree_term"]);
+    expect(orderTransition("term_proposed", "accept", "service")).toBeNull();
+    expect(orderTransition("term_proposed", "propose_time", "service")).toBeNull();
+    expect(orderTransition("term_proposed", "close", "service")).toBeNull();
+    // A no-show and an unresolved visit come only from a confirmed time.
+    expect(orderActionSources("mark_no_show", "service")).toEqual(["accepted"]);
+    expect(orderActionSources("expire_visit", "service")).toEqual(["accepted"]);
+    // Only an unresolved visit is closed late — never a no-show (D-043 is the administrator's).
+    expect(orderActionSources("close_late", "service")).toEqual(["visit_unresolved"]);
+  });
+
   it("names the actor of each action", () => {
+    expect(orderActionActor.propose_time).toBe("supplier");
+    expect(orderActionActor.mark_no_show).toBe("supplier");
+    expect(orderActionActor.expire_visit).toBe("system");
     expect(orderActionActor.accept).toBe("supplier");
     expect(orderActionActor.cancel).toBe("user");
     expect(orderActionActor.expire_reserve).toBe("system");
@@ -244,14 +313,16 @@ describe("orderTransition", () => {
     for (const status of orderStatuses) {
       expect(orderNeedsAnswer(status), status).toBe(status === "term_proposed");
     }
-    // The user's answer is exactly the moves out of these statuses that are theirs.
+    // The user's answer is exactly the moves out of these statuses that are
+    // theirs — another term under order and another time of a service alike.
     for (const status of answerAwaitingOrderStatuses) {
-      const userMoves = orderActions.filter(
-        (action) =>
-          orderActionActor[action] === "user" &&
-          orderTransition(status, action, "on_order") !== null,
-      );
-      expect(userMoves).toEqual(["cancel", "agree_term", "reject_term"]);
+      for (const kind of ["on_order", "service"] as const) {
+        const userMoves = orderActions.filter(
+          (action) =>
+            orderActionActor[action] === "user" && orderTransition(status, action, kind) !== null,
+        );
+        expect(userMoves, kind).toEqual(["cancel", "agree_term", "reject_term"]);
+      }
     }
   });
 });

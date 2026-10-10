@@ -1225,7 +1225,7 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
       expectError(await propose(shop, order.id, 5), 409, "ORDER_KIND_NOT_SUPPORTED");
     });
 
-    it("an offer on a service isn't ordered yet (TASK-019; its order is TASK-038)", async () => {
+    it("an offer on a service is no order of goods: it needs a car and a time (TASK-038)", async () => {
       const shop = await company("Сервис");
       await db.query("UPDATE supplier SET type = 'services' WHERE id = $1", [shop.supplierId]);
       const { rows } = await db.query<{ id: string }>(
@@ -1238,17 +1238,17 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
       );
       expect(service.showcase.visible).toBe(true);
       const who = await customer();
-      expectError(
-        await who.as("post", "/orders", {
-          offerId: service.id,
-          quantity: 1,
-          fulfillment: "pickup",
-          expectedPrice: 7_000,
-          idempotencyKey: randomUUID(),
-        }),
-        409,
-        "ORDER_KIND_NOT_SUPPORTED",
-      );
+      // Ordered as goods — without a car and a time — it is refused at the
+      // field; the orders on services themselves are service-orders.integration.test.ts.
+      const asGoods = await who.as("post", "/orders", {
+        offerId: service.id,
+        quantity: 1,
+        fulfillment: "pickup",
+        expectedPrice: 7_000,
+        idempotencyKey: randomUUID(),
+      });
+      expectError(asGoods, 400, "VALIDATION_ERROR");
+      expect(asGoods.body.details).toEqual([expect.objectContaining({ path: "carId" })]);
       const { rows: orders } = await db.query("SELECT count(*)::int AS n FROM customer_order");
       expect(orders[0]).toEqual({ n: 0 });
     });

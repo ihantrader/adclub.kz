@@ -5,6 +5,7 @@ import type {
   OrderDeclineReason,
   OrderEventAction,
   OrderFulfillment,
+  OrderCar,
   OrderKind,
   OrderStatusValue,
 } from "@adclub/contracts";
@@ -104,6 +105,20 @@ export const customerOrder = pgTable("customer_order", {
   confirmedLeadDays: integer("confirmed_lead_days"),
   supplyOverdueAt: timestamp("supply_overdue_at", { withTimezone: true }),
   supplyOverdueNotedAt: timestamp("supply_overdue_noted_at", { withTimezone: true }),
+  /**
+   * TASK-038, an order on a service: the car of the garage it is for (gone
+   * with the car — the order lives by its snapshot) and the snapshot of
+   * make, model and year; the time asked for, another time an employee
+   * proposed (the proposal and the user's answer deadline are
+   * `termProposedAt` and `termAnswerBy`), the time of the visit once
+   * confirmed and the end of its window.
+   */
+  carId: uuid("car_id"),
+  carSnapshot: jsonb("car_snapshot").$type<OrderCar>(),
+  desiredAt: timestamp("desired_at", { withTimezone: true }),
+  proposedAt: timestamp("proposed_at", { withTimezone: true }),
+  visitAt: timestamp("visit_at", { withTimezone: true }),
+  visitUntil: timestamp("visit_until", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -17,13 +17,16 @@ import {
   type DeclineOrderBody,
   type DeclineOrderResponse,
   type OfferSnapshot,
+  type OfferVisitOptions,
   type OrderStatusValue,
   type ProposeOrderTermBody,
+  type ProposeOrderTimeBody,
   type RepeatOrderResponse,
   type SupplierOrder,
   type SupplierOrderListQuery,
   type SupplierOrderPage,
   type SupplierOrderTermOptions,
+  type SupplierOrderTimeOptions,
   type UserOrder,
   type UserOrderHistoryPage,
   type UserOrderHistoryQuery,
@@ -35,14 +38,21 @@ import {
   isActiveOrderStatus,
   isRegistrationComplete,
   leadDaysForDate,
+  noShowVerdict,
   orderNeedsAnswer,
   proposedTermProblem,
   readAdminQuery,
   receiptDate,
+  servicePriceForCar,
+  serviceRespondBy,
   termAnswerBy,
   termOptions,
+  visitDays,
+  visitTimeProblem,
   type OrderKind,
   type TermOption,
+  type VisitDay,
+  type VisitTimeProblem,
 } from "@adclub/domain";
 import {
   and,
@@ -66,8 +76,9 @@ import { Metrics } from "../../observability";
 import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { CatalogPhotosService, decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
+import { accountCar, type AccountCarRow } from "../garage";
 import { AccountStore, supplier, supplierMember } from "../identity";
-import { offer, offerShowcase, OfferSnapshots, receiptSchedules } from "../offers";
+import { offer, offerShowcase, OfferSnapshots, receiptSchedules, servicePricings } from "../offers";
 import { AppSettings } from "../settings";
 import { newConfirmationCode, newQrToken } from "./order-code";
 import {
@@ -75,6 +86,7 @@ import {
   fulfillmentUnavailable,
   idempotencyMismatch,
   kindNotSupported,
+  noShowTooEarly,
   notFound,
   offerUnavailable,
   priceChanged,
@@ -122,12 +134,14 @@ const CODE_ATTEMPTS = 20;
 const ACTIVE = [...activeOrderStatuses] as OrderStatusValue[];
 
 /**
- * The kind of order an offer makes (TASK-037); `null` — none the server can
- * make yet: an offer on a service (TASK-019) — its order is TASK-038.
+ * The kind of order an offer makes: an offer on a service makes an order on
+ * a service (TASK-038), an offer under order — one under order (TASK-037),
+ * an offer in stock — one in stock; `null` — an availability the server
+ * does not know.
  */
 function orderKindOf(offer: { availability: string; itemType: string }): OrderKind | null {
   if (offer.itemType === "service") {
-    return null;
+    return "service";
   }
   if (offer.availability === "in_stock") {
     return "stock";
@@ -135,16 +149,27 @@ function orderKindOf(offer: { availability: string; itemType: string }): OrderKi
   return offer.availability === "on_order" ? "on_order" : null;
 }
 
+/** What a problem of the time of a visit is told at its field (TASK-038). */
+const VISIT_TIME_PROBLEMS: Record<VisitTimeProblem, string> = {
+  not_whole_minute: "A whole minute, without seconds",
+  past: "The time has passed: choose a later one",
+  too_far: "Too far ahead (service_booking_horizon_days)",
+  hours_not_set: "The point has no working hours: no visit can be booked",
+  closed_date: "The point is closed that day",
+  outside_hours: "Outside the point's working hours",
+};
+
 /**
  * The deadline of an active order: the end of its pickup reserve once
- * there is one, the user's answer to another term while it is due
- * (TASK-037), the supplier's answer deadline otherwise. The saved copy is
- * cut by it — a user with more active orders than fit gets the ones that
- * run out first (TASK-023 requirement 1).
+ * there is one, the user's answer to another term (or time) while it is
+ * due (TASK-037), the time of a confirmed visit (TASK-038), the supplier's
+ * answer deadline otherwise. The saved copy is cut by it — a user with
+ * more active orders than fit gets the ones that run out first (TASK-023
+ * requirement 1).
  */
 const DEADLINE_AT = sql`CASE WHEN ${customerOrder.status} = 'term_proposed'
   THEN ${customerOrder.termAnswerBy}
-  ELSE coalesce(${customerOrder.expiresAt}, ${customerOrder.respondBy}) END`;
+  ELSE coalesce(${customerOrder.expiresAt}, ${customerOrder.visitAt}, ${customerOrder.respondBy}) END`;
 
 /**
  * How many orders above the limit are read for the copy: some of them may
@@ -165,7 +190,7 @@ function inCardOrder(rows: readonly OrderRow[]): OrderRow[] {
   const deadline = (row: OrderRow) =>
     (row.status === "term_proposed" && row.termAnswerBy
       ? row.termAnswerBy
-      : (row.expiresAt ?? row.respondBy)
+      : (row.expiresAt ?? row.visitAt ?? row.respondBy)
     ).getTime();
   return [...rows].sort(
     (a, b) => rank(a) - rank(b) || deadline(a) - deadline(b) || (a.id < b.id ? -1 : 1),
@@ -260,6 +285,14 @@ export class OrdersService {
     if (input.quantity > maxQuantity) {
       throw validationError("quantity", `At most ${String(maxQuantity)} items in one order`);
     }
+    // The fields of goods and of a service (TASK-038) can't be mixed up; the
+    // kind itself is the offer's, known in the transaction.
+    if ((input.carId === undefined) !== (input.desiredAt === undefined)) {
+      throw validationError(
+        input.carId === undefined ? "carId" : "desiredAt",
+        "An order on a service names the car and the time together",
+      );
+    }
     // The same order sent again (a double tap, a repeat after a lost
     // answer) finds the first one: no second order, no second count.
     const replay = await this.byKey(this.database.db, accountId, input.idempotencyKey);
@@ -330,6 +363,7 @@ export class OrdersService {
         itemId: offer.itemId,
         itemType: offer.itemType,
         price: offer.price,
+        priceMode: offer.priceMode,
         availability: offer.availability,
         pickup: offer.pickup,
         delivery: offer.delivery,
@@ -342,17 +376,29 @@ export class OrdersService {
       throw offerUnavailable();
     }
     // TASK-037: an offer under order makes an order under order — the same
-    // order with a term (ARCHITECTURE 6.2). A kind the server can't order yet
-    // (services, TASK-038) would still be refused here.
+    // order with a term (ARCHITECTURE 6.2); TASK-038: an offer on a service —
+    // an order on a service, a visit at a time for a car (6.3).
     const kind = orderKindOf(current);
     if (kind === null) {
       throw kindNotSupported();
     }
-    if (!(input.fulfillment === "pickup" ? current.pickup : current.delivery)) {
-      throw fulfillmentUnavailable();
+    const service =
+      kind === "service" ? await this.visitOf(tx, input, accountId, current, at) : null;
+    if (service === null) {
+      if (input.carId !== undefined) {
+        throw validationError("carId", "Goods are ordered without a car and a time");
+      }
+      if (input.fulfillment === undefined) {
+        throw validationError("fulfillment", "Pickup or delivery");
+      }
+      if (!(input.fulfillment === "pickup" ? current.pickup : current.delivery)) {
+        throw fulfillmentUnavailable();
+      }
     }
-    if (current.price !== input.expectedPrice) {
-      throw priceChanged(input.expectedPrice, current.price);
+    // A service's price is the price for the car's model (`servicePriceForCar`).
+    const price = service?.price ?? current.price;
+    if (price !== input.expectedPrice) {
+      throw priceChanged(input.expectedPrice, price);
     }
     if (!input.allowAnotherActive) {
       const [active] = await tx
@@ -373,7 +419,12 @@ export class OrdersService {
         throw duplicateActive(active.id, active.number);
       }
     }
-    const snapshot = await this.snapshots.take(tx, current.id, at);
+    const snapshot = await this.snapshots.take(
+      tx,
+      current.id,
+      at,
+      service ? { modelId: service.car.modelId } : null,
+    );
     // An employee ordering from their own company: a test order (PRODUCT 12.6).
     const [membership] = await tx
       .select({ id: supplierMember.id })
@@ -385,10 +436,16 @@ export class OrdersService {
           eq(supplierMember.status, "active"),
         ),
       );
-    const respondBy = respondByOf(at, await this.settings.get("supplier_response_hours"));
+    const responseHours = await this.settings.get("supplier_response_hours");
+    // A service: the answer is due by the setting, but never after the time
+    // the user asked for (ARCHITECTURE 6.3).
+    const respondBy = service
+      ? serviceRespondBy(at, responseHours, service.desiredAt)
+      : respondByOf(at, responseHours);
     // The user agrees to the offer's term by ordering (PRODUCT 10.3); the
     // date it gives now is what «Поставщик привезёт до {дата}» showed.
     const expectedReadyOn = kind === "on_order" ? await this.readyOn(tx, snapshot, at) : null;
+    const quantity = service ? 1 : input.quantity;
     for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
       const [row] = await tx
         .insert(customerOrder)
@@ -402,9 +459,19 @@ export class OrdersService {
           itemId: current.itemId,
           offerSnapshot: snapshot,
           unitPrice: snapshot.price,
-          quantity: input.quantity,
-          total: snapshot.price * input.quantity,
-          fulfillment: input.fulfillment,
+          quantity,
+          total: snapshot.price * quantity,
+          // A visit is made at the point.
+          fulfillment: input.fulfillment ?? "pickup",
+          carId: service?.car.id ?? null,
+          carSnapshot: service
+            ? {
+                make: { id: service.car.makeId, label: service.car.makeLabel },
+                model: { id: service.car.modelId, label: service.car.modelLabel },
+                year: service.car.year,
+              }
+            : null,
+          desiredAt: service?.desiredAt ?? null,
           comment: input.comment ?? null,
           isTest: membership !== undefined,
           confirmationCode: newConfirmationCode(),
@@ -429,7 +496,12 @@ export class OrdersService {
           { type: "user", accountId },
           "app",
           at,
-          { quantity: row.quantity, total: row.total, fulfillment: row.fulfillment },
+          {
+            quantity: row.quantity,
+            total: row.total,
+            fulfillment: row.fulfillment,
+            ...(row.desiredAt ? { visitAt: row.desiredAt.toISOString() } : {}),
+          },
         );
         // W-01 to the supplier's employees, in the transaction of the order
         // itself: the notices exist if and only if the order does (TASK-025).
@@ -442,6 +514,70 @@ export class OrdersService {
       }
     }
     throw new Error("No free confirmation code after many draws");
+  }
+
+  /**
+   * The car and the time of an order on a service (TASK-038; ARCHITECTURE
+   * 6.3, 4.62), checked in the transaction of the order: the car is one of
+   * the user's own garage (another's, or none — 400 at `carId`), the offer
+   * has a price for its model (`servicePriceForCar`, the one function of the
+   * showcase and the snapshot; none — the offer is not the user's to see,
+   * `ORDER_OFFER_UNAVAILABLE`), and the time passes `visitTimeProblem` by
+   * the point's hours with the clock of this transaction (400 at
+   * `desiredAt`). One visit at the point: no quantity, no delivery.
+   */
+  private async visitOf(
+    tx: DbExecutor,
+    input: CreateOrderInput,
+    accountId: string,
+    current: { id: string; locationId: string; price: number; priceMode: "single" | "by_model" },
+    at: Date,
+  ): Promise<{ car: AccountCarRow; desiredAt: Date; price: number }> {
+    if (input.carId === undefined || input.desiredAt === undefined) {
+      throw validationError(
+        input.carId === undefined ? "carId" : "desiredAt",
+        "An order on a service names the car of the garage and the time asked for",
+      );
+    }
+    if (input.fulfillment === "delivery") {
+      throw validationError("fulfillment", "A service is a visit to the point");
+    }
+    if (input.quantity !== 1) {
+      throw validationError("quantity", "An order on a service is one visit");
+    }
+    const [car] = await tx
+      .select()
+      .from(accountCar)
+      .where(and(eq(accountCar.id, input.carId), eq(accountCar.accountId, accountId)));
+    if (!car) {
+      throw validationError("carId", "Not a car of your garage");
+    }
+    const pricing = (await servicePricings(tx, [current])).get(current.id);
+    const price = pricing ? servicePriceForCar(pricing, { modelId: car.modelId }) : null;
+    if (price === null) {
+      throw offerUnavailable();
+    }
+    const desiredAt = new Date(input.desiredAt);
+    const problem = await this.visitTimeProblemAt(tx, current.locationId, desiredAt, at);
+    if (problem) {
+      throw validationError("desiredAt", VISIT_TIME_PROBLEMS[problem]);
+    }
+    return { car, desiredAt, price };
+  }
+
+  /** `visitTimeProblem` by the point's schedule and the setting of the horizon. */
+  private async visitTimeProblemAt(
+    executor: DbExecutor,
+    locationId: string,
+    visitAt: Date,
+    at: Date,
+  ): Promise<VisitTimeProblem | null> {
+    const [schedules, horizonDays] = await Promise.all([
+      receiptSchedules(executor, [locationId]),
+      this.settings.get("service_booking_horizon_days"),
+    ]);
+    const schedule = schedules.get(locationId);
+    return schedule ? visitTimeProblem(visitAt, at, schedule, horizonDays) : "hours_not_set";
   }
 
   /**
@@ -479,11 +615,18 @@ export class OrdersService {
     input: CreateOrderInput,
     lang: CatalogLanguage,
   ): Promise<CreateOrderResponse> {
-    if (
-      row.offerId !== input.offerId ||
-      row.quantity !== input.quantity ||
-      row.fulfillment !== input.fulfillment
-    ) {
+    // A service is the same order with the same car and time (TASK-038); the
+    // car may have left the garage since — then its snapshot is what is left.
+    const sameOrder =
+      row.kind === "service"
+        ? input.carId !== undefined &&
+          (row.carId === null || row.carId === input.carId) &&
+          input.desiredAt !== undefined &&
+          row.desiredAt?.getTime() === new Date(input.desiredAt).getTime() &&
+          (input.fulfillment ?? "pickup") === row.fulfillment &&
+          input.quantity === row.quantity
+        : row.fulfillment === input.fulfillment && row.quantity === input.quantity;
+    if (row.offerId !== input.offerId || !sameOrder) {
       throw idempotencyMismatch();
     }
     return { order: await userOrderView(this.database.db, row, lang, this.photos), created: false };
@@ -742,7 +885,8 @@ export class OrdersService {
     // accepted and ready orders, and an expired pickup whose late close
     // window is still open («Срок истёк — можно закрыть до …», PRODUCT
     // 10.7) — the same window `orderCloseVerdict` and `close_late` use.
-    const lateWindowOpen = sql`(${customerOrder.status} = 'reserve_expired'
+    // TASK-038: an unresolved visit has the same window.
+    const lateWindowOpen = sql`(${customerOrder.status} IN ('reserve_expired', 'visit_unresolved')
       AND ${customerOrder.lateCloseUntil} IS NOT NULL
       AND ${customerOrder.lateCloseUntil} > ${at.toISOString()}::timestamptz
       AND ${customerOrder.codeReleasedAt} IS NULL)`;
@@ -985,6 +1129,159 @@ export class OrdersService {
       options: await this.termOptionsOf(db, found, at, maxLeadDays),
       answerBy: termAnswerBy(at, agreementHours).toISOString(),
     };
+  }
+
+  /**
+   * «Предложить другое время» of an order on a service (TASK-038; SCREENS
+   * S-ORD-04; ARCHITECTURE 6.3): the time is judged in the transaction of
+   * the move by the same rule as the time the user asked for
+   * (`visitTimeProblem`), and is not that time (that one is «Подтвердить
+   * время», `accept`). The user is asked; a colleague who acted first — 409
+   * naming them.
+   */
+  async proposeTime(
+    actor: OrderSupplierActor,
+    orderId: string,
+    body: ProposeOrderTimeBody,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    const visitAt = new Date(body.visitAt);
+    const row = await this.run({
+      scope: async (tx) => {
+        const found = await this.supplierRow(tx, actor.supplierId, orderId);
+        if (found.kind !== "service") {
+          throw kindNotSupported();
+        }
+        if (found.desiredAt?.getTime() === visitAt.getTime()) {
+          throw validationError(
+            "visitAt",
+            "This is the time the customer asked for: confirm it instead",
+          );
+        }
+        const problem = await this.visitTimeProblemAt(
+          tx,
+          found.locationId,
+          visitAt,
+          await databaseNow(tx),
+        );
+        if (problem) {
+          throw validationError("visitAt", VISIT_TIME_PROBLEMS[problem]);
+        }
+        return found;
+      },
+      request: {
+        orderId,
+        action: "propose_time",
+        actor,
+        channel: "supplier_web",
+        expectedVersion: body.expectedVersion,
+        time: { visitAt },
+      },
+      forUser: false,
+    });
+    return supplierOrderView(this.database.db, row, lang, this.photos);
+  }
+
+  /**
+   * The days and hours another time of a visit may be now (TASK-038;
+   * S-ORD-02, S-ORD-04): `visitDays` by the point's schedule — the cabinet
+   * judges no hours itself — and until when the customer would answer.
+   */
+  async timeOptions(supplierId: string, orderId: string): Promise<SupplierOrderTimeOptions> {
+    const db = this.database.db;
+    const found = await this.supplierRow(db, supplierId, orderId);
+    if (found.kind !== "service" || !found.desiredAt) {
+      throw kindNotSupported();
+    }
+    const [agreementHours, at, days] = await Promise.all([
+      this.settings.get("time_agreement_hours"),
+      databaseNow(db),
+      this.visitDaysOf(db, found.locationId),
+    ]);
+    return {
+      desiredAt: found.desiredAt.toISOString(),
+      timeZone: found.offerSnapshot.location.timeZone,
+      days,
+      answerBy: new Date(at.getTime() + agreementHours * 3_600_000).toISOString(),
+    };
+  }
+
+  /**
+   * «Отметить неявку» (TASK-038; ARCHITECTURE 6.3): only an employee, only
+   * a confirmed visit, only from its time to the end of its window. Before
+   * the time — 409 `ORDER_NO_SHOW_TOO_EARLY`; after the window the visit has
+   * expired unresolved (the move applies the expiry first and answers 409
+   * with `visit_unresolved`). The user's discipline gets a mark.
+   */
+  async markNoShow(
+    actor: OrderSupplierActor,
+    orderId: string,
+    expectedVersion: number,
+    lang: CatalogLanguage,
+  ): Promise<SupplierOrder> {
+    const row = await this.run({
+      scope: async (tx) => {
+        const found = await this.supplierRow(tx, actor.supplierId, orderId);
+        if (found.kind !== "service") {
+          throw kindNotSupported();
+        }
+        if (found.status === "accepted" && found.visitAt && found.visitUntil) {
+          const verdict = noShowVerdict(found.visitAt, found.visitUntil, await databaseNow(tx));
+          if (verdict === "too_early") {
+            throw noShowTooEarly(found.visitAt);
+          }
+        }
+        return found;
+      },
+      request: {
+        orderId,
+        action: "mark_no_show",
+        actor,
+        channel: "supplier_web",
+        expectedVersion,
+      },
+      forUser: false,
+    });
+    return supplierOrderView(this.database.db, row, lang, this.photos);
+  }
+
+  /**
+   * The days and hours a user may ask for a visit at the point of an offer
+   * on a service (TASK-038; M-ORD-01 for a service): only an offer the
+   * showcase shows — another one answers as `POST /orders` would.
+   */
+  async visitOptions(offerId: string): Promise<OfferVisitOptions> {
+    const db = this.database.db;
+    const at = await databaseNow(db);
+    const [found] = await db
+      .select({ id: offer.id, locationId: offer.locationId, itemType: offer.itemType })
+      .from(offer)
+      .where(eq(offer.id, offerId));
+    if (!found || !(await offerShowcase(db, [found.id], at)).get(found.id)?.visible) {
+      throw offerUnavailable();
+    }
+    if (found.itemType !== "service") {
+      throw kindNotSupported();
+    }
+    const schedule = (await receiptSchedules(db, [found.locationId])).get(found.locationId);
+    return {
+      timeZone: schedule?.timeZone ?? ALMATY_TIME_ZONE,
+      days: await this.visitDaysOf(db, found.locationId, at),
+    };
+  }
+
+  private async visitDaysOf(
+    executor: DbExecutor,
+    locationId: string,
+    at?: Date,
+  ): Promise<VisitDay[]> {
+    const [schedules, horizonDays, now] = await Promise.all([
+      receiptSchedules(executor, [locationId]),
+      this.settings.get("service_booking_horizon_days"),
+      at ?? databaseNow(executor),
+    ]);
+    const schedule = schedules.get(locationId);
+    return schedule ? visitDays(now, schedule, horizonDays) : [];
   }
 
   private async termOptionsOf(

@@ -15,8 +15,10 @@ import {
   orderActionBodySchema,
   orderCredentialSchema,
   orderPathSchema,
+  offerVisitOptionsQuerySchema,
   orderTermAnswerBodySchema,
   proposeOrderTermBodySchema,
+  proposeOrderTimeBodySchema,
   revokeDisciplineBodySchema,
   supplierOrderListQuerySchema,
   userOrderHistoryQuerySchema,
@@ -43,18 +45,22 @@ import {
   type DeclineOrderBody,
   type DeclineOrderResponse,
   type DisciplinePath,
+  type OfferVisitOptions,
+  type OfferVisitOptionsQuery,
   type OrderActionBody,
   type OrderCredential,
   type OrderLookupResponse,
   type OrderPath,
   type OrderTermAnswerBody,
   type ProposeOrderTermBody,
+  type ProposeOrderTimeBody,
   type RepeatOrderResponse,
   type RevokeDisciplineBody,
   type SupplierOrderListQuery,
   type SupplierOrderPage,
   type SupplierOrderResponse,
   type SupplierOrderTermOptions,
+  type SupplierOrderTimeOptions,
   type UserOrderHistoryPage,
   type UserOrderHistoryQuery,
   type UserOrderListQuery,
@@ -98,6 +104,14 @@ export class UserOrdersController {
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<CreateOrderResponse> {
     return this.orders.create(body, session.accountId, pickLanguage(acceptLanguage));
+  }
+
+  /** The days and hours a visit for a service may be asked for (TASK-038). */
+  @SessionRoute(apiRoutes.getOfferVisitOptions)
+  visitOptions(
+    @Query(new ZodValidationPipe(offerVisitOptionsQuerySchema)) query: OfferVisitOptionsQuery,
+  ): Promise<OfferVisitOptions> {
+    return this.orders.visitOptions(query.offerId);
   }
 
   @SessionRoute(apiRoutes.listUserOrders)
@@ -297,6 +311,51 @@ export class SupplierOrdersController {
       body,
       pickLanguage(acceptLanguage),
     );
+  }
+
+  /** The time asked for and the days and hours of «Предложить другое время» now (TASK-038). */
+  @SessionRoute(apiRoutes.getSupplierOrderTimeOptions)
+  async timeOptions(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierOrderTimeOptions> {
+    return this.orders.timeOptions(supplierActor(session).supplierId, params.orderId);
+  }
+
+  /** S-ORD-04 «Предложить другое время» for an order on a service (TASK-038). */
+  @RateLimitedRoute(apiRoutes.proposeSupplierOrderTime)
+  async proposeTime(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(proposeOrderTimeBodySchema)) body: ProposeOrderTimeBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierOrderResponse> {
+    return {
+      order: await this.orders.proposeTime(
+        supplierActor(session),
+        params.orderId,
+        body,
+        pickLanguage(acceptLanguage),
+      ),
+    };
+  }
+
+  /** «Отметить неявку» of a confirmed visit (TASK-038). */
+  @RateLimitedRoute(apiRoutes.markSupplierOrderNoShow)
+  async noShow(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @Body(new ZodValidationPipe(orderActionBodySchema)) body: OrderActionBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierOrderResponse> {
+    return {
+      order: await this.orders.markNoShow(
+        supplierActor(session),
+        params.orderId,
+        body.expectedVersion,
+        pickLanguage(acceptLanguage),
+      ),
+    };
   }
 
   /** The dates of «Подтвердить срок» and «Предложить другой срок» now (TASK-039). */

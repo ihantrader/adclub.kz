@@ -241,6 +241,10 @@ import {
   orderTermAnswerBodySchema,
   proposeOrderTermBodySchema,
   supplierOrderTermOptionsSchema,
+  offerVisitOptionsQuerySchema,
+  offerVisitOptionsSchema,
+  proposeOrderTimeBodySchema,
+  supplierOrderTimeOptionsSchema,
 } from "./orders";
 import {
   adminSearchQuerySchema,
@@ -3505,7 +3509,7 @@ export const apiRoutes = {
     method: "POST",
     path: "/orders",
     summary:
-      "Order from one offer on the showcase (M-ORD-01): a quantity, pickup or delivery, a comment; club access required; the answer has the confirmation code and the QR — for this user only. The same `idempotencyKey` again returns the order already created",
+      "Order from one offer on the showcase (M-ORD-01): a quantity, pickup or delivery, a comment; club access required; the answer has the confirmation code and the QR — for this user only. The same `idempotencyKey` again returns the order already created. TASK-038: an offer on a service makes an order on a service — a car of the garage (`carId`) and the time asked for (`desiredAt`), the price for the car's model",
     tag: "orders",
     clientVersionCheck: "enforced",
     auth: "session",
@@ -3513,6 +3517,21 @@ export const apiRoutes = {
     requestBody: { description: "The order", schema: createOrderBodySchema },
     responses: {
       201: { description: "The order", schema: createOrderResponseSchema },
+    },
+  }),
+  getOfferVisitOptions: defineRoute({
+    operationId: "getOfferVisitOptions",
+    method: "GET",
+    path: "/order-visit-options",
+    summary:
+      "The days and hours a visit for a service may be asked for now at the point of an offer (TASK-038; M-ORD-01 for a service): working days from today to the horizon, today cut to what is still ahead, in the point's time zone. An offer users don't see, or not on a service — 409 ORDER_OFFER_UNAVAILABLE / ORDER_KIND_NOT_SUPPORTED",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    query: offerVisitOptionsQuerySchema,
+    responses: {
+      200: { description: "The days and hours", schema: offerVisitOptionsSchema },
     },
   }),
   listUserOrders: defineRoute({
@@ -3611,7 +3630,7 @@ export const apiRoutes = {
     method: "POST",
     path: "/orders/{orderId}/term/agree",
     summary:
-      "Agree to the other term the supplier proposed for an order under order (M-ORD-03 «Согласиться»): the order is taken on with that term — «Срок подтверждён» — and the supplier sees the customer's phone. Only the user of the order; after the answer deadline the order has expired — 409 ORDER_STATE_CONFLICT with `term_expired`",
+      "Agree to the other term the supplier proposed for an order under order (M-ORD-03 «Согласиться»): the order is taken on with that term — «Срок подтверждён» — and the supplier sees the customer's phone. TASK-038: the same for another time of a service — the visit is confirmed at that time. Only the user of the order; after the answer deadline the order has expired — 409 ORDER_STATE_CONFLICT with `term_expired`",
     tag: "orders",
     clientVersionCheck: "enforced",
     auth: "session",
@@ -3627,7 +3646,7 @@ export const apiRoutes = {
     method: "POST",
     path: "/orders/{orderId}/term/reject",
     summary:
-      "Say no to the other term the supplier proposed (M-ORD-03 «Отказаться»): the order is cancelled by the user and the supplier is told so. Only the user of the order",
+      "Say no to the other term (or, TASK-038, the other time of a service) the supplier proposed (M-ORD-03 «Отказаться»): the order is cancelled by the user and the supplier is told so. Only the user of the order",
     tag: "orders",
     clientVersionCheck: "enforced",
     auth: "session",
@@ -3673,7 +3692,7 @@ export const apiRoutes = {
     method: "POST",
     path: "/supplier/orders/{orderId}/accept",
     summary:
-      "Accept a new order: the customer's phone opens, the pickup reserve starts. For an order under order this is «Подтвердить срок» — the term the customer agreed to, no reserve until it is ready (TASK-037). A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
+      "Accept a new order: the customer's phone opens, the pickup reserve starts. For an order under order this is «Подтвердить срок» — the term the customer agreed to, no reserve until it is ready (TASK-037); for a service — «Подтвердить время», the time the customer asked for (TASK-038). A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
     tag: "supplier",
     clientVersionCheck: "enforced",
     auth: "session",
@@ -3753,6 +3772,59 @@ export const apiRoutes = {
     pathParams: orderPathSchema,
     responses: {
       200: { description: "The dates", schema: supplierOrderTermOptionsSchema },
+    },
+  }),
+  // ------------------------------------------------ orders on services (TASK-038)
+  proposeSupplierOrderTime: defineRoute({
+    operationId: "proposeSupplierOrderTime",
+    method: "POST",
+    path: "/supplier/orders/{orderId}/propose-time",
+    summary:
+      "Propose another time for a new order on a service (S-ORD-04, TASK-038): inside the point's hours, not on a closed date, later than now, within the horizon, not the time asked for (that is `…/accept`, «Подтвердить время») — 400 at `visitAt` otherwise. The customer answers by `serviceVisit.proposed.answerBy`. An order on goods — 409 ORDER_KIND_NOT_SUPPORTED; a colleague who acted first — 409 ORDER_STATE_CONFLICT naming them",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
+    pathParams: orderPathSchema,
+    requestBody: {
+      description: "The version seen and the time (one of `…/time-options`)",
+      schema: proposeOrderTimeBodySchema,
+    },
+    responses: {
+      200: { description: "The order", schema: supplierOrderResponseSchema },
+    },
+  }),
+  getSupplierOrderTimeOptions: defineRoute({
+    operationId: "getSupplierOrderTimeOptions",
+    method: "GET",
+    path: "/supplier/orders/{orderId}/time-options",
+    summary:
+      "The time the customer asked for and the days and hours another time may be now by the point's schedule, with until when the customer would answer (S-ORD-02, S-ORD-04, TASK-038). An order on goods — 409 ORDER_KIND_NOT_SUPPORTED; another company's — 404",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: { description: "The days and hours", schema: supplierOrderTimeOptionsSchema },
+    },
+  }),
+  markSupplierOrderNoShow: defineRoute({
+    operationId: "markSupplierOrderNoShow",
+    method: "POST",
+    path: "/supplier/orders/{orderId}/no-show",
+    summary:
+      "Mark that the customer did not come to a confirmed visit (TASK-038): only from the time of the visit to the end of its window (`service_grace_hours`) — before it 409 ORDER_NO_SHOW_TOO_EARLY, after it the visit has expired (409 ORDER_STATE_CONFLICT). The customer's discipline gets a mark (never a test order's). An order on goods — 409 ORDER_KIND_NOT_SUPPORTED",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "order_actions_per_member", whenUnavailable: "allow" },
+    pathParams: orderPathSchema,
+    requestBody: { description: "The version seen", schema: orderActionBodySchema },
+    responses: {
+      200: { description: "The order", schema: supplierOrderResponseSchema },
     },
   }),
   listAdminOrders: defineRoute({

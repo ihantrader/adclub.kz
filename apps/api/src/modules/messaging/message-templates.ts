@@ -189,7 +189,7 @@ export const messageTemplates = {
       kk: "№ {number} жазылу: {service}, {model}, {date} сағат {time}. {respondBy} дейін жауап беріңіз",
     },
     sample: pick("number", "service", "model", "date", "time", "respondBy"),
-    sentBy: null,
+    sentBy: "orders (OrderNotices.newOrder, TASK-038)",
   },
   /** W-02 — after the employee confirmed: who the customer is. */
   order_accepted: {

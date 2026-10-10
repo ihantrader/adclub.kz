@@ -89,9 +89,17 @@ const expectedVersionSchema = z.number().int().min(1);
  * «срок подтверждён» (the supplier confirmed the term, or the user agreed
  * to another one); `term_proposed` — the supplier proposed another term and
  * the user's answer is due (until `term.proposed.answerBy`); `term_expired`
- * — the user did not answer in time. Final: `completed`,
+ * — the user did not answer in time. TASK-038, a service: `accepted` means
+ * «Подтверждена на время» (the supplier confirmed the time asked for, or
+ * the user agreed to another one); `term_proposed` — the supplier proposed
+ * another time and the user's answer is due (`serviceVisit.proposed`);
+ * `term_expired` — the user did not answer it; `no_show` — an employee
+ * marked that the user did not come; `visit_unresolved` — nobody closed the
+ * visit nor marked a no-show in its window (it may still be closed by the
+ * code inside the late close window). Final: `completed`,
  * `cancelled_by_user`, `declined_by_supplier`, `response_expired`,
- * `reserve_expired`, `cancelled_by_admin`, `term_expired`.
+ * `reserve_expired`, `cancelled_by_admin`, `term_expired`, `no_show`,
+ * `visit_unresolved`.
  */
 export const orderStatusSchema = z.enum([
   "created",
@@ -105,15 +113,18 @@ export const orderStatusSchema = z.enum([
   "cancelled_by_admin",
   "term_proposed",
   "term_expired",
+  "no_show",
+  "visit_unresolved",
 ]);
 
 export type OrderStatusValue = z.infer<typeof orderStatusSchema>;
 
 /**
  * `stock` — an item in stock; `on_order` — an item the supplier orders for
- * the user, with a term (TASK-037, PRODUCT 10.3). Services — TASK-038.
+ * the user, with a term (TASK-037, PRODUCT 10.3); `service` — a visit for a
+ * service at a time, for a car of the garage (TASK-038, PRODUCT 11).
  */
-export const orderKindSchema = z.enum(["stock", "on_order"]);
+export const orderKindSchema = z.enum(["stock", "on_order", "service"]);
 
 export type OrderKind = z.infer<typeof orderKindSchema>;
 
@@ -147,6 +158,13 @@ export type OrderDeclineReason = z.infer<typeof orderDeclineReasonSchema>;
  * `reject_term` — the user's answer; `expire_term` — the user did not
  * answer in time; and the note `supply_overdue` — the confirmed date has
  * passed and the order is still not ready (the status does not change).
+ * TASK-038, a service: `propose_time` — an employee proposed another time
+ * (the user answers with `agree_term` / `reject_term`, silence is
+ * `expire_term`); `mark_no_show` — an employee marked that the user did not
+ * come; `expire_visit` — the visit's window passed and nobody closed it nor
+ * marked a no-show; the note `late_cancel` — the user cancelled a confirmed
+ * visit less than `late_cancel_hours` before it (the cancel is the move
+ * before it).
  */
 export const orderEventActionSchema = z.enum([
   "create",
@@ -168,6 +186,10 @@ export const orderEventActionSchema = z.enum([
   "reject_term",
   "expire_term",
   "supply_overdue",
+  "propose_time",
+  "mark_no_show",
+  "expire_visit",
+  "late_cancel",
 ]);
 
 export type OrderEventAction = z.infer<typeof orderEventActionSchema>;
@@ -185,6 +207,8 @@ export const orderAttemptedActionSchema = z.enum([
   "propose_term",
   "agree_term",
   "reject_term",
+  "propose_time",
+  "mark_no_show",
 ]);
 
 export type OrderAttemptedAction = z.infer<typeof orderAttemptedActionSchema>;
@@ -201,10 +225,10 @@ export type OrderCloseMethod = z.infer<typeof orderCloseMethodSchema>;
 
 // ------------------------------------------------------------------- parts
 
-/** The item as the order's snapshot keeps it, in the language of the request. */
+/** The item as the order's snapshot keeps it, in the language of the request (a service — TASK-038). */
 export const orderItemSchema = z.object({
   id: z.uuid(),
-  type: z.enum(["part", "generic"]),
+  type: z.enum(["part", "generic", "service"]),
   name: localizedTextSchema,
   article: z.string().nullable(),
   brand: z.string().nullable(),
@@ -297,6 +321,12 @@ export const orderEventDetailsSchema = z.object({
   readyOn: dateSchema.optional(),
   answerBy: z.iso.datetime().optional(),
   /**
+   * TASK-038, a service: the time of the visit — asked for (`create`),
+   * proposed (`propose_time`), confirmed (`accept`, `agree_term`) or the one
+   * the move was about (`mark_no_show`, `expire_visit`, `late_cancel`).
+   */
+  visitAt: z.iso.datetime().optional(),
+  /**
    * `deadline_extended`, `admin_cancel`: why the administrator did it
    * (A-ORD-02 — every manual action has a reason). **The administrator's
    * view only**: the supplier sees what happened, never the words.
@@ -365,8 +395,10 @@ export type OrderGivenOut = z.infer<typeof orderGivenOutSchema>;
  * the supplier had accepted ran out and nobody came for the item. It is
  * the administrator's to see: the user is never shown it, it has no effect
  * on the supplier's rating, and there is no public rating of a user.
+ * TASK-038: `service_no_show` — an employee marked that the user did not
+ * come to a visit whose time was confirmed.
  */
-export const disciplineKindSchema = z.enum(["pickup_no_show"]);
+export const disciplineKindSchema = z.enum(["pickup_no_show", "service_no_show"]);
 
 export type DisciplineKind = z.infer<typeof disciplineKindSchema>;
 
@@ -453,6 +485,51 @@ export const onOrderTermSchema = z.object({
 
 export type OnOrderTerm = z.infer<typeof onOrderTermSchema>;
 
+/**
+ * The car an order on a service is for (TASK-038): make, model and year as
+ * they were in the garage when the user ordered — the order keeps them
+ * whatever becomes of the car (removed from the garage, changed). The price
+ * of the order is the offer's price for this model.
+ */
+export const orderCarSchema = z.object({
+  make: z.object({ id: z.uuid(), label: z.string() }),
+  model: z.object({ id: z.uuid(), label: z.string() }),
+  year: z.number().int().nullable(),
+});
+
+export type OrderCar = z.infer<typeof orderCarSchema>;
+
+/**
+ * The visit of an order on a service (TASK-038; PRODUCT 11; SCREENS
+ * M-ORD-03, S-ORD-02, S-ORD-04, W-01b) — the same for every side that sees
+ * the order. Every time is an instant; the screens show it in the point's
+ * time zone (`timeZone`).
+ *
+ * - `car` — the car (snapshot);
+ * - `desiredAt` — the time the user asked for;
+ * - `proposed` — another time an employee proposed (`visitAt`), when
+ *   (`at`) and until when the user may answer (`answerBy`; never later than
+ *   that time); kept after the answer, so «было — стало» can be told; `null`
+ *   — none was proposed;
+ * - `confirmed` — the time of the visit (`visitAt`): the one asked for,
+ *   confirmed by the supplier, or the proposed one the user agreed to; when
+ *   it was confirmed (`at`) and the end of its window (`until`, after it a
+ *   visit nobody closed expires unresolved); `null` — not confirmed.
+ */
+export const serviceVisitSchema = z.object({
+  car: orderCarSchema,
+  timeZone: z.string(),
+  desiredAt: z.iso.datetime(),
+  proposed: z
+    .object({ visitAt: z.iso.datetime(), at: z.iso.datetime(), answerBy: z.iso.datetime() })
+    .nullable(),
+  confirmed: z
+    .object({ visitAt: z.iso.datetime(), at: z.iso.datetime(), until: z.iso.datetime() })
+    .nullable(),
+});
+
+export type ServiceVisit = z.infer<typeof serviceVisitSchema>;
+
 const moneyFields = {
   quantity: z.number().int(),
   /** The price of one item when the order was created, whole tenge. */
@@ -484,6 +561,8 @@ const orderBaseFields = {
   receiptOn: dateSchema.nullable(),
   /** The term of an order under order (TASK-037); `null` — an item in stock. */
   onOrderTerm: onOrderTermSchema.nullable(),
+  /** The car and the time of an order on a service (TASK-038); `null` — goods. */
+  serviceVisit: serviceVisitSchema.nullable(),
   createdAt: z.iso.datetime(),
 };
 
@@ -578,11 +657,26 @@ export type OrderPath = z.infer<typeof orderPathSchema>;
 export const createOrderBodySchema = z.object({
   offerId: z.uuid(),
   quantity: z.number().int().min(1).max(ORDER_QUANTITY_LIMIT).default(1),
-  fulfillment: orderFulfillmentSchema,
+  /**
+   * How the goods are received — required for goods (400 at the field
+   * without it). A service is a visit to the point: leave it out (or
+   * `pickup`; `delivery` — 400).
+   */
+  fulfillment: orderFulfillmentSchema.optional(),
   comment: multilineText(ORDER_COMMENT_MAX_LENGTH).optional(),
   expectedPrice: z.number().int().min(1).max(OFFER_PRICE_LIMIT),
   idempotencyKey: z.uuid(),
   allowAnotherActive: z.boolean().default(false),
+  /**
+   * TASK-038, a service — required for it, left out for goods (400 at the
+   * field otherwise): `carId` — the car of the user's garage the visit is for
+   * (the price is the offer's price for its model; `expectedPrice` is that
+   * price); `desiredAt` — the time asked for: a whole minute, later than
+   * now, within `service_booking_horizon_days`, inside the point's hours and
+   * not on its closed date (`GET /orders/visit-options`). Quantity is 1.
+   */
+  carId: z.uuid().optional(),
+  desiredAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 export type CreateOrderBody = z.input<typeof createOrderBodySchema>;
@@ -606,10 +700,39 @@ export type UserOrderResponse = z.infer<typeof userOrderResponseSchema>;
  * with the version of the order they saw. Only the user of the order
  * answers; the answer is due by `onOrderTerm.proposed.answerBy` — after it
  * the order has expired (409 `ORDER_STATE_CONFLICT`, `term_expired`).
+ * TASK-038: the same answer to another time of a service
+ * (`serviceVisit.proposed`): «да» confirms the visit at that time.
  */
 export const orderTermAnswerBodySchema = z.object({ expectedVersion: expectedVersionSchema });
 
 export type OrderTermAnswerBody = z.infer<typeof orderTermAnswerBodySchema>;
+
+/** One working day a visit may be on, with its open intervals (`HH:MM`, `to` exclusive). */
+export const visitDaySchema = z.object({
+  date: dateSchema,
+  intervals: z.array(z.object({ from: z.string(), to: z.string() })),
+});
+
+export type VisitDayValue = z.infer<typeof visitDaySchema>;
+
+export const offerVisitOptionsQuerySchema = z.object({ offerId: z.uuid() });
+
+export type OfferVisitOptionsQuery = z.infer<typeof offerVisitOptionsQuerySchema>;
+
+/**
+ * `GET /orders/visit-options?offerId=` (TASK-038; SCREENS M-ORD-01 for a
+ * service): the days and hours a visit may be asked for now at the point of
+ * an offer on a service the user sees — every working day from today to
+ * `service_booking_horizon_days`, today cut to what is still ahead, closed
+ * dates left out. `timeZone` — the point's: the hours are its local time.
+ * The server judges the time again when the order is placed.
+ */
+export const offerVisitOptionsSchema = z.object({
+  timeZone: z.string(),
+  days: z.array(visitDaySchema),
+});
+
+export type OfferVisitOptions = z.infer<typeof offerVisitOptionsSchema>;
 
 /** M-ORD-02: «Активные» (going on) and «История» (final); newest first. */
 export const userOrderTabSchema = z.enum(["active", "history"]);
@@ -640,10 +763,10 @@ export type UserOrderPage = z.infer<typeof userOrderPageSchema>;
  * lead with (delivery, which lives until it is handed over — PRODUCT
  * 10.4). TASK-037: `answer_by` — «Ответьте до {время}» while the user's
  * answer to another term is due (the date itself is in `onOrderTerm`).
- * EPIC-13 adds a kind for the time of a service.
+ * TASK-038: `visit_at` — the time of a confirmed visit for a service.
  */
 export const activeOrderMainDateSchema = z.object({
-  kind: z.enum(["respond_by", "reserve_until", "answer_by"]),
+  kind: z.enum(["respond_by", "reserve_until", "answer_by", "visit_at"]),
   at: z.iso.datetime(),
 });
 
@@ -688,6 +811,8 @@ export const activeOrderSchema = z.object({
   reserveUntil: z.iso.datetime().nullable(),
   /** The term of an order under order (TASK-037); `null` — an item in stock. */
   onOrderTerm: onOrderTermSchema.nullable(),
+  /** The car and the time of an order on a service (TASK-038); `null` — goods. */
+  serviceVisit: serviceVisitSchema.nullable(),
   createdAt: z.iso.datetime(),
   /** The order last changed then: the app merges a copy by it. */
   updatedAt: z.iso.datetime(),
@@ -755,6 +880,8 @@ export const userHistoryOrderSchema = z.object({
   givenOut: orderGivenOutSchema.nullable(),
   canRepeat: z.boolean(),
   canReview: z.boolean(),
+  /** The car and the time of an order on a service (TASK-038); `null` — goods. */
+  serviceVisit: serviceVisitSchema.nullable(),
   createdAt: z.iso.datetime(),
 });
 
@@ -797,6 +924,13 @@ export const userOrderHistoryPageSchema = z.object({
 export type UserOrderHistoryPage = z.infer<typeof userOrderHistoryPageSchema>;
 
 // ------------------------------------------- repeating an order (TASK-023)
+
+/**
+ * The item of a repeat: goods only — a service is not repeated until the
+ * checkout of TASK-039.B (`kind_not_supported`), so its answer never names
+ * one (TASK-038 keeps this answer as it was).
+ */
+export const repeatItemSchema = orderItemSchema.extend({ type: z.enum(["part", "generic"]) });
 
 /** The offer to order again, with its price as it is now — never the snapshot's. */
 export const repeatOfferSchema = z.object({
@@ -847,7 +981,7 @@ export type RepeatUnavailableReason = z.infer<typeof repeatUnavailableReasonSche
 export const repeatOrderResponseSchema = z.discriminatedUnion("result", [
   z.object({
     result: z.literal("offer"),
-    item: orderItemSchema,
+    item: repeatItemSchema,
     offer: repeatOfferSchema,
     /** What the finished order was, to fill the checkout in with. */
     previous: z.object({
@@ -861,7 +995,7 @@ export const repeatOrderResponseSchema = z.discriminatedUnion("result", [
   /** Open the item's card in the catalog: somebody else may have it. */
   z.object({
     result: z.literal("catalog"),
-    item: orderItemSchema,
+    item: repeatItemSchema,
     reason: repeatBlockedReasonSchema,
   }),
   z.object({ result: z.literal("unavailable"), reason: repeatUnavailableReasonSchema }),
@@ -1003,6 +1137,39 @@ export const supplierOrderTermOptionsSchema = z.object({
 export type SupplierOrderTermOptions = z.infer<typeof supplierOrderTermOptionsSchema>;
 
 /**
+ * `POST /supplier/orders/{orderId}/propose-time` (TASK-038; SCREENS S-ORD-04
+ * for a service): another time for a new order on a service — the same
+ * rules as the time the user asked for (a whole minute, later than now,
+ * within `service_booking_horizon_days`, inside the point's hours, not on a
+ * closed date; 400 at `visitAt` otherwise) and not that very time (that one
+ * is «Подтвердить время», `…/accept`). The user is asked; until they answer
+ * the order is `term_proposed`, and their silence expires it after
+ * `time_agreement_hours` — never later than the proposed time itself.
+ */
+export const proposeOrderTimeBodySchema = z.object({
+  expectedVersion: expectedVersionSchema,
+  visitAt: z.iso.datetime({ offset: true }),
+});
+
+export type ProposeOrderTimeBody = z.infer<typeof proposeOrderTimeBodySchema>;
+
+/**
+ * `GET /supplier/orders/{orderId}/time-options` (TASK-038; S-ORD-02,
+ * S-ORD-04 for a service): the time the customer asked for, the days and
+ * hours another time may be now by the point's schedule (the cabinet judges
+ * no hours itself), and until when the customer would answer one proposed
+ * now (`answerBy` — or the proposed time itself, if that is earlier).
+ */
+export const supplierOrderTimeOptionsSchema = z.object({
+  desiredAt: z.iso.datetime(),
+  timeZone: z.string(),
+  days: z.array(visitDaySchema),
+  answerBy: z.iso.datetime(),
+});
+
+export type SupplierOrderTimeOptions = z.infer<typeof supplierOrderTimeOptionsSchema>;
+
+/**
  * The declined order; with «Нет в наличии» and the offer still on sale —
  * `withdrawOffer`: the offer to take off sale if the employee agrees
  * («Снять это предложение с продажи?»; `POST /supplier/offers/{offerId}/withdraw`
@@ -1032,6 +1199,8 @@ export const supplierFinishedStatusSchema = z.enum([
   "reserve_expired",
   "cancelled_by_admin",
   "term_expired",
+  "no_show",
+  "visit_unresolved",
 ]);
 
 export type SupplierFinishedStatus = z.infer<typeof supplierFinishedStatusSchema>;
@@ -1110,6 +1279,8 @@ export const supplierScanOrderSchema = z.object({
   fulfillment: orderFulfillmentSchema,
   item: orderItemSchema,
   receiptOn: dateSchema.nullable(),
+  /** TASK-038: the car and the time of a visit — «Отметить выполненной»; `null` — goods. */
+  serviceVisit: serviceVisitSchema.nullable(),
   createdAt: z.iso.datetime(),
 });
 
@@ -1131,6 +1302,8 @@ export const orderCloseRefusalSchema = z.enum([
   "cancelled_by_admin",
   /** «Клиент не ответил на предложенный срок — заявка истекла» (TASK-037). */
   "term_expired",
+  /** «Отмечена неявка клиента {когда}» (TASK-038; a service). */
+  "no_show",
 ]);
 
 export type OrderCloseRefusalReason = z.infer<typeof orderCloseRefusalSchema>;
@@ -1258,6 +1431,11 @@ export const adminOrderSchema = adminOrderSummarySchema.extend({
     lateCloseUntil: z.iso.datetime().nullable(),
     /** TASK-037: until when the user answers another term; `null` — no answer is due. */
     termAnswerBy: z.iso.datetime().nullable(),
+    /**
+     * TASK-038: the end of the window of a confirmed visit (a no-show is
+     * marked until then, after it the visit expires unresolved); `null` — none.
+     */
+    visitUntil: z.iso.datetime().nullable(),
   }),
   /** TASK-036.B: who of the administrators cancelled it, when and why; `null` — not cancelled so. */
   cancellation: z

@@ -4356,7 +4356,9 @@
                 "reserve_expired",
                 "cancelled_by_admin",
                 "term_proposed",
-                "term_expired"
+                "term_expired",
+                "no_show",
+                "visit_unresolved"
               ]
             }
           },
@@ -4368,7 +4370,8 @@
               "type": "string",
               "enum": [
                 "stock",
-                "on_order"
+                "on_order",
+                "service"
               ]
             }
           },
@@ -5163,7 +5166,8 @@
                 "frequent_admin_closes",
                 "whatsapp_outage",
                 "supplier_unreachable",
-                "supply_overdue"
+                "supply_overdue",
+                "visit_unresolved"
               ]
             }
           },
@@ -12270,6 +12274,59 @@
         }
       }
     },
+    "/order-visit-options": {
+      "get": {
+        "operationId": "getOfferVisitOptions",
+        "summary": "The days and hours a visit for a service may be asked for now at the point of an offer (TASK-038; M-ORD-01 for a service): working days from today to the horizon, today cut to what is still ahead, in the point's time zone. An offer users don't see, or not on a service — 409 ORDER_OFFER_UNAVAILABLE / ORDER_KIND_NOT_SUPPORTED",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The days and hours",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferVisitOptions"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/orders": {
       "get": {
         "operationId": "listUserOrders",
@@ -12348,7 +12405,7 @@
       },
       "post": {
         "operationId": "createOrder",
-        "summary": "Order from one offer on the showcase (M-ORD-01): a quantity, pickup or delivery, a comment; club access required; the answer has the confirmation code and the QR — for this user only. The same `idempotencyKey` again returns the order already created",
+        "summary": "Order from one offer on the showcase (M-ORD-01): a quantity, pickup or delivery, a comment; club access required; the answer has the confirmation code and the QR — for this user only. The same `idempotencyKey` again returns the order already created. TASK-038: an offer on a service makes an order on a service — a car of the garage (`carId`) and the time asked for (`desiredAt`), the price for the car's model",
         "tags": [
           "orders"
         ],
@@ -12561,7 +12618,7 @@
     "/orders/{orderId}/term/agree": {
       "post": {
         "operationId": "agreeUserOrderTerm",
-        "summary": "Agree to the other term the supplier proposed for an order under order (M-ORD-03 «Согласиться»): the order is taken on with that term — «Срок подтверждён» — and the supplier sees the customer's phone. Only the user of the order; after the answer deadline the order has expired — 409 ORDER_STATE_CONFLICT with `term_expired`",
+        "summary": "Agree to the other term the supplier proposed for an order under order (M-ORD-03 «Согласиться»): the order is taken on with that term — «Срок подтверждён» — and the supplier sees the customer's phone. TASK-038: the same for another time of a service — the visit is confirmed at that time. Only the user of the order; after the answer deadline the order has expired — 409 ORDER_STATE_CONFLICT with `term_expired`",
         "tags": [
           "orders"
         ],
@@ -12625,7 +12682,7 @@
     "/orders/{orderId}/term/reject": {
       "post": {
         "operationId": "rejectUserOrderTerm",
-        "summary": "Say no to the other term the supplier proposed (M-ORD-03 «Отказаться»): the order is cancelled by the user and the supplier is told so. Only the user of the order",
+        "summary": "Say no to the other term (or, TASK-038, the other time of a service) the supplier proposed (M-ORD-03 «Отказаться»): the order is cancelled by the user and the supplier is told so. Only the user of the order",
         "tags": [
           "orders"
         ],
@@ -14078,7 +14135,9 @@
                 "response_expired",
                 "reserve_expired",
                 "cancelled_by_admin",
-                "term_expired"
+                "term_expired",
+                "no_show",
+                "visit_unresolved"
               ]
             }
           },
@@ -14214,7 +14273,7 @@
     "/supplier/orders/{orderId}/accept": {
       "post": {
         "operationId": "acceptSupplierOrder",
-        "summary": "Accept a new order: the customer's phone opens, the pickup reserve starts. For an order under order this is «Подтвердить срок» — the term the customer agreed to, no reserve until it is ready (TASK-037). A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
+        "summary": "Accept a new order: the customer's phone opens, the pickup reserve starts. For an order under order this is «Подтвердить срок» — the term the customer agreed to, no reserve until it is ready (TASK-037); for a service — «Подтвердить время», the time the customer asked for (TASK-038). A colleague who acted first — 409 `ORDER_STATE_CONFLICT` naming them",
         "tags": [
           "supplier"
         ],
@@ -14347,6 +14406,74 @@
         }
       }
     },
+    "/supplier/orders/{orderId}/no-show": {
+      "post": {
+        "operationId": "markSupplierOrderNoShow",
+        "summary": "Mark that the customer did not come to a confirmed visit (TASK-038): only from the time of the visit to the end of its window (`service_grace_hours`) — before it 409 ORDER_NO_SHOW_TOO_EARLY, after it the visit has expired (409 ORDER_STATE_CONFLICT). The customer's discipline gets a mark (never a test order's). An order on goods — 409 ORDER_KIND_NOT_SUPPORTED",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perMember": "order_actions_per_member",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "The version seen",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderActionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/orders/{orderId}/propose-term": {
       "post": {
         "operationId": "proposeSupplierOrderTerm",
@@ -14391,6 +14518,74 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProposeOrderTermBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/orders/{orderId}/propose-time": {
+      "post": {
+        "operationId": "proposeSupplierOrderTime",
+        "summary": "Propose another time for a new order on a service (S-ORD-04, TASK-038): inside the point's hours, not on a closed date, later than now, within the horizon, not the time asked for (that is `…/accept`, «Подтвердить время») — 400 at `visitAt` otherwise. The customer answers by `serviceVisit.proposed.answerBy`. An order on goods — 409 ORDER_KIND_NOT_SUPPORTED; a colleague who acted first — 409 ORDER_STATE_CONFLICT naming them",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perMember": "order_actions_per_member",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "The version seen and the time (one of `…/time-options`)",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposeOrderTimeBody"
               }
             }
           }
@@ -14523,6 +14718,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupplierOrderTermOptions"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/orders/{orderId}/time-options": {
+      "get": {
+        "operationId": "getSupplierOrderTimeOptions",
+        "summary": "The time the customer asked for and the days and hours another time may be now by the point's schedule, with until when the customer would answer (S-ORD-02, S-ORD-04, TASK-038). An order on goods — 409 ORDER_KIND_NOT_SUPPORTED; another company's — 404",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The days and hours",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOrderTimeOptions"
                 }
               }
             }
@@ -15168,6 +15416,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -15198,6 +15456,7 @@
           "respondBy",
           "reserveUntil",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "updatedAt"
         ]
@@ -15210,7 +15469,8 @@
             "enum": [
               "respond_by",
               "reserve_until",
-              "answer_by"
+              "answer_by",
+              "visit_at"
             ]
           },
           "at": {
@@ -18029,6 +18289,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -18234,13 +18504,26 @@
                     "type": "null"
                   }
                 ]
+              },
+              "visitUntil": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "respondBy",
               "reserveUntil",
               "lateCloseUntil",
-              "termAnswerBy"
+              "termAnswerBy",
+              "visitUntil"
             ]
           },
           "cancellation": {
@@ -18297,6 +18580,7 @@
           "reserveUntil",
           "receiptOn",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "offerId",
           "handledBy",
@@ -18560,6 +18844,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -18661,6 +18955,7 @@
           "reserveUntil",
           "receiptOn",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "offerId",
           "handledBy",
@@ -19141,7 +19436,8 @@
           "frequent_admin_closes",
           "whatsapp_outage",
           "supplier_unreachable",
-          "supply_overdue"
+          "supply_overdue",
+          "visit_unresolved"
         ]
       },
       "AdminSignalListQuery": {
@@ -19331,6 +19627,11 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "visitAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           }
         }
       },
@@ -25109,12 +25410,21 @@
           "allowAnotherActive": {
             "default": false,
             "type": "boolean"
+          },
+          "carId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "desiredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
           }
         },
         "required": [
           "offerId",
           "quantity",
-          "fulfillment",
           "expectedPrice",
           "idempotencyKey",
           "allowAnotherActive"
@@ -25698,7 +26008,8 @@
       "DisciplineKind": {
         "type": "string",
         "enum": [
-          "pickup_no_show"
+          "pickup_no_show",
+          "service_no_show"
         ]
       },
       "DisciplineMark": {
@@ -25975,6 +26286,7 @@
           "ORDER_DUPLICATE_ACTIVE",
           "ORDER_IDEMPOTENCY_MISMATCH",
           "ORDER_STATE_CONFLICT",
+          "ORDER_NO_SHOW_TOO_EARLY",
           "SUPPLIER_BLOCKED",
           "SIGNAL_CONFLICT",
           "ORDER_QR_UNKNOWN",
@@ -27331,6 +27643,37 @@
           "currentVersion"
         ]
       },
+      "OfferVisitOptions": {
+        "type": "object",
+        "properties": {
+          "timeZone": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VisitDay"
+            }
+          }
+        },
+        "required": [
+          "timeZone",
+          "days"
+        ]
+      },
+      "OfferVisitOptionsQuery": {
+        "type": "object",
+        "properties": {
+          "offerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "offerId"
+        ]
+      },
       "OfferWarrantyContactsDetails": {
         "type": "object",
         "properties": {
@@ -27650,7 +27993,65 @@
           "admin_cancel",
           "propose_term",
           "agree_term",
-          "reject_term"
+          "reject_term",
+          "propose_time",
+          "mark_no_show"
+        ]
+      },
+      "OrderCar": {
+        "type": "object",
+        "properties": {
+          "make": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ]
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "make",
+          "model",
+          "year"
         ]
       },
       "OrderCloseMethod": {
@@ -27670,7 +28071,8 @@
           "response_expired",
           "late_window_passed",
           "cancelled_by_admin",
-          "term_expired"
+          "term_expired",
+          "no_show"
         ]
       },
       "OrderClosure": {
@@ -27893,7 +28295,11 @@
           "agree_term",
           "reject_term",
           "expire_term",
-          "supply_overdue"
+          "supply_overdue",
+          "propose_time",
+          "mark_no_show",
+          "expire_visit",
+          "late_cancel"
         ]
       },
       "OrderEventDetails": {
@@ -27970,6 +28376,11 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
+          "visitAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
           "adminNote": {
             "type": "string"
           }
@@ -28020,7 +28431,8 @@
             "type": "string",
             "enum": [
               "part",
-              "generic"
+              "generic",
+              "service"
             ]
           },
           "name": {
@@ -28059,7 +28471,8 @@
             "type": "string",
             "enum": [
               "part",
-              "generic"
+              "generic",
+              "service"
             ]
           },
           "name": {
@@ -28101,7 +28514,8 @@
         "type": "string",
         "enum": [
           "stock",
-          "on_order"
+          "on_order",
+          "service"
         ]
       },
       "OrderLookupResponse": {
@@ -28387,7 +28801,9 @@
           "reserve_expired",
           "cancelled_by_admin",
           "term_proposed",
-          "term_expired"
+          "term_expired",
+          "no_show",
+          "visit_unresolved"
         ]
       },
       "OrderTermAnswerBody": {
@@ -28514,6 +28930,25 @@
         },
         "required": [
           "expectedVersion"
+        ]
+      },
+      "ProposeOrderTimeBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "visitAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "visitAt"
         ]
       },
       "RateLimitName": {
@@ -28844,6 +29279,45 @@
           "supplier_unavailable"
         ]
       },
+      "RepeatItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "part",
+              "generic"
+            ]
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "article": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "article",
+          "brand"
+        ]
+      },
       "RepeatOffer": {
         "type": "object",
         "properties": {
@@ -28919,7 +29393,7 @@
                 "const": "offer"
               },
               "item": {
-                "$ref": "#/components/schemas/OrderItem"
+                "$ref": "#/components/schemas/RepeatItem"
               },
               "offer": {
                 "$ref": "#/components/schemas/RepeatOffer"
@@ -28967,7 +29441,7 @@
                 "const": "catalog"
               },
               "item": {
-                "$ref": "#/components/schemas/OrderItem"
+                "$ref": "#/components/schemas/RepeatItem"
               },
               "reason": {
                 "$ref": "#/components/schemas/RepeatBlockedReason"
@@ -29363,6 +29837,93 @@
         "required": [
           "signInStep",
           "supplierId"
+        ]
+      },
+      "ServiceVisit": {
+        "type": "object",
+        "properties": {
+          "car": {
+            "$ref": "#/components/schemas/OrderCar"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "desiredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "visitAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "answerBy": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "visitAt",
+                  "at",
+                  "answerBy"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "visitAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "until": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "visitAt",
+                  "at",
+                  "until"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "car",
+          "timeZone",
+          "desiredAt",
+          "proposed",
+          "confirmed"
         ]
       },
       "SessionAccess": {
@@ -31719,7 +32280,9 @@
           "response_expired",
           "reserve_expired",
           "cancelled_by_admin",
-          "term_expired"
+          "term_expired",
+          "no_show",
+          "visit_unresolved"
         ]
       },
       "SupplierInvitation": {
@@ -32616,6 +33179,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -32759,6 +33332,7 @@
           "reserveUntil",
           "receiptOn",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "offerId",
           "handledBy",
@@ -32959,6 +33533,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -33035,6 +33619,7 @@
           "reserveUntil",
           "receiptOn",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "offerId",
           "handledBy",
@@ -33113,6 +33698,36 @@
           "answerBy"
         ]
       },
+      "SupplierOrderTimeOptions": {
+        "type": "object",
+        "properties": {
+          "desiredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VisitDay"
+            }
+          },
+          "answerBy": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "desiredAt",
+          "timeZone",
+          "days",
+          "answerBy"
+        ]
+      },
       "SupplierPauseReason": {
         "type": "string",
         "enum": [
@@ -33183,6 +33798,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -33203,6 +33828,7 @@
           "fulfillment",
           "item",
           "receiptOn",
+          "serviceVisit",
           "createdAt"
         ]
       },
@@ -35103,6 +35729,16 @@
           "canReview": {
             "type": "boolean"
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -35126,6 +35762,7 @@
           "givenOut",
           "canRepeat",
           "canReview",
+          "serviceVisit",
           "createdAt"
         ]
       },
@@ -35214,6 +35851,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -35280,6 +35927,7 @@
           "reserveUntil",
           "receiptOn",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "supplier",
           "version",
@@ -35593,6 +36241,16 @@
               }
             ]
           },
+          "serviceVisit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServiceVisit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -35618,6 +36276,7 @@
           "reserveUntil",
           "receiptOn",
           "onOrderTerm",
+          "serviceVisit",
           "createdAt",
           "supplier"
         ]
@@ -37407,6 +38066,37 @@
         "required": [
           "phone",
           "code"
+        ]
+      },
+      "VisitDay": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "intervals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ]
+            }
+          }
+        },
+        "required": [
+          "date",
+          "intervals"
         ]
       },
       "WeeklyHours": {

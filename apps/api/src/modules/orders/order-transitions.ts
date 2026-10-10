@@ -13,6 +13,7 @@ import {
 import {
   acceptedReserveEnd,
   countsInStatistics,
+  isLateCancel,
   lateCloseUntil,
   orderTransition,
   readyReserveEnd,
@@ -22,6 +23,8 @@ import {
   supplierState,
   supplyOverdueAt,
   termAnswerBy,
+  timeAnswerBy,
+  visitUntil,
   type OrderAction,
 } from "@adclub/domain";
 import { and, desc, eq, gte, isNotNull, ne, sql, type SQL } from "drizzle-orm";
@@ -113,6 +116,11 @@ export interface MoveRequest {
    * schedule gives a date for it in this transaction.
    */
   term?: { leadDays: number };
+  /**
+   * Another time of a service (TASK-038); the caller has checked it
+   * (`visitTimeProblem`) in this transaction.
+   */
+  time?: { visitAt: Date };
 }
 
 export type MoveOutcome =
@@ -153,10 +161,15 @@ export type ExtensionOutcome =
       reason: "changed" | "not_waiting" | "expired" | "not_found";
     };
 
-type DeadlineAction = "expire_no_response" | "expire_reserve" | "expire_term";
+type DeadlineAction = "expire_no_response" | "expire_reserve" | "expire_term" | "expire_visit";
 
 function isExpiry(due: ReturnType<typeof dueDeadline>): due is DeadlineAction {
-  return due === "expire_no_response" || due === "expire_reserve" || due === "expire_term";
+  return (
+    due === "expire_no_response" ||
+    due === "expire_reserve" ||
+    due === "expire_term" ||
+    due === "expire_visit"
+  );
 }
 
 /** What the sweeper did to one order. */
@@ -184,6 +197,11 @@ export function dueDeadline(
   if (row.status === "term_proposed" && row.termAnswerBy !== null && row.termAnswerBy <= at) {
     return "expire_term";
   }
+  // TASK-038: the window of a confirmed visit is over and nobody closed it
+  // nor marked a no-show.
+  if (row.status === "accepted" && row.visitUntil !== null && row.visitUntil <= at) {
+    return "expire_visit";
+  }
   // TASK-037: the confirmed date has passed and the goods are not ready — a
   // note, once per order; the status stays (ARCHITECTURE 6.2).
   if (
@@ -205,7 +223,7 @@ export function dueDeadline(
   // The late close window has passed: the order holds its code no longer,
   // so the digits may be drawn for someone else (TASK-022).
   if (
-    row.status === "reserve_expired" &&
+    (row.status === "reserve_expired" || row.status === "visit_unresolved") &&
     row.codeReleasedAt === null &&
     row.lateCloseUntil !== null &&
     row.lateCloseUntil <= at
@@ -269,6 +287,10 @@ function sameParameters(row: OrderRow, request: MoveRequest): boolean {
   if (request.action === "propose_term") {
     return row.proposedLeadDays === (request.term?.leadDays ?? null);
   }
+  // The same for another time of a service (TASK-038).
+  if (request.action === "propose_time") {
+    return row.proposedAt?.getTime() === request.time?.visitAt.getTime();
+  }
   return true;
 }
 
@@ -311,6 +333,7 @@ export class OrderTransitions {
         close: request.close,
         cancel: request.cancel,
         term: request.term,
+        time: request.time,
       });
       if (moved) {
         return { kind: "moved", order: moved };
@@ -448,7 +471,8 @@ export class OrderTransitions {
         const expired =
           row.status === "response_expired" ||
           row.status === "reserve_expired" ||
-          row.status === "term_expired";
+          row.status === "term_expired" ||
+          row.status === "visit_unresolved";
         return { kind: "refused", order: row, reason: expired ? "expired" : "not_waiting" };
       }
       if (row.version !== request.expectedVersion) {
@@ -643,6 +667,7 @@ export class OrderTransitions {
       close?: MoveRequest["close"];
       cancel?: MoveRequest["cancel"];
       term?: MoveRequest["term"];
+      time?: MoveRequest["time"];
     } = {},
   ): Promise<OrderRow | null> {
     const to = orderTransition(row.status, action, row.kind);
@@ -659,6 +684,25 @@ export class OrderTransitions {
       case "accept": {
         if (actor.type !== "supplier_member") {
           throw new Error("Only an employee accepts an order");
+        }
+        if (row.kind === "service") {
+          // «Подтвердить время» (TASK-038): the time the user asked for; the
+          // visit's window runs `service_grace_hours` after it. No receipt
+          // date and no reserve — a service is not an item waiting.
+          const visitAt = row.desiredAt;
+          if (!visitAt) {
+            throw new Error("An order on a service always has the time asked for");
+          }
+          Object.assign(set, {
+            acceptedAt: at,
+            phoneRevealedAt: at,
+            handledByMemberId: actor.memberId,
+            handledAt: at,
+            visitAt,
+            visitUntil: visitUntil(visitAt, await this.settings.get("service_grace_hours")),
+          });
+          details.visitAt = visitAt.toISOString();
+          break;
         }
         const schedule = (await receiptSchedules(tx, [row.locationId])).get(row.locationId) ?? null;
         const leadDays = row.offerSnapshot.leadDays;
@@ -762,7 +806,45 @@ export class OrderTransitions {
         details.answerBy = answerBy.toISOString();
         break;
       }
+      case "propose_time": {
+        // Another time of a service (TASK-038): the user answers by
+        // `time_agreement_hours`, never later than that time itself.
+        if (actor.type !== "supplier_member") {
+          throw new Error("Only an employee proposes another time");
+        }
+        const visitAt = extra.time?.visitAt;
+        if (!visitAt) {
+          throw new Error("Another time of a service needs the time (checked by the caller)");
+        }
+        const answerBy = timeAnswerBy(at, await this.settings.get("time_agreement_hours"), visitAt);
+        Object.assign(set, {
+          handledByMemberId: actor.memberId,
+          handledAt: at,
+          proposedAt: visitAt,
+          termProposedAt: at,
+          termAnswerBy: answerBy,
+        });
+        details.visitAt = visitAt.toISOString();
+        details.answerBy = answerBy.toISOString();
+        break;
+      }
       case "agree_term": {
+        if (row.kind === "service") {
+          // The user's «yes» to another time (TASK-038): the visit is at the
+          // proposed time, the phone opens (ARCHITECTURE 6.3).
+          const visitAt = row.proposedAt;
+          if (!visitAt) {
+            throw new Error("A proposal of another time always has the time");
+          }
+          Object.assign(set, {
+            acceptedAt: at,
+            phoneRevealedAt: at,
+            visitAt,
+            visitUntil: visitUntil(visitAt, await this.settings.get("service_grace_hours")),
+          });
+          details.visitAt = visitAt.toISOString();
+          break;
+        }
         // The user's «yes»: the order is taken on with the proposed term and
         // the date shown with it — the date the supplier committed to when
         // proposing, not one counted again from the moment of the answer.
@@ -793,6 +875,25 @@ export class OrderTransitions {
         set.finishedAt = at;
         details.deadline = iso(row.respondBy);
         break;
+      case "mark_no_show":
+        // The user did not come (TASK-038): the caller checked the time is
+        // inside the visit's window; the guard below checks it again.
+        if (actor.type !== "supplier_member") {
+          throw new Error("Only an employee marks a no-show");
+        }
+        set.finishedAt = at;
+        details.visitAt = iso(row.visitAt);
+        break;
+      case "expire_visit": {
+        // Nobody closed the visit nor marked a no-show (TASK-038). It may
+        // still be given out by the code inside the window (PRODUCT 10.7), so
+        // it keeps its code until then — as an expired reserve.
+        const windowHours = await this.settings.get("order_late_close_hours");
+        Object.assign(set, { finishedAt: at, lateCloseUntil: lateCloseUntil(at, windowHours) });
+        details.deadline = iso(row.visitUntil);
+        details.visitAt = iso(row.visitAt);
+        break;
+      }
       case "expire_reserve": {
         // The reserve ran out; the order may still be given out against the
         // code for the window (PRODUCT 10.7), so it keeps its code until
@@ -867,7 +968,8 @@ export class OrderTransitions {
       action === "admin_cancel" ||
       action === "expire_no_response" ||
       action === "reject_term" ||
-      action === "expire_term"
+      action === "expire_term" ||
+      action === "mark_no_show"
     ) {
       // Nothing more will ever be given out on this code.
       set.codeReleasedAt = at;
@@ -912,12 +1014,33 @@ export class OrderTransitions {
     if (action === "expire_reserve") {
       // Nobody came for an item the supplier had put aside: the club's own
       // discipline statistics of the user (PRODUCT 10.5).
-      await this.discipline.mark(tx, updated, at);
+      await this.discipline.mark(tx, updated, at, "pickup_no_show");
+    }
+    if (action === "mark_no_show") {
+      // TASK-038: the same mark for a visit the user did not come to.
+      await this.discipline.mark(tx, updated, at, "service_no_show");
+    }
+    if (action === "expire_visit") {
+      await this.signalVisitUnresolved(tx, updated, at);
+    }
+    if (action === "cancel" && row.kind === "service" && row.status === "accepted" && row.visitAt) {
+      // ARCHITECTURE 6.3: a confirmed visit cancelled less than
+      // `late_cancel_hours` before it is a late cancel — a note in the
+      // order's journal. The mark of discipline waits for EPIC-19, as the
+      // late cancel of goods does (ARCHITECTURE 4.62).
+      if (isLateCancel(row.visitAt, at, await this.settings.get("late_cancel_hours"))) {
+        await this.record(tx, updated, "late_cancel", null, null, actor, channel, at, {
+          visitAt: row.visitAt.toISOString(),
+        });
+      }
     }
     if (action === "close_late") {
       // The customer had come in time after all (PRODUCT 10.7).
       await this.discipline.revokeForOrder(tx, updated.id, "late_close", at);
-      await this.signalDuplicateAfterLateClose(tx, row, updated, at);
+      if (row.kind !== "service") {
+        // A visit is not an item that could have been handed over twice.
+        await this.signalDuplicateAfterLateClose(tx, row, updated, at);
+      }
     }
     if (action === "admin_close" && actor.type === "admin") {
       await this.discipline.revokeForOrder(tx, updated.id, "admin_close", at);
@@ -993,6 +1116,15 @@ export class OrderTransitions {
     if (action === "expire_term") {
       return sql`(${customerOrder.termAnswerBy} IS NOT NULL AND ${customerOrder.termAnswerBy} <= ${now})`;
     }
+    if (action === "expire_visit") {
+      return sql`(${customerOrder.visitUntil} IS NOT NULL AND ${customerOrder.visitUntil} <= ${now})`;
+    }
+    // TASK-038: a no-show only inside the visit's window — from its time on
+    // (the end of the window is the general guard below).
+    const visitStarted =
+      action === "mark_no_show"
+        ? sql` AND ${customerOrder.visitAt} IS NOT NULL AND ${customerOrder.visitAt} <= ${now}`
+        : sql``;
     if (action === "close_late") {
       return sql`(${customerOrder.lateCloseUntil} IS NOT NULL AND ${customerOrder.lateCloseUntil} > ${now}
         AND ${customerOrder.codeReleasedAt} IS NULL)`;
@@ -1008,7 +1140,9 @@ export class OrderTransitions {
       AND NOT (${customerOrder.status} IN ('accepted', 'ready')
         AND ${customerOrder.expiresAt} IS NOT NULL AND ${customerOrder.expiresAt} <= ${now})
       AND NOT (${customerOrder.status} = 'term_proposed'
-        AND ${customerOrder.termAnswerBy} IS NOT NULL AND ${customerOrder.termAnswerBy} <= ${now})`;
+        AND ${customerOrder.termAnswerBy} IS NOT NULL AND ${customerOrder.termAnswerBy} <= ${now})
+      AND NOT (${customerOrder.status} = 'accepted'
+        AND ${customerOrder.visitUntil} IS NOT NULL AND ${customerOrder.visitUntil} <= ${now})${visitStarted}`;
   }
 
   /**
@@ -1062,6 +1196,33 @@ export class OrderTransitions {
   }
 
   /**
+   * TASK-038 (ARCHITECTURE 6.3 «unresolved»): a confirmed visit nobody
+   * closed nor marked a no-show — it is unclear who failed whom, so a person
+   * looks. Raised by the move that expires the visit, which happens once per
+   * order (a conditional update), so two sweepers never raise it twice; one
+   * open signal per order besides. A test order raises none
+   * (`countsInStatistics`); the rating feels nothing of it automatically.
+   */
+  private async signalVisitUnresolved(tx: DbExecutor, order: OrderRow, at: Date): Promise<void> {
+    if (!countsInStatistics(order)) {
+      return;
+    }
+    await this.signals.raise(tx, {
+      kind: "visit_unresolved",
+      subjectType: "order",
+      subjectId: order.id,
+      payload: {
+        orderId: order.id,
+        orderNumber: order.number,
+        supplierId: order.supplierId,
+        supplierName: order.offerSnapshot.supplier.name,
+        ...(order.visitAt ? { visitAt: order.visitAt.toISOString() } : {}),
+      },
+      at,
+    });
+  }
+
+  /**
    * The code of an order whose late close window has passed is let go: the
    * digits may be drawn for another order again (a note, not a move).
    */
@@ -1073,7 +1234,7 @@ export class OrderTransitions {
       .where(
         and(
           eq(customerOrder.id, row.id),
-          eq(customerOrder.status, "reserve_expired"),
+          sql`${customerOrder.status} IN ('reserve_expired', 'visit_unresolved')`,
           sql`${customerOrder.codeReleasedAt} IS NULL`,
           sql`${customerOrder.lateCloseUntil} IS NOT NULL AND ${customerOrder.lateCloseUntil} <= ${now}`,
         ),

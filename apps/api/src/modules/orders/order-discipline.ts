@@ -7,6 +7,7 @@ import {
   type AdminDisciplinePage,
   type AdminDisciplineUsersPage,
   type AdminDisciplineUsersQuery,
+  type DisciplineKind,
   type DisciplineMark,
 } from "@adclub/contracts";
 import { countsInStatistics, hidePhone } from "@adclub/domain";
@@ -59,8 +60,12 @@ export class Discipline {
     @Inject(AuditLog) private readonly audit: AuditLog,
   ) {}
 
-  /** The no-show of an order whose pickup reserve has just run out. */
-  async mark(tx: DbExecutor, order: OrderRow, at: Date): Promise<void> {
+  /**
+   * The no-show of an order: its pickup reserve has just run out
+   * (`pickup_no_show`), or an employee marked that the user did not come to
+   * a confirmed visit (`service_no_show`, TASK-038).
+   */
+  async mark(tx: DbExecutor, order: OrderRow, at: Date, kind: DisciplineKind): Promise<void> {
     if (!countsInStatistics(order)) {
       // An employee's own order is out of every statistic (PRODUCT 12.6):
       // the one place that decides it is `countsInStatistics` (4.33).
@@ -72,12 +77,12 @@ export class Discipline {
         userAccountId: order.userAccountId,
         orderId: order.id,
         supplierId: order.supplierId,
-        kind: "pickup_no_show",
+        kind,
         occurredAt: at,
       })
       // The sweeper may reach the same order twice; one mark per order.
       .onConflictDoNothing();
-    this.logger.log(`Discipline mark order=${order.id} kind=pickup_no_show`);
+    this.logger.log(`Discipline mark order=${order.id} kind=${kind}`);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCESS_CLOSED_TEXT,
+  carText,
   fulfillmentText,
   itemText,
   momentText,
@@ -9,6 +10,7 @@ import {
   orderStateText,
   phoneText,
   termText,
+  visitTexts,
 } from "./order-notice-texts";
 
 const item = (
@@ -95,6 +97,46 @@ describe("the values of the notices of orders (TASK-025, SCREENS 8.5)", () => {
       "предложен другой срок: Марат, 12:40",
     );
     expect(ACCESS_CLOSED_TEXT.ru).toBe("недоступна: доступ к кабинету закрыт");
+  });
+
+  it("says the car and the time of W-01b in the point's zone, and a service's state in its words (TASK-038)", () => {
+    const car = {
+      make: { id: "7c9e6679-7425-40de-944b-e07fc1f90ae1", label: "Geely" },
+      model: { id: "7c9e6679-7425-40de-944b-e07fc1f90ae2", label: "Coolray" },
+      year: 2024,
+    };
+    expect(carText(car)).toBe("Geely Coolray 2024");
+    expect(carText({ ...car, year: null })).toBe("Geely Coolray");
+    expect(carText(null)).toBe("—");
+    // 10:00 UTC is 15:00 in Almaty, on the same date.
+    expect(visitTexts(new Date("2026-10-11T10:00:00Z"), "Asia/Almaty", "ru")).toEqual({
+      date: "11 октября",
+      time: "15:00",
+    });
+    // 20:30 UTC is already the next day there.
+    expect(visitTexts(new Date("2026-10-11T20:30:00Z"), "Asia/Almaty", "kk")).toEqual({
+      date: "12 қазан",
+      time: "01:30",
+    });
+    const now = new Date("2026-09-26T10:00:00Z");
+    const facts = {
+      handledBy: "Марат",
+      handledAt: new Date("2026-09-26T07:40:00Z"),
+      timeZone: "Asia/Almaty",
+      kind: "service" as const,
+    };
+    expect(orderStateText({ ...facts, status: "accepted" }, "ru", now)).toBe(
+      "время подтверждено: Марат, 12:40",
+    );
+    expect(orderStateText({ ...facts, status: "term_proposed" }, "ru", now)).toBe(
+      "предложено другое время: Марат, 12:40",
+    );
+    expect(orderStateText({ ...facts, status: "no_show" }, "ru", now)).toBe(
+      "отмечена неявка клиента",
+    );
+    expect(orderStateText({ ...facts, status: "visit_unresolved" }, "kk", now)).toBe(
+      "мерзімі өткен",
+    );
   });
 
   it("says the term of W-01a by its date, or by its working days without one (TASK-037)", () => {

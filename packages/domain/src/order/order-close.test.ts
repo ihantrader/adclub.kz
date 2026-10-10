@@ -45,6 +45,8 @@ describe("orderCloseVerdict", () => {
       "response_expired",
       // TASK-037: the user never agreed to the proposed term.
       "term_expired",
+      // TASK-038: the employee marked that the customer did not come.
+      "no_show",
     ] as const) {
       expect(orderCloseVerdict(facts({ status }), now)).toEqual({
         kind: "refused",
@@ -75,6 +77,16 @@ describe("orderCloseVerdict", () => {
       reason: "late_window_passed",
       at: EXPIRED,
     });
+  });
+
+  it("closes an unresolved visit inside its window, as an expired reserve (TASK-038)", () => {
+    const until = lateCloseUntil(EXPIRED, 48);
+    expect(
+      orderCloseVerdict(facts({ status: "visit_unresolved", lateCloseUntil: until }), now),
+    ).toEqual({ kind: "late", expiredAt: EXPIRED, until });
+    expect(
+      orderCloseVerdict(facts({ status: "visit_unresolved", lateCloseUntil: until }), until),
+    ).toEqual({ kind: "refused", reason: "late_window_passed", at: EXPIRED });
   });
 
   it("refuses an expired reserve without a window (an order from before the window existed)", () => {

@@ -223,9 +223,13 @@ import { clientPlatformSchema } from "./client";
  * - `ORDER_OFFER_UNAVAILABLE` (409): the offer isn't on the showcase any
  *   more (withdrawn, the supplier paused, the item archived…) or never
  *   was — «Поставщик снял это предложение».
- * - `ORDER_KIND_NOT_SUPPORTED` (409): the offer is of a kind the server
- *   can't order yet. Since TASK-037 an offer under order is ordered (an
- *   order with a term, ARCHITECTURE 6.2); services come with TASK-038.
+ * - `ORDER_KIND_NOT_SUPPORTED` (409): the action is not one of the order's
+ *   (or the offer's) kind — another term for an order that isn't under
+ *   order, another time or a no-show for one that isn't a service. Since
+ *   TASK-038 every offer the showcase shows can be ordered: `POST /orders`
+ *   no longer answers it.
+ * - `ORDER_NO_SHOW_TOO_EARLY` (409, TASK-038): a no-show of a visit is
+ *   marked from its time on, not before — nothing changed.
  * - `ORDER_FULFILLMENT_UNAVAILABLE` (409): the offer doesn't give the
  *   chosen way to get it (pickup or delivery).
  * - `ORDER_PRICE_CHANGED` (409): the price isn't the one the user saw;
@@ -404,6 +408,8 @@ export const errorCodeSchema = z.enum([
   "ORDER_DUPLICATE_ACTIVE",
   "ORDER_IDEMPOTENCY_MISMATCH",
   "ORDER_STATE_CONFLICT",
+  // Orders on services (TASK-038, ARCHITECTURE 4.62).
+  "ORDER_NO_SHOW_TOO_EARLY",
   // A blocked company and its orders (TASK-033.A, ARCHITECTURE 4.51).
   "SUPPLIER_BLOCKED",
   // Signals the administrator works with (TASK-034, ARCHITECTURE 4.52).

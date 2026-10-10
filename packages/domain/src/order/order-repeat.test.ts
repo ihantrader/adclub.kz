@@ -64,7 +64,7 @@ describe("orderRepeatDecision", () => {
     ).toEqual({ kind: "unavailable", reason: "club_access_required" });
   });
 
-  it("refuses a kind the server can't create yet (services — TASK-038)", () => {
+  it("does not repeat a service until the checkout of TASK-039.B asks for a car and a time", () => {
     expect(orderRepeatDecision(facts({ orderKind: "service" }))).toEqual({
       kind: "unavailable",
       reason: "kind_not_supported",

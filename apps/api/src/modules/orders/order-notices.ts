@@ -17,6 +17,7 @@ import {
 import { AppSettings } from "../settings";
 import {
   ACCESS_CLOSED_TEXT,
+  carText,
   CUSTOMER_NAME_UNKNOWN,
   fulfillmentText,
   itemText,
@@ -26,6 +27,7 @@ import {
   orderStateText,
   phoneText,
   termText,
+  visitTexts,
   type NoticeLang,
 } from "./order-notice-texts";
 import { customerOrder, type OrderRow } from "./schema";
@@ -67,10 +69,15 @@ export const ORDER_SUBJECT = "order";
 export const ORDER_BUTTONS = ["confirm", "decline"] as const;
 
 /**
- * The notices of a new order: W-01 (in stock) and W-01a (under order,
- * TASK-037) — the same buttons, the same payloads, the same key of the event.
+ * The notices of a new order: W-01 (in stock), W-01a (under order,
+ * TASK-037) and W-01b (a service, TASK-038) — the same buttons, the same
+ * payloads, the same key of the event.
  */
-export const NEW_ORDER_TEMPLATES = ["order_new", "order_new_on_order"] as const;
+export const NEW_ORDER_TEMPLATES = [
+  "order_new",
+  "order_new_on_order",
+  "order_new_service",
+] as const;
 export type OrderButton = (typeof ORDER_BUTTONS)[number];
 
 /** An employee as a notice needs them. */
@@ -164,23 +171,36 @@ export class OrderNotices {
       };
       await this.messaging.enqueue(tx, {
         // W-01a for an order under order (TASK-037): «срок до {дата}» and
-        // «Подтвердить срок» — the same buttons, the same payloads.
-        ...(order.kind === "on_order"
+        // «Подтвердить срок»; W-01b for a service (TASK-038): «{услуга},
+        // {модель}, {дата} в {время}» and «Подтвердить время» — the same
+        // buttons, the same payloads.
+        ...(order.kind === "service"
           ? {
-              template: "order_new_on_order" as const,
+              template: "order_new_service" as const,
               variables: {
-                ...common,
-                term: termText(order.expectedReadyOn, order.offerSnapshot.leadDays, member.lang),
+                number: common.number,
+                service: common.item,
+                model: carText(order.carSnapshot),
+                ...visitTexts(order.desiredAt ?? order.respondBy, timeZone, member.lang),
+                respondBy: common.respondBy,
               },
             }
-          : {
-              template: "order_new" as const,
-              variables: {
-                ...common,
-                total: moneyText(order.total),
-                fulfillment: fulfillmentText(order.fulfillment, member.lang),
-              },
-            }),
+          : order.kind === "on_order"
+            ? {
+                template: "order_new_on_order" as const,
+                variables: {
+                  ...common,
+                  term: termText(order.expectedReadyOn, order.offerSnapshot.leadDays, member.lang),
+                },
+              }
+            : {
+                template: "order_new" as const,
+                variables: {
+                  ...common,
+                  total: moneyText(order.total),
+                  fulfillment: fulfillmentText(order.fulfillment, member.lang),
+                },
+              }),
         phone: member.phone,
         lang: member.lang,
         buttons: Object.fromEntries(
@@ -309,6 +329,7 @@ export class OrderNotices {
           handledBy: handler?.name ?? null,
           handledAt: order.handledAt,
           timeZone: order.offerSnapshot.location.timeZone,
+          kind: order.kind,
         },
         member.lang,
         at,
@@ -405,6 +426,7 @@ export class OrderMessages implements MessageSubject, OnModuleInit {
     switch (template) {
       case "order_new":
       case "order_new_on_order":
+      case "order_new_service":
         return (
           order.status === "created" &&
           member.notificationsEnabledAt !== null &&

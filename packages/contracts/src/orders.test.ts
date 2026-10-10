@@ -30,11 +30,22 @@ describe("the body of a new order", () => {
     expect(createOrderBodySchema.safeParse({ ...base, quantity }).success).toBe(false);
   });
 
-  it("needs the price seen, the way to get it and a key", () => {
-    for (const field of ["expectedPrice", "fulfillment", "idempotencyKey", "offerId"] as const) {
+  it("needs the price seen and a key; the way to get it is the server's to require (TASK-038)", () => {
+    for (const field of ["expectedPrice", "idempotencyKey", "offerId"] as const) {
       const { [field]: _left, ...rest } = base;
       expect(createOrderBodySchema.safeParse(rest).success, field).toBe(false);
     }
+    // A service is a visit: no way to get it, a car and a time instead — goods
+    // without `fulfillment` are refused by the server, at the field.
+    const { fulfillment: _fulfillment, ...visit } = base;
+    expect(
+      createOrderBodySchema.safeParse({
+        ...visit,
+        carId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        desiredAt: "2026-10-11T11:00:00+05:00",
+      }).success,
+    ).toBe(true);
+    expect(createOrderBodySchema.safeParse({ ...base, desiredAt: "tomorrow" }).success).toBe(false);
     expect(createOrderBodySchema.safeParse({ ...base, fulfillment: "courier" }).success).toBe(
       false,
     );

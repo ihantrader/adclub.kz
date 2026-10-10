@@ -66,7 +66,17 @@ export function kindNotSupported(): ApiException {
   return new ApiException(
     409,
     "ORDER_KIND_NOT_SUPPORTED",
-    "Orders of items under order come later; this offer can't be ordered yet",
+    "This action is not one of an order of this kind",
+  );
+}
+
+/** TASK-038: a no-show is marked from the time of the visit on, not before. */
+export function noShowTooEarly(visitAt: Date): ApiException {
+  return new ApiException(
+    409,
+    "ORDER_NO_SHOW_TOO_EARLY",
+    "The time of the visit has not come yet: a no-show is marked from it on",
+    { details: { visitAt: visitAt.toISOString() } },
   );
 }
 

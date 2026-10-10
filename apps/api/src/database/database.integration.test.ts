@@ -98,6 +98,217 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds an order on a service in the database, and rolls back removing only such orders (service orders)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000138') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('service-orders-city', 'Город записей') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Записи', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const locationId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+        [supplierId, city.rows[0]!.id],
+      )
+    ).rows[0]!.id;
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('service_orders_node', 'services', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('service_orders_sub', 'services', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const itemId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO catalog_item (item_type, category_id, category_kind) VALUES ('service', $1, 'services') RETURNING id",
+        [subcategory.rows[0]!.id],
+      )
+    ).rows[0]!.id;
+    const offerId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, lead_days, pickup, delivery) VALUES ($1, $2, $3, 'service', 8000, 'in_stock', 0, false, false) RETURNING id",
+        [supplierId, locationId, itemId],
+      )
+    ).rows[0]!.id;
+    const makeId = (
+      await client.query<{ id: string }>("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const modelId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+        [makeId],
+      )
+    ).rows[0]!.id;
+    const carId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account_car (account_id, make_id, make_label, model_id, model_label, year) VALUES ($1, $2, 'Geely', $3, 'Coolray', 2024) RETURNING id",
+        [accountId, makeId, modelId],
+      )
+    ).rows[0]!.id;
+    const car = JSON.stringify({
+      make: { id: makeId, label: "Geely" },
+      model: { id: modelId, label: "Coolray" },
+      year: 2024,
+    });
+    const now = Date.now();
+    const desiredAt = new Date(now + 24 * 3_600_000);
+    let code = 500_100;
+    const insert = (values: Record<string, unknown>) => {
+      code += 1;
+      const row = {
+        kind: "service",
+        user_account_id: accountId,
+        supplier_id: supplierId,
+        location_id: locationId,
+        offer_id: offerId,
+        item_id: itemId,
+        offer_snapshot: "{}",
+        unit_price: 8000,
+        quantity: 1,
+        total: 8000,
+        fulfillment: "pickup",
+        confirmation_code: String(code),
+        qr_token: `qr-service-${randomUUID()}`,
+        idempotency_key: randomUUID(),
+        respond_by: new Date(now + 3_600_000),
+        car_id: carId,
+        car_snapshot: car,
+        desired_at: desiredAt,
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO customer_order (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    const taken = { accepted_at: new Date(), phone_revealed_at: new Date() };
+    const visit = { visit_at: desiredAt, visit_until: new Date(desiredAt.getTime() + 7_200_000) };
+    // A service has its car and its time, and nothing else has them.
+    await expect(insert({ car_snapshot: null })).rejects.toThrow(/customer_order_service_check/);
+    await expect(insert({ desired_at: null })).rejects.toThrow(/customer_order_service_check/);
+    await expect(insert({ kind: "stock" })).rejects.toThrow(/customer_order_service_check/);
+    // One visit at the point: no quantity, no delivery.
+    await expect(insert({ quantity: 2, total: 16000 })).rejects.toThrow(
+      /customer_order_service_check/,
+    );
+    await expect(insert({ fulfillment: "delivery" })).rejects.toThrow(
+      /customer_order_service_check/,
+    );
+    // Another time is a whole proposal.
+    await expect(insert({ proposed_at: desiredAt })).rejects.toThrow(
+      /customer_order_service_check/,
+    );
+    // A confirmed visit has its time and window; a no-show is a service's only.
+    await expect(insert({ status: "accepted", ...taken })).rejects.toThrow(
+      /customer_order_service_check/,
+    );
+    await expect(
+      insert({ status: "accepted", ...taken, visit_at: desiredAt, visit_until: null }),
+    ).rejects.toThrow(/customer_order_service_check/);
+    await expect(
+      insert({
+        kind: "stock",
+        car_id: null,
+        car_snapshot: null,
+        desired_at: null,
+        status: "no_show",
+        ...taken,
+        finished_at: new Date(),
+        code_released_at: new Date(),
+      }),
+    ).rejects.toThrow(/customer_order_service_check/);
+    // An unresolved visit always knows its late close window.
+    await expect(
+      insert({ status: "visit_unresolved", ...taken, ...visit, finished_at: new Date() }),
+    ).rejects.toThrow(/customer_order_late_close_check/);
+    const created = (await insert({})).rows[0]!.id;
+    const proposed = (
+      await insert({
+        status: "term_proposed",
+        proposed_at: new Date(now + 30 * 3_600_000),
+        term_proposed_at: new Date(),
+        term_answer_by: new Date(now + 24 * 3_600_000),
+      })
+    ).rows[0]!.id;
+    const noShow = (
+      await insert({
+        status: "no_show",
+        ...taken,
+        ...visit,
+        finished_at: new Date(),
+        code_released_at: new Date(),
+      })
+    ).rows[0]!.id;
+    const unresolved = (
+      await insert({
+        status: "visit_unresolved",
+        ...taken,
+        ...visit,
+        finished_at: new Date(),
+        late_close_until: new Date(now + 48 * 3_600_000),
+      })
+    ).rows[0]!.id;
+    const goods = (
+      await insert({ kind: "stock", car_id: null, car_snapshot: null, desired_at: null })
+    ).rows[0]!.id;
+    const event = (orderId: string, action: string, from: string | null, to: string | null) =>
+      client.query(
+        `INSERT INTO order_event (order_id, action, from_status, to_status, actor_type, channel, payload)
+         VALUES ($1, $2, $3, $4, 'system', 'timer', '{}')`,
+        [orderId, action, from, to],
+      );
+    await event(proposed, "propose_time", "created", "term_proposed");
+    await event(noShow, "mark_no_show", "accepted", "no_show");
+    await event(unresolved, "expire_visit", "accepted", "visit_unresolved");
+    // A late cancel is a note: it names no status.
+    await expect(event(created, "late_cancel", "accepted", "cancelled_by_user")).rejects.toThrow(
+      /order_event_move_check/,
+    );
+    await event(created, "late_cancel", null, null);
+    await client.query(
+      "INSERT INTO user_discipline_event (user_account_id, order_id, supplier_id, kind, occurred_at) VALUES ($1, $2, $3, 'service_no_show', now())",
+      [accountId, noShow, supplierId],
+    );
+    // A car leaving the garage leaves the order its snapshot.
+    await client.query("DELETE FROM account_car WHERE id = $1", [carId]);
+    const kept = await client.query<{ car_id: string | null; car_snapshot: { year: number } }>(
+      "SELECT car_id, car_snapshot FROM customer_order WHERE id = $1",
+      [created],
+    );
+    expect(kept.rows[0]).toMatchObject({ car_id: null, car_snapshot: { year: 2024 } });
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The old rules know no service: such orders go with their journal and
+    // marks; an order of goods stays as it was.
+    expect(await count("customer_order", "kind = 'service'", [])).toBe(0);
+    expect(await count("customer_order", "id = $1", [goods])).toBe(1);
+    expect(await count("user_discipline_event", "order_id = $1", [noShow])).toBe(0);
+    expect(await count("order_event", "order_id = $1", [created])).toBe(0);
+    expect(await columnExists(client, "customer_order", "desired_at")).toBe(false);
+    await expect(
+      client.query("UPDATE customer_order SET kind = 'service' WHERE id = $1", [goods]),
+    ).rejects.toThrow(/customer_order_kind_check/);
+    // Nothing of this test is left for the walk down below.
+    await client.query("DELETE FROM customer_order WHERE id = $1", [goods]);
+    await client.query("DELETE FROM offer WHERE id = $1", [offerId]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [itemId]);
+    await client.query("DELETE FROM category WHERE code = 'service_orders_sub'");
+    await client.query("DELETE FROM category WHERE code = 'service_orders_node'");
+    await client.query("DELETE FROM vehicle_model WHERE id = $1", [modelId]);
+    await client.query("DELETE FROM vehicle_make WHERE id = $1", [makeId]);
+    await client.query("DELETE FROM supplier_location WHERE id = $1", [locationId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
   it("holds a service's prices by model in the database, and rolls back keeping the goods (service offers)", async () => {
     const city = await client.query<{ id: string }>(
       "INSERT INTO city (code, name_ru) VALUES ('service-offers-city', 'Город услуг') RETURNING id",

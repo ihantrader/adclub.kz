@@ -41,6 +41,12 @@ import type { CatalogItemListQuery } from "./catalog-items";
  * an employee raises none (`countsInStatistics`). The status of the order
  * does not change — the administrator calls the supplier.
  *
+ * TASK-038 adds `visit_unresolved` (ARCHITECTURE 6.3): a confirmed visit for
+ * a service was neither closed by the code nor marked a no-show by the end
+ * of its window — it is unclear who failed whom, so a person looks. One
+ * signal per order (the subject is the order), raised once by the move that
+ * expires the visit; a test order of an employee raises none.
+ *
  * Later tasks add the others (a low rating, a spike of complaints, a failed
  * payment).
  */
@@ -51,6 +57,7 @@ export const adminSignalKindSchema = z.enum([
   "whatsapp_outage",
   "supplier_unreachable",
   "supply_overdue",
+  "visit_unresolved",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -120,6 +127,8 @@ export const adminSignalPayloadSchema = z.object({
    */
   readyOn: z.string().optional(),
   leadDays: z.number().int().optional(),
+  /** `visit_unresolved` (TASK-038): the confirmed time of the visit; the order — `orderId`, `orderNumber`. */
+  visitAt: z.iso.datetime().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

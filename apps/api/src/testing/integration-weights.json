@@ -20,6 +20,7 @@
   "src/modules/orders/on-order.integration.test.ts": 124,
   "src/modules/orders/order-notices.integration.test.ts": 98,
   "src/modules/orders/orders.integration.test.ts": 83,
+  "src/modules/orders/service-orders.integration.test.ts": 90,
   "src/modules/settings/settings.integration.test.ts": 33,
   "src/modules/showcase/showcase.integration.test.ts": 35,
   "src/modules/suppliers/supplier-members.integration.test.ts": 37,

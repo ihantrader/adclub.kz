@@ -110,6 +110,16 @@ export {
   termOptions,
 } from "./order/order-term";
 export type { ProposedTermProblem, TermOption } from "./order/order-term";
+export {
+  isLateCancel,
+  noShowVerdict,
+  serviceRespondBy,
+  timeAnswerBy,
+  visitDays,
+  visitTimeProblem,
+  visitUntil,
+} from "./order/order-visit";
+export type { VisitDay, VisitTimeProblem } from "./order/order-visit";
 export { countsInStatistics } from "./order/order-statistics";
 export type { OrderStatisticsFacts } from "./order/order-statistics";
 export { orderRepeatDecision } from "./order/order-repeat";

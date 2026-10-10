@@ -28,10 +28,27 @@
  * come: an order whose term is confirmed has no pickup reserve, «Готово к
  * выдаче» starts one (`on_order_pickup_reserve_hours`), and only that
  * reserve expires.
+ *
+ * **A service** (`service`, PRODUCT 11, ARCHITECTURE 6.3, TASK-038): the
+ * user asks for a time of a visit; the supplier confirms it (`accept` —
+ * «Подтверждена на время» is `accepted` of this kind), proposes another one
+ * (`propose_time` → `term_proposed`: the same «the user's answer is due» as
+ * another term under order, answered by the same `agree_term` /
+ * `reject_term` and expired by the same `expire_term`) or declines — also
+ * while the user thinks the time over (D-072 carried over). The visit is
+ * closed by the code; an employee marks a no-show (`mark_no_show` → `no_show`,
+ * from the visit's time to the end of the window `service_grace_hours`); a
+ * visit nobody closed or marked expires unresolved (`expire_visit` →
+ * `visit_unresolved`, a signal to the administrator) and may still be closed
+ * by the code inside the late close window (PRODUCT 10.7, ARCHITECTURE 6.5).
+ * There is no «Готово» and no reserve.
  */
 
-/** `stock` — an item in stock; `on_order` — an item the supplier orders for the user (TASK-037). */
-export const orderKinds = ["stock", "on_order"] as const;
+/**
+ * `stock` — an item in stock; `on_order` — an item the supplier orders for
+ * the user (TASK-037); `service` — a visit for a service (TASK-038).
+ */
+export const orderKinds = ["stock", "on_order", "service"] as const;
 
 export type OrderKind = (typeof orderKinds)[number];
 
@@ -50,6 +67,10 @@ export const orderStatuses = [
   "term_proposed",
   // TASK-037: under order — the user did not answer the proposed term in time.
   "term_expired",
+  // TASK-038: a service — an employee marked that the user did not come.
+  "no_show",
+  // TASK-038: a service — the confirmed visit was neither closed nor marked in time.
+  "visit_unresolved",
 ] as const;
 
 export type OrderStatus = (typeof orderStatuses)[number];
@@ -84,8 +105,8 @@ export function isActiveOrderStatus(status: OrderStatus): status is ActiveOrderS
  * the user, so the confirmation code and the way to the pickup point
  * matter offline. For an item in stock that is «принята» and «готова к
  * выдаче»; for an item under order «срок подтверждён» is the same
- * `accepted` (TASK-037), so it is here already; EPIC-13 adds «время
- * подтверждено» (a service).
+ * `accepted` (TASK-037), so it is here already, and so is «время
+ * подтверждено» of a service (TASK-038).
  *
  * It is a subset of `activeOrderStatuses`, not a second definition of
  * «active»: the saved copy carries every active order and marks these
@@ -103,7 +124,7 @@ export function orderAwaitsReceipt(status: OrderStatus): boolean {
 /**
  * The statuses in which the order waits for the user's own word (SCREENS
  * M-ORD-02, M-ORD-03 «Нужен ваш ответ»): another term proposed by the
- * supplier. EPIC-13 adds another time of a service here.
+ * supplier, or another time of a service (TASK-038: the same status).
  */
 export const answerAwaitingOrderStatuses = [
   "term_proposed",
@@ -120,7 +141,8 @@ export function orderNeedsAnswer(status: OrderStatus): boolean {
  * user; `admin_close` — the administrator, with a reason (D-043);
  * `admin_cancel` — the administrator, with a reason (TASK-036.B);
  * `expire_no_response`, `expire_reserve`, `expire_term` — the deadline
- * sweeper.
+ * sweeper. TASK-038, a service: `propose_time`, `mark_no_show` — an
+ * employee; `expire_visit` — the sweeper.
  */
 export const orderActions = [
   "accept",
@@ -137,6 +159,9 @@ export const orderActions = [
   "agree_term",
   "reject_term",
   "expire_term",
+  "propose_time",
+  "mark_no_show",
+  "expire_visit",
 ] as const;
 
 export type OrderAction = (typeof orderActions)[number];
@@ -157,6 +182,9 @@ export const orderActionActor = {
   agree_term: "user",
   reject_term: "user",
   expire_term: "system",
+  propose_time: "supplier",
+  mark_no_show: "supplier",
+  expire_visit: "system",
 } as const satisfies Record<OrderAction, "supplier" | "user" | "admin" | "system">;
 
 interface Move {
@@ -242,9 +270,54 @@ const onOrderMoves: Partial<Record<OrderAction, Move>> = {
   expire_reserve: { from: ["ready"], to: "reserve_expired" },
 };
 
+/**
+ * The moves of an order on a service (PRODUCT 11, ARCHITECTURE 6.3,
+ * TASK-038): a time asked for, confirmed or talked over, then the visit —
+ * given out by the code, marked a no-show, or left unresolved. Nothing is
+ * «ready» and nothing is reserved.
+ */
+const serviceMoves: Partial<Record<OrderAction, Move>> = {
+  // «Подтвердить время»: the time the user asked for.
+  accept: { from: ["created"], to: "accepted" },
+  // «Предложить другое время» — the user's answer is due, as with a term.
+  propose_time: { from: ["created"], to: "term_proposed" },
+  agree_term: { from: ["term_proposed"], to: "accepted" },
+  reject_term: { from: ["term_proposed"], to: "cancelled_by_user" },
+  expire_term: { from: ["term_proposed"], to: "term_expired" },
+  expire_no_response: { from: ["created"], to: "response_expired" },
+  // D-072 carried over: the supplier may decline while the user thinks the
+  // time over; and after confirming (`decline_after_confirm` of 6.3).
+  decline: { from: ["created", "term_proposed", "accepted"], to: "declined_by_supplier" },
+  cancel: { from: ["created", "term_proposed", "accepted"], to: "cancelled_by_user" },
+  admin_cancel: { from: ["created", "term_proposed", "accepted"], to: "cancelled_by_admin" },
+  // The visit, by the code the user shows.
+  close: { from: ["accepted"], to: "completed" },
+  // The user did not come: only from the visit's time to the end of its
+  // window — the time itself is checked by the server (`noShowWindow`).
+  mark_no_show: { from: ["accepted"], to: "no_show" },
+  // Nobody closed it nor marked a no-show by the end of the window.
+  expire_visit: { from: ["accepted"], to: "visit_unresolved" },
+  // PRODUCT 10.7: the user came in time, the employee had no network.
+  close_late: { from: ["visit_unresolved"], to: "completed" },
+  // D-043: a disputed visit — the no-show too («клиент был»).
+  admin_close: {
+    from: [
+      "created",
+      "term_proposed",
+      "accepted",
+      "response_expired",
+      "term_expired",
+      "no_show",
+      "visit_unresolved",
+    ],
+    to: "completed",
+  },
+};
+
 const movesByKind: Record<OrderKind, Partial<Record<OrderAction, Move>>> = {
   stock: stockMoves,
   on_order: onOrderMoves,
+  service: serviceMoves,
 };
 
 /** The two moves that give an order out by its code or its QR. */

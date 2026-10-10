@@ -18,7 +18,7 @@ import { orderKinds, type OrderKind } from "./order-machine";
  * - **nothing to repeat** — the item itself left the catalog (archived, or
  *   its category hidden), the user has no club access to order with
  *   (D-059), or the order is of a kind the server can't create yet
- *   (services — TASK-038).
+ *   (a service — until the checkout of TASK-039.B).
  *
  * The order is then placed by the ordinary `POST /orders`: repeating never
  * becomes a second way to create an order.
@@ -50,8 +50,12 @@ export type OrderRepeatDecision =
   | { kind: "catalog"; reason: OrderRepeatBlocked }
   | { kind: "unavailable"; reason: OrderRepeatImpossible };
 
-/** The kinds of orders the server creates (TASK-037 adds under order; services — TASK-038). */
-const REPEATABLE_KINDS: readonly OrderKind[] = orderKinds;
+/**
+ * The kinds «Повторить» opens the checkout for (TASK-037 adds under order).
+ * A service is created since TASK-038, but repeating it needs a car and a
+ * time the checkout of TASK-039.B asks for — until then it is not repeated.
+ */
+const REPEATABLE_KINDS: readonly OrderKind[] = orderKinds.filter((kind) => kind !== "service");
 
 /** The hidden reasons that mean the item itself is no longer in the catalog. */
 const ITEM_GONE: readonly OfferHiddenReason[] = ["item_unavailable", "category_hidden"];

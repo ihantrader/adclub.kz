@@ -28,7 +28,7 @@ export async function repeatView(
   lang: CatalogLanguage,
   at: Date,
 ): Promise<RepeatOrderResponse> {
-  const item = itemOf(row, lang);
+  const { type, ...itemFields } = itemOf(row, lang);
   const [current] = await executor
     .select({
       id: offer.id,
@@ -63,6 +63,12 @@ export async function repeatView(
   if (decision.kind === "unavailable") {
     return { result: "unavailable", reason: decision.reason };
   }
+  if (type === "service") {
+    // `orderRepeatDecision` repeats no service until the checkout of
+    // TASK-039.B; the answer carries the item of goods only (TASK-038).
+    throw new Error(`A service was offered for a repeat: order ${row.id}`);
+  }
+  const item = { ...itemFields, type };
   if (decision.kind === "catalog") {
     return { result: "catalog", item, reason: decision.reason };
   }

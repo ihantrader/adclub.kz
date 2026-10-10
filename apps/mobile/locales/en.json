@@ -1,0 +1,6 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "The camera photographs your vehicle registration certificate to add the car. The photo is not kept.",
+    "NSPhotoLibraryUsageDescription": "A photo of your vehicle registration certificate is read to add the car. The photo is not kept."
+  }
+}

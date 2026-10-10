@@ -4,6 +4,7 @@ import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BottomTabs, type TabItem } from "../design-system";
 import { OrdersScreen } from "../screens/tabs/OrdersScreen";
 import { useT } from "../state/language";
+import { AddCarProvider } from "./car-adding";
 import { CatalogTab } from "./CatalogStack";
 import { GarageStack } from "./GarageStack";
 import { ProfileStack } from "./ProfileStack";
@@ -66,14 +67,17 @@ function AppTabBar({ state, navigation }: BottomTabBarProps) {
  */
 export function MainTabs() {
   return (
-    <Tabs.Navigator
-      tabBar={(props) => <AppTabBar {...props} />}
-      screenOptions={{ headerShown: false, animation: "none" }}
-    >
-      <Tabs.Screen name="catalog" component={CatalogTab} />
-      <Tabs.Screen name="orders" component={OrdersScreen} />
-      <Tabs.Screen name="garage" component={GarageStack} />
-      <Tabs.Screen name="profile" component={ProfileStack} />
-    </Tabs.Navigator>
+    // M-GAR-02 (TASK-057): one sheet of the ways to add a car for every tab.
+    <AddCarProvider>
+      <Tabs.Navigator
+        tabBar={(props) => <AppTabBar {...props} />}
+        screenOptions={{ headerShown: false, animation: "none" }}
+      >
+        <Tabs.Screen name="catalog" component={CatalogTab} />
+        <Tabs.Screen name="orders" component={OrdersScreen} />
+        <Tabs.Screen name="garage" component={GarageStack} />
+        <Tabs.Screen name="profile" component={ProfileStack} />
+      </Tabs.Navigator>
+    </AddCarProvider>
   );
 }

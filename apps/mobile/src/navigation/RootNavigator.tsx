@@ -4,12 +4,12 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
 import { useTheme } from "../design-system";
-import { EMPTY_DRAFT } from "../garage/car-picker";
 import { CodeScreen } from "../screens/auth/CodeScreen";
 import { PhoneScreen } from "../screens/auth/PhoneScreen";
 import { RegisterScreen } from "../screens/auth/RegisterScreen";
 import { FirstRunCarScreen } from "../screens/FirstRunCarScreen";
 import { FirstRunCityScreen } from "../screens/FirstRunCityScreen";
+import { CarDocumentScreen } from "../screens/garage/CarDocumentScreen";
 import { CarStepScreen } from "../screens/garage/CarStepScreen";
 import { CarSummaryScreen } from "../screens/garage/CarSummaryScreen";
 import { CheckoutScreen } from "../screens/orders/CheckoutScreen";
@@ -84,6 +84,7 @@ export function RootNavigator({ start }: { start: RootStart }) {
           initialParams={initial.screen === "tabs" ? { screen: initial.tab } : undefined}
           options={{ gestureEnabled: false, animationTypeForReplace: "push" }}
         />
+        <Stack.Screen name="car-document" component={CarDocumentScreen} />
         <Stack.Screen name="car-step" component={CarStepScreen} />
         <Stack.Screen name="car-summary" component={CarSummaryScreen} />
         {/* Sign-in (TASK-029, SCREENS M-AUTH-01…03): pushed above whichever tab asked for it (`useSignIn`). */}
@@ -120,16 +121,9 @@ function FirstRunCityRoute({ navigation }: NativeStackScreenProps<RootParams, "f
   );
 }
 
-/** M-START-05. Only the list is available (photo and voice are stage D), so the button goes to the first step. */
-function FirstRunCarRoute({ navigation }: NativeStackScreenProps<RootParams, "first-run-car">) {
-  return (
-    <FirstRunCarScreen
-      onChooseFromList={() => {
-        if (!navigation.isFocused()) return;
-        navigation.push("car-step", { origin: "first-run", draft: EMPTY_DRAFT });
-      }}
-    />
-  );
+/** M-START-05: the photo of the certificate first (D-064); the screen opens the rest itself. */
+function FirstRunCarRoute(_props: NativeStackScreenProps<RootParams, "first-run-car">) {
+  return <FirstRunCarScreen />;
 }
 
 /**

@@ -24,7 +24,11 @@ export function CarSummaryScreen({
   navigation,
 }: NativeStackScreenProps<RootParams, "car-summary">) {
   const { cars } = useGarage();
-  const { origin, carId, draft, color } = route.params;
+  const { origin, carId, draft, color, recognition, unconfirmed } = route.params;
+  const carried = {
+    ...(recognition ? { recognition } : {}),
+    ...(unconfirmed ? { unconfirmed } : {}),
+  };
   const current = carId ? cars.find((item) => item.id === carId) : undefined;
   // A car being edited that another phone removed meanwhile (TASK-029.B)
   // stays the car being edited: saving it is a change of that car — the
@@ -42,6 +46,15 @@ export function CarSummaryScreen({
       draft={draft}
       color={color}
       {...(car ? { car } : {})}
+      {...(recognition ? { recognition } : {})}
+      unconfirmed={unconfirmed === true}
+      // «Переснять» (M-GAR-05): back to the camera the photo was taken with.
+      onRetake={() => {
+        if (!navigation.isFocused()) return;
+        const routes = navigation.getState().routes;
+        const camera = routes.map((item) => item.name).lastIndexOf("car-document");
+        if (camera >= 0) navigation.dispatch(StackActions.pop(routes.length - 1 - camera));
+      }}
       isActive={() => navigation.isFocused()}
       onEditLevel={(level: CarLevel, current) => {
         const steps = stepRoutes();
@@ -55,6 +68,7 @@ export function CarSummaryScreen({
             origin,
             ...(carId ? { carId } : {}),
             draft: clearFrom(current, level),
+            ...carried,
           });
           return;
         }

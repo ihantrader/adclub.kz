@@ -48,6 +48,21 @@ export interface CarLevelValue {
   label: string;
 }
 
+/**
+ * The mark about the car's registration certificate (D-064, TASK-057):
+ * `shown` — a certificate was read (when the car was added, or later with
+ * «Подтвердить техпаспортом»); `unconfirmed` — the car was chosen from the
+ * list after recognition did not work. `proof` is what the recognition
+ * signed: a guest keeps it on the device to bring the mark into the account
+ * at sign-in; the account's own cars never carry it.
+ */
+export interface CarDocumentMark {
+  status: "shown" | "unconfirmed";
+  /** ISO 8601. */
+  at: string;
+  proof?: string;
+}
+
 export interface GarageCar {
   /** Made on this device; the account gets its own on transfer (TASK-029). */
   id: string;
@@ -64,8 +79,26 @@ export interface GarageCar {
   modificationId: string | null;
   /** `null` — not chosen; a car stored before D-063 reads back this way. */
   color: CarColorId | null;
+  /** 17 characters, upper case (TASK-057); `null` — not known. */
+  vin: string | null;
+  /** Compact, `123ABC02`; shown as on the plate. */
+  plate: string | null;
+  /** `null` — a car added before TASK-057: no mark at all. */
+  document: CarDocumentMark | null;
   /** ISO 8601; the order the guest added cars in. */
   addedAt: string;
+}
+
+function parseDocument(raw: unknown): CarDocumentMark | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  if (value.status !== "shown" && value.status !== "unconfirmed") return null;
+  if (typeof value.at !== "string") return null;
+  return {
+    status: value.status,
+    at: value.at,
+    ...(typeof value.proof === "string" ? { proof: value.proof } : {}),
+  };
 }
 
 export interface GarageState {
@@ -107,6 +140,10 @@ function parseCar(raw: unknown): GarageCar | null {
     // Absent in a garage stored before D-063, or a value a later app no
     // longer lists: either way, "не указан" — never a reason to drop the car.
     color: isCarColorId(value.color) ? value.color : null,
+    // Absent in a garage stored before TASK-057: no VIN, no plate, no mark.
+    vin: typeof value.vin === "string" && value.vin !== "" ? value.vin : null,
+    plate: typeof value.plate === "string" && value.plate !== "" ? value.plate : null,
+    document: parseDocument(value.document),
     addedAt: typeof value.addedAt === "string" ? value.addedAt : new Date(0).toISOString(),
   };
   return car;
@@ -127,6 +164,16 @@ export function parseGarage(raw: unknown): GarageState | null {
 
 export function findDuplicate(state: GarageState, car: GarageCar): GarageCar | undefined {
   return state.cars.find((existing) => existing.id !== car.id && sameCar(existing, car));
+}
+
+/**
+ * Another car of the garage with this VIN (TASK-057, ARCHITECTURE 4.58):
+ * one VIN is one car — the server refuses a second one (`GARAGE_VIN_TAKEN`),
+ * and the device asks before trying.
+ */
+export function findVinHolder(state: GarageState, car: GarageCar): GarageCar | undefined {
+  if (!car.vin) return undefined;
+  return state.cars.find((existing) => existing.id !== car.id && existing.vin === car.vin);
 }
 
 /** The first car added becomes the main one (M-GAR-03). */

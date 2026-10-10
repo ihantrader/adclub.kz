@@ -14,6 +14,7 @@ export function garageErrorText(error: unknown, t: LanguageContextValue["t"]): s
       const limit = typeof details?.limit === "number" ? details.limit : "";
       return t("garage.limitReached", { limit });
     }
+    if (error.code === "GARAGE_VIN_TAKEN") return t("car.vinTaken");
     if (error.status === 404) return t("garage.carGone");
   }
   return t("garage.changeFailed");

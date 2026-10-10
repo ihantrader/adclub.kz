@@ -2,6 +2,8 @@ import { layout } from "@adclub/ui-core";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
+  AiBadge,
+  Banner,
   Button,
   Chip,
   DataState,
@@ -30,6 +32,7 @@ import {
   type PickerData,
   type PickerOption,
 } from "../../garage/car-picker";
+import { unplacedText, withSuggestions, type CarRecognition } from "../../garage/document-flow";
 import type { CarLevel } from "../../garage/garage";
 import { useOnline } from "../../services/use-network";
 import type { RequestState } from "../../services/use-request";
@@ -66,6 +69,8 @@ const LEVEL_TEXT = {
 export interface CarStepViewProps {
   /** What had been decided when this screen opened — all of its state. */
   draft: CarDraft;
+  /** What a photographed certificate brought (TASK-057): suggestions first, unplaced names said. */
+  recognition?: CarRecognition;
   /**
    * The drafts of every screen of the choice, bottom to top — read when a
    * chosen value is tapped, to find the screen that asked for it.
@@ -111,6 +116,7 @@ export interface CarStepViewProps {
  */
 export function CarStepView({
   draft,
+  recognition,
   screenDrafts,
   onNext,
   onJump,
@@ -234,12 +240,19 @@ export function CarStepView({
   const chosen = chosenLevels(resolved);
   const canSave = canSaveDraft(resolved);
   const searchable = stage.kind === "choose" && (stage.step === "make" || stage.step === "model");
-  const options =
+  const found =
     stage.kind === "choose"
       ? searchable
         ? filterOptions(stage.options, query)
         : stage.options
       : [];
+  // What a photographed certificate suggests goes first and is marked
+  // (M-GAR-05); what it named and the catalog could not place is said.
+  const { options, suggested } =
+    stage.kind === "choose"
+      ? withSuggestions(recognition, stage.step, found)
+      : { options: found, suggested: new Set<string>() };
+  const unplaced = stage.kind === "choose" ? unplacedText(recognition, stage.step, resolved) : null;
 
   // The title names the step while its data still loads: the level this
   // screen is about does not have to wait for the server to be read out.
@@ -312,6 +325,11 @@ export function CarStepView({
                 </View>
               )}
               <ScrollView keyboardShouldPersistTaps="handled">
+                {unplaced !== null && (
+                  <View style={styles.unplaced}>
+                    <Banner icon="sparkles">{t("doc.unplaced", { text: unplaced })}</Banner>
+                  </View>
+                )}
                 {options.length > 0 && (
                   <ListGroup>
                     {options.map((option, index) => (
@@ -320,6 +338,11 @@ export function CarStepView({
                         first={index === 0}
                         title={option.label}
                         subtitle={option.hint}
+                        trailing={
+                          suggested.has(option.id) ? (
+                            <AiBadge>{t("doc.recognized")}</AiBadge>
+                          ) : undefined
+                        }
                         navigates
                         onPress={() => choose(stage.step, option)}
                       />
@@ -383,6 +406,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   search: { paddingBottom: 8 },
+  unplaced: { paddingBottom: 8 },
   searchEmpty: { paddingVertical: layout.cardPadding, textAlign: "center" },
   notListed: { paddingVertical: layout.cardPadding },
 });

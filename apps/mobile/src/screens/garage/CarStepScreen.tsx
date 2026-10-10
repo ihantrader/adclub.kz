@@ -24,8 +24,14 @@ export function CarStepScreen({
   navigation,
 }: NativeStackScreenProps<RootParams, "car-step">) {
   const { cars } = useGarage();
-  const { origin, carId, draft } = route.params;
+  const { origin, carId, draft, recognition, unconfirmed } = route.params;
   const car = carId ? cars.find((item) => item.id === carId) : undefined;
+  // What a photographed certificate brought, or that the list was chosen
+  // after it did not work (TASK-057): carried through every step to the end.
+  const carried = {
+    ...(recognition ? { recognition } : {}),
+    ...(unconfirmed ? { unconfirmed } : {}),
+  };
 
   /** Every step screen of the choice, bottom to top (there is one choice at a time). */
   const stepRoutes = () => navigation.getState().routes.filter((item) => item.name === "car-step");
@@ -35,7 +41,8 @@ export function CarStepScreen({
     origin,
     ...(carId ? { carId } : {}),
     draft: resolved,
-    color: car?.color ?? null,
+    color: car?.color ?? recognition?.color ?? null,
+    ...carried,
   });
 
   return (
@@ -45,10 +52,16 @@ export function CarStepScreen({
       // its search field and whatever else it held belong to the step it left.
       key={JSON.stringify(draft)}
       draft={draft}
+      {...(recognition ? { recognition } : {})}
       screenDrafts={screenDrafts}
       isActive={() => navigation.isFocused()}
       onNext={(next) =>
-        navigation.push("car-step", { origin, ...(carId ? { carId } : {}), draft: next })
+        navigation.push("car-step", {
+          origin,
+          ...(carId ? { carId } : {}),
+          draft: next,
+          ...carried,
+        })
       }
       onJump={(jump: LevelJump) => {
         const steps = stepRoutes();

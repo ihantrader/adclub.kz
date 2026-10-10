@@ -36,6 +36,9 @@ function car(overrides: Partial<GarageCar> = {}): GarageCar {
     drive: { id: "drive-awd", label: "Полный" },
     modificationId: "mod-1",
     color: "blue",
+    vin: null,
+    plate: null,
+    document: null,
     addedAt: "2026-09-26T10:00:00.000Z",
     ...overrides,
   };

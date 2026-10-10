@@ -1,5 +1,6 @@
 import type {
   AccountCar,
+  CarDocumentInput,
   CarLevels,
   SaveGarageCarBody,
   TransferGarageBody,
@@ -32,7 +33,28 @@ export function toWireLevels(car: GarageCar): CarLevels {
  * to the account, and the catalog then matched by levels only) and the colour.
  */
 export function toSaveBody(car: GarageCar): SaveGarageCarBody {
-  return { levels: toWireLevels(car), modificationId: car.modificationId, color: car.color };
+  const document = documentInput(car);
+  return {
+    levels: toWireLevels(car),
+    modificationId: car.modificationId,
+    color: car.color,
+    vin: car.vin,
+    plate: car.plate,
+    ...(document ? { document } : {}),
+  };
+}
+
+/**
+ * The mark as the server takes it (TASK-057): «документ показан» only with
+ * the proof the recognition signed — a mark the device merely remembers
+ * (the account's own copy) is not sent; «не подтверждён» as it is.
+ */
+export function documentInput(car: GarageCar): CarDocumentInput | null {
+  if (car.document?.status === "shown" && car.document.proof) {
+    return { status: "shown", proof: car.document.proof };
+  }
+  if (car.document?.status === "unconfirmed") return { status: "unconfirmed" };
+  return null;
 }
 
 /**
@@ -63,6 +85,9 @@ export function fromAccountCar(car: AccountCar): GarageCar {
     drive: car.drive,
     modificationId: car.modificationId,
     color: car.color,
+    vin: car.vin,
+    plate: car.plate,
+    document: car.document,
     addedAt: car.createdAt,
   };
 }

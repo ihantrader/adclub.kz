@@ -22,6 +22,9 @@ function car(id: string, model = "Atlas"): GarageCar {
     drive: null,
     modificationId: null,
     color: null,
+    vin: null,
+    plate: null,
+    document: null,
     addedAt: "2026-09-26T10:00:00.000Z",
   };
 }

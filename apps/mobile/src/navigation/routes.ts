@@ -2,6 +2,7 @@ import type { OrderFulfillment } from "@adclub/contracts";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { CarColorId } from "../garage/car-color";
 import type { CarDraft } from "../garage/car-picker";
+import type { CarRecognition } from "../garage/document-flow";
 
 /**
  * The screens of the app and what they take (TASK-027, TASK-028, TASK-028.A).
@@ -77,6 +78,25 @@ export interface CarStepParams {
   /** A car of the garage being completed or edited. */
   carId?: string;
   draft: CarDraft;
+  /**
+   * What a photographed certificate brought (TASK-057, M-GAR-05): its
+   * suggestions are put first on the steps, the final step shows what was
+   * read. Absent — the choice from the list.
+   */
+  recognition?: CarRecognition;
+  /** The list was chosen after recognition did not work: the car is «документ не подтверждён». */
+  unconfirmed?: boolean;
+}
+
+/**
+ * M-GAR-04 (TASK-057): the camera, or a photo the gallery already gave (the
+ * gallery opens in the tap that asked for it — a browser does not allow it
+ * later). `carId` — «Подтвердить техпаспортом» of a car of the garage.
+ */
+export interface CarDocumentParams {
+  origin: "first-run" | "app";
+  carId?: string;
+  picked?: { uri: string; width: number; height: number };
 }
 
 /**
@@ -92,6 +112,8 @@ export interface CarSummaryParams {
   carId?: string;
   draft: CarDraft;
   color: CarColorId | null;
+  recognition?: CarRecognition;
+  unconfirmed?: boolean;
 }
 
 /**
@@ -149,6 +171,8 @@ export type RootParams = {
   /** M-START-05. */
   "first-run-car": undefined;
   tabs: NavigatorScreenParams<TabParams> | undefined;
+  /** M-GAR-04. */
+  "car-document": CarDocumentParams;
   /** M-GAR-03. */
   "car-step": CarStepParams;
   /** M-GAR-03, final step. */

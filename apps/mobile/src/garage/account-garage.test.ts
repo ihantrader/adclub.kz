@@ -39,6 +39,9 @@ function car(id: string, model: string, overrides: Partial<GarageCar> = {}): Gar
     drive: null,
     modificationId: null,
     color: null,
+    vin: null,
+    plate: null,
+    document: null,
     addedAt: "2026-10-01T10:00:00.000Z",
     ...overrides,
   };
@@ -55,7 +58,7 @@ function fakeServer() {
   /** Holds the answer of the next `list()` until released (a slow read). */
   let gate: Promise<void> | null = null;
 
-  function insert(body: SaveGarageCarBody, isPrimary: boolean): AccountCar {
+  function insert(body: Omit<SaveGarageCarBody, "document">, isPrimary: boolean): AccountCar {
     clock += 1000;
     const at = new Date(clock).toISOString();
     const row: AccountCar = {
@@ -63,6 +66,9 @@ function fakeServer() {
       ...body.levels,
       modificationId: body.modificationId ?? null,
       color: body.color,
+      vin: body.vin ?? null,
+      plate: body.plate ?? null,
+      document: null,
       isPrimary,
       createdAt: at,
       updatedAt: at,

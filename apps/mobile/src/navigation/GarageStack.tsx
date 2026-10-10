@@ -85,6 +85,7 @@ function GarageCarScreen({
           : navigation.replace("garage-list")
       }
       onEdit={(step) => carPicker.edit(car, step)}
+      onConfirm={() => carPicker.confirm(car)}
     />
   );
 }

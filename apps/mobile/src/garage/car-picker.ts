@@ -4,7 +4,13 @@ import type {
   VehicleNamed,
 } from "@adclub/contracts";
 import type { CarColorId } from "./car-color";
-import { CAR_LEVELS, type CarLevel, type CarLevelValue, type GarageCar } from "./garage";
+import {
+  CAR_LEVELS,
+  type CarDocumentMark,
+  type CarLevel,
+  type CarLevelValue,
+  type GarageCar,
+} from "./garage";
 
 /**
  * The step-by-step choice of a car (SCREENS M-GAR-03), as pure rules over
@@ -439,6 +445,10 @@ export function draftToCar(
     addedAt: string;
     modifications: readonly VehicleModificationView[];
     color?: CarColorId | null;
+    /** TASK-057: what the final step holds besides the levels. */
+    vin?: string | null;
+    plate?: string | null;
+    document?: CarDocumentMark | null;
   },
 ): GarageCar | null {
   if (!draft.make || !draft.model) return null;
@@ -460,6 +470,9 @@ export function draftToCar(
     drive: draft.drive,
     modificationId: single?.id ?? null,
     color: options.color ?? null,
+    vin: options.vin ?? null,
+    plate: options.plate ?? null,
+    document: options.document ?? null,
     addedAt: options.addedAt,
   };
 }

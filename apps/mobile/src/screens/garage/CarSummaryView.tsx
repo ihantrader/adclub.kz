@@ -2,16 +2,25 @@ import { layout } from "@adclub/ui-core";
 import { randomUUID } from "expo-crypto";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { formatKzPlate } from "@adclub/domain";
 import {
+  AiBadge,
   Button,
   Dialog,
   ListGroup,
   ListRow,
   Screen,
   Text,
+  TextField,
   useAfterDismiss,
   useToast,
 } from "../../design-system";
+import {
+  checkDocumentFields,
+  stillRecognized,
+  type CarRecognition,
+  type DocumentFieldError,
+} from "../../garage/document-flow";
 import type { CarColorId } from "../../garage/car-color";
 import {
   draftToCar,
@@ -20,7 +29,13 @@ import {
   type CarDraft,
   type CarStep,
 } from "../../garage/car-picker";
-import { carTitle, type CarLevel, type GarageCar } from "../../garage/garage";
+import {
+  carTitle,
+  findVinHolder,
+  type CarDocumentMark,
+  type CarLevel,
+  type GarageCar,
+} from "../../garage/garage";
 import { useOnline } from "../../services/use-network";
 import { useVehicleModifications } from "../../services/use-vehicles";
 import { useGarage } from "../../state/garage-provider";
@@ -57,6 +72,12 @@ export interface CarSummaryViewProps {
   color: CarColorId | null;
   /** The car being completed or edited. */
   car?: GarageCar;
+  /** What a photographed certificate brought (TASK-057, M-GAR-05). */
+  recognition?: CarRecognition;
+  /** Chosen from the list after recognition did not work: «документ не подтверждён». */
+  unconfirmed?: boolean;
+  /** «Переснять»: back to the camera. */
+  onRetake?: () => void;
   isActive: () => boolean;
   /** A row was tapped and the warning, if any, was accepted: open its step. */
   onEditLevel: (level: CarLevel, draft: CarDraft) => void;
@@ -81,6 +102,9 @@ export function CarSummaryView({
   draft,
   color,
   car,
+  recognition,
+  unconfirmed,
+  onRetake,
   isActive,
   onEditLevel,
   onBack,
@@ -98,7 +122,30 @@ export function CarSummaryView({
   const [colorSheet, setColorSheet] = useState(false);
   const [confirmReset, setConfirmReset] = useState<CarLevel | null>(null);
   const [duplicate, setDuplicate] = useState<GarageCar | null>(null);
-  const afterDialog = useAfterDismiss(confirmReset !== null || duplicate !== null);
+  const [vinHolder, setVinHolder] = useState<GarageCar | null>(null);
+  const afterDialog = useAfterDismiss(
+    confirmReset !== null || duplicate !== null || vinHolder !== null,
+  );
+
+  // VIN and plate (TASK-057): read off the certificate, or the car's own;
+  // marked «распознано» while they still say what was read.
+  const readVin = recognition?.fields.vin ?? "";
+  const readPlate = recognition?.fields.plate ? formatKzPlate(recognition.fields.plate) : "";
+  const [vin, setVin] = useState(() => readVin || (car?.vin ?? ""));
+  const [plate, setPlate] = useState(
+    () => readPlate || (car?.plate ? formatKzPlate(car.plate) : ""),
+  );
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<"vin" | "plate", DocumentFieldError>>
+  >({});
+  const fieldErrorText = (error: DocumentFieldError | undefined) =>
+    error === "vin_length"
+      ? t("car.vinLength")
+      : error === "vin_characters"
+        ? t("car.vinCharacters")
+        : error === "plate"
+          ? t("car.plateInvalid")
+          : undefined;
 
   // Stable across re-renders: a new id and timestamp must be picked once,
   // when the screen opens, not on every render this component draws before
@@ -114,13 +161,28 @@ export function CarSummaryView({
   // 60-second cache (`services/use-vehicles.ts`) and costs no extra wait.
   const modifications = useVehicleModifications(draft.generation?.id ?? null);
 
-  const build = (finalColor: CarColorId | null) =>
-    draftToCar(draft, {
+  // The mark the car is saved with (D-064): a certificate read — «показан»
+  // with the server's proof; the list after a failure — «не подтверждён»;
+  // a car being edited keeps its own.
+  const [documentAt] = useState(() => new Date().toISOString());
+  const document: CarDocumentMark | null = recognition
+    ? { status: "shown", at: documentAt, proof: recognition.proof }
+    : unconfirmed
+      ? { status: "unconfirmed", at: documentAt }
+      : (car?.document ?? null);
+
+  const build = (finalColor: CarColorId | null) => {
+    const checked = checkDocumentFields(vin, plate);
+    return draftToCar(draft, {
       id,
       addedAt,
       modifications: modifications.data?.modifications ?? [],
       color: finalColor,
+      vin: checked.vin,
+      plate: checked.plate,
+      document,
     });
+  };
 
   const [saving, setSaving] = useState(false);
 
@@ -141,6 +203,10 @@ export function CarSummaryView({
 
   const save = async () => {
     if (!isActive()) return;
+    // T-GAR-07, checked as the server will check it.
+    const checked = checkDocumentFields(vin, plate);
+    setFieldErrors(checked.errors);
+    if (Object.keys(checked.errors).length > 0) return;
     const built = build(pickedColor);
     if (!built) return;
     if (garage.remote) {
@@ -151,6 +217,12 @@ export function CarSummaryView({
         toast.show(garageErrorText(synced.error, t));
         return;
       }
+    }
+    // One VIN is one car (ARCHITECTURE 4.58): no «всё равно добавить».
+    const holder = findVinHolder(garage.state, built);
+    if (holder) {
+      setVinHolder(holder);
+      return;
     }
     const existing = garage.duplicateOf(built);
     if (existing) {
@@ -186,6 +258,11 @@ export function CarSummaryView({
           <Button onPress={save} loading={saving} disabled={offline}>
             {t("car.summary.save")}
           </Button>
+          {recognition && onRetake && (
+            <Button variant="secondary" onPress={onRetake} disabled={saving}>
+              {t("doc.retake")}
+            </Button>
+          )}
           {offline && (
             <Text variant="caption" color="textMuted" style={styles.center}>
               {t("garage.needsNetwork")}
@@ -196,7 +273,8 @@ export function CarSummaryView({
     >
       <View style={styles.content}>
         <Text variant="bodyS" color="textMuted">
-          {t("car.summary.text")}
+          {/* T-GAR-03 when the values came off a certificate. */}
+          {t(recognition ? "doc.check" : "car.summary.text")}
         </Text>
         <ListGroup>
           {rows.map((row, index) => (
@@ -210,6 +288,8 @@ export function CarSummaryView({
                   <Text variant="bodyS" color="accent">
                     {t("garage.complete")}
                   </Text>
+                ) : stillRecognized(recognition, draft, row.level) ? (
+                  <AiBadge>{t("doc.recognized")}</AiBadge>
                 ) : null
               }
               onPress={() => editLevel(row.level)}
@@ -223,11 +303,46 @@ export function CarSummaryView({
                 <Text variant="bodyS" color="accent">
                   {t("garage.complete")}
                 </Text>
+              ) : recognition?.color !== null && pickedColor === recognition?.color ? (
+                <AiBadge>{t("doc.recognized")}</AiBadge>
               ) : null
             }
             onPress={() => setColorSheet(true)}
           />
         </ListGroup>
+        <TextField
+          label={t("car.vin")}
+          value={vin}
+          onChangeText={(value) => {
+            setVin(value);
+            setFieldErrors((errors) => ({ ...errors, vin: undefined }));
+          }}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={25}
+          {...(readVin !== "" && vin === readVin ? { aiLabel: t("doc.recognized") } : {})}
+          {...(fieldErrors.vin ? { error: fieldErrorText(fieldErrors.vin) } : {})}
+        />
+        <TextField
+          label={t("car.plate")}
+          value={plate}
+          onChangeText={(value) => {
+            setPlate(value);
+            setFieldErrors((errors) => ({ ...errors, plate: undefined }));
+          }}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={15}
+          {...(readPlate !== "" && plate === readPlate ? { aiLabel: t("doc.recognized") } : {})}
+          {...(fieldErrors.plate
+            ? { error: fieldErrorText(fieldErrors.plate) }
+            : { hint: t("car.vinPlateRule") })}
+        />
+        {unconfirmed && (
+          <Text variant="caption" color="textMuted">
+            {t("doc.listNote")}
+          </Text>
+        )}
       </View>
 
       <Dialog
@@ -274,6 +389,20 @@ export function CarSummaryView({
         }
       >
         {duplicate ? carTitle(duplicate) : ""}
+      </Dialog>
+
+      <Dialog
+        visible={vinHolder !== null}
+        onClose={() => setVinHolder(null)}
+        onDismissed={afterDialog.onDismissed}
+        title={t("car.vinTaken")}
+        actions={
+          <Button variant="secondary" onPress={() => setVinHolder(null)}>
+            {t("common.close")}
+          </Button>
+        }
+      >
+        {vinHolder ? t("car.vinTakenText", { car: carTitle(vinHolder) }) : ""}
       </Dialog>
 
       <ColorSheet

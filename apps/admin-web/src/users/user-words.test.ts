@@ -16,6 +16,10 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
       accessText({ granted: true, source: "manual", validUntil: "2026-12-31T18:59:59.000Z" }),
     ).toBe("до 31.12.2026");
     expect(accessText({ granted: false, source: null, validUntil: null })).toBe("нет");
+    // The operator command ends a grant at the start of the next day of Almaty: the last day shown.
+    expect(
+      accessText({ granted: true, source: "manual", validUntil: "2026-12-31T19:00:00.000Z" }),
+    ).toBe("до 31.12.2026");
   });
 
   it("gives a grant until the end of the chosen day of Almaty, by default the year's end", () => {

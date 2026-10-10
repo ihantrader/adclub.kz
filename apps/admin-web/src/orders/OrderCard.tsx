@@ -415,12 +415,15 @@ function OrderFacts({ order }: { order: AdminOrder }) {
           <dt>Срок ответа поставщика</dt>
           <dd className="num">до {formatMoment(order.deadlines.respondBy)}</dd>
         </div>
-        {order.deadlines.reserveUntil && (
-          <div>
-            <dt>Резерв</dt>
-            <dd className="num">до {formatMoment(order.deadlines.reserveUntil)}</dd>
-          </div>
-        )}
+        {order.deadlines.reserveUntil &&
+          (order.status === "accepted" ||
+            order.status === "ready" ||
+            order.status === "reserve_expired") && (
+            <div>
+              <dt>Резерв</dt>
+              <dd className="num">до {formatMoment(order.deadlines.reserveUntil)}</dd>
+            </div>
+          )}
         {order.deadlines.lateCloseUntil && (
           <div>
             <dt>Позднее закрытие</dt>

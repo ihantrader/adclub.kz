@@ -25,9 +25,19 @@ export function dateText(iso: string): string {
   }).format(new Date(iso));
 }
 
-/** Club access now, in a line: «до 31.12.2026» or «нет». */
+/**
+ * The last day a grant ending at `iso` still works, in Almaty: the operator
+ * command ends a grant at the start of the next day (`--until 2026-12-31` →
+ * 2027-01-01 00:00), the admin panel at 23:59:59 of the day — both read
+ * «31.12.2026».
+ */
+export function lastDayText(iso: string): string {
+  return dateText(new Date(Date.parse(iso) - 1000).toISOString());
+}
+
+/** Club access now, in a line: «до 31.12.2026» (inclusive) or «нет». */
 export function accessText(state: ClubAccessState): string {
-  return state.granted && state.validUntil ? `до ${dateText(state.validUntil)}` : "нет";
+  return state.granted && state.validUntil ? `до ${lastDayText(state.validUntil)}` : "нет";
 }
 
 export const GRANT_STATUS_TEXT: Record<ClubAccessGrantStatus, string> = {

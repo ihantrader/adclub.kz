@@ -38,7 +38,7 @@ import { UsersTabs } from "./Users";
 import {
   accessText,
   carText,
-  dateText,
+  lastDayText,
   deviceText,
   endOfYear,
   GRANT_STATUS_TEXT,
@@ -300,7 +300,7 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
       setAsking(null);
       setHistoryKey((key) => key + 1);
       onChanged();
-      toast.show(`Клубный доступ выдан до ${dateText(validUntil)}`);
+      toast.show(`Клубный доступ выдан до ${lastDayText(validUntil)}`);
     } catch (thrown) {
       setError(userErrorText(thrown));
     } finally {
@@ -394,7 +394,7 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
                         </span>
                       </div>
                     </td>
-                    <td className="num">{dateText(grant.validUntil)}</td>
+                    <td className="num">{lastDayText(grant.validUntil)}</td>
                     <td className="ac-text-body-s reason-cell">{grant.reason}</td>
                     <td className="ac-text-body-s reason-cell">
                       {grant.revokedAt ? (
@@ -432,7 +432,7 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
         </label>
         <WasNow
           was={access.granted ? `доступ ${accessText(access)}` : "доступа нет"}
-          now={grantUntil(until) ? `доступ до ${dateText(grantUntil(until)!)}` : "—"}
+          now={grantUntil(until) ? `доступ до ${lastDayText(grantUntil(until)!)}` : "—"}
         />
         {access.granted && (
           <p className="ac-text-body-s">

@@ -514,7 +514,7 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
 const VALUE_WORDS: Record<string, Record<string, string>> = {
   state: { draft: "Черновик", active: "Активен", paused: "Пауза", blocked: "Блокировка" },
   type: { ...SUPPLIER_TYPE_TEXT, part: "Запчасть", generic: "Товар", service: "Услуга" },
-  source: LEAD_SOURCE_TEXT,
+  source: { ...LEAD_SOURCE_TEXT, manual: "вручную" },
   deadline: { response: "срок ответа", reserve: "резерв" },
   subject: {
     account: "пользователь",
@@ -639,9 +639,18 @@ export function hiddenFieldsOf(entityType: string): readonly string[] {
   return HIDDEN_FIELDS[entityType] ?? [];
 }
 
+/** A field that reads otherwise on one kind of object: a person's `name` is a name, not a title. */
+const ENTITY_FIELD_TEXT: Record<string, Record<string, string>> = {
+  account: { name: "Имя" },
+  admin_user: { name: "Имя" },
+};
+
 function line(key: string, before: unknown, after: unknown, context: ChangeContext): ChangeLine {
   const entry: ChangeLine = {
-    field: FIELD_TEXT[key] ?? key,
+    field:
+      (context.entityType ? ENTITY_FIELD_TEXT[context.entityType]?.[key] : undefined) ??
+      FIELD_TEXT[key] ??
+      key,
     before: valueText(before, key, context),
     after: valueText(after, key, context),
   };
@@ -667,7 +676,16 @@ export function changeLines(
     return keys
       .filter((key) => !hidden.includes(key))
       .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-      .map((key) => line(key, before[key], after[key], context));
+      .map((key) => {
+        const entry = line(key, before[key], after[key], context);
+        // An id only «before» names what the object belonged to (an employee's
+        // company on its removal), not a change: under «Подробнее».
+        const value = before[key];
+        if (!(key in after) && typeof value === "string" && UUID.test(value)) {
+          entry.technical = true;
+        }
+        return entry;
+      });
   }
   if (isRecord(after) && (before === null || before === undefined)) {
     return Object.entries(after)

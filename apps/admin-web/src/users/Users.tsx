@@ -1,9 +1,9 @@
 import type { AdminUserSummary } from "@adclub/contracts";
-import { Button, Checkbox, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
+import { Checkbox, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
 import { apiClient } from "../api";
 import { AppLink, follow } from "../catalog/shared";
 import { formatMoment } from "../format";
-import { navigate, routePaths, userPath } from "../router";
+import { routePaths, userPath } from "../router";
 import { SearchBox, useAddressFilters } from "../suppliers/shared";
 import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
 import { accessText, userFiltersOf } from "./user-words";
@@ -65,9 +65,6 @@ export function Users() {
     <>
       <div className="page__head">
         <h1 className="ac-text-title-l page__title">Пользователи</h1>
-        <Button variant="secondary" size="s" onClick={() => navigate("userNoShows")}>
-          Неявки
-        </Button>
       </div>
       <UsersTabs active="users" />
       <div className="filters">

@@ -3143,7 +3143,9 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
       );
       expect(users).toMatchObject({
         total: 1,
-        users: [{ accountId: buyer.accountId, phone: buyer.phone, count: 1, revokedCount: 1 }],
+        users: [
+          { accountId: buyer.accountId, phone: hidePhone(buyer.phone), count: 1, revokedCount: 1 },
+        ],
       });
       expect(
         (

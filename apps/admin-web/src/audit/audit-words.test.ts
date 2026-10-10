@@ -193,12 +193,15 @@ describe("the words of the journal", () => {
           .filter((line) => !line.technical)
           .map((line) => [line.field, line.before, line.after]),
       ).toEqual([
-        ["Компания", "Алматы", "—"],
         ["Статус", "Удалён", "Активен"],
         ["Удалён", "9 окт. 2026 г., 19:52", "—"],
         ["Получает уведомления", "—", "да"],
       ]);
-      expect(lines.find((line) => line.technical)?.field).toBe("removedByMemberId");
+      // The company the employee belonged to and who removed them — under «Подробнее».
+      expect(lines.filter((line) => line.technical).map((line) => line.field)).toEqual([
+        "Компания",
+        "removedByMemberId",
+      ]);
     });
 
     it("a member added: the account technical, the number partly hidden, «Восстановлен — нет»", () => {

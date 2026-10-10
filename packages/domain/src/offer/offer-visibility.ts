@@ -20,6 +20,7 @@ export type OfferHiddenReason =
   | "offer_suspended"
   | "supplier_paused"
   | "supplier_blocked"
+  | "supplier_type_mismatch"
   | "item_unavailable"
   | "category_hidden"
   | "no_city"
@@ -39,6 +40,12 @@ export interface OfferVisibilityFacts {
   offerStatus: OfferStatus;
   supplierPauseReason: SupplierPauseReason | null;
   supplierBlocked: boolean;
+  /**
+   * The supplier's type still lets it offer the item (`supplierOffers`,
+   * TASK-019): an offer on a service of a supplier made «только товары»
+   * after it was put on sale — and the other way round — is hidden.
+   */
+  supplierTypeFits: boolean;
   /** The catalog item: `draft`, `active` or `archived`. */
   itemStatus: string;
   /** The item's subcategory and its node are both active (neither hidden nor archived). */
@@ -72,6 +79,9 @@ export function offerVisibility(facts: OfferVisibilityFacts): OfferVisibility {
   }
   if (facts.supplierPauseReason !== null) {
     reasons.push("supplier_paused");
+  }
+  if (!facts.supplierTypeFits) {
+    reasons.push("supplier_type_mismatch");
   }
   if (facts.itemStatus !== "active") {
     reasons.push("item_unavailable");

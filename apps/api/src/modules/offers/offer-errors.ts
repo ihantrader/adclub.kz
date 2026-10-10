@@ -1,5 +1,6 @@
 import type {
   OfferExistsDetails,
+  OfferNotApplicableDetails,
   OfferStateDetails,
   OfferStatusValue,
   OfferVersionConflictDetails,
@@ -67,11 +68,18 @@ export function pickupNeedsAddress(): ApiException {
   );
 }
 
-export function notApplicable(): ApiException {
+export function notApplicable(
+  supplierType: OfferNotApplicableDetails["supplierType"],
+  itemType: OfferNotApplicableDetails["itemType"],
+): ApiException {
+  const details: OfferNotApplicableDetails = { supplierType, itemType };
   return new ApiException(
     409,
     "OFFER_NOT_APPLICABLE",
-    "Offers are put on parts and products; offers on services come later",
+    supplierType === "goods"
+      ? "The company offers goods only: it puts no offers on services"
+      : "The company offers services only: it puts no offers on goods",
+    { details },
   );
 }
 

@@ -92,6 +92,10 @@ function localizedName(
 
 export function itemOf(row: OrderRow, lang: CatalogLanguage): OrderItem {
   const item = row.offerSnapshot.item;
+  if (item.type === "service") {
+    // Orders refuse offers on services until TASK-038 brings their own kind.
+    throw new Error(`The order ${row.id} holds a service, which orders don't take yet`);
+  }
   return {
     id: item.id,
     type: item.type,

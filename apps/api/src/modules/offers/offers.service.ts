@@ -11,10 +11,11 @@ import {
   type OfferReceipt,
   type OfferReturnedResponse,
   type SupplierOffer,
+  type SupplierType,
   type UpdateOfferBody,
 } from "@adclub/contracts";
-import { normalizeArticle, warrantyTextContacts } from "@adclub/domain";
-import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { normalizeArticle, supplierOffers, warrantyTextContacts } from "@adclub/domain";
+import { and, count, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog, type AuditActorRecord } from "../audit";
 import {
@@ -44,9 +45,10 @@ import {
 import { activeOrderCounts } from "./offer-active-orders";
 import { OFFER_ON_SALE_STATUSES } from "./offer-list-rule";
 import { describeOfferItems } from "./offer-items";
+import { describePricings, modelAvailability } from "./offer-pricing";
 import { describeReceipt, receiptSchedules } from "./offer-receipt";
 import { offerShowcase } from "./offer-showcase";
-import { offer, type OfferRow } from "./schema";
+import { offer, offerModelPrice, type OfferRow } from "./schema";
 
 /** An employee acting for the company of the session. */
 export type OfferActor = Extract<AuditActorRecord, { role: "supplier" }>;
@@ -77,14 +79,43 @@ const FIELDS = [
   ["supplierName", "supplierRawName"],
 ] as const satisfies readonly (readonly [keyof UpdateOfferBody, keyof OfferRow])[];
 
-function checkTerms(terms: Terms, changed: (field: string) => boolean): void {
-  if (terms.availability === "on_order" && terms.leadDays === 0) {
+/**
+ * The fields a service doesn't have (TASK-019): it is done at the point —
+ * no availability, term, pickup or delivery. Its row holds the neutral
+ * values (`SERVICE_TERMS`; the database refuses anything else).
+ */
+const GOODS_ONLY_FIELDS = ["availability", "leadDays", "pickup", "delivery"] as const;
+
+const SERVICE_TERMS = {
+  availability: "in_stock",
+  leadDays: 0,
+  pickup: false,
+  delivery: false,
+} as const;
+
+/** A row of a service's prices by model, as kept and journaled. */
+interface ModelPriceValue {
+  modelId: string;
+  price: number;
+}
+
+function sameModelPrices(a: readonly ModelPriceValue[], b: readonly ModelPriceValue[]): boolean {
+  const key = (rows: readonly ModelPriceValue[]) =>
+    [...rows]
+      .sort((x, y) => x.modelId.localeCompare(y.modelId))
+      .map((row) => `${row.modelId}:${row.price}`)
+      .join(",");
+  return key(a) === key(b);
+}
+
+function checkTerms(terms: Terms, changed: (field: string) => boolean, service: boolean): void {
+  if (!service && terms.availability === "on_order" && terms.leadDays === 0) {
     throw validationError(
       changed("leadDays") ? "leadDays" : "availability",
       "Under order needs a term of at least one working day",
     );
   }
-  if (!terms.pickup && !terms.delivery) {
+  if (!service && !terms.pickup && !terms.delivery) {
     throw validationError(
       changed("delivery") && !changed("pickup") ? "delivery" : "pickup",
       "Choose pickup, delivery or both",
@@ -110,8 +141,10 @@ function checkTerms(terms: Terms, changed: (field: string) => boolean): void {
 /**
  * Offers of suppliers (TASK-018; ARCHITECTURE 4.28; SCREENS S-OFF-01,
  * S-OFF-03, A-SUP-03): an employee puts an offer of the company's pickup
- * point on an active part or product, changes it field by field straight
- * from the list, withdraws it and returns it. The company is always the
+ * point on an active part, product or — TASK-019, S-OFF-04 — service (as
+ * far as the company's type lets it: `supplierOffers`), changes it field by
+ * field straight from the list (a service's table of prices by model —
+ * whole), withdraws it and returns it. The company is always the
  * session's; another company's offer is as missing as one that doesn't
  * exist. Every change is one transaction with its entry in the action
  * journal (the author — the employee). A change applies to new orders:
@@ -136,24 +169,48 @@ export class OffersService {
     actor: OfferActor,
     lang: CatalogLanguage,
   ): Promise<SupplierOffer> {
-    await this.checkPrice(input.price);
-    await this.checkLeadDays(input.leadDays);
-    const terms: Terms = {
-      availability: input.availability,
-      leadDays: input.leadDays,
-      pickup: input.pickup,
-      delivery: input.delivery,
-      warrantyMonths: input.warrantyMonths ?? null,
-      warrantyText: input.warrantyText ?? null,
-    };
-    checkTerms(terms, (field) => field in input);
+    const changed = (field: string) => field in input;
     return this.database.db.transaction(async (tx) => {
+      const item = await this.offerableItem(tx, input.itemId);
+      // The type of the company decides what it may offer (TASK-019).
+      const supplierType = await this.supplierTypeOf(tx, actor.supplierId);
+      if (!supplierOffers(supplierType, item.itemType)) {
+        throw notApplicable(supplierType, item.itemType);
+      }
+      const service = item.itemType === "service";
       // The point's address can't be cleared while the offer is put on it.
       const location = await this.pointOf(tx, actor.supplierId, "share");
+      let terms: Terms;
+      let price: number;
+      let modelPrices: ModelPriceValue[] = [];
+      if (service) {
+        this.refuseGoodsFields(input);
+        const pricing = await this.servicePricing(tx, input, new Set());
+        price = pricing.price;
+        modelPrices = pricing.modelPrices;
+        terms = {
+          ...SERVICE_TERMS,
+          warrantyMonths: input.warrantyMonths ?? null,
+          warrantyText: input.warrantyText ?? null,
+        };
+      } else {
+        const goods = this.goodsInput(input);
+        await this.checkPrice(goods.price);
+        await this.checkLeadDays(goods.leadDays);
+        price = goods.price;
+        terms = {
+          availability: goods.availability,
+          leadDays: goods.leadDays,
+          pickup: goods.pickup,
+          delivery: goods.delivery,
+          warrantyMonths: input.warrantyMonths ?? null,
+          warrantyText: input.warrantyText ?? null,
+        };
+      }
+      checkTerms(terms, changed, service);
       if (terms.pickup && !location.address) {
         throw pickupNeedsAddress();
       }
-      const item = await this.offerableItem(tx, input.itemId);
       const [created] = await tx
         .insert(offer)
         .values({
@@ -161,7 +218,8 @@ export class OffersService {
           locationId: location.id,
           itemId: item.id,
           itemType: item.itemType,
-          price: input.price,
+          price,
+          priceMode: modelPrices.length > 0 ? "by_model" : "single",
           ...terms,
           supplierSku: input.supplierSku ?? null,
           supplierRawName: input.supplierName ?? null,
@@ -185,6 +243,15 @@ export class OffersService {
           );
         throw offerExists(existing!.id, existing!.status);
       }
+      if (modelPrices.length > 0) {
+        await tx.insert(offerModelPrice).values(
+          modelPrices.map((row) => ({
+            offerId: created.id,
+            vehicleModelId: row.modelId,
+            price: row.price,
+          })),
+        );
+      }
       await this.audit.record(
         {
           action: auditActions.offerCreated,
@@ -195,6 +262,8 @@ export class OffersService {
             itemId: created.itemId,
             locationId: created.locationId,
             ...this.journalFields(created),
+            ...(service && { priceMode: created.priceMode }),
+            ...(modelPrices.length > 0 && { modelPrices }),
           },
         },
         tx,
@@ -218,8 +287,46 @@ export class OffersService {
     }
     return this.database.db.transaction(async (tx) => {
       const row = await this.lockOwn(tx, actor.supplierId, offerId, input.expectedVersion);
+      const service = row.itemType === "service";
+      // A service: one price, or the whole table of prices by model (TASK-019).
+      let price = input.price ?? row.price;
+      let priceMode = row.priceMode;
+      const currentModels: ModelPriceValue[] =
+        row.priceMode === "by_model"
+          ? (
+              await tx
+                .select({ modelId: offerModelPrice.vehicleModelId, price: offerModelPrice.price })
+                .from(offerModelPrice)
+                .where(eq(offerModelPrice.offerId, row.id))
+            ).sort((a, b) => a.modelId.localeCompare(b.modelId))
+          : [];
+      let nextModels = currentModels;
+      if (service) {
+        this.refuseGoodsFields(input);
+        if (input.price !== undefined && input.modelPrices !== undefined) {
+          throw validationError(
+            "modelPrices",
+            "One price for all models or prices by model, not both",
+          );
+        }
+        if (input.price !== undefined) {
+          priceMode = "single";
+          nextModels = [];
+        } else if (input.modelPrices !== undefined) {
+          const pricing = await this.servicePricing(
+            tx,
+            { modelPrices: input.modelPrices },
+            new Set(currentModels.map((entry) => entry.modelId)),
+          );
+          priceMode = "by_model";
+          price = pricing.price;
+          nextModels = [...pricing.modelPrices].sort((a, b) => a.modelId.localeCompare(b.modelId));
+        }
+      } else if (input.modelPrices !== undefined) {
+        throw validationError("modelPrices", "Prices by model are a service's only");
+      }
       const next = {
-        price: input.price ?? row.price,
+        price,
         availability: input.availability ?? row.availability,
         leadDays: input.leadDays ?? row.leadDays,
         pickup: input.pickup ?? row.pickup,
@@ -231,7 +338,7 @@ export class OffersService {
         supplierRawName:
           input.supplierName === undefined ? row.supplierRawName : input.supplierName,
       };
-      checkTerms(next, (field) => field in input);
+      checkTerms(next, (field) => field in input, service);
       if (next.pickup && !row.pickup) {
         const location = await this.pointOf(tx, actor.supplierId, "share");
         if (!location.address) {
@@ -246,6 +353,15 @@ export class OffersService {
           after[field] = next[column];
         }
       }
+      if (priceMode !== row.priceMode) {
+        before.priceMode = row.priceMode;
+        after.priceMode = priceMode;
+      }
+      const modelsChanged = !sameModelPrices(currentModels, nextModels);
+      if (modelsChanged) {
+        before.modelPrices = currentModels;
+        after.modelPrices = nextModels;
+      }
       if (Object.keys(after).length === 0) {
         // Saving what is already there changes nothing, not even the version.
         return (await this.describe(tx, [row], lang))[0]!;
@@ -254,12 +370,26 @@ export class OffersService {
         .update(offer)
         .set({
           ...next,
+          priceMode,
           version: row.version + 1,
           updatedByMemberId: actor.memberId,
           updatedAt: new Date(),
         })
         .where(eq(offer.id, row.id))
         .returning();
+      if (modelsChanged) {
+        // The whole table is replaced; the database checks the price is its lowest at commit.
+        await tx.delete(offerModelPrice).where(eq(offerModelPrice.offerId, row.id));
+        if (nextModels.length > 0) {
+          await tx.insert(offerModelPrice).values(
+            nextModels.map((entry) => ({
+              offerId: row.id,
+              vehicleModelId: entry.modelId,
+              price: entry.price,
+            })),
+          );
+        }
+      }
       await this.audit.record(
         {
           action: auditActions.offerChanged,
@@ -335,6 +465,11 @@ export class OffersService {
       if (item?.status !== "active") {
         throw itemUnavailable();
       }
+      // The type of the company may have changed since (TASK-019).
+      const supplierType = await this.supplierTypeOf(tx, actor.supplierId);
+      if (!supplierOffers(supplierType, row.itemType)) {
+        throw notApplicable(supplierType, row.itemType);
+      }
       const [updated] = await tx
         .update(offer)
         .set({
@@ -390,6 +525,11 @@ export class OffersService {
       query.tab === "withdrawn"
         ? eq(offer.status, "withdrawn")
         : inArray(offer.status, ["active", "suspended"]),
+      query.kind === "services"
+        ? eq(offer.itemType, "service")
+        : query.kind === "goods"
+          ? ne(offer.itemType, "service")
+          : undefined,
       query.availability ? eq(offer.availability, query.availability) : undefined,
       query.withoutPhoto === "true"
         ? sql`NOT EXISTS (SELECT 1 FROM catalog_item i WHERE i.id = ${offer.itemId} AND i.primary_photo_id IS NOT NULL)`
@@ -519,7 +659,7 @@ export class OffersService {
       return [];
     }
     const now = new Date();
-    const [items, showcase, schedules, activeOrders] = await Promise.all([
+    const [items, showcase, schedules, activeOrders, pricings] = await Promise.all([
       describeOfferItems(
         executor,
         this.photos,
@@ -539,6 +679,7 @@ export class OffersService {
         executor,
         rows.map((row) => row.id),
       ),
+      describePricings(executor, rows),
     ]);
     return rows.map((row) => ({
       id: row.id,
@@ -546,6 +687,7 @@ export class OffersService {
       locationId: row.locationId,
       item: items.get(row.itemId)!,
       price: row.price,
+      pricing: pricings.get(row.id)!,
       currency: row.currency,
       availability: row.availability,
       leadDays: row.leadDays,
@@ -571,14 +713,117 @@ export class OffersService {
     return Object.fromEntries(FIELDS.map(([field, column]) => [field, row[column]]));
   }
 
-  private async checkPrice(price: number): Promise<void> {
+  private async checkPrice(price: number, path = "price"): Promise<void> {
     const [min, max] = await Promise.all([
       this.settings.get("offer_price_min_kzt"),
       this.settings.get("offer_price_max_kzt"),
     ]);
     if (price < min || price > max) {
-      throw validationError("price", `The price must be from ${min} to ${max} tenge`, { min, max });
+      throw validationError(path, `The price must be from ${min} to ${max} tenge`, { min, max });
     }
+  }
+
+  /** The company's type (PRODUCT 12.1), held until the offer is saved. */
+  private async supplierTypeOf(executor: DbExecutor, supplierId: string): Promise<SupplierType> {
+    const [row] = await executor
+      .select({ type: supplier.type })
+      .from(supplier)
+      .where(eq(supplier.id, supplierId))
+      .for("share");
+    if (!row) {
+      throw notFound("supplier");
+    }
+    return row.type;
+  }
+
+  /** A service is done at the point (TASK-019): the fields of goods are refused at their path. */
+  private refuseGoodsFields(input: Partial<Record<(typeof GOODS_ONLY_FIELDS)[number], unknown>>) {
+    for (const field of GOODS_ONLY_FIELDS) {
+      if (input[field] !== undefined) {
+        throw validationError(
+          field,
+          "A service is done at the point: it has no availability, term, pickup or delivery",
+        );
+      }
+    }
+  }
+
+  /** The terms an offer on goods can't do without; prices by model are a service's only. */
+  private goodsInput(input: CreateOfferBody) {
+    if (input.modelPrices !== undefined) {
+      throw validationError("modelPrices", "Prices by model are a service's only");
+    }
+    const { price, availability, leadDays, pickup, delivery } = input;
+    for (const [field, value] of Object.entries({
+      price,
+      availability,
+      leadDays,
+      pickup,
+      delivery,
+    })) {
+      if (value === undefined) {
+        throw validationError(field, "Required for an offer on goods");
+      }
+    }
+    return {
+      price: price!,
+      availability: availability!,
+      leadDays: leadDays!,
+      pickup: pickup!,
+      delivery: delivery!,
+    };
+  }
+
+  /**
+   * The price of a service (S-OFF-04): one for all models, or a table of
+   * prices by model — exactly one of them. Every price within the settings
+   * (an error at its row); a model must be one clients can choose — a model
+   * in the archive may only stay in a table that already has it (`kept`):
+   * its price stays, nobody sees it. With a table the offer's price is its
+   * lowest («от N ₸»; the database checks it).
+   */
+  private async servicePricing(
+    executor: DbExecutor,
+    input: { price?: number; modelPrices?: readonly ModelPriceValue[] },
+    kept: ReadonlySet<string>,
+  ): Promise<{ price: number; modelPrices: ModelPriceValue[] }> {
+    if (input.price !== undefined && input.modelPrices !== undefined) {
+      throw validationError("modelPrices", "One price for all models or prices by model, not both");
+    }
+    if (input.price !== undefined) {
+      await this.checkPrice(input.price);
+      return { price: input.price, modelPrices: [] };
+    }
+    if (input.modelPrices === undefined || input.modelPrices.length === 0) {
+      throw validationError("price", "Give one price for all models or prices by model");
+    }
+    const rows = input.modelPrices;
+    for (const [index, row] of rows.entries()) {
+      await this.checkPrice(row.price, `modelPrices.${index}.price`);
+    }
+    const models = await modelAvailability(
+      executor,
+      rows.map((row) => row.modelId),
+    );
+    for (const [index, row] of rows.entries()) {
+      const available = models.get(row.modelId);
+      if (available === undefined) {
+        throw validationError(
+          `modelPrices.${index}.modelId`,
+          "No such model in the vehicle catalog",
+        );
+      }
+      if (!available && !kept.has(row.modelId)) {
+        throw validationError(
+          `modelPrices.${index}.modelId`,
+          "The model is in the archive: clients can't choose it",
+        );
+      }
+    }
+    return {
+      price: Math.min(...rows.map((row) => row.price)),
+      modelPrices: rows.map((row) => ({ modelId: row.modelId, price: row.price })),
+    };
   }
 
   private async checkLeadDays(leadDays: number): Promise<void> {
@@ -614,13 +859,13 @@ export class OffersService {
   /**
    * An item a supplier may put an offer on: active, in a visible
    * subcategory (a supplier sees the catalog as users do — anything else
-   * is as missing as an item that doesn't exist), a part or a product.
-   * Held against archiving until the offer is saved.
+   * is as missing as an item that doesn't exist) — a part, a product or,
+   * since TASK-019, a service. Held against archiving until the offer is saved.
    */
   private async offerableItem(
     executor: DbExecutor,
     itemId: string,
-  ): Promise<{ id: string; itemType: "part" | "generic" }> {
+  ): Promise<{ id: string; itemType: "part" | "generic" | "service" }> {
     const [row] = await executor
       .select({ id: catalogItem.id, itemType: catalogItem.itemType, status: catalogItem.status })
       .from(catalogItem)
@@ -637,9 +882,6 @@ export class OffersService {
       .for("share");
     if (!row || row.status !== "active") {
       throw notFound("item");
-    }
-    if (row.itemType === "service") {
-      throw notApplicable();
     }
     return { id: row.id, itemType: row.itemType };
   }

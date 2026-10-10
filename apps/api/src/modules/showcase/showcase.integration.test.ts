@@ -27,6 +27,7 @@ import {
   type ShowcaseItemResponse,
   type ShowcaseListResponse,
   type SupplierOffer,
+  type SupplierType,
 } from "@adclub/contracts";
 import {
   kzBinCheckDigit,
@@ -366,7 +367,7 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
   async function company(
     name: string,
     cityId: string,
-    options: { hours?: DayHours[] | null; verified?: boolean } = {},
+    options: { hours?: DayHours[] | null; verified?: boolean; type?: SupplierType } = {},
   ): Promise<Company> {
     const phone = phoneOf(++phoneCounter);
     const contactPhone = phoneOf(500 + phoneCounter);
@@ -378,7 +379,7 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
         name,
         bin: validBin(`0712340${String(binCounter++).padStart(4, "0")}`),
         cityId,
-        type: "goods",
+        type: options.type ?? "goods",
         contactPhone,
         address,
         district,
@@ -1791,17 +1792,18 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
         );
       const main = await service("Замена масла с фильтром");
       const analog = await service("Замена масла экспресс");
-      // Services have no offers and no analogs until TASK-019: the checks
-      // that say so are lifted for this test only, to see the rule the
-      // analogs share with the list and the card.
-      await db.query("ALTER TABLE offer DROP CONSTRAINT offer_item_type_check");
+      // Services have no analogs: the check that says so is lifted for this
+      // test only, to see the rule the analogs share with the list and the
+      // card. Offers on services exist since TASK-019 — of a company that
+      // offers them.
+      await db.query("UPDATE supplier SET type = 'both' WHERE id = $1", [shop.supplierId]);
       await db.query("ALTER TABLE item_analog DROP CONSTRAINT item_analog_type_check");
       try {
         for (const itemId of [main, analog]) {
           await db.query(
             `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability,
                lead_days, pickup, delivery, created_by_member_id, updated_by_member_id)
-             SELECT supplier_id, location_id, $2, 'service', 3000, 'in_stock', 0, true, false,
+             SELECT supplier_id, location_id, $2, 'service', 3000, 'in_stock', 0, false, false,
                created_by_member_id, updated_by_member_id
              FROM offer WHERE id = $1`,
             [seeded.id, itemId],
@@ -1826,12 +1828,208 @@ describe("the catalog for users (PostgreSQL + Redis)", () => {
         await db.query("DELETE FROM item_analog WHERE item_type = 'service'");
         await db.query("DELETE FROM offer WHERE item_type = 'service'");
         await db.query(
-          "ALTER TABLE offer ADD CONSTRAINT offer_item_type_check CHECK (item_type IN ('part', 'generic'))",
-        );
-        await db.query(
           "ALTER TABLE item_analog ADD CONSTRAINT item_analog_type_check CHECK (item_type = 'part')",
         );
       }
+    });
+  });
+
+  // ------------------------------------------------------------ services
+
+  describe("services (TASK-019; M-CAT-01, M-CAT-08)", () => {
+    const OIL_CHANGE = "Замена моторного масла";
+
+    async function serviceWorld() {
+      const w = await world();
+      return {
+        ...w,
+        monjaro: await idOf(
+          "SELECT model_id AS id FROM vehicle_model_spelling WHERE make_id = $1 AND key = 'monjaro'",
+          [w.geely],
+        ),
+        oilService: await idOf(
+          "SELECT entity_id AS id FROM translation WHERE entity_type = 'catalog_item' AND lang = 'ru' AND text = $1",
+          [OIL_CHANGE],
+        ),
+      };
+    }
+
+    async function putService(of: Company, itemId: string, body: object): Promise<SupplierOffer> {
+      return ok(
+        of.as("post", "/supplier/offers", { itemId, ...body }),
+        (response) => supplierOfferResponseSchema.parse(response).offer,
+        201,
+      );
+    }
+
+    const car = (modelId: string, makeId: string) => ({
+      vehicleMakeId: makeId,
+      vehicleModelId: modelId,
+    });
+
+    it("shows a service only in the city of the point, with the price for the car's model", async () => {
+      const w = await serviceWorld();
+      const service = await company("Шины Юг", almaty, { type: "services", verified: true });
+      await putService(service, w.oilService, {
+        modelPrices: [
+          { modelId: w.coolray, price: 8_000 },
+          { modelId: w.atlas, price: 10_000 },
+        ],
+      });
+      const coolray = { cityId: almaty, ...car(w.coolray, w.geely) };
+      const atlas = { cityId: almaty, ...car(w.atlas, w.geely) };
+
+      const forCoolray = await list(w.oilChange, coolray);
+      expect(forCoolray).toMatchObject({ total: 1, empty: null, category: { kind: "services" } });
+      expect(forCoolray.items[0]).toMatchObject({
+        id: w.oilService,
+        type: "service",
+        offers: { count: 1, minPrice: 8_000 },
+      });
+      expect((await list(w.oilChange, atlas)).items[0]!.offers.minPrice).toBe(10_000);
+      // Another model has no price: nothing for it — because of the car.
+      expect(await list(w.oilChange, { cityId: almaty, ...car(w.monjaro, w.geely) })).toMatchObject(
+        { items: [], total: 0, empty: "vehicle" },
+      );
+      // A car known only by its make: prices by model don't fit it.
+      expect(await list(w.oilChange, { cityId: almaty, vehicleMakeId: w.geely })).toMatchObject({
+        items: [],
+        empty: "vehicle",
+      });
+      // Without a city — ask for one; another city — none there.
+      expect(await list(w.oilChange, car(w.coolray, w.geely))).toMatchObject({
+        items: [],
+        empty: "city_required",
+      });
+      expect(await list(w.oilChange, { cityId: astana, ...car(w.coolray, w.geely) })).toMatchObject(
+        { items: [], empty: "no_items" },
+      );
+
+      // The card (M-CAT-08): the offer at the model's price, the supplier by the rules of visibility.
+      const cardForCoolray = await card(w.oilService, coolray);
+      expect(cardForCoolray.item.type).toBe("service");
+      expect(cardForCoolray.offers).toHaveLength(1);
+      expect(cardForCoolray.offers[0]).toMatchObject({
+        price: 8_000,
+        verifiedPartner: true,
+        inCity: true,
+        supplier: { kind: "hidden", reason: "auth_required" },
+      });
+      expect((await card(w.oilService, atlas)).offers[0]!.price).toBe(10_000);
+      expect(
+        (await card(w.oilService, { cityId: almaty, ...car(w.monjaro, w.geely) })).offers,
+      ).toEqual([]);
+      expect((await card(w.oilService, car(w.coolray, w.geely))).offers).toEqual([]);
+      const member = await sessionToken(USER_PHONE, IOS);
+      await grant(USER_PHONE);
+      expect((await card(w.oilService, coolray, member)).offers[0]!.supplier).toMatchObject({
+        kind: "visible",
+        name: "Шины Юг",
+      });
+
+      // One price for all — any model, and a car without a model.
+      const mine = await ok(service.as("get", "/supplier/offers"), (body) =>
+        offerPageSchema.parse(body),
+      );
+      await ok(
+        service.as("patch", `/supplier/offers/${mine.offers[0]!.id}`, {
+          expectedVersion: mine.offers[0]!.version,
+          price: 7_000,
+        }),
+        (body) => body,
+      );
+      const queries: Record<string, string>[] = [
+        { cityId: almaty, ...car(w.monjaro, w.geely) },
+        { cityId: almaty, vehicleMakeId: w.geely },
+        { cityId: almaty },
+      ];
+      for (const query of queries) {
+        expect((await list(w.oilChange, query)).items[0]!.offers.minPrice).toBe(7_000);
+      }
+    });
+
+    it("moves with the point to its new city; an archived model's price is seen by nobody", async () => {
+      const w = await serviceWorld();
+      const service = await company("Шины Юг", almaty, { type: "both" });
+      await putService(service, w.oilService, {
+        modelPrices: [
+          { modelId: w.coolray, price: 8_000 },
+          { modelId: w.atlas, price: 10_000 },
+        ],
+      });
+      await ok(
+        asAdmin("patch", `/admin/suppliers/${service.supplierId}`, {
+          expectedVersion: await supplierVersion(service.supplierId),
+          cityId: astana,
+        }),
+        (body) => body,
+      );
+      expect(
+        (await list(w.oilChange, { cityId: almaty, ...car(w.coolray, w.geely) })).items,
+      ).toEqual([]);
+      expect((await list(w.oilChange, { cityId: astana, ...car(w.coolray, w.geely) })).total).toBe(
+        1,
+      );
+      await db.query(
+        "UPDATE vehicle_model SET status = 'archived', archived_at = now() WHERE id = $1",
+        [w.atlas],
+      );
+      // The archived model can't even be named by a client any more.
+      const archived = await guest(
+        `/catalog/categories/${w.oilChange}/items?cityId=${astana}&vehicleModelId=${w.atlas}&vehicleMakeId=${w.geely}`,
+      );
+      if (archived.status === 200) {
+        expect(showcaseListResponseSchema.parse(archived.body).items).toEqual([]);
+      } else {
+        expect(archived.status).toBe(400);
+      }
+    });
+
+    it("hides services by the same rule as goods — hours, pause, block, the company's type — and the SQL twin agrees", async () => {
+      const w = await serviceWorld();
+      const companies = {
+        shown: await company("Сервис 1", almaty, { type: "services" }),
+        noHours: await company("Сервис 2", almaty, { type: "services", hours: null }),
+        paused: await company("Сервис 3", almaty, { type: "services" }),
+        blocked: await company("Сервис 4", almaty, { type: "services" }),
+        retyped: await company("Сервис 5", almaty, { type: "both" }),
+      };
+      const offers = new Map<string, SupplierOffer>();
+      for (const [key, of] of Object.entries(companies)) {
+        offers.set(key, await putService(of, w.oilService, { price: 5_000 }));
+      }
+      await pause(companies.paused, true);
+      await ok(
+        asAdmin("post", `/admin/suppliers/${companies.blocked.supplierId}/block`, {
+          expectedVersion: await supplierVersion(companies.blocked.supplierId),
+          blocked: true,
+          reason: "Жалобы",
+        }),
+        (body) => body,
+      );
+      await ok(
+        asAdmin("patch", `/admin/suppliers/${companies.retyped.supplierId}`, {
+          expectedVersion: await supplierVersion(companies.retyped.supplierId),
+          type: "goods",
+        }),
+        (body) => body,
+      );
+      const database = app.get(DatabaseService).db;
+      const ids = [...offers.values()].map((entry) => entry.id);
+      const rule = await offerShowcase(database, ids);
+      const twin = await database
+        .select({ id: offer.id })
+        .from(offer)
+        .where(and(inArray(offer.id, ids), shownOffers()));
+      const catalog = await card(w.oilService, { cityId: almaty, ...car(w.coolray, w.geely) });
+      const visible = ids.filter((id) => rule.get(id)!.visible).sort();
+      expect(twin.map((row) => row.id).sort()).toEqual(visible);
+      expect(catalog.offers.map((entry) => entry.id).sort()).toEqual(visible);
+      expect(visible).toEqual([offers.get("shown")!.id]);
+      expect(rule.get(offers.get("noHours")!.id)!.reasons).toEqual(["hours_not_set"]);
+      expect(rule.get(offers.get("paused")!.id)!.reasons).toEqual(["supplier_paused"]);
+      expect(rule.get(offers.get("blocked")!.id)!.reasons).toEqual(["supplier_blocked"]);
+      expect(rule.get(offers.get("retyped")!.id)!.reasons).toEqual(["supplier_type_mismatch"]);
     });
   });
 

@@ -1,5 +1,19 @@
-import type { OfferAvailability, OfferStatusValue, OfferWithdrawnReason } from "@adclub/contracts";
-import { boolean, integer, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type {
+  OfferAvailability,
+  OfferPriceMode,
+  OfferStatusValue,
+  OfferWithdrawnReason,
+} from "@adclub/contracts";
+import {
+  boolean,
+  integer,
+  pgTable,
+  primaryKey,
+  smallint,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { supplier } from "../identity";
 
 /**
@@ -16,8 +30,10 @@ export const offer = pgTable("offer", {
     .references(() => supplier.id),
   locationId: uuid("location_id").notNull(),
   itemId: uuid("item_id").notNull(),
-  itemType: text("item_type").$type<"part" | "generic">().notNull(),
+  itemType: text("item_type").$type<"part" | "generic" | "service">().notNull(),
+  /** The lowest of the model prices when `priceMode` is `by_model` (kept so by the database). */
   price: integer("price").notNull(),
+  priceMode: text("price_mode").$type<OfferPriceMode>().notNull().default("single"),
   currency: text("currency").$type<"KZT">().notNull().default("KZT"),
   availability: text("availability").$type<OfferAvailability>().notNull(),
   leadDays: smallint("lead_days").notNull().default(0),
@@ -41,5 +57,25 @@ export const offer = pgTable("offer", {
 
 export type OfferRow = typeof offer.$inferSelect;
 
+/**
+ * The price of a service for a model of the car (TASK-019, S-OFF-04): one
+ * row per model of an offer priced `by_model` (`…_service-offers.sql`).
+ */
+export const offerModelPrice = pgTable(
+  "offer_model_price",
+  {
+    offerId: uuid("offer_id")
+      .notNull()
+      .references(() => offer.id),
+    vehicleModelId: uuid("vehicle_model_id").notNull(),
+    price: integer("price").notNull(),
+  },
+  (table) => [
+    primaryKey({ name: "offer_model_price_pkey", columns: [table.offerId, table.vehicleModelId] }),
+  ],
+);
+
+export type OfferModelPriceRow = typeof offerModelPrice.$inferSelect;
+
 /** Every table this module owns — checked against the migrated database. */
-export const offerTables = [offer];
+export const offerTables = [offer, offerModelPrice];

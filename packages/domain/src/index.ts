@@ -68,6 +68,13 @@ export type {
   OfferVisibility,
   OfferVisibilityFacts,
 } from "./offer/offer-visibility";
+export { lowestServicePrice, servicePriceForCar, supplierOffers } from "./offer/service-price";
+export type {
+  ModelPrice,
+  OfferItemType,
+  ServicePricing,
+  SupplierOfferType,
+} from "./offer/service-price";
 export { warrantyTextContacts } from "./offer/warranty-text";
 export type { WarrantyContactKind } from "./offer/warranty-text";
 export { daysBetween, recommendedScore } from "./offer/offer-ranking";

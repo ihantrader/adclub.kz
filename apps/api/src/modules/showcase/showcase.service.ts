@@ -207,13 +207,14 @@ export class ShowcaseService {
     if (subcategory.kind === "services" && cityId === null) {
       return answer({ items: [], total: 0, empty: "city_required", brands: [], nextCursor: null });
     }
+    const shown = await visibleOffers(executor, { categoryId: subcategory.id }, now);
     const offered = groupByItem(
-      offersInReach(
-        subcategory.kind,
-        await visibleOffers(executor, { categoryId: subcategory.id }, now),
-        cityId,
-      ),
+      offersInReach(subcategory.kind, shown, cityId, vehicle?.modelId ?? null),
     );
+    // A service offered in the city, only not for this car's model (TASK-019):
+    // the list is empty because of the car, not because the city has none.
+    const offeredForOtherModels =
+      subcategory.kind === "services" && shown.some((entry) => entry.cityId === cityId);
 
     // Compatibility and D-029 — the one calculation, for the whole
     // subcategory in one statement (by the subcategory rather than by a
@@ -277,7 +278,7 @@ export class ShowcaseService {
         ? null
         : listed.length > 0
           ? "filters"
-          : offered.size > 0 && vehicle !== null
+          : (offered.size > 0 || offeredForOtherModels) && vehicle !== null
             ? "vehicle"
             : "no_items";
     const described = await this.describeListItems(
@@ -344,7 +345,7 @@ export class ShowcaseService {
         loadTexts(executor, "category", [subcategory.id, subcategory.parentId!]),
       ]);
     const offers = sortOffers(
-      offersInReach(subcategory.kind, offersOfItem, cityId),
+      offersInReach(subcategory.kind, offersOfItem, cityId, vehicle?.modelId ?? null),
       query.sort ?? "recommended",
       cityId,
       weights,
@@ -775,7 +776,12 @@ export class ShowcaseService {
       .where(inArray(catalogItem.id, [...found.keys()]));
     const offers = new Map<string, VisibleOffer[]>();
     for (const { itemId, kind } of kinds) {
-      const reachable = offersInReach(kind, found.get(itemId) ?? [], cityId);
+      const reachable = offersInReach(
+        kind,
+        found.get(itemId) ?? [],
+        cityId,
+        vehicle?.modelId ?? null,
+      );
       if (reachable.length > 0) {
         offers.set(itemId, reachable);
       }

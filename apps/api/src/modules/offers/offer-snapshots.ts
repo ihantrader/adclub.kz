@@ -1,9 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import type { OfferSnapshot } from "@adclub/contracts";
+import { servicePriceForCar } from "@adclub/domain";
 import { eq, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { loadTexts, plainTexts, textsOf } from "../catalog";
 import { notFound } from "./offer-errors";
+import { servicePricings } from "./offer-pricing";
 import { offer } from "./schema";
 
 interface SnapshotRow extends Record<string, unknown> {
@@ -28,10 +30,27 @@ interface SnapshotRow extends Record<string, unknown> {
  */
 @Injectable()
 export class OfferSnapshots {
-  async take(executor: DbExecutor, offerId: string, takenAt: Date): Promise<OfferSnapshot> {
+  /**
+   * `car` — the car an order on a service is for (TASK-038): its price is
+   * the price for the car's model (`servicePriceForCar`, the one function of
+   * the showcase too); a model without a price — the offer isn't available
+   * to it (`ORDER_OFFER_UNAVAILABLE` is the caller's answer). A product
+   * ignores it: its price is one for every car.
+   */
+  async take(
+    executor: DbExecutor,
+    offerId: string,
+    takenAt: Date,
+    car: { modelId: string | null } | null = null,
+  ): Promise<OfferSnapshot> {
     const [row] = await executor.select().from(offer).where(eq(offer.id, offerId)).for("share");
     if (!row) {
       throw notFound("offer");
+    }
+    const pricing = (await servicePricings(executor, [row])).get(row.id)!;
+    const price = servicePriceForCar(pricing, car);
+    if (price === null) {
+      throw notFound("price of the offer for the car");
     }
     const [facts] = (
       await executor.execute<SnapshotRow>(sql`
@@ -68,7 +87,8 @@ export class OfferSnapshots {
         article: facts!.article,
         brand: facts!.brand,
       },
-      price: row.price,
+      price,
+      ...(row.priceMode === "by_model" && { vehicleModelId: car?.modelId ?? null }),
       currency: row.currency,
       availability: row.availability,
       leadDays: row.leadDays,

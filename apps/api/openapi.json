@@ -6579,6 +6579,18 @@
             }
           },
           {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "goods",
+                "services"
+              ]
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "required": false,
@@ -13634,6 +13646,18 @@
             }
           },
           {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "goods",
+                "services"
+              ]
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "required": false,
@@ -17527,6 +17551,9 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "pricing": {
+            "$ref": "#/components/schemas/OfferPricing"
+          },
           "currency": {
             "type": "string",
             "const": "KZT"
@@ -17650,6 +17677,7 @@
           "locationId",
           "item",
           "price",
+          "pricing",
           "currency",
           "availability",
           "leadDays",
@@ -24986,6 +25014,9 @@
           "delivery": {
             "type": "boolean"
           },
+          "modelPrices": {
+            "$ref": "#/components/schemas/OfferModelPrices"
+          },
           "warrantyMonths": {
             "anyOf": [
               {
@@ -25039,12 +25070,7 @@
           }
         },
         "required": [
-          "itemId",
-          "price",
-          "availability",
-          "leadDays",
-          "pickup",
-          "delivery"
+          "itemId"
         ]
       },
       "CreateOrderBody": {
@@ -26484,6 +26510,7 @@
           "offer_suspended",
           "supplier_blocked",
           "supplier_paused",
+          "supplier_type_mismatch",
           "item_unavailable",
           "category_hidden",
           "no_city",
@@ -26503,7 +26530,8 @@
             "type": "string",
             "enum": [
               "part",
-              "generic"
+              "generic",
+              "service"
             ]
           },
           "status": {
@@ -26698,6 +26726,13 @@
             "default": "on_sale",
             "$ref": "#/components/schemas/OfferTab"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "goods",
+              "services"
+            ]
+          },
           "q": {
             "type": "string",
             "minLength": 1,
@@ -26729,6 +26764,106 @@
         "required": [
           "tab",
           "limit"
+        ]
+      },
+      "OfferModelPrice": {
+        "type": "object",
+        "properties": {
+          "make": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "make",
+          "model",
+          "price",
+          "available"
+        ]
+      },
+      "OfferModelPriceInput": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "price": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000
+          }
+        },
+        "required": [
+          "modelId",
+          "price"
+        ]
+      },
+      "OfferModelPrices": {
+        "minItems": 1,
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/OfferModelPriceInput"
+        }
+      },
+      "OfferNotApplicableDetails": {
+        "type": "object",
+        "properties": {
+          "supplierType": {
+            "$ref": "#/components/schemas/SupplierType"
+          },
+          "itemType": {
+            "type": "string",
+            "enum": [
+              "part",
+              "generic",
+              "service"
+            ]
+          }
+        },
+        "required": [
+          "supplierType",
+          "itemType"
         ]
       },
       "OfferPage": {
@@ -26793,6 +26928,31 @@
         },
         "required": [
           "offerId"
+        ]
+      },
+      "OfferPriceMode": {
+        "type": "string",
+        "enum": [
+          "single",
+          "by_model"
+        ]
+      },
+      "OfferPricing": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/OfferPriceMode"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferModelPrice"
+            }
+          }
+        },
+        "required": [
+          "mode",
+          "models"
         ]
       },
       "OfferReceipt": {
@@ -26995,7 +27155,8 @@
                 "type": "string",
                 "enum": [
                   "part",
-                  "generic"
+                  "generic",
+                  "service"
                 ]
               },
               "names": {
@@ -27051,6 +27212,18 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "vehicleModelId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "currency": {
             "type": "string",
@@ -32144,6 +32317,9 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "pricing": {
+            "$ref": "#/components/schemas/OfferPricing"
+          },
           "currency": {
             "type": "string",
             "const": "KZT"
@@ -32250,6 +32426,7 @@
           "locationId",
           "item",
           "price",
+          "pricing",
           "currency",
           "availability",
           "leadDays",
@@ -34274,6 +34451,9 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2000000000
+          },
+          "modelPrices": {
+            "$ref": "#/components/schemas/OfferModelPrices"
           },
           "availability": {
             "$ref": "#/components/schemas/OfferAvailability"

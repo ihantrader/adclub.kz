@@ -1225,6 +1225,34 @@ describe("orders under order: the term, its answers and its deadlines (PostgreSQ
       expectError(await propose(shop, order.id, 5), 409, "ORDER_KIND_NOT_SUPPORTED");
     });
 
+    it("an offer on a service isn't ordered yet (TASK-019; its order is TASK-038)", async () => {
+      const shop = await company("Сервис");
+      await db.query("UPDATE supplier SET type = 'services' WHERE id = $1", [shop.supplierId]);
+      const { rows } = await db.query<{ id: string }>(
+        "SELECT id FROM catalog_item WHERE item_type = 'service' AND status = 'active' LIMIT 1",
+      );
+      const service = await ok(
+        shop.as("post", "/supplier/offers", { itemId: rows[0]!.id, price: 7_000 }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+        201,
+      );
+      expect(service.showcase.visible).toBe(true);
+      const who = await customer();
+      expectError(
+        await who.as("post", "/orders", {
+          offerId: service.id,
+          quantity: 1,
+          fulfillment: "pickup",
+          expectedPrice: 7_000,
+          idempotencyKey: randomUUID(),
+        }),
+        409,
+        "ORDER_KIND_NOT_SUPPORTED",
+      );
+      const { rows: orders } = await db.query("SELECT count(*)::int AS n FROM customer_order");
+      expect(orders[0]).toEqual({ n: 0 });
+    });
+
     it("is not proposed by a blocked company", async () => {
       const shop = await company("Блокировка");
       const offer = await putOnOrder(shop);

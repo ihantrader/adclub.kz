@@ -1,15 +1,18 @@
 import { z } from "zod";
 import { catalogLanguageSchema, localizedTextSchema } from "./catalog";
 import { itemPhotoImageSchema } from "./catalog-photos";
+import { supplierTypeSchema } from "./suppliers";
 
 /**
- * Offers of suppliers on catalog goods (PRODUCT 7.1, 9, 9.1, 12.3, 12.4;
- * SCREENS S-OFF-01…03, A-SUP-03; ARCHITECTURE 5.5, 4.28; TASK-018). A
- * supplier doesn't create items: it finds one in the catalog and puts its
- * price, availability, term, pickup and delivery and warranty on it. One
- * item — one offer of a pickup point. An offer taken off sale isn't
- * deleted; it waits on the «withdrawn» tab to be returned. Offers on
- * services — TASK-019.
+ * Offers of suppliers on catalog goods and services (PRODUCT 7.1, 9, 9.1,
+ * 11, 12.3, 12.4; SCREENS S-OFF-01…04, A-SUP-03; ARCHITECTURE 5.5, 4.28,
+ * 4.61; TASK-018, TASK-019). A supplier doesn't create items: it finds one
+ * in the catalog and puts its price, availability, term, pickup and
+ * delivery and warranty on it. One item — one offer of a pickup point. An
+ * offer taken off sale isn't deleted; it waits on the «withdrawn» tab to be
+ * returned. A service (TASK-019) is done at the point — no availability,
+ * term, pickup or delivery — and its price is one for all models of the car
+ * or a price per model.
  */
 
 /** Upper bounds of the contract; the working bounds of the price and the term are settings. */
@@ -22,6 +25,8 @@ export const OFFER_SUPPLIER_NAME_MAX_LENGTH = 200;
 export const OFFER_QUERY_MAX_LENGTH = 100;
 export const OFFER_PAGE_MAX_SIZE = 100;
 export const OFFER_PAGE_DEFAULT_SIZE = 50;
+/** Rows of a service's table of prices by model (S-OFF-04). */
+export const OFFER_MODEL_PRICES_MAX = 200;
 
 /**
  * The search of an item for an offer (S-OFF-02) works only by a query:
@@ -66,6 +71,15 @@ export const offerWithdrawnReasonSchema = z.enum(["manual", "missing_in_import"]
 export type OfferWithdrawnReason = z.infer<typeof offerWithdrawnReasonSchema>;
 
 /**
+ * The price of an offer (TASK-019, S-OFF-04): `single` — one for every
+ * model (a product's is always so); `by_model` — a service's price per
+ * model of the car: a client whose model has no price doesn't see the offer.
+ */
+export const offerPriceModeSchema = z.enum(["single", "by_model"]);
+
+export type OfferPriceMode = z.infer<typeof offerPriceModeSchema>;
+
+/**
  * Why users don't see an offer (several at once, in this order): it is
  * withdrawn or suspended; the supplier is blocked or paused; the item is
  * not active in the catalog (archived by the administrator); its
@@ -79,6 +93,9 @@ export const offerHiddenReasonSchema = z.enum([
   "offer_suspended",
   "supplier_blocked",
   "supplier_paused",
+  // TASK-019: the company's type no longer lets it offer the item (a
+  // service of a company made «только товары», or goods of «только услуги»).
+  "supplier_type_mismatch",
   "item_unavailable",
   "category_hidden",
   "no_city",
@@ -121,7 +138,8 @@ export type OfferReceipt = z.infer<typeof offerReceiptSchema>;
 /** The catalog item of an offer, in the language of the request. */
 export const offerItemSchema = z.object({
   id: z.uuid(),
-  type: z.enum(["part", "generic"]),
+  /** `service` — an offer on a service (TASK-019). */
+  type: z.enum(["part", "generic", "service"]),
   /** `draft`, `active` or `archived` in the catalog: an archived item keeps its offers, off the showcase. */
   status: z.enum(["draft", "active", "archived"]),
   name: localizedTextSchema,
@@ -139,14 +157,42 @@ export const offerItemSchema = z.object({
 
 export type OfferItem = z.infer<typeof offerItemSchema>;
 
+/** A row of a service's prices by model, with the names of the make and the model. */
+export const offerModelPriceSchema = z.object({
+  make: z.object({ id: z.uuid(), name: z.string() }),
+  model: z.object({ id: z.uuid(), name: z.string() }),
+  price: z.number().int(),
+  /**
+   * Clients can choose this model (it and its make are active). A model in
+   * the archive keeps its price, but nobody sees it — no client has it to
+   * choose any more.
+   */
+  available: z.boolean(),
+});
+
+export type OfferModelPrice = z.infer<typeof offerModelPriceSchema>;
+
+/** How an offer is priced; `models` — only of `by_model`, by make and model name. */
+export const offerPricingSchema = z.object({
+  mode: offerPriceModeSchema,
+  models: z.array(offerModelPriceSchema),
+});
+
+export type OfferPricing = z.infer<typeof offerPricingSchema>;
+
 /** An offer as the cabinet and the admin panel see it (S-OFF-01, A-SUP-03). */
 export const supplierOfferSchema = z.object({
   id: z.uuid(),
   supplierId: z.uuid(),
   locationId: z.uuid(),
   item: offerItemSchema,
-  /** Whole tenge. */
+  /**
+   * Whole tenge. Priced by model (a service, TASK-019) — the lowest of the
+   * model prices («от N ₸»).
+   */
   price: z.number().int(),
+  /** One price, or prices by model (a service; TASK-019). */
+  pricing: offerPricingSchema,
   currency: z.literal("KZT"),
   availability: offerAvailabilitySchema,
   /** Working days from the confirmation of an order; 0 — take it at once. */
@@ -191,21 +237,63 @@ const warrantyMonthsSchema = z.number().int().min(1).max(OFFER_WARRANTY_MONTHS_M
 const priceSchema = z.number().int().min(1).max(OFFER_PRICE_LIMIT);
 const leadDaysSchema = z.number().int().min(0).max(OFFER_LEAD_DAYS_LIMIT);
 
+/** A row of a service's prices by model as the cabinet sends it: a model of the vehicle catalog. */
+export const offerModelPriceInputSchema = z.object({
+  modelId: z.uuid(),
+  price: priceSchema,
+});
+
+export type OfferModelPriceInput = z.infer<typeof offerModelPriceInputSchema>;
+
+/**
+ * The whole table of a service's prices by model (S-OFF-04): at least one
+ * row, one row per model — a repeated model is refused at its row.
+ */
+export const offerModelPricesSchema = z
+  .array(offerModelPriceInputSchema)
+  .min(1)
+  .max(OFFER_MODEL_PRICES_MAX)
+  .superRefine((rows, context) => {
+    const seen = new Set<string>();
+    rows.forEach((row, index) => {
+      if (seen.has(row.modelId)) {
+        context.addIssue({
+          code: "custom",
+          path: [index, "modelId"],
+          message: "This model already has a price in the table",
+        });
+      }
+      seen.add(row.modelId);
+    });
+  });
+
 /**
  * `POST /supplier/offers`: an offer of the company's pickup point on an
- * active part or product. The price must be within the settings
- * `offer_price_min_kzt`…`offer_price_max_kzt`, the term within
- * `offer_lead_days_max`; `on_order` needs a term of at least one day;
- * pickup or delivery (or both); pickup needs the address of the point;
- * the warranty is months or a short text, not both.
+ * active item its type lets it offer (`OFFER_NOT_APPLICABLE` otherwise).
+ *
+ * - **A part or a product**: `price`, `availability`, `leadDays`, `pickup`
+ *   and `delivery` are required (400 at the missing field). The price must
+ *   be within the settings `offer_price_min_kzt`…`offer_price_max_kzt`, the
+ *   term within `offer_lead_days_max`; `on_order` needs a term of at least
+ *   one day; pickup or delivery (or both); pickup needs the address of the
+ *   point. `modelPrices` — 400.
+ * - **A service** (TASK-019): `price` — one for all models, or
+ *   `modelPrices` — a price per model; exactly one of the two (400 at the
+ *   other). Each price within the same settings (400 at
+ *   `modelPrices.<i>.price`); a model of the table must be one clients can
+ *   choose (400 at `modelPrices.<i>.modelId`). No availability, term,
+ *   pickup or delivery — 400 at the field given.
+ *
+ * The warranty is months or a short text, not both.
  */
 export const createOfferBodySchema = z.object({
   itemId: z.uuid(),
-  price: priceSchema,
-  availability: offerAvailabilitySchema,
-  leadDays: leadDaysSchema,
-  pickup: z.boolean(),
-  delivery: z.boolean(),
+  price: priceSchema.optional(),
+  availability: offerAvailabilitySchema.optional(),
+  leadDays: leadDaysSchema.optional(),
+  pickup: z.boolean().optional(),
+  delivery: z.boolean().optional(),
+  modelPrices: offerModelPricesSchema.optional(),
   warrantyMonths: warrantyMonthsSchema.nullable().optional(),
   warrantyText: plainText(OFFER_WARRANTY_TEXT_MAX_LENGTH).nullable().optional(),
   supplierSku: plainText(OFFER_SUPPLIER_SKU_MAX_LENGTH).nullable().optional(),
@@ -217,6 +305,7 @@ export type CreateOfferBody = z.infer<typeof createOfferBodySchema>;
 const OFFER_EDITABLE_FIELDS = new Set([
   "expectedVersion",
   "price",
+  "modelPrices",
   "availability",
   "leadDays",
   "pickup",
@@ -233,11 +322,17 @@ const OFFER_EDITABLE_FIELDS = new Set([
  * hold for the offer as it becomes. The item and the status aren't
  * changed here (another item is another offer; the status — withdraw and
  * return); any other field is refused on its path.
+ *
+ * A service (TASK-019): `price` makes it one price for all models,
+ * `modelPrices` replaces the whole table of prices by model (and makes it
+ * priced by model) — not both at once; the fields a service doesn't have
+ * (availability, term, pickup, delivery) — 400. A product: `modelPrices` — 400.
  */
 export const updateOfferBodySchema = z
   .object({
     expectedVersion: expectedVersionSchema,
     price: priceSchema.optional(),
+    modelPrices: offerModelPricesSchema.optional(),
     availability: offerAvailabilitySchema.optional(),
     leadDays: leadDaysSchema.optional(),
     pickup: z.boolean().optional(),
@@ -299,6 +394,8 @@ export type OfferTab = z.infer<typeof offerTabSchema>;
  */
 export const offerListQuerySchema = z.object({
   tab: offerTabSchema.default("on_sale"),
+  /** «Услуги» (TASK-019): only offers on services (`services`) or only on goods (`goods`). */
+  kind: z.enum(["goods", "services"]).optional(),
   q: plainText(OFFER_QUERY_MAX_LENGTH).optional(),
   availability: offerAvailabilitySchema.optional(),
   withoutPhoto: z.enum(["true", "false"]).optional(),
@@ -452,6 +549,17 @@ export const offerWarrantyContactsDetailsSchema = z.object({
 
 export type OfferWarrantyContactsDetails = z.infer<typeof offerWarrantyContactsDetailsSchema>;
 
+/**
+ * `details` of `OFFER_NOT_APPLICABLE` (TASK-019): the company's type and the
+ * type of the item it can't offer — «Ваша компания выставляет только товары».
+ */
+export const offerNotApplicableDetailsSchema = z.object({
+  supplierType: supplierTypeSchema,
+  itemType: z.enum(["part", "generic", "service"]),
+});
+
+export type OfferNotApplicableDetails = z.infer<typeof offerNotApplicableDetailsSchema>;
+
 // ---------------------------------------------------------------- snapshot
 
 /**
@@ -475,7 +583,7 @@ export const offerSnapshotSchema = z.object({
   }),
   item: z.object({
     id: z.uuid(),
-    type: z.enum(["part", "generic"]),
+    type: z.enum(["part", "generic", "service"]),
     names: z.object({
       kk: z.string().nullable(),
       ru: z.string().nullable(),
@@ -484,7 +592,13 @@ export const offerSnapshotSchema = z.object({
     article: z.string().nullable(),
     brand: z.string().nullable(),
   }),
+  /**
+   * The price the order is made at: a service priced by model — the price
+   * for the model of the car (`servicePriceForCar`, TASK-019), the model in
+   * `vehicleModelId`.
+   */
   price: z.number().int(),
+  vehicleModelId: z.uuid().nullable().optional(),
   currency: z.literal("KZT"),
   availability: offerAvailabilitySchema,
   leadDays: z.number().int(),

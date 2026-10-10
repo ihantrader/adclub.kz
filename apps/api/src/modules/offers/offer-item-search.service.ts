@@ -6,10 +6,11 @@ import {
   type OfferItemSearchResponse,
   type OfferStatusValue,
 } from "@adclub/contracts";
-import { normalizeArticle } from "@adclub/domain";
-import { sql } from "drizzle-orm";
+import { normalizeArticle, supplierOffers } from "@adclub/domain";
+import { eq, inArray, sql } from "drizzle-orm";
 import { DatabaseService } from "../../database";
 import { CatalogPhotosService, escapeLike, normalizeText } from "../catalog";
+import { supplier } from "../identity";
 import { describeOfferItems } from "./offer-items";
 import type { OfferActor } from "./offers.service";
 
@@ -23,7 +24,8 @@ interface FoundRow extends Record<string, unknown> {
  * The search of a catalog item for an offer (TASK-018 requirement 2;
  * SCREENS S-OFF-02; ARCHITECTURE 4.28). The catalog is never given out
  * whole: only by a query of at least three letters or digits (the
- * contract), only active parts and products of visible subcategories, a
+ * contract), only active items of visible subcategories the company's type
+ * lets it offer (parts and products, services — TASK-019), a
  * page of at most 20 and no further than the first 100 matches of a
  * query, and a limit of searches per employee the route declares in the
  * contract (`offer_item_search_per_member` per `…_window_seconds`,
@@ -54,13 +56,22 @@ export class OfferItemSearch {
       article === ""
         ? sql`2`
         : sql`CASE WHEN i.article_norm = ${article} THEN 0 WHEN strpos(i.article_norm, ${article}) = 1 THEN 1 ELSE 2 END`;
+    // What the company's type lets it offer (TASK-019): «только товары» finds
+    // no services, «только услуги» no goods — as `supplierOffers` decides.
+    const [company] = await this.database.db
+      .select({ type: supplier.type })
+      .from(supplier)
+      .where(eq(supplier.id, actor.supplierId));
+    const types = (["part", "generic", "service"] as const).filter((type) =>
+      supplierOffers(company?.type ?? "goods", type),
+    );
     const found = await this.database.db.execute<FoundRow>(sql`
       SELECT i.id, o.id AS offer_id, o.status AS offer_status
       FROM catalog_item i
       JOIN category c ON c.id = i.category_id
       LEFT JOIN category p ON p.id = c.parent_id
       LEFT JOIN offer o ON o.item_id = i.id AND o.supplier_id = ${actor.supplierId}::uuid
-      WHERE i.item_type IN ('part', 'generic')
+      WHERE ${inArray(sql`i.item_type`, types)}
         AND i.status = 'active'
         AND c.status = 'active' AND coalesce(p.status, 'active') = 'active'
         AND ${matches}

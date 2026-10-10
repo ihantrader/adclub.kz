@@ -54,9 +54,6 @@ export async function describeOfferItems(
   const brandNames = new Map(brands.map((row) => [row.brandId, row.name]));
   const subcategoryById = new Map(subcategories.map((row) => [row.id, row]));
   for (const row of items) {
-    if (row.itemType === "service") {
-      continue;
-    }
     const subcategory = subcategoryById.get(row.categoryId);
     const brandName = row.brandId ? brandNames.get(row.brandId) : undefined;
     described.set(row.id, {

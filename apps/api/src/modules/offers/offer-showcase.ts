@@ -3,6 +3,9 @@ import {
   offerVisibility,
   RECEIPT_DATE_HORIZON_DAYS,
   scheduleFact,
+  supplierOffers,
+  type OfferItemType,
+  type SupplierOfferType,
   type SupplierPauseReason,
 } from "@adclub/domain";
 import { inArray, sql, type SQL } from "drizzle-orm";
@@ -35,6 +38,8 @@ interface FactsRow extends Record<string, unknown> {
   offer_status: "active" | "withdrawn" | "suspended";
   pause_reason: SupplierPauseReason | null;
   blocked: boolean;
+  supplier_type: SupplierOfferType;
+  item_type: OfferItemType;
   item_status: string;
   category_visible: boolean;
   has_city: boolean;
@@ -56,6 +61,8 @@ export async function offerShowcase(
       o.status AS offer_status,
       s.pause_reason,
       s.blocked_at IS NOT NULL AS blocked,
+      s.type AS supplier_type,
+      o.item_type,
       i.status AS item_status,
       (c.status = 'active' AND coalesce(p.status, 'active') = 'active') AS category_visible,
       EXISTS (SELECT 1 FROM city WHERE city.id = l.city_id) AS has_city
@@ -79,6 +86,7 @@ export async function offerShowcase(
         offerStatus: row.offer_status,
         supplierPauseReason: row.pause_reason,
         supplierBlocked: row.blocked,
+        supplierTypeFits: supplierOffers(row.supplier_type, row.item_type),
         itemStatus: row.item_status,
         categoryVisible: row.category_visible,
         hasCity: row.has_city,
@@ -93,7 +101,9 @@ export async function offerShowcase(
  * The same rule as a condition on `offer` at `at`: only offers users see.
  * The supplier's `status = 'active'` is exactly «neither paused nor
  * blocked» — the database keeps it so (ARCHITECTURE 4.26 I254). The
- * point's schedule, as `scheduleFact`: the hours are given, and one of the
+ * supplier's type still lets it offer the item, as `supplierOffers`
+ * (TASK-019): «both» — anything, «goods» — not a service, «services» —
+ * only a service. The point's schedule, as `scheduleFact`: the hours are given, and one of the
  * `RECEIPT_DATE_HORIZON_DAYS` days after today in the point's time zone
  * has an interval on its day of the week and isn't a closed date. The
  * points are worked out once per statement (an uncorrelated subquery),
@@ -102,7 +112,10 @@ export async function offerShowcase(
 export function shownOffers(at: Date = new Date()): SQL {
   return sql`(
     ${offer.status} = 'active'
-    AND EXISTS (SELECT 1 FROM supplier s WHERE s.id = ${offer.supplierId} AND s.status = 'active')
+    AND EXISTS (
+      SELECT 1 FROM supplier s WHERE s.id = ${offer.supplierId} AND s.status = 'active'
+        AND (s.type = 'both' OR (s.type = 'services') = (${offer.itemType} = 'service'))
+    )
     AND EXISTS (
       SELECT 1 FROM catalog_item i
       JOIN category c ON c.id = i.category_id

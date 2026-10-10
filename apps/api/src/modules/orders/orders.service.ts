@@ -121,12 +121,18 @@ const CODE_ATTEMPTS = 20;
 
 const ACTIVE = [...activeOrderStatuses] as OrderStatusValue[];
 
-/** The kind of order an offer makes (TASK-037); `null` — none the server can make yet. */
-function orderKindOf(availability: string): OrderKind | null {
-  if (availability === "in_stock") {
+/**
+ * The kind of order an offer makes (TASK-037); `null` — none the server can
+ * make yet: an offer on a service (TASK-019) — its order is TASK-038.
+ */
+function orderKindOf(offer: { availability: string; itemType: string }): OrderKind | null {
+  if (offer.itemType === "service") {
+    return null;
+  }
+  if (offer.availability === "in_stock") {
     return "stock";
   }
-  return availability === "on_order" ? "on_order" : null;
+  return offer.availability === "on_order" ? "on_order" : null;
 }
 
 /**
@@ -322,6 +328,7 @@ export class OrdersService {
         supplierId: offer.supplierId,
         locationId: offer.locationId,
         itemId: offer.itemId,
+        itemType: offer.itemType,
         price: offer.price,
         availability: offer.availability,
         pickup: offer.pickup,
@@ -337,7 +344,7 @@ export class OrdersService {
     // TASK-037: an offer under order makes an order under order — the same
     // order with a term (ARCHITECTURE 6.2). A kind the server can't order yet
     // (services, TASK-038) would still be refused here.
-    const kind = orderKindOf(current.availability);
+    const kind = orderKindOf(current);
     if (kind === null) {
       throw kindNotSupported();
     }

@@ -202,7 +202,10 @@ import { clientPlatformSchema } from "./client";
  *   is `OfferStateDetails`.
  * - `OFFER_PICKUP_NEEDS_ADDRESS` (409): pickup needs the address of the
  *   pickup point — fill it in on the company card first.
- * - `OFFER_NOT_APPLICABLE` (409): offers on services come with TASK-019.
+ * - `OFFER_NOT_APPLICABLE` (409): the company's type doesn't let it offer
+ *   this item — «только товары» puts no services on sale, «только услуги»
+ *   no goods (TASK-019; putting on sale and returning to it); `details` is
+ *   `OfferNotApplicableDetails`. Until TASK-019 — any offer on a service.
  * - `OFFER_ITEM_UNAVAILABLE` (409): the item is no longer active in the
  *   catalog; the offer stays, but can't be returned to sale.
  * - `OFFER_WARRANTY_CONTACTS` (400, TASK-020.A): the warranty text of the

@@ -1,10 +1,16 @@
 import type { OfferAvailability, ShowcaseReceipt } from "@adclub/contracts";
-import { daysBetween, receiptDate, type ReceiptSchedule } from "@adclub/domain";
+import {
+  daysBetween,
+  receiptDate,
+  servicePriceForCar,
+  type ReceiptSchedule,
+  type ServicePricing,
+} from "@adclub/domain";
 import { and, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { catalogItem } from "../catalog";
 import { supplier } from "../identity";
-import { offer, receiptSchedules, shownOffers } from "../offers";
+import { offer, receiptSchedules, servicePricings, shownOffers } from "../offers";
 import { supplierLocation } from "../suppliers";
 
 /**
@@ -35,7 +41,13 @@ export interface VisibleOffer {
   supplierId: string;
   locationId: string;
   cityId: string;
+  /**
+   * The price the viewer pays: a service priced by model — the price for
+   * the car's model, set by `offersInReach` (until then the lowest of them).
+   */
   price: number;
+  /** One price, or a service's prices by model (TASK-019). */
+  pricing: ServicePricing;
   availability: OfferAvailability;
   leadDays: number;
   pickup: boolean;
@@ -51,19 +63,33 @@ export interface VisibleOffer {
 export type OfferScope = { categoryId: string } | { itemIds: readonly string[] };
 
 /**
- * The offers a user can get of an item of this kind in the chosen city:
- * a product from anywhere; a service only in the chosen city, and none
- * without a city (PRODUCT 6.3, D-031). The one place of the rule — the
- * list, the card and its analogs (TASK-020.A).
+ * The offers a user can get of an item of this kind in the chosen city,
+ * for the car's model: a product from anywhere; a service only in the
+ * chosen city — the city of the supplier's point — and none without a city
+ * (PRODUCT 6.3, 11, D-031), and only with a price for the model
+ * (`servicePriceForCar`, TASK-019): the offer then costs that price. The one
+ * place of the rule — the list, the card and its analogs (TASK-020.A).
  */
 export function offersInReach(
   kind: "goods" | "services",
   offers: readonly VisibleOffer[],
   cityId: string | null,
+  modelId: string | null,
 ): VisibleOffer[] {
-  return kind === "services"
-    ? offers.filter((entry) => cityId !== null && entry.cityId === cityId)
-    : [...offers];
+  if (kind !== "services") {
+    return [...offers];
+  }
+  const reachable: VisibleOffer[] = [];
+  for (const entry of offers) {
+    if (cityId === null || entry.cityId !== cityId) {
+      continue;
+    }
+    const price = servicePriceForCar(entry.pricing, { modelId });
+    if (price !== null) {
+      reachable.push({ ...entry, price });
+    }
+  }
+  return reachable;
 }
 
 export async function visibleOffers(
@@ -86,6 +112,7 @@ export async function visibleOffers(
       locationId: offer.locationId,
       cityId: supplierLocation.cityId,
       price: offer.price,
+      priceMode: offer.priceMode,
       availability: offer.availability,
       leadDays: offer.leadDays,
       pickup: offer.pickup,
@@ -102,10 +129,13 @@ export async function visibleOffers(
   if (rows.length === 0) {
     return [];
   }
-  const schedules = await receiptSchedules(
-    executor,
-    rows.map((row) => row.locationId),
-  );
+  const [schedules, pricings] = await Promise.all([
+    receiptSchedules(
+      executor,
+      rows.map((row) => row.locationId),
+    ),
+    servicePricings(executor, rows),
+  ]);
   // One calculation per point and term: a subcategory of thousands of
   // offers has a handful of points.
   const dates = new Map<string, { receipt: ShowcaseReceipt; days: number } | null>();
@@ -136,7 +166,12 @@ export async function visibleOffers(
     if (!date) {
       continue;
     }
-    visible.push({ ...row, receipt: date.receipt, receiptDays: date.days });
+    visible.push({
+      ...row,
+      pricing: pricings.get(row.id)!,
+      receipt: date.receipt,
+      receiptDays: date.days,
+    });
   }
   return visible;
 }

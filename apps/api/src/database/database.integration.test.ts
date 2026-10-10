@@ -98,6 +98,144 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds a service's prices by model in the database, and rolls back keeping the goods (service offers)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('service-offers-city', 'Город услуг') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Сервис', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const location = await client.query<{ id: string }>(
+      "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+      [supplierId, city.rows[0]!.id],
+    );
+    const locationId = location.rows[0]!.id;
+    const subcategory = async (kind: "goods" | "services") => {
+      const node = await client.query<{ id: string }>(
+        "INSERT INTO category (code, kind, level) VALUES ($1, $2, 1) RETURNING id",
+        [`service_offers_${kind}`, kind],
+      );
+      return (
+        await client.query<{ id: string }>(
+          "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ($1, $2, 2, $3, 1) RETURNING id",
+          [`service_offers_${kind}_sub`, kind, node.rows[0]!.id],
+        )
+      ).rows[0]!.id;
+    };
+    const serviceItem = (
+      await client.query<{ id: string }>(
+        "INSERT INTO catalog_item (item_type, category_id, category_kind) VALUES ('service', $1, 'services') RETURNING id",
+        [await subcategory("services")],
+      )
+    ).rows[0]!.id;
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const goodsItem = (
+      await client.query<{ id: string }>(
+        "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+        [await subcategory("goods"), brand.rows[0]!.id],
+      )
+    ).rows[0]!.id;
+    const make = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_make DEFAULT VALUES RETURNING id",
+    );
+    const models: string[] = [];
+    for (let index = 0; index < 2; index += 1) {
+      models.push(
+        (
+          await client.query<{ id: string }>(
+            "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+            [make.rows[0]!.id],
+          )
+        ).rows[0]!.id,
+      );
+    }
+    const [coolray, atlas] = models as [string, string];
+    const service = (values: Record<string, unknown>) => {
+      const row = {
+        supplier_id: supplierId,
+        location_id: locationId,
+        item_id: serviceItem,
+        item_type: "service",
+        price: 8000,
+        availability: "in_stock",
+        lead_days: 0,
+        pickup: false,
+        delivery: false,
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO offer (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    // A service is done at the point: no pickup, delivery, term or order.
+    await expect(service({ pickup: true })).rejects.toThrow(/offer_service_terms_check/);
+    await expect(service({ lead_days: 2 })).rejects.toThrow(/offer_service_terms_check/);
+    // Prices by model with no rows, and goods by model — refused.
+    await expect(service({ price_mode: "by_model" })).rejects.toThrow(/model prices/);
+    await expect(
+      client.query(
+        `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery, price_mode)
+         VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, false, 'by_model')`,
+        [supplierId, locationId, goodsItem],
+      ),
+    ).rejects.toThrow(/offer_price_mode_service_check/);
+    await client.query(
+      `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery)
+       VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, false)`,
+      [supplierId, locationId, goodsItem],
+    );
+    // The offer and its rows in one transaction; the price is the lowest of them.
+    await client.query("BEGIN");
+    const offerId = (await service({ price_mode: "by_model" })).rows[0]!.id;
+    await client.query(
+      "INSERT INTO offer_model_price (offer_id, vehicle_model_id, price) VALUES ($1, $2, 8000), ($1, $3, 10000)",
+      [offerId, coolray, atlas],
+    );
+    await client.query("COMMIT");
+    await expect(
+      client.query("UPDATE offer SET price = 10000 WHERE id = $1", [offerId]),
+    ).rejects.toThrow(/lowest/);
+    await expect(
+      client.query(
+        "INSERT INTO offer_model_price (offer_id, vehicle_model_id, price) VALUES ($1, $2, 9000)",
+        [offerId, coolray],
+      ),
+    ).rejects.toThrow(/offer_model_price_pkey/);
+    await expect(
+      client.query("UPDATE offer_model_price SET price = 0 WHERE offer_id = $1", [offerId]),
+    ).rejects.toThrow(/offer_model_price_price_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // Offers on services go with the feature; goods stay as they were.
+    expect(await tableExists(client, "offer_model_price")).toBe(false);
+    expect(await count("offer", "item_type = 'service'", [])).toBe(0);
+    expect(await count("offer", "item_id = $1", [goodsItem])).toBe(1);
+    await expect(
+      client.query(
+        `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery)
+         VALUES ($1, $2, $3, 'service', 1000, 'in_stock', true, false)`,
+        [supplierId, locationId, serviceItem],
+      ),
+    ).rejects.toThrow(/offer_item_type_check/);
+    // Nothing of this test is left for the walk down below.
+    await client.query("DELETE FROM offer WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM vehicle_model WHERE make_id = $1", [make.rows[0]!.id]);
+    await client.query("DELETE FROM vehicle_make WHERE id = $1", [make.rows[0]!.id]);
+    await client.query("DELETE FROM catalog_item WHERE id = ANY($1)", [[serviceItem, goodsItem]]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brand.rows[0]!.id]);
+    await client.query("DELETE FROM category WHERE code LIKE 'service_offers_%_sub'");
+    await client.query("DELETE FROM category WHERE code LIKE 'service_offers_%'");
+    await client.query("DELETE FROM supplier_location WHERE id = $1", [locationId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+  });
+
   it("holds the term of an order under order in the database, and rolls back keeping the orders (on order orders)", async () => {
     const account = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77470000137') RETURNING id",

@@ -22,6 +22,7 @@ import {
   type DayHours,
   type ErrorCode,
   type SupplierOffer,
+  type SupplierType,
 } from "@adclub/contracts";
 import {
   kzBinCheckDigit,
@@ -49,6 +50,7 @@ import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { DevCatalogSeed } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
+import { DevVehicleSeed } from "../vehicles";
 import { offer, offerShowcase, OfferSnapshots, shownOffers } from ".";
 
 /**
@@ -329,6 +331,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
       address?: string | null;
       hours?: DayHours[] | null;
       closedDates?: { date: string; note: string }[];
+      type?: SupplierType;
     } = {},
   ): Promise<Company> {
     const phone = phoneOf(++phoneCounter);
@@ -338,7 +341,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
         name,
         bin: validBin(`0712340${String(binCounter++).padStart(4, "0")}`),
         cityId,
-        type: "goods",
+        type: options.type ?? "goods",
         ...(options.address === null ? {} : { address: options.address ?? "пр. Абая, 10" }),
         district: "Бостандыкский район",
         firstMember: { name: "Айгерим", phone },
@@ -1430,6 +1433,424 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
   });
 
   // ------------------------------------------------------------- admin and access
+
+  // ------------------------------------------------------------ services
+
+  describe("offers on services (TASK-019, S-OFF-04)", () => {
+    const OIL_CHANGE = "Замена моторного масла";
+
+    async function serviceItem(): Promise<string> {
+      return (await itemBy(OIL_CHANGE)).id;
+    }
+
+    async function models() {
+      await app.get(DevVehicleSeed).run();
+      const model = async (key: string) => {
+        const { rows } = await db.query<{ id: string }>(
+          "SELECT model_id AS id FROM vehicle_model_spelling WHERE key = $1",
+          [key],
+        );
+        expect(rows.length, key).toBeGreaterThan(0);
+        return rows[0]!.id;
+      };
+      return {
+        coolray: await model("coolray"),
+        atlas: await model("atlas"),
+        monjaro: await model("monjaro"),
+      };
+    }
+
+    async function putService(of: Company, body: object): Promise<SupplierOffer> {
+      return ok(
+        of.as("post", "/supplier/offers", { itemId: await serviceItem(), ...body }),
+        (response) => supplierOfferResponseSchema.parse(response).offer,
+        201,
+      );
+    }
+
+    function expectFieldError(response: Response, path: string): void {
+      expectError(response, 400, "VALIDATION_ERROR");
+      expect(
+        (response.body as { details: { path: string }[] }).details.map((entry) => entry.path),
+      ).toContain(path);
+    }
+
+    it("is put with one price for all models or with prices by model, the lowest as its price", async () => {
+      const own = await company("Шины Юг", { type: "services" });
+      const m = await models();
+      const byModel = await putService(own, {
+        modelPrices: [
+          { modelId: m.atlas, price: 10_000 },
+          { modelId: m.coolray, price: 8_000 },
+        ],
+        warrantyMonths: 1,
+      });
+      expect(byModel).toMatchObject({
+        item: { type: "service" },
+        price: 8_000,
+        availability: "in_stock",
+        leadDays: 0,
+        pickup: false,
+        delivery: false,
+        warrantyMonths: 1,
+        showcase: { visible: true, reasons: [] },
+      });
+      expect(byModel.pricing.mode).toBe("by_model");
+      expect(
+        byModel.pricing.models.map((row) => [row.make.name, row.model.name, row.price]),
+      ).toEqual([
+        ["Geely", "Atlas", 10_000],
+        ["Geely", "Coolray", 8_000],
+      ]);
+      expect(byModel.pricing.models.every((row) => row.available)).toBe(true);
+      const created = (await journal(byModel.id))[0]!;
+      expect(created.action).toBe("offer.created");
+      expect(created.after).toMatchObject({
+        priceMode: "by_model",
+        modelPrices: [
+          { modelId: m.atlas, price: 10_000 },
+          { modelId: m.coolray, price: 8_000 },
+        ],
+      });
+
+      // One price for all: another item of services — the dev catalog has three.
+      const diagnostics = await itemBy("Компьютерная диагностика двигателя");
+      const single = await ok(
+        own.as("post", "/supplier/offers", { itemId: diagnostics.id, price: 5_000 }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+        201,
+      );
+      expect(single).toMatchObject({ price: 5_000, pricing: { mode: "single", models: [] } });
+
+      // «Мои предложения» show services next to goods; «Услуги» — only them.
+      const all = await ok(own.as("get", "/supplier/offers"), (body) =>
+        offerPageSchema.parse(body),
+      );
+      expect(all.total).toBe(2);
+      const services = await ok(own.as("get", "/supplier/offers?kind=services"), (body) =>
+        offerPageSchema.parse(body),
+      );
+      expect(services.total).toBe(2);
+      const goods = await ok(own.as("get", "/supplier/offers?kind=goods"), (body) =>
+        offerPageSchema.parse(body),
+      );
+      expect(goods.total).toBe(0);
+    });
+
+    it("refuses what a service doesn't have, a repeated model and prices out of bounds — at their field", async () => {
+      const own = await company("Шины Юг", { type: "both" });
+      const m = await models();
+      const item = await serviceItem();
+      const post = (body: object) => own.as("post", "/supplier/offers", { itemId: item, ...body });
+      expectFieldError(
+        await post({ price: 5_000, modelPrices: [{ modelId: m.coolray, price: 8_000 }] }),
+        "modelPrices",
+      );
+      expectFieldError(await post({}), "price");
+      expectFieldError(await post({ price: 5_000, availability: "in_stock" }), "availability");
+      expectFieldError(await post({ price: 5_000, pickup: true }), "pickup");
+      expectFieldError(
+        await post({
+          modelPrices: [
+            { modelId: m.coolray, price: 8_000 },
+            { modelId: m.coolray, price: 9_000 },
+          ],
+        }),
+        "modelPrices.1.modelId",
+      );
+      await settings.set({ offer_price_max_kzt: 50_000 });
+      expectFieldError(
+        await post({
+          modelPrices: [
+            { modelId: m.coolray, price: 8_000 },
+            { modelId: m.atlas, price: 60_000 },
+          ],
+        }),
+        "modelPrices.1.price",
+      );
+      expectFieldError(
+        await post({
+          modelPrices: [{ modelId: "00000000-0000-4000-8000-000000000000", price: 1 }],
+        }),
+        "modelPrices.0.modelId",
+      );
+      // A model in the archive can't get a new price: no client can choose it.
+      await db.query(
+        "UPDATE vehicle_model SET status = 'archived', archived_at = now() WHERE id = $1",
+        [m.monjaro],
+      );
+      expectFieldError(
+        await post({ modelPrices: [{ modelId: m.monjaro, price: 9_000 }] }),
+        "modelPrices.0.modelId",
+      );
+      // Prices by model are a service's only; goods still need their terms.
+      const pads = await itemBy(PADS);
+      expectFieldError(
+        await own.as(
+          "post",
+          "/supplier/offers",
+          inStock(pads.id, { modelPrices: [{ modelId: m.coolray, price: 8_000 }] }),
+        ),
+        "modelPrices",
+      );
+      expectFieldError(
+        await own.as("post", "/supplier/offers", { itemId: pads.id, price: 5_000 }),
+        "availability",
+      );
+      const { rows } = await db.query("SELECT count(*)::int AS n FROM offer");
+      expect(rows[0]).toEqual({ n: 0 });
+    });
+
+    it("changes its table of prices whole, with the version; an archived model keeps its price", async () => {
+      const own = await company("Шины Юг", { type: "services" });
+      const m = await models();
+      const created = await putService(own, { price: 7_000 });
+      const patch = (body: object) => own.as("patch", `/supplier/offers/${created.id}`, body);
+      const table = await ok(
+        patch({
+          expectedVersion: 1,
+          modelPrices: [
+            { modelId: m.coolray, price: 8_000 },
+            { modelId: m.atlas, price: 10_000 },
+          ],
+        }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+      );
+      expect(table).toMatchObject({ version: 2, price: 8_000, pricing: { mode: "by_model" } });
+      // Another employee's version — refused, nothing changes.
+      expectError(
+        await patch({ expectedVersion: 1, modelPrices: [{ modelId: m.atlas, price: 1_000 }] }),
+        409,
+        "OFFER_VERSION_CONFLICT",
+      );
+      // Saving the same table (in another order) changes nothing.
+      const same = await ok(
+        patch({
+          expectedVersion: 2,
+          modelPrices: [
+            { modelId: m.atlas, price: 10_000 },
+            { modelId: m.coolray, price: 8_000 },
+          ],
+        }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+      );
+      expect(same.version).toBe(2);
+      // An archived model stays in the table with its price, unseen.
+      await db.query(
+        "UPDATE vehicle_model SET status = 'archived', archived_at = now() WHERE id = $1",
+        [m.atlas],
+      );
+      const kept = await ok(
+        patch({
+          expectedVersion: 2,
+          modelPrices: [
+            { modelId: m.atlas, price: 10_000 },
+            { modelId: m.coolray, price: 9_000 },
+          ],
+        }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+      );
+      expect(kept).toMatchObject({ version: 3, price: 9_000 });
+      expect(kept.pricing.models.find((row) => row.model.id === m.atlas)).toMatchObject({
+        price: 10_000,
+        available: false,
+      });
+      const entries = await journal(created.id);
+      expect(entries.at(-1)).toMatchObject({
+        action: "offer.changed",
+        before: { price: 8_000, modelPrices: [expect.anything(), expect.anything()] },
+        after: { price: 9_000, version: 3 },
+      });
+      // Back to one price: the table goes.
+      const single = await ok(
+        patch({ expectedVersion: 3, price: 6_000 }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+      );
+      expect(single).toMatchObject({
+        version: 4,
+        price: 6_000,
+        pricing: { mode: "single", models: [] },
+      });
+      const { rows } = await db.query("SELECT count(*)::int AS n FROM offer_model_price");
+      expect(rows[0]).toEqual({ n: 0 });
+      // Both at once, and the fields of goods — refused.
+      expectFieldError(
+        await patch({
+          expectedVersion: 4,
+          price: 1_000,
+          modelPrices: [{ modelId: m.coolray, price: 2_000 }],
+        }),
+        "modelPrices",
+      );
+      expectFieldError(await patch({ expectedVersion: 4, leadDays: 2 }), "leadDays");
+      // Withdrawn and returned like any offer.
+      await ok(
+        own.as("post", `/supplier/offers/${created.id}/withdraw`, { expectedVersion: 4 }),
+        (b) => b,
+      );
+      await ok(
+        own.as("post", `/supplier/offers/${created.id}/return`, { expectedVersion: 5 }),
+        (body) => offerReturnedResponseSchema.parse(body),
+      );
+    });
+
+    it("the database keeps the rules: a service's neutral terms, the lowest model price, one mode", async () => {
+      const own = await company("Шины Юг", { type: "services" });
+      const m = await models();
+      const created = await putService(own, {
+        modelPrices: [
+          { modelId: m.coolray, price: 8_000 },
+          { modelId: m.atlas, price: 10_000 },
+        ],
+      });
+      const refused = async (text: string, values: unknown[]) => {
+        await expect(db.query(text, values)).rejects.toThrow(/violat|offer/);
+      };
+      await refused("UPDATE offer SET price = 9000 WHERE id = $1", [created.id]);
+      await refused("UPDATE offer SET pickup = true WHERE id = $1", [created.id]);
+      await refused("UPDATE offer SET price_mode = 'single' WHERE id = $1", [created.id]);
+      await refused("DELETE FROM offer_model_price WHERE offer_id = $1", [created.id]);
+      await refused("UPDATE offer_model_price SET price = 0 WHERE offer_id = $1", [created.id]);
+      // Changing a row and the offer's lowest price in one transaction is fine.
+      await db.query("BEGIN");
+      await db.query(
+        "UPDATE offer_model_price SET price = 7000 WHERE offer_id = $1 AND vehicle_model_id = $2",
+        [created.id, m.coolray],
+      );
+      await db.query("UPDATE offer SET price = 7000 WHERE id = $1", [created.id]);
+      await db.query("COMMIT");
+      // Goods can't be priced by model.
+      const goods = await company("Автомаркет", { type: "goods" });
+      const pads = await put(goods, (await itemBy(PADS)).id);
+      await refused("UPDATE offer SET price_mode = 'by_model' WHERE id = $1", [pads.id]);
+    });
+
+    it("the company's type limits what it puts on sale and returns; a misfit stays, off the showcase", async () => {
+      const m = await models();
+      const goodsOnly = await company("Автомаркет", { type: "goods" });
+      const servicesOnly = await company("Шины Юг", { type: "services" });
+      const both = await company("Всё для авто", { type: "both" });
+      const pads = await itemBy(PADS);
+      const item = await serviceItem();
+
+      // The search finds only what the type lets the company offer.
+      const found = async (of: Company, q: string) =>
+        ok(search(of, q), (body) => offerItemSearchResponseSchema.parse(body)).then((page) => [
+          ...new Set(page.results.map((entry) => entry.item.type)),
+        ]);
+      expect(await found(goodsOnly, "замена")).toEqual([]);
+      expect(await found(servicesOnly, "замена")).toEqual(["service"]);
+      expect(await found(both, "замена")).toEqual(["service"]);
+      expect(await found(servicesOnly, "04465")).toEqual([]);
+      expect(await found(both, "04465")).toEqual(["part"]);
+
+      const refusedWith = async (response: Response, details: object) => {
+        expectError(response, 409, "OFFER_NOT_APPLICABLE");
+        expect(response.body).toMatchObject({ details });
+      };
+      await refusedWith(
+        await goodsOnly.as("post", "/supplier/offers", { itemId: item, price: 5_000 }),
+        { supplierType: "goods", itemType: "service" },
+      );
+      await refusedWith(await servicesOnly.as("post", "/supplier/offers", inStock(pads.id)), {
+        supplierType: "services",
+        itemType: "part",
+      });
+      const service = await ok(
+        both.as("post", "/supplier/offers", {
+          itemId: item,
+          modelPrices: [{ modelId: m.coolray, price: 8_000 }],
+        }),
+        (body) => supplierOfferResponseSchema.parse(body).offer,
+        201,
+      );
+      const part = await put(both, pads.id);
+      await ok(
+        both.as("post", `/supplier/offers/${part.id}/withdraw`, { expectedVersion: 1 }),
+        (b) => b,
+      );
+
+      // The type changes to «только товары»: the service stays with the
+      // company, off the showcase with the reason; it can't be returned.
+      await ok(
+        asAdmin("patch", `/admin/suppliers/${both.supplierId}`, {
+          expectedVersion: await supplierVersion(both.supplierId),
+          type: "goods",
+        }),
+        (body) => body,
+      );
+      const mine = await ok(both.as("get", "/supplier/offers"), (body) =>
+        offerPageSchema.parse(body),
+      );
+      expect(mine.offers.find((entry) => entry.id === service.id)!.showcase).toEqual({
+        visible: false,
+        reasons: ["supplier_type_mismatch"],
+      });
+      await ok(
+        both.as("post", `/supplier/offers/${service.id}/withdraw`, { expectedVersion: 1 }),
+        (b) => b,
+      );
+      await refusedWith(
+        await both.as("post", `/supplier/offers/${service.id}/return`, { expectedVersion: 2 }),
+        { supplierType: "goods", itemType: "service" },
+      );
+      // «Только услуги»: the withdrawn part can't come back either.
+      await ok(
+        asAdmin("patch", `/admin/suppliers/${both.supplierId}`, {
+          expectedVersion: await supplierVersion(both.supplierId),
+          type: "services",
+        }),
+        (body) => body,
+      );
+      await refusedWith(
+        await both.as("post", `/supplier/offers/${part.id}/return`, { expectedVersion: 2 }),
+        { supplierType: "services", itemType: "part" },
+      );
+      await ok(
+        both.as("post", `/supplier/offers/${service.id}/return`, { expectedVersion: 2 }),
+        (body) => offerReturnedResponseSchema.parse(body),
+      );
+
+      // The rule and its SQL twin agree on every one of these offers.
+      const database = app.get(DatabaseService).db;
+      const ids = [service.id, part.id];
+      const rule = await offerShowcase(database, ids);
+      const shown = await database
+        .select({ id: offer.id })
+        .from(offer)
+        .where(and(inArray(offer.id, ids), shownOffers()));
+      expect(shown.map((row) => row.id).sort()).toEqual(
+        ids.filter((id) => rule.get(id)!.visible).sort(),
+      );
+      expect(shown.map((row) => row.id)).toEqual([service.id]);
+    });
+
+    it("the snapshot takes the price for the car's model", async () => {
+      const own = await company("Шины Юг", { type: "services" });
+      const m = await models();
+      const created = await putService(own, {
+        modelPrices: [
+          { modelId: m.coolray, price: 8_000 },
+          { modelId: m.atlas, price: 10_000 },
+        ],
+      });
+      const snapshots = app.get(OfferSnapshots);
+      const database = app.get(DatabaseService).db;
+      const at = new Date();
+      expect(await snapshots.take(database, created.id, at, { modelId: m.atlas })).toMatchObject({
+        price: 10_000,
+        vehicleModelId: m.atlas,
+        item: { type: "service" },
+        pickup: false,
+      });
+      expect((await snapshots.take(database, created.id, at, { modelId: m.coolray })).price).toBe(
+        8_000,
+      );
+      await expect(
+        snapshots.take(database, created.id, at, { modelId: m.monjaro }),
+      ).rejects.toThrow();
+    });
+  });
 
   describe("the administrator and access", () => {
     it("the administrator sees a supplier's offers read only, with the showcase sign", async () => {

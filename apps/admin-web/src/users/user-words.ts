@@ -97,7 +97,23 @@ export function userFiltersOf(query: URLSearchParams): Omit<AdminUserListQuery, 
       access === "active" || access === "none" || access === "expiring" ? access : undefined,
     expiringDays: Number.isInteger(days) && days >= 1 && days <= 366 ? days : 7,
     noShows: query.get("noShows") === "true" ? "true" : undefined,
+    unconfirmedCar: query.get("unconfirmedCar") === "true" ? "true" : undefined,
   };
+}
+
+/**
+ * The mark of a car about its registration certificate (D-064, TASK-057):
+ * «Документ показан · 10.10.2026», «Документ не подтверждён» (chosen from the
+ * list after recognition did not work), «Без отметки» (added before TASK-057).
+ * Never «владение подтверждено»: a document read is not proof of owning a car.
+ */
+export function carDocumentText(
+  document: AccountCar["document"],
+  moment: (iso: string) => string,
+): string {
+  if (document?.status === "shown") return `Документ показан · ${moment(document.at)}`;
+  if (document?.status === "unconfirmed") return `Документ не подтверждён · ${moment(document.at)}`;
+  return "Без отметки о документе";
 }
 
 /**

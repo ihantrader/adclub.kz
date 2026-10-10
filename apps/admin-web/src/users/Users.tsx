@@ -99,6 +99,11 @@ export function Users() {
           checked={filters.noShows === "true"}
           onChange={(on) => set({ noShows: on ? "true" : undefined })}
         />
+        <Checkbox
+          label="Есть автомобиль без подтверждённого документа"
+          checked={filters.unconfirmedCar === "true"}
+          onChange={(on) => set({ unconfirmedCar: on ? "true" : undefined })}
+        />
       </div>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent

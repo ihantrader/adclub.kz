@@ -19,6 +19,7 @@ import {
   SkeletonList,
   useToast,
 } from "@adclub/ui";
+import { formatKzPlate } from "@adclub/domain";
 import { useOnline } from "@adclub/web-session";
 import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
@@ -37,6 +38,7 @@ import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
 import { UsersTabs } from "./Users";
 import {
   accessText,
+  carDocumentText,
   carText,
   lastDayText,
   deviceText,
@@ -485,6 +487,20 @@ function Garage({ accountId }: { accountId: string }) {
                   {" "}
                   · добавлен {formatMoment(car.createdAt)}
                 </span>
+                {/* TASK-057 (D-064): VIN, plate and the mark of the document. */}
+                <div className="ac-text-caption">
+                  VIN: {car.vin ?? "не указан"} · Госномер:{" "}
+                  {car.plate ? formatKzPlate(car.plate) : "не указан"} ·{" "}
+                  <span
+                    className={
+                      car.document?.status === "shown"
+                        ? "status status--acknowledged"
+                        : "status status--open"
+                    }
+                  >
+                    {carDocumentText(car.document, formatMoment)}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

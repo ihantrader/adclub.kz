@@ -2,6 +2,7 @@ import { ApiError } from "@adclub/api-client";
 import { describe, expect, it } from "vitest";
 import {
   accessText,
+  carDocumentText,
   carText,
   deviceText,
   endOfYear,
@@ -33,13 +34,33 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
   it("keeps the filters in the address and «истекает в N дней» in its bounds", () => {
     expect(
       userFiltersOf(new URLSearchParams("q=4567&clubAccess=expiring&expiringDays=14&noShows=true")),
-    ).toEqual({ q: "4567", clubAccess: "expiring", expiringDays: 14, noShows: "true" });
+    ).toEqual({
+      q: "4567",
+      clubAccess: "expiring",
+      expiringDays: 14,
+      noShows: "true",
+      unconfirmedCar: undefined,
+    });
     expect(userFiltersOf(new URLSearchParams("clubAccess=x&expiringDays=900"))).toEqual({
       q: undefined,
       clubAccess: undefined,
       expiringDays: 7,
       noShows: undefined,
+      unconfirmedCar: undefined,
     });
+    // TASK-057: «Есть автомобиль без подтверждённого документа».
+    expect(userFiltersOf(new URLSearchParams("unconfirmedCar=true")).unconfirmedCar).toBe("true");
+  });
+
+  it("says the mark of a car's document, never «владение подтверждено» (TASK-057)", () => {
+    const day = (iso: string) => iso.slice(0, 10);
+    expect(carDocumentText({ status: "shown", at: "2026-10-10T08:00:00.000Z" }, day)).toBe(
+      "Документ показан · 2026-10-10",
+    );
+    expect(carDocumentText({ status: "unconfirmed", at: "2026-10-10T08:00:00.000Z" }, day)).toBe(
+      "Документ не подтверждён · 2026-10-10",
+    );
+    expect(carDocumentText(null, day)).toBe("Без отметки о документе");
   });
 
   it("names a device, a car and a refusal in words", () => {
@@ -62,6 +83,9 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
         drive: null,
         modificationId: null,
         color: null,
+        vin: null,
+        plate: null,
+        document: null,
         isPrimary: true,
         createdAt: "2026-10-10T10:00:00.000Z",
         updatedAt: "2026-10-10T10:00:00.000Z",

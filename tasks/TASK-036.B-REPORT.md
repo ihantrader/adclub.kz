@@ -41,7 +41,7 @@ COMPLETED
 - `pnpm --filter @adclub/api openapi:check` — PASS.
 - `pnpm --filter @adclub/api openapi:compat --base HEAD~1` (после коммита с трейлером) — PASS с подтверждением: ровно два признанных `response-body-one-of-added` (`POST /supplier/orders/lookup`, `/close`), «Breaking contract change acknowledged via "Contract-Breaking-Change"».
 - Интеграционные локально (Testcontainers, настоящие PostgreSQL и Redis): `users/admin-users.integration.test.ts` — PASS 12/12 (и повторно вместе с `showcase.integration.test.ts` — 37/37); `database.integration.test.ts` — PASS 37/37 (первый прогон падал на списке миграций — добавлены новая миграция и её тест); `admin-home/admin-panel.integration.test.ts` — PASS 13/13 отдельно (в общем прогоне пяти файлов упал по таймаутам хуков 120 с под нагрузкой, как в TASK-036); `audit-log`, `settings` — PASS; `orders.integration.test.ts` — 74/75, падение — ожидание полного номера в «Неявках», исправлено на скрытый, тест повторён отдельно — PASS; `suppliers` + `supplier-members` — PASS 48/48. Полный интеграционный набор — CI на `main` (см. ниже).
-- CI на `main` — см. раздел «CI» в конце.
+- CI на `main` — PASS (после одного исправления теста), см. раздел «CI» в конце.
 
 ## UAT / E2E
 Встроенный браузер, dev-данные (`dev:compatibility:seed`, `dev:suppliers:seed`), API + worker + админка + кабинет из `.claude/launch.json`, тестовый канал сообщений. Администратор — dev-учётная запись «Юрий»: второй фактор сброшен командой оператора и настроен заново (код TOTP посчитан по ключу страницы, RFC 6238). Тестовый пользователь «Тест Альфа» (`+7 747 000 10 28`) вошёл через API приложения (`/auth/login-code` → код с `/dev/login-codes` → `complete-registration`), клубный доступ — `club-access:grant`, заявки — `POST /orders` (скрипт в scratchpad; приложение в браузере не поднималось).
@@ -63,7 +63,7 @@ COMPLETED
 - AC-6 — PASS — сценарии 1–4 пройдены в браузере (UAT 1–4). Заявки оформлялись через API приложения тестовым пользователем, `SESSION_ENDED` проверен по API пользователя (задача допускает «приложение или API»).
 - AC-7 — PASS — осознанное изменение с трейлером `Contract-Breaking-Change` и обоснованием (коммит 9fc8549, ARCHITECTURE 4.57 I587); `openapi:compat` подтверждает только эти два `oneOf`; `openapi:check` PASS.
 - AC-8 — PASS — `ARCHITECTURE.md` 0.61 (4.57, заметка в 6.1, строка 14), `CLAUDE.md` блок 0 («Заявки и пользователи в админке», «Поставщики в админке» — номера).
-- AC-9 — PASS — format:check, lint, typecheck, test, build — PASS; CI на `main` — см. «CI».
+- AC-9 — PASS — format:check, lint, typecheck, test, build — PASS; CI на `main` — success (запуск 38019963188, см. «CI»).
 - AC-10 — PASS — этот отчёт.
 
 ## Errors & Fixes
@@ -105,4 +105,5 @@ None.
 8. «Журнал»: записи о сотрудниках и заявках на подключение читаются словами («Удалён → Активен», «Новая → Связались»).
 
 ## CI
-См. ответ после push (run и статус).
+- Запуск [38019362975](https://github.com/ihantrader/adclub.kz/actions/runs/38019362975) (коммит 5d43bbb) — FAIL на «Integration test»: 1 файл из 27 — `identity/access.integration.test.ts`, тест «appoints administrators only through the operator command» сверяет полный список админских маршрутов, а 9 новых маршрутов задачи в него не были внесены (локально этот файл не запускался). Исправлено коммитом 9c07aa8 (список дополнен), тест локально — PASS.
+- Запуск [38019963188](https://github.com/ihantrader/adclub.kz/actions/runs/38019963188) (коммит 9c07aa8) — **success** за 10 мин 12 с: format, lint, typecheck, icons, test, integration test, build, `openapi:check`, `openapi:compat` (с признанным изменением контракта), остановка API и worker'а по SIGTERM.

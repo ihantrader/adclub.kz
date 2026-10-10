@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "brand:assets": "node scripts/brand-assets.mjs",
     "icons": "node scripts/icons.mjs",
-    "dev:lan": "node scripts/dev-lan.mjs"
+    "dev:lan": "node scripts/dev-lan.mjs",
+    "vehicle-document:samples": "node scripts/vehicle-document-samples.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

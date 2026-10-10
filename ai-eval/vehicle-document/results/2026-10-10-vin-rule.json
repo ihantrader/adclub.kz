@@ -1,0 +1,1366 @@
+{
+  "startedAt": "2026-10-10T05:28:45.081Z",
+  "finishedAt": "2026-10-10T05:33:16.551Z",
+  "dataVersion": 1,
+  "samples": 24,
+  "label": "vin-rule",
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "google/gemini-2.5-flash-lite",
+      "answeredBy": ["google/gemini-2.5-flash-lite"],
+      "calls": 24,
+      "failures": [],
+      "costUsd": 0.00666,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000278,
+      "tokensIn": 57264,
+      "tokensOut": 2343,
+      "latencyMs": {
+        "min": 1253,
+        "median": 1670,
+        "max": 4253
+      },
+      "score": {
+        "samples": 24,
+        "answered": 24,
+        "kind": {
+          "correct": 24,
+          "total": 24,
+          "share": 1
+        },
+        "fields": {
+          "make": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "model": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "year": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "vin": {
+            "correct": 16,
+            "total": 17,
+            "share": 0.941
+          },
+          "plate": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "engineVolumeCc": {
+            "correct": 15,
+            "total": 17,
+            "share": 0.882
+          },
+          "color": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          }
+        },
+        "foreign": {
+          "refused": 4,
+          "total": 4
+        },
+        "guessedHiddenVin": 0,
+        "passes": false,
+        "misses": [
+          {
+            "sampleId": "coolray-tilt",
+            "what": "engineVolumeCc",
+            "expected": "1477",
+            "got": "1800"
+          },
+          {
+            "sampleId": "coolray-lowres",
+            "what": "vin",
+            "expected": "L6T7844Z0RN001234",
+            "got": "L6T784420RN001234"
+          },
+          {
+            "sampleId": "atlas-lowres",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "null"
+          }
+        ]
+      },
+      "answers": {
+        "coolray-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "monjaro-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "MONJARO",
+          "year": 2024,
+          "vin": "L6T7944Z7RU008901",
+          "plate": "505 MNJ 17",
+          "engineVolumeCc": 1969,
+          "color": "ЧЕРНЫЙ"
+        },
+        "tiggo-clean": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "camry-clean": {
+          "documentKind": "kz_registration",
+          "make": "TOYOTA",
+          "model": "CAMRY",
+          "year": 2019,
+          "vin": "JTNB11HK403045678",
+          "plate": "404 CAM 02",
+          "engineVolumeCc": 2487,
+          "color": "СЕРЕБРИСТЫЙ"
+        },
+        "emgrand-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "EMGRAND",
+          "year": 2021,
+          "vin": "L6T7724S1MN012345",
+          "plate": "211 EMG 04",
+          "engineVolumeCc": 1498,
+          "color": "КРАСНЫЙ"
+        },
+        "atlas-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "accent-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "HYUNDAI",
+          "model": "ACCENT",
+          "year": 2015,
+          "vin": "KMHCT41DAFU765432",
+          "plate": "315 ACC 09",
+          "engineVolumeCc": 1591,
+          "color": "БЕЖЕВЫЙ"
+        },
+        "coolray-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1800,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-blur": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1800,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-occluded": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": null,
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T784420RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123KZA01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": null,
+          "color": "БЕЛЫЙ"
+        },
+        "tiggo-tilt": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "tiggo-blur": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1950,
+          "color": "СИНИЙ"
+        },
+        "atlas-old-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "atlas-old-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "ru_sts-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-tilt": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "not_document-clean": {
+          "documentKind": "not_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen3-vl-30b-a3b-instruct",
+      "answeredBy": ["qwen/qwen3-vl-30b-a3b-instruct"],
+      "calls": 24,
+      "failures": [],
+      "costUsd": 0.009999,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000417,
+      "tokensIn": 53048,
+      "tokensOut": 2195,
+      "latencyMs": {
+        "min": 2015,
+        "median": 3327,
+        "max": 12154
+      },
+      "score": {
+        "samples": 24,
+        "answered": 24,
+        "kind": {
+          "correct": 24,
+          "total": 24,
+          "share": 1
+        },
+        "fields": {
+          "make": {
+            "correct": 15,
+            "total": 17,
+            "share": 0.882
+          },
+          "model": {
+            "correct": 15,
+            "total": 17,
+            "share": 0.882
+          },
+          "year": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "vin": {
+            "correct": 16,
+            "total": 17,
+            "share": 0.941
+          },
+          "plate": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "engineVolumeCc": {
+            "correct": 11,
+            "total": 17,
+            "share": 0.647
+          },
+          "color": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          }
+        },
+        "foreign": {
+          "refused": 4,
+          "total": 4
+        },
+        "guessedHiddenVin": 0,
+        "passes": false,
+        "misses": [
+          {
+            "sampleId": "atlas-clean",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "1665"
+          },
+          {
+            "sampleId": "monjaro-clean",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "1770"
+          },
+          {
+            "sampleId": "coolray-lowres",
+            "what": "make",
+            "expected": "GEELY",
+            "got": "GEELY COOLRAY"
+          },
+          {
+            "sampleId": "coolray-lowres",
+            "what": "model",
+            "expected": "COOLRAY",
+            "got": ""
+          },
+          {
+            "sampleId": "coolray-lowres",
+            "what": "vin",
+            "expected": "L6T7844Z0RN001234",
+            "got": "L6T784420RN001234"
+          },
+          {
+            "sampleId": "coolray-lowres",
+            "what": "engineVolumeCc",
+            "expected": "1477",
+            "got": "1340"
+          },
+          {
+            "sampleId": "atlas-glare",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "1665"
+          },
+          {
+            "sampleId": "atlas-tilt",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "1665"
+          },
+          {
+            "sampleId": "atlas-lowres",
+            "what": "make",
+            "expected": "GEELY",
+            "got": "GEELY ATLAS"
+          },
+          {
+            "sampleId": "atlas-lowres",
+            "what": "model",
+            "expected": "ATLAS",
+            "got": "B"
+          },
+          {
+            "sampleId": "atlas-lowres",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "1665"
+          }
+        ]
+      },
+      "answers": {
+        "coolray-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1665,
+          "color": "БЕЛЫЙ"
+        },
+        "monjaro-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "MONJARO",
+          "year": 2024,
+          "vin": "L6T7944Z7RU008901",
+          "plate": "505 MNJ 17",
+          "engineVolumeCc": 1770,
+          "color": "ЧЕРНЫЙ"
+        },
+        "tiggo-clean": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "camry-clean": {
+          "documentKind": "kz_registration",
+          "make": "TOYOTA",
+          "model": "CAMRY",
+          "year": 2019,
+          "vin": "JTNB11HK403045678",
+          "plate": "404 CAM 02",
+          "engineVolumeCc": 2487,
+          "color": "СЕРЕБРИСТЫЙ"
+        },
+        "emgrand-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "EMGRAND",
+          "year": 2021,
+          "vin": "L6T7724S1MN012345",
+          "plate": "211 EMG 04",
+          "engineVolumeCc": 1498,
+          "color": "КРАСНЫЙ"
+        },
+        "atlas-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "accent-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "HYUNDAI",
+          "model": "ACCENT",
+          "year": 2015,
+          "vin": "KMHCT41DAFU765432",
+          "plate": "315 ACC 09",
+          "engineVolumeCc": 1591,
+          "color": "БЕЖЕВЫЙ"
+        },
+        "coolray-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-blur": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1800,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-occluded": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": null,
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY COOLRAY",
+          "model": "",
+          "year": 2024,
+          "vin": "L6T784420RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1340,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1665,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1665,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY ATLAS",
+          "model": "B",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1665,
+          "color": "БЕЛЫЙ"
+        },
+        "tiggo-tilt": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "tiggo-blur": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "atlas-old-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "atlas-old-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "ru_sts-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-tilt": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "not_document-clean": {
+          "documentKind": "not_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "answeredBy": ["google/gemini-2.5-flash"],
+      "calls": 24,
+      "failures": [],
+      "costUsd": 0.021942,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000914,
+      "tokensIn": 57264,
+      "tokensOut": 1905,
+      "latencyMs": {
+        "min": 1533,
+        "median": 1992,
+        "max": 2574
+      },
+      "score": {
+        "samples": 24,
+        "answered": 24,
+        "kind": {
+          "correct": 24,
+          "total": 24,
+          "share": 1
+        },
+        "fields": {
+          "make": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "model": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "year": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "vin": {
+            "correct": 15,
+            "total": 17,
+            "share": 0.882
+          },
+          "plate": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "engineVolumeCc": {
+            "correct": 16,
+            "total": 17,
+            "share": 0.941
+          },
+          "color": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          }
+        },
+        "foreign": {
+          "refused": 4,
+          "total": 4
+        },
+        "guessedHiddenVin": 0,
+        "passes": false,
+        "misses": [
+          {
+            "sampleId": "coolray-glare",
+            "what": "vin",
+            "expected": "L6T7844Z0RN001234",
+            "got": "L6T7844ZORN001234"
+          },
+          {
+            "sampleId": "coolray-lowres",
+            "what": "vin",
+            "expected": "L6T7844Z0RN001234",
+            "got": "L6T784420RN001234"
+          },
+          {
+            "sampleId": "atlas-tilt",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "null"
+          }
+        ]
+      },
+      "answers": {
+        "coolray-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777ABC02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123KZA01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "monjaro-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "MONJARO",
+          "year": 2024,
+          "vin": "L6T7944Z7RU008901",
+          "plate": "505 MNJ 17",
+          "engineVolumeCc": 1969,
+          "color": "ЧЕРНЫЙ"
+        },
+        "tiggo-clean": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090TGR05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "camry-clean": {
+          "documentKind": "kz_registration",
+          "make": "TOYOTA",
+          "model": "CAMRY",
+          "year": 2019,
+          "vin": "JTNB11HK403045678",
+          "plate": "404CAM02",
+          "engineVolumeCc": 2487,
+          "color": "СЕРЕБРИСТЫЙ"
+        },
+        "emgrand-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "EMGRAND",
+          "year": 2021,
+          "vin": "L6T7724S1MN012345",
+          "plate": "211EMG04",
+          "engineVolumeCc": 1498,
+          "color": "КРАСНЫЙ"
+        },
+        "atlas-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "accent-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "HYUNDAI",
+          "model": "ACCENT",
+          "year": 2015,
+          "vin": "KMHCT41DAFU765432",
+          "plate": "315 ACC 09",
+          "engineVolumeCc": 1591,
+          "color": "БЕЖЕВЫЙ"
+        },
+        "coolray-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844ZORN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-blur": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-occluded": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": null,
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T784420RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": null,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123KZA01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "tiggo-tilt": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090TGR05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "tiggo-blur": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090TGR05",
+          "engineVolumeCc": null,
+          "color": "СИНИЙ"
+        },
+        "atlas-old-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "atlas-old-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "ru_sts-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-tilt": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "not_document-clean": {
+          "documentKind": "not_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "answeredBy": ["openai/gpt-4.1-mini"],
+      "calls": 24,
+      "failures": [],
+      "costUsd": 0.020316,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000847,
+      "tokensIn": 45354,
+      "tokensOut": 1359,
+      "latencyMs": {
+        "min": 2139,
+        "median": 2747,
+        "max": 5729
+      },
+      "score": {
+        "samples": 24,
+        "answered": 24,
+        "kind": {
+          "correct": 24,
+          "total": 24,
+          "share": 1
+        },
+        "fields": {
+          "make": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "model": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "year": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "vin": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "plate": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          },
+          "engineVolumeCc": {
+            "correct": 16,
+            "total": 17,
+            "share": 0.941
+          },
+          "color": {
+            "correct": 17,
+            "total": 17,
+            "share": 1
+          }
+        },
+        "foreign": {
+          "refused": 4,
+          "total": 4
+        },
+        "guessedHiddenVin": 0,
+        "passes": true,
+        "misses": [
+          {
+            "sampleId": "atlas-lowres",
+            "what": "engineVolumeCc",
+            "expected": "1969",
+            "got": "1665"
+          }
+        ]
+      },
+      "answers": {
+        "coolray-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777ABC02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "monjaro-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "MONJARO",
+          "year": 2024,
+          "vin": "L6T7944Z7RU008901",
+          "plate": "505 MNJ 17",
+          "engineVolumeCc": 1969,
+          "color": "ЧЕРНЫЙ"
+        },
+        "tiggo-clean": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "camry-clean": {
+          "documentKind": "kz_registration",
+          "make": "TOYOTA",
+          "model": "CAMRY",
+          "year": 2019,
+          "vin": "JTNB11HK403045678",
+          "plate": "404 CAM 02",
+          "engineVolumeCc": 2487,
+          "color": "СЕРЕБРИСТЫЙ"
+        },
+        "emgrand-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "EMGRAND",
+          "year": 2021,
+          "vin": "L6T7724S1MN012345",
+          "plate": "211 EMG 04",
+          "engineVolumeCc": 1498,
+          "color": "КРАСНЫЙ"
+        },
+        "atlas-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "accent-old-clean": {
+          "documentKind": "kz_registration",
+          "make": "HYUNDAI",
+          "model": "ACCENT",
+          "year": 2015,
+          "vin": "KMHСT41DAFU765432",
+          "plate": "315 ACC 09",
+          "engineVolumeCc": 1591,
+          "color": "БЕЖЕВЫЙ"
+        },
+        "coolray-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777ABC02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-blur": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-occluded": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": null,
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "coolray-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "COOLRAY",
+          "year": 2024,
+          "vin": "L6T7844Z0RN001234",
+          "plate": "777 ABC 02",
+          "engineVolumeCc": 1477,
+          "color": "СЕРЫЙ"
+        },
+        "atlas-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1969,
+          "color": "БЕЛЫЙ"
+        },
+        "atlas-lowres": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2023,
+          "vin": "L6T79P4E5PE004567",
+          "plate": "123 KZA 01",
+          "engineVolumeCc": 1665,
+          "color": "БЕЛЫЙ"
+        },
+        "tiggo-tilt": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "tiggo-blur": {
+          "documentKind": "kz_registration",
+          "make": "CHERY",
+          "model": "TIGGO 7 PRO",
+          "year": 2022,
+          "vin": "LVTDB21B8ND112233",
+          "plate": "090 TGR 05",
+          "engineVolumeCc": 1498,
+          "color": "СИНИЙ"
+        },
+        "atlas-old-glare": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "atlas-old-tilt": {
+          "documentKind": "kz_registration",
+          "make": "GEELY",
+          "model": "ATLAS",
+          "year": 2018,
+          "vin": "L6T79P4E8JE076543",
+          "plate": "B 456 KLM",
+          "engineVolumeCc": 2378,
+          "color": "ТЕМНО-СИНИЙ"
+        },
+        "ru_sts-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-clean": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "kz_license-tilt": {
+          "documentKind": "other_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        },
+        "not_document-clean": {
+          "documentKind": "not_document",
+          "make": null,
+          "model": null,
+          "year": null,
+          "vin": null,
+          "plate": null,
+          "engineVolumeCc": null,
+          "color": null
+        }
+      }
+    }
+  ]
+}

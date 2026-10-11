@@ -27,6 +27,7 @@ import { loadErrorText } from "../errors";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import { AttributesPanel } from "./AttributesPanel";
+import { SearchSynonyms } from "./SearchSynonyms";
 import {
   CATEGORY_STATUS_TEXT,
   catalogErrorText,
@@ -481,6 +482,18 @@ function CategoryDetail({
         {!isNode && (
           <AppLink href={itemsLink({ categoryId: category.id })}>Позиции подкатегории</AppLink>
         )}
+      </div>
+      <div className="card-section">
+        <h3 className="ac-text-heading">Синонимы для поиска</h3>
+        <SearchSynonyms
+          key={category.id}
+          owner={{ kind: "category", id: category.id }}
+          intro={
+            isNode
+              ? "По ним в приложении найдутся все позиции подкатегорий этого узла."
+              : "По ним в приложении найдутся все позиции этой подкатегории: «колодки», «brake pads», «тежегіш қалыптары»."
+          }
+        />
       </div>
       {isNode ? (
         <p className="ac-text-body-s ac-muted">

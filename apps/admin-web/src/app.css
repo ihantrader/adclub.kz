@@ -1121,6 +1121,45 @@ code,
   min-width: 0;
 }
 
+/* Search synonyms of an item or a category (TASK-044): a plain list and one form. */
+.synonym-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+}
+
+.synonym-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-1) var(--ac-space-1) var(--ac-space-1) var(--ac-space-3);
+}
+
+.synonym-list__item > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.synonym-list__item + .synonym-list__item {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.synonym-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--ac-space-3);
+}
+
+.synonym-form > :first-child {
+  flex: 1 1 240px;
+}
+
 .pick-list {
   display: flex;
   flex-direction: column;

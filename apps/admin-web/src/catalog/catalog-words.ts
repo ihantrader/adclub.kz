@@ -147,6 +147,13 @@ export function showcaseReasonText(reason: string): string {
 
 const LANGUAGE_TEXT: Record<string, string> = { kk: "казахское", ru: "русское", en: "английское" };
 
+/** The language of a search synonym (TASK-044) — a note for the administrator only. */
+export const SYNONYM_LANGUAGE_TEXT: Record<"kk" | "ru" | "en", string> = {
+  ru: "русский",
+  kk: "казахский",
+  en: "английский",
+};
+
 function detail<T>(error: unknown, key: string): T | undefined {
   if (!isApiError(error)) return undefined;
   const details = error.details;
@@ -247,6 +254,8 @@ export function catalogErrorText(error: unknown): string {
       if (reason === "archived") return "Позиция в архиве";
       return "Эти позиции нельзя связать";
     }
+    case "CATALOG_SYNONYM_EXISTS":
+      return "Такой синоним уже есть (регистр, «ё» и знаки не важны)";
     case "CATALOG_VALUES_REJECTED":
       return "Часть значений не принята — ошибки у ячеек";
     case "CATALOG_PHOTO_INVALID": {

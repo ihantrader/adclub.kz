@@ -14,6 +14,7 @@ import { ItemOffers } from "./ItemOffers";
 import { ItemPhotos } from "./ItemPhotos";
 import { ItemTranslations } from "./ItemTranslations";
 import { ItemValues } from "./ItemValues";
+import { SearchSynonyms } from "./SearchSynonyms";
 import { CatalogTabs, follow } from "./shared";
 import { ruText } from "./values";
 
@@ -24,6 +25,7 @@ type Tab =
   | "photos"
   | "compatibility"
   | "analogs"
+  | "search"
   | "offers"
   | "history";
 
@@ -34,6 +36,7 @@ const TAB_TEXT: Record<Tab, string> = {
   photos: "Фото",
   compatibility: "Совместимость",
   analogs: "Аналоги",
+  search: "Поиск",
   offers: "Предложения",
   history: "История",
 };
@@ -83,6 +86,14 @@ export function ItemCard({ itemId }: { itemId: string }) {
         break;
       case "analogs":
         body = <ItemAnalogs card={data} onChanged={card.replace} />;
+        break;
+      case "search":
+        body = (
+          <SearchSynonyms
+            owner={{ kind: "item", id: itemId }}
+            intro="Синонимы этой позиции для поиска в приложении: по ним её найдут так же, как по названию. Синонимы её подкатегории — в дереве «Категории»."
+          />
+        );
         break;
       case "offers":
         body = <ItemOffers itemId={itemId} />;

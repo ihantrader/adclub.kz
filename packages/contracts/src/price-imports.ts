@@ -130,6 +130,22 @@ export const priceImportStateDetailsSchema = z.object({ status: priceImportStatu
 
 export type PriceImportStateDetails = z.infer<typeof priceImportStateDetailsSchema>;
 
+/**
+ * `details` of `PRICE_IMPORT_VERSION_CONFLICT` (409; TASK-046.A): the roles
+ * were confirmed by someone after the page asking was loaded; nothing changed.
+ */
+export const priceImportVersionConflictDetailsSchema = z.object({
+  status: priceImportStatusSchema,
+  version: z.number().int(),
+  /** Who confirmed the columns last, and when; `null` — unknown. */
+  confirmedBy: z.object({ memberId: z.uuid(), name: z.string().nullable() }).nullable(),
+  confirmedAt: z.iso.datetime().nullable(),
+});
+
+export type PriceImportVersionConflictDetails = z.infer<
+  typeof priceImportVersionConflictDetailsSchema
+>;
+
 export const priceImportProgressSchema = z.object({
   /** Rows done of the phase: read out of the file (`parsing`) or read by the roles (`reading`). */
   done: z.number().int(),
@@ -162,6 +178,12 @@ export const priceImportPersonSchema = z.object({
 export const priceImportSchema = z.object({
   id: z.uuid(),
   status: priceImportStatusSchema,
+  /**
+   * Grows with each confirmation of the columns (TASK-046.A): sent back as
+   * `expectedVersion`, it keeps a page showing an older state from
+   * overwriting a colleague's roles.
+   */
+  version: z.number().int(),
   fileName: z.string().nullable(),
   format: priceImportFormatSchema,
   byteSize: z.number().int(),
@@ -286,6 +308,13 @@ export type PriceImportPage = z.infer<typeof priceImportPageSchema>;
 export const confirmPriceColumnsBodySchema = z.object({
   roles: z.array(priceColumnRoleSchema).min(1).max(200),
   remember: z.boolean(),
+  /**
+   * The `version` of the import the page shows (TASK-046.A): another one —
+   * a colleague confirmed the columns meanwhile — is
+   * `PRICE_IMPORT_VERSION_CONFLICT`, nothing changes. Without it the roles
+   * are taken as they are.
+   */
+  expectedVersion: z.number().int().min(1).optional(),
 });
 
 export type ConfirmPriceColumnsBody = z.infer<typeof confirmPriceColumnsBodySchema>;

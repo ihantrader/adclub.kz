@@ -700,6 +700,8 @@
   "price.columns.roleOf": "What the column «{column}» holds",
   "price.columns.rowNo": "Row of the file",
   "price.columns.notNow": "The file is still being processed or could not be read — reload the page",
+  "price.columns.changedBy": "{name} has already confirmed the columns — reload the page",
+  "price.columns.changed": "A colleague has already confirmed the columns — reload the page",
   "price.columns.invalid": "Check the columns: a price and an article or a name are required, each role once",
   "price.parsed.summary": "Read: {rows}, rows with errors — {errors}",
   "price.parsed.short": "{rows}, rows with errors — {errors}",

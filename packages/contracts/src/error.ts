@@ -267,6 +267,10 @@ import { clientPlatformSchema } from "./client";
  * - `PRICE_IMPORT_STATE` (409): the import isn't where this can be done
  *   (its file is still being read, it failed); `details` is
  *   `PriceImportStateDetails`.
+ * - `PRICE_IMPORT_VERSION_CONFLICT` (409, TASK-046.A): the columns were
+ *   confirmed by someone after the page was loaded (`expectedVersion` is
+ *   not the import's `version`); nothing changed. `details` is
+ *   `PriceImportVersionConflictDetails` («Колонки уже подтвердил {кто}»).
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -441,6 +445,7 @@ export const errorCodeSchema = z.enum([
   // Price list imports (TASK-046, ARCHITECTURE 4.66).
   "PRICE_IMPORT_FILE_INVALID",
   "PRICE_IMPORT_STATE",
+  "PRICE_IMPORT_VERSION_CONFLICT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

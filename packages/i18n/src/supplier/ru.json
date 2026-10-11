@@ -700,6 +700,8 @@
   "price.columns.roleOf": "Что в колонке «{column}»",
   "price.columns.rowNo": "Строка файла",
   "price.columns.notNow": "Файл ещё обрабатывается или не прочитан — обновите страницу",
+  "price.columns.changedBy": "Колонки уже подтвердил {name} — обновите страницу",
+  "price.columns.changed": "Колонки уже подтвердил коллега — обновите страницу",
   "price.columns.invalid": "Проверьте колонки: цена и артикул или название обязательны, каждая роль — у одной колонки",
   "price.parsed.summary": "Разобрано: {rows}, ошибки в строках — {errors}",
   "price.parsed.short": "{rows}, ошибки в строках — {errors}",

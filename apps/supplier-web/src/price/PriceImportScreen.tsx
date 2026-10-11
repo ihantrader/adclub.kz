@@ -278,7 +278,7 @@ function ColumnsEditor({
     try {
       const answer = await apiClient.confirmPriceImportColumns(
         { importId: detail.import.id },
-        { roles, remember },
+        { roles, remember, expectedVersion: detail.import.version },
       );
       onConfirmed(answer.import);
     } catch (failure) {

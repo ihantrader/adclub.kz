@@ -1,10 +1,11 @@
 import { isApiError } from "@adclub/api-client";
-import type {
-  PriceColumnRoleName,
-  PriceImport,
-  PriceImportFailure,
-  PriceImportStatus,
-  PriceRowErrorValue,
+import {
+  priceImportVersionConflictDetailsSchema,
+  type PriceColumnRoleName,
+  type PriceImport,
+  type PriceImportFailure,
+  type PriceImportStatus,
+  type PriceRowErrorValue,
 } from "@adclub/contracts";
 import { missingPriceRoles, numberText } from "@adclub/domain";
 import { pluralForm, type Lang, type SupplierTextKey } from "@adclub/i18n";
@@ -120,6 +121,12 @@ function reasonOf(details: unknown): Pick<PriceImportFailure, "reason" | "limit"
   return { reason: reason as FailureReason, limit: typeof limit === "number" ? limit : null };
 }
 
+/** Who confirmed the columns first, from the details of `PRICE_IMPORT_VERSION_CONFLICT`. */
+function confirmedByName(details: unknown): string | null {
+  const parsed = priceImportVersionConflictDetailsSchema.safeParse(details);
+  return parsed.success ? (parsed.data.confirmedBy?.name ?? null) : null;
+}
+
 /** The words of a refused upload (S-PRICE-01). `maxFileMb` — the limit the list told. */
 export function uploadErrorText(error: unknown, t: Translate, maxFileMb: number): string {
   if (!isApiError(error)) return t("common.errorText");
@@ -149,6 +156,10 @@ export function confirmErrorText(error: unknown, t: Translate): string {
   switch (error.code) {
     case "PRICE_IMPORT_STATE":
       return t("price.columns.notNow");
+    case "PRICE_IMPORT_VERSION_CONFLICT": {
+      const name = confirmedByName(error.details);
+      return name ? t("price.columns.changedBy", { name }) : t("price.columns.changed");
+    }
     case "VALIDATION_ERROR":
       return t("price.columns.invalid");
     case "NETWORK_ERROR":

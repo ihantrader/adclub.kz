@@ -700,6 +700,8 @@
   "price.columns.roleOf": "«{column}» бағанында не бар",
   "price.columns.rowNo": "Файл жолы",
   "price.columns.notNow": "Файл әлі өңделуде немесе оқылмады — бетті жаңартыңыз",
+  "price.columns.changedBy": "Бағандарды {name} растап қойды — бетті жаңартыңыз",
+  "price.columns.changed": "Бағандарды әріптесіңіз растап қойды — бетті жаңартыңыз",
   "price.columns.invalid": "Бағандарды тексеріңіз: баға және артикул не атау міндетті, әр рөл — бір бағанда",
   "price.parsed.summary": "Талданды: {rows}, жолдардағы қателер — {errors}",
   "price.parsed.short": "{rows}, жолдардағы қателер — {errors}",

@@ -86,6 +86,21 @@ describe("words of the price list", () => {
     expect(confirmErrorText(apiError("PRICE_IMPORT_STATE", { status: "parsing" }), t)).toBe(
       "Файл ещё обрабатывается или не прочитан — обновите страницу",
     );
+    const conflict = {
+      status: "parsed",
+      version: 2,
+      confirmedBy: { memberId: "00000000-0000-4000-8000-000000000001", name: "Марат" },
+      confirmedAt: "2026-10-11T10:00:00.000Z",
+    };
+    expect(confirmErrorText(apiError("PRICE_IMPORT_VERSION_CONFLICT", conflict), t)).toBe(
+      "Колонки уже подтвердил Марат — обновите страницу",
+    );
+    expect(
+      confirmErrorText(
+        apiError("PRICE_IMPORT_VERSION_CONFLICT", { ...conflict, confirmedBy: null }),
+        t,
+      ),
+    ).toBe("Колонки уже подтвердил коллега — обновите страницу");
   });
 
   it("tell what is wrong with a row", () => {

@@ -18,7 +18,7 @@ export {
   ToastProvider,
   useToast,
 } from "./feedback";
-export { CodeCells, Keypad, SearchField, TextField } from "./fields";
+export { CodeCells, Keypad, SearchEntry, SearchField, TextField } from "./fields";
 export {
   DataState,
   OfflineBanner,

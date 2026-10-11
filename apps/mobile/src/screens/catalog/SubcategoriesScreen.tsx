@@ -5,6 +5,7 @@ import {
   Button,
   CategoryIcon,
   DataState,
+  IconButton,
   ListGroup,
   ListRow,
   OfflineBanner,
@@ -21,6 +22,8 @@ export interface SubcategoriesScreenProps {
   title?: string;
   /** `kind` — of the node: a subcategory of services is listed by a city (TASK-019). */
   onOpen: (subcategory: CategorySubcategory, kind: "goods" | "services") => void;
+  /** M-CAT-04: the search icon of the top bar (TASK-044). */
+  onSearch?: () => void;
   onBack: () => void;
 }
 
@@ -33,6 +36,7 @@ export function SubcategoriesScreen({
   categoryId,
   title,
   onOpen,
+  onSearch,
   onBack,
 }: SubcategoriesScreenProps) {
   const t = useT();
@@ -56,6 +60,9 @@ export function SubcategoriesScreen({
     <Screen
       title={node?.name.text ?? title ?? t("tabs.catalog")}
       back={{ label: t("common.back"), onPress: onBack }}
+      actions={
+        onSearch ? <IconButton icon="search" label={t("search.open")} onPress={onSearch} /> : null
+      }
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={tree.refreshing}
       refreshingLabel={t("common.loading")}

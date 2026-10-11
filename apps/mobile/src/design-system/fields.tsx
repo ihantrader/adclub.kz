@@ -164,6 +164,43 @@ export function SearchField({ label, value, onChangeText, clearLabel, ...rest }:
   );
 }
 
+export interface SearchEntryProps {
+  /** Screen reader text: what pressing it opens. */
+  label: string;
+  placeholder: string;
+  onPress: () => void;
+}
+
+/**
+ * The search field of a screen that only opens the search (M-CAT-01 «Артикул
+ * или название», TASK-044): looks like `SearchField`, is a button — typing
+ * happens on the search screen itself.
+ */
+export function SearchEntry({ label, placeholder, onPress }: SearchEntryProps) {
+  const { theme } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="search"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.control,
+        styles.search,
+        styles.entry,
+        {
+          backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
+          borderColor: theme.colors.borderField,
+        },
+      ]}
+    >
+      <Icon name="search" size={20} color="textMuted" />
+      <Text variant="body" color="textMuted" numberOfLines={1} style={styles.entryText}>
+        {placeholder}
+      </Text>
+    </Pressable>
+  );
+}
+
 export interface CodeCellsProps {
   label: string;
   value: string;
@@ -333,6 +370,8 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, minHeight: 44, paddingVertical: 10 },
   search: { paddingLeft: 12, paddingRight: 0 },
+  entry: { paddingRight: 12 },
+  entryText: { flex: 1 },
   clear: {
     width: size.touchTarget,
     height: size.touchTarget,

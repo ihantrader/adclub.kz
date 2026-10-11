@@ -28,6 +28,8 @@ export type CatalogStackParams = {
    * subcategory of services (TASK-019): shown by a city, at a model's price.
    */
   "catalog-items": { categoryId: string; title?: string; kind?: "goods" | "services" };
+  /** M-CAT-04: the search (TASK-044), for the car and the city of the header. */
+  "catalog-search": undefined;
   /**
    * M-CAT-07. `notice` — why the card was opened by «Повторить заказ»
    * instead of the checkout (TASK-030): the offer was withdrawn, or the

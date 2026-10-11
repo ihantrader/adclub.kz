@@ -2,6 +2,7 @@ import { isLang, type Lang } from "@adclub/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getRandomBytes } from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
+import { parseRecentSearches, RECENT_SEARCHES_KEY } from "../catalog/recent-searches";
 import { parseAccountGarageCopy, type AccountGarageCopy } from "../garage/account-garage";
 import { INITIAL_GARAGE, parseGarage, type GarageState } from "../garage/garage";
 import { forgetOpenedOrders } from "../orders/opened-orders";
@@ -115,6 +116,13 @@ export const cityStore: DeviceStore<CityState> = createDeviceStore(storage, {
   key: "adclub.mobile.city",
   initial: INITIAL_CITY_STATE,
   parse: parseCityState,
+});
+
+/** The recent queries of the search (M-CAT-04, TASK-044): this device only. */
+export const recentSearchesStore: DeviceStore<string[]> = createDeviceStore(storage, {
+  key: RECENT_SEARCHES_KEY,
+  initial: [],
+  parse: parseRecentSearches,
 });
 
 /** How far the first run got. */

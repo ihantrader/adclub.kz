@@ -9,6 +9,7 @@ import {
   DataState,
   OfflineBanner,
   Screen,
+  SearchEntry,
   Section,
   SkeletonList,
   Text,
@@ -31,6 +32,8 @@ export interface CatalogHomeScreenProps {
   onAddCar: () => void;
   /** «Уточните двигатель» opens the car at that step. */
   onCompleteEngine: (car: GarageCar) => void;
+  /** «Артикул или название» opens the search (M-CAT-04, TASK-044). */
+  onOpenSearch: () => void;
 }
 
 /**
@@ -48,6 +51,7 @@ export function CatalogHomeScreen({
   onOpenServices,
   onAddCar,
   onCompleteEngine,
+  onOpenSearch,
 }: CatalogHomeScreenProps) {
   const t = useT();
   const online = useOnline();
@@ -94,7 +98,18 @@ export function CatalogHomeScreen({
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={tree.refreshing}
       refreshingLabel={t("common.loading")}
-      header={<CatalogHeader onAddCar={onAddCar} />}
+      header={
+        <>
+          <CatalogHeader onAddCar={onAddCar} />
+          <View style={styles.search}>
+            <SearchEntry
+              label={t("search.open")}
+              placeholder={t("search.placeholder")}
+              onPress={onOpenSearch}
+            />
+          </View>
+        </>
+      }
     >
       <View style={styles.content}>
         {hint}
@@ -228,6 +243,7 @@ function CategoryTile({
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, gap: 12 },
+  search: { paddingHorizontal: layout.screenPadding, paddingBottom: 12 },
   tiles: { gap: 12 },
   tileRow: { flexDirection: "row", gap: 12, alignItems: "stretch" },
   tile: {

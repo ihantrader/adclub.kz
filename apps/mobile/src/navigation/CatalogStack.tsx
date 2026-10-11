@@ -10,6 +10,7 @@ import { CatalogHomeScreen } from "../screens/catalog/CatalogHomeScreen";
 import { ItemListScreen } from "../screens/catalog/ItemListScreen";
 import { ItemScreen } from "../screens/catalog/ItemScreen";
 import { NeedsCarScreen } from "../screens/catalog/NeedsCarScreen";
+import { SearchScreen } from "../screens/catalog/SearchScreen";
 import { SubcategoriesScreen } from "../screens/catalog/SubcategoriesScreen";
 import { useGarage } from "../state/garage-provider";
 import { useCarPicker } from "./car-picker";
@@ -48,6 +49,7 @@ function CatalogStack() {
       <Stack.Screen name="catalog-node" component={CatalogNode} />
       <Stack.Screen name="catalog-items" component={CatalogItems} />
       <Stack.Screen name="catalog-item" component={CatalogItem} />
+      <Stack.Screen name="catalog-search" component={CatalogSearch} />
     </Stack.Navigator>
   );
 }
@@ -93,6 +95,7 @@ function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, 
       }
       onAddCar={addCar}
       onCompleteEngine={completeEngine}
+      onOpenSearch={() => navigation.navigate("catalog-search")}
     />
   );
 }
@@ -106,6 +109,7 @@ function CatalogNode({
       categoryId={route.params.categoryId}
       {...(route.params.title ? { title: route.params.title } : {})}
       onBack={navigation.goBack}
+      onSearch={() => navigation.navigate("catalog-search")}
       onOpen={(subcategory, kind) =>
         navigation.navigate("catalog-items", {
           categoryId: subcategory.id,
@@ -133,6 +137,34 @@ function CatalogItems({
       }
       onAddCar={addCar}
       onCheckCar={openCar}
+      onSearch={() => navigation.navigate("catalog-search")}
+    />
+  );
+}
+
+function CatalogSearch({
+  navigation,
+}: NativeStackScreenProps<CatalogStackParams, "catalog-search">) {
+  const { addCar } = useGarageJump();
+  return (
+    <SearchScreen
+      onBack={navigation.goBack}
+      onOpenItem={(item) =>
+        navigation.navigate("catalog-item", { itemId: item.id, title: item.name })
+      }
+      onOpenCategory={(category) =>
+        category.level === 1
+          ? navigation.navigate("catalog-node", {
+              categoryId: category.id,
+              title: category.name.text,
+            })
+          : navigation.navigate("catalog-items", {
+              categoryId: category.id,
+              title: category.name.text,
+              kind: category.kind,
+            })
+      }
+      onAddCar={addCar}
     />
   );
 }

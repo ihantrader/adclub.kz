@@ -7,6 +7,7 @@ import {
   Button,
   Chip,
   DataState,
+  IconButton,
   OfflineBanner,
   Screen,
   Segments,
@@ -52,6 +53,8 @@ export interface ItemListScreenProps {
   /** «Проверить параметры автомобиля» opens the car of the garage. */
   onCheckCar: (carId: string) => void;
   onBack: () => void;
+  /** M-CAT-04: the search icon of the top bar (TASK-044). */
+  onSearch?: () => void;
 }
 
 /**
@@ -73,6 +76,7 @@ export function ItemListScreen({
   onAddCar,
   onCheckCar,
   onBack,
+  onSearch,
 }: ItemListScreenProps) {
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -147,6 +151,9 @@ export function ItemListScreen({
     <Screen
       title={page?.category.name.text ?? title ?? t("tabs.catalog")}
       back={{ label: t("common.back"), onPress: onBack }}
+      actions={
+        onSearch ? <IconButton icon="search" label={t("search.open")} onPress={onSearch} /> : null
+      }
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       refreshing={list.refreshing}
       refreshingLabel={t("common.loading")}

@@ -500,6 +500,7 @@ export * from "./orders";
 export * from "./signals";
 export * from "./users";
 export * from "./showcase";
+export * from "./search";
 export * from "./account";
 export * from "./garage";
 export * from "./vehicle-document";

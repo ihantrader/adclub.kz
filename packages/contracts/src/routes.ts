@@ -278,6 +278,13 @@ import {
   showcaseListResponseSchema,
 } from "./showcase";
 import {
+  addSearchSynonymBodySchema,
+  catalogSearchQuerySchema,
+  catalogSearchResponseSchema,
+  searchSynonymListSchema,
+  searchSynonymPathSchema,
+} from "./search";
+import {
   editTranslationBodySchema,
   entityTranslationsResponseSchema,
   translationEntityPathSchema,
@@ -1666,6 +1673,84 @@ export const apiRoutes = {
     pathParams: itemAnalogPathSchema,
     responses: {
       200: { description: "The item card", schema: adminCatalogItemCardSchema },
+    },
+  }),
+  // ------------------------------------------- search synonyms (TASK-044)
+  listItemSearchSynonyms: defineRoute({
+    operationId: "listItemSearchSynonyms",
+    method: "GET",
+    path: "/admin/catalog/items/{itemId}/synonyms",
+    summary: "The search synonyms of an item («колодки», «brake pads»), oldest first",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    responses: {
+      200: { description: "The synonyms", schema: searchSynonymListSchema },
+    },
+  }),
+  addItemSearchSynonym: defineRoute({
+    operationId: "addItemSearchSynonym",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/synonyms",
+    summary:
+      "Add a search synonym to an item; one that reads the same as another of the item — 409 CATALOG_SYNONYM_EXISTS",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    requestBody: { description: "The synonym", schema: addSearchSynonymBodySchema },
+    responses: {
+      200: { description: "The synonyms of the item", schema: searchSynonymListSchema },
+    },
+  }),
+  listCategorySearchSynonyms: defineRoute({
+    operationId: "listCategorySearchSynonyms",
+    method: "GET",
+    path: "/admin/catalog/categories/{categoryId}/synonyms",
+    summary: "The search synonyms of a category (they find every item of it), oldest first",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: categoryIdPathSchema,
+    responses: {
+      200: { description: "The synonyms", schema: searchSynonymListSchema },
+    },
+  }),
+  addCategorySearchSynonym: defineRoute({
+    operationId: "addCategorySearchSynonym",
+    method: "POST",
+    path: "/admin/catalog/categories/{categoryId}/synonyms",
+    summary:
+      "Add a search synonym to a category; one that reads the same as another of the category — 409 CATALOG_SYNONYM_EXISTS",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: categoryIdPathSchema,
+    requestBody: { description: "The synonym", schema: addSearchSynonymBodySchema },
+    responses: {
+      200: { description: "The synonyms of the category", schema: searchSynonymListSchema },
+    },
+  }),
+  removeSearchSynonym: defineRoute({
+    operationId: "removeSearchSynonym",
+    method: "DELETE",
+    path: "/admin/catalog/synonyms/{synonymId}",
+    summary: "Remove a search synonym of an item or a category",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: searchSynonymPathSchema,
+    responses: {
+      200: {
+        description: "The synonyms left to its item or category",
+        schema: searchSynonymListSchema,
+      },
     },
   }),
   getCategoryFill: defineRoute({
@@ -3434,6 +3519,26 @@ export const apiRoutes = {
     query: showcaseListQuerySchema,
     responses: {
       200: { description: "A page of items", schema: showcaseListResponseSchema },
+    },
+  }),
+  searchCatalog: defineRoute({
+    operationId: "searchCatalog",
+    method: "GET",
+    path: "/catalog/search",
+    summary:
+      "Search the catalog (M-CAT-04): an article in any spelling, names and synonyms in kk/ru/en, the wrong keyboard layout, transliteration; only what the catalog shows for this city and car; open to guests",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    rateLimit: {
+      limit: "catalog_read_per_ip",
+      perAccount: "catalog_read_per_account",
+      whenUnavailable: "allow",
+    },
+    query: catalogSearchQuerySchema,
+    responses: {
+      200: { description: "A page of found items", schema: catalogSearchResponseSchema },
     },
   }),
   getShowcaseItem: defineRoute({

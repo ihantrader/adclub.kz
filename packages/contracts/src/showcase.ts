@@ -54,7 +54,7 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Must be Y
  * whole modification or only the known levels. Nothing is stored: a guest's
  * car travels with each request (ARCHITECTURE 8.4).
  */
-const vehicleQueryShape = {
+export const showcaseVehicleQueryShape = {
   vehicleModificationId: z.uuid().optional(),
   vehicleMakeId: z.uuid().optional(),
   vehicleModelId: z.uuid().optional(),
@@ -159,7 +159,7 @@ export type ShowcaseCategoryPath = z.infer<typeof showcaseCategoryPathSchema>;
 export const showcaseListQuerySchema = z.object({
   cityId: z.uuid().optional(),
   onlyMyCity: booleanQuery.optional(),
-  ...vehicleQueryShape,
+  ...showcaseVehicleQueryShape,
   availability: offerAvailabilitySchema.optional(),
   receiving: z.enum(["pickup", "delivery"]).optional(),
   brandIds: brandIdsQuery.optional(),
@@ -178,7 +178,7 @@ export type ShowcaseItemPath = z.infer<typeof showcaseItemPathSchema>;
 /** `GET /catalog/items/{itemId}` (M-CAT-07): the chosen city, the car, the order of the offers. */
 export const showcaseItemQuerySchema = z.object({
   cityId: z.uuid().optional(),
-  ...vehicleQueryShape,
+  ...showcaseVehicleQueryShape,
   sort: showcaseOfferSortSchema.optional(),
 });
 

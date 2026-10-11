@@ -10,6 +10,32 @@ export { hidePhone, maskPhone, normalizeKzMobilePhone } from "./phone/kz-mobile-
 export { PHONE_SEARCH_MIN_DIGITS, phoneSearchDigits } from "./phone/phone-search";
 export { readAdminQuery } from "./search/admin-query";
 export type { AdminQueryReading } from "./search/admin-query";
+export {
+  ARTICLE_QUERY_MIN_LENGTH,
+  articleQuery,
+  cyrillicToLatin,
+  englishLayoutToRussian,
+  KAZAKH_FOLD,
+  kazakhLayoutLetters,
+  latinToCyrillic,
+  matchSearchDocuments,
+  normalizeSearchText,
+  russianLayoutToEnglish,
+  SEARCH_VARIANTS_MAX,
+  SEARCH_WORDS_MAX,
+  searchKey,
+  searchStems,
+  searchVariant,
+  searchVariants,
+} from "./search/search-query";
+export type {
+  SearchDocument,
+  SearchDocumentsMatch,
+  SearchTextMatch,
+  SearchVariant,
+} from "./search/search-query";
+export { compareSearchRankKeys, searchRankKey } from "./search/search-ranking";
+export type { SearchMatch, SearchRankFacts, SearchRankKey } from "./search/search-ranking";
 export { decideAccess, resolveAccessContext } from "./access/access-predicate";
 export type {
   AccessContext,

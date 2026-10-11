@@ -98,6 +98,9 @@ import { clientPlatformSchema } from "./client";
  *   `CatalogValuesRejectedDetails` with every refused value.
  * - `CATALOG_ANALOG_INVALID` (400): `details` is
  *   `CatalogAnalogInvalidDetails`.
+ * - `CATALOG_SYNONYM_EXISTS` (409): the item or the category already has a
+ *   search synonym that reads the same (TASK-044); `details` is
+ *   `CatalogSynonymExistsDetails`.
  * - `CONFLICT` (409, retryable): a brand's spelling or an item's article was
  *   refused by the unique key while no other brand or item has it any more
  *   (the rival change was rolled back meanwhile); nothing was written,
@@ -349,6 +352,8 @@ export const errorCodeSchema = z.enum([
   "CATALOG_ITEM_HAS_ANALOGS",
   "CATALOG_VALUES_REJECTED",
   "CATALOG_ANALOG_INVALID",
+  // Search synonyms (TASK-044, ARCHITECTURE 4.64).
+  "CATALOG_SYNONYM_EXISTS",
   // Translations of the catalog's texts (TASK-012, ARCHITECTURE 4.19).
   "TRANSLATION_MANUALLY_EDITED",
   "TRANSLATION_NOT_MANUAL",

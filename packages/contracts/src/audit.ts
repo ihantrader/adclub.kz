@@ -99,6 +99,13 @@ export const auditActions = {
   catalogItemAnalogLinked: "catalog_item.analog_linked",
   catalogItemAnalogUnlinked: "catalog_item.analog_unlinked",
   /**
+   * A search synonym was added to an item or a category, or removed
+   * (TASK-044). The entity is the item (`catalog_item`) or the category
+   * (`catalog_category`); `after` (added) or `before` (removed): `term`, `lang`.
+   */
+  catalogSynonymAdded: "catalog_synonym.added",
+  catalogSynonymRemoved: "catalog_synonym.removed",
+  /**
    * An administrator wrote a translation by hand (TASK-012). The entity is
    * the thing translated (`entityId`); `before`/`after`: `entityType`,
    * `field`, `lang` and the text.

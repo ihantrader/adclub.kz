@@ -47,7 +47,6 @@ import { productIdentityLock, STRUCTURE_LOCK_SHARED } from "./catalog-locks";
 import {
   decodeCursor,
   encodeCursor,
-  escapeLike,
   TIME_POSITION,
   UNIQUE_RACE_ATTEMPTS,
   uniqueViolation,
@@ -62,6 +61,7 @@ import {
 } from "./catalog-texts";
 import { checkValue, journalValue, sameValue, valueOf, type StoredColumns } from "./catalog-values";
 import { refreshItemsCompleteness } from "./completeness";
+import { itemNameMatches } from "./item-name-search";
 import { sameProductItemIds } from "./same-products";
 import { CatalogItemListRules, withoutApprovedPhoto } from "./item-list-rules";
 import { TranslationQueue } from "./translation-queue.service";
@@ -1119,11 +1119,14 @@ export class CatalogItemsService {
     return { text: entered, norm };
   }
 
-  /** `q`: a part of the normalized article, or a part of a name in any language, case ignored. */
+  /**
+   * `q`: a part of the normalized article, or a part of a name in any
+   * language, case ignored — or in any reading of the users' search
+   * (`itemNameMatches`, TASK-044).
+   */
   private searchCondition(q: string): SQL {
     const article = normalizeArticle(q);
-    const pattern = `%${escapeLike(normalizeText(q))}%`;
-    const byName = sql`EXISTS (SELECT 1 FROM translation t WHERE t.entity_type = 'catalog_item' AND t.entity_id = ${catalogItem.id} AND t.field = 'name' AND lower(t.text) LIKE lower(${pattern}) ESCAPE '\\')`;
+    const byName = itemNameMatches(sql`${catalogItem.id}`, q);
     return article === ""
       ? byName
       : sql`(strpos(${catalogItem.articleNorm}, ${article}) > 0 OR ${byName})`;

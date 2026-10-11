@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   CatalogItemType,
+  CatalogLanguage,
   CategoryIcon,
   CategoryKind,
   CreateAttributeBody,
@@ -9,6 +10,7 @@ import { APP_CONFIG, type AppConfig } from "../../config";
 import { CatalogAdminService, type CatalogActor } from "./catalog-admin.service";
 import { CatalogBrandsService } from "./catalog-brands.service";
 import { CatalogItemsService } from "./catalog-items.service";
+import { CatalogSynonymsService } from "./catalog-synonyms.service";
 import { TranslationQueue } from "./translation-queue.service";
 
 /**
@@ -443,6 +445,58 @@ export const devCatalogAnalogs: readonly [[string, string], [string, string]][] 
   ],
 ];
 
+/**
+ * Search synonyms of the example categories (TASK-044): by the category's
+ * code, each with the language it is in. «колодки», «brake pads» and
+ * «тежегіш қалыптары» lead to the brake pads; «масло», «engine oil» and
+ * «мотор майы» — to the engine oils.
+ */
+export const devSearchSynonyms: Readonly<Record<string, readonly [string, CatalogLanguage][]>> = {
+  brake_pads: [
+    ["колодки", "ru"],
+    ["тормозные колодки", "ru"],
+    ["brake pads", "en"],
+    ["тежегіш қалыптары", "kk"],
+  ],
+  engine_oils: [
+    ["масло", "ru"],
+    ["моторное масло", "ru"],
+    ["engine oil", "en"],
+    ["мотор майы", "kk"],
+  ],
+  oil_filters: [
+    ["фильтр масляный", "ru"],
+    ["oil filter", "en"],
+  ],
+  air_filters: [
+    ["фильтр воздушный", "ru"],
+    ["air filter", "en"],
+  ],
+  spark_plugs: [
+    ["свечи", "ru"],
+    ["spark plug", "en"],
+  ],
+  shock_absorbers: [
+    ["амортизатор", "ru"],
+    ["стойки амортизатора", "ru"],
+  ],
+  batteries: [
+    ["аккумулятор", "ru"],
+    ["АКБ", "ru"],
+    ["battery", "en"],
+  ],
+  wiper_blades: [
+    ["дворники", "ru"],
+    ["щетки", "ru"],
+  ],
+  oil_change: [
+    ["замена масла", "ru"],
+    ["oil change", "en"],
+    ["май ауыстыру", "kk"],
+  ],
+  brake_pad_replacement: [["замена колодок", "ru"]],
+};
+
 interface SeedCounts {
   categories: number;
   attributes: number;
@@ -450,6 +504,7 @@ interface SeedCounts {
   brands: number;
   items: number;
   analogs: number;
+  synonyms: number;
 }
 
 export interface DevCatalogSeedResult {
@@ -487,6 +542,7 @@ export class DevCatalogSeed {
     @Inject(CatalogBrandsService) private readonly brands: CatalogBrandsService,
     @Inject(CatalogItemsService) private readonly items: CatalogItemsService,
     @Inject(TranslationQueue) private readonly translations: TranslationQueue,
+    @Inject(CatalogSynonymsService) private readonly synonyms: CatalogSynonymsService,
   ) {}
 
   async run(): Promise<DevCatalogSeedResult> {
@@ -502,6 +558,7 @@ export class DevCatalogSeed {
       brands: 0,
       items: 0,
       analogs: 0,
+      synonyms: 0,
     });
     const result: DevCatalogSeedResult = {
       created: zero(),
@@ -526,6 +583,7 @@ export class DevCatalogSeed {
         for (const spec of child.attributes ?? []) {
           await this.attribute(result, childId, spec);
         }
+        await this.searchSynonyms(result, child.code, childId);
       }
     }
     await this.seedItems(result);
@@ -535,6 +593,28 @@ export class DevCatalogSeed {
     // What has no Kazakh or English name yet — the seed leaves some Russian-only — is translated.
     result.translationsQueued = (await this.translations.queueMissing()).queued;
     return result;
+  }
+
+  /** The search synonyms of a category (TASK-044): those it lacks are added by the operator. */
+  private async searchSynonyms(
+    result: DevCatalogSeedResult,
+    code: string,
+    categoryId: string,
+  ): Promise<void> {
+    const wanted = devSearchSynonyms[code] ?? [];
+    if (wanted.length === 0) {
+      return;
+    }
+    const owner = { kind: "category", id: categoryId } as const;
+    const present = new Set((await this.synonyms.termsOf(owner)).map((term) => term.toLowerCase()));
+    for (const [term, lang] of wanted) {
+      if (present.has(term.toLowerCase())) {
+        result.existing.synonyms += 1;
+        continue;
+      }
+      await this.synonyms.add(owner, { term, lang }, OPERATOR);
+      result.created.synonyms += 1;
+    }
   }
 
   /**

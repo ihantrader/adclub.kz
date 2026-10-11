@@ -542,12 +542,15 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         visibleToClients: true,
       });
       // No route deletes a catalog entry; the one DELETE (TASK-011) removes
-      // a link between two items, never an item.
+      // a link between two items, never an item; the other (TASK-044) — a search synonym.
       expect(
         Object.values(apiRoutes)
           .filter((route) => route.path.startsWith("/admin/catalog") && route.method === "DELETE")
           .map((route) => route.path),
-      ).toEqual(["/admin/catalog/items/{itemId}/analogs/{analogItemId}"]);
+      ).toEqual([
+        "/admin/catalog/items/{itemId}/analogs/{analogItemId}",
+        "/admin/catalog/synonyms/{synonymId}",
+      ]);
     });
 
     it("checks names, icons, codes and the compatibility flag", async () => {
@@ -1609,14 +1612,16 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         analogItemId: randomUUID(),
         recordId: randomUUID(),
         proposalId: randomUUID(),
+        synonymId: randomUUID(),
       };
       const adminRoutes = Object.values(apiRoutes).filter((route) =>
         route.path.startsWith("/admin/catalog"),
       );
       // 14 of the structure (TASK-010), 14 of brands, items and the fill
       // (TASK-011), 4 of photos (TASK-013), 5 of compatibility (TASK-015), and
-      // an item's offers, the admin check of compatibility and locate (TASK-035).
-      expect(adminRoutes).toHaveLength(40);
+      // an item's offers, the admin check of compatibility and locate (TASK-035),
+      // and 5 of search synonyms (TASK-044).
+      expect(adminRoutes).toHaveLength(45);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },
@@ -1682,6 +1687,7 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         brands: 4,
         items: 10,
         analogs: 1,
+        synonyms: 25,
       });
       const rows = {
         categories: await count("category"),
@@ -1697,6 +1703,7 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         brands: 0,
         items: 0,
         analogs: 0,
+        synonyms: 0,
       });
       expect(second.existing).toEqual(first.created);
       expect({

@@ -98,6 +98,86 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds search synonyms and the search key in the database, and rolls back keeping the catalog (catalog search)", async () => {
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('search_node', 'services', 1) RETURNING id",
+    );
+    const sub = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('search_sub', 'services', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const categoryId = sub.rows[0]!.id;
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind) VALUES ('service', $1, 'services') RETURNING id",
+      [categoryId],
+    );
+    const itemId = item.rows[0]!.id;
+    // The key folds the case, «ё», the Kazakh letters and the signs.
+    const key = await client.query<{ key: string; text: string }>(
+      "SELECT search_key('ТЕЖЕГІШ «Ёлка»-5W') AS key, search_text('ТЕЖЕГІШ «Ёлка»-5W') AS text",
+    );
+    expect(key.rows[0]).toEqual({ key: "тежегиш елка 5w", text: "тежегіш елка 5w" });
+    const added = await client.query<{ term_key: string }>(
+      "INSERT INTO item_search_synonym (category_id, lang, term) VALUES ($1, 'kk', 'Тежегіш қалыптары') RETURNING term_key",
+      [categoryId],
+    );
+    expect(added.rows[0]!.term_key).toBe("тежегиш калыптары");
+    // One reading once per owner; the same at another owner is fine.
+    await expect(
+      client.query(
+        "INSERT INTO item_search_synonym (category_id, term) VALUES ($1, 'тежегиш-калыптары')",
+        [categoryId],
+      ),
+    ).rejects.toThrow(/item_search_synonym_category_key/);
+    await client.query(
+      "INSERT INTO item_search_synonym (item_id, term) VALUES ($1, 'тежегіш қалыптары')",
+      [itemId],
+    );
+    // An owner — exactly one; a term — trimmed, of 2..100 characters, with a letter or a digit.
+    await expect(
+      client.query(
+        "INSERT INTO item_search_synonym (item_id, category_id, term) VALUES ($1, $2, 'ab')",
+        [itemId, categoryId],
+      ),
+    ).rejects.toThrow(/item_search_synonym_owner_check/);
+    for (const term of [" ab", "a", "--"]) {
+      await expect(
+        client.query("INSERT INTO item_search_synonym (item_id, term) VALUES ($1, $2)", [
+          itemId,
+          term,
+        ]),
+      ).rejects.toThrow(/item_search_synonym_term_check/);
+    }
+    await expect(
+      client.query(
+        "INSERT INTO item_search_synonym (item_id, lang, term) VALUES ($1, 'de', 'abc')",
+        [itemId],
+      ),
+    ).rejects.toThrow(/item_search_synonym_lang_check/);
+    // Synonyms go with their item.
+    const other = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind) VALUES ('service', $1, 'services') RETURNING id",
+      [categoryId],
+    );
+    await client.query("INSERT INTO item_search_synonym (item_id, term) VALUES ($1, 'колодки')", [
+      other.rows[0]!.id,
+    ]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [other.rows[0]!.id]);
+    expect(await count("item_search_synonym", "item_id = $1", [other.rows[0]!.id])).toBe(0);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "item_search_synonym")).toBe(false);
+    expect(await count("catalog_item", "id = $1", [itemId])).toBe(1);
+    await expect(client.query("SELECT search_key('a')")).rejects.toThrow(/search_key/);
+    const trgm = await client.query("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'");
+    expect(trgm.rowCount).toBe(0);
+    // Nothing of this test is left for the walk down below.
+    await client.query("DELETE FROM catalog_item WHERE category_id = $1", [categoryId]);
+    await client.query("DELETE FROM category WHERE id = ANY($1::uuid[])", [
+      [categoryId, node.rows[0]!.id],
+    ]);
+  });
+
   it("holds an order on a service in the database, and rolls back removing only such orders (service orders)", async () => {
     const account = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77470000138') RETURNING id",

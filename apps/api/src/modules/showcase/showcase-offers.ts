@@ -92,6 +92,20 @@ export function offersInReach(
   return reachable;
 }
 
+/** The offers by their item, each item's in the order given. */
+export function groupByItem(offers: readonly VisibleOffer[]): Map<string, VisibleOffer[]> {
+  const grouped = new Map<string, VisibleOffer[]>();
+  for (const entry of offers) {
+    const list = grouped.get(entry.itemId);
+    if (list) {
+      list.push(entry);
+    } else {
+      grouped.set(entry.itemId, [entry]);
+    }
+  }
+  return grouped;
+}
+
 export async function visibleOffers(
   executor: DbExecutor,
   scope: OfferScope,

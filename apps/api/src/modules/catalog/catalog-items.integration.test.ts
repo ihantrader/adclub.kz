@@ -2066,7 +2066,14 @@ describe("catalog items (PostgreSQL + Redis)", () => {
         status: "draft",
       });
       expect(await search("status=draft")).toEqual([trw.item.id]);
-      expect(await search(`q=colodki&type=part`)).toEqual([]);
+      // The readings of the users' search (TASK-044): a transliteration and the wrong layout find the pads.
+      expect((await search(`q=colodki&type=part`)).sort()).toEqual(
+        [pads.item.id, trw.item.id].sort(),
+      );
+      expect((await search(`q=rjkjlrb&type=part`)).sort()).toEqual(
+        [pads.item.id, trw.item.id].sort(),
+      );
+      expect(await search(`q=xyzxyz&type=part`)).toEqual([]);
 
       // Paging: newest first, no gaps or repeats even when items appear meanwhile.
       const more: string[] = [];
@@ -2228,8 +2235,8 @@ describe("catalog items (PostgreSQL + Redis)", () => {
           route.path.endsWith("/fill"),
       );
       // With the 3 compatibility routes of an item (TASK-015), its offers and
-      // the admin check of compatibility (TASK-035).
-      expect(routes).toHaveLength(23);
+      // the admin check of compatibility (TASK-035), and an item's search synonyms (TASK-044).
+      expect(routes).toHaveLength(25);
       const item = await createItem({
         type: "part",
         categoryId: f.pads.id,

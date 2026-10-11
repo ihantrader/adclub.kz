@@ -6,6 +6,7 @@ export { CatalogBrandsService } from "./catalog-brands.service";
 export { adminActor } from "./catalog-admin.controller";
 export { loadTexts, localize, normalizeText, plainTexts, textsOf } from "./catalog-texts";
 export { decodeCursor, encodeCursor, escapeLike, TIME_POSITION } from "./catalog-paging";
+export { itemNameMatches } from "./item-name-search";
 export { CatalogItemsService } from "./catalog-items.service";
 export { CatalogItemListRules } from "./item-list-rules";
 export type { ItemCondition, OffersOnSaleCounts } from "./item-list-rules";
@@ -13,6 +14,7 @@ export { UNTRANSLATED_STATES } from "./translation-states";
 export { CatalogPhotosService } from "./catalog-photos.service";
 export { CATALOG_PHOTO_PREFIX, photoObjectKey, PhotoStorage } from "./photo-storage";
 export { CatalogReadService } from "./catalog-read.service";
+export { CatalogSynonymsService } from "./catalog-synonyms.service";
 export { DevCatalogSeed, DevCatalogSeedError, devCatalogTree } from "./dev-catalog-seed";
 export type { DevCatalogSeedResult } from "./dev-catalog-seed";
 export { catalogTables } from "./schema";
@@ -35,6 +37,7 @@ export {
   category,
   itemAnalog,
   itemAttributeValue,
+  itemSearchSynonym,
   translation,
 } from "./schema";
 export type { AttributeRow, CatalogItemRow, CategoryRow } from "./schema";

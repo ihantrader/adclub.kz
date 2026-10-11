@@ -9,6 +9,8 @@ import { CatalogPhotosController } from "./catalog-photos.controller";
 import { CatalogPhotosService } from "./catalog-photos.service";
 import { PhotoStorage } from "./photo-storage";
 import { CatalogReadService } from "./catalog-read.service";
+import { CatalogSynonymsController } from "./catalog-synonyms.controller";
+import { CatalogSynonymsService } from "./catalog-synonyms.service";
 import { CatalogController } from "./catalog.controller";
 import { DevCatalogSeed } from "./dev-catalog-seed";
 import { TranslationAdminController } from "./translation-admin.controller";
@@ -42,6 +44,7 @@ export class CatalogModule {
             CatalogAdminController,
             CatalogItemsController,
             CatalogPhotosController,
+            CatalogSynonymsController,
             TranslationAdminController,
           ]
         : [],
@@ -52,6 +55,7 @@ export class CatalogModule {
         CatalogItemListRules,
         CatalogPhotosService,
         CatalogReadService,
+        CatalogSynonymsService,
         PhotoStorage,
         DevCatalogSeed,
         TranslationQueue,
@@ -65,6 +69,7 @@ export class CatalogModule {
         CatalogItemListRules,
         CatalogPhotosService,
         CatalogReadService,
+        CatalogSynonymsService,
         PhotoStorage,
         DevCatalogSeed,
         TranslationQueue,

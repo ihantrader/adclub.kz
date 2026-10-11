@@ -9,7 +9,7 @@ import {
 import { normalizeArticle, supplierOffers } from "@adclub/domain";
 import { eq, inArray, sql } from "drizzle-orm";
 import { DatabaseService } from "../../database";
-import { CatalogPhotosService, escapeLike, normalizeText } from "../catalog";
+import { CatalogPhotosService, itemNameMatches } from "../catalog";
 import { supplier } from "../identity";
 import { describeOfferItems } from "./offer-items";
 import type { OfferActor } from "./offers.service";
@@ -48,8 +48,8 @@ export class OfferItemSearch {
     lang: CatalogLanguage,
   ): Promise<OfferItemSearchResponse> {
     const article = normalizeArticle(query.q);
-    const pattern = `%${escapeLike(normalizeText(query.q))}%`;
-    const byName = sql`EXISTS (SELECT 1 FROM translation t WHERE t.entity_type = 'catalog_item' AND t.entity_id = i.id AND t.field = 'name' AND lower(t.text) LIKE lower(${pattern}) ESCAPE '\\')`;
+    // The name in any reading of the users' search too: another layout, a transliteration (TASK-044).
+    const byName = itemNameMatches(sql`i.id`, query.q);
     const matches =
       article === "" ? byName : sql`(strpos(i.article_norm, ${article}) > 0 OR ${byName})`;
     const rank =

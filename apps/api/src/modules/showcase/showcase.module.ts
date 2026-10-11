@@ -1,4 +1,5 @@
 import { Module, type DynamicModule } from "@nestjs/common";
+import { CatalogSearchService } from "./catalog-search.service";
 import { ShowcaseController } from "./showcase.controller";
 import { ShowcaseService } from "./showcase.service";
 
@@ -27,7 +28,7 @@ export class ShowcaseModule {
       module: ShowcaseModule,
       imports: [options.catalog, options.compatibility, options.clubAccess],
       controllers: options.http ? [ShowcaseController] : [],
-      providers: [ShowcaseService],
+      providers: [ShowcaseService, CatalogSearchService],
       exports: [ShowcaseService],
     };
   }

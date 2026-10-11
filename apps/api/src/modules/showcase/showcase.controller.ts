@@ -2,10 +2,13 @@ import { Controller, Headers, Inject, Param, Query, Res } from "@nestjs/common";
 import {
   apiRoutes,
   CATALOG_CLIENT_CACHE_SECONDS,
+  catalogSearchQuerySchema,
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
   showcaseItemQuerySchema,
   showcaseListQuerySchema,
+  type CatalogSearchQuery,
+  type CatalogSearchResponse,
   type ShowcaseCategoryPath,
   type ShowcaseItemPath,
   type ShowcaseItemQuery,
@@ -18,6 +21,7 @@ import type { Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
 import { RateLimitedRoute } from "../../rate-limit";
 import { OptionalSession, type AuthenticatedSession } from "../identity";
+import { CatalogSearchService } from "./catalog-search.service";
 import { ShowcaseService } from "./showcase.service";
 
 /**
@@ -49,7 +53,10 @@ export function roleSafeCaching(response: Response, lang: string, signedIn: bool
 @Controller()
 export class ShowcaseController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(@Inject(ShowcaseService) private readonly showcase: ShowcaseService) {}
+  constructor(
+    @Inject(ShowcaseService) private readonly showcase: ShowcaseService,
+    @Inject(CatalogSearchService) private readonly searching: CatalogSearchService,
+  ) {}
 
   @RateLimitedRoute(apiRoutes.getShowcaseItems)
   async list(
@@ -62,6 +69,21 @@ export class ShowcaseController {
     const lang = pickLanguage(acceptLanguage);
     const viewer = await this.showcase.viewer(session);
     const answer = await this.showcase.list(params.categoryId, query, viewer, lang);
+    roleSafeCaching(response, lang, session !== null);
+    return answer;
+  }
+
+  /** M-CAT-04 (TASK-044): limited and cached as the catalog; the query is never logged. */
+  @RateLimitedRoute(apiRoutes.searchCatalog)
+  async search(
+    @Query(new ZodValidationPipe(catalogSearchQuerySchema)) query: CatalogSearchQuery,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @OptionalSession() session: AuthenticatedSession | null,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<CatalogSearchResponse> {
+    const lang = pickLanguage(acceptLanguage);
+    const viewer = await this.showcase.viewer(session);
+    const answer = await this.searching.search(query, viewer, lang);
     roleSafeCaching(response, lang, session !== null);
     return answer;
   }

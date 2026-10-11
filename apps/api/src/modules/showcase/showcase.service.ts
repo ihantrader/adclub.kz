@@ -49,7 +49,7 @@ import {
 import type { AuthenticatedSession } from "../identity";
 import { AppSettings } from "../settings";
 import { city, localizedCityName } from "../suppliers";
-import { offersInReach, visibleOffers, type VisibleOffer } from "./showcase-offers";
+import { groupByItem, offersInReach, visibleOffers, type VisibleOffer } from "./showcase-offers";
 import {
   after,
   decodeListCursor,
@@ -112,19 +112,6 @@ function vehicleOf(query: VehicleQuery): CompatibilityVehicle | null {
     ...(query.vehicleYear !== undefined && { year: query.vehicleYear }),
   };
   return Object.keys(vehicle).length === 0 ? null : vehicle;
-}
-
-function groupByItem(offers: readonly VisibleOffer[]): Map<string, VisibleOffer[]> {
-  const grouped = new Map<string, VisibleOffer[]>();
-  for (const entry of offers) {
-    const list = grouped.get(entry.itemId);
-    if (list) {
-      list.push(entry);
-    } else {
-      grouped.set(entry.itemId, [entry]);
-    }
-  }
-  return grouped;
 }
 
 function formatNumber(value: number, lang: CatalogLanguage): string {
@@ -428,7 +415,7 @@ export class ShowcaseService {
     return row;
   }
 
-  private async chosenCity(
+  async chosenCity(
     executor: DbExecutor,
     cityId: string | undefined,
     lang: CatalogLanguage,
@@ -456,7 +443,7 @@ export class ShowcaseService {
     return new Map(rows.map((row) => [row.id, localizedCityName(row, lang)]));
   }
 
-  private async vehicle(
+  async vehicle(
     executor: DbExecutor,
     query: VehicleQuery,
   ): Promise<ResolvedCompatibilityVehicle | null> {
@@ -725,6 +712,32 @@ export class ShowcaseService {
     return described;
   }
 
+  /**
+   * Items of any subcategories described as rows of a list (analogs, the
+   * search — TASK-044): the same `describeListItems`, by subcategory.
+   */
+  async describeItems(
+    executor: DbExecutor,
+    rows: readonly CatalogItemRow[],
+    lang: CatalogLanguage,
+  ): Promise<Map<string, Omit<ShowcaseListItem, "compatibility" | "offers">>> {
+    const bySubcategory = new Map<string, CatalogItemRow[]>();
+    for (const row of rows) {
+      bySubcategory.set(row.categoryId, [...(bySubcategory.get(row.categoryId) ?? []), row]);
+    }
+    const described = new Map<string, Omit<ShowcaseListItem, "compatibility" | "offers">>();
+    for (const [subcategoryId, list] of bySubcategory) {
+      const [subcategory] = await executor
+        .select()
+        .from(category)
+        .where(eq(category.id, subcategoryId));
+      for (const [id, entry] of await this.describeListItems(executor, subcategory!, list, lang)) {
+        described.set(id, entry);
+      }
+    }
+    return described;
+  }
+
   /** «Подходит для»: the approved records of the item in words. */
   private async fitsFor(executor: DbExecutor, itemId: string) {
     const records = await executor
@@ -807,20 +820,7 @@ export class ShowcaseService {
           shown.map((result) => result.itemId),
         ),
       );
-    const bySubcategory = new Map<string, CatalogItemRow[]>();
-    for (const row of rows) {
-      bySubcategory.set(row.categoryId, [...(bySubcategory.get(row.categoryId) ?? []), row]);
-    }
-    const described = new Map<string, Omit<ShowcaseListItem, "compatibility" | "offers">>();
-    for (const [subcategoryId, list] of bySubcategory) {
-      const [subcategory] = await executor
-        .select()
-        .from(category)
-        .where(eq(category.id, subcategoryId));
-      for (const [id, entry] of await this.describeListItems(executor, subcategory!, list, lang)) {
-        described.set(id, entry);
-      }
-    }
+    const described = await this.describeItems(executor, rows, lang);
     return shown
       .flatMap((result) => {
         const entry = described.get(result.itemId);

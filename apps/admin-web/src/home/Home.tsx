@@ -198,6 +198,14 @@ function Cards({ home }: { home: AdminHome }) {
         </h2>
         <div className="home-grid">
           <Card
+            icon="checklist"
+            title="Запросы на позиции"
+            value={home.catalogRequests}
+            tone={home.catalogRequests > 0 ? "attention" : "plain"}
+            note="Строки прайсов поставщиков, которых нет в справочнике: создать позицию, указать существующую или отклонить"
+            onOpen={() => navigateTo(routePaths.catalogRequests)}
+          />
+          <Card
             icon="package"
             title="Без фото"
             value={quality.withoutPhoto}

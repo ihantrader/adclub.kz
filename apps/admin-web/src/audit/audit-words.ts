@@ -3,6 +3,7 @@ import { formatMoment } from "../format";
 import { ORDER_STATUS_TEXT } from "../orders/order-words";
 import {
   catalogItemPath,
+  catalogRequestPath,
   orderPath,
   routePaths,
   settingHistoryPath,
@@ -133,6 +134,10 @@ const ACTIONS: Record<string, string> = {
   "order.cancelled_by_admin": "Заявка отменена администратором",
   "phone.revealed": "Открыт полный номер",
   "account.sessions_ended": "Завершены сессии приложения пользователя",
+  "price_import.applied": "Прайс применён к предложениям",
+  "catalog_request.created": "Поставщик запросил добавить позицию",
+  "catalog_request.approved": "Запрос на позицию закрыт: позиция в справочнике",
+  "catalog_request.rejected": "Запрос на позицию отклонён",
 };
 
 /** The actions the filter offers, in the order of the dictionary. */
@@ -172,6 +177,8 @@ const ENTITIES: Record<string, string> = {
   order: "Заявка",
   user_discipline_event: "Дисциплинарная отметка",
   account: "Пользователь",
+  price_import: "Загрузка прайса",
+  catalog_request: "Запрос на позицию",
 };
 
 /** The kinds of objects the filter offers. */
@@ -313,6 +320,13 @@ export function entityLink(
     }
     case "supplier_lead":
       return UUID.test(entityId) ? supplierLeadPath(entityId) : null;
+    // A request to add an item opens its card; a price list — its company's «Прайс» (TASK-047).
+    case "catalog_request":
+      return UUID.test(entityId) ? catalogRequestPath(entityId) : null;
+    case "price_import": {
+      const supplierId = named(payload, "supplierId");
+      return supplierId && UUID.test(supplierId) ? supplierPath(supplierId, "price") : null;
+    }
     // Orders and users (TASK-036.B): an order its card, an account its card;
     // a grant of club access — its user's «Клубный доступ», a discipline
     // mark — its order (the user's «Дисциплина» when the order isn't named).
@@ -432,6 +446,19 @@ const FIELD_TEXT: Record<string, string> = {
   warrantyText: "Гарантия",
   supplierSku: "Свой артикул",
   supplierName: "Своё название",
+  // A price list applied, a request to add an item (TASK-047).
+  importId: "Загрузка прайса",
+  rowNo: "Строка прайса",
+  how: "Как",
+  updated: "Обновлено",
+  created: "Создано",
+  unchanged: "Без изменений",
+  returned: "Вернулось в продажу",
+  withdrawnOutOfStock: "Снято: нет в наличии",
+  withdrawnMissing: "Снято: нет в прайсе",
+  requested: "Отправлено на добавление",
+  skipped: "Пропущено",
+  notApplied: "Не применено",
   validUntil: "До",
   endedAt: "Завершена",
   number: "Номер",
@@ -499,6 +526,7 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
   order: ORDER_STATUS_TEXT,
   admin_signal: { open: "Новый", acknowledged: "В работе", closed: "Закрыт" },
   offer: { active: "В продаже", withdrawn: "Снято с продажи", suspended: "Приостановлено" },
+  catalog_request: { new: "Новый", approved: "Добавлено", rejected: "Отклонено" },
   supplier_invitation: INVITATION_TEXT,
   catalog_item_photo: {
     proposed: "Предложено",
@@ -517,7 +545,8 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
 const VALUE_WORDS: Record<string, Record<string, string>> = {
   state: { draft: "Черновик", active: "Активен", paused: "Пауза", blocked: "Блокировка" },
   type: { ...SUPPLIER_TYPE_TEXT, part: "Запчасть", generic: "Товар", service: "Услуга" },
-  source: { ...LEAD_SOURCE_TEXT, manual: "вручную" },
+  source: { ...LEAD_SOURCE_TEXT, manual: "вручную", price_import: "из прайса" },
+  how: { created: "создана новая позиция", existing: "существующая позиция" },
   deadline: { response: "срок ответа", reserve: "резерв" },
   subject: {
     account: "пользователь",
@@ -526,6 +555,11 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
     order: "клиент заявки",
   },
   availability: { in_stock: "В наличии", on_order: "Под заказ" },
+  reason: {
+    manual: "вручную",
+    missing_in_import: "нет в прайсе",
+    out_of_stock_in_import: "нет в наличии по прайсу",
+  },
   language: { kk: "Қазақша", ru: "Русский", en: "English" },
   notificationLanguage: { kk: "Қазақша", ru: "Русский" },
   pauseReason: { admin: "решение администратора", billing: "не оплачена подписка" },

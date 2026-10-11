@@ -257,7 +257,13 @@ export const PRICE_IMPORT_STATUS_TEXT: Record<PriceImport["status"], string> = {
   columns: "Ждёт подтверждения колонок",
   reading: "Строки разбираются",
   parsed: "Разобран",
+  // TASK-047.
+  matching: "Сопоставляется со справочником",
+  review: "Ждёт сверки поставщика",
+  applying: "Применяется",
+  applied: "Применён",
   failed: "Не прочитан",
+  expired: "Сверка истекла",
 };
 
 const PRICE_FAILURE_TEXT: Record<PriceImportFailure["reason"], string> = {

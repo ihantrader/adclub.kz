@@ -13,8 +13,13 @@ const STATUS_CLASS: Record<PriceImport["status"], string> = {
   parsing: "acknowledged",
   columns: "open",
   reading: "acknowledged",
-  parsed: "done",
+  parsed: "acknowledged",
+  matching: "acknowledged",
+  review: "open",
+  applying: "acknowledged",
+  applied: "done",
   failed: "danger",
+  expired: "danger",
 };
 
 /**

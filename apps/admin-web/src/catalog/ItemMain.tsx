@@ -3,6 +3,7 @@ import {
   catalogItemDuplicateDetailsSchema,
   type AdminBrand,
   type AdminCatalogItemCard,
+  type AdminCatalogRequestResponse,
   type AdminCategoryTreeResponse,
   type AdminItemOffersResponse,
   type CatalogItemBrand,
@@ -26,8 +27,20 @@ import { apiClient } from "../api";
 import { SearchSelect } from "../search-select/SearchSelect";
 import { SEARCH_PAGE, type Choice } from "../search-select/search-select-core";
 import { brandChoice } from "../search-select/sources";
-import { catalogItemPath, navigateTo, routePaths, useLocation } from "../router";
+import {
+  catalogItemPath,
+  catalogRequestPath,
+  navigateTo,
+  routePaths,
+  useLocation,
+} from "../router";
 import { useLoad } from "../use-load";
+import {
+  itemFormFromRequest,
+  REQUEST_STATUS_TEXT,
+  requestErrorText,
+  requestTitle,
+} from "./request-words";
 import {
   ITEM_STATUS_TEXT,
   ITEM_TYPE_TEXT,
@@ -568,6 +581,9 @@ export function ItemCreate() {
   const toast = useToast();
   const online = useOnline();
   const { query } = useLocation();
+  // «Создать позицию» of a supplier's request (TASK-047, A-MOD-01): the form
+  // is filled from its row, and the item answers the request on creation.
+  const requestId = query.get("requestId");
   const [form, setForm] = useState<Form>({
     type: "part",
     categoryId: query.get("categoryId") ?? "",
@@ -580,6 +596,17 @@ export function ItemCreate() {
   const [error, setError] = useState<FormError | null>(null);
   const [saving, setSaving] = useState(false);
   const tree = useLoad<AdminCategoryTreeResponse>(() => apiClient.listAdminCategories(), "tree");
+  const request = useLoad<AdminCatalogRequestResponse | null>(
+    () => (requestId ? apiClient.getAdminCatalogRequest({ requestId }) : Promise.resolve(null)),
+    `request:${requestId ?? ""}`,
+  );
+  const [filledFrom, setFilledFrom] = useState<string | null>(null);
+  const asked = request.data?.request ?? null;
+  if (asked && filledFrom !== asked.id) {
+    // The row arrived: the form takes it once (derived state, set during render).
+    setFilledFrom(asked.id);
+    setForm((current) => ({ ...current, ...itemFormFromRequest(asked) }));
+  }
 
   const create = async (status: "draft" | "active") => {
     setError(null);
@@ -594,7 +621,7 @@ export function ItemCreate() {
     const optional = (value: string) => (value.trim() ? value.trim() : null);
     setSaving(true);
     try {
-      const created = await apiClient.createCatalogItem({
+      const item = {
         type: form.type,
         categoryId: form.categoryId,
         ...(form.type !== "service"
@@ -602,12 +629,25 @@ export function ItemCreate() {
           : {}),
         names: { ru: form.ru.trim(), kk: optional(form.kk), en: optional(form.en) },
         status,
-      });
+      };
+      if (asked) {
+        const answered = await apiClient.createItemFromCatalogRequest(
+          { requestId: asked.id },
+          { expectedVersion: asked.version, item },
+        );
+        toast.show("Позиция создана, запрос поставщика закрыт");
+        navigateTo(catalogItemPath(answered.item.item.id, "values"), { replace: true });
+        return;
+      }
+      const created = await apiClient.createCatalogItem(item);
       toast.show("Позиция создана");
       navigateTo(catalogItemPath(created.item.id, "values"), { replace: true });
     } catch (thrown) {
       setError({
-        text: catalogErrorText(thrown),
+        text:
+          isApiError(thrown) && thrown.code === "CATALOG_REQUEST_VERSION_CONFLICT"
+            ? requestErrorText(thrown)
+            : catalogErrorText(thrown),
         field: errorField(thrown),
         existingItemId: duplicateOf(thrown),
       });
@@ -629,6 +669,19 @@ export function ItemCreate() {
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
         <div className="detail-stack">
+          {asked && (
+            <Banner tone="neutral">
+              Запрос поставщика «{asked.supplier.name}»: {requestTitle(asked.data)}. Форма заполнена
+              из строки прайса — выберите подкатегорию и проверьте название. Предложение поставщик
+              выставит следующей загрузкой прайса.{" "}
+              <AppLink href={catalogRequestPath(asked.id)}>К запросу</AppLink>
+            </Banner>
+          )}
+          {asked && asked.status !== "new" && (
+            <Banner tone="warning">
+              Запрос уже рассмотрен: {REQUEST_STATUS_TEXT[asked.status].toLowerCase()}.
+            </Banner>
+          )}
           <ItemFields form={form} onChange={setForm} creating error={error} online={online} />
           {error && (!error.field || error.existingItemId) && (
             <Banner tone="warning">
@@ -656,7 +709,9 @@ export function ItemCreate() {
             >
               Сохранить черновиком
             </Button>
-            <AppLink href={routePaths.catalogItems}>Отмена</AppLink>
+            <AppLink href={asked ? catalogRequestPath(asked.id) : routePaths.catalogItems}>
+              Отмена
+            </AppLink>
           </div>
         </div>
       </LoadingContent>

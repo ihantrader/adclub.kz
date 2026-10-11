@@ -10,6 +10,7 @@ import { ItemCard } from "./catalog/ItemCard";
 import { ItemCreate } from "./catalog/ItemMain";
 import { Items } from "./catalog/Items";
 import { Proposals } from "./catalog/Proposals";
+import { RequestCard, Requests } from "./catalog/Requests";
 import { Home } from "./home/Home";
 import { Extensions } from "./orders/Extensions";
 import { OrderCard } from "./orders/OrderCard";
@@ -157,6 +158,10 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
       return id ? <Fill key={id} categoryId={id} /> : null;
     case "catalogProposals":
       return <Proposals />;
+    case "catalogRequests":
+      return <Requests />;
+    case "catalogRequest":
+      return id ? <RequestCard key={id} requestId={id} /> : null;
     case "vehicles":
       return <Makes />;
     case "vehicleEngines":

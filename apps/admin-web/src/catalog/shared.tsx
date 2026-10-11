@@ -10,6 +10,7 @@ const TABS = [
   { key: "tree", label: "Категории", href: routePaths.catalog },
   { key: "items", label: "Позиции", href: routePaths.catalogItems },
   { key: "proposals", label: "Предложения совместимости", href: routePaths.catalogProposals },
+  { key: "requests", label: "Запросы на позиции", href: routePaths.catalogRequests },
 ] as const;
 
 /** The pages of «Справочник» (A-CAT-01…05): real links with their own addresses. */

@@ -45,8 +45,13 @@ const STATUS_ICON = {
   parsing: "clock",
   columns: "checklist",
   reading: "clock",
-  parsed: "circleCheck",
+  parsed: "clock",
+  matching: "clock",
+  review: "checklist",
+  applying: "clock",
+  applied: "circleCheck",
   failed: "circleX",
+  expired: "circleX",
 } as const;
 
 /**

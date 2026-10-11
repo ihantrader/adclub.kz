@@ -63,9 +63,18 @@ export function missingRoleKeys(roles: readonly PriceColumnRoleName[]): Supplier
   );
 }
 
-/** The reading of a file is under way: the page asks again until it ends. */
+/**
+ * The server is at work on the upload — reading the file, matching it with
+ * the catalog (TASK-047), applying it: the page asks again until it ends.
+ */
 export function isRunning(status: PriceImportStatus): boolean {
-  return status === "parsing" || status === "reading";
+  return (
+    status === "parsing" ||
+    status === "reading" ||
+    status === "parsed" ||
+    status === "matching" ||
+    status === "applying"
+  );
 }
 
 export const STATUS_TEXT: Record<PriceImportStatus, SupplierTextKey> = {
@@ -73,7 +82,12 @@ export const STATUS_TEXT: Record<PriceImportStatus, SupplierTextKey> = {
   columns: "price.status.columns",
   reading: "price.status.reading",
   parsed: "price.status.parsed",
+  matching: "price.status.matching",
+  review: "price.status.review",
+  applying: "price.status.applying",
+  applied: "price.status.applied",
   failed: "price.status.failed",
+  expired: "price.status.expired",
 };
 
 export type StatusTone = "neutral" | "warning" | "success" | "danger";
@@ -81,10 +95,13 @@ export type StatusTone = "neutral" | "warning" | "success" | "danger";
 export function statusTone(status: PriceImportStatus): StatusTone {
   switch (status) {
     case "columns":
+    case "review":
       return "warning";
     case "parsed":
+    case "applied":
       return "success";
     case "failed":
+    case "expired":
       return "danger";
     default:
       return "neutral";
@@ -190,6 +207,13 @@ export function rowErrorText(error: PriceRowErrorValue, t: Translate): string {
         value: number(error.value),
         max: number(error.max),
       });
+    // Found by matching with the catalog (TASK-047). The row number is not a quantity: no separators.
+    case "repeated_row":
+      return t("price.rowError.repeatedRow", { value: String(error.value ?? "") });
+    case "service_item":
+      return t("price.rowError.serviceItem");
+    case "supplier_type":
+      return t("price.rowError.supplierType");
   }
 }
 
@@ -249,5 +273,28 @@ export function progressText(entry: PriceImport, t: Translate, lang: Lang): stri
     return t("price.columnsWaiting", { rows: rowsText(lang, entry.stats.dataRows, t) });
   }
   if (entry.status === "failed" && entry.failure) return failureText(entry.failure, t);
+  if (entry.status === "matching" && entry.match) {
+    if (entry.match.aiWaiting) return t("price.aiWaiting");
+    return t("price.progressMatch", {
+      done: formatNumber(entry.match.done),
+      total: formatNumber(entry.match.total),
+    });
+  }
+  if (entry.status === "review" && entry.match) {
+    return t("price.matched.short", {
+      confident: formatNumber(entry.match.confident),
+      review: formatNumber(entry.match.review),
+      notFound: formatNumber(entry.match.notFound),
+    });
+  }
+  if (entry.status === "applied" && entry.result) {
+    return t("price.applied.short", {
+      updated: formatNumber(entry.result.updated + entry.result.returned),
+      created: formatNumber(entry.result.created),
+      withdrawn: formatNumber(entry.result.withdrawnOutOfStock + entry.result.withdrawnMissing),
+      requested: formatNumber(entry.result.requested),
+    });
+  }
+  if (entry.status === "expired") return t("price.expired.short");
   return null;
 }

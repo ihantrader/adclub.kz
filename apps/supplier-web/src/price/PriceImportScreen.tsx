@@ -159,7 +159,12 @@ function Body({
     </Banner>
   );
 
-  if (entry.status === "parsing" || entry.status === "reading") {
+  if (
+    entry.status === "parsing" ||
+    entry.status === "reading" ||
+    entry.status === "matching" ||
+    entry.status === "applying"
+  ) {
     return (
       <>
         {same}
@@ -176,11 +181,15 @@ function Body({
     );
   }
 
-  if (entry.status === "failed") {
+  if (entry.status === "failed" || entry.status === "expired") {
     return (
       <>
         <Banner tone="danger" icon="alertTriangle">
-          {entry.failure ? failureText(entry.failure, t) : t("price.error.notATable")}
+          {entry.status === "expired"
+            ? t("price.expired.short")
+            : entry.failure
+              ? failureText(entry.failure, t)
+              : t("price.error.notATable")}
         </Banner>
         <div>
           <Button icon="fileSpreadsheet" onClick={() => navigate("price")}>
@@ -224,21 +233,28 @@ function Body({
               ? "price.parsed.columnsRemembered"
               : "price.parsed.columnsConfirmed",
           )}{" "}
-          <button type="button" className="text-link" onClick={() => setEditing(true)}>
-            {t("price.parsed.changeColumns")}
-          </button>
+          {entry.status !== "applied" && (
+            <button type="button" className="text-link" onClick={() => setEditing(true)}>
+              {t("price.parsed.changeColumns")}
+            </button>
+          )}
         </p>
         {stats && stats.serviceRows > 0 && (
           <p className="ac-text-body-s ac-muted">
             {t("price.parsed.serviceRows", { n: formatNumber(stats.serviceRows) })}
           </p>
         )}
+        {(entry.status === "review" || entry.status === "applied") && (
+          <p className="ac-text-body">{progressText(entry, t, lang)}</p>
+        )}
         <p className="ac-text-body-s price-summary__next">
           <Icon name="info" size={16} />
-          <span>{t("price.parsed.next")}</span>
+          <span>{t(entry.status === "review" ? "price.matched.next" : "price.parsed.next")}</span>
         </p>
       </div>
-      {(stats?.errorRows ?? 0) > 0 && <RowErrors importId={entry.id} />}
+      {((stats?.errorRows ?? 0) > 0 || (entry.match?.errors ?? 0) > 0) && (
+        <RowErrors importId={entry.id} />
+      )}
     </>
   );
 }

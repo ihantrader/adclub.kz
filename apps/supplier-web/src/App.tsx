@@ -21,6 +21,8 @@ import { NewOfferScreen, OfferCardScreen } from "./offers/OfferScreen";
 import { OffersList } from "./offers/OffersList";
 import { OrderCardScreen } from "./orders/OrderScreen";
 import { OrdersList } from "./orders/OrdersList";
+import { PriceImports } from "./price/PriceImports";
+import { PriceImportScreen } from "./price/PriceImportScreen";
 import { Scanner } from "./scan/Scanner";
 import { subscribeOnline, isOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "./i18n";
@@ -268,6 +270,10 @@ function Page({
       return <NewOfferScreen company={cabinet.company.company} />;
     case "offer":
       return <OfferCardScreen company={cabinet.company.company} />;
+    case "price":
+      return <PriceImports timeZone={card.timeZone} />;
+    case "priceImport":
+      return <PriceImportScreen timeZone={card.timeZone} />;
     default:
       return <Company cabinet={cabinet} />;
   }

@@ -1290,7 +1290,10 @@ textarea {
 
 /* Tab labels: one line (DESIGN.md 7.11). */
 .ac-tab__label {
-  max-width: 100%;
+  /* Five tabs at 375 px (SCREENS 3.2, «Прайс» since TASK-046): the longest
+     word may reach a few pixels into the neighbours' padding, whose own
+     words are short, rather than lose its last letters. */
+  max-width: calc(100% + var(--ac-space-2));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

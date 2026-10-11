@@ -9,7 +9,7 @@ import {
 } from "./supplier";
 import { languages } from "./translate";
 
-const TAB_KEYS = ["tabs.orders", "tabs.offers", "tabs.scan", "tabs.more"] as const;
+const TAB_KEYS = ["tabs.orders", "tabs.offers", "tabs.scan", "tabs.price", "tabs.more"] as const;
 
 describe("supplier cabinet texts", () => {
   it("has the same, non-empty text keys in all three languages", () => {
@@ -193,8 +193,9 @@ describe("supplier cabinet texts", () => {
   it("keeps no capitalised words (DESIGN 7.4)", () => {
     for (const lang of languages) {
       for (const key of supplierTextKeys()) {
-        // Words of three letters or more in caps; «БИН»/«БСН», «SMS», «QR» are names.
-        const text = supplierText(lang, key).replace(/\b(БИН|БСН|BIN|SMS)\b/g, "");
+        // Words of three letters or more in caps; «БИН»/«БСН», «SMS», «QR» are names,
+        // and so are the formats of a price file, «CSV» and «UTF-8» (TASK-046).
+        const text = supplierText(lang, key).replace(/\b(БИН|БСН|BIN|SMS|CSV|UTF)\b/g, "");
         expect(text).not.toMatch(/\b[A-ZА-ЯЁӘҒҚҢӨҰҮҺІ]{3,}\b/u);
       }
     }

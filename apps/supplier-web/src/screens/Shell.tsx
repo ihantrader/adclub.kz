@@ -46,8 +46,8 @@ export interface ShellProps {
 
 /**
  * The frame of every page (SCREENS 3.2, 6.0): the company in the header
- * always; on a phone — bottom tabs «Заявки · Предложения · Сканер · Ещё»
- * (no «Прайс» until stage C); from 1024 px — the side menu (DESIGN 7.5).
+ * always; on a phone — bottom tabs «Заявки · Предложения · Сканер · Прайс ·
+ * Ещё» («Прайс» — stage C, TASK-046); from 1024 px — the side menu (DESIGN 7.5).
  * Banners above every page: no network, a new version, the company's state.
  */
 export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
@@ -91,6 +91,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const tabs: NavItem<StaticRoute>[] = [
     ordersItem,
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
+    { key: "price", label: t("tabs.price"), icon: "fileSpreadsheet", href: routePaths.price },
     { key: "more", label: t("tabs.more"), icon: "dots", href: routePaths.more },
   ];
   // The desktop menu lists the sections of «Ещё» directly (design/mockups/supplier.html).
@@ -98,6 +99,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
     ordersItem,
     { key: "scan", label: t("tabs.scan"), icon: "scan", href: routePaths.scan },
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
+    { key: "price", label: t("tabs.price"), icon: "fileSpreadsheet", href: routePaths.price },
     { key: "team", label: t("nav.team"), icon: "users", href: routePaths.team },
     { key: "company", label: t("nav.company"), icon: "store", href: routePaths.company },
     { key: "settings", label: t("nav.settings"), icon: "settings", href: routePaths.settings },

@@ -13,6 +13,7 @@ export const routePaths = {
   offerSearch: "/offers/search",
   offerNew: "/offers/new",
   scan: "/scan",
+  price: "/price",
   more: "/more",
   settings: "/settings",
   team: "/team",
@@ -23,8 +24,11 @@ export const routePaths = {
 /** A page with a fixed address. */
 export type StaticRoute = keyof typeof routePaths;
 
-/** Every page; `offer` — one offer, `/offers/<id>`; `order` — one order, `/orders/<id>`. */
-export type RouteKey = StaticRoute | "offer" | "order";
+/**
+ * Every page; `offer` — one offer, `/offers/<id>`; `order` — one order,
+ * `/orders/<id>`; `priceImport` — one price list upload, `/price/<id>` (TASK-046).
+ */
+export type RouteKey = StaticRoute | "offer" | "order" | "priceImport";
 
 /** The pages reached from «Ещё» on a phone; they open with «назад» to it. */
 export const morePages: readonly RouteKey[] = ["settings", "team", "company", "install"];
@@ -37,9 +41,14 @@ export const DEFAULT_ROUTE: StaticRoute = "orders";
 const UUID = "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
 const OFFER_PATH = new RegExp(`^/offers/${UUID}$`, "i");
 const ORDER_PATH = new RegExp(`^/orders/${UUID}$`, "i");
+const PRICE_IMPORT_PATH = new RegExp(`^/price/${UUID}$`, "i");
 
 export function offerPath(offerId: string): string {
   return `/offers/${offerId}`;
+}
+
+export function priceImportPath(importId: string): string {
+  return `/price/${importId}`;
 }
 
 export function orderPath(orderId: string): string {
@@ -57,6 +66,8 @@ export function locationOf(pathname: string): { route: RouteKey | null; id: stri
   if (offer) return { route: "offer", id: offer[1]!.toLowerCase() };
   const order = ORDER_PATH.exec(path);
   if (order) return { route: "order", id: order[1]!.toLowerCase() };
+  const priceImport = PRICE_IMPORT_PATH.exec(path);
+  if (priceImport) return { route: "priceImport", id: priceImport[1]!.toLowerCase() };
   return { route: null, id: null };
 }
 
@@ -66,11 +77,12 @@ export function routeOf(pathname: string): RouteKey | null {
 }
 
 /** The bottom tab (and the side menu item) a page belongs to. */
-export function tabOf(route: RouteKey): "orders" | "offers" | "scan" | "more" {
+export function tabOf(route: RouteKey): "orders" | "offers" | "scan" | "price" | "more" {
   if (morePages.includes(route) || route === "more") return "more";
   if (offerPages.includes(route)) return "offers";
   if (route === "order") return "orders";
-  return route as "orders" | "offers" | "scan";
+  if (route === "priceImport") return "price";
+  return route as "orders" | "offers" | "scan" | "price";
 }
 
 /** The side menu item of a page (the sections of «Ещё» are items of their own there). */
@@ -78,6 +90,7 @@ export function menuOf(route: RouteKey): StaticRoute {
   if (route === "more") return "settings";
   if (route === "offer" || offerPages.includes(route)) return "offers";
   if (route === "order") return "orders";
+  if (route === "priceImport") return "price";
   return route;
 }
 

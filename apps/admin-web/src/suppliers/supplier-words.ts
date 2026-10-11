@@ -1,6 +1,8 @@
 import { isApiError } from "@adclub/api-client";
 import type {
   AdminSupplierMember,
+  PriceImport,
+  PriceImportFailure,
   SupplierInvitationStatus,
   SupplierLeadStatusValue,
   SupplierLeadSource,
@@ -247,4 +249,39 @@ export function supplierErrorView(error: unknown): VehicleErrorView {
     default:
       return view(actionErrorText(error));
   }
+}
+
+/** The state of a price list upload (A-SUP-03 «Прайс», TASK-046). */
+export const PRICE_IMPORT_STATUS_TEXT: Record<PriceImport["status"], string> = {
+  parsing: "Файл читается",
+  columns: "Ждёт подтверждения колонок",
+  reading: "Строки разбираются",
+  parsed: "Разобран",
+  failed: "Не прочитан",
+};
+
+const PRICE_FAILURE_TEXT: Record<PriceImportFailure["reason"], string> = {
+  not_a_table: "не таблица",
+  old_excel: "старый .xls",
+  encrypted: "защищён паролем",
+  broken: "файл повреждён",
+  empty: "нет строк с товарами",
+  too_many_rows: "слишком много строк",
+  encoding: "неизвестная кодировка",
+  file_missing: "файл удалён по сроку хранения",
+  timeout: "обрабатывался слишком долго",
+};
+
+/** Why an upload was not read, in a few words. */
+export function priceImportFailureText(failure: PriceImportFailure): string {
+  return PRICE_FAILURE_TEXT[failure.reason] ?? failure.reason;
+}
+
+/** «Строк с товарами: 1 240, с ошибками: 12» — what is known of the rows so far. */
+export function priceImportNumbers(entry: PriceImport): string {
+  if (!entry.stats) return "—";
+  const goods = `с товарами: ${entry.stats.dataRows.toLocaleString("ru-RU")}`;
+  return entry.stats.errorRows === null
+    ? goods
+    : `${goods}, с ошибками: ${entry.stats.errorRows.toLocaleString("ru-RU")}`;
 }

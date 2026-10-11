@@ -1,10 +1,14 @@
 import { ApiError, type ApiErrorCode } from "@adclub/api-client";
+import type { PriceImport } from "@adclub/contracts";
 import { kzBinCheckDigit } from "@adclub/domain";
 import { describe, expect, it } from "vitest";
 import {
   binProblem,
   hiddenPhone,
   leadMoves,
+  PRICE_IMPORT_STATUS_TEXT,
+  priceImportFailureText,
+  priceImportNumbers,
   mobilePhone,
   supplierErrorView,
   waitText,
@@ -119,5 +123,32 @@ describe("the words of «Поставщики» (TASK-036)", () => {
     expect(at("firstMember.phone").text).toMatch(/казахстанский мобильный/);
     expect(at("closedDates.0.date")).toMatchObject({ field: "closedDates" });
     expect(at("contractSignedOn").text).toMatch(/позже сегодняшней/);
+  });
+});
+
+describe("the words of «Прайс» of a supplier's card (TASK-046)", () => {
+  const entry = (stats: PriceImport["stats"]) => ({ stats }) as PriceImport;
+
+  it("say what is known of the rows so far", () => {
+    expect(priceImportNumbers(entry(null))).toBe("—");
+    expect(
+      priceImportNumbers(
+        entry({ rows: 1250, dataRows: 1240, serviceRows: 9, parsedRows: null, errorRows: null }),
+      ),
+    ).toBe(`с товарами: ${(1240).toLocaleString("ru-RU")}`);
+    expect(
+      priceImportNumbers(
+        entry({ rows: 1250, dataRows: 1240, serviceRows: 9, parsedRows: 1228, errorRows: 12 }),
+      ),
+    ).toBe(`с товарами: ${(1240).toLocaleString("ru-RU")}, с ошибками: 12`);
+  });
+
+  it("name every state and every reason of a failure", () => {
+    for (const status of ["parsing", "columns", "reading", "parsed", "failed"] as const) {
+      expect(PRICE_IMPORT_STATUS_TEXT[status]).toBeTruthy();
+    }
+    expect(
+      priceImportFailureText({ reason: "old_excel", detected: "xls", limit: null, line: null }),
+    ).toBe("старый .xls");
   });
 });

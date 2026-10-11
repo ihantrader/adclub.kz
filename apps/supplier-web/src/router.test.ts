@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { locationOf, menuOf, offerPath, orderPath, routeOf, tabOf } from "./router";
+import {
+  locationOf,
+  menuOf,
+  offerPath,
+  orderPath,
+  priceImportPath,
+  routeOf,
+  tabOf,
+} from "./router";
 
 describe("the cabinet's addresses", () => {
   it("maps every page to its address and back, with or without a trailing slash", () => {
@@ -7,16 +15,26 @@ describe("the cabinet's addresses", () => {
     expect(routeOf("/team")).toBe("team");
     expect(routeOf("/team/")).toBe("team");
     expect(routeOf("/company")).toBe("company");
-    expect(routeOf("/price")).toBeNull();
+    expect(routeOf("/price")).toBe("price");
     expect(routeOf("/showcase")).toBeNull();
   });
 
-  it("keeps the pages of «Ещё» under its tab, and has no «Прайс» (stage C)", () => {
+  it("keeps the pages of «Ещё» under its tab", () => {
     expect(tabOf("team")).toBe("more");
     expect(tabOf("settings")).toBe("more");
     expect(tabOf("install")).toBe("more");
     expect(tabOf("scan")).toBe("scan");
-    expect(routeOf("/price")).toBeNull();
+  });
+
+  it("gives «Прайс» a tab and an upload its own address under it (stage C, TASK-046)", () => {
+    const id = "3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d";
+    expect(priceImportPath(id)).toBe(`/price/${id}`);
+    expect(locationOf(`/price/${id}`)).toEqual({ route: "priceImport", id });
+    expect(routeOf("/price/12")).toBeNull();
+    for (const route of ["price", "priceImport"] as const) {
+      expect(tabOf(route)).toBe("price");
+      expect(menuOf(route)).toBe("price");
+    }
   });
 
   it("gives an offer its own address, under the tab and the menu item «Предложения» (TASK-032)", () => {

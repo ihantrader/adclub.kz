@@ -11,6 +11,7 @@ import { StateMark, SuppliersTabs } from "./shared";
 import { SupplierMembers } from "./SupplierMembers";
 import { SupplierOffers } from "./SupplierOffers";
 import { SupplierOrders } from "./SupplierOrders";
+import { SupplierPriceImports } from "./SupplierPriceImports";
 import { SupplierProfile } from "./SupplierProfile";
 import { SupplierStatuses } from "./SupplierStatuses";
 import { SUPPLIER_TYPE_TEXT } from "./supplier-words";
@@ -21,6 +22,7 @@ const TAB_TEXT: Record<SupplierTab, string> = {
   members: "Сотрудники",
   offers: "Предложения",
   orders: "Заявки",
+  price: "Прайс",
   history: "История",
 };
 
@@ -59,6 +61,9 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
         break;
       case "orders":
         body = <SupplierOrders supplierId={supplierId} />;
+        break;
+      case "price":
+        body = <SupplierPriceImports supplierId={supplierId} />;
         break;
       case "history":
         body = (

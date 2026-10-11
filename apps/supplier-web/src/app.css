@@ -1699,3 +1699,215 @@ a.ac-button {
     transition: none;
   }
 }
+
+/* ---------- price list (S-PRICE-01, S-PRICE-02, TASK-046) ---------- */
+.price-wrap {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.price-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-6) var(--ac-space-4);
+  border: var(--ac-line) dashed var(--ac-color-border-field);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  text-align: center;
+}
+
+.price-drop > .ac-icon {
+  color: var(--ac-color-accent);
+}
+
+.price-drop--over {
+  border-color: var(--ac-color-accent);
+  background: var(--ac-color-accent-tint);
+}
+
+.price-drop__progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  width: 100%;
+  max-width: 420px;
+}
+
+.progress {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--ac-color-fill);
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ac-color-accent);
+  transition: width 150ms linear;
+}
+
+.price-history {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  list-style: none;
+}
+
+.price-history > li + li {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.price-history__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-3) var(--ac-space-4);
+  color: inherit;
+  text-decoration: none;
+}
+
+.price-history__row:hover {
+  background: var(--ac-color-surface-raised);
+}
+
+.price-history__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.price-history__main > * {
+  overflow-wrap: anywhere;
+}
+
+.price-running {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.price-running > .ac-icon {
+  flex: none;
+  color: var(--ac-color-accent);
+}
+
+.price-summary__next {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  color: var(--ac-color-text-muted);
+}
+
+.price-columns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  min-width: 0;
+}
+
+.price-table {
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.price-table th,
+.price-table td {
+  max-width: 280px;
+  padding: var(--ac-space-2);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.price-table thead th {
+  font-weight: var(--ac-font-weight-body);
+  vertical-align: bottom;
+}
+
+.price-table thead th.price-table__role {
+  min-width: 176px;
+  /* The selects stand in one line; «определено автоматически» goes under. */
+  vertical-align: top;
+}
+
+.price-table__role .inline-field {
+  width: 100%;
+}
+
+.price-table__role .inline-field__select {
+  width: 100%;
+}
+
+.price-table__auto {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  margin-top: var(--ac-space-1);
+  color: var(--ac-color-text-muted);
+}
+
+.price-table__header th {
+  color: var(--ac-color-text);
+  font-weight: var(--ac-font-weight-label);
+}
+
+.price-table__no {
+  width: 1%;
+  color: var(--ac-color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.price-table td.price-table__cell--off {
+  color: var(--ac-color-text-disabled);
+}
+
+.price-errors {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  list-style: none;
+}
+
+.price-errors__row {
+  display: flex;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-3) var(--ac-space-4);
+}
+
+.price-errors__row + .price-errors__row {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.price-errors__no {
+  flex: none;
+  min-width: 88px;
+}
+
+@media (min-width: 1024px) {
+  .page > .price-columns {
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress > span {
+    transition: none;
+  }
+}

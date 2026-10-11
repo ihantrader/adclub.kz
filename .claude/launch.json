@@ -27,6 +27,13 @@
       "port": 3999
     },
     {
+      "name": "worker-test-ai",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "api", "worker"],
+      "env": { "AI_PROVIDER": "test" },
+      "port": 3999
+    },
+    {
       "name": "mobile-web",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "mobile", "exec", "expo", "start", "--web", "--port", "8082"],

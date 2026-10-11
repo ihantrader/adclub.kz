@@ -109,6 +109,13 @@ export type {
 } from "./offer/service-price";
 export { warrantyTextContacts } from "./offer/warranty-text";
 export type { WarrantyContactKind } from "./offer/warranty-text";
+export {
+  offerLeadDaysProblem,
+  offerPriceProblem,
+  offerTermsProblem,
+  offerTermsShapeProblem,
+} from "./offer/offer-terms";
+export type { OfferLimits, OfferTerms, OfferTermsProblem } from "./offer/offer-terms";
 export { daysBetween, recommendedScore } from "./offer/offer-ranking";
 export type { RankedOfferFacts, RecommendedWeights } from "./offer/offer-ranking";
 export {
@@ -251,3 +258,24 @@ export type {
   PriceRowLimits,
   PriceRowReading,
 } from "./price-import/price-values";
+export {
+  candidateScore,
+  exactArticleDecision,
+  isStrongCandidate,
+  nameTokens,
+  priceNameKey,
+  priceRowKey,
+  rankCandidates,
+  repeatedRows,
+  searchWords,
+  sharpPriceChange,
+  strongCandidate,
+} from "./price-import/price-match";
+export type {
+  ArticleItem,
+  ExactArticleDecision,
+  NameCandidate,
+  NameRow,
+  PriceRowKey,
+  PriceRowKeyKind,
+} from "./price-import/price-match";

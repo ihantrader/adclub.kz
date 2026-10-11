@@ -98,6 +98,70 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keys remembered formats by a hash, keeps refusals and queued phases, and rolls back keeping the imports (price import hardening)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('price-hardening-city', 'Город прайса') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Автомир Степь', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77010000363') RETURNING id",
+    );
+    const member = await client.query<{ id: string }>(
+      "INSERT INTO supplier_member (supplier_id, account_id, display_name, added_by) VALUES ($1, $2, 'Ерлан', 'operator') RETURNING id",
+      [supplierId, account.rows[0]!.id],
+    );
+    const memberId = member.rows[0]!.id;
+    const importId = "00000000-0000-4000-8000-00000000046a";
+    // A queued upload has no phase yet; its version starts at 1.
+    await client.query(
+      "INSERT INTO price_import (id, supplier_id, uploaded_by_member_id, uploaded_by_account_id, file_kind, file_key, byte_size, checksum) VALUES ($1, $2, $3, $4, 'csv', 'price-imports/x/z', 10, 'sum')",
+      [importId, supplierId, memberId, account.rows[0]!.id],
+    );
+    const queued = await client.query<{ phase_started_at: Date | null; version: number }>(
+      "SELECT phase_started_at, version FROM price_import WHERE id = $1",
+      [importId],
+    );
+    expect(queued.rows[0]).toEqual({ phase_started_at: null, version: 1 });
+    // A header far longer than a btree key holds is remembered by its hash.
+    const long = "артикул|".repeat(2000);
+    await client.query(
+      "INSERT INTO price_import_format (supplier_id, header_key, header_hash, roles, remembered_by_member_id) VALUES ($1, $2, encode(sha256(convert_to($2, 'UTF8')), 'hex'), '[\"article\"]', $3)",
+      [supplierId, long, memberId],
+    );
+    await client.query(
+      "INSERT INTO price_import_format (supplier_id, header_key, header_hash, roles, remembered_by_member_id) VALUES ($1, 'цена', encode(sha256(convert_to('цена', 'UTF8')), 'hex'), '[\"price\"]', $2)",
+      [supplierId, memberId],
+    );
+    await client.query(
+      "INSERT INTO price_import_refusal (id, supplier_id, member_id, reason, byte_size) VALUES (gen_random_uuid(), $1, $2, 'not_a_table', 9)",
+      [supplierId, memberId],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "price_import_refusal")).toBe(false);
+    // The queued upload gets a phase as before; the short format stays, keyed by its text.
+    const back = await client.query<{ phase_started_at: Date | null }>(
+      "SELECT phase_started_at FROM price_import WHERE id = $1",
+      [importId],
+    );
+    expect(back.rows[0]!.phase_started_at).not.toBeNull();
+    const formats = await client.query<{ header_key: string }>(
+      "SELECT header_key FROM price_import_format WHERE supplier_id = $1",
+      [supplierId],
+    );
+    expect(formats.rows.map((row) => row.header_key)).toEqual(["цена"]);
+    await client.query("DELETE FROM price_import_format WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM price_import WHERE id = $1", [importId]);
+    await client.query("DELETE FROM supplier_member WHERE id = $1", [memberId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM account WHERE id = $1", [account.rows[0]!.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+  });
+
   it("holds price list uploads, their rows and remembered formats, and rolls back keeping the companies (price imports)", async () => {
     const city = await client.query<{ id: string }>(
       "INSERT INTO city (code, name_ru) VALUES ('price-import-city', 'Город прайса') RETURNING id",

@@ -10,6 +10,7 @@ import {
   type PriceImportPage,
   type PriceImportRowsPage,
   type PriceImportRowsQuery,
+  type PriceImportVersionConflictDetails,
   type UploadPriceImportQuery,
 } from "@adclub/contracts";
 import { priceRolesProblem } from "@adclub/domain";
@@ -30,8 +31,10 @@ import {
   describeRow,
 } from "./price-import-views";
 import {
+  headerHash,
   priceImport,
   priceImportFormatTable,
+  priceImportRefusal,
   priceImportRow,
   type PriceImportRecord,
   type StoredColumn,
@@ -50,22 +53,45 @@ function encodeCursor(createdAt: Date, id: string): string {
   return Buffer.from(JSON.stringify([createdAt.toISOString(), id]), "utf8").toString("base64url");
 }
 
-function decodeCursor(cursor: string): { createdAt: string; id: string } {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function badCursor() {
+  return validationError("cursor", "Use the nextCursor of the previous page");
+}
+
+/**
+ * A cursor of the history exactly as `encodeCursor` writes it: an ISO
+ * instant that reads back to itself and a UUID — anything else (a year
+ * 275760, «1», 36 dashes) is a 400, never a query the database refuses.
+ */
+export function decodeCursor(cursor: string): { createdAt: string; id: string } {
   try {
     const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (
-      Array.isArray(value) &&
-      typeof value[0] === "string" &&
-      typeof value[1] === "string" &&
-      !Number.isNaN(Date.parse(value[0])) &&
-      /^[0-9a-f-]{36}$/i.test(value[1])
-    ) {
-      return { createdAt: value[0], id: value[1] };
+    if (Array.isArray(value) && typeof value[0] === "string" && typeof value[1] === "string") {
+      const instant = new Date(value[0]);
+      const year = instant.getUTCFullYear();
+      if (
+        !Number.isNaN(instant.getTime()) &&
+        instant.toISOString() === value[0] &&
+        year >= 2000 &&
+        year <= 9999 &&
+        UUID.test(value[1])
+      ) {
+        return { createdAt: value[0], id: value[1] };
+      }
     }
   } catch {
     // Falls through to the refusal below.
   }
-  throw validationError("cursor", "Use the nextCursor of the previous page");
+  throw badCursor();
+}
+
+/** A cursor of the rows: the number of the last row of the page, as the file numbers them. */
+export function decodeRowCursor(cursor: string): number {
+  if (!/^\d{1,10}$/.test(cursor)) throw badCursor();
+  const rowNo = Number(cursor);
+  if (rowNo > 2_147_483_647) throw badCursor();
+  return rowNo;
 }
 
 /**
@@ -98,25 +124,32 @@ export class PriceImportsService {
     actor: PriceImportActor,
   ): Promise<PriceImport> {
     const values = await this.settings.values();
-    const maxMb = values.import_max_file_mb;
-    if (bytes.length > maxMb * 1024 * 1024) {
-      throw new ApiException(
-        413,
-        "PAYLOAD_TOO_LARGE",
-        `The file is larger than the limit of ${String(maxMb)} MB`,
-      );
-    }
     // Before the content is looked at: a company over its limit costs nothing.
     await this.assertWithinLimit(
       this.database.db,
       actor.supplierId,
       values.price_import_uploads_per_supplier_hour,
     );
+    const maxMb = values.import_max_file_mb;
+    if (bytes.length > maxMb * 1024 * 1024) {
+      await this.refused(actor, "too_large", bytes.length);
+      throw new ApiException(
+        413,
+        "PAYLOAD_TOO_LARGE",
+        `The file is larger than the limit of ${String(maxMb)} MB`,
+      );
+    }
+    // Only cheap checks here (TASK-046.A requirement 1): the first bytes, the
+    // ZIP directory, the start of a text. Unpacking and reading through are
+    // the worker's.
     let facts;
     try {
       facts = checkPriceFile(bytes, values.import_max_rows);
     } catch (error) {
-      if (error instanceof PriceFileError) throw error.toApiException();
+      if (error instanceof PriceFileError) {
+        await this.refused(actor, error.reason, bytes.length);
+        throw error.toApiException();
+      }
       throw error;
     }
     const checksum = createHash("sha256").update(bytes).digest("hex");
@@ -176,6 +209,28 @@ export class PriceImportsService {
     return describeImport(created, await this.memberName(created.uploadedByMemberId));
   }
 
+  /**
+   * An upload refused before anything was stored still costs the company an
+   * attempt (TASK-046.A requirement 3): without it, a file refused at once
+   * could be sent again and again for free.
+   */
+  private async refused(actor: PriceImportActor, reason: string, byteSize: number): Promise<void> {
+    await this.database.db.insert(priceImportRefusal).values({
+      id: randomUUID(),
+      supplierId: actor.supplierId,
+      memberId: actor.memberId,
+      reason,
+      byteSize,
+    });
+    this.logger.log(
+      `Price list upload refused supplier=${actor.supplierId} reason=${reason} bytes=${String(byteSize)}`,
+    );
+  }
+
+  /**
+   * The uploads of a company in the last hour — stored ones and refused ones
+   * alike — against `price_import_uploads_per_supplier_hour`.
+   */
   private async assertWithinLimit(
     executor: DbExecutor,
     supplierId: string,
@@ -184,9 +239,15 @@ export class PriceImportsService {
     const result = await executor.execute<{ uploads: number; wait: number | null }>(sql`
       SELECT count(*)::int AS uploads,
         extract(epoch FROM min(created_at) + make_interval(secs => ${HOUR_SECONDS}) - now())::float AS wait
-      FROM price_import
-      WHERE supplier_id = ${supplierId}::uuid
-        AND created_at > now() - make_interval(secs => ${HOUR_SECONDS})
+      FROM (
+        SELECT created_at FROM price_import
+        WHERE supplier_id = ${supplierId}::uuid
+          AND created_at > now() - make_interval(secs => ${HOUR_SECONDS})
+        UNION ALL
+        SELECT created_at FROM price_import_refusal
+        WHERE supplier_id = ${supplierId}::uuid
+          AND created_at > now() - make_interval(secs => ${HOUR_SECONDS})
+      ) attempts
     `);
     const row = result.rows[0];
     if (row && Number(row.uploads) >= limit) {
@@ -258,8 +319,11 @@ export class PriceImportsService {
     return record;
   }
 
-  private async memberName(memberId: string): Promise<string | null> {
-    const [member] = await this.database.db
+  private async memberName(
+    memberId: string,
+    executor: DbExecutor = this.database.db,
+  ): Promise<string | null> {
+    const [member] = await executor
       .select({ name: supplierMember.displayName })
       .from(supplierMember)
       .where(eq(supplierMember.id, memberId));
@@ -320,6 +384,26 @@ export class PriceImportsService {
             : "The file is still being read; wait for it",
         );
       }
+      if (body.expectedVersion !== undefined && body.expectedVersion !== record.version) {
+        // A colleague confirmed the roles after this page was loaded (TASK-046.A).
+        const details: PriceImportVersionConflictDetails = {
+          status: record.status,
+          version: record.version,
+          confirmedBy: record.columnsConfirmedByMemberId
+            ? {
+                memberId: record.columnsConfirmedByMemberId,
+                name: await this.memberName(record.columnsConfirmedByMemberId, tx),
+              }
+            : null,
+          confirmedAt: record.columnsConfirmedAt?.toISOString() ?? null,
+        };
+        throw new ApiException(
+          409,
+          "PRICE_IMPORT_VERSION_CONFLICT",
+          "The columns were confirmed by someone else meanwhile; reload the page",
+          { details },
+        );
+      }
       const previous = record.columnMapping ?? [];
       if (body.roles.length !== previous.length) {
         throw validationError(
@@ -351,24 +435,30 @@ export class PriceImportsService {
             serviceRows: stats.serviceRows,
             valuesRead: 0,
           },
-          phaseStartedAt: new Date(),
+          // The phase begins when the worker takes it, not while it waits.
+          phaseStartedAt: null,
           parsedAt: null,
+          version: record.version + 1,
+          columnsConfirmedByMemberId: actor.memberId,
+          columnsConfirmedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(priceImport.id, importId))
         .returning();
       if (record.headerKey) {
+        const hash = headerHash(record.headerKey);
         if (body.remember) {
           await tx
             .insert(priceImportFormatTable)
             .values({
               supplierId: actor.supplierId,
               headerKey: record.headerKey,
+              headerHash: hash,
               roles: body.roles,
               rememberedByMemberId: actor.memberId,
             })
             .onConflictDoUpdate({
-              target: [priceImportFormatTable.supplierId, priceImportFormatTable.headerKey],
+              target: [priceImportFormatTable.supplierId, priceImportFormatTable.headerHash],
               set: {
                 roles: body.roles,
                 rememberedByMemberId: actor.memberId,
@@ -381,7 +471,7 @@ export class PriceImportsService {
             .where(
               and(
                 eq(priceImportFormatTable.supplierId, actor.supplierId),
-                eq(priceImportFormatTable.headerKey, record.headerKey),
+                eq(priceImportFormatTable.headerHash, hash),
               ),
             );
         }
@@ -398,10 +488,7 @@ export class PriceImportsService {
     query: PriceImportRowsQuery,
   ): Promise<PriceImportRowsPage> {
     const record = await this.own(this.database.db, supplierId, importId);
-    const after = query.cursor === undefined ? null : Number(query.cursor);
-    if (after !== null && (!Number.isInteger(after) || after < 0)) {
-      throw validationError("cursor", "Use the nextCursor of the previous page");
-    }
+    const after = query.cursor === undefined ? null : decodeRowCursor(query.cursor);
     const filter: SQL[] = [eq(priceImportRow.importId, importId), eq(priceImportRow.kind, "data")];
     if (query.only === "errors") filter.push(isNotNull(priceImportRow.errors));
     const [rows, [total]] = await Promise.all([

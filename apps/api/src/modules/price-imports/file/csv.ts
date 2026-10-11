@@ -20,6 +20,9 @@ import { MAX_CELL_LENGTH, MAX_COLUMNS, tableLike, type FileRow, type RowSink } f
 
 export type CsvDelimiter = ";" | "," | "\t";
 
+/** Text kept of one cell while it is read (a cell keeps `MAX_CELL_LENGTH` after trimming). */
+const CELL_KEEP = MAX_CELL_LENGTH * 4;
+
 export interface DecodedCsv {
   text: string;
   encoding: "utf-8" | "utf-16le" | "utf-16be" | "windows-1251";
@@ -32,16 +35,28 @@ function startsWith(bytes: Buffer, signature: readonly number[]): boolean {
 /** Letters a Russian or Kazakh text in Windows-1251 is made of, beyond ASCII. */
 const CYRILLIC_1251 = /[\u0400-\u04ff«»№–—“”„‘’…•°±§©®™\u00a0]/u;
 
-/** Decodes the bytes of a CSV, or refuses with what they are instead. */
-export function decodeCsv(bytes: Buffer): DecodedCsv {
+/**
+ * Decodes the bytes of a CSV, or refuses with what they are instead.
+ * `partial` — the bytes are the start of a file: a character cut at their
+ * end is not a fault of the encoding.
+ */
+export function decodeCsv(bytes: Buffer, partial = false): DecodedCsv {
+  const stream = { stream: partial };
+  const utf8 = (part: Buffer) => new TextDecoder("utf-8", { fatal: true }).decode(part, stream);
   if (startsWith(bytes, [0xef, 0xbb, 0xbf])) {
     return { text: utf8(bytes.subarray(3)), encoding: "utf-8" };
   }
   if (startsWith(bytes, [0xff, 0xfe])) {
-    return { text: new TextDecoder("utf-16le").decode(bytes.subarray(2)), encoding: "utf-16le" };
+    return {
+      text: new TextDecoder("utf-16le").decode(bytes.subarray(2), stream),
+      encoding: "utf-16le",
+    };
   }
   if (startsWith(bytes, [0xfe, 0xff])) {
-    return { text: new TextDecoder("utf-16be").decode(bytes.subarray(2)), encoding: "utf-16be" };
+    return {
+      text: new TextDecoder("utf-16be").decode(bytes.subarray(2), stream),
+      encoding: "utf-16be",
+    };
   }
   const head = bytes.subarray(0, 4096);
   if (head.includes(0)) {
@@ -49,7 +64,7 @@ export function decodeCsv(bytes: Buffer): DecodedCsv {
     let oddZeros = 0;
     for (let at = 1; at < head.length; at += 2) if (head[at] === 0) oddZeros++;
     if (oddZeros > head.length / 2 / 3) {
-      return { text: new TextDecoder("utf-16le").decode(bytes), encoding: "utf-16le" };
+      return { text: new TextDecoder("utf-16le").decode(bytes, stream), encoding: "utf-16le" };
     }
     throw new PriceFileError("not_a_table", "This is a binary file, not a table", {
       detected: "binary",
@@ -75,10 +90,6 @@ export function decodeCsv(bytes: Buffer): DecodedCsv {
   }
   if (cyrillic === 0 || other > cyrillic * 0.1) throw encodingError();
   return { text, encoding: "windows-1251" };
-}
-
-function utf8(bytes: Buffer): string {
-  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
 function encodingError(): PriceFileError {
@@ -147,9 +158,13 @@ export function* csvRows(text: string, delimiter: CsvDelimiter): Generator<FileR
   let recordNo = 1;
   let line = 1;
   let quoteLine = 1;
+  // A line of a million separators, a cell of megabytes: only what is kept is held.
+  const push = () => {
+    if (cells.length < MAX_COLUMNS) cells.push(cell);
+  };
   const record = (): FileRow | null => {
-    cells.push(cell);
-    const values = cells.slice(0, MAX_COLUMNS).map(cellOf);
+    push();
+    const values = cells.map(cellOf);
     cells = [];
     cell = "";
     const rowNo = recordNo++;
@@ -160,14 +175,14 @@ export function* csvRows(text: string, delimiter: CsvDelimiter): Generator<FileR
     if (quoted) {
       if (character === '"') {
         if (text[index + 1] === '"') {
-          cell += '"';
+          if (cell.length < CELL_KEEP) cell += '"';
           index++;
         } else {
           quoted = false;
         }
       } else {
         if (character === "\n") line++;
-        cell += character;
+        if (cell.length < CELL_KEEP) cell += character;
       }
       continue;
     }
@@ -176,14 +191,14 @@ export function* csvRows(text: string, delimiter: CsvDelimiter): Generator<FileR
       cell = "";
       quoteLine = line;
     } else if (character === delimiter) {
-      cells.push(cell);
+      push();
       cell = "";
     } else if (character === "\r" || character === "\n") {
       if (character === "\r" && text[index + 1] === "\n") index++;
       line++;
       const row = record();
       if (row) yield row;
-    } else {
+    } else if (cell.length < CELL_KEEP) {
       cell += character;
     }
   }
@@ -207,54 +222,93 @@ export interface CsvFacts {
   delimiter: CsvDelimiter;
 }
 
-/**
- * The check of an upload: the text decodes, is a table (a row of two or
- * more filled cells) and has no more than `maxRows` non-empty rows.
- */
-export function checkCsv(bytes: Buffer, maxRows: number): CsvFacts {
-  const { text, encoding } = decodeCsv(bytes);
+/** What the start of a text says before its rows are read: what it is, how it splits. */
+function textFacts(text: string): CsvDelimiter {
   if (text.trim() === "") throw new PriceFileError("empty", "The file is empty");
   const other = notTableText(text);
   if (other) {
     throw new PriceFileError("not_a_table", "This is not a table", { detected: other });
   }
-  const delimiter = detectDelimiter(text);
+  return detectDelimiter(text);
+}
+
+function notATable(): PriceFileError {
+  return new PriceFileError("not_a_table", "The text has no columns: it is not a table", {
+    detected: "text",
+  });
+}
+
+function tooManyRows(maxRows: number): PriceFileError {
+  return new PriceFileError(
+    "too_many_rows",
+    `The file has more than ${String(maxRows)} rows; at most ${String(maxRows)} are taken at once`,
+    { limit: maxRows },
+  );
+}
+
+/** The most of a CSV the upload looks at (TASK-046.A requirement 1). */
+export const CSV_HEAD_BYTES = 64 * 1024;
+
+/**
+ * The check of an upload (TASK-046.A requirement 1): never more than the
+ * first `CSV_HEAD_BYTES` are decoded and read. A file that small is
+ * checked whole — it decodes, is a table (a row of two or more filled
+ * cells), has no more than `maxRows` non-empty rows and no quote left
+ * open — in well under a millisecond. Of a larger one only its start is
+ * judged: the encoding and whether the text is a table at all; reading it
+ * through is the worker's (`readCsv`), with the same reasons.
+ */
+export function checkCsv(bytes: Buffer, maxRows: number): CsvFacts {
+  const whole = bytes.length <= CSV_HEAD_BYTES;
+  const { text, encoding } = decodeCsv(whole ? bytes : bytes.subarray(0, CSV_HEAD_BYTES), !whole);
+  const delimiter = textFacts(text);
+  if (!whole) return { encoding, delimiter };
   let rows = 0;
   let table = false;
   for (const row of csvRows(text, delimiter)) {
     rows++;
     if (!table && tableLike(row)) table = true;
   }
-  if (!table) {
-    throw new PriceFileError("not_a_table", "The text has no columns: it is not a table", {
-      detected: "text",
-    });
-  }
-  if (rows > maxRows) {
-    throw new PriceFileError(
-      "too_many_rows",
-      `The file has ${String(rows)} rows; at most ${String(maxRows)} are taken at once`,
-      { limit: maxRows },
-    );
-  }
+  if (!table) throw notATable();
+  if (rows > maxRows) throw tooManyRows(maxRows);
   return { encoding, delimiter };
 }
 
-/** How many rows go to the sink between two flushes. */
-const FLUSH_EVERY = 1000;
+/** How many rows go between two turns of the event loop (and flushes of the sink). */
+const ROWS_PER_TURN = 1000;
 
-/** Reads the rows of a CSV into `sink` (the upload has checked it already). */
-export async function readCsv(bytes: Buffer, maxRows: number, sink: RowSink): Promise<CsvFacts> {
-  const facts = checkCsv(bytes, maxRows);
-  const { text } = decodeCsv(bytes);
+/**
+ * Reads the rows of a CSV into `sink`: the whole file decoded, then a first
+ * pass — is it a table, are there too many rows (it stops at the first row
+ * past the limit) — and a second one writing the rows. `between` is
+ * awaited every thousand rows: the event loop gets its turn.
+ */
+export async function readCsv(
+  bytes: Buffer,
+  maxRows: number,
+  sink: RowSink,
+  between: () => Promise<void>,
+): Promise<CsvFacts> {
+  const { text, encoding } = decodeCsv(bytes);
+  const delimiter = textFacts(text);
+  let rows = 0;
+  let table = false;
+  for (const row of csvRows(text, delimiter)) {
+    rows++;
+    if (!table && tableLike(row)) table = true;
+    if (rows > maxRows) throw tooManyRows(maxRows);
+    if (rows % ROWS_PER_TURN === 0) await between();
+  }
+  if (!table) throw notATable();
   let pending = 0;
-  for (const row of csvRows(text, facts.delimiter)) {
+  for (const row of csvRows(text, delimiter)) {
     sink.row(row);
-    if (++pending >= FLUSH_EVERY) {
+    if (++pending >= ROWS_PER_TURN) {
       pending = 0;
+      await between();
       await sink.flush();
     }
   }
   await sink.flush();
-  return facts;
+  return { encoding, delimiter };
 }

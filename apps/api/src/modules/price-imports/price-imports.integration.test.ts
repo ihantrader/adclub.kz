@@ -18,6 +18,7 @@ import {
   priceImportPageSchema,
   priceImportResponseSchema,
   priceImportRowsPageSchema,
+  priceImportVersionConflictDetailsSchema,
   rateLimitedDetailsSchema,
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
@@ -56,6 +57,7 @@ import {
   withErrorsCsv,
 } from "./testing/price-samples";
 import { writeXlsx } from "./testing/xlsx-writer";
+import { SHARED_STRINGS, xlsxBomb, xlsxWithMerges } from "./testing/zip-bomb";
 
 /**
  * TASK-046 end to end on a real PostgreSQL, Redis and object storage (MinIO)
@@ -897,4 +899,341 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     expect(uploadMs).toBeLessThan(10_000);
     expect(parseMs + valuesMs).toBeLessThan(240_000);
   }, 600_000);
+
+  // ------------------------------------------------- TASK-046.A: hardening
+
+  const ARTICLE_NAME_PRICE: PriceColumnRoleName[] = [
+    "article",
+    "name",
+    "price",
+    "availability",
+    "lead_days",
+  ];
+
+  async function rowsStored(importId: string): Promise<number> {
+    const result = await db.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM price_import_row WHERE import_id = $1",
+      [importId],
+    );
+    return result.rows[0]!.n;
+  }
+
+  /** Polls /health every 100 ms while `work` runs; the longest answer, ms. */
+  async function healthDuring(work: () => Promise<void>): Promise<{ max: number; count: number }> {
+    const health: number[] = [];
+    let polling = true;
+    const poller = (async () => {
+      while (polling) {
+        const started = performance.now();
+        const answer = await http().get("/health");
+        health.push(performance.now() - started);
+        expect(answer.status).toBe(200);
+        await sleep(100);
+      }
+    })();
+    await sleep(250);
+    try {
+      await work();
+      await sleep(300);
+    } finally {
+      polling = false;
+      await poller;
+    }
+    return { max: Math.max(...health), count: health.length };
+  }
+
+  it("refuses the acceptance's 20 MB workbook at once by its ZIP directory, /health answering throughout", async () => {
+    const of = await company();
+    // Shared strings declared as 100 bytes, gigabytes of zeros inside.
+    const bomb = xlsxBomb({ part: SHARED_STRINGS, megabytes: 19_500, declaredSize: 100 });
+    let uploadMs = 0;
+    const health = await healthDuring(async () => {
+      const started = performance.now();
+      const response = await of.upload(bomb, "bomb.xlsx");
+      uploadMs = performance.now() - started;
+      expectError(response, 400, "PRICE_IMPORT_FILE_INVALID");
+      expect(response.body.details).toMatchObject({ reason: "broken" });
+    });
+    expect(await objectsOf(of.supplierId)).toEqual([]);
+    timings.push(
+      `[price-import bomb, acceptance] bytes=${String(bomb.length)} uploadMs=${uploadMs.toFixed(0)} healthMaxMs=${health.max.toFixed(0)} healthChecks=${String(health.count)}`,
+    );
+    expect(uploadMs).toBeLessThan(500);
+    expect(health.max).toBeLessThan(200);
+  }, 120_000);
+
+  it("stores a 20 MB workbook that claims a plausible size; the worker stops unpacking it at once, /health answering throughout", async () => {
+    const of = await company();
+    // Declared as 20 MB — as much as its compressed bytes allow — gigabytes inside.
+    const bomb = xlsxBomb({
+      part: SHARED_STRINGS,
+      megabytes: 19_500,
+      declaredSize: 20 * 1024 * 1024,
+    });
+    let uploadMs = 0;
+    let settledMs = 0;
+    let importId = "";
+    const health = await healthDuring(async () => {
+      const started = performance.now();
+      const response = await of.upload(bomb, "bomb.xlsx");
+      uploadMs = performance.now() - started;
+      expect(response.status, JSON.stringify(response.body)).toBe(201);
+      importId = priceImportResponseSchema.parse(response.body).import.id;
+      const failed = await settled(of, importId, ["failed", "columns", "parsed"]);
+      settledMs = performance.now() - started;
+      expect(failed.import).toMatchObject({
+        status: "failed",
+        failure: { reason: "broken" },
+        stats: null,
+      });
+    });
+    expect(await rowsStored(importId)).toBe(0);
+    timings.push(
+      `[price-import bomb, plausible size] bytes=${String(bomb.length)} uploadMs=${uploadMs.toFixed(0)} failedAfterMs=${settledMs.toFixed(0)} healthMaxMs=${health.max.toFixed(0)} healthChecks=${String(health.count)}`,
+    );
+    // The upload is the 20 MB taken in and written to the storage — no reading.
+    expect(uploadMs).toBeLessThan(2000);
+    expect(settledMs).toBeLessThan(5000);
+    expect(health.max).toBeLessThan(200);
+  }, 120_000);
+
+  it("refuses at once, and reads in the worker, what a large CSV hides past its start", async () => {
+    const of = await company();
+    const lines = ["Артикул;Цена"];
+    for (let index = 1; index < 9_000; index++) lines.push(`X${String(index)};100`);
+    const created = await uploaded(of, Buffer.from(`${lines.join("\n")}\n"X0;100\n`));
+    const failed = await settled(of, created.id, ["failed", "columns"]);
+    expect(failed.import.failure).toMatchObject({ reason: "broken", line: 9_001 });
+  });
+
+  it("counts refused uploads in the limit of the company, and forgets them after a day", async () => {
+    await settings.set({ price_import_uploads_per_supplier_hour: 3 });
+    await sleep(100);
+    const of = await company();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expectError(await of.upload(Buffer.from("%PDF-1.7\n")), 400, "PRICE_IMPORT_FILE_INVALID");
+    }
+    const refused = await of.upload(withErrorsCsv());
+    expectError(refused, 429, "RATE_LIMITED");
+    expect(rateLimitedDetailsSchema.parse(refused.body.details).limit).toBe(
+      "price_import_uploads_per_supplier",
+    );
+    expect(Number(refused.headers["retry-after"])).toBeGreaterThan(3500);
+    // Nothing was stored of them.
+    expect(await objectsOf(of.supplierId)).toEqual([]);
+    const kept = await db.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM price_import_refusal WHERE supplier_id = $1",
+      [of.supplierId],
+    );
+    expect(kept.rows[0]!.n).toBe(3);
+    // Another company is counted on its own.
+    await uploaded(await company("Шины Юг"), withErrorsCsv());
+
+    await db.query(
+      "UPDATE price_import_refusal SET created_at = now() - interval '25 hours' WHERE supplier_id = $1",
+      [of.supplierId],
+    );
+    await worker.get(PriceImportExpiry).run();
+    const left = await db.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM price_import_refusal",
+    );
+    expect(left.rows[0]!.n).toBe(0);
+    await uploaded(of, withErrorsCsv());
+  });
+
+  it("applies 100 000 merged ranges without holding the worker: another company's file is read meanwhile", async () => {
+    const of = await company();
+    const other = await company("Шины Юг");
+    const merged = await uploaded(of, xlsxWithMerges(50_000, 100_000));
+    await sleep(200);
+    const startedAt = Date.now();
+    const small = await uploaded(other, withErrorsCsv());
+    expect((await settled(other, small.id)).import.status).toBe("columns");
+    const neighbourMs = Date.now() - startedAt;
+    const read = await settled(of, merged.id, ["columns", "failed"], 120_000);
+    expect(read.import).toMatchObject({ status: "columns", stats: { dataRows: 49_999 } });
+    // The brand merged over the rows of goods belongs to each of them.
+    expect(read.preview[5]!.cells[0]).toBe("Geely");
+    timings.push(`[price-import merges] neighbourSettledMs=${String(neighbourMs)}`);
+    expect(neighbourMs).toBeLessThan(5_000);
+  }, 180_000);
+
+  it("refuses a sheet merging more ranges than a price list has", async () => {
+    const of = await company();
+    const created = await uploaded(of, xlsxWithMerges(100, 100_001));
+    expect((await settled(of, created.id)).import.failure).toMatchObject({ reason: "broken" });
+  });
+
+  it("goes on with a retry of a run that failed while reading the values by the remembered format", async () => {
+    const of = await company();
+    const first = await uploaded(of, withErrorsCsv());
+    await settled(of, first.id);
+    await confirm(of, first.id, ARTICLE_NAME_PRICE, true);
+    await settled(of, first.id, ["parsed"]);
+    const second = await uploaded(of, withErrorsCsv());
+    expect((await settled(of, second.id, ["parsed"])).import.columnsSource).toBe("remembered");
+    // As if the run died after the file was read, halfway through the values.
+    await db.query(
+      `UPDATE price_import SET status = 'reading', parsed_at = NULL,
+         stats = jsonb_build_object('rows', 11, 'dataRows', 10, 'serviceRows', 0, 'valuesRead', 5)
+       WHERE id = $1`,
+      [second.id],
+    );
+    await db.query(
+      "UPDATE price_import_row SET parsed = NULL, errors = NULL WHERE import_id = $1",
+      [second.id],
+    );
+    await app.get(JobQueue).enqueue(parsePriceFileJob, { importId: second.id });
+    const done = await settled(of, second.id, ["parsed", "failed"]);
+    expect(done.import).toMatchObject({
+      status: "parsed",
+      stats: { dataRows: 10, errorRows: 7 },
+    });
+  });
+
+  it("counts the time of a phase from when the worker took it: a queued upload doesn't expire", async () => {
+    const of = await company();
+    const created = await uploaded(of, withErrorsCsv());
+    await settled(of, created.id);
+    // The worker set it when it took the file.
+    const started = await db.query<{ phase_started_at: Date | null; created_at: Date }>(
+      "SELECT phase_started_at, created_at FROM price_import WHERE id = $1",
+      [created.id],
+    );
+    expect(started.rows[0]!.phase_started_at!.getTime()).toBeGreaterThanOrEqual(
+      started.rows[0]!.created_at.getTime(),
+    );
+
+    // Uploaded two hours ago and still waiting for the worker.
+    await db.query(
+      "UPDATE price_import SET status = 'parsing', phase_started_at = NULL, created_at = now() - interval '2 hours' WHERE id = $1",
+      [created.id],
+    );
+    await worker.get(PriceImportExpiry).run();
+    expect((await detail(of, created.id)).import.status).toBe("parsing");
+
+    // Taken by the worker two hours ago: it times out, and its rows go.
+    await db.query(
+      "UPDATE price_import SET phase_started_at = now() - interval '2 hours' WHERE id = $1",
+      [created.id],
+    );
+    await worker.get(PriceImportExpiry).run();
+    expect((await detail(of, created.id)).import).toMatchObject({
+      status: "failed",
+      failure: { reason: "timeout" },
+    });
+    expect(await rowsStored(created.id)).toBe(0);
+  });
+
+  it("gives a timed-out import no rows from the run that is still reading it", async () => {
+    const of = await company();
+    const created = await uploaded(of, oneCExport(30_000, 0));
+    const until = Date.now() + 60_000;
+    while ((await detail(of, created.id)).import.progress?.done === 0 && Date.now() < until) {
+      await sleep(50);
+    }
+    await db.query(
+      "UPDATE price_import SET phase_started_at = now() - interval '2 hours' WHERE id = $1",
+      [created.id],
+    );
+    await worker.get(PriceImportExpiry).run();
+    expect((await detail(of, created.id)).import.status).toBe("failed");
+    // The run goes on reading the file for a while; nothing it reads lands.
+    for (let check = 0; check < 10; check++) {
+      expect(await rowsStored(created.id)).toBe(0);
+      await sleep(500);
+    }
+    expect((await detail(of, created.id)).import).toMatchObject({
+      status: "failed",
+      failure: { reason: "timeout" },
+    });
+  }, 120_000);
+
+  it("remembers the format of a header of any length", async () => {
+    const of = await company();
+    const notes = Array.from(
+      { length: 40 },
+      (_, index) => `Примечание ${String(index)} ${"о".repeat(900)}`,
+    );
+    const csv = (price: number) =>
+      Buffer.from(
+        [
+          ["Артикул", "Цена", ...notes].join(";"),
+          ["X-1", String(price), ...notes.map(() => "")].join(";"),
+          ["X-2", String(price + 1), ...notes.map(() => "")].join(";"),
+        ].join("\n"),
+      );
+    const first = await uploaded(of, csv(100));
+    const read = await settled(of, first.id);
+    expect(read.columns).toHaveLength(42);
+    const roles: PriceColumnRoleName[] = [
+      "article",
+      "price",
+      ...notes.map(() => "ignore" as const),
+    ];
+    await confirm(of, first.id, roles, true);
+    expect((await settled(of, first.id, ["parsed", "failed"])).import.status).toBe("parsed");
+    const second = await uploaded(of, csv(200));
+    expect((await settled(of, second.id, ["parsed", "columns", "failed"])).import).toMatchObject({
+      status: "parsed",
+      columnsSource: "remembered",
+    });
+  });
+
+  it("doesn't let a page showing an older state overwrite a colleague's roles", async () => {
+    const of = await company();
+    const created = await uploaded(of, withErrorsCsv());
+    const read = await settled(of, created.id);
+    expect(read.import.version).toBe(1);
+    const put = (body: object) =>
+      of.as("put", `/supplier/price-imports/${created.id}/columns`, {
+        roles: ARTICLE_NAME_PRICE,
+        remember: false,
+        ...body,
+      });
+    const first = await put({ expectedVersion: 1 });
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(priceImportResponseSchema.parse(first.body).import.version).toBe(2);
+    await settled(of, created.id, ["parsed"]);
+
+    const stale = await put({ expectedVersion: 1 });
+    expectError(stale, 409, "PRICE_IMPORT_VERSION_CONFLICT");
+    expect(priceImportVersionConflictDetailsSchema.parse(stale.body.details)).toMatchObject({
+      status: "parsed",
+      version: 2,
+      confirmedBy: { memberId: of.memberId, name: "Ерлан" },
+    });
+    expect((await detail(of, created.id)).import).toMatchObject({ status: "parsed", version: 2 });
+    // A client that sends no version is answered as before.
+    expect((await put({})).status).toBe(200);
+  });
+
+  it("answers a broken cursor with 400, never 500", async () => {
+    const of = await company();
+    const created = await uploaded(of, withErrorsCsv());
+    await settled(of, created.id);
+    const cursor = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    const id = crypto.randomUUID();
+    for (const bad of [
+      cursor(["1", id]),
+      cursor(["2026-10-11T10:00:00.000Z", "-".repeat(36)]),
+      cursor(["+275760-09-13T00:00:00.000Z", id]),
+      cursor(["2026-10-11", id]),
+      cursor({}),
+      "%25%25",
+    ]) {
+      expectError(
+        await of.as("get", `/supplier/price-imports?cursor=${bad}`),
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
+    for (const bad of ["1e20", "99999999999", "-1", "1.5", "0x10"]) {
+      expectError(
+        await of.as("get", `/supplier/price-imports/${created.id}/rows?cursor=${bad}`),
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
+  });
 });

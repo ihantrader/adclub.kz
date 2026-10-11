@@ -1,15 +1,18 @@
-import { Inflate, inflateSync } from "fflate";
+import { Inflate } from "fflate";
 import { PriceFileError } from "../price-import-errors";
 
 /**
- * The ZIP container of an `.xlsx` (TASK-046; ARCHITECTURE 4.66): the
- * central directory is read by hand, so an entry is found by its name and
- * inflated alone — a sheet as a stream, never whole in memory.
+ * The ZIP container of an `.xlsx` (TASK-046, TASK-046.A; ARCHITECTURE 4.66):
+ * the central directory is read by hand, so an entry is found by its name
+ * and inflated alone — as a stream, never whole in memory.
  *
- * A file of 20 MB can unpack into gigabytes (a ZIP bomb): every entry is
- * inflated under a ceiling of its own, and passing it is a broken file,
- * not an exhausted worker. Encrypted entries, other compression methods
- * and ZIP64 are not what Excel writes — they are refused as broken.
+ * A file of 20 MB can claim one size and unpack into another. Nothing here
+ * trusts the claim: every entry is inflated piece by piece, and the moment
+ * it gives more than it declared, or more than is left of the budget of
+ * the whole file, the inflating stops and the file is broken. The budget
+ * (`unpackBudget`) is shared by every entry and every pass over a sheet.
+ * Encrypted entries, other compression methods and ZIP64 are not what
+ * Excel writes — they are refused as broken.
  */
 
 export interface ZipEntry {
@@ -21,6 +24,21 @@ export interface ZipEntry {
   encrypted: boolean;
 }
 
+/** More entries than a workbook has (sheets, styles, pictures): a broken file. */
+export const MAX_ZIP_ENTRIES = 2000;
+
+/** Unpacked bytes a file may give per byte of it, over all its entries and passes. */
+export const UNPACK_RATIO = 200;
+/** The budget of a small file: its XML is mostly tags, compressed little. */
+export const UNPACK_FLOOR = 32 * 1024 * 1024;
+/** The budget of any file, however large. */
+export const UNPACK_CEILING = 512 * 1024 * 1024;
+
+/** How many unpacked bytes reading a file of `fileBytes` may produce in all. */
+export function unpackBudget(fileBytes: number): number {
+  return Math.min(UNPACK_CEILING, Math.max(UNPACK_FLOOR, UNPACK_RATIO * fileBytes));
+}
+
 const EOCD = 0x06054b50;
 const CENTRAL = 0x02014b50;
 const LOCAL = 0x04034b50;
@@ -29,7 +47,11 @@ function broken(message: string): PriceFileError {
   return new PriceFileError("broken", message);
 }
 
-/** The entries of the archive by name; a damaged directory is a broken file. */
+/**
+ * The entries of the archive by name — only its directory is read, nothing
+ * is unpacked, so this is cheap for any file. A damaged directory, or more
+ * than `MAX_ZIP_ENTRIES` entries, is a broken file.
+ */
 export function zipEntries(bytes: Buffer): Map<string, ZipEntry> {
   // The end of central directory record: 22 bytes plus a comment of up to 64 KiB.
   let end = -1;
@@ -45,6 +67,9 @@ export function zipEntries(bytes: Buffer): Map<string, ZipEntry> {
   if (count === 0xffff || directoryOffset === 0xffffffff) {
     throw broken("ZIP64 archives are not Excel files");
   }
+  if (count > MAX_ZIP_ENTRIES) {
+    throw broken(`The archive has ${String(count)} entries; a workbook has far fewer`);
+  }
   const entries = new Map<string, ZipEntry>();
   let at = directoryOffset;
   for (let index = 0; index < count; index++) {
@@ -59,6 +84,9 @@ export function zipEntries(bytes: Buffer): Map<string, ZipEntry> {
     const extraLength = bytes.readUInt16LE(at + 30);
     const commentLength = bytes.readUInt16LE(at + 32);
     const localHeaderOffset = bytes.readUInt32LE(at + 42);
+    if (at + 46 + nameLength > bytes.length) {
+      throw broken("The ZIP directory of the Excel file is damaged");
+    }
     const name = bytes.toString("utf8", at + 46, at + 46 + nameLength);
     entries.set(name, {
       name,
@@ -71,6 +99,29 @@ export function zipEntries(bytes: Buffer): Map<string, ZipEntry> {
     at += 46 + nameLength + extraLength + commentLength;
   }
   return entries;
+}
+
+/**
+ * What the directory alone says is wrong with an entry — nothing unpacked
+ * (TASK-046.A requirement 1):
+ * - deflate never makes data larger than about 1/256 more than it was, so
+ *   an entry whose compressed bytes far outweigh its declared size claims
+ *   a size it doesn't have (the acceptance's file: «100 bytes» in 20 MB);
+ * - a part of the workbook (XML, relationships) declared larger than the
+ *   whole budget of the file could never be read.
+ */
+export function entryProblem(entry: ZipEntry, budget: number): PriceFileError | null {
+  const plausible =
+    entry.method === 0
+      ? entry.compressedSize === entry.size
+      : entry.compressedSize <= entry.size + Math.ceil(entry.size / 256) + 1024;
+  if (!plausible) {
+    return broken(`The entry ${entry.name} says it is smaller than its compressed bytes`);
+  }
+  if (/\.(xml|rels)$/i.test(entry.name) && entry.size > budget) {
+    return broken(`The entry ${entry.name} is larger than a price list can be`);
+  }
+  return null;
 }
 
 /** Where the compressed bytes of an entry are. */
@@ -91,69 +142,109 @@ function dataOf(bytes: Buffer, entry: ZipEntry): Buffer {
   return bytes.subarray(start, finish);
 }
 
-/** A small entry (the workbook, its styles, shared strings) whole; at most `ceiling` bytes. */
-export function readEntry(bytes: Buffer, entry: ZipEntry, ceiling: number): Buffer {
-  if (entry.size > ceiling) {
-    throw broken(`The entry ${entry.name} is larger than a price list can be`);
-  }
-  const data = dataOf(bytes, entry);
-  if (entry.method === 0) return Buffer.from(data);
-  let out: Uint8Array;
-  try {
-    out = inflateSync(data, { out: new Uint8Array(entry.size) });
-  } catch {
-    throw broken(`The entry ${entry.name} of the Excel file is damaged`);
-  }
-  if (out.length !== entry.size) throw broken(`The entry ${entry.name} is damaged`);
-  return Buffer.from(out.buffer, out.byteOffset, out.byteLength);
-}
-
-/** How many compressed bytes go into the inflater at once. */
-const CHUNK = 64 * 1024;
+/**
+ * How many compressed bytes go into the inflater at once. Deflate can give
+ * about a thousand bytes per byte, so a piece this small can't unpack into
+ * more than about a megabyte before the count below sees it (and the XML
+ * reader never gets more than that at once).
+ */
+const CHUNK = 1024;
+/** Unpacked bytes handed on between two turns of the event loop. */
+const TURN_BYTES = 256 * 1024;
 
 /**
- * Inflates an entry piece by piece: `onChunk` gets the output as it comes,
- * synchronously; between pieces of input `between` is awaited, so the
- * caller writes what it collected before more is unpacked. More than
- * `ceiling` bytes of output is a broken file (a ZIP bomb).
+ * An opened archive with the budget of unpacked bytes it has left: every
+ * entry inflated through it, on every pass, spends from the same budget.
  */
-export async function streamEntry(
-  bytes: Buffer,
-  entry: ZipEntry,
-  ceiling: number,
-  onChunk: (chunk: Uint8Array) => void,
-  between: () => Promise<void>,
-): Promise<void> {
-  const data = dataOf(bytes, entry);
-  let produced = 0;
-  const take = (chunk: Uint8Array) => {
-    produced += chunk.length;
-    if (produced > ceiling) throw broken(`The entry ${entry.name} unpacks into too much`);
-    onChunk(chunk);
-  };
-  if (entry.method === 0) {
-    for (let at = 0; at < data.length; at += CHUNK) {
-      take(data.subarray(at, at + CHUNK));
-      await between();
-    }
-    return;
+export class ZipArchive {
+  readonly entries: Map<string, ZipEntry>;
+  private left: number;
+
+  constructor(
+    private readonly bytes: Buffer,
+    budget = unpackBudget(bytes.length),
+  ) {
+    this.entries = zipEntries(bytes);
+    this.left = budget;
   }
-  let failure: unknown = null;
-  const inflate = new Inflate((chunk) => {
-    if (failure) return;
-    try {
-      take(chunk);
-    } catch (error) {
-      failure = error;
+
+  /** What is left of the budget. */
+  get remaining(): number {
+    return this.left;
+  }
+
+  /**
+   * Inflates an entry piece by piece: `onChunk` gets the output as it comes,
+   * synchronously; between pieces of input `between` is awaited (it yields
+   * to the event loop and may stop the reading). The entry may give exactly
+   * the size it declares, no more and no less, and never more than is left
+   * of the budget or `ceiling`; the inflating stops at the first byte past.
+   */
+  async stream(
+    entry: ZipEntry,
+    ceiling: number,
+    onChunk: (chunk: Uint8Array) => void,
+    between: () => Promise<void>,
+  ): Promise<void> {
+    if (entry.size > ceiling || entry.size > this.left) {
+      throw broken(`The entry ${entry.name} is larger than a price list can be`);
     }
-  });
-  for (let at = 0; at < data.length; at += CHUNK) {
-    try {
-      inflate.push(data.subarray(at, at + CHUNK), at + CHUNK >= data.length);
-    } catch {
-      throw broken(`The entry ${entry.name} of the Excel file is damaged`);
+    const problem = entryProblem(entry, Number.POSITIVE_INFINITY);
+    if (problem) throw problem;
+    const data = dataOf(this.bytes, entry);
+    const limit = entry.size;
+    let produced = 0;
+    const take = (chunk: Uint8Array) => {
+      if (chunk.length === 0) return;
+      produced += chunk.length;
+      this.left -= chunk.length;
+      if (produced > limit) throw broken(`The entry ${entry.name} unpacks into more than it says`);
+      onChunk(chunk);
+    };
+    if (entry.method === 0) {
+      if (data.length !== limit) throw broken(`The entry ${entry.name} is damaged`);
+      for (let at = 0; at < data.length; at += 64 * 1024) {
+        take(data.subarray(at, at + 64 * 1024));
+        await between();
+      }
+      return;
+    }
+    let failure: unknown = null;
+    let ended = false;
+    const inflate = new Inflate((chunk, final) => {
+      if (failure) return;
+      try {
+        take(chunk);
+      } catch (error) {
+        failure = error;
+        // The inflater can't be told to stop: its output is dropped from here on.
+      }
+      if (final) ended = true;
+    });
+    let turn = 0;
+    for (let at = 0; at < data.length; at += CHUNK) {
+      try {
+        inflate.push(data.subarray(at, at + CHUNK), at + CHUNK >= data.length);
+      } catch {
+        if (failure) throw failure;
+        throw broken(`The entry ${entry.name} of the Excel file is damaged`);
+      }
+      if (failure) throw failure;
+      // The event loop gets a turn every 256 KiB parsed or 64 KiB of input.
+      if (produced - turn >= TURN_BYTES || (at / CHUNK) % 64 === 63) {
+        turn = produced;
+        await between();
+      }
     }
     if (failure) throw failure;
+    if (!ended || produced !== limit) throw broken(`The entry ${entry.name} is damaged`);
     await between();
+  }
+
+  /** A small entry (the workbook, its relationships) whole; at most `ceiling` bytes. */
+  async read(entry: ZipEntry, ceiling: number, between: () => Promise<void>): Promise<Buffer> {
+    const chunks: Uint8Array[] = [];
+    await this.stream(entry, ceiling, (chunk) => chunks.push(chunk.slice()), between);
+    return Buffer.concat(chunks);
   }
 }

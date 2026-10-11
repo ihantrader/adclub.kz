@@ -21,6 +21,8 @@ export const parsePriceFileJob = defineJob({
   timeoutSeconds: 1800,
   retry: { limit: 2, delaySeconds: 30, backoff: true },
   singleton: false,
+  // A long price list of one company leaves room for another's (TASK-046.A).
+  concurrency: 2,
 });
 
 /** Reads the values of the rows by the confirmed roles: `parsed` and the errors of each row. */
@@ -30,6 +32,7 @@ export const readPriceValuesJob = defineJob({
   timeoutSeconds: 1800,
   retry: { limit: 2, delaySeconds: 30, backoff: true },
   singleton: false,
+  concurrency: 2,
 });
 
 /**

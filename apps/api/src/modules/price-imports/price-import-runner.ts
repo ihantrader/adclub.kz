@@ -11,7 +11,7 @@ import {
   type PriceColumnRole,
   type PriceRowKind,
 } from "@adclub/domain";
-import type { PriceImportFailure } from "@adclub/contracts";
+import type { PriceImportFailure, PriceImportStatus } from "@adclub/contracts";
 import {
   and,
   asc,
@@ -24,6 +24,7 @@ import {
   lt,
   notInArray,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import type {
@@ -41,8 +42,10 @@ import { PriceFileMissing, PriceFileStorage } from "./price-file-storage";
 import { PriceFileError } from "./price-import-errors";
 import { parsePriceFileJob } from "./price-import-jobs";
 import {
+  headerHash,
   priceImport,
   priceImportFormatTable,
+  priceImportRefusal,
   priceImportRow,
   type PriceImportStatsRecord,
   type StoredColumn,
@@ -117,7 +120,25 @@ class RowWriter implements RowSink {
     return classifyPriceRow(cells, this.headerKey);
   }
 
+  /**
+   * Writes a batch only while the import is still being read, under a share
+   * lock on it (TASK-046.A requirement 5): an import failed meanwhile (its
+   * time ran out) takes no rows from a run that came late — that run stops.
+   * Failing an import locks it for update, so the two never interleave.
+   */
   private async write(batch: FileRow[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: priceImport.status })
+        .from(priceImport)
+        .where(eq(priceImport.id, this.importId))
+        .for("share");
+      if (current?.status !== "parsing") throw new ImportSuperseded();
+      await this.insert(tx, batch);
+    });
+  }
+
+  private async insert(tx: DbExecutor, batch: FileRow[]): Promise<void> {
     const values = batch.map((row) => {
       const kind = this.kindOf(this.seen++, row.cells);
       this.width = Math.max(this.width, row.cells.length);
@@ -129,12 +150,19 @@ class RowWriter implements RowSink {
       }
       return { importId: this.importId, rowNo: row.rowNo, kind, raw: row.cells };
     });
-    await this.db.insert(priceImportRow).values(values);
+    await tx.insert(priceImportRow).values(values);
     this.rows += values.length;
-    await this.db
+    await tx
       .update(priceImport)
       .set({ stats: { rows: this.rows }, updatedAt: new Date() })
       .where(and(eq(priceImport.id, this.importId), eq(priceImport.status, "parsing")));
+  }
+}
+
+/** The import left the phase this run was reading it for (failed, read by another run). */
+class ImportSuperseded extends Error {
+  constructor() {
+    super("The import is no longer being read by this run");
   }
 }
 
@@ -179,6 +207,19 @@ export class PriceValuesReader implements JobHandler<{ importId: string }> {
     const db = this.database.db;
     const [record] = await db.select().from(priceImport).where(eq(priceImport.id, importId));
     if (!record || record.status !== "reading" || !record.columnMapping) return;
+    // This run reads the roles of one confirmation; a later one makes it stale.
+    const ours = and(
+      eq(priceImport.id, importId),
+      eq(priceImport.status, "reading"),
+      eq(priceImport.version, record.version),
+    );
+    // The phase starts now, when the worker takes it (TASK-046.A requirement 5).
+    const [started] = await db
+      .update(priceImport)
+      .set({ phaseStartedAt: new Date() })
+      .where(ours)
+      .returning({ id: priceImport.id });
+    if (!started) return;
     const startedAt = Date.now();
     const values = await this.settings.values();
     const limits = {
@@ -224,7 +265,7 @@ export class PriceValuesReader implements JobHandler<{ importId: string }> {
       const [still] = await db
         .update(priceImport)
         .set({ stats: { ...stats, valuesRead: read }, updatedAt: new Date() })
-        .where(and(eq(priceImport.id, importId), eq(priceImport.status, "reading")))
+        .where(ours)
         .returning({ id: priceImport.id });
       // Confirmed again or failed meanwhile: this run is no longer the one.
       if (!still) return;
@@ -254,7 +295,7 @@ export class PriceValuesReader implements JobHandler<{ importId: string }> {
         parsedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(and(eq(priceImport.id, importId), eq(priceImport.status, "reading")));
+      .where(ours);
     this.logger.log(
       `Price rows read import=${importId} rows=${String(read)} errors=${String(errorRows)} durationMs=${String(Date.now() - startedAt)}`,
     );
@@ -286,18 +327,37 @@ export class PriceFileParser implements JobHandler<{ importId: string }> {
   async run({ importId }: { importId: string }, context: JobRunContext): Promise<void> {
     const db = this.database.db;
     const [record] = await db.select().from(priceImport).where(eq(priceImport.id, importId));
-    if (!record || record.status !== "parsing") return;
+    if (!record) return;
+    if (record.status === "reading" && record.columnsSource === "remembered") {
+      // A retry of a run that read the file and failed while reading the values
+      // by the remembered format (TASK-046.A requirement 5): it goes on from there.
+      await this.readValues(importId, context);
+      return;
+    }
+    if (record.status !== "parsing") return;
     const startedAt = Date.now();
     const maxRows = (await this.settings.values()).import_max_rows;
-    // A retry starts over.
-    await db.delete(priceImportRow).where(eq(priceImportRow.importId, importId));
+    // A retry starts over; the phase starts now, when the worker takes it.
+    await db.transaction(async (tx) => {
+      await tx.delete(priceImportRow).where(eq(priceImportRow.importId, importId));
+      await tx
+        .update(priceImport)
+        .set({ phaseStartedAt: new Date(), stats: {}, updatedAt: new Date() })
+        .where(and(eq(priceImport.id, importId), eq(priceImport.status, "parsing")));
+    });
     const writer = new RowWriter(db, importId);
     let facts;
     try {
       const bytes = await this.storage.get(record.fileKey);
-      facts = await readPriceFile(bytes, record.fileKind, maxRows, writer);
+      facts = await readPriceFile(bytes, record.fileKind, maxRows, writer, context.signal);
       await writer.flush(true);
     } catch (error) {
+      if (error instanceof ImportSuperseded) {
+        this.logger.warn(
+          `Price file reading stopped: the import left the phase import=${importId}`,
+        );
+        return;
+      }
       if (error instanceof PriceFileError) {
         await this.fail(importId, failureOf(error));
         return;
@@ -342,7 +402,7 @@ export class PriceFileParser implements JobHandler<{ importId: string }> {
         .where(
           and(
             eq(priceImportFormatTable.supplierId, record.supplierId),
-            eq(priceImportFormatTable.headerKey, headerKey),
+            eq(priceImportFormatTable.headerHash, headerHash(headerKey)),
           ),
         );
       const roles = format ? fitRoles(format.roles, width) : null;
@@ -379,23 +439,76 @@ export class PriceFileParser implements JobHandler<{ importId: string }> {
       `Price file read import=${importId} rows=${String(writer.rows)} dataRows=${String(writer.dataRows)} remembered=${String(remembered)} durationMs=${String(Date.now() - startedAt)}`,
     );
     // The company's format: the rows are read by it now, in this very run.
-    if (done && remembered) await this.values.read(importId, context);
+    if (done && remembered) await this.readValues(importId, context);
+  }
+
+  /**
+   * Reads the values by the remembered format. A failure is retried with the
+   * job (the retry comes back here); the last attempt that still fails says
+   * the file could not be read, instead of leaving the import in `reading`.
+   */
+  private async readValues(importId: string, context: JobRunContext): Promise<void> {
+    try {
+      await this.values.read(importId, context);
+    } catch (error) {
+      if (context.attempt > parsePriceFileJob.retry.limit) {
+        this.logger.error(
+          `Price rows could not be read import=${importId} cause=${error instanceof Error ? error.message : String(error)}`,
+        );
+        await failImport(this.database.db, importId, ["reading"], brokenFailure());
+        return;
+      }
+      throw error;
+    }
   }
 
   private async fail(importId: string, failure: PriceImportFailure): Promise<void> {
-    await this.database.db.transaction(async (tx) => {
-      const [failed] = await tx
-        .update(priceImport)
-        .set({ status: "failed", failure, stats: {}, updatedAt: new Date() })
-        .where(and(eq(priceImport.id, importId), eq(priceImport.status, "parsing")))
-        .returning({ id: priceImport.id });
-      if (failed) await tx.delete(priceImportRow).where(eq(priceImportRow.importId, importId));
-    });
+    await failImport(this.database.db, importId, ["parsing"], failure);
     this.logger.log(`Price file refused import=${importId} reason=${failure.reason}`);
   }
 }
 
-/** Fails imports read for longer than `price_import_timeout_minutes` (`prices.expire-stalled`). */
+function brokenFailure(): PriceImportFailure {
+  return { reason: "broken", detected: null, limit: null, line: null };
+}
+
+/**
+ * Fails imports in one of `statuses` and removes their rows, in one
+ * transaction: a failed import holds no rows. The update locks the import,
+ * so a batch being written under its share lock is either in before (and
+ * removed here) or sees the failure and stops. Returns the ids failed.
+ */
+async function failImport(
+  db: DbExecutor,
+  where: string | SQL,
+  statuses: PriceImportStatus[],
+  failure: PriceImportFailure,
+): Promise<string[]> {
+  return db.transaction(async (tx) => {
+    const failed = await tx
+      .update(priceImport)
+      .set({ status: "failed", failure, stats: {}, updatedAt: new Date() })
+      .where(
+        and(
+          typeof where === "string" ? eq(priceImport.id, where) : where,
+          inArray(priceImport.status, statuses),
+        ),
+      )
+      .returning({ id: priceImport.id });
+    const ids = failed.map((row) => row.id);
+    if (ids.length > 0)
+      await tx.delete(priceImportRow).where(inArray(priceImportRow.importId, ids));
+    return ids;
+  });
+}
+
+/**
+ * Fails imports whose phase has run longer than
+ * `price_import_timeout_minutes` (`prices.expire-stalled`), removing their
+ * rows; the phase is counted from when the worker took it, so an upload
+ * waiting in the queue doesn't expire. Also forgets refused uploads older
+ * than a day (the limit of uploads looks back an hour).
+ */
 @Injectable()
 export class PriceImportExpiry implements PeriodicJobHandler {
   private readonly logger = new Logger("PriceImports");
@@ -415,19 +528,22 @@ export class PriceImportExpiry implements PeriodicJobHandler {
       limit: null,
       line: null,
     };
-    const expired = await this.database.db
-      .update(priceImport)
-      .set({ status: "failed", failure, updatedAt: new Date() })
-      .where(
-        and(
-          inArray(priceImport.status, ["parsing", "reading"]),
-          lt(priceImport.phaseStartedAt, cutoff),
-        ),
-      )
-      .returning({ id: priceImport.id });
-    if (expired.length === 0) return { worked: false };
-    this.logger.warn(`Price imports read too long failed imports=${String(expired.length)}`);
-    return { worked: true };
+    // An import waiting in the queue has no phase yet and never expires here.
+    const expired = await failImport(
+      this.database.db,
+      lt(priceImport.phaseStartedAt, cutoff),
+      ["parsing", "reading"],
+      failure,
+    );
+    // Refused uploads are kept for the limit, which looks back an hour.
+    const forgotten = await this.database.db
+      .delete(priceImportRefusal)
+      .where(lt(priceImportRefusal.createdAt, new Date(Date.now() - DAY_MS)))
+      .returning({ id: priceImportRefusal.id });
+    if (expired.length > 0) {
+      this.logger.warn(`Price imports read too long failed imports=${String(expired.length)}`);
+    }
+    return { worked: expired.length > 0 || forgotten.length > 0 };
   }
 }
 

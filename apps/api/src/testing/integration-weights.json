@@ -21,7 +21,7 @@
   "src/modules/orders/order-notices.integration.test.ts": 98,
   "src/modules/orders/orders.integration.test.ts": 83,
   "src/modules/orders/service-orders.integration.test.ts": 90,
-  "src/modules/price-imports/price-imports.integration.test.ts": 70,
+  "src/modules/price-imports/price-imports.integration.test.ts": 100,
   "src/modules/search-index/search-index.integration.test.ts": 110,
   "src/modules/settings/settings.integration.test.ts": 33,
   "src/modules/showcase/showcase.integration.test.ts": 35,

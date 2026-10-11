@@ -61,9 +61,11 @@ export interface UploadFacts {
 }
 
 /**
- * Everything about a file the upload can answer at once: what it is, that it
- * opens, and — for a CSV, which costs nothing to count — that its rows fit
- * `maxRows`. The rows of an `.xlsx` are counted by the worker.
+ * Everything about a file the upload can answer at once, without unpacking
+ * or reading it through (TASK-046.A requirement 1; ARCHITECTURE 4.66): what
+ * it is by its first bytes; of an `.xlsx` — its ZIP directory alone; of a
+ * CSV — at most its first `CSV_HEAD_BYTES` (a file that small is checked
+ * whole). Whatever needs more is found by the worker, with the same reasons.
  */
 export function checkPriceFile(bytes: Buffer, maxRows: number): UploadFacts {
   const format = priceFileFormat(bytes);
@@ -81,18 +83,32 @@ export interface ReadFacts {
   delimiter: string | null;
 }
 
-/** Reads the rows of a file of a known format into `sink`. */
+/** A turn of the event loop: timers, I/O and a job's stop get through. */
+export function nextTurn(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
+ * Reads the rows of a file of a known format into `sink`. Between pieces of
+ * the file the event loop gets a turn; once `signal` is aborted (the job's
+ * timeout, the worker stopping) the reading throws.
+ */
 export async function readPriceFile(
   bytes: Buffer,
   format: PriceImportFormat,
   maxRows: number,
   sink: RowSink,
+  signal?: AbortSignal,
 ): Promise<ReadFacts> {
+  const between = async () => {
+    await nextTurn();
+    signal?.throwIfAborted();
+  };
   if (format === "xlsx") {
-    const { sheetName } = await readXlsx(bytes, maxRows, sink);
+    const { sheetName } = await readXlsx(bytes, maxRows, sink, between);
     await sink.flush();
     return { sheetName, encoding: null, delimiter: null };
   }
-  const facts = await readCsv(bytes, maxRows, sink);
+  const facts = await readCsv(bytes, maxRows, sink, between);
   return { sheetName: null, encoding: facts.encoding, delimiter: facts.delimiter };
 }

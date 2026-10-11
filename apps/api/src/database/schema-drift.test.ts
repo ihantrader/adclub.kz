@@ -99,6 +99,7 @@ describe("ormTables", () => {
         "phone_verification",
         "price_import",
         "price_import_format",
+        "price_import_refusal",
         "price_import_row",
         "session",
         "supplier",

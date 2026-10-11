@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type {
   PriceColumnRoleName,
@@ -59,7 +60,12 @@ export const priceImport = pgTable("price_import", {
   columnsSource: text("columns_source").$type<"auto" | "remembered" | "supplier">(),
   stats: jsonb("stats").$type<PriceImportStatsRecord>().notNull().default({}),
   failure: jsonb("failure").$type<PriceImportFailure>(),
-  phaseStartedAt: timestamp("phase_started_at", { withTimezone: true }).notNull().defaultNow(),
+  /** When the worker began the current phase; `null` — waiting for it (TASK-046.A). */
+  phaseStartedAt: timestamp("phase_started_at", { withTimezone: true }),
+  /** Confirmations of the columns so far, plus one (TASK-046.A). */
+  version: integer("version").notNull().default(1),
+  columnsConfirmedByMemberId: uuid("columns_confirmed_by_member_id"),
+  columnsConfirmedAt: timestamp("columns_confirmed_at", { withTimezone: true }),
   parsedAt: timestamp("parsed_at", { withTimezone: true }),
   fileDeletedAt: timestamp("file_deleted_at", { withTimezone: true }),
   createdAt: createdAt(),
@@ -84,15 +90,37 @@ export const priceImportFormatTable = pgTable(
   {
     supplierId: uuid("supplier_id").notNull(),
     headerKey: text("header_key").notNull(),
+    /** SHA-256 of `header_key` (hex): the key a format is found by (TASK-046.A). */
+    headerHash: text("header_hash").notNull(),
     roles: jsonb("roles").$type<PriceColumnRoleName[]>().notNull(),
     rememberedByMemberId: uuid("remembered_by_member_id").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [primaryKey({ columns: [table.supplierId, table.headerKey] })],
+  (table) => [primaryKey({ columns: [table.supplierId, table.headerHash] })],
 );
+
+/** An upload refused before anything was stored: it counts in the limit (TASK-046.A). */
+export const priceImportRefusal = pgTable("price_import_refusal", {
+  id: uuid("id").primaryKey(),
+  supplierId: uuid("supplier_id").notNull(),
+  memberId: uuid("member_id").notNull(),
+  reason: text("reason").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  createdAt: createdAt(),
+});
+
+/** The key a remembered format is found by: SHA-256 of the header's normal form. */
+export function headerHash(headerKey: string): string {
+  return createHash("sha256").update(headerKey, "utf8").digest("hex");
+}
 
 export type PriceImportRecord = typeof priceImport.$inferSelect;
 export type PriceImportRowRecord = typeof priceImportRow.$inferSelect;
 
-export const priceImportTables = [priceImport, priceImportRow, priceImportFormatTable];
+export const priceImportTables = [
+  priceImport,
+  priceImportRow,
+  priceImportFormatTable,
+  priceImportRefusal,
+];

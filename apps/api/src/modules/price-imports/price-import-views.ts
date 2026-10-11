@@ -34,6 +34,7 @@ export function describeImport(
   return {
     id: record.id,
     status: record.status,
+    version: record.version,
     fileName: record.fileName,
     format: record.fileKind,
     byteSize: record.byteSize,

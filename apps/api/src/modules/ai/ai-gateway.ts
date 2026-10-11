@@ -213,6 +213,57 @@ export const vehicleDocumentOutputSchema = z.object({
 
 export type VehicleDocumentOutput = z.infer<typeof vehicleDocumentOutputSchema>;
 
+// ----------------------------------------------------- price list matching
+
+/** A catalog item a row may be: what the model is shown of it. */
+export interface PriceMatchCandidate {
+  /** The caller's id of the candidate (the item's id). */
+  id: string;
+  name: string;
+  brand: string | null;
+  article: string | null;
+  /** The subcategory, for the sense of the name. */
+  category: string;
+}
+
+/**
+ * A row of a supplier's price list to match (TASK-047): what the file says
+ * of it and one to three candidates found by the search. Prices,
+ * quantities and the company are not sent — the model needs only what
+ * tells one item from another.
+ */
+export interface PriceMatchRow {
+  id: string;
+  article: string | null;
+  brand: string | null;
+  name: string | null;
+  candidates: readonly PriceMatchCandidate[];
+}
+
+export interface PriceMatchInput {
+  rows: readonly PriceMatchRow[];
+}
+
+/**
+ * For each row: the candidate it is (`itemId`, one of the row's
+ * candidates) or `null` — none of them, the catalog has no such item; how
+ * sure the model is (0…1) and a short explanation the supplier sees.
+ */
+export const priceMatchOutputSchema = z.object({
+  matches: z.array(
+    z.object({
+      id: z.string(),
+      itemId: z.string().nullable(),
+      // No bounds in the schema: strict structured output of some endpoints
+      // refuses `minimum`/`maximum`; the caller keeps it within 0…1.
+      confidence: z.number(),
+      explanation: z.string(),
+    }),
+  ),
+});
+
+export type PriceMatchOutput = z.infer<typeof priceMatchOutputSchema>;
+
 /**
  * The provider behind the interface. `model` is the one `AiService` chose
  * from the settings of the operation; `signal` is aborted when the call
@@ -225,6 +276,12 @@ export abstract class AiGateway {
 
   abstract readVehicleDocument(
     input: VehicleDocumentInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult>;
+
+  abstract matchPrices(
+    input: PriceMatchInput,
     model: string,
     signal: AbortSignal,
   ): Promise<AiResult>;
@@ -268,4 +325,12 @@ export const vehicleDocumentOperation: AiOperation<VehicleDocumentInput, Vehicle
   },
   outputSchema: vehicleDocumentOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.readVehicleDocument(input, model, signal),
+};
+
+/** Matching price list rows with catalog candidates (TASK-047): `ai_job.kind` is `price_match`. */
+export const priceMatchOperation: AiOperation<PriceMatchInput, PriceMatchOutput> = {
+  kind: "price_match",
+  models: { primary: "ai_model_price_match_primary", fallback: "ai_model_price_match_fallback" },
+  outputSchema: priceMatchOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.matchPrices(input, model, signal),
 };

@@ -27,20 +27,21 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
-import type {
-  JobHandler,
-  JobRunContext,
-  JobRunOutcome,
-  PeriodicJobHandler,
-  Sweeper,
-  SweepResult,
+import {
+  JobQueue,
+  type JobHandler,
+  type JobRunContext,
+  type JobRunOutcome,
+  type PeriodicJobHandler,
+  type Sweeper,
+  type SweepResult,
 } from "../../jobs";
 import { AppSettings } from "../settings";
 import { readPriceFile } from "./file/price-file";
 import type { FileRow, RowSink } from "./file/rows";
 import { PriceFileMissing, PriceFileStorage } from "./price-file-storage";
 import { PriceFileError } from "./price-import-errors";
-import { parsePriceFileJob } from "./price-import-jobs";
+import { matchPricesJob, parsePriceFileJob } from "./price-import-jobs";
 import {
   headerHash,
   priceImport,
@@ -197,6 +198,7 @@ export class PriceValuesReader implements JobHandler<{ importId: string }> {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AppSettings) private readonly settings: AppSettings,
+    @Inject(JobQueue) private readonly queue: JobQueue,
   ) {}
 
   run({ importId }: { importId: string }, context: JobRunContext): Promise<void> {
@@ -281,21 +283,29 @@ export class PriceValuesReader implements JobHandler<{ importId: string }> {
         ),
       );
     const errorRows = errors?.value ?? 0;
-    await db
-      .update(priceImport)
-      .set({
-        status: "parsed",
-        stats: {
-          rows: stats.rows,
-          dataRows: stats.dataRows,
-          serviceRows: stats.serviceRows,
-          parsedRows: read - errorRows,
-          errorRows,
-        },
-        parsedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(ours);
+    await db.transaction(async (tx) => {
+      const [parsed] = await tx
+        .update(priceImport)
+        .set({
+          status: "parsed",
+          stats: {
+            rows: stats.rows,
+            dataRows: stats.dataRows,
+            serviceRows: stats.serviceRows,
+            parsedRows: read - errorRows,
+            errorRows,
+          },
+          parsedAt: new Date(),
+          phaseStartedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(ours)
+        .returning({ id: priceImport.id });
+      // Matching with the catalog follows at once (TASK-047), queued with the state.
+      if (parsed) {
+        await this.queue.enqueue(matchPricesJob, { importId }, { tx, singletonKey: importId });
+      }
+    });
     this.logger.log(
       `Price rows read import=${importId} rows=${String(read)} errors=${String(errorRows)} durationMs=${String(Date.now() - startedAt)}`,
     );

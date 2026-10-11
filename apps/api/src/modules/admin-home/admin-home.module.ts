@@ -8,6 +8,8 @@ export interface AdminHomeModuleOptions {
   compatibility: DynamicModule;
   signals: DynamicModule;
   suppliers: DynamicModule;
+  /** Its requests to add an item (TASK-047). */
+  priceImports: DynamicModule;
 }
 
 /**
@@ -20,7 +22,13 @@ export class AdminHomeModule {
   static forRoot(options: AdminHomeModuleOptions): DynamicModule {
     return {
       module: AdminHomeModule,
-      imports: [options.catalog, options.compatibility, options.signals, options.suppliers],
+      imports: [
+        options.catalog,
+        options.compatibility,
+        options.signals,
+        options.suppliers,
+        options.priceImports,
+      ],
       controllers: [AdminHomeController],
       providers: [AdminHomeService],
     };

@@ -63,6 +63,8 @@ export class AppModule implements NestModule {
     const offers = OffersModule.forRoot({ http: true, catalog, suppliers });
     // One vehicle catalog: a recognised certificate is placed in this very instance.
     const vehicles = VehiclesModule.forRoot({ http: true });
+    // One price imports module: the home screen counts its requests (TASK-047).
+    const priceImports = PriceImportsModule.forRoot({ catalog });
     return {
       module: AppModule,
       imports: [
@@ -107,9 +109,9 @@ export class AppModule implements NestModule {
         // The API serves GET /metrics, so it samples the search index's state.
         ...(config.metrics.enabled ? [SearchIndexMetricsModule] : []),
         OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
-        AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers }),
+        AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers, priceImports }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers }),
-        PriceImportsModule,
+        priceImports,
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

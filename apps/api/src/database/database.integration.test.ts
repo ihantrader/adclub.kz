@@ -98,6 +98,84 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds the review of a price list, the company's memory and requests, and rolls back keeping the imports (price import matching)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('price-matching-city', 'Город сверки') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Автомир Степь', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77010000364') RETURNING id",
+    );
+    const member = await client.query<{ id: string }>(
+      "INSERT INTO supplier_member (supplier_id, account_id, display_name, added_by) VALUES ($1, $2, 'Ерлан', 'operator') RETURNING id",
+      [supplierId, account.rows[0]!.id],
+    );
+    const memberId = member.rows[0]!.id;
+    const importId = "00000000-0000-4000-8000-00000000047a";
+    await client.query(
+      "INSERT INTO price_import (id, supplier_id, uploaded_by_member_id, uploaded_by_account_id, status, file_kind, file_key, byte_size, checksum, missing_action) VALUES ($1, $2, $3, $4, 'review', 'csv', 'price-imports/x/m', 10, 'sum', 'keep')",
+      [importId, supplierId, memberId, account.rows[0]!.id],
+    );
+    await client.query(
+      "INSERT INTO price_import_row (import_id, row_no, kind, raw, match_group, match_source, decision, decided_at, decided_by_member_id) VALUES ($1, 2, 'data', '[]', 'review', 'ai', 'skip', now(), $2)",
+      [importId, memberId],
+    );
+    // Applied means who and when; a decision means when; the memory of an item has the item.
+    await expect(
+      client.query("UPDATE price_import SET status = 'applied' WHERE id = $1", [importId]),
+    ).rejects.toThrow(/price_import_applied_check/);
+    await expect(
+      client.query(
+        "UPDATE price_import_row SET decided_at = NULL WHERE import_id = $1 AND row_no = 2",
+        [importId],
+      ),
+    ).rejects.toThrow(/price_import_row_decided_check/);
+    await expect(
+      client.query(
+        "INSERT INTO supplier_sku_mapping (supplier_id, key_kind, key, decision, confirmed_by) VALUES ($1, 'article', 'A1', 'item', 'supplier')",
+        [supplierId],
+      ),
+    ).rejects.toThrow(/supplier_sku_mapping_item_check/);
+    await client.query(
+      "INSERT INTO supplier_sku_mapping (supplier_id, key_kind, key, decision, confirmed_by, confirmed_by_member_id, import_id) VALUES ($1, 'article', 'A1', 'skip', 'supplier', $2, $3)",
+      [supplierId, memberId, importId],
+    );
+    // One open request per key of a company; a refused one doesn't count.
+    const request = (status: string, reason: string | null) =>
+      client.query(
+        `INSERT INTO catalog_request (supplier_id, import_id, row_no, key_kind, key, payload, status, reject_reason, decided_at, decided_by_admin_id, created_by_member_id)
+         VALUES ($1, $2, 2, 'article', 'A1', '{}', $3, $4, CASE WHEN $3 = 'new' THEN NULL ELSE now() END, NULL, $5)`,
+        [supplierId, importId, status, reason, memberId],
+      );
+    await request("new", null);
+    await expect(request("new", null)).rejects.toThrow(/catalog_request_open_key/);
+    await request("rejected", "Нет");
+    await expect(request("rejected", null)).rejects.toThrow(/catalog_request_rejected_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "supplier_sku_mapping")).toBe(false);
+    expect(await tableExists(client, "catalog_request")).toBe(false);
+    // The import stays, read back as parsed; its rows stay too.
+    const back = await client.query<{ status: string }>(
+      "SELECT status FROM price_import WHERE id = $1",
+      [importId],
+    );
+    expect(back.rows[0]!.status).toBe("parsed");
+    expect(
+      (await client.query("SELECT 1 FROM price_import_row WHERE import_id = $1", [importId]))
+        .rowCount,
+    ).toBe(1);
+    await client.query("DELETE FROM price_import WHERE id = $1", [importId]);
+    await client.query("DELETE FROM supplier_member WHERE id = $1", [memberId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM account WHERE id = $1", [account.rows[0]!.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+  });
+
   it("keys remembered formats by a hash, keeps refusals and queued phases, and rolls back keeping the imports (price import hardening)", async () => {
     const city = await client.query<{ id: string }>(
       "INSERT INTO city (code, name_ru) VALUES ('price-hardening-city', 'Город прайса') RETURNING id",

@@ -54,9 +54,75 @@ export const expirePriceImportsJob = definePeriodicJob({
  */
 export const deletePriceFilesJob = defineSweeperJob({ name: "prices.delete-files" });
 
+/**
+ * Matches the rows with the catalog without AI (TASK-047; ARCHITECTURE 12.1
+ * step 4): the remembered matches, the exact article, the search by name;
+ * then hands the rest to `prices.match-ai`, or ends the matching. Resumes
+ * where a stopped run left: a decided row is not decided again.
+ */
+export const matchPricesJob = defineJob({
+  name: "prices.match",
+  payload: importPayload,
+  timeoutSeconds: 1800,
+  retry: { limit: 2, delaySeconds: 30, backoff: true },
+  singleton: false,
+  concurrency: 2,
+});
+
+/**
+ * Asks AI about the rows the search left undecided, in batches of
+ * `price_match_batch_size`. AI can't be reached or the day's budget is
+ * spent — the import waits in `matching` and the job is put back for later.
+ */
+export const matchPricesAiJob = defineJob({
+  name: "prices.match-ai",
+  payload: importPayload,
+  timeoutSeconds: 1800,
+  retry: { limit: 2, delaySeconds: 60, backoff: true },
+  singleton: false,
+});
+
+/**
+ * Every minute: an import in matching that nobody works on (a worker that
+ * stopped, AI that came back) is put back on the queue.
+ */
+export const wakePriceMatchingJob = definePeriodicJob({
+  name: "prices.match-wake",
+  timeoutSeconds: 60,
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: () => EVERY_MINUTE,
+});
+
+/** Applies the review to the offers in one transaction (`applying` → `applied`). */
+export const applyPriceImportJob = defineJob({
+  name: "prices.apply",
+  payload: importPayload,
+  timeoutSeconds: 1800,
+  retry: { limit: 2, delaySeconds: 30, backoff: true },
+  singleton: false,
+});
+
+/**
+ * Every minute: a review (or a matching) left longer than
+ * `price_import_review_days` expires — nothing of it is applied.
+ */
+export const expirePriceReviewsJob = definePeriodicJob({
+  name: "prices.expire-reviews",
+  timeoutSeconds: 60,
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: () => EVERY_MINUTE,
+});
+
 export const priceImportJobCatalog = [
   parsePriceFileJob,
   readPriceValuesJob,
   expirePriceImportsJob,
   deletePriceFilesJob,
+  matchPricesJob,
+  matchPricesAiJob,
+  wakePriceMatchingJob,
+  applyPriceImportJob,
+  expirePriceReviewsJob,
 ];

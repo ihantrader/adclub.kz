@@ -14,7 +14,14 @@ import {
   type SupplierType,
   type UpdateOfferBody,
 } from "@adclub/contracts";
-import { normalizeArticle, supplierOffers, warrantyTextContacts } from "@adclub/domain";
+import {
+  normalizeArticle,
+  offerLeadDaysProblem,
+  offerPriceProblem,
+  offerTermsShapeProblem,
+  supplierOffers,
+  type OfferLimits,
+} from "@adclub/domain";
 import { and, count, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog, type AuditActorRecord } from "../audit";
@@ -52,6 +59,16 @@ import { offer, offerModelPrice, type OfferRow } from "./schema";
 
 /** An employee acting for the company of the session. */
 export type OfferActor = Extract<AuditActorRecord, { role: "supplier" }>;
+
+/** The working range of a price and a term now (settings): the same for the cabinet and a price list. */
+export async function offerLimits(settings: AppSettings): Promise<OfferLimits> {
+  const [priceMin, priceMax, leadDaysMax] = await Promise.all([
+    settings.get("offer_price_min_kzt"),
+    settings.get("offer_price_max_kzt"),
+    settings.get("offer_lead_days_max"),
+  ]);
+  return { priceMin, priceMax, leadDaysMax };
+}
 
 /** The position of an offer in the lists: its creation time to the microsecond. */
 const createdPosition = sql<string>`to_char(${offer.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
@@ -108,33 +125,39 @@ function sameModelPrices(a: readonly ModelPriceValue[], b: readonly ModelPriceVa
   return key(a) === key(b);
 }
 
+/**
+ * The rules of the terms as a whole — `offerTermsShapeProblem` of the
+ * domain, the one check a price list import applies too (TASK-047) — as
+ * the cabinet's errors at the field the change touched.
+ */
 function checkTerms(terms: Terms, changed: (field: string) => boolean, service: boolean): void {
-  if (!service && terms.availability === "on_order" && terms.leadDays === 0) {
-    throw validationError(
-      changed("leadDays") ? "leadDays" : "availability",
-      "Under order needs a term of at least one working day",
-    );
-  }
-  if (!service && !terms.pickup && !terms.delivery) {
-    throw validationError(
-      changed("delivery") && !changed("pickup") ? "delivery" : "pickup",
-      "Choose pickup, delivery or both",
-    );
-  }
-  if (terms.warrantyMonths !== null && terms.warrantyText !== null) {
-    throw validationError(
-      changed("warrantyText") ? "warrantyText" : "warrantyMonths",
-      "The warranty is given in months or as a text, not both",
-    );
-  }
   // No contacts in the warranty (TASK-020.A, D-026): checked on the offer
   // as it would be saved, so a text saved before the check is refused on
   // the next save of the offer, whatever field that save changes.
-  if (terms.warrantyText !== null) {
-    const found = warrantyTextContacts(terms.warrantyText);
-    if (found.length > 0) {
-      throw warrantyContacts(found);
-    }
+  const problem = offerTermsShapeProblem(terms, service);
+  if (problem === null) {
+    return;
+  }
+  switch (problem.code) {
+    case "on_order_needs_lead_days":
+      throw validationError(
+        changed("leadDays") ? "leadDays" : "availability",
+        "Under order needs a term of at least one working day",
+      );
+    case "no_fulfillment":
+      throw validationError(
+        changed("delivery") && !changed("pickup") ? "delivery" : "pickup",
+        "Choose pickup, delivery or both",
+      );
+    case "warranty_both":
+      throw validationError(
+        changed("warrantyText") ? "warrantyText" : "warrantyMonths",
+        "The warranty is given in months or as a text, not both",
+      );
+    case "warranty_contacts":
+      throw warrantyContacts(problem.found);
+    default:
+      throw new Error(`Unexpected problem of the terms: ${problem.code}`);
   }
 }
 
@@ -714,11 +737,9 @@ export class OffersService {
   }
 
   private async checkPrice(price: number, path = "price"): Promise<void> {
-    const [min, max] = await Promise.all([
-      this.settings.get("offer_price_min_kzt"),
-      this.settings.get("offer_price_max_kzt"),
-    ]);
-    if (price < min || price > max) {
+    const problem = offerPriceProblem(price, await offerLimits(this.settings));
+    if (problem?.code === "price_out_of_range") {
+      const { min, max } = problem;
       throw validationError(path, `The price must be from ${min} to ${max} tenge`, { min, max });
     }
   }
@@ -827,8 +848,9 @@ export class OffersService {
   }
 
   private async checkLeadDays(leadDays: number): Promise<void> {
-    const max = await this.settings.get("offer_lead_days_max");
-    if (leadDays > max) {
+    const problem = offerLeadDaysProblem(leadDays, await offerLimits(this.settings));
+    if (problem?.code === "lead_days_out_of_range") {
+      const { max } = problem;
       throw validationError("leadDays", `The term must be at most ${max} working days`, {
         min: 0,
         max,

@@ -1,6 +1,8 @@
 export { OffersModule } from "./offers.module";
 export type { OffersModuleOptions } from "./offers.module";
-export { OffersService } from "./offers.service";
+export { OffersService, offerLimits } from "./offers.service";
+export { describeOfferItems } from "./offer-items";
+export { activeOrderCounts } from "./offer-active-orders";
 export type { OfferActor } from "./offers.service";
 export { OfferSnapshots } from "./offer-snapshots";
 export { offerShowcase, shownOffers } from "./offer-showcase";

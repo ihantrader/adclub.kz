@@ -9,6 +9,7 @@ import {
 import { AiService } from "../ai";
 import { CatalogItemsService, TranslationAdminService, UNTRANSLATED_STATES } from "../catalog";
 import { AdminSignals } from "../signals";
+import { CatalogRequestsService } from "../price-imports";
 import { SupplierLeadsService } from "../suppliers";
 
 /** The catalog cards, in the order their totals are read. */
@@ -39,10 +40,11 @@ export class AdminHomeService {
     @Inject(CatalogItemsService) private readonly items: CatalogItemsService,
     @Inject(TranslationAdminService) private readonly translations: TranslationAdminService,
     @Inject(SupplierLeadsService) private readonly leads: SupplierLeadsService,
+    @Inject(CatalogRequestsService) private readonly requests: CatalogRequestsService,
   ) {}
 
   async summary(): Promise<AdminHome> {
-    const [outage, signals, budget, leads, quality, queue] = await Promise.all([
+    const [outage, signals, budget, leads, quality, queue, requests] = await Promise.all([
       this.signals.currentOfKind("whatsapp_outage"),
       this.signals.currentCounts(),
       this.ai.budget(),
@@ -55,6 +57,7 @@ export class AdminHomeService {
         ),
       ),
       this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
+      this.requests.waiting(),
     ]);
     const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
@@ -74,6 +77,7 @@ export class AdminHomeService {
         budgetUsd: budget.budgetUsd,
       },
       newSupplierLeads: leads.counts.new,
+      catalogRequests: requests,
       catalog: {
         withoutPhoto: withoutPhoto!,
         incomplete: incomplete!,

@@ -511,6 +511,338 @@
         }
       }
     },
+    "/admin/catalog-requests": {
+      "get": {
+        "operationId": "listAdminCatalogRequests",
+        "summary": "Requests of suppliers to add an item (A-MOD-01), newest first, by status and supplier, with the counts by status",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "supplierId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCatalogRequestPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog-requests/{requestId}": {
+      "get": {
+        "operationId": "getAdminCatalogRequest",
+        "summary": "One request: the row of the price list, the supplier, the import, the brand it names and the items of the catalog that look like it",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCatalogRequestResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog-requests/{requestId}/create-item": {
+      "post": {
+        "operationId": "createItemFromCatalogRequest",
+        "summary": "«Создать позицию»: the item is created exactly as «Новая позиция» creates it, and in the same transaction the request is approved and the supplier's article remembered for this item — its next price list applies the row by itself",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The item",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItemFromRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The request and the item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemFromRequestResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog-requests/{requestId}/link": {
+      "post": {
+        "operationId": "linkCatalogRequest",
+        "summary": "«Это существующая позиция»: the request is approved with this item and the supplier's article is remembered for it",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The item",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkCatalogRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRequestDecidedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/catalog-requests/{requestId}/reject": {
+      "post": {
+        "operationId": "rejectCatalogRequest",
+        "summary": "«Отклонить»: with a reason the supplier sees",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The reason",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCatalogRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRequestDecidedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/catalog/attribute-options/{optionId}": {
       "patch": {
         "operationId": "updateAttributeOption",
@@ -13438,6 +13770,83 @@
         }
       }
     },
+    "/supplier/catalog-requests": {
+      "get": {
+        "operationId": "listSupplierCatalogRequests",
+        "summary": "The company's requests to add an item (S-MOD-01), newest first: what the row said, the status, the item it became, the reason of a refusal",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierCatalogRequestPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/catalog/items/{itemId}/compatibility-proposals": {
       "post": {
         "operationId": "createCompatibilityProposal",
@@ -15715,6 +16124,70 @@
         }
       }
     },
+    "/supplier/price-imports/{importId}/apply": {
+      "post": {
+        "operationId": "applyPriceImport",
+        "summary": "Apply the review to the company's offers in one transaction in the background (`applying`, then `applied` with the result); a second request doesn't apply it again. A blocked company can't",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The version decided on",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceImportVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The import, being applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/price-imports/{importId}/columns": {
       "put": {
         "operationId": "confirmPriceImportColumns",
@@ -15766,6 +16239,432 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/review": {
+      "get": {
+        "operationId": "getPriceImportReview",
+        "summary": "The review of a matched upload (S-PRICE-03): the groups, the offers missing in the file with their active orders, sharp price changes and what applying would do now",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceReviewSummary"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/review/missing": {
+      "get": {
+        "operationId": "listPriceMissingOffers",
+        "summary": "«Пропали из файла»: active offers of the company (not services) whose items the file doesn't have, with their active orders",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of offers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceMissingPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "choosePriceMissingAction",
+        "summary": "The one choice about every offer missing in the file: «Снять с продажи» or «Оставить как есть» — required before applying when there are any",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The choice",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChoosePriceMissingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The import",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/review/rows": {
+      "get": {
+        "operationId": "listPriceReviewRows",
+        "summary": "Rows of one group of the review in file order: the text of the file, the item matched or proposed («предложено ИИ»), candidates, «было → стало», the decision and who took it",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "confident",
+                "review",
+                "not_found",
+                "errors"
+              ]
+            }
+          },
+          {
+            "name": "decided",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceReviewRowsPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/review/rows/{rowNo}": {
+      "put": {
+        "operationId": "decidePriceReviewRow",
+        "summary": "Decide on one row: «Верно», «Другая позиция», «Пропустить», «Нет в справочнике», «Подтвердить цену», «Отправить администратору». One row at a time: AI's matches are never confirmed in bulk",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "rowNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9]\\d{0,8}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The decision",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecidePriceRowBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The row and the import's new version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceRowDecidedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/review/skip-remaining": {
+      "post": {
+        "operationId": "skipRemainingPriceRows",
+        "summary": "«Пропустить все оставшиеся»: every row of «Нужно проверить» without a decision is skipped — the only action on many rows at once",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The version decided on",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceImportVersionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many were skipped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceRowsSkippedResponse"
                 }
               }
             }
@@ -17234,6 +18133,297 @@
           "nextCursor"
         ]
       },
+      "AdminCatalogRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CatalogRequestStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "createdBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportPerson"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/CatalogRequestData"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "import": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "fileName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rowNo": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "fileName",
+                  "rowNo",
+                  "createdAt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rejectReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "adminId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "adminId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "version",
+          "supplier",
+          "createdBy",
+          "data",
+          "brand",
+          "import",
+          "item",
+          "rejectReason",
+          "decidedBy",
+          "decidedAt",
+          "createdAt"
+        ]
+      },
+      "AdminCatalogRequestListQuery": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/CatalogRequestStatus"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      },
+      "AdminCatalogRequestPage": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCatalogRequest"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "new": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "approved": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "rejected": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "new",
+              "approved",
+              "rejected"
+            ]
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "requests",
+          "total",
+          "counts",
+          "nextCursor"
+        ]
+      },
+      "AdminCatalogRequestResponse": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/AdminCatalogRequest"
+          },
+          "similar": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferItem"
+            }
+          }
+        },
+        "required": [
+          "request",
+          "similar"
+        ]
+      },
       "AdminCategory": {
         "type": "object",
         "properties": {
@@ -18699,6 +19889,11 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "catalogRequests": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "catalog": {
             "type": "object",
             "properties": {
@@ -18747,6 +19942,7 @@
           "signals",
           "aiBudget",
           "newSupplierLeads",
+          "catalogRequests",
           "catalog",
           "at"
         ]
@@ -23785,6 +24981,183 @@
           "too_many_photos"
         ]
       },
+      "CatalogRequestConflictDetails": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/CatalogRequestStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "adminId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "adminId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "decidedBy",
+          "decidedAt"
+        ]
+      },
+      "CatalogRequestData": {
+        "type": "object",
+        "properties": {
+          "article": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowAvailability"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leadDays": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "article",
+          "brand",
+          "name",
+          "price",
+          "availability",
+          "leadDays"
+        ]
+      },
+      "CatalogRequestDecidedResponse": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/AdminCatalogRequest"
+          }
+        },
+        "required": [
+          "request"
+        ]
+      },
+      "CatalogRequestListQuery": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/CatalogRequestStatus"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      },
+      "CatalogRequestPath": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "requestId"
+        ]
+      },
+      "CatalogRequestStatus": {
+        "type": "string",
+        "enum": [
+          "new",
+          "approved",
+          "rejected"
+        ]
+      },
       "CatalogSearchAttributeFacet": {
         "type": "object",
         "properties": {
@@ -24910,6 +26283,23 @@
           "value",
           "expectedVersion",
           "reason"
+        ]
+      },
+      "ChoosePriceMissingBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "action": {
+            "$ref": "#/components/schemas/PriceMissingAction"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "action"
         ]
       },
       "CityCode": {
@@ -26865,6 +28255,23 @@
           "evidence"
         ]
       },
+      "CreateItemFromRequestBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "item": {
+            "$ref": "#/components/schemas/CreateCatalogItemBody"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "item"
+        ]
+      },
       "CreateOfferBody": {
         "type": "object",
         "properties": {
@@ -27501,6 +28908,40 @@
           "intervals"
         ]
       },
+      "DecidePriceRowBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowDecisionKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "priceConfirmed": {
+            "type": "boolean"
+          },
+          "sendRequest": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
       "DeclineOrderBody": {
         "type": "object",
         "properties": {
@@ -27877,6 +29318,9 @@
           "PRICE_IMPORT_FILE_INVALID",
           "PRICE_IMPORT_STATE",
           "PRICE_IMPORT_VERSION_CONFLICT",
+          "PRICE_IMPORT_ITEM_UNAVAILABLE",
+          "PRICE_IMPORT_MISSING_CHOICE",
+          "CATALOG_REQUEST_VERSION_CONFLICT",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -28110,6 +29554,21 @@
           "incomplete"
         ]
       },
+      "ItemFromRequestResponse": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/AdminCatalogRequest"
+          },
+          "item": {
+            "$ref": "#/components/schemas/AdminCatalogItemCard"
+          }
+        },
+        "required": [
+          "request",
+          "item"
+        ]
+      },
       "ItemPhotoImage": {
         "type": "object",
         "properties": {
@@ -28227,6 +29686,25 @@
         "required": [
           "attributeId",
           "value"
+        ]
+      },
+      "LinkCatalogRequestBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "itemId"
         ]
       },
       "LinkItemAnalogBody": {
@@ -29279,7 +30757,8 @@
         "type": "string",
         "enum": [
           "manual",
-          "missing_in_import"
+          "missing_in_import",
+          "out_of_stock_in_import"
         ]
       },
       "OnOrderTerm": {
@@ -30748,6 +32227,60 @@
                 "type": "null"
               }
             ]
+          },
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "appliedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportPerson"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "appliedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -30770,7 +32303,12 @@
           "fileKept",
           "createdAt",
           "updatedAt",
-          "parsedAt"
+          "parsedAt",
+          "match",
+          "reviewUntil",
+          "appliedBy",
+          "appliedAt",
+          "result"
         ]
       },
       "PriceImportColumn": {
@@ -30976,6 +32514,22 @@
           "csv"
         ]
       },
+      "PriceImportItemUnavailableDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unavailable",
+              "service_item",
+              "supplier_type"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
       "PriceImportLimits": {
         "type": "object",
         "properties": {
@@ -31012,6 +32566,133 @@
         },
         "required": [
           "limit"
+        ]
+      },
+      "PriceImportMatch": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "confident": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "review": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "notFound": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "errors": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "bySource": {
+            "type": "object",
+            "properties": {
+              "mapping": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "exactArticle": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "search": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "ai": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "remembered": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "mapping",
+              "exactArticle",
+              "search",
+              "ai",
+              "remembered"
+            ]
+          },
+          "aiRows": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "aiPending": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "aiWaiting": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unavailable",
+                  "budget"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "done",
+          "total",
+          "confident",
+          "review",
+          "notFound",
+          "errors",
+          "bySource",
+          "aiRows",
+          "aiPending",
+          "aiWaiting"
+        ]
+      },
+      "PriceImportMissingChoiceDetails": {
+        "type": "object",
+        "properties": {
+          "missing": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "withActiveOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "missing",
+          "withActiveOrders"
         ]
       },
       "PriceImportPage": {
@@ -31133,6 +32814,82 @@
           "import"
         ]
       },
+      "PriceImportResult": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "created": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "returned": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "withdrawnOutOfStock": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "withdrawnMissing": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "requested": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "notApplied": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "$ref": "#/components/schemas/PriceRowNotAppliedReason"
+                },
+                "rows": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "reason",
+                "rows"
+              ]
+            }
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "updated",
+          "created",
+          "unchanged",
+          "returned",
+          "withdrawnOutOfStock",
+          "withdrawnMissing",
+          "requested",
+          "notApplied",
+          "skipped"
+        ]
+      },
       "PriceImportRow": {
         "type": "object",
         "properties": {
@@ -31231,10 +32988,51 @@
         "properties": {
           "status": {
             "$ref": "#/components/schemas/PriceImportStatus"
+          },
+          "appliedBy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "memberId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "memberId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "appliedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "status"
+          "status",
+          "appliedBy",
+          "appliedAt"
         ]
       },
       "PriceImportStats": {
@@ -31295,7 +33093,25 @@
           "columns",
           "reading",
           "parsed",
-          "failed"
+          "matching",
+          "review",
+          "applying",
+          "applied",
+          "failed",
+          "expired"
+        ]
+      },
+      "PriceImportVersionBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "expectedVersion"
         ]
       },
       "PriceImportVersionConflictDetails": {
@@ -31347,13 +33163,568 @@
                 "type": "null"
               }
             ]
+          },
+          "changedBy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "memberId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "memberId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "status",
           "version",
           "confirmedBy",
-          "confirmedAt"
+          "confirmedAt",
+          "changedBy",
+          "changedAt"
+        ]
+      },
+      "PriceMatchSource": {
+        "type": "string",
+        "enum": [
+          "mapping",
+          "exact_article",
+          "search",
+          "ai",
+          "remembered_skip",
+          "remembered_absent"
+        ]
+      },
+      "PriceMissingAction": {
+        "type": "string",
+        "enum": [
+          "withdraw",
+          "keep"
+        ]
+      },
+      "PriceMissingOffer": {
+        "type": "object",
+        "properties": {
+          "offerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "item": {
+            "$ref": "#/components/schemas/OfferItem"
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "availability": {
+            "$ref": "#/components/schemas/PriceRowAvailability"
+          },
+          "supplierSku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "activeOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "offerId",
+          "item",
+          "price",
+          "availability",
+          "supplierSku",
+          "activeOrders"
+        ]
+      },
+      "PriceMissingPage": {
+        "type": "object",
+        "properties": {
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceMissingOffer"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "offers",
+          "total",
+          "nextCursor"
+        ]
+      },
+      "PriceMissingQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      },
+      "PriceReviewGroup": {
+        "type": "string",
+        "enum": [
+          "confident",
+          "review",
+          "not_found",
+          "errors"
+        ]
+      },
+      "PriceReviewRow": {
+        "type": "object",
+        "properties": {
+          "rowNo": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "group": {
+            "$ref": "#/components/schemas/PriceReviewGroup"
+          },
+          "parsed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParsedPriceRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceRowError"
+            }
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceMatchSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "byName": {
+            "type": "boolean"
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferItem"
+            }
+          },
+          "aiProposed": {
+            "type": "boolean"
+          },
+          "aiConfidence": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "aiExplanation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowNote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowOffer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sharpPrice": {
+            "type": "boolean"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/PriceRowDecisionKind"
+                  },
+                  "itemId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "$ref": "#/components/schemas/PriceImportPerson"
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "itemId",
+                  "by",
+                  "at"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priceConfirmed": {
+            "type": "boolean"
+          },
+          "sendRequest": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "rowNo",
+          "group",
+          "parsed",
+          "errors",
+          "source",
+          "byName",
+          "item",
+          "candidates",
+          "aiProposed",
+          "aiConfidence",
+          "aiExplanation",
+          "note",
+          "offer",
+          "sharpPrice",
+          "decision",
+          "priceConfirmed",
+          "sendRequest",
+          "outcome"
+        ]
+      },
+      "PriceReviewRowPath": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "rowNo": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,8}$"
+          }
+        },
+        "required": [
+          "importId",
+          "rowNo"
+        ]
+      },
+      "PriceReviewRowsPage": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceReviewRow"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "nextCursor"
+        ]
+      },
+      "PriceReviewRowsQuery": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/PriceReviewGroup"
+          },
+          "decided": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "group",
+          "limit"
+        ]
+      },
+      "PriceReviewSummary": {
+        "type": "object",
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/PriceImport"
+          },
+          "groups": {
+            "type": "object",
+            "properties": {
+              "confident": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "review": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "notFound": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "errors": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "confident",
+              "review",
+              "notFound",
+              "errors"
+            ]
+          },
+          "missing": {
+            "type": "object",
+            "properties": {
+              "offers": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "withActiveOrders": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "action": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceMissingAction"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decidedBy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceImportPerson"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "offers",
+              "withActiveOrders",
+              "action",
+              "decidedBy"
+            ]
+          },
+          "sharpPrice": {
+            "type": "object",
+            "properties": {
+              "rows": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "unconfirmed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "rows",
+              "unconfirmed"
+            ]
+          },
+          "preview": {
+            "type": "object",
+            "properties": {
+              "update": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "create": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "withdraw": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "request": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "unchecked": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "priceConfirmationRequired": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "update",
+              "create",
+              "withdraw",
+              "request",
+              "unchecked",
+              "priceConfirmationRequired"
+            ]
+          },
+          "canApply": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "import",
+          "groups",
+          "missing",
+          "sharpPrice",
+          "preview",
+          "canApply"
         ]
       },
       "PriceRowAvailability": {
@@ -31362,6 +33733,30 @@
           "in_stock",
           "out_of_stock",
           "on_order"
+        ]
+      },
+      "PriceRowDecidedResponse": {
+        "type": "object",
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/PriceImport"
+          },
+          "row": {
+            "$ref": "#/components/schemas/PriceReviewRow"
+          }
+        },
+        "required": [
+          "import",
+          "row"
+        ]
+      },
+      "PriceRowDecisionKind": {
+        "type": "string",
+        "enum": [
+          "accept",
+          "other",
+          "skip",
+          "not_in_catalog"
         ]
       },
       "PriceRowError": {
@@ -31374,7 +33769,10 @@
               "price_not_number",
               "price_out_of_range",
               "no_article_or_name",
-              "lead_days_out_of_range"
+              "lead_days_out_of_range",
+              "repeated_row",
+              "service_item",
+              "supplier_type"
             ]
           },
           "text": {
@@ -31419,6 +33817,144 @@
           "group",
           "total",
           "data"
+        ]
+      },
+      "PriceRowNotAppliedReason": {
+        "type": "string",
+        "enum": [
+          "price_out_of_range",
+          "lead_days_out_of_range",
+          "on_order_needs_lead_days",
+          "no_fulfillment",
+          "pickup_needs_address",
+          "warranty_both",
+          "warranty_contacts",
+          "price_confirmation_required",
+          "item_unavailable",
+          "service_item",
+          "supplier_type",
+          "out_of_stock",
+          "duplicate_item"
+        ]
+      },
+      "PriceRowNote": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "several_brands",
+              "other_brand",
+              "same_item"
+            ]
+          },
+          "rowNo": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "rowNo"
+        ]
+      },
+      "PriceRowOffer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "withdrawn",
+              "suspended"
+            ]
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "in_stock",
+              "on_order"
+            ]
+          },
+          "leadDays": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "price",
+          "availability",
+          "leadDays"
+        ]
+      },
+      "PriceRowOutcome": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "unchanged",
+              "returned",
+              "withdrawn",
+              "requested",
+              "skipped",
+              "not_applied"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowNotAppliedReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "reason"
+        ]
+      },
+      "PriceRowsSkippedResponse": {
+        "type": "object",
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/PriceImport"
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "import",
+          "skipped"
         ]
       },
       "ProposeOrderTermBody": {
@@ -31572,6 +34108,25 @@
         },
         "required": [
           "totpCode"
+        ]
+      },
+      "RejectCatalogRequestBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "reason"
         ]
       },
       "RejectCompatibilityProposalBody": {
@@ -34647,6 +37202,111 @@
         },
         "required": [
           "company"
+        ]
+      },
+      "SupplierCatalogRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CatalogRequestStatus"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CatalogRequestData"
+          },
+          "importId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rowNo": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rejectReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "data",
+          "importId",
+          "rowNo",
+          "item",
+          "rejectReason",
+          "createdAt",
+          "decidedAt"
+        ]
+      },
+      "SupplierCatalogRequestPage": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierCatalogRequest"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "requests",
+          "nextCursor"
         ]
       },
       "SupplierColleagueRef": {

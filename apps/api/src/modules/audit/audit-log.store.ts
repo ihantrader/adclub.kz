@@ -175,6 +175,23 @@ export class AuditLogStore {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
+  /** Many entries of one action, in chunks of a thousand rows per statement. */
+  async appendMany(rows: readonly NewAuditLogRow[], executor: DbExecutor): Promise<number> {
+    let written = 0;
+    for (let start = 0; start < rows.length; start += 1000) {
+      const chunk = rows.slice(start, start + 1000);
+      const result = await executor
+        .insert(auditLog)
+        .values([...chunk])
+        .returning({ id: auditLog.id });
+      written += result.length;
+    }
+    if (written !== rows.length) {
+      throw new Error("Not every action was recorded in the journal");
+    }
+    return written;
+  }
+
   async append(row: NewAuditLogRow, executor: DbExecutor): Promise<AuditLogRow> {
     const [written] = await executor.insert(auditLog).values(row).returning(columns);
     if (!written) {

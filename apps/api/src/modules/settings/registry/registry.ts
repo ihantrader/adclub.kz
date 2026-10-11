@@ -482,6 +482,20 @@ const ai = group({
       description:
         "Запасная модель автоперевода: используется, когда основная недоступна или её нет у OpenRouter. Другой поставщик, чем основная, — иначе сбой у одного остановит обе (TASK-053.B). Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
+    ai_model_price_match_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-2.5-flash-lite",
+      description:
+        "Модель OpenRouter для сопоставления строк прайса со справочником: выбирает одного из кандидатов поиска или отвечает «нет в справочнике» (TASK-047). Умолчание — как у автоперевода; замер на наборе примеров (D-058) — отдельной задачей. Меняется без релиза, действует не позже чем через 30 секунд.",
+    }),
+    ai_model_price_match_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "deepseek/deepseek-v4-flash",
+      description:
+        "Запасная модель сопоставления прайса: используется, когда основная недоступна. Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
     ai_model_vehicle_document_primary: define.string({
       maxLength: 100,
       pattern: MODEL_ID,
@@ -653,6 +667,30 @@ const pricelist = group({
       default: 30,
       description:
         "Сколько минут может идти чтение файла прайса или его строк; дольше — загрузка помечается ошибкой, и поставщик загружает файл снова.",
+    }),
+    price_match_batch_size: define.integer({
+      unit: "rows",
+      min: 1,
+      max: 200,
+      default: 50,
+      description:
+        "Сколько строк прайса уходит модели ИИ одним вызовом при сопоставлении со справочником (у каждой — до трёх кандидатов).",
+    }),
+    price_match_retry_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: 3600,
+      default: 60,
+      description:
+        "Через сколько секунд сопоставление прайса снова обращается к ИИ, если тот был недоступен или исчерпан дневной бюджет; загрузка всё это время ждёт и продолжается сама.",
+    }),
+    price_import_review_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 90,
+      default: 7,
+      description:
+        "Сколько дней хранится незаконченная сверка прайса; после этого загрузка истекает и ничего из неё не применяется.",
     }),
   },
 });

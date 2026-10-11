@@ -47,7 +47,7 @@ export function notFound(): ApiException {
 }
 
 export function importState(status: PriceImportStatus, message: string): ApiException {
-  const details: PriceImportStateDetails = { status };
+  const details: PriceImportStateDetails = { status, appliedBy: null, appliedAt: null };
   return new ApiException(409, "PRICE_IMPORT_STATE", message, { details });
 }
 

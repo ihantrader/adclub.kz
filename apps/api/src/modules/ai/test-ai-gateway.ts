@@ -1,9 +1,12 @@
 import { Injectable } from "@nestjs/common";
+import { rankCandidates } from "@adclub/domain";
 import type { AiTestMode } from "../../config";
 import {
   AiGateway,
   AiGatewayError,
   type AiResult,
+  type PriceMatchInput,
+  type PriceMatchRow,
   type TranslateInput,
   type TranslateItem,
   type VehicleDocumentInput,
@@ -113,6 +116,11 @@ export class TestAiGateway extends AiGateway {
   failingModels = new Set<string>();
   /** Every certificate photo received: its size and the model, never the picture (TASK-057). */
   readonly documentRequests: { bytes: number; model: string }[] = [];
+  /** Every batch of price list rows received: how many rows and the model (TASK-047). */
+  readonly priceMatchRequests: { rows: number; model: string }[] = [];
+  /** An answer for one row instead of the closest candidate; `undefined` — the default. */
+  matchOverride:
+    ((row: PriceMatchRow) => { itemId: string | null; confidence: number } | undefined) | undefined;
 
   async translate(input: TranslateInput, model: string, signal: AbortSignal): Promise<AiResult> {
     this.requests.push({ input, model });
@@ -220,6 +228,76 @@ export class TestAiGateway extends AiGateway {
       1_000_000;
     return {
       output,
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
+  }
+
+  /**
+   * Matches each row with the candidate whose words are closest to it
+   * (`candidateScore` of the domain): deterministic, and plainly a stand-in.
+   * The best candidate scoring at least 0.5 is the answer with that score as
+   * the confidence; anything less is «нет в справочнике». `matchOverride`
+   * decides a single row instead (tests of the threshold and of «нет»).
+   */
+  async matchPrices(input: PriceMatchInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    this.priceMatchRequests.push({ rows: input.rows.length, model });
+    if (model.startsWith(MISSING_MODEL_PREFIX) || this.failingModels.has(model)) {
+      throw new AiGatewayError("model_unavailable", `The test AI provider has no model ${model}`);
+    }
+    switch (this.mode) {
+      case "unavailable":
+        throw new AiGatewayError("unavailable", "The test AI provider is unavailable");
+      case "rejected":
+        throw new AiGatewayError("rejected", "The test AI provider refuses the request");
+      case "no_private_provider":
+        throw new AiGatewayError(
+          "no_private_provider",
+          "No provider of this model keeps requests unstored, so nothing was sent",
+        );
+      case "slow":
+        await this.wait(this.delayMs, signal);
+        break;
+      default:
+        break;
+    }
+    const matches = input.rows.map((row) => {
+      const decided = this.matchOverride?.(row);
+      if (decided) {
+        return { id: row.id, ...decided, explanation: "test: decided by the test" };
+      }
+      const ranked = rankCandidates(
+        { name: row.name, brand: row.brand },
+        row.candidates.map((candidate) => ({
+          itemId: candidate.id,
+          name: candidate.name,
+          brandSpellings: candidate.brand ? [candidate.brand] : [],
+          article: candidate.article,
+        })),
+        1,
+      );
+      const best = ranked[0];
+      return best && best.score >= 0.5
+        ? {
+            id: row.id,
+            itemId: best.candidate.itemId,
+            confidence: Math.round(best.score * 1000) / 1000,
+            explanation: `test: the closest candidate (${best.score.toFixed(2)})`,
+          }
+        : { id: row.id, itemId: null, confidence: 0.9, explanation: "test: none fits" };
+    });
+    const answered = this.mode === "incomplete" ? matches.slice(0, -1) : matches;
+    const tokensIn = 60 + input.rows.length * 40;
+    const tokensOut = answered.length * 20;
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    return {
+      output: { matches: answered },
       model,
       usage: {
         tokensIn,

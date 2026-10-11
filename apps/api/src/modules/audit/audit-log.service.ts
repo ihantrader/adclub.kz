@@ -120,36 +120,58 @@ export class AuditLog {
    * entry (business rule, TASK-009).
    */
   async record(entry: AuditEntryInput, executor: DbExecutor): Promise<string> {
-    const origin = getRequestOrigin();
-    const { actor } = entry;
-    const row = await this.store.append(
-      {
-        action: entry.action,
-        actorRole: actor.role,
-        actorAccountId: "accountId" in actor ? actor.accountId : null,
-        actorAdminId: actor.role === "admin" ? actor.adminId : null,
-        actorSupplierId: actor.role === "supplier" ? actor.supplierId : null,
-        actorMemberId: actor.role === "supplier" ? actor.memberId : null,
-        entityType: entry.entityType,
-        entityId: entry.entityId,
-        before: bounded(entry.before),
-        after: bounded(entry.after),
-        reason: entry.reason ?? null,
-        ip: origin.ip,
-        userAgent: origin.userAgent,
-        requestId: getRequestId() ?? null,
-      },
-      executor,
-    );
+    const row = await this.store.append(this.rowOf(entry), executor);
     // The entry itself holds the detail; the log line only says it exists —
     // once the transaction of the action has committed, never for an
     // action that was rolled back (TASK-009.A).
     afterCommit(() =>
       this.logger.log(
-        `Action recorded action=${entry.action} entity=${entry.entityType}:${entry.entityId} by=${this.actorLabel(actor)} audit=${row.id}`,
+        `Action recorded action=${entry.action} entity=${entry.entityType}:${entry.entityId} by=${this.actorLabel(entry.actor)} audit=${row.id}`,
       ),
     );
     return row.id;
+  }
+
+  /**
+   * Records many actions of one operation in its transaction, a thousand
+   * rows per statement (TASK-047: applying a price list changes thousands of
+   * offers, each keeps its own entry). The same rules as `record`; the log
+   * says once how many were written.
+   */
+  async recordMany(entries: readonly AuditEntryInput[], executor: DbExecutor): Promise<number> {
+    if (entries.length === 0) return 0;
+    const written = await this.store.appendMany(
+      entries.map((entry) => this.rowOf(entry)),
+      executor,
+    );
+    const first = entries[0]!;
+    afterCommit(() =>
+      this.logger.log(
+        `Actions recorded count=${String(written)} first=${first.action} by=${this.actorLabel(first.actor)}`,
+      ),
+    );
+    return written;
+  }
+
+  private rowOf(entry: AuditEntryInput) {
+    const origin = getRequestOrigin();
+    const { actor } = entry;
+    return {
+      action: entry.action,
+      actorRole: actor.role,
+      actorAccountId: "accountId" in actor ? actor.accountId : null,
+      actorAdminId: actor.role === "admin" ? actor.adminId : null,
+      actorSupplierId: actor.role === "supplier" ? actor.supplierId : null,
+      actorMemberId: actor.role === "supplier" ? actor.memberId : null,
+      entityType: entry.entityType,
+      entityId: entry.entityId,
+      before: bounded(entry.before),
+      after: bounded(entry.after),
+      reason: entry.reason ?? null,
+      ip: origin.ip,
+      userAgent: origin.userAgent,
+      requestId: getRequestId() ?? null,
+    };
   }
 
   /** One page of the journal, newest first (admin panel; SCREENS, TASK-034). */

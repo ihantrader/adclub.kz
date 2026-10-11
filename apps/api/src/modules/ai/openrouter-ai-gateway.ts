@@ -2,11 +2,13 @@ import { z } from "zod";
 import {
   AiGateway,
   AiGatewayError,
+  priceMatchOutputSchema,
   translateOutputSchema,
   vehicleDocumentOutputSchema,
   type AiFailureKind,
   type AiResult,
   type AiUsage,
+  type PriceMatchInput,
   type TranslateGlossaryEntry,
   type TranslateInput,
   type VehicleDocumentInput,
@@ -182,6 +184,28 @@ const VEHICLE_DOCUMENT_FORMAT = {
   },
 } as const;
 
+const PRICE_MATCH_SYSTEM = `You match rows of a car parts supplier's price list with items of a catalog. Each row comes with what the file says (article, brand, name — any of them may be missing, names may be abbreviated, in Russian, Kazakh or English, with the supplier's own codes) and one to three candidate items of the catalog found by a search.
+
+For every row decide which candidate is the same product, or that none is:
+- the same product means the same part or product: the same manufacturer's article when both have one, the same brand when the row names one, the same sizes, volume, viscosity grade, fitment and other characteristics; a similar product of another size, volume or brand is NOT the same;
+- itemId is the id of that candidate exactly as given, or null when no candidate is the same product;
+- confidence is how sure you are, from 0 to 1;
+- explanation is one short sentence in Russian that a supplier understands (what matched or what differs).
+
+Return exactly one answer for every row, using the row's id.`;
+
+/** The longest answer a matching batch may produce. */
+const PRICE_MATCH_MAX_TOKENS = 16_000;
+
+const PRICE_MATCH_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "price_list_matches",
+    strict: true,
+    schema: strictJsonSchema(priceMatchOutputSchema),
+  },
+} as const;
+
 export interface OpenRouterOptions {
   /** Tests give their own HTTP layer; nothing in development, tests or CI calls the real service. */
   fetch?: typeof fetch;
@@ -256,6 +280,35 @@ export class OpenRouterAiGateway extends AiGateway {
               { type: "image_url", image_url: { url: dataUrl } },
             ],
           },
+        ],
+      },
+      signal,
+    );
+  }
+
+  /** Rows of a price list with their candidates (TASK-047): only what tells items apart is sent. */
+  async matchPrices(input: PriceMatchInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    const rows = input.rows.map((row) => ({
+      id: row.id,
+      article: row.article,
+      brand: row.brand,
+      name: row.name,
+      candidates: row.candidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        brand: candidate.brand,
+        article: candidate.article,
+        category: candidate.category,
+      })),
+    }));
+    return this.complete(
+      {
+        model,
+        max_tokens: PRICE_MATCH_MAX_TOKENS,
+        response_format: PRICE_MATCH_FORMAT,
+        messages: [
+          { role: "system", content: PRICE_MATCH_SYSTEM },
+          { role: "user", content: `Match these rows:\n${JSON.stringify({ rows })}` },
         ],
       },
       signal,

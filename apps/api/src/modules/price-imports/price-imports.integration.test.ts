@@ -394,7 +394,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
   async function settled(
     of: Company,
     importId: string,
-    statuses: PriceImportStatus[] = ["columns", "parsed", "failed"],
+    statuses: PriceImportStatus[] = ["columns", "review", "failed"],
     timeoutMs = 60_000,
   ) {
     const until = Date.now() + timeoutMs;
@@ -485,18 +485,24 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const confirmed = await confirm(of, created.id, roles);
     expect(confirmed.status).toBe("reading");
     expect(confirmed.columnsSource).toBe("supplier");
-    const parsed = await settled(of, created.id, ["parsed", "failed"]);
+    const parsed = await settled(of, created.id, ["review", "failed"]);
     expect(parsed.import).toMatchObject({
-      status: "parsed",
+      status: "review",
       stats: { dataRows: 1240, parsedRows: 1228, errorRows: 12 },
     });
     expect(parsed.columns![6]).toMatchObject({ role: "ignore", source: "supplier" });
     expect(parsed.columns![1]).toMatchObject({ role: "article", source: "header" });
 
     const errors = await errorRows(of, created.id);
-    expect(errors.total).toBe(12);
-    expect(errors.rows.every((row) => row.errors[0]!.code === "price_not_number")).toBe(true);
-    expect(errors.rows[0]!.errors[0]).toMatchObject({ text: "по запросу" });
+    // 12 prices «по запросу» from reading and 3 rows repeated in the file
+    // from matching (TASK-047).
+    expect(errors.total).toBe(15);
+    const codes = errors.rows.map((row) => row.errors[0]!.code);
+    expect(codes.filter((code) => code === "price_not_number")).toHaveLength(12);
+    expect(codes.filter((code) => code === "repeated_row")).toHaveLength(3);
+    expect(
+      errors.rows.find((row) => row.errors[0]!.code === "price_not_number")!.errors[0],
+    ).toMatchObject({ text: "по запросу" });
     const all = priceImportRowsPageSchema.parse(
       (await of.as("get", `/supplier/price-imports/${created.id}/rows?only=data&limit=2`)).body,
     );
@@ -522,14 +528,14 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const first = await uploaded(of, oneCExport(300, 3));
     await settled(of, first.id);
     await confirm(of, first.id, ONE_C_ROLES, true);
-    await settled(of, first.id, ["parsed"]);
+    await settled(of, first.id, ["review"]);
 
     // Uploaded during nothing: the same bytes again.
     const again = await uploaded(of, oneCExport(300, 3));
     expect(again.sameFileAsImportId).toBe(first.id);
-    const skipped = await settled(of, again.id, ["parsed", "columns", "failed"]);
+    const skipped = await settled(of, again.id, ["review", "columns", "failed"]);
     expect(skipped.import).toMatchObject({
-      status: "parsed",
+      status: "review",
       columnsSource: "remembered",
       stats: { dataRows: 300, errorRows: 3 },
     });
@@ -538,14 +544,14 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     // Another file of the same format (other rows): also without the screen.
     const other = await uploaded(of, oneCExport(120, 0));
     expect(other.sameFileAsImportId).toBeNull();
-    expect((await settled(of, other.id, ["parsed", "columns"])).import.status).toBe("parsed");
+    expect((await settled(of, other.id, ["review", "columns"])).import.status).toBe("review");
 
     // The supplier opens the remembered roles and corrects them, unticking «Запомнить».
     const roles = [...ONE_C_ROLES];
     roles[4] = "price";
     roles[5] = "ignore";
     await confirm(of, other.id, roles, false);
-    const corrected = await settled(of, other.id, ["parsed"]);
+    const corrected = await settled(of, other.id, ["review"]);
     expect(corrected.columns![4]).toMatchObject({ role: "price", source: "supplier" });
     const next = await uploaded(of, oneCExport(50, 0));
     expect((await settled(of, next.id)).import.status).toBe("columns");
@@ -591,7 +597,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
       faulty.id,
       faultyRead.columns!.map((column) => column.role),
     );
-    const done = await settled(of, faulty.id, ["parsed"]);
+    const done = await settled(of, faulty.id, ["review"]);
     expect(done.import.stats).toMatchObject({ dataRows: 10, parsedRows: 3, errorRows: 7 });
     const errors = await errorRows(of, faulty.id);
     expect(errors.rows.map((row) => [row.rowNo, row.errors.map((error) => error.code)])).toEqual([
@@ -758,7 +764,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     await db.query("UPDATE price_import SET status = 'parsing' WHERE id = $1", [created.id]);
     const busy = await put(["article", "name", "price", "availability", "lead_days"]);
     expectError(busy, 409, "PRICE_IMPORT_STATE");
-    expect(busy.body.details).toEqual({ status: "parsing" });
+    expect(busy.body.details).toEqual({ status: "parsing", appliedBy: null, appliedAt: null });
   });
 
   it("limits the uploads of one company per hour", async () => {
@@ -799,7 +805,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const created = await uploaded(of, withErrorsCsv());
     expect((await settled(of, created.id)).import.status).toBe("columns");
     await confirm(of, created.id, ["article", "name", "price", "availability", "lead_days"]);
-    expect((await settled(of, created.id, ["parsed"])).import.status).toBe("parsed");
+    expect((await settled(of, created.id, ["review"])).import.status).toBe("review");
   });
 
   it("reads two uploads at once", async () => {
@@ -818,7 +824,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const created = await uploaded(of, withErrorsCsv());
     await settled(of, created.id);
     await confirm(of, created.id, ["article", "name", "price", "availability", "lead_days"]);
-    await settled(of, created.id, ["parsed"]);
+    await settled(of, created.id, ["review"]);
     const young = await uploaded(of, cp1251Csv(10));
     await settled(of, young.id);
 
@@ -831,7 +837,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const until = Date.now() + 30_000;
     while ((await detail(of, created.id)).import.fileKept && Date.now() < until) await sleep(200);
     const kept = await detail(of, created.id);
-    expect(kept.import).toMatchObject({ fileKept: false, status: "parsed" });
+    expect(kept.import).toMatchObject({ fileKept: false, status: "review" });
     expect(kept.preview.length).toBeGreaterThan(0);
     expect((await errorRows(of, created.id)).total).toBe(7);
     expect(await objectsOf(of.supplierId)).toEqual([`price-imports/${of.supplierId}/${young.id}`]);
@@ -890,7 +896,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     });
     const confirmedAt = Date.now();
     await confirm(of, created.id, ONE_C_ROLES);
-    const parsed = await settled(of, created.id, ["parsed", "failed"], 240_000);
+    const parsed = await settled(of, created.id, ["review", "failed"], 240_000);
     const valuesMs = Date.now() - confirmedAt;
     expect(parsed.import.stats).toMatchObject({ dataRows: 49_990, errorRows: 12 });
     timings.push(
@@ -979,7 +985,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
       uploadMs = performance.now() - started;
       expect(response.status, JSON.stringify(response.body)).toBe(201);
       importId = priceImportResponseSchema.parse(response.body).import.id;
-      const failed = await settled(of, importId, ["failed", "columns", "parsed"]);
+      const failed = await settled(of, importId, ["failed", "columns", "review"]);
       settledMs = performance.now() - started;
       expect(failed.import).toMatchObject({
         status: "failed",
@@ -1069,9 +1075,9 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const first = await uploaded(of, withErrorsCsv());
     await settled(of, first.id);
     await confirm(of, first.id, ARTICLE_NAME_PRICE, true);
-    await settled(of, first.id, ["parsed"]);
+    await settled(of, first.id, ["review"]);
     const second = await uploaded(of, withErrorsCsv());
-    expect((await settled(of, second.id, ["parsed"])).import.columnsSource).toBe("remembered");
+    expect((await settled(of, second.id, ["review"])).import.columnsSource).toBe("remembered");
     // As if the run died after the file was read, halfway through the values.
     await db.query(
       `UPDATE price_import SET status = 'reading', parsed_at = NULL,
@@ -1084,9 +1090,9 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
       [second.id],
     );
     await app.get(JobQueue).enqueue(parsePriceFileJob, { importId: second.id });
-    const done = await settled(of, second.id, ["parsed", "failed"]);
+    const done = await settled(of, second.id, ["review", "failed"]);
     expect(done.import).toMatchObject({
-      status: "parsed",
+      status: "review",
       stats: { dataRows: 10, errorRows: 7 },
     });
   });
@@ -1172,10 +1178,10 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
       ...notes.map(() => "ignore" as const),
     ];
     await confirm(of, first.id, roles, true);
-    expect((await settled(of, first.id, ["parsed", "failed"])).import.status).toBe("parsed");
+    expect((await settled(of, first.id, ["review", "failed"])).import.status).toBe("review");
     const second = await uploaded(of, csv(200));
-    expect((await settled(of, second.id, ["parsed", "columns", "failed"])).import).toMatchObject({
-      status: "parsed",
+    expect((await settled(of, second.id, ["review", "columns", "failed"])).import).toMatchObject({
+      status: "review",
       columnsSource: "remembered",
     });
   });
@@ -1194,16 +1200,16 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     const first = await put({ expectedVersion: 1 });
     expect(first.status, JSON.stringify(first.body)).toBe(200);
     expect(priceImportResponseSchema.parse(first.body).import.version).toBe(2);
-    await settled(of, created.id, ["parsed"]);
+    await settled(of, created.id, ["review"]);
 
     const stale = await put({ expectedVersion: 1 });
     expectError(stale, 409, "PRICE_IMPORT_VERSION_CONFLICT");
     expect(priceImportVersionConflictDetailsSchema.parse(stale.body.details)).toMatchObject({
-      status: "parsed",
+      status: "review",
       version: 2,
       confirmedBy: { memberId: of.memberId, name: "Ерлан" },
     });
-    expect((await detail(of, created.id)).import).toMatchObject({ status: "parsed", version: 2 });
+    expect((await detail(of, created.id)).import).toMatchObject({ status: "review", version: 2 });
     // A client that sends no version is answered as before.
     expect((await put({})).status).toBe(200);
   });

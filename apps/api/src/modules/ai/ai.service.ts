@@ -10,11 +10,14 @@ import {
   AiGatewayError,
   FALLBACK_WORTHY,
   NOT_BILLED,
+  priceMatchOperation,
   translateOperation,
   vehicleDocumentOperation,
   type AiFailureKind,
   type AiOperation,
   type AiResult,
+  type PriceMatchInput,
+  type PriceMatchOutput,
   type TranslateInput,
   type TranslateOutput,
   type VehicleDocumentInput,
@@ -137,6 +140,11 @@ export class AiService {
     meta: AiCallMeta,
   ): Promise<AiCallResult<VehicleDocumentOutput>> {
     return this.call(vehicleDocumentOperation, input, meta);
+  }
+
+  /** Rows of a price list matched with their candidates (TASK-047). */
+  matchPrices(input: PriceMatchInput, meta: AiCallMeta): Promise<AiCallResult<PriceMatchOutput>> {
+    return this.call(priceMatchOperation, input, meta);
   }
 
   /**

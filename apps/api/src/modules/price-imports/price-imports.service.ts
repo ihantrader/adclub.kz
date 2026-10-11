@@ -14,7 +14,7 @@ import {
   type UploadPriceImportQuery,
 } from "@adclub/contracts";
 import { priceRolesProblem } from "@adclub/domain";
-import { and, asc, count, desc, eq, gt, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { ApiException, rateLimitedException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue } from "../../jobs";
@@ -48,6 +48,36 @@ export interface PriceImportActor {
 }
 
 const HOUR_SECONDS = 3600;
+
+/** States the columns can be confirmed (or corrected) in. */
+const CONFIRMABLE: readonly PriceImportRecord["status"][] = [
+  "columns",
+  "parsed",
+  "matching",
+  "review",
+];
+
+/** A row as it is before matching (TASK-047). */
+const UNMATCHED = {
+  matchKeyKind: null,
+  matchKey: null,
+  matchStage: null,
+  matchGroup: null,
+  matchSource: null,
+  itemId: null,
+  candidates: null,
+  aiProposed: false,
+  aiConfidence: null,
+  aiExplanation: null,
+  matchNote: null,
+  matchError: null,
+  decision: null,
+  decisionItemId: null,
+  decidedByMemberId: null,
+  decidedAt: null,
+  priceConfirmed: false,
+  sendRequest: null,
+} as const;
 
 function encodeCursor(createdAt: Date, id: string): string {
   return Buffer.from(JSON.stringify([createdAt.toISOString(), id]), "utf8").toString("base64url");
@@ -355,7 +385,7 @@ export class PriceImportsService {
             .orderBy(asc(priceImportRow.rowNo))
             .limit(PRICE_IMPORT_PREVIEW_ROWS);
     return {
-      import: describeImport(record, await this.memberName(record.uploadedByMemberId)),
+      import: await this.described(record),
       columns: record.status === "parsing" ? null : describeColumns(record, header?.raw ?? null),
       header: header && record.status !== "parsing" ? describePreviewRow(header, width) : null,
       preview: preview.map((row) => describePreviewRow(row, width)),
@@ -376,12 +406,18 @@ export class PriceImportsService {
   ): Promise<PriceImport> {
     const updated = await this.database.db.transaction(async (tx) => {
       const record = await this.own(tx, actor.supplierId, importId, true);
-      if (record.status !== "columns" && record.status !== "parsed") {
+      // The columns can be corrected until the import is applied (TASK-047):
+      // matching and the decisions of the review start over.
+      if (!CONFIRMABLE.includes(record.status)) {
         throw importState(
           record.status,
           record.status === "failed"
             ? "The file of this upload could not be read; upload it again"
-            : "The file is still being read; wait for it",
+            : record.status === "applying" || record.status === "applied"
+              ? "The price list has been applied already"
+              : record.status === "expired"
+                ? "The review of this upload has expired; upload the file again"
+                : "The file is still being read; wait for it",
         );
       }
       if (body.expectedVersion !== undefined && body.expectedVersion !== record.version) {
@@ -396,6 +432,13 @@ export class PriceImportsService {
               }
             : null,
           confirmedAt: record.columnsConfirmedAt?.toISOString() ?? null,
+          changedBy: record.changedByMemberId
+            ? {
+                memberId: record.changedByMemberId,
+                name: await this.memberName(record.changedByMemberId, tx),
+              }
+            : null,
+          changedAt: record.changedAt?.toISOString() ?? null,
         };
         throw new ApiException(
           409,
@@ -441,10 +484,21 @@ export class PriceImportsService {
           version: record.version + 1,
           columnsConfirmedByMemberId: actor.memberId,
           columnsConfirmedAt: new Date(),
+          changedByMemberId: actor.memberId,
+          changedAt: new Date(),
+          missingAction: null,
+          missingDecidedByMemberId: null,
+          missingDecidedAt: null,
+          matchedAt: null,
+          reviewUntil: null,
           updatedAt: new Date(),
         })
         .where(eq(priceImport.id, importId))
         .returning();
+      if (record.status !== "columns" && record.status !== "parsed") {
+        // Read again by other roles: what matching found and what was decided goes.
+        await tx.update(priceImportRow).set(UNMATCHED).where(eq(priceImportRow.importId, importId));
+      }
       if (record.headerKey) {
         const hash = headerHash(record.headerKey);
         if (body.remember) {
@@ -479,7 +533,16 @@ export class PriceImportsService {
       await this.queue.enqueue(readPriceValuesJob, { importId }, { tx });
       return row!;
     });
-    return describeImport(updated, await this.memberName(updated.uploadedByMemberId));
+    return this.described(updated);
+  }
+
+  /** An import with the names of who uploaded and who applied it. */
+  private async described(record: PriceImportRecord): Promise<PriceImport> {
+    return describeImport(
+      record,
+      await this.memberName(record.uploadedByMemberId),
+      record.appliedByMemberId ? await this.memberName(record.appliedByMemberId) : null,
+    );
   }
 
   async rows(
@@ -490,7 +553,10 @@ export class PriceImportsService {
     const record = await this.own(this.database.db, supplierId, importId);
     const after = query.cursor === undefined ? null : decodeRowCursor(query.cursor);
     const filter: SQL[] = [eq(priceImportRow.importId, importId), eq(priceImportRow.kind, "data")];
-    if (query.only === "errors") filter.push(isNotNull(priceImportRow.errors));
+    if (query.only === "errors") {
+      // The reading's errors and, once matched, the matching's (TASK-047).
+      filter.push(or(isNotNull(priceImportRow.errors), isNotNull(priceImportRow.matchError))!);
+    }
     const [rows, [total]] = await Promise.all([
       this.database.db
         .select()

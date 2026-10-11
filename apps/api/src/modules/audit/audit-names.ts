@@ -109,6 +109,12 @@ const NAMERS: Record<string, Namer> = {
         WHERE modification.id = ANY(${ids(list)})`,
   vehicle_import: (list) =>
     sql`SELECT id, coalesce(file_name, 'Импорт') AS name FROM vehicle_import WHERE id = ANY(${ids(list)})`,
+  // TASK-047: a price list by its file, a request by the row it came from.
+  price_import: (list) =>
+    sql`SELECT id, coalesce(file_name, 'Прайс') AS name FROM price_import WHERE id = ANY(${ids(list)})`,
+  catalog_request: (list) =>
+    sql`SELECT id, concat_ws(' · ', payload->>'article', payload->>'name') AS name
+        FROM catalog_request WHERE id = ANY(${ids(list)})`,
 };
 
 /**
@@ -146,6 +152,7 @@ export const AUDIT_REFERENCE_FIELDS: Record<string, string> = {
   fuelId: "vehicle_option",
   adminId: "admin_user",
   grantId: "club_access_grant",
+  importId: "price_import",
 };
 
 /** A translation's entry names the thing it is of (`after.entityType`): the kind to name it as. */

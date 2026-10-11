@@ -33,6 +33,11 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "prices.read-values",
   "prices.expire-stalled",
   "prices.delete-files",
+  "prices.match",
+  "prices.match-ai",
+  "prices.match-wake",
+  "prices.apply",
+  "prices.expire-reviews",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -69,8 +74,12 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "orders.watch-supplier-reach", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Files of price lists past their retention (TASK-046).
   { name: "prices.delete-files", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Reviews of price lists left longer than allowed (TASK-047).
+  { name: "prices.expire-reviews", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Price list imports read longer than allowed (TASK-046).
   { name: "prices.expire-stalled", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Matching of price lists nobody works on, put back on the queue (TASK-047).
+  { name: "prices.match-wake", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The nightly check of the search index against the database (TASK-045).
   { name: "search.reconcile", cron: "20 4 * * *", timezone: "Asia/Almaty" },
   // Imports of the vehicle catalog stuck longer than allowed (TASK-014).

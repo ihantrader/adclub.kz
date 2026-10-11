@@ -303,7 +303,17 @@ export class CatalogItemsService {
 
   // -------------------------------------------------------------- changes
 
-  async create(input: CreateCatalogItemBody, actor: CatalogActor): Promise<AdminCatalogItemCard> {
+  /**
+   * `within` runs in the transaction of the creation, after the item and its
+   * journal entry are written (TASK-047: «Создать позицию» of a request to
+   * add an item approves the request with it — the item never exists
+   * without the request answered, nor the other way round).
+   */
+  async create(
+    input: CreateCatalogItemBody,
+    actor: CatalogActor,
+    within?: (tx: DbExecutor, card: AdminCatalogItemCard) => Promise<void>,
+  ): Promise<AdminCatalogItemCard> {
     const type = input.type;
     if (type === "service") {
       if (input.brandId) {
@@ -375,6 +385,9 @@ export class CatalogItemsService {
           },
           tx,
         );
+        if (within) {
+          await within(tx, card);
+        }
         this.logger.log(`Item created item=${created.id} type=${type} category=${owner.id}`);
         return card;
       }),

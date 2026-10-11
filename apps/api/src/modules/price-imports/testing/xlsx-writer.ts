@@ -145,6 +145,8 @@ export function writeXlsx(
       .map((text) => `<si><t xml:space="preserve">${escape(text)}</t></si>`)
       .join("")}</sst>`,
   );
-  // A fixed time of every entry: the same workbook gives the same bytes.
-  return Buffer.from(zipSync(files, { level: 6, mtime: new Date(Date.UTC(2026, 9, 1)) }));
+  // A fixed time of every entry: the same workbook gives the same bytes. fflate
+  // writes the DOS time from the local clock fields, so the time is local
+  // midnight — a UTC instant would differ between time zones (CI runs in UTC).
+  return Buffer.from(zipSync(files, { level: 6, mtime: new Date(2026, 9, 1) }));
 }

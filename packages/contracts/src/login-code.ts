@@ -182,6 +182,11 @@ export const rateLimitNameSchema = z.enum([
   "vehicle_document_per_device",
   "vehicle_document_per_ip",
   "vehicle_document_per_account",
+  /**
+   * Price list uploads of one company (TASK-046) in a rolling hour —
+   * counted in the database by the uploads themselves, not by the guard.
+   */
+  "price_import_uploads_per_supplier",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

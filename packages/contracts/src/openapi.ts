@@ -32,6 +32,7 @@ import * as orderContract from "./orders";
 import * as signalContract from "./signals";
 import * as userContract from "./users";
 import * as showcaseContract from "./showcase";
+import * as priceImportContract from "./price-imports";
 import * as searchContract from "./search";
 import * as vehicleContract from "./vehicles";
 import {
@@ -259,6 +260,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(userContract),
   ...moduleComponentSchemas(showcaseContract),
   ...moduleComponentSchemas(searchContract),
+  ...moduleComponentSchemas(priceImportContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,

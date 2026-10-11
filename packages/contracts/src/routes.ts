@@ -344,6 +344,21 @@ import {
   updateSupplierCompanyBodySchema,
   updateSupplierMemberBodySchema,
 } from "./suppliers";
+import {
+  adminPriceImportPageSchema,
+  adminSupplierPriceImportsPathSchema,
+  confirmPriceColumnsBodySchema,
+  PRICE_IMPORT_CONTENT_TYPES,
+  PRICE_IMPORT_MAX_UPLOAD_BYTES,
+  priceImportDetailResponseSchema,
+  priceImportListQuerySchema,
+  priceImportPageSchema,
+  priceImportPathSchema,
+  priceImportResponseSchema,
+  priceImportRowsPageSchema,
+  priceImportRowsQuerySchema,
+  uploadPriceImportQuerySchema,
+} from "./price-imports";
 import { healthCheckResponseSchema } from "./health";
 import type { RateLimitName } from "./login-code";
 import {
@@ -3482,6 +3497,106 @@ export const apiRoutes = {
     query: offerListQuerySchema,
     responses: {
       200: { description: "Offers", schema: offerPageSchema },
+    },
+  }),
+  // ----------------------------------------- price list imports (TASK-046)
+  uploadPriceImport: defineRoute({
+    operationId: "uploadPriceImport",
+    method: "POST",
+    path: "/supplier/price-imports",
+    summary:
+      "Upload the company's price list as it is (Excel .xlsx or CSV): the body is the file itself, checked by its content; a background job reads it into rows and recognises the columns. Nothing on the showcase changes",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: uploadPriceImportQuerySchema,
+    upload: {
+      description:
+        "The file itself: .xlsx, or a CSV in UTF-8, Windows-1251 or UTF-16 separated by «;», «,» or a tab",
+      contentTypes: PRICE_IMPORT_CONTENT_TYPES,
+      maxBytes: PRICE_IMPORT_MAX_UPLOAD_BYTES,
+    },
+    responses: {
+      201: { description: "The import, being read", schema: priceImportResponseSchema },
+    },
+  }),
+  listPriceImports: defineRoute({
+    operationId: "listPriceImports",
+    method: "GET",
+    path: "/supplier/price-imports",
+    summary:
+      "The company's price list uploads, newest first, with their state and the progress of reading; the limits of a file",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: priceImportListQuerySchema,
+    responses: {
+      200: { description: "Uploads", schema: priceImportPageSchema },
+    },
+  }),
+  getPriceImport: defineRoute({
+    operationId: "getPriceImport",
+    method: "GET",
+    path: "/supplier/price-imports/{importId}",
+    summary:
+      "One upload of the company: its state, the columns with their roles (recognised, remembered or confirmed) and the first rows of goods; another company's answers like a missing one (404)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    responses: {
+      200: { description: "The upload", schema: priceImportDetailResponseSchema },
+    },
+  }),
+  confirmPriceImportColumns: defineRoute({
+    operationId: "confirmPriceImportColumns",
+    method: "PUT",
+    path: "/supplier/price-imports/{importId}/columns",
+    summary:
+      "Confirm the roles of the columns (a price, and an article or a name, required; each role once) and, if asked, remember them for the next files with the same header; the rows are then read by them in the background",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    requestBody: { description: "The roles", schema: confirmPriceColumnsBodySchema },
+    responses: {
+      200: { description: "The upload, being read", schema: priceImportResponseSchema },
+    },
+  }),
+  listPriceImportRows: defineRoute({
+    operationId: "listPriceImportRows",
+    method: "GET",
+    path: "/supplier/price-imports/{importId}/rows",
+    summary:
+      "Rows of goods of an upload in file order with the values read and their errors; by default only the rows with an error",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    query: priceImportRowsQuerySchema,
+    responses: {
+      200: { description: "A page of rows", schema: priceImportRowsPageSchema },
+    },
+  }),
+  listAdminSupplierPriceImports: defineRoute({
+    operationId: "listAdminSupplierPriceImports",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}/price-imports",
+    summary:
+      "A supplier's price list uploads, read only (A-SUP-03 «Прайс»): file, state, rows and errors, who uploaded",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminSupplierPriceImportsPathSchema,
+    query: priceImportListQuerySchema,
+    responses: {
+      200: { description: "Uploads", schema: adminPriceImportPageSchema },
     },
   }),
   listAdminItemOffers: defineRoute({

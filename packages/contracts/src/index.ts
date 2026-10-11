@@ -504,6 +504,7 @@ export * from "./search";
 export * from "./account";
 export * from "./garage";
 export * from "./vehicle-document";
+export * from "./price-imports";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

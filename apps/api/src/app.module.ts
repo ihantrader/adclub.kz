@@ -25,6 +25,7 @@ import { SearchIndexMetricsModule } from "./modules/search-index";
 import { SignalsModule } from "./modules/signals";
 import { AdminHomeModule } from "./modules/admin-home";
 import { UsersModule } from "./modules/users";
+import { PriceImportsModule } from "./modules/price-imports";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -108,6 +109,7 @@ export class AppModule implements NestModule {
         OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
         AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers }),
+        PriceImportsModule,
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

@@ -33,6 +33,7 @@ describe("upload routes", () => {
       "/garage/vehicle-document",
       "/admin/catalog/items/{itemId}/photos",
       "/admin/vehicles/imports",
+      "/supplier/price-imports",
     ]);
     expect(isUploadRoute(apiRoutes.uploadItemPhoto)).toBe(true);
     expect(isUploadRoute(apiRoutes.createCatalogItem)).toBe(false);

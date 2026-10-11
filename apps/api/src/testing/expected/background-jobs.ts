@@ -29,6 +29,10 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "orders.watch-supplier-reach",
   "search.apply-outbox",
   "search.reconcile",
+  "prices.parse",
+  "prices.read-values",
+  "prices.expire-stalled",
+  "prices.delete-files",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -63,6 +67,10 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "orders.watch-notice-channel", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The detector of a supplier no notice can reach (TASK-034, D-061).
   { name: "orders.watch-supplier-reach", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Files of price lists past their retention (TASK-046).
+  { name: "prices.delete-files", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Price list imports read longer than allowed (TASK-046).
+  { name: "prices.expire-stalled", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The nightly check of the search index against the database (TASK-045).
   { name: "search.reconcile", cron: "20 4 * * *", timezone: "Asia/Almaty" },
   // Imports of the vehicle catalog stuck longer than allowed (TASK-014).

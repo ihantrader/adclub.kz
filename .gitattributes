@@ -14,3 +14,7 @@
 *.otf binary
 *.woff binary
 *.woff2 binary
+
+# Example price lists (TASK-046): the bytes are the point — an encoding, CRLF
+# line ends — so git never touches them.
+apps/api/fixtures/price-imports/** binary

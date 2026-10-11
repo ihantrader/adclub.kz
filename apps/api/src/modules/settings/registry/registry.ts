@@ -617,7 +617,8 @@ const pricelist = group({
     import_max_file_mb: define.integer({
       unit: "megabytes",
       min: 1,
-      max: 100,
+      // The server reads at most 20 MB of an upload (PRICE_IMPORT_MAX_UPLOAD_BYTES).
+      max: 20,
       default: 20,
       description: "Наибольший размер файла прайса.",
     }),
@@ -626,7 +627,32 @@ const pricelist = group({
       min: 100,
       max: 200_000,
       default: 50_000,
-      description: "Наибольшее число строк в одном прайсе.",
+      description:
+        "Наибольшее число непустых строк в одном прайсе (с шапкой и строками групп); больше — файл не принимается.",
+    }),
+    price_import_uploads_per_supplier_hour: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 20,
+      description:
+        "Сколько прайсов сотрудники одного поставщика могут загрузить за скользящий час; сверх — отказ с временем ожидания.",
+    }),
+    price_import_file_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Сколько дней хранится файл загруженного прайса; затем он удаляется из хранилища, а загрузка и её строки остаются как история.",
+    }),
+    price_import_timeout_minutes: define.duration({
+      unit: "minutes",
+      min: 5,
+      max: 240,
+      default: 30,
+      description:
+        "Сколько минут может идти чтение файла прайса или его строк; дольше — загрузка помечается ошибкой, и поставщик загружает файл снова.",
     }),
   },
 });

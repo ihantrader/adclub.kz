@@ -11,6 +11,7 @@ import { messagingTables } from "./modules/messaging";
 import { offerTables } from "./modules/offers";
 import { orderTables } from "./modules/orders";
 import { searchIndexTables } from "./modules/search-index";
+import { priceImportTables } from "./modules/price-imports";
 import { settingsTables } from "./modules/settings";
 import { signalTables } from "./modules/signals";
 import { supplierTables } from "./modules/suppliers";
@@ -38,5 +39,6 @@ export const ormTables: readonly PgTable[] = [
   ...garageTables,
   ...signalTables,
   ...searchIndexTables,
+  ...priceImportTables,
   ...jobsTables,
 ];

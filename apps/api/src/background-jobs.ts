@@ -5,6 +5,7 @@ import { identityJobCatalog } from "./modules/identity";
 import { messagingJobCatalog } from "./modules/messaging";
 import { orderJobCatalog } from "./modules/orders";
 import { searchJobCatalog } from "./modules/search-index";
+import { priceImportJobCatalog } from "./modules/price-imports";
 import { supplierJobCatalog } from "./modules/suppliers";
 import { vehicleJobCatalog } from "./modules/vehicles";
 
@@ -25,6 +26,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
     ...supplierJobCatalog,
     ...orderJobCatalog,
     ...searchJobCatalog,
+    ...priceImportJobCatalog,
     ...(hasDevJobs(config) ? devJobCatalog : []),
   ];
 }

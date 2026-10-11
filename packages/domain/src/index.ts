@@ -200,3 +200,54 @@ export {
   normalizeVin,
 } from "./vehicle/vehicle-document";
 export type { VinCheck } from "./vehicle/vehicle-document";
+export {
+  priceColumnRoles,
+  priceDoubtWords,
+  priceHeaderSpellings,
+  priceTotalWords,
+  priceUnitWords,
+} from "./price-import/column-headers";
+export type {
+  PriceColumnRole,
+  PriceDataRole,
+  PriceHeaderSpelling,
+} from "./price-import/column-headers";
+export {
+  classifyPriceRow,
+  findPriceHeader,
+  guessRoleByHeader,
+  HEADER_SEARCH_ROWS,
+  missingPriceRoles,
+  normalizeHeader,
+  priceHeaderKey,
+  priceRolesProblem,
+  recognizePriceColumns,
+} from "./price-import/price-columns";
+export type {
+  ColumnGuessSource,
+  HeaderGuess,
+  PriceColumnGuess,
+  PriceRowKind,
+} from "./price-import/price-columns";
+export {
+  numberText,
+  readArticle,
+  readAvailability,
+  readBrand,
+  readDecimal,
+  readLeadDays,
+  readName,
+  readPrice,
+  readPriceRow,
+} from "./price-import/price-values";
+export type {
+  ArticleReading,
+  AvailabilityReading,
+  ParsedPriceRow,
+  PriceAvailability,
+  PriceCell,
+  PriceReading,
+  PriceRowError,
+  PriceRowLimits,
+  PriceRowReading,
+} from "./price-import/price-values";

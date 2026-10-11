@@ -259,6 +259,15 @@ import { clientPlatformSchema } from "./client";
  *   `details` is `AdminSignalConflictDetails` with the signal as it is now
  *   («уже закрыт {кем}»).
  *
+ * Price list imports (TASK-046, ARCHITECTURE 4.66):
+ * - `PRICE_IMPORT_FILE_INVALID` (400): the uploaded file can't be read as a
+ *   price list — the content is looked at, not the name; `details` is
+ *   `PriceImportFileInvalidDetails`. A file above `import_max_file_mb` is
+ *   `PAYLOAD_TOO_LARGE` (413).
+ * - `PRICE_IMPORT_STATE` (409): the import isn't where this can be done
+ *   (its file is still being read, it failed); `details` is
+ *   `PriceImportStateDetails`.
+ *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
  *   order — «Это не QR заявки клуба»; `details` is `OrderQrUnknownDetails`.
@@ -429,6 +438,9 @@ export const errorCodeSchema = z.enum([
   // A photographed vehicle registration certificate (TASK-057, D-064).
   "VEHICLE_DOCUMENT_INVALID",
   "VEHICLE_DOCUMENT_UNAVAILABLE",
+  // Price list imports (TASK-046, ARCHITECTURE 4.66).
+  "PRICE_IMPORT_FILE_INVALID",
+  "PRICE_IMPORT_STATE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

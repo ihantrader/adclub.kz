@@ -7032,6 +7032,80 @@
         }
       }
     },
+    "/admin/suppliers/{supplierId}/price-imports": {
+      "get": {
+        "operationId": "listAdminSupplierPriceImports",
+        "summary": "A supplier's price list uploads, read only (A-SUP-03 «Прайс»): file, state, rows and errors, who uploaded",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "supplierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Uploads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPriceImportPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/suppliers/{supplierId}/schedule": {
       "put": {
         "operationId": "setAdminSupplierSchedule",
@@ -15418,6 +15492,380 @@
         }
       }
     },
+    "/supplier/price-imports": {
+      "get": {
+        "operationId": "listPriceImports",
+        "summary": "The company's price list uploads, newest first, with their state and the progress of reading; the limits of a file",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "Uploads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadPriceImport",
+        "summary": "Upload the company's price list as it is (Excel .xlsx or CSV): the body is the file itself, checked by its content; a background job reads it into rows and recognises the columns. Nothing on the showcase changes",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "fileName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The file itself: .xlsx, or a CSV in UTF-8, Windows-1251 or UTF-16 separated by «;», «,» or a tab",
+          "required": true,
+          "content": {
+            "application/csv": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "application/csv"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "application/octet-stream"
+              }
+            },
+            "application/vnd.ms-excel": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "application/vnd.ms-excel"
+              }
+            },
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            },
+            "text/csv": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "text/csv"
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "text/plain"
+              }
+            },
+            "text/tab-separated-values": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "text/tab-separated-values"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The import, being read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}": {
+      "get": {
+        "operationId": "getPriceImport",
+        "summary": "One upload of the company: its state, the columns with their roles (recognised, remembered or confirmed) and the first rows of goods; another company's answers like a missing one (404)",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The upload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportDetailResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/columns": {
+      "put": {
+        "operationId": "confirmPriceImportColumns",
+        "summary": "Confirm the roles of the columns (a price, and an article or a name, required; each role once) and, if asked, remember them for the next files with the same header; the rows are then read by them in the background",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The roles",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPriceColumnsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The upload, being read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/{importId}/rows": {
+      "get": {
+        "operationId": "listPriceImportRows",
+        "summary": "Rows of goods of an upload in file order with the values read and their errors; by default only the rows with an error",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "errors",
+              "type": "string",
+              "enum": [
+                "errors",
+                "data"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportRowsPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/vehicles/generations/{generationId}/modifications": {
       "get": {
         "operationId": "getVehicleGenerationModifications",
@@ -19514,6 +19962,27 @@
           "customer"
         ]
       },
+      "AdminPriceImportPage": {
+        "type": "object",
+        "properties": {
+          "imports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceImport"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "imports",
+          "nextCursor"
+        ]
+      },
       "AdminSearchQuery": {
         "type": "object",
         "properties": {
@@ -20962,6 +21431,19 @@
           "suppliers",
           "total",
           "nextCursor"
+        ]
+      },
+      "AdminSupplierPriceImportsPath": {
+        "type": "object",
+        "properties": {
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "supplierId"
         ]
       },
       "AdminSupplierResponse": {
@@ -25849,6 +26331,26 @@
           "phoneShareConsentVersion"
         ]
       },
+      "ConfirmPriceColumnsBody": {
+        "type": "object",
+        "properties": {
+          "roles": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceColumnRole"
+            }
+          },
+          "remember": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "roles",
+          "remember"
+        ]
+      },
       "CopyCompatibilityBody": {
         "type": "object",
         "properties": {
@@ -27367,6 +27869,8 @@
           "GARAGE_VIN_TAKEN",
           "VEHICLE_DOCUMENT_INVALID",
           "VEHICLE_DOCUMENT_UNAVAILABLE",
+          "PRICE_IMPORT_FILE_INVALID",
+          "PRICE_IMPORT_STATE",
           "MALFORMED_REQUEST",
           "METHOD_NOT_ALLOWED",
           "NOT_ACCEPTABLE",
@@ -29935,6 +30439,91 @@
           "warrantyText"
         ]
       },
+      "ParsedPriceRow": {
+        "type": "object",
+        "properties": {
+          "article": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "articleNorm": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceRowAvailability"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leadDays": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "article",
+          "articleNorm",
+          "brand",
+          "name",
+          "price",
+          "availability",
+          "quantity",
+          "leadDays"
+        ]
+      },
       "PhoneRevealSubject": {
         "type": "string",
         "enum": [
@@ -29979,6 +30568,787 @@
         },
         "required": [
           "minSupportedVersion"
+        ]
+      },
+      "PriceCell": {
+        "type": [
+          "string",
+          "number",
+          "null"
+        ]
+      },
+      "PriceColumnRole": {
+        "type": "string",
+        "enum": [
+          "article",
+          "brand",
+          "name",
+          "price",
+          "availability",
+          "lead_days",
+          "ignore"
+        ]
+      },
+      "PriceColumnSource": {
+        "type": "string",
+        "enum": [
+          "header",
+          "content",
+          "remembered",
+          "supplier"
+        ]
+      },
+      "PriceImport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PriceImportStatus"
+          },
+          "fileName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "format": {
+            "$ref": "#/components/schemas/PriceImportFormat"
+          },
+          "byteSize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "sameFileAsImportId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uploadedBy": {
+            "$ref": "#/components/schemas/PriceImportPerson"
+          },
+          "sheetName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "encoding": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delimiter": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headerRowNo": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "columnsSource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "remembered",
+                  "supplier"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fileKept": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "parsedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "fileName",
+          "format",
+          "byteSize",
+          "sameFileAsImportId",
+          "uploadedBy",
+          "sheetName",
+          "encoding",
+          "delimiter",
+          "headerRowNo",
+          "columnsSource",
+          "progress",
+          "stats",
+          "failure",
+          "fileKept",
+          "createdAt",
+          "updatedAt",
+          "parsedAt"
+        ]
+      },
+      "PriceImportColumn": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "header": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/PriceColumnRole"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceColumnSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "header",
+          "role",
+          "source",
+          "confidence"
+        ]
+      },
+      "PriceImportDetailResponse": {
+        "type": "object",
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/PriceImport"
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PriceImportColumn"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "header": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportPreviewRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceImportPreviewRow"
+            }
+          }
+        },
+        "required": [
+          "import",
+          "columns",
+          "header",
+          "preview"
+        ]
+      },
+      "PriceImportFailure": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "not_a_table",
+              "old_excel",
+              "encrypted",
+              "broken",
+              "empty",
+              "too_many_rows",
+              "encoding",
+              "file_missing",
+              "timeout"
+            ]
+          },
+          "detected": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "reason",
+          "detected",
+          "limit",
+          "line"
+        ]
+      },
+      "PriceImportFileInvalidDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/PriceImportFileProblem"
+          },
+          "detected": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "reason",
+          "detected",
+          "limit",
+          "line"
+        ]
+      },
+      "PriceImportFileProblem": {
+        "type": "string",
+        "enum": [
+          "not_a_table",
+          "old_excel",
+          "encrypted",
+          "broken",
+          "empty",
+          "too_many_rows",
+          "encoding"
+        ]
+      },
+      "PriceImportFormat": {
+        "type": "string",
+        "enum": [
+          "xlsx",
+          "csv"
+        ]
+      },
+      "PriceImportLimits": {
+        "type": "object",
+        "properties": {
+          "maxFileMb": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "maxRows": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "maxFileMb",
+          "maxRows"
+        ]
+      },
+      "PriceImportListQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      },
+      "PriceImportPage": {
+        "type": "object",
+        "properties": {
+          "imports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceImport"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PriceImportLimits"
+          }
+        },
+        "required": [
+          "imports",
+          "nextCursor",
+          "limits"
+        ]
+      },
+      "PriceImportPath": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "importId"
+        ]
+      },
+      "PriceImportPerson": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "memberId",
+          "name"
+        ]
+      },
+      "PriceImportPreviewRow": {
+        "type": "object",
+        "properties": {
+          "rowNo": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PriceRowKind"
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceCell"
+            }
+          }
+        },
+        "required": [
+          "rowNo",
+          "kind",
+          "cells"
+        ]
+      },
+      "PriceImportProgress": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "done",
+          "total"
+        ]
+      },
+      "PriceImportResponse": {
+        "type": "object",
+        "properties": {
+          "import": {
+            "$ref": "#/components/schemas/PriceImport"
+          }
+        },
+        "required": [
+          "import"
+        ]
+      },
+      "PriceImportRow": {
+        "type": "object",
+        "properties": {
+          "rowNo": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceCell"
+            }
+          },
+          "parsed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParsedPriceRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceRowError"
+            }
+          }
+        },
+        "required": [
+          "rowNo",
+          "cells",
+          "parsed",
+          "errors"
+        ]
+      },
+      "PriceImportRowsPage": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceImportRow"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "nextCursor"
+        ]
+      },
+      "PriceImportRowsQuery": {
+        "type": "object",
+        "properties": {
+          "only": {
+            "default": "errors",
+            "type": "string",
+            "enum": [
+              "errors",
+              "data"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "only",
+          "limit"
+        ]
+      },
+      "PriceImportStateDetails": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PriceImportStatus"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "PriceImportStats": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "dataRows": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "serviceRows": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "parsedRows": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorRows": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "rows",
+          "dataRows",
+          "serviceRows",
+          "parsedRows",
+          "errorRows"
+        ]
+      },
+      "PriceImportStatus": {
+        "type": "string",
+        "enum": [
+          "parsing",
+          "columns",
+          "reading",
+          "parsed",
+          "failed"
+        ]
+      },
+      "PriceRowAvailability": {
+        "type": "string",
+        "enum": [
+          "in_stock",
+          "out_of_stock",
+          "on_order"
+        ]
+      },
+      "PriceRowError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "price_missing",
+              "price_not_number",
+              "price_out_of_range",
+              "no_article_or_name",
+              "lead_days_out_of_range"
+            ]
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "text",
+          "value",
+          "min",
+          "max"
+        ]
+      },
+      "PriceRowKind": {
+        "type": "string",
+        "enum": [
+          "title",
+          "header",
+          "repeat_header",
+          "group",
+          "total",
+          "data"
         ]
       },
       "ProposeOrderTermBody": {
@@ -30056,7 +31426,8 @@
           "phone_reveal_per_account",
           "vehicle_document_per_device",
           "vehicle_document_per_ip",
-          "vehicle_document_per_account"
+          "vehicle_document_per_account",
+          "price_import_uploads_per_supplier"
         ]
       },
       "RateLimitedDetails": {
@@ -36759,6 +38130,16 @@
         "required": [
           "expectedVersion"
         ]
+      },
+      "UploadPriceImportQuery": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
       },
       "UploadVehicleImportQuery": {
         "type": "object",

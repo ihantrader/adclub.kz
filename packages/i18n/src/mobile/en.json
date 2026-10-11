@@ -198,6 +198,7 @@
   "search.emptyTips": "Check the keyboard layout and the spelling, try an article or a category name",
   "search.emptyVehicle": "Nothing for {car} matches this search. Check the keyboard layout or try an article",
   "search.otherCar": "Search for another car from the garage",
+  "search.allCategories": "All",
   "search.servicesNeedCity": "Services are shown only for the chosen city",
   "search.needsNetwork": "Network needed",
   "search.needsNetworkText": "Search works only when you are online",

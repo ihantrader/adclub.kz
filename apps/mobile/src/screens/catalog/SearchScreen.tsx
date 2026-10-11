@@ -18,12 +18,20 @@ import {
 } from "../../design-system";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { categoryIconOf } from "../../catalog/category-icon";
+import {
+  EMPTY_FILTERS,
+  filterCount,
+  filtersToQuery,
+  hasFilters,
+  type FilterQuery,
+  type FilterState,
+} from "../../catalog/filters";
 import { rememberSearch, tidyQuery } from "../../catalog/recent-searches";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle } from "../../garage/garage";
-import { useCategoryTree, useDebounced } from "../../services/use-catalog";
+import { useCategoryAttributes, useCategoryTree, useDebounced } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
-import { useSearchResults, useSearchSuggestions } from "../../services/use-search";
+import { useSearchResults, useSearchSuggestions, useSearchTotal } from "../../services/use-search";
 import { cityIdOf } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useGarage } from "../../state/garage-provider";
@@ -32,6 +40,7 @@ import { recentSearchesStore } from "../../state/stores";
 import { CitySheet } from "../CitySheet";
 import { CarSheet } from "./CarSheet";
 import { CatalogHeader } from "./CatalogHeader";
+import { FiltersSheet } from "./FiltersSheet";
 import { ItemRow } from "./parts";
 
 /** How long typing has to pause before the suggestions are asked for (M-CAT-04). */
@@ -55,7 +64,11 @@ export interface SearchScreenProps {
  *   runs the search.
  * - The results: rows of M-CAT-02 for the car and the city of the header,
  *   with the marks of compatibility; T-CAT-08 when the server read the
- *   query otherwise; pages as the list scrolls.
+ *   query otherwise (a typo forgiven, TASK-045); pages as the list scrolls.
+ * - The chips of the subcategories of the results with their numbers
+ *   (TASK-045, the server's facets): one keeps its items; then «Фильтры» —
+ *   the sheet of M-CAT-03 with the numbers at the values, «Показать N
+ *   позиций», «Сбросить».
  * - Nothing found: «Ничего не нашли по „…“», the tips — and, instead of the
  *   cancelled «Искать без фильтра по автомобилю» (D-062), «Искать для
  *   другого автомобиля из гаража»: the car switch of the header.
@@ -72,7 +85,11 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   const recent = useSyncExternalStore(recentSearchesStore.subscribe, recentSearchesStore.get);
   const [text, setText] = useState("");
   const [ran, setSubmitted] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<"car" | "city" | null>(null);
+  const [sheet, setSheet] = useState<"car" | "city" | "filters" | null>(null);
+  // The chip of a subcategory and its filters (TASK-045): a new query starts without them.
+  const [category, setCategory] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
 
   const typed = tidyQuery(text);
   // The search that was run, while the query is still the one it was run for:
@@ -81,11 +98,27 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   const settled = useDebounced(typed, SUGGEST_AFTER_MS);
   const cityId = cityIdOf(selection);
   const options = { ...(cityId ? { cityId } : {}), vehicle: vehicleQuery(car) };
+  const attributes = useCategoryAttributes(category);
+  const described = attributes.data?.attributes ?? [];
   const suggestions = useSearchSuggestions(
     submitted === null && online && settled.length >= 2 && settled === typed ? settled : null,
     options,
   );
-  const results = useSearchResults(online ? submitted : null, options);
+  const results = useSearchResults(online ? submitted : null, {
+    ...options,
+    ...(category ? { categoryId: category, filters: filtersToQuery(filters, described) } : {}),
+  });
+  const settledDraft = useDebounced(JSON.stringify(filtersToQuery(draftFilters, described)), 300);
+  const preview = useSearchTotal(
+    submitted,
+    {
+      ...options,
+      ...(category
+        ? { categoryId: category, filters: JSON.parse(settledDraft) as FilterQuery }
+        : {}),
+    },
+    online && sheet === "filters" && category !== null,
+  );
   const moreIndicator = useDelayedIndicator(results.loadingMore);
   const carName = carTitle(car);
 
@@ -95,6 +128,16 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
     recentSearchesStore.set(rememberSearch(recentSearchesStore.get(), tidy));
     setText(tidy);
     setSubmitted(tidy);
+    chooseCategory(null);
+  };
+
+  const chooseCategory = (id: string | null) => {
+    setCategory(id);
+    setFilters(EMPTY_FILTERS);
+  };
+  const openFilters = () => {
+    setDraftFilters(filters);
+    setSheet("filters");
   };
 
   const iconOf = (item: CatalogSearchItem) =>
@@ -158,6 +201,17 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
         onAddCar={onAddCar}
       />
       <CitySheet visible={sheet === "city"} onClose={() => setSheet(null)} services />
+      <FiltersSheet
+        visible={sheet === "filters"}
+        onClose={() => setSheet(null)}
+        total={preview.data?.total ?? null}
+        counts={preview.data?.facets.attributes ?? results.first.data?.facets.attributes ?? []}
+        attributes={described}
+        brands={results.first.data?.facets.brands ?? []}
+        draft={draftFilters}
+        onDraftChange={setDraftFilters}
+        onApply={setFilters}
+      />
     </Screen>
   );
 
@@ -349,15 +403,37 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
             {t("search.servicesNeedCity")}
           </Banner>
         )}
-        {answer.categories.length > 0 && (
-          <View style={styles.chips}>
-            {answer.categories.map((category) => (
-              <Chip key={category.id} icon="category" onPress={() => onOpenCategory(category)}>
-                {category.name.text}
+        {answer.facets.categories.length > 1 || category !== null ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.chipRow}
+          >
+            <Chip selected={category === null} onPress={() => chooseCategory(null)}>
+              {t("search.allCategories")}
+            </Chip>
+            {answer.facets.categories.map((facet) => (
+              <Chip
+                key={facet.id}
+                selected={category === facet.id}
+                onPress={() => chooseCategory(category === facet.id ? null : facet.id)}
+              >
+                {`${facet.name.text} · ${facet.count}`}
               </Chip>
             ))}
+          </ScrollView>
+        ) : null}
+        {/* Services have no filters (as their list, TASK-019). */}
+        {answer.facets.categories.find((facet) => facet.id === category)?.kind === "goods" ? (
+          <View style={styles.chips}>
+            <Chip icon="filters" selected={filterCount(filters) > 0} onPress={openFilters}>
+              {filterCount(filters) > 0
+                ? t("catalog.filtersCount", { n: filterCount(filters) })
+                : t("catalog.filters")}
+            </Chip>
           </View>
-        )}
+        ) : null}
         <Text variant="bodyS" color="textMuted">
           {tn("search.found", answer.total)}
         </Text>
@@ -368,6 +444,17 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   function emptyState() {
     const answer = results.first.data;
     const query = answer?.usedQuery ?? submitted ?? "";
+    if (category !== null && hasFilters(filters)) {
+      return {
+        icon: "filters" as const,
+        title: t("catalog.emptyFilters"),
+        action: (
+          <Button variant="secondary" size="m" onPress={() => setFilters(EMPTY_FILTERS)}>
+            {t("catalog.resetFilters")}
+          </Button>
+        ),
+      };
+    }
     if (answer?.empty === "city_required") {
       return {
         icon: "mapPin" as const,
@@ -426,5 +513,6 @@ const styles = StyleSheet.create({
   groupTitle: { paddingHorizontal: layout.screenPadding, paddingBottom: 8 },
   head: { gap: 12, paddingHorizontal: layout.screenPadding, paddingBottom: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chipRow: { flexDirection: "row", gap: 8 },
   more: { paddingVertical: layout.cardPadding },
 });

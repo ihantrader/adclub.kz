@@ -28,7 +28,9 @@ import { categoryIconOf } from "../../catalog/category-icon";
 import {
   useCategoryAttributes,
   useCategoryTree,
+  useDebounced,
   useShowcaseList,
+  useShowcaseTotal,
 } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { cityIdOf } from "../../state/city";
@@ -106,6 +108,18 @@ export function ItemListScreen({
     vehicle,
     filters: filtersToQuery(filters, attributes.data?.attributes ?? []),
     sort,
+  });
+  // «Показать N позиций» of the sheet: the total of the filters being edited.
+  const settledDraft = useDebounced(
+    JSON.stringify(filtersToQuery(draftFilters, attributes.data?.attributes ?? [])),
+    300,
+  );
+  const preview = useShowcaseTotal({
+    categoryId,
+    ...(cityId ? { cityId } : {}),
+    vehicle,
+    filters: JSON.parse(settledDraft) as ReturnType<typeof filtersToQuery>,
+    enabled: sheet,
   });
 
   // Back on the screen after longer than the server's own cache window: the
@@ -239,9 +253,7 @@ export function ItemListScreen({
       <FiltersSheet
         visible={sheet}
         onClose={() => setSheet(false)}
-        categoryId={categoryId}
-        {...(cityId ? { cityId } : {})}
-        vehicle={vehicle}
+        total={preview.data?.total ?? null}
         attributes={attributes.data?.attributes ?? []}
         brands={page?.brands ?? []}
         draft={draftFilters}

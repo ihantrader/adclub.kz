@@ -1,12 +1,10 @@
-import type { CategoryAttribute } from "@adclub/contracts";
+import type { CatalogSearchAttributeFacet, CategoryAttribute } from "@adclub/contracts";
 import { space } from "@adclub/ui-core";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Button, Chip, Sheet, Text, TextField, useAfterDismiss } from "../../design-system";
-import type { VehicleQuery } from "../../catalog/vehicle-query";
 import {
   EMPTY_FILTERS,
-  filtersToQuery,
   hasFilters,
   setBoolean,
   setRange,
@@ -14,42 +12,49 @@ import {
   toggleOption,
   type FilterState,
 } from "../../catalog/filters";
-import { useDebounced, useShowcaseTotal } from "../../services/use-catalog";
 import { useLanguage } from "../../state/language";
 
 export interface FiltersSheetProps {
   visible: boolean;
   onClose: () => void;
-  categoryId: string;
-  cityId?: string;
-  vehicle: VehicleQuery;
   attributes: CategoryAttribute[];
   brands: { id: string; name: string; count: number }[];
-  /** The filters being edited; the list screen owns them so opening the
+  /** The filters being edited; the screen owns them so opening the
    * sheet is an ordinary event, not a state to synchronise. */
   draft: FilterState;
   onDraftChange: (update: (current: FilterState) => FilterState) => void;
   onApply: (next: FilterState) => void;
+  /**
+   * «Показать N позиций»: the `total` the server gives for the filters being
+   * edited (the list of the subcategory, or the search), asked for by the
+   * screen; `null` — not known yet.
+   */
+  total: number | null;
+  /**
+   * How many items each value of a characteristic would give (the facets of
+   * the search, TASK-045); left out — no numbers (the list of a subcategory).
+   */
+  counts?: readonly CatalogSearchAttributeFacet[];
 }
 
 /**
- * M-CAT-03 — the filters. Every section but the three fixed ones is built
- * from the description the server gives for the category, so a new
- * characteristic appears here without a release. «Показать N позиций» is
- * the `total` of a request with the filters being edited, not a count made
- * on the device.
+ * M-CAT-03 — the filters, of the list of a subcategory and of the search in
+ * a chosen subcategory (M-CAT-04, TASK-045). Every section but the three
+ * fixed ones is built from the description the server gives for the
+ * category, so a new characteristic appears here without a release.
+ * «Показать N позиций» and the numbers at the values are the server's, not
+ * counts made on the device.
  */
 export function FiltersSheet({
   visible,
   onClose,
-  categoryId,
-  cityId,
-  vehicle,
   attributes,
   brands,
   draft,
   onDraftChange: setDraft,
   onApply,
+  total,
+  counts,
 }: FiltersSheetProps) {
   const { t, tn } = useLanguage();
   // The filters are applied when the sheet has gone: it closes, and then the
@@ -62,17 +67,6 @@ export function FiltersSheet({
       attributes.filter((attribute) => attribute.isFilterable && attribute.valueType !== "text"),
     [attributes],
   );
-
-  const query = filtersToQuery(draft, attributes);
-  const settled = useDebounced(JSON.stringify(query), 300);
-  const preview = useShowcaseTotal({
-    categoryId,
-    cityId,
-    vehicle,
-    filters: JSON.parse(settled) as typeof query,
-    enabled: visible,
-  });
-  const total = preview.data?.total ?? null;
 
   return (
     <Sheet
@@ -162,6 +156,7 @@ export function FiltersSheet({
             attribute={attribute}
             draft={draft}
             setDraft={setDraft}
+            counts={counts?.find((facet) => facet.attributeId === attribute.id)}
           />
         ))}
       </ScrollView>
@@ -187,20 +182,31 @@ export function FiltersSheet({
   );
 }
 
+/** A value with the number of items it gives, when the server tells it. */
+function withCount(label: string, count: number | undefined): string {
+  return count === undefined ? label : `${label} (${count})`;
+}
+
 function AttributeGroup({
   attribute,
   draft,
   setDraft,
+  counts,
 }: {
   attribute: CategoryAttribute;
   draft: FilterState;
   setDraft: (update: (current: FilterState) => FilterState) => void;
+  counts: CatalogSearchAttributeFacet | undefined;
 }) {
   const { t } = useLanguage();
   const value = draft.attributes[attribute.id];
   const title = attribute.unit
     ? `${attribute.name.text}, ${attribute.unit.text}`
     : attribute.name.text;
+  const optionCount = (optionId: string) =>
+    counts ? (counts.options.find((entry) => entry.optionId === optionId)?.count ?? 0) : undefined;
+  const valueCount = (yes: boolean) =>
+    counts ? (counts.values.find((entry) => entry.value === yes)?.count ?? 0) : undefined;
 
   if (attribute.valueType === "enum") {
     const selected = value?.kind === "options" ? value.optionIds : [];
@@ -212,7 +218,7 @@ function AttributeGroup({
             selected={selected.includes(option.id)}
             onPress={() => setDraft((current) => toggleOption(current, attribute.id, option.id))}
           >
-            {option.name.text}
+            {withCount(option.name.text, optionCount(option.id))}
           </Chip>
         ))}
       </Group>
@@ -229,7 +235,7 @@ function AttributeGroup({
             setDraft((state) => setBoolean(state, attribute.id, current === true ? null : true))
           }
         >
-          {t("catalog.yes")}
+          {withCount(t("catalog.yes"), valueCount(true))}
         </Chip>
         <Chip
           selected={current === false}
@@ -237,7 +243,7 @@ function AttributeGroup({
             setDraft((state) => setBoolean(state, attribute.id, current === false ? null : false))
           }
         >
-          {t("catalog.no")}
+          {withCount(t("catalog.no"), valueCount(false))}
         </Chip>
       </Group>
     );

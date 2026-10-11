@@ -1,5 +1,6 @@
 import type { CatalogSearchItem, CatalogSearchResponse } from "@adclub/contracts";
 import { useCallback, useState } from "react";
+import type { FilterQuery } from "../catalog/filters";
 import type { VehicleQuery } from "../catalog/vehicle-query";
 import { useLanguage } from "../state/language";
 import { apiClient } from "./api";
@@ -21,10 +22,39 @@ export const SUGGESTION_LIMIT = 5;
 export interface SearchOptions {
   cityId?: string;
   vehicle: VehicleQuery;
+  /** The chip of a subcategory (TASK-045): only its items, with its filters. */
+  categoryId?: string;
+  filters?: FilterQuery;
 }
 
-function queryOf(q: string, { cityId, vehicle }: SearchOptions) {
-  return { q, ...(cityId ? { cityId } : {}), ...vehicle };
+function queryOf(q: string, { cityId, vehicle, categoryId, filters }: SearchOptions) {
+  return {
+    q,
+    ...(cityId ? { cityId } : {}),
+    ...vehicle,
+    ...(categoryId ? { categoryId, ...filters } : {}),
+  };
+}
+
+/**
+ * «Показать N позиций» of the filters of the search (TASK-045): the `total`
+ * — and the numbers at the values — of the search with the filters being
+ * edited, one short page of it.
+ */
+export function useSearchTotal(
+  q: string | null,
+  options: SearchOptions,
+  enabled: boolean,
+): RequestState<CatalogSearchResponse> {
+  const { lang } = useLanguage();
+  const query = q === null ? null : { ...queryOf(q, options), limit: 1 };
+  // The last number stays on the button while the next one is asked for.
+  const scope = `search-total:${lang}:${q ?? ""}:${options.categoryId ?? ""}`;
+  return useRequest(
+    enabled && query ? `${scope}:${JSON.stringify(query)}` : null,
+    (signal) => apiClient.searchCatalog({ signal, query: query! }),
+    { scope },
+  );
 }
 
 /** The suggestions for a query typed (and settled); `null` — nothing to suggest yet. */

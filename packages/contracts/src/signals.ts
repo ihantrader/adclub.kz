@@ -289,6 +289,11 @@ export const adminHomeSchema = z.object({
   }),
   /** New connection requests of suppliers (7): `GET /admin/supplier-leads?status=new`. */
   newSupplierLeads: z.number().int(),
+  /**
+   * Requests of suppliers to add an item, waiting (TASK-047, A-MOD-01;
+   * «Запросы на позиции · N»): `GET /admin/catalog-requests?status=new`.
+   */
+  catalogRequests: z.number().int(),
   /** The quality of the catalog (8). Items that are not archived. */
   catalog: z.object({
     /** No approved photo. */

@@ -38,15 +38,28 @@ export const PRICE_IMPORT_PREVIEW_ROWS = 20;
  * - `columns` — the supplier is to confirm the roles of the columns (S-PRICE-02);
  * - `reading` — the values of the rows are being read by the confirmed roles;
  * - `parsed` — every row is read: the rows with errors are known; matching
- *   with the catalog is the next step (TASK-047);
- * - `failed` — the file could not be read (`failure`).
+ *   with the catalog starts at once (TASK-047);
+ * - `matching` — the rows are matched with the catalog (`match`); it waits
+ *   here while AI can't be reached and goes on by itself;
+ * - `review` — the supplier checks the result (S-PRICE-03, TASK-048);
+ *   the decisions are kept on the server;
+ * - `applying` — the decisions are being applied to the offers;
+ * - `applied` — done (`result`, S-PRICE-04);
+ * - `failed` — the file could not be read (`failure`);
+ * - `expired` — the review was left unfinished longer than
+ *   `price_import_review_days`; nothing was applied.
  */
 export const priceImportStatusSchema = z.enum([
   "parsing",
   "columns",
   "reading",
   "parsed",
+  "matching",
+  "review",
+  "applying",
+  "applied",
   "failed",
+  "expired",
 ]);
 
 export type PriceImportStatus = z.infer<typeof priceImportStatusSchema>;
@@ -125,8 +138,16 @@ export const priceImportFailureSchema = z.object({
 
 export type PriceImportFailure = z.infer<typeof priceImportFailureSchema>;
 
-/** `details` of `PRICE_IMPORT_STATE` (409): the import isn't where this can be done. */
-export const priceImportStateDetailsSchema = z.object({ status: priceImportStatusSchema });
+/**
+ * `details` of `PRICE_IMPORT_STATE` (409): the import isn't where this can be
+ * done. Applied (or being applied) — who did it and when (TASK-047: two
+ * employees apply one import, the second one learns who was first).
+ */
+export const priceImportStateDetailsSchema = z.object({
+  status: priceImportStatusSchema,
+  appliedBy: z.object({ memberId: z.uuid(), name: z.string().nullable() }).nullable(),
+  appliedAt: z.iso.datetime().nullable(),
+});
 
 export type PriceImportStateDetails = z.infer<typeof priceImportStateDetailsSchema>;
 
@@ -140,6 +161,13 @@ export const priceImportVersionConflictDetailsSchema = z.object({
   /** Who confirmed the columns last, and when; `null` — unknown. */
   confirmedBy: z.object({ memberId: z.uuid(), name: z.string().nullable() }).nullable(),
   confirmedAt: z.iso.datetime().nullable(),
+  /**
+   * Who changed the import last — the columns, a decision of the review, the
+   * choice about the missing offers, applying (TASK-047) — and when; `null` —
+   * nobody since the upload.
+   */
+  changedBy: z.object({ memberId: z.uuid(), name: z.string().nullable() }).nullable(),
+  changedAt: z.iso.datetime().nullable(),
 });
 
 export type PriceImportVersionConflictDetails = z.infer<
@@ -174,6 +202,112 @@ export const priceImportPersonSchema = z.object({
   memberId: z.uuid(),
   name: z.string().nullable(),
 });
+
+/**
+ * How a row was matched with the catalog (TASK-047; ARCHITECTURE 12.1 step 4):
+ * - `mapping` — the company's remembered match of this article (or name);
+ * - `exact_article` — the article and the brand (by any of its spellings);
+ * - `search` — one sure candidate of the search by the name;
+ * - `ai` — AI chose among the candidates of the search; the supplier confirms it row by row;
+ * - `remembered_skip` — the supplier skipped this row in an earlier import;
+ * - `remembered_absent` — not in the catalog by an earlier import.
+ */
+export const priceMatchSourceSchema = z.enum([
+  "mapping",
+  "exact_article",
+  "search",
+  "ai",
+  "remembered_skip",
+  "remembered_absent",
+]);
+
+export type PriceMatchSource = z.infer<typeof priceMatchSourceSchema>;
+
+/**
+ * Where matching is (`matching`) or what it found (from `review` on): the
+ * groups of S-PRICE-03 and how the rows got there.
+ */
+export const priceImportMatchSchema = z.object({
+  /** Rows of goods matched so far, of `total`. */
+  done: z.number().int(),
+  total: z.number().int(),
+  /** «Уверенно». */
+  confident: z.number().int(),
+  /** «Нужно проверить». */
+  review: z.number().int(),
+  /** «Не найдено». */
+  notFound: z.number().int(),
+  /** «Ошибки в строках»: the reading's errors and the matching's (a repeated row, a service, the company's type). */
+  errors: z.number().int(),
+  bySource: z.object({
+    mapping: z.number().int(),
+    exactArticle: z.number().int(),
+    search: z.number().int(),
+    ai: z.number().int(),
+    remembered: z.number().int(),
+  }),
+  /** Rows handed to AI so far, and those it is still to answer. */
+  aiRows: z.number().int(),
+  aiPending: z.number().int(),
+  /** Why the AI part waits and will go on by itself: `unavailable` or `budget`; `null` — it doesn't wait. */
+  aiWaiting: z.enum(["unavailable", "budget"]).nullable(),
+});
+
+export type PriceImportMatch = z.infer<typeof priceImportMatchSchema>;
+
+/**
+ * Why a row was not applied (S-PRICE-04): the rules of an offer — the same
+ * ones as by hand (`price_out_of_range`, `lead_days_out_of_range`,
+ * `on_order_needs_lead_days`, `no_fulfillment`, `pickup_needs_address`,
+ * `warranty_both`, `warranty_contacts`), and the import's own:
+ * `price_confirmation_required` — a sharp change of the price not
+ * confirmed; `item_unavailable` — the item left the catalog meanwhile;
+ * `service_item` — services aren't imported (their prices are by model);
+ * `supplier_type` — the company's type doesn't let it sell this;
+ * `out_of_stock` — no offer to withdraw and nothing in stock to offer;
+ * `duplicate_item` — another row of the file was applied to this item.
+ */
+export const priceRowNotAppliedReasonSchema = z.enum([
+  "price_out_of_range",
+  "lead_days_out_of_range",
+  "on_order_needs_lead_days",
+  "no_fulfillment",
+  "pickup_needs_address",
+  "warranty_both",
+  "warranty_contacts",
+  "price_confirmation_required",
+  "item_unavailable",
+  "service_item",
+  "supplier_type",
+  "out_of_stock",
+  "duplicate_item",
+]);
+
+export type PriceRowNotAppliedReason = z.infer<typeof priceRowNotAppliedReasonSchema>;
+
+/** What applying did (S-PRICE-04). */
+export const priceImportResultSchema = z.object({
+  /** Offers whose price, availability, term or own article changed. */
+  updated: z.number().int(),
+  /** New offers. */
+  created: z.number().int(),
+  /** Offers the file confirmed as they were. */
+  unchanged: z.number().int(),
+  /** Withdrawn offers back on sale (they are in the file again). */
+  returned: z.number().int(),
+  /** Withdrawn: «нет в наличии» in the file. */
+  withdrawnOutOfStock: z.number().int(),
+  /** Withdrawn: missing in the file, by the supplier's choice. */
+  withdrawnMissing: z.number().int(),
+  /** Requests to add an item sent to the administrator (a request already open is not sent again). */
+  requested: z.number().int(),
+  /** Rows decided but not applied, by reason. */
+  notApplied: z.array(z.object({ reason: priceRowNotAppliedReasonSchema, rows: z.number().int() })),
+  /** Rows left unchecked in «Нужно проверить», and skipped ones. */
+  skipped: z.number().int(),
+});
+
+export type PriceImportResult = z.infer<typeof priceImportResultSchema>;
 
 export const priceImportSchema = z.object({
   id: z.uuid(),
@@ -211,6 +345,15 @@ export const priceImportSchema = z.object({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   parsedAt: z.iso.datetime().nullable(),
+  /** Matching with the catalog (TASK-047): from `matching` on; `null` before. */
+  match: priceImportMatchSchema.nullable(),
+  /** Until when an unfinished review is kept (`review`); after it the import is `expired`. */
+  reviewUntil: z.iso.datetime().nullable(),
+  /** Who applied the import and when (`applying`, `applied`). */
+  appliedBy: priceImportPersonSchema.nullable(),
+  appliedAt: z.iso.datetime().nullable(),
+  /** What applying did (`applied`). */
+  result: priceImportResultSchema.nullable(),
 });
 
 export type PriceImport = z.infer<typeof priceImportSchema>;
@@ -349,7 +492,11 @@ export type ParsedPriceRowValue = z.infer<typeof parsedPriceRowSchema>;
 /**
  * A problem of a row (S-PRICE-03 «Ошибки в строках»): no price, a price
  * that is not a number (`text`) or outside `min`…`max` (`value`), neither an
- * article nor a name, a lead time beyond `max` (`value`).
+ * article nor a name, a lead time beyond `max` (`value`). Found by matching
+ * (TASK-047): `repeated_row` — the same article (or name) as row `value`,
+ * which decides; `service_item` — the row is a service of the catalog,
+ * whose prices are set by model, not imported; `supplier_type` — the
+ * company's type doesn't let it sell goods.
  */
 export const priceRowErrorSchema = z.object({
   code: z.enum([
@@ -358,6 +505,9 @@ export const priceRowErrorSchema = z.object({
     "price_out_of_range",
     "no_article_or_name",
     "lead_days_out_of_range",
+    "repeated_row",
+    "service_item",
+    "supplier_type",
   ]),
   text: z.string().nullable(),
   value: z.number().nullable(),

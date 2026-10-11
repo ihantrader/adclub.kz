@@ -236,6 +236,22 @@ export const auditActions = {
   clubAccessGranted: "club_access.granted",
   clubAccessRevoked: "club_access.revoked",
   /**
+   * A price list applied (TASK-047), by an employee (actor `supplier`):
+   * `after` — the numbers of the result. The offers it changed have their
+   * own `offer.*` entries with `after.source: "price_import"` and the import.
+   */
+  priceImportApplied: "price_import.applied",
+  /**
+   * Requests to add an item (TASK-047, A-MOD-01), by an administrator:
+   * `approved` — the item created from it or matched to it (`after.itemId`,
+   * `after.how`: `created`/`existing`); `rejected` — `reason` is what the
+   * supplier sees. `created` — sent by applying a price list (actor
+   * `supplier`).
+   */
+  catalogRequestCreated: "catalog_request.created",
+  catalogRequestApproved: "catalog_request.approved",
+  catalogRequestRejected: "catalog_request.rejected",
+  /**
    * Orders (TASK-021): the supplier accepted an order and the customer's
    * phone number opened to it (actor `supplier` — the employee). The
    * order's own journal (`order_event`) holds every move; this entry
@@ -333,6 +349,10 @@ export const auditEntities = {
   adminSignal: "admin_signal",
   /** A user's account (TASK-029; named here with TASK-036.B). */
   account: "account",
+  /** A price list upload of a supplier (TASK-047). */
+  priceImport: "price_import",
+  /** A request to add an item to the catalog (TASK-047). */
+  catalogRequest: "catalog_request",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

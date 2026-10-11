@@ -271,6 +271,16 @@ import { clientPlatformSchema } from "./client";
  *   confirmed by someone after the page was loaded (`expectedVersion` is
  *   not the import's `version`); nothing changed. `details` is
  *   `PriceImportVersionConflictDetails` («Колонки уже подтвердил {кто}»).
+ *   With TASK-047 also any change of the review (a decision, the choice
+ *   about missing offers, applying) — `changedBy`/`changedAt` name it.
+ * - `PRICE_IMPORT_ITEM_UNAVAILABLE` (409, TASK-047): the item chosen for a
+ *   row can't take it; `details` is `PriceImportItemUnavailableDetails`.
+ * - `PRICE_IMPORT_MISSING_CHOICE` (409, TASK-047): offers are missing in the
+ *   file and nobody chose «Снять с продажи» or «Оставить как есть»;
+ *   `details` is `PriceImportMissingChoiceDetails`.
+ * - `CATALOG_REQUEST_VERSION_CONFLICT` (409, TASK-047): the request to add
+ *   an item was decided or changed after the page was loaded; `details` is
+ *   `CatalogRequestConflictDetails`.
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -446,6 +456,10 @@ export const errorCodeSchema = z.enum([
   "PRICE_IMPORT_FILE_INVALID",
   "PRICE_IMPORT_STATE",
   "PRICE_IMPORT_VERSION_CONFLICT",
+  // Matching and applying a price list, requests to add an item (TASK-047).
+  "PRICE_IMPORT_ITEM_UNAVAILABLE",
+  "PRICE_IMPORT_MISSING_CHOICE",
+  "CATALOG_REQUEST_VERSION_CONFLICT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

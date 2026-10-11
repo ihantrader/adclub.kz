@@ -359,6 +359,30 @@ import {
   priceImportRowsQuerySchema,
   uploadPriceImportQuerySchema,
 } from "./price-imports";
+import {
+  adminCatalogRequestListQuerySchema,
+  adminCatalogRequestPageSchema,
+  adminCatalogRequestResponseSchema,
+  catalogRequestDecidedResponseSchema,
+  catalogRequestListQuerySchema,
+  catalogRequestPathSchema,
+  choosePriceMissingBodySchema,
+  createItemFromRequestBodySchema,
+  decidePriceRowBodySchema,
+  itemFromRequestResponseSchema,
+  linkCatalogRequestBodySchema,
+  priceImportVersionBodySchema,
+  priceMissingPageSchema,
+  priceMissingQuerySchema,
+  priceReviewRowPathSchema,
+  priceReviewRowsPageSchema,
+  priceReviewRowsQuerySchema,
+  priceReviewSummarySchema,
+  priceRowDecidedResponseSchema,
+  priceRowsSkippedResponseSchema,
+  rejectCatalogRequestBodySchema,
+  supplierCatalogRequestPageSchema,
+} from "./price-review";
 import { healthCheckResponseSchema } from "./health";
 import type { RateLimitName } from "./login-code";
 import {
@@ -3597,6 +3621,213 @@ export const apiRoutes = {
     query: priceImportListQuerySchema,
     responses: {
       200: { description: "Uploads", schema: adminPriceImportPageSchema },
+    },
+  }),
+  // ----------------------- the review and application of a price list (TASK-047)
+  getPriceImportReview: defineRoute({
+    operationId: "getPriceImportReview",
+    method: "GET",
+    path: "/supplier/price-imports/{importId}/review",
+    summary:
+      "The review of a matched upload (S-PRICE-03): the groups, the offers missing in the file with their active orders, sharp price changes and what applying would do now",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    responses: {
+      200: { description: "The review", schema: priceReviewSummarySchema },
+    },
+  }),
+  listPriceReviewRows: defineRoute({
+    operationId: "listPriceReviewRows",
+    method: "GET",
+    path: "/supplier/price-imports/{importId}/review/rows",
+    summary:
+      "Rows of one group of the review in file order: the text of the file, the item matched or proposed («предложено ИИ»), candidates, «было → стало», the decision and who took it",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    query: priceReviewRowsQuerySchema,
+    responses: {
+      200: { description: "A page of rows", schema: priceReviewRowsPageSchema },
+    },
+  }),
+  decidePriceReviewRow: defineRoute({
+    operationId: "decidePriceReviewRow",
+    method: "PUT",
+    path: "/supplier/price-imports/{importId}/review/rows/{rowNo}",
+    summary:
+      "Decide on one row: «Верно», «Другая позиция», «Пропустить», «Нет в справочнике», «Подтвердить цену», «Отправить администратору». One row at a time: AI's matches are never confirmed in bulk",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceReviewRowPathSchema,
+    requestBody: { description: "The decision", schema: decidePriceRowBodySchema },
+    responses: {
+      200: {
+        description: "The row and the import's new version",
+        schema: priceRowDecidedResponseSchema,
+      },
+    },
+  }),
+  skipRemainingPriceRows: defineRoute({
+    operationId: "skipRemainingPriceRows",
+    method: "POST",
+    path: "/supplier/price-imports/{importId}/review/skip-remaining",
+    summary:
+      "«Пропустить все оставшиеся»: every row of «Нужно проверить» without a decision is skipped — the only action on many rows at once",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    requestBody: { description: "The version decided on", schema: priceImportVersionBodySchema },
+    responses: {
+      200: { description: "How many were skipped", schema: priceRowsSkippedResponseSchema },
+    },
+  }),
+  listPriceMissingOffers: defineRoute({
+    operationId: "listPriceMissingOffers",
+    method: "GET",
+    path: "/supplier/price-imports/{importId}/review/missing",
+    summary:
+      "«Пропали из файла»: active offers of the company (not services) whose items the file doesn't have, with their active orders",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    query: priceMissingQuerySchema,
+    responses: {
+      200: { description: "A page of offers", schema: priceMissingPageSchema },
+    },
+  }),
+  choosePriceMissingAction: defineRoute({
+    operationId: "choosePriceMissingAction",
+    method: "PUT",
+    path: "/supplier/price-imports/{importId}/review/missing",
+    summary:
+      "The one choice about every offer missing in the file: «Снять с продажи» or «Оставить как есть» — required before applying when there are any",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    requestBody: { description: "The choice", schema: choosePriceMissingBodySchema },
+    responses: {
+      200: { description: "The import", schema: priceImportResponseSchema },
+    },
+  }),
+  applyPriceImport: defineRoute({
+    operationId: "applyPriceImport",
+    method: "POST",
+    path: "/supplier/price-imports/{importId}/apply",
+    summary:
+      "Apply the review to the company's offers in one transaction in the background (`applying`, then `applied` with the result); a second request doesn't apply it again. A blocked company can't",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: priceImportPathSchema,
+    requestBody: { description: "The version decided on", schema: priceImportVersionBodySchema },
+    responses: {
+      202: { description: "The import, being applied", schema: priceImportResponseSchema },
+    },
+  }),
+  listSupplierCatalogRequests: defineRoute({
+    operationId: "listSupplierCatalogRequests",
+    method: "GET",
+    path: "/supplier/catalog-requests",
+    summary:
+      "The company's requests to add an item (S-MOD-01), newest first: what the row said, the status, the item it became, the reason of a refusal",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: catalogRequestListQuerySchema,
+    responses: {
+      200: { description: "Requests", schema: supplierCatalogRequestPageSchema },
+    },
+  }),
+  listAdminCatalogRequests: defineRoute({
+    operationId: "listAdminCatalogRequests",
+    method: "GET",
+    path: "/admin/catalog-requests",
+    summary:
+      "Requests of suppliers to add an item (A-MOD-01), newest first, by status and supplier, with the counts by status",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminCatalogRequestListQuerySchema,
+    responses: {
+      200: { description: "Requests", schema: adminCatalogRequestPageSchema },
+    },
+  }),
+  getAdminCatalogRequest: defineRoute({
+    operationId: "getAdminCatalogRequest",
+    method: "GET",
+    path: "/admin/catalog-requests/{requestId}",
+    summary:
+      "One request: the row of the price list, the supplier, the import, the brand it names and the items of the catalog that look like it",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogRequestPathSchema,
+    responses: {
+      200: { description: "The request", schema: adminCatalogRequestResponseSchema },
+    },
+  }),
+  createItemFromCatalogRequest: defineRoute({
+    operationId: "createItemFromCatalogRequest",
+    method: "POST",
+    path: "/admin/catalog-requests/{requestId}/create-item",
+    summary:
+      "«Создать позицию»: the item is created exactly as «Новая позиция» creates it, and in the same transaction the request is approved and the supplier's article remembered for this item — its next price list applies the row by itself",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogRequestPathSchema,
+    requestBody: { description: "The item", schema: createItemFromRequestBodySchema },
+    responses: {
+      201: { description: "The request and the item", schema: itemFromRequestResponseSchema },
+    },
+  }),
+  linkCatalogRequest: defineRoute({
+    operationId: "linkCatalogRequest",
+    method: "POST",
+    path: "/admin/catalog-requests/{requestId}/link",
+    summary:
+      "«Это существующая позиция»: the request is approved with this item and the supplier's article is remembered for it",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogRequestPathSchema,
+    requestBody: { description: "The item", schema: linkCatalogRequestBodySchema },
+    responses: {
+      200: { description: "The request", schema: catalogRequestDecidedResponseSchema },
+    },
+  }),
+  rejectCatalogRequest: defineRoute({
+    operationId: "rejectCatalogRequest",
+    method: "POST",
+    path: "/admin/catalog-requests/{requestId}/reject",
+    summary: "«Отклонить»: with a reason the supplier sees",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogRequestPathSchema,
+    requestBody: { description: "The reason", schema: rejectCatalogRequestBodySchema },
+    responses: {
+      200: { description: "The request", schema: catalogRequestDecidedResponseSchema },
     },
   }),
   listAdminItemOffers: defineRoute({

@@ -42,6 +42,12 @@ interface JobDefinitionBase {
    * a request while one already waits is dropped (`enqueue` returns null).
    */
   readonly singleton: boolean;
+  /**
+   * Runs of this job one worker process takes at once (1 by default; up to
+   * 8). More than one lets a long run — a price list of fifty thousand rows —
+   * leave room for the next company's (TASK-046.A).
+   */
+  readonly concurrency?: number;
 }
 
 /** A job a module puts on the queue with data (`JobQueue.enqueue`). */
@@ -91,6 +97,13 @@ function checkBase(definition: JobDefinitionBase): void {
     retry.delaySeconds < 0
   ) {
     throw new Error(`Job ${name}: retry.limit and retry.delaySeconds must be whole numbers ≥ 0`);
+  }
+  const { concurrency } = definition;
+  if (
+    concurrency !== undefined &&
+    (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8)
+  ) {
+    throw new Error(`Job ${name}: concurrency must be a whole number between 1 and 8`);
   }
 }
 

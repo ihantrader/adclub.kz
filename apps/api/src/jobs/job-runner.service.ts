@@ -120,6 +120,7 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
           job.definition.name,
           {
             batchSize: 1,
+            localConcurrency: job.definition.concurrency ?? 1,
             includeMetadata: true,
             perJobResults: true,
             pollingIntervalSeconds: this.options.tuning.pollingIntervalSeconds,

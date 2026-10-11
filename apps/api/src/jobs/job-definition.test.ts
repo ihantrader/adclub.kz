@@ -55,6 +55,16 @@ describe("job declarations", () => {
     ).toThrow(/retry/);
   });
 
+  it("takes a concurrency of 1 to 8 runs per worker", () => {
+    const base = { name: "test.job", timeoutSeconds: 10, retry, singleton: false };
+    const payload = z.object({});
+    expect(defineJob({ ...base, payload, concurrency: 2 }).concurrency).toBe(2);
+    expect(defineJob({ ...base, payload }).concurrency).toBeUndefined();
+    for (const concurrency of [0, 9, 1.5]) {
+      expect(() => defineJob({ ...base, payload, concurrency })).toThrow(/concurrency/);
+    }
+  });
+
   it("gives a sweeper a minute schedule, one run at a time and bounded batches", () => {
     const sweeper = defineSweeperJob({ name: "orders.expire-unanswered" });
     expect(sweeper).toMatchObject({

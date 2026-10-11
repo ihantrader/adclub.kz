@@ -3,8 +3,11 @@ import {
   CATALOG_SEARCH_CATEGORIES_MAX,
   SHOWCASE_PAGE_DEFAULT_SIZE,
   type CatalogLanguage,
+  type CatalogSearchAttributeFacet,
   type CatalogSearchCategory,
+  type CatalogSearchCategoryFacet,
   type CatalogSearchEmptyReason,
+  type CatalogSearchFacets,
   type CatalogSearchItem,
   type CatalogSearchQuery,
   type CatalogSearchResponse,
@@ -15,8 +18,10 @@ import {
   compareSearchRankKeys,
   matchSearchDocuments,
   normalizeSearchText,
+  SEARCH_RANK_KEY_NUMBERS,
   searchKey,
   searchRankKey,
+  searchReading,
   searchVariant,
   searchVariants,
   type SearchDocument,
@@ -27,9 +32,16 @@ import {
 import { inArray, sql, type SQL } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
-import { catalogItem, loadTexts, localize, textsOf } from "../catalog";
+import { catalogItem, loadTexts, localize, textsOf, type CatalogItemRow } from "../catalog";
 import { CompatibilityEvaluator } from "../compatibility";
-import { groupByItem, offersInReach, visibleOffers, type VisibleOffer } from "./showcase-offers";
+import { SearchIndex } from "../search-index";
+import {
+  groupByItem,
+  offerFilterOf,
+  offersInReach,
+  visibleOffers,
+  type VisibleOffer,
+} from "./showcase-offers";
 import { summarize } from "./showcase-ranking";
 import { describeViewer, type Viewer } from "./showcase-visibility";
 import { ShowcaseService } from "./showcase.service";
@@ -42,26 +54,33 @@ const CANDIDATES_MAX = 5000;
 const CORRECTION_SIMILARITY_MIN = 0.4;
 /** Words shorter than this are never corrected. */
 const CORRECTION_WORD_MIN = 3;
+/** From this many found items of one subcategory, compatibility is worked out by the subcategory. */
+const EVALUATE_BY_SUBCATEGORY_FROM = 200;
 
 const uuids = (list: readonly string[]) => sql`${`{${list.join(",")}}`}::uuid[]`;
 
 interface TextMatch {
-  match: "exact" | "partial";
+  match: Exclude<SearchMatch, "article">;
   own: boolean;
-  /** The variant that matched best. */
-  variant: number;
-  /** The query as typed matched too (no T-CAT-08 for this item). */
-  asTyped: boolean;
+  /** The relevance the index gave it (0 without the index). */
+  relevance: number;
+  /** Its popularity as the index holds it (0 without the index). */
+  popularity: number;
+  /** What the results are for when not the query as typed (T-CAT-08); `null` — as typed. */
+  reading: string | null;
 }
 
 interface Found {
   itemId: string;
+  categoryId: string;
   match: SearchMatch;
-  own: boolean;
-  /** The text of the reading it was found by; `null` — as typed or by the article. */
   reading: string | null;
   offers: VisibleOffer[];
   key: SearchRankKey;
+}
+
+interface TextDocument extends SearchDocument {
+  text: string;
 }
 
 function badCursor(): ApiException {
@@ -85,9 +104,11 @@ function decodeCursor(cursor: string): SearchRankKey {
   const key = (parsed as { k?: unknown } | null)?.k;
   if (
     !Array.isArray(key) ||
-    key.length !== 5 ||
-    !key.slice(0, 4).every((part) => typeof part === "number" && Number.isFinite(part)) ||
-    typeof key[4] !== "string"
+    key.length !== SEARCH_RANK_KEY_NUMBERS + 1 ||
+    !key
+      .slice(0, SEARCH_RANK_KEY_NUMBERS)
+      .every((part) => typeof part === "number" && Number.isFinite(part)) ||
+    typeof key[SEARCH_RANK_KEY_NUMBERS] !== "string"
   ) {
     throw badCursor();
   }
@@ -103,28 +124,50 @@ function beginsAnyWord(expression: SQL, stems: readonly string[]): SQL {
   )})`;
 }
 
+/** The longest stem of each variant: a text matching it has that beginning of a word. */
+function leadingStems(variants: readonly SearchVariant[]): string[] {
+  return [
+    ...new Set(
+      variants.flatMap((variant) =>
+        variant.stems.length === 0
+          ? []
+          : [[...variant.stems].sort((a, b) => b.length - a.length)[0]!],
+      ),
+    ),
+  ];
+}
+
 /**
- * The search of the catalog for users (TASK-044; ARCHITECTURE 10.2, 4.64;
- * SCREENS M-CAT-04). Until the search index (TASK-045) it works on
- * PostgreSQL:
+ * The search of the catalog for users (TASK-044, TASK-045; ARCHITECTURE
+ * 10.2, 4.64, 4.65; SCREENS M-CAT-04):
  *
  * 1. the query is read by `@adclub/domain` — its variants (the layouts,
  *    the transliteration) and the article it may be;
- * 2. the article branch: `catalog_item.article_norm` and the supplier's own
- *    article of a visible offer equal to the article;
- * 3. the text branch: the items whose names (kk/ru/en), synonyms, the names
- *    and synonyms of their categories and the spellings of their brands
- *    match a variant (`matchSearchDocuments`) — the database picks the
- *    candidates by the beginnings of words, the domain decides;
+ * 2. the article branch, on PostgreSQL: `catalog_item.article_norm` and the
+ *    supplier's own article of a visible offer equal to the article — first;
+ * 3. the text branch: the search index (Meilisearch) finds and ranks the
+ *    candidates of all variants in one `multi-search`, typos forgiven; the
+ *    domain then tells how each matched (`matchSearchDocuments`: exact,
+ *    partial — or only a forgiven typo) by the item's texts in PostgreSQL.
+ *    Without the index, or when it does not answer, the text branch of
+ *    TASK-044 on PostgreSQL answers instead (the database picks the
+ *    candidates by the beginnings of words, the domain decides);
  * 4. nothing matched — a word of the query is corrected to the most similar
  *    word of the catalog (`pg_trgm`), and the corrected reading is searched
- *    (T-CAT-08);
+ *    (T-CAT-08) — the index forgives typos itself, this catches the rest
+ *    (a first letter in the wrong layout);
  * 5. what is shown is what the catalog would show, by its own functions and
- *    nothing else: the showcase rule and the receipt date (`visibleOffers`),
- *    a service only in the chosen city at the price for the car's model
- *    (`offersInReach`), D-029 (`CompatibilityEvaluator`, `listed`), what the
- *    viewer sees of a supplier (`showcase-visibility`, through the card);
- * 6. the one order — `searchRankKey` of the domain.
+ *    nothing else — whatever the index says: the showcase rule and the
+ *    receipt date (`visibleOffers`), a service only in the chosen city at
+ *    the price for the car's model (`offersInReach`), D-029
+ *    (`CompatibilityEvaluator`, `listed`), what the viewer sees of a
+ *    supplier (`showcase-visibility`, through the card). An index behind
+ *    the database can only fail to find, never show more;
+ * 6. the facets — the subcategories of what is shown and, in a chosen one,
+ *    its brands and characteristics — are counted over what is shown;
+ *    the filters of a chosen subcategory are the list's (`offerFilterOf`,
+ *    `attributeFilter`);
+ * 7. the one order — `searchRankKey` of the domain.
  *
  * The query is never logged nor journaled: it may be a phone number.
  */
@@ -135,6 +178,7 @@ export class CatalogSearchService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(CompatibilityEvaluator) private readonly compatibility: CompatibilityEvaluator,
     @Inject(ShowcaseService) private readonly showcase: ShowcaseService,
+    @Inject(SearchIndex) private readonly index: SearchIndex,
   ) {}
 
   async search(
@@ -152,9 +196,12 @@ export class CatalogSearchService {
     ]);
     const cityId = chosenCity?.id ?? null;
 
-    // The reading of the query: its variants; nothing matched — a corrected one.
+    // The reading of the query: its variants — through the index, or the
+    // database without it; nothing matched — a corrected one.
     let variants = searchVariants(query.q);
-    let texts = await this.textMatches(executor, variants);
+    let texts =
+      (await this.indexMatches(executor, variants, cityId)) ??
+      (await this.textMatches(executor, variants));
     let corrected: string | null = null;
     if (texts.size === 0 && variants.length > 0) {
       const correction = await this.correction(executor, variants);
@@ -209,35 +256,43 @@ export class CatalogSearchService {
     }
 
     // D-029: only what a list may show for the car.
-    const results =
-      reachable.size === 0
-        ? []
-        : await this.compatibility.evaluate(
-            vehicle,
-            { kind: "items", itemIds: [...reachable.keys()] },
-            executor,
-          );
+    const results = await this.evaluate(vehicle, reachable.keys(), rowOf, executor);
     const resultOf = new Map(results.map((result) => [result.itemId, result]));
-    const found: Found[] = results
-      .filter((result) => result.listed)
-      .map((result) => {
-        const { offers, match } = reachable.get(result.itemId)!;
-        const text = texts.get(result.itemId);
+    const listed = results.filter((result) => result.listed);
+
+    // The chips count every listed item; a chosen subcategory narrows the
+    // results to it and applies its filters, as its list does.
+    const categoryFacets = await this.categoryFacets(executor, listed, rowOf, lang);
+    let kept = listed.map((result) => result.itemId);
+    let offersOf = new Map(kept.map((id) => [id, reachable.get(id)!.offers]));
+    let facets: CatalogSearchFacets = { categories: categoryFacets, brands: [], attributes: [] };
+    if (query.categoryId) {
+      const narrowed = await this.narrow(executor, query, cityId, kept, rowOf, offersOf);
+      kept = narrowed.itemIds;
+      offersOf = narrowed.offersOf;
+      facets = { ...facets, brands: narrowed.brands, attributes: narrowed.attributes };
+    }
+
+    const found: Found[] = kept
+      .map((itemId) => {
+        const { match } = reachable.get(itemId)!;
+        const text = texts.get(itemId);
+        const offers = offersOf.get(itemId)!;
         const summary = summarize(offers, cityId);
-        const own = match === "article" ? true : (text?.own ?? false);
         return {
-          itemId: result.itemId,
+          itemId,
+          categoryId: rowOf.get(itemId)!.categoryId,
           match,
-          own,
-          reading:
-            match === "article" || !text || text.asTyped ? null : variants[text.variant]!.text,
+          reading: match === "article" || !text ? null : text.reading,
           offers,
           key: searchRankKey({
             match,
-            own,
+            own: match === "article" ? true : (text?.own ?? false),
             inCity: summary.inCity,
+            relevance: text?.relevance ?? 0,
+            popularity: text?.popularity ?? 0,
             minPrice: summary.minPrice,
-            id: result.itemId,
+            id: itemId,
           }),
         };
       })
@@ -254,7 +309,7 @@ export class CatalogSearchService {
       lang,
     );
     const categoryTexts = await loadTexts(executor, "category", [
-      ...new Set(page.map((entry) => rowOf.get(entry.itemId)!.categoryId)),
+      ...new Set(page.map((entry) => entry.categoryId)),
     ]);
     const items: CatalogSearchItem[] = page.map((entry) => {
       const row = rowOf.get(entry.itemId)!;
@@ -262,7 +317,8 @@ export class CatalogSearchService {
         ...described.get(entry.itemId)!,
         compatibility: resultOf.get(entry.itemId)!,
         offers: summarize(entry.offers, cityId),
-        match: entry.match,
+        // A typo forgiven is a partial match to a client (the enum is unchanged).
+        match: entry.match === "typo" ? "partial" : entry.match,
         category: {
           id: row.categoryId,
           kind: row.categoryKind,
@@ -272,25 +328,28 @@ export class CatalogSearchService {
     });
 
     // T-CAT-08: the reading the results are for when the query as typed found
-    // nothing of them (the first found by text tells which).
+    // nothing of them as it is (the first found by text tells which).
     const byText = found.filter((entry) => entry.match !== "article");
-    const usedQuery =
+    const asRead = normalizeSearchText(query.q);
+    const reading =
       corrected ??
       (byText.length > 0 && byText.every((entry) => entry.reading !== null)
         ? byText[0]!.reading
         : null);
+    const usedQuery = reading !== null && reading !== asRead ? reading : null;
     const empty: CatalogSearchEmptyReason | null =
       found.length > 0
         ? null
-        : (reachableAny || otherModels) && vehicle !== null
+        : (reachableAny || otherModels) && vehicle !== null && listed.length === 0
           ? "vehicle"
-          : cityRequired
+          : cityRequired && listed.length === 0
             ? "city_required"
             : "no_items";
+    const readingVariant = usedQuery ? searchVariant(usedQuery) : null;
 
     return {
       language: lang,
-      query: normalizeSearchText(query.q),
+      query: asRead,
       usedQuery,
       city: chosenCity,
       vehicle,
@@ -299,9 +358,219 @@ export class CatalogSearchService {
       total: found.length,
       empty,
       cityRequired,
-      categories: await this.categories(executor, variants, lang),
+      categories: await this.categories(
+        executor,
+        readingVariant ? [...variants, readingVariant] : variants,
+        lang,
+      ),
+      facets,
       nextCursor: remaining.length > limit && last ? encodeCursor(last.key) : null,
     };
+  }
+
+  /**
+   * The one calculation of compatibility (`CompatibilityEvaluator`) for the
+   * found items, in the order given. Many found items of one subcategory
+   * are worked out by the subcategory (the list's way, 4.29 I290: a
+   * subcategory in one statement is tens of times faster than thousands of
+   * ids) and kept for the found ones; the rest — by their ids. The same
+   * result either way.
+   */
+  private async evaluate(
+    vehicle: Awaited<ReturnType<ShowcaseService["vehicle"]>>,
+    itemIds: Iterable<string>,
+    rowOf: ReadonlyMap<string, CatalogItemRow>,
+    executor: DbExecutor,
+  ) {
+    const ids = [...itemIds];
+    const bySubcategory = new Map<string, string[]>();
+    for (const id of ids) {
+      const categoryId = rowOf.get(id)!.categoryId;
+      bySubcategory.set(categoryId, [...(bySubcategory.get(categoryId) ?? []), id]);
+    }
+    const wanted = new Set(ids);
+    const byIds: string[] = [];
+    const results: Awaited<ReturnType<CompatibilityEvaluator["evaluate"]>> = [];
+    for (const [categoryId, members] of bySubcategory) {
+      if (members.length < EVALUATE_BY_SUBCATEGORY_FROM) {
+        byIds.push(...members);
+        continue;
+      }
+      const whole = await this.compatibility.evaluate(
+        vehicle,
+        { kind: "category", categoryId },
+        executor,
+      );
+      results.push(...whole.filter((result) => wanted.has(result.itemId)));
+    }
+    if (byIds.length > 0) {
+      results.push(
+        ...(await this.compatibility.evaluate(
+          vehicle,
+          { kind: "items", itemIds: byIds },
+          executor,
+        )),
+      );
+    }
+    const order = new Map(ids.map((id, index) => [id, index]));
+    return results.sort((a, b) => order.get(a.itemId)! - order.get(b.itemId)!);
+  }
+
+  // -------------------------------------------------------------- facets
+
+  /** The subcategories of the listed items, most items first (a chip each). */
+  private async categoryFacets(
+    executor: DbExecutor,
+    listed: readonly { itemId: string }[],
+    rowOf: ReadonlyMap<string, CatalogItemRow>,
+    lang: CatalogLanguage,
+  ): Promise<CatalogSearchCategoryFacet[]> {
+    const counts = new Map<string, number>();
+    for (const { itemId } of listed) {
+      const categoryId = rowOf.get(itemId)!.categoryId;
+      counts.set(categoryId, (counts.get(categoryId) ?? 0) + 1);
+    }
+    if (counts.size === 0) {
+      return [];
+    }
+    const rows = await executor.execute<{
+      id: string;
+      kind: "goods" | "services";
+      parent_id: string | null;
+      sort: number;
+    }>(sql`
+      SELECT c.id, c.kind, c.parent_id, c.sort FROM category c
+      WHERE c.id = ANY(${uuids([...counts.keys()])})
+    `);
+    const texts = await loadTexts(executor, "category", [
+      ...new Set(rows.rows.flatMap((row) => (row.parent_id ? [row.id, row.parent_id] : [row.id]))),
+    ]);
+    return rows.rows
+      .map((row) => ({
+        row,
+        facet: {
+          id: row.id,
+          kind: row.kind,
+          name: localize(textsOf(texts, row.id, "name"), lang) ?? NO_NAME,
+          parentName: row.parent_id ? localize(textsOf(texts, row.parent_id, "name"), lang) : null,
+          count: counts.get(row.id) ?? 0,
+        },
+      }))
+      .sort(
+        (a, b) =>
+          b.facet.count - a.facet.count ||
+          a.row.sort - b.row.sort ||
+          a.row.id.localeCompare(b.row.id),
+      )
+      .map(({ facet }) => facet);
+  }
+
+  /**
+   * The results in the chosen subcategory with its filters (M-CAT-03, as
+   * the list applies them): the offer filters, the brands, the
+   * characteristics (`attributeFilter` — the list's own). The brands are
+   * counted before the filters (as the list's `brands`); a characteristic's
+   * values over the items that pass every other filter.
+   */
+  private async narrow(
+    executor: DbExecutor,
+    query: CatalogSearchQuery,
+    cityId: string | null,
+    itemIds: readonly string[],
+    rowOf: ReadonlyMap<string, CatalogItemRow>,
+    offersOf: ReadonlyMap<string, VisibleOffer[]>,
+  ): Promise<{
+    itemIds: string[];
+    offersOf: Map<string, VisibleOffer[]>;
+    brands: CatalogSearchFacets["brands"];
+    attributes: CatalogSearchAttributeFacet[];
+  }> {
+    const categoryId = query.categoryId!;
+    const inCategory = itemIds.filter((id) => rowOf.get(id)!.categoryId === categoryId);
+    const brands = await this.showcase.brandFacet(
+      executor,
+      inCategory.map((id) => rowOf.get(id)!),
+    );
+    const offerFilter = offerFilterOf(query, cityId);
+    const brandFilter = query.brandIds ? new Set(query.brandIds) : null;
+    const passingOffers = new Map<string, VisibleOffer[]>();
+    for (const id of inCategory) {
+      const row = rowOf.get(id)!;
+      if (brandFilter && (row.brandId === null || !brandFilter.has(row.brandId))) {
+        continue;
+      }
+      const passing = (offersOf.get(id) ?? []).filter(offerFilter);
+      if (passing.length > 0) {
+        passingOffers.set(id, passing);
+      }
+    }
+    const base = [...passingOffers.keys()];
+    const filters = query.attributes ?? [];
+    const passAll = await this.showcase.attributeFilter(executor, categoryId, filters, base);
+    const attributes = await this.attributeFacets(executor, categoryId, filters, base, passAll);
+    const kept = passAll ? base.filter((id) => passAll.has(id)) : base;
+    return {
+      itemIds: kept,
+      offersOf: new Map(kept.map((id) => [id, passingOffers.get(id)!])),
+      brands,
+      attributes,
+    };
+  }
+
+  private async attributeFacets(
+    executor: DbExecutor,
+    categoryId: string,
+    filters: NonNullable<CatalogSearchQuery["attributes"]>,
+    base: readonly string[],
+    passAll: Set<string> | null,
+  ): Promise<CatalogSearchAttributeFacet[]> {
+    const attributes = await executor.execute<{ id: string; value_type: "enum" | "bool" }>(sql`
+      SELECT a.id, a.value_type FROM attribute a
+      WHERE a.category_id = ${categoryId} AND a.status = 'active' AND a.is_filterable
+        AND a.value_type IN ('enum', 'bool')
+      ORDER BY a.sort, a.code
+    `);
+    if (attributes.rows.length === 0 || base.length === 0) {
+      return attributes.rows.map((row) => ({ attributeId: row.id, options: [], values: [] }));
+    }
+    const values = await executor.execute<{
+      item_id: string;
+      attribute_id: string;
+      option_id: string | null;
+      value_bool: boolean | null;
+    }>(sql`
+      SELECT item_id, attribute_id, value_option_id AS option_id, value_bool
+      FROM item_attribute_value
+      WHERE item_id = ANY(${uuids(base)})
+        AND attribute_id = ANY(${uuids(attributes.rows.map((row) => row.id))})
+    `);
+    const facets: CatalogSearchAttributeFacet[] = [];
+    for (const attribute of attributes.rows) {
+      // The items that pass every filter but this attribute's own.
+      const others = filters.filter((filter) => filter.attributeId !== attribute.id);
+      const pass =
+        others.length === filters.length
+          ? passAll
+          : await this.showcase.attributeFilter(executor, categoryId, others, base);
+      const options = new Map<string, number>();
+      const booleans = new Map<boolean, number>();
+      for (const row of values.rows) {
+        if (row.attribute_id !== attribute.id || (pass && !pass.has(row.item_id))) {
+          continue;
+        }
+        if (attribute.value_type === "enum" && row.option_id) {
+          options.set(row.option_id, (options.get(row.option_id) ?? 0) + 1);
+        } else if (attribute.value_type === "bool" && row.value_bool !== null) {
+          booleans.set(row.value_bool, (booleans.get(row.value_bool) ?? 0) + 1);
+        }
+      }
+      facets.push({
+        attributeId: attribute.id,
+        options: [...options.entries()].map(([optionId, count]) => ({ optionId, count })),
+        values: [...booleans.entries()].map(([value, count]) => ({ value, count })),
+      });
+    }
+    return facets;
   }
 
   // ------------------------------------------------------------ article
@@ -338,26 +607,70 @@ export class CatalogSearchService {
 
   // --------------------------------------------------------------- text
 
-  /** The items a reading of the query matches, by `matchSearchDocuments`. */
+  /**
+   * The items the search index finds for the variants (TASK-045), and how
+   * each matched by its texts: exact or partial (the domain's
+   * `matchSearchDocuments`), or only with a typo forgiven — then the reading
+   * of T-CAT-08 is worked out from its texts (`searchReading`). `null` — no
+   * index, or it did not answer: the database searches instead.
+   */
+  private async indexMatches(
+    executor: DbExecutor,
+    variants: readonly SearchVariant[],
+    cityId: string | null,
+  ): Promise<Map<string, TextMatch> | null> {
+    if (!this.index.enabled) {
+      return null;
+    }
+    const candidates = await this.index.find({
+      variants: variants.map((variant) => variant.key),
+      cityId,
+    });
+    if (candidates === null) {
+      return null;
+    }
+    const matches = new Map<string, TextMatch>();
+    if (candidates.size === 0) {
+      return matches;
+    }
+    const documents = await this.documentsOf(executor, [...candidates.keys()]);
+    for (const [itemId, candidate] of candidates) {
+      const docs = documents.get(itemId) ?? [];
+      const best = matchSearchDocuments(variants, docs);
+      const facts = { relevance: candidate.score, popularity: candidate.popularity };
+      if (best) {
+        const asTyped =
+          best.variant === 0 || matchSearchDocuments(variants.slice(0, 1), docs) !== null;
+        matches.set(itemId, {
+          ...facts,
+          match: best.match,
+          own: best.own,
+          reading: asTyped ? null : variants[best.variant]!.text,
+        });
+      } else {
+        // Only a forgiven typo found it — or the index dropped words: it
+        // stays only if a word of the query is really in its texts.
+        const reading = searchReading(
+          variants[candidate.variant] ?? variants[0]!,
+          docs.map((doc) => doc.text),
+        );
+        if (reading.kept > 0) {
+          matches.set(itemId, { ...facts, match: "typo", own: false, reading: reading.text });
+        }
+      }
+    }
+    return matches;
+  }
+
+  /** The items a reading of the query matches, by `matchSearchDocuments` (without the index). */
   private async textMatches(
     executor: DbExecutor,
     variants: readonly SearchVariant[],
   ): Promise<Map<string, TextMatch>> {
     const matches = new Map<string, TextMatch>();
-    if (variants.length === 0) {
-      return matches;
-    }
     // A text of an item matching a variant has its longest stem in one of
     // its texts: the candidates are found by that, through the index.
-    const leading = [
-      ...new Set(
-        variants.flatMap((variant) =>
-          variant.stems.length === 0
-            ? []
-            : [[...variant.stems].sort((a, b) => b.length - a.length)[0]!],
-        ),
-      ),
-    ];
+    const leading = leadingStems(variants);
     if (leading.length === 0) {
       return matches;
     }
@@ -397,6 +710,32 @@ export class CatalogSearchService {
     if (ids.length === 0) {
       return matches;
     }
+    for (const [itemId, docs] of await this.documentsOf(executor, ids)) {
+      const best = matchSearchDocuments(variants, docs);
+      if (best) {
+        const asTyped =
+          best.variant === 0 || matchSearchDocuments(variants.slice(0, 1), docs) !== null;
+        matches.set(itemId, {
+          match: best.match,
+          own: best.own,
+          relevance: 0,
+          popularity: 0,
+          reading: asTyped ? null : variants[best.variant]!.text,
+        });
+      }
+    }
+    return matches;
+  }
+
+  /**
+   * The texts of items a query is compared with: their names (kk/ru/en) and
+   * synonyms (`own`), the names and synonyms of their subcategory and node,
+   * the spellings of their brand.
+   */
+  private async documentsOf(
+    executor: DbExecutor,
+    ids: readonly string[],
+  ): Promise<Map<string, TextDocument[]>> {
     const documents = await executor.execute<{ item_id: string; text: string; own: boolean }>(sql`
       SELECT t.entity_id AS item_id, t.text, true AS own FROM translation t
       WHERE t.entity_type = 'catalog_item' AND t.field = 'name' AND t.entity_id = ANY(${uuids(ids)})
@@ -419,22 +758,13 @@ export class CatalogSearchService {
       JOIN brand_spelling b ON b.brand_id = i.brand_id
       WHERE i.id = ANY(${uuids(ids)})
     `);
-    const byItem = new Map<string, SearchDocument[]>();
+    const byItem = new Map<string, TextDocument[]>();
     for (const row of documents.rows) {
       const list = byItem.get(row.item_id) ?? [];
-      list.push({ key: searchKey(row.text), own: row.own });
+      list.push({ key: searchKey(row.text), own: row.own, text: row.text });
       byItem.set(row.item_id, list);
     }
-    for (const [itemId, docs] of byItem) {
-      const best = matchSearchDocuments(variants, docs);
-      if (best) {
-        matches.set(itemId, {
-          ...best,
-          asTyped: best.variant === 0 || matchSearchDocuments(variants.slice(0, 1), docs) !== null,
-        });
-      }
-    }
-    return matches;
+    return byItem;
   }
 
   /**
@@ -528,15 +858,7 @@ export class CatalogSearchService {
     variants: readonly SearchVariant[],
     lang: CatalogLanguage,
   ): Promise<CatalogSearchCategory[]> {
-    const leading = [
-      ...new Set(
-        variants.flatMap((variant) =>
-          variant.stems.length === 0
-            ? []
-            : [[...variant.stems].sort((a, b) => b.length - a.length)[0]!],
-        ),
-      ),
-    ];
+    const leading = leadingStems(variants);
     if (leading.length === 0) {
       return [];
     }

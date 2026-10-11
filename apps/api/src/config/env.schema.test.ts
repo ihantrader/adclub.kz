@@ -67,8 +67,43 @@ describe("loadConfig", () => {
           baseUrl: "https://graph.facebook.com/v21.0",
         },
       },
+      // No index without MEILISEARCH_URL: the search runs on PostgreSQL.
+      search: { url: undefined, apiKey: undefined, index: "catalog_items" },
       ignoredVariables: [],
     });
+  });
+
+  it("reads the search index: the address, the key (the master key without one), the index (TASK-045)", () => {
+    expect(
+      loadConfig({
+        ...VALID_ENV,
+        MEILISEARCH_URL: "http://localhost:7700/",
+        MEILI_MASTER_KEY: "adclub-dev-master-key",
+      }).search,
+    ).toEqual({
+      url: "http://localhost:7700",
+      apiKey: "adclub-dev-master-key",
+      index: "catalog_items",
+    });
+    expect(
+      loadConfig({
+        ...VALID_ENV,
+        MEILISEARCH_URL: "https://search.example.kz",
+        MEILISEARCH_API_KEY: "a-search-and-write-key",
+        MEILI_MASTER_KEY: "adclub-dev-master-key",
+        MEILISEARCH_INDEX: "items_v2",
+      }).search,
+    ).toEqual({
+      url: "https://search.example.kz",
+      apiKey: "a-search-and-write-key",
+      index: "items_v2",
+    });
+    expect(() => loadConfig({ ...VALID_ENV, MEILISEARCH_URL: "ftp://x" })).toThrow(
+      ConfigValidationError,
+    );
+    expect(() => loadConfig({ ...VALID_ENV, MEILISEARCH_INDEX: "bad name" })).toThrow(
+      ConfigValidationError,
+    );
   });
 
   it("turns a Sentry-compatible DSN into the receiver's envelope endpoint (TASK-009)", () => {

@@ -41,4 +41,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791000000000_service-offers",
   "1791050000000_service-orders",
   "1791100000000_catalog-search",
+  "1791150000000_search-index",
 ];

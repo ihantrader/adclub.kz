@@ -346,6 +346,21 @@ export const envSchema = z.object({
   // Where the Cloud API is; development only (an address nothing answers
   // at, to watch retries and the dead letter queue without the network).
   WHATSAPP_API_BASE_URL: blankAsUndefined(z.url()),
+  // The search index of the catalog (ARCHITECTURE 10, 4.65; TASK-045).
+  // Unset — no index: the users' search runs on PostgreSQL (TASK-044) and
+  // the worker leaves the outbox alone.
+  MEILISEARCH_URL: blankAsUndefined(urlWithProtocol(["http:", "https:"])),
+  // A key with the rights the API and the worker need; unset — the master
+  // key of the local container (`MEILI_MASTER_KEY`, compose.dev.yml).
+  MEILISEARCH_API_KEY: blankAsUndefined(z.string().trim().min(16)),
+  MEILI_MASTER_KEY: blankAsUndefined(z.string().trim().min(16)),
+  // The name of the index of items; tests give each run its own.
+  MEILISEARCH_INDEX: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[a-zA-Z0-9_-]{1,100}$/),
+  ),
 });
 
 export interface RateLimitSettings {
@@ -442,6 +457,13 @@ export type AppConfig = {
       /** Where the Cloud API is, with the version (`…/v21.0`). */
       baseUrl: string;
     };
+  };
+  search: {
+    /** Where Meilisearch is; `undefined` — no index, the search runs on PostgreSQL. */
+    url: string | undefined;
+    apiKey: string | undefined;
+    /** The index of items users search (the live one; a rebuild swaps into it). */
+    index: string;
   };
   /**
    * Variables present in the environment that used to hold what are
@@ -635,6 +657,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           (isLocal ? DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN : undefined),
         baseUrl: `${parsed.WHATSAPP_API_BASE_URL ?? WHATSAPP_PUBLIC_URL}/${WHATSAPP_API_VERSION}`,
       },
+    },
+    search: {
+      url: parsed.MEILISEARCH_URL?.replace(/\/+$/, ""),
+      apiKey: parsed.MEILISEARCH_API_KEY ?? parsed.MEILI_MASTER_KEY,
+      index: parsed.MEILISEARCH_INDEX ?? "catalog_items",
     },
     ignoredVariables: Object.keys(env)
       .filter((name) =>

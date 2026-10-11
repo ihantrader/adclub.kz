@@ -45,6 +45,12 @@ import {
 } from "./modules/compatibility";
 import { DevSupplierSeed, DevSupplierSeedError, SuppliersModule } from "./modules/suppliers";
 import { ClubAccessGrants, ClubAccessModule } from "./modules/club-access";
+import { SearchEval, ShowcaseModule } from "./modules/showcase";
+import {
+  SearchIndexUnavailableError,
+  SearchIndexWriter,
+  SearchReindexBusyError,
+} from "./modules/search-index";
 import { ObservabilityModule, sanitizeForLog } from "./observability";
 import { devAlwaysFailingJob, JobAdmin, JobAdminError, JobQueue, JobsModule } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
@@ -117,6 +123,18 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                written to `ai-eval/vehicle-document/results/`.
  *                                The spend is stated as for translations.
  *
+ * The search index of the catalog (TASK-045; ARCHITECTURE 10, 4.65):
+ *   search:status                the index: documents, whether it answers, the outbox
+ *                                waiting to be applied, the last failure, the last
+ *                                rebuild and the last nightly check
+ *   search:reindex               rebuild the index from the database without stopping
+ *                                the search: a new index is filled and swapped in
+ *   search:reconcile             the nightly check now: missing, extra and stale
+ *                                documents found and fixed
+ *   search:eval                  the phrases of `search-eval/phrases.json` against this
+ *                                database: the share found in the first three and the
+ *                                phrases that failed
+ *
  * Messages to suppliers (ARCHITECTURE 4.35) — never the values of the
  * placeholders, and never a whole number:
  *   messages:list [--limit <n>] [--status <status>] [--template <key>]
@@ -165,6 +183,10 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 @Module({})
 class OperatorModule {
   static forRoot(config: AppConfig) {
+    // One of each: the search (`search:eval`) reads the catalog through these very instances.
+    const catalog = CatalogModule.forRoot({ http: false });
+    const compatibility = CompatibilityModule.forRoot({ http: false });
+    const clubAccess = ClubAccessModule.forRoot({ http: false });
     return {
       module: OperatorModule,
       imports: [
@@ -178,11 +200,12 @@ class OperatorModule {
         SettingsModule.forRoot({ http: false }),
         AiModule.forRoot(config),
         MessagingModule.forRoot(config, { http: false }),
-        CatalogModule.forRoot({ http: false }),
+        catalog,
         VehiclesModule.forRoot({ http: false }),
-        CompatibilityModule.forRoot({ http: false }),
+        compatibility,
         SuppliersModule.forRoot({ http: false }),
-        ClubAccessModule.forRoot({ http: false }),
+        clubAccess,
+        ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -227,6 +250,10 @@ const USAGE = `Usage: operator <command> [arguments]
   ai:eval:translate --models <a,b,...> --confirm-spend <usd> [--glossary] [--batch-size <n>] [--label <text>]
   ai:eval:recheck <result file name>
   ai:eval:vehicle-document --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  search:status
+  search:reindex
+  search:reconcile
+  search:eval
   dev:supplier:create --name <name> --city <city>
   dev:member:add <supplierId> <phone> --name <display name>
   dev:member:remove <memberId>
@@ -308,6 +335,8 @@ interface Services {
   translations: TranslationQueue;
   translationEval: TranslationEval;
   documentEval: VehicleDocumentEval;
+  searchIndex: SearchIndexWriter;
+  searchEval: SearchEval;
   devCommands: boolean;
 }
 
@@ -328,6 +357,8 @@ async function run(
     translations,
     translationEval,
     documentEval,
+    searchIndex,
+    searchEval,
     devCommands,
   }: Services,
   argv: string[],
@@ -441,6 +472,18 @@ async function run(
       return { jobId: await translations.wake() };
     case "translations:retry-failed":
       return translations.retryFailed();
+    case "search:status":
+      return searchIndex.status();
+    case "search:reindex":
+      return searchIndex.rebuild();
+    case "search:reconcile":
+      return (
+        (await searchIndex.reconcile()) ?? {
+          skipped: "No search index is configured (MEILISEARCH_URL is not set)",
+        }
+      );
+    case "search:eval":
+      return searchEval.run();
     case "ai:eval:recheck": {
       if (!devCommands) {
         throw new OperatorCommandError(
@@ -658,6 +701,8 @@ async function main(): Promise<void> {
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),
         documentEval: app.get(VehicleDocumentEval),
+        searchIndex: app.get(SearchIndexWriter),
+        searchEval: app.get(SearchEval),
         devCommands: hasDevJobs(config),
       },
       process.argv.slice(2),
@@ -678,7 +723,9 @@ main().catch((error: unknown) => {
     error instanceof DevSupplierSeedError ||
     error instanceof JobAdminError ||
     error instanceof MessagingCommandError ||
-    error instanceof DocumentEvalBudgetError
+    error instanceof DocumentEvalBudgetError ||
+    error instanceof SearchReindexBusyError ||
+    error instanceof SearchIndexUnavailableError
   ) {
     console.error(error.message);
   } else if (error instanceof ApiException) {

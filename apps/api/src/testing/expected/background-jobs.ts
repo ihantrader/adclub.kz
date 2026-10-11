@@ -27,6 +27,8 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "orders.cleanup-idempotency-keys",
   "orders.watch-notice-channel",
   "orders.watch-supplier-reach",
+  "search.apply-outbox",
+  "search.reconcile",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -61,6 +63,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "orders.watch-notice-channel", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The detector of a supplier no notice can reach (TASK-034, D-061).
   { name: "orders.watch-supplier-reach", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The nightly check of the search index against the database (TASK-045).
+  { name: "search.reconcile", cron: "20 4 * * *", timezone: "Asia/Almaty" },
   // Imports of the vehicle catalog stuck longer than allowed (TASK-014).
   { name: "vehicles.expire-imports", cron: "* * * * *", timezone: "Asia/Almaty" },
 ];

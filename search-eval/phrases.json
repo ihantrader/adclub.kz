@@ -1,0 +1,333 @@
+{
+  "version": 1,
+  "description": "TASK-045: the measured quality of the users' search over the development catalog (dev:catalog:seed). A phrase passes when one of the expected items is among the first `top` results; an empty `expect` — nothing may be found. A part is named «<brand> <article>», anything else by its Russian name. Every phrase is searched by a guest in the set's city, without a car unless it says otherwise.",
+  "city": "almaty",
+  "top": 3,
+  "threshold": 0.95,
+  "phrases": [
+    { "kind": "article", "q": "04465-0K090", "expect": ["Geely 04465-0K090"] },
+    { "kind": "article", "q": "04465 0k090", "expect": ["Geely 04465-0K090"] },
+    { "kind": "article", "q": "044650K090", "expect": ["Geely 04465-0K090"] },
+    { "kind": "article", "q": "04465.0K090", "expect": ["Geely 04465-0K090"] },
+    { "kind": "article", "q": "gdb3534", "expect": ["TRW GDB3534"] },
+    { "kind": "article", "q": "GDB 3534", "expect": ["TRW GDB3534"] },
+    { "kind": "article", "q": "4050068800", "expect": ["Geely 4050068800"] },
+    { "kind": "article", "q": "4050-068-800", "expect": ["Geely 4050068800"] },
+
+    {
+      "kind": "name",
+      "q": "колодки",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "name",
+      "q": "тормозные колодки",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "name",
+      "q": "колодки тормозные передние",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534"]
+    },
+    { "kind": "name", "q": "колодки задние", "expect": ["Geely 4050068800"] },
+    { "kind": "name", "q": "передние колодки trw", "expect": ["TRW GDB3534"] },
+    {
+      "kind": "name",
+      "q": "масло",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    {
+      "kind": "name",
+      "q": "моторное масло",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    {
+      "kind": "name",
+      "q": "моторное масло shell",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    {
+      "kind": "name",
+      "q": "масло 5w30",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Mobil 1 ESP 5W-30"]
+    },
+    { "kind": "name", "q": "масло 5w-40", "expect": ["Mobil Super 3000 5W-40, 4 л"] },
+    {
+      "kind": "name",
+      "q": "shell helix",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    { "kind": "name", "q": "helix ultra", "expect": ["Shell Helix Ultra 0W-20, 1 л"] },
+    { "kind": "name", "q": "mobil super 3000", "expect": ["Mobil Super 3000 5W-40, 4 л"] },
+    { "kind": "name", "q": "mobil 1 esp", "expect": ["Mobil 1 ESP 5W-30"] },
+    { "kind": "name", "q": "0w-20", "expect": ["Shell Helix Ultra 0W-20, 1 л"] },
+    { "kind": "name", "q": "замена масла", "expect": ["Замена моторного масла"] },
+    { "kind": "name", "q": "замена колодок", "expect": ["Замена передних тормозных колодок"] },
+    {
+      "kind": "name",
+      "q": "диагностика двигателя",
+      "expect": ["Компьютерная диагностика двигателя"]
+    },
+    {
+      "kind": "name",
+      "q": "компьютерная диагностика",
+      "expect": ["Компьютерная диагностика двигателя"]
+    },
+    { "kind": "name", "q": "джили колодки", "expect": ["Geely 04465-0K090", "Geely 4050068800"] },
+
+    {
+      "kind": "typo",
+      "q": "колодкм",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "typo",
+      "q": "тормозные колодкм",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "typo",
+      "q": "калодки",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "typo",
+      "q": "колодик",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "typo",
+      "q": "тормазные колодки",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "typo",
+      "q": "моторное масоло",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    {
+      "kind": "typo",
+      "q": "hellix",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    {
+      "kind": "typo",
+      "q": "shel helix",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    { "kind": "typo", "q": "диагностка", "expect": ["Компьютерная диагностика двигателя"] },
+    { "kind": "typo", "q": "заменна масла", "expect": ["Замена моторного масла"] },
+    {
+      "kind": "typo",
+      "q": "mobill",
+      "expect": ["Mobil Super 3000 5W-40, 4 л", "Mobil 1 ESP 5W-30"]
+    },
+    { "kind": "typo", "q": "передние колодкии", "expect": ["Geely 04465-0K090", "TRW GDB3534"] },
+
+    {
+      "kind": "layout",
+      "q": "rjkjlrb",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "layout",
+      "q": "vfckj",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    {
+      "kind": "layout",
+      "q": "njhvjpyst rjkjlrb",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "layout",
+      "q": "ырудд",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    {
+      "kind": "layout",
+      "q": "ырудд рудшч",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    {
+      "kind": "layout",
+      "q": "ьщишд",
+      "expect": ["Mobil Super 3000 5W-40, 4 л", "Mobil 1 ESP 5W-30"]
+    },
+    { "kind": "layout", "q": "pfvtyf vfckf", "expect": ["Замена моторного масла"] },
+    {
+      "kind": "layout",
+      "q": "лjkjlrb",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "layout",
+      "q": "тежег3ш",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+
+    {
+      "kind": "translit",
+      "q": "kolodki",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "translit",
+      "q": "maslo",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    { "kind": "translit", "q": "zamena masla", "expect": ["Замена моторного масла"] },
+    {
+      "kind": "translit",
+      "q": "шелл",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    {
+      "kind": "translit",
+      "q": "мобил",
+      "expect": ["Mobil Super 3000 5W-40, 4 л", "Mobil 1 ESP 5W-30"]
+    },
+    {
+      "kind": "translit",
+      "q": "tormoznye kolodki",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    { "kind": "translit", "q": "diagnostika", "expect": ["Компьютерная диагностика двигателя"] },
+
+    {
+      "kind": "kazakh",
+      "q": "тежегіш қалыптары",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "kazakh",
+      "q": "тежегиш калыптары",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "kazakh",
+      "q": "алдыңғы тежегіш қалыптары",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534"]
+    },
+    { "kind": "kazakh", "q": "артқы тежегіш", "expect": ["Geely 4050068800"] },
+    {
+      "kind": "kazakh",
+      "q": "мотор майы",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    {
+      "kind": "kazakh",
+      "q": "мотор майлары",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    { "kind": "kazakh", "q": "май ауыстыру", "expect": ["Замена моторного масла"] },
+    { "kind": "kazakh", "q": "мотор майын ауыстыру", "expect": ["Замена моторного масла"] },
+    { "kind": "kazakh", "q": "диагностикалау", "expect": ["Компьютерная диагностика двигателя"] },
+
+    {
+      "kind": "english",
+      "q": "brake pads",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    { "kind": "english", "q": "front brake pads", "expect": ["Geely 04465-0K090", "TRW GDB3534"] },
+    { "kind": "english", "q": "rear brake pads", "expect": ["Geely 4050068800"] },
+    {
+      "kind": "english",
+      "q": "engine oil",
+      "expect": [
+        "Shell Helix HX8 5W-30, 4 л",
+        "Mobil Super 3000 5W-40, 4 л",
+        "Shell Helix Ultra 0W-20, 1 л",
+        "Mobil 1 ESP 5W-30"
+      ]
+    },
+    { "kind": "english", "q": "oil change", "expect": ["Замена моторного масла"] },
+    {
+      "kind": "english",
+      "q": "engine computer diagnostics",
+      "expect": ["Компьютерная диагностика двигателя"]
+    },
+    {
+      "kind": "english",
+      "q": "brake pad replacement",
+      "expect": ["Замена передних тормозных колодок"]
+    },
+
+    {
+      "kind": "mixed",
+      "q": "brake колодки",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    {
+      "kind": "mixed",
+      "q": "масло shell",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Shell Helix Ultra 0W-20, 1 л"]
+    },
+    {
+      "kind": "mixed",
+      "q": "engine oil 5w30",
+      "expect": ["Shell Helix HX8 5W-30, 4 л", "Mobil 1 ESP 5W-30"]
+    },
+    { "kind": "mixed", "q": "geely колодки", "expect": ["Geely 04465-0K090", "Geely 4050068800"] },
+    {
+      "kind": "mixed",
+      "q": "колодки geely atlas",
+      "expect": ["Geely 04465-0K090", "Geely 4050068800"]
+    },
+    {
+      "kind": "mixed",
+      "q": "тежегіш pads",
+      "expect": ["Geely 04465-0K090", "TRW GDB3534", "Geely 4050068800"]
+    },
+    { "kind": "mixed", "q": "trw колодки", "expect": ["TRW GDB3534"] },
+    {
+      "kind": "mixed",
+      "q": "mobil майы",
+      "expect": ["Mobil Super 3000 5W-40, 4 л", "Mobil 1 ESP 5W-30"]
+    },
+
+    { "kind": "nothing", "q": "xyzxyz", "expect": [] },
+    { "kind": "nothing", "q": "амортизатор", "expect": [] },
+    { "kind": "nothing", "q": "аккумулятор", "expect": [] },
+    { "kind": "nothing", "q": "свечи зажигания", "expect": [] },
+    { "kind": "nothing", "q": "qqqq", "expect": [] },
+    { "kind": "nothing", "q": "1234567", "expect": [] },
+    { "kind": "nothing", "q": "фильтр масляный", "expect": [] },
+    { "kind": "nothing", "q": "зимние шины", "expect": [] }
+  ]
+}

@@ -14,6 +14,7 @@ import { CatalogJobsModule } from "./modules/catalog";
 import { VehicleJobsModule } from "./modules/vehicles";
 import { SupplierJobsModule } from "./modules/suppliers";
 import { OrderJobsModule } from "./modules/orders";
+import { SearchIndexJobsModule } from "./modules/search-index";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -59,6 +60,7 @@ export class WorkerModule {
         MessagingJobsModule,
         SupplierJobsModule,
         OrderJobsModule,
+        SearchIndexJobsModule,
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

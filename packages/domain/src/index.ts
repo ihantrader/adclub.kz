@@ -34,7 +34,13 @@ export type {
   SearchTextMatch,
   SearchVariant,
 } from "./search/search-query";
-export { compareSearchRankKeys, searchRankKey } from "./search/search-ranking";
+export {
+  compareSearchRankKeys,
+  SEARCH_RANK_KEY_NUMBERS,
+  searchRankKey,
+} from "./search/search-ranking";
+export { editDistance, searchReading } from "./search/search-reading";
+export type { SearchReading } from "./search/search-reading";
 export type { SearchMatch, SearchRankFacts, SearchRankKey } from "./search/search-ranking";
 export { decideAccess, resolveAccessContext } from "./access/access-predicate";
 export type {

@@ -3,8 +3,10 @@ import { catalogLanguageSchema, categoryKindSchema, localizedTextSchema } from "
 import { resolvedCompatibilityVehicleSchema } from "./compatibility";
 import {
   SHOWCASE_PAGE_MAX_SIZE,
+  showcaseBrandSchema,
   showcaseCitySchema,
   showcaseListItemSchema,
+  showcaseListQuerySchema,
   showcaseVehicleQueryShape,
   showcaseViewerSchema,
 } from "./showcase";
@@ -37,6 +39,19 @@ export const catalogSearchQuerySchema = z.object({
   q: z.string().trim().min(SEARCH_QUERY_MIN_LENGTH).max(SEARCH_QUERY_MAX_LENGTH),
   cityId: z.uuid().optional(),
   ...showcaseVehicleQueryShape,
+  /**
+   * The chip of a subcategory (TASK-045): only the found items of it. With
+   * it, the filters of M-CAT-03 apply as in the list of that subcategory —
+   * `attributes`, `brandIds`, `availability`, `receiving`, `onlyMyCity`
+   * (without it they are ignored) — and the answer carries the facets of
+   * its characteristics and brands.
+   */
+  categoryId: z.uuid().optional(),
+  onlyMyCity: showcaseListQuerySchema.shape.onlyMyCity,
+  availability: showcaseListQuerySchema.shape.availability,
+  receiving: showcaseListQuerySchema.shape.receiving,
+  brandIds: showcaseListQuerySchema.shape.brandIds,
+  attributes: showcaseListQuerySchema.shape.attributes,
   limit: z.coerce.number().int().min(1).max(SHOWCASE_PAGE_MAX_SIZE).optional(),
   cursor: z.string().min(1).max(500).optional(),
 });
@@ -48,7 +63,8 @@ export type CatalogSearchQuery = z.infer<typeof catalogSearchQuerySchema>;
  * gave its visible offer, is the query (the block «по артикулу», always
  * first); `exact` — its name or synonym, or the name or synonym of its
  * category, or its brand, is the query; `partial` — every word of the query
- * begins a word of its texts.
+ * begins a word of its texts — or, with the search index (TASK-045), the
+ * words match with a typo forgiven.
  */
 export const catalogSearchMatchSchema = z.enum(["article", "exact", "partial"]);
 
@@ -91,14 +107,62 @@ export const catalogSearchEmptyReasonSchema = z.enum(["vehicle", "city_required"
 
 export type CatalogSearchEmptyReason = z.infer<typeof catalogSearchEmptyReasonSchema>;
 
+/** A subcategory of the found items and how many of them are in it (a chip of M-CAT-04). */
+export const catalogSearchCategoryFacetSchema = z.object({
+  id: z.uuid(),
+  kind: categoryKindSchema,
+  name: localizedTextSchema,
+  /** The node it is in. */
+  parentName: localizedTextSchema.nullable(),
+  count: z.number().int(),
+});
+
+export type CatalogSearchCategoryFacet = z.infer<typeof catalogSearchCategoryFacetSchema>;
+
+/**
+ * How many of the found items of the chosen subcategory have each value of
+ * a filterable characteristic: a list — by option, yes/no — by value
+ * (TASK-045). A count is of the items that pass every other filter (the
+ * filter of the characteristic itself left out, so choosing «5W-30» still
+ * tells how many «5W-40» would add). Numbers have no counts.
+ */
+export const catalogSearchAttributeFacetSchema = z.object({
+  attributeId: z.uuid(),
+  options: z.array(z.object({ optionId: z.uuid(), count: z.number().int() })),
+  values: z.array(z.object({ value: z.boolean(), count: z.number().int() })),
+});
+
+export type CatalogSearchAttributeFacet = z.infer<typeof catalogSearchAttributeFacetSchema>;
+
+/**
+ * The facets of the results (TASK-045; ARCHITECTURE 4.65). Every number is
+ * exact: of the items the search really shows — after the showcase rule,
+ * the city of services and D-029 — never of what the index merely found.
+ */
+export const catalogSearchFacetsSchema = z.object({
+  /** The subcategories of all found items (before `categoryId`), most items first. */
+  categories: z.array(catalogSearchCategoryFacetSchema),
+  /**
+   * With `categoryId`: the brands of its found items before the other
+   * filters (as the list's `brands`); without it — empty.
+   */
+  brands: z.array(showcaseBrandSchema.extend({ count: z.number().int() })),
+  /** With `categoryId`: its filterable characteristics; without it — empty. */
+  attributes: z.array(catalogSearchAttributeFacetSchema),
+});
+
+export type CatalogSearchFacets = z.infer<typeof catalogSearchFacetsSchema>;
+
 export const catalogSearchResponseSchema = z.object({
   language: catalogLanguageSchema,
   /** The query as read: lower case, signs as spaces («04465 0k090»). */
   query: z.string(),
   /**
    * T-CAT-08 «Показаны результаты по «{запрос}»»: the results are for this
-   * reading of the query — another layout, a transliteration or a corrected
-   * word — because the query as typed found nothing; `null` — as typed.
+   * reading of the query — another layout, a transliteration, a corrected
+   * word (a typo the search forgave, TASK-045) or without a word nothing
+   * has — because the query as typed found nothing as it is; `null` — as
+   * typed.
    */
   usedQuery: z.string().nullable(),
   city: showcaseCitySchema.nullable(),
@@ -117,6 +181,8 @@ export const catalogSearchResponseSchema = z.object({
   cityRequired: z.boolean(),
   /** Categories that match the query, at most three. */
   categories: z.array(catalogSearchCategorySchema).max(CATALOG_SEARCH_CATEGORIES_MAX),
+  /** The chips of subcategories and the filters of the chosen one (TASK-045). */
+  facets: catalogSearchFacetsSchema,
   nextCursor: z.string().nullable(),
 });
 

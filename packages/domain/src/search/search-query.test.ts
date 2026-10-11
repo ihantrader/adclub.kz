@@ -16,6 +16,7 @@ import {
   type SearchDocument,
 } from "./search-query";
 import { compareSearchRankKeys, searchRankKey } from "./search-ranking";
+import { editDistance, searchReading } from "./search-reading";
 
 describe("normalizeSearchText and searchKey (ARCHITECTURE 10.2 п. 1)", () => {
   it.each([
@@ -204,16 +205,142 @@ describe("matchSearchDocuments", () => {
 });
 
 describe("searchRankKey (the one order of the search)", () => {
+  const facts = { relevance: 0, popularity: 0 };
+
   it("puts the article first, then exact, then partial; in the city, own name, price within", () => {
     const keys = [
-      searchRankKey({ match: "partial", own: true, inCity: true, minPrice: 100, id: "a" }),
-      searchRankKey({ match: "exact", own: false, inCity: false, minPrice: 50, id: "b" }),
-      searchRankKey({ match: "exact", own: true, inCity: false, minPrice: 900, id: "c" }),
-      searchRankKey({ match: "exact", own: false, inCity: true, minPrice: 900, id: "d" }),
-      searchRankKey({ match: "article", own: false, inCity: false, minPrice: 9000, id: "e" }),
-      searchRankKey({ match: "exact", own: false, inCity: false, minPrice: 50, id: "a" }),
+      searchRankKey({
+        ...facts,
+        match: "partial",
+        own: true,
+        inCity: true,
+        minPrice: 100,
+        id: "a",
+      }),
+      searchRankKey({ ...facts, match: "exact", own: false, inCity: false, minPrice: 50, id: "b" }),
+      searchRankKey({ ...facts, match: "exact", own: true, inCity: false, minPrice: 900, id: "c" }),
+      searchRankKey({ ...facts, match: "exact", own: false, inCity: true, minPrice: 900, id: "d" }),
+      searchRankKey({
+        ...facts,
+        match: "article",
+        own: false,
+        inCity: false,
+        minPrice: 9000,
+        id: "e",
+      }),
+      searchRankKey({ ...facts, match: "exact", own: false, inCity: false, minPrice: 50, id: "a" }),
     ];
-    const order = [...keys].sort(compareSearchRankKeys).map((key) => key[4]);
+    const order = [...keys].sort(compareSearchRankKeys).map((key) => key[6]);
     expect(order).toEqual(["e", "d", "c", "a", "b", "a"]);
+  });
+
+  it("puts what only a typo found last; within a match, the city, then relevance, then popularity", () => {
+    const base = { own: true, minPrice: 100 };
+    const keys = [
+      searchRankKey({
+        ...base,
+        match: "typo",
+        inCity: true,
+        relevance: 0.99,
+        popularity: 50,
+        id: "t",
+      }),
+      searchRankKey({
+        ...base,
+        match: "partial",
+        inCity: false,
+        relevance: 0.9,
+        popularity: 0,
+        id: "o",
+      }),
+      searchRankKey({
+        ...base,
+        match: "partial",
+        inCity: true,
+        relevance: 0.5,
+        popularity: 0,
+        id: "c",
+      }),
+      searchRankKey({
+        ...base,
+        match: "partial",
+        inCity: true,
+        relevance: 0.8,
+        popularity: 1,
+        id: "r",
+      }),
+      searchRankKey({
+        ...base,
+        match: "partial",
+        inCity: true,
+        relevance: 0.8,
+        popularity: 9,
+        id: "p",
+      }),
+    ];
+    const order = [...keys].sort(compareSearchRankKeys).map((key) => key[6]);
+    expect(order).toEqual(["p", "r", "c", "o", "t"]);
+  });
+
+  it("does not tell apart relevances closer than the fourth decimal", () => {
+    const a = searchRankKey({
+      match: "exact",
+      inCity: true,
+      relevance: 0.912345,
+      popularity: 0,
+      own: true,
+      minPrice: 10,
+      id: "b",
+    });
+    const b = searchRankKey({
+      match: "exact",
+      inCity: true,
+      relevance: 0.912349,
+      popularity: 0,
+      own: true,
+      minPrice: 10,
+      id: "a",
+    });
+    expect(compareSearchRankKeys(b, a)).toBeLessThan(0);
+  });
+});
+
+describe("searchReading (T-CAT-08 when a typo was forgiven)", () => {
+  const read = (query: string, texts: string[]) =>
+    searchReading(searchVariants(query)[0]!, texts).text;
+  const kept = (query: string, texts: string[]) =>
+    searchReading(searchVariants(query)[0]!, texts).kept;
+
+  it("counts the words kept: none — not really found", () => {
+    expect(kept("зимние шины", ["Колодки тормозные задние", "Rear brake pads"])).toBe(0);
+    expect(kept("масло для coolray", ["Моторные масла", "Shell Helix HX8 5W-30, 4 л"])).toBe(1);
+    expect(kept("колодки geely atlas", ["Колодки тормозные передние", "Geely"])).toBe(2);
+  });
+
+  it("corrects a typo to the word of the found texts", () => {
+    expect(read("колодкм", ["Колодки тормозные передние"])).toBe("колодки");
+    expect(read("тормозные колодкм", ["Колодки тормозные передние"])).toBe("тормозные колодки");
+  });
+
+  it("keeps words that begin a word, Kazakh letters as the text has them", () => {
+    expect(read("тежегиш калыптарм", ["Алдыңғы тежегіш қалыптары"])).toBe("тежегиш қалыптары");
+    expect(read("масло shell", ["Shell Helix HX8 5W-30, 4 л", "Моторные масла", "масло"])).toBe(
+      "масло shell",
+    );
+  });
+
+  it("keeps a word the texts have in two («5w30» — «5W-30»)", () => {
+    expect(read("масло 5w30", ["Mobil 1 ESP 5W-30", "Моторные масла", "масло"])).toBe("масло 5w30");
+  });
+
+  it("leaves out a word nothing is near, and never corrects a short word", () => {
+    expect(read("колодки атлас", ["Колодки тормозные передние"])).toBe("колодки");
+    expect(read("hlx", ["Shell Helix HX8"])).toBe("hlx");
+  });
+
+  it("measures transpositions as one edit", () => {
+    expect(editDistance("колодик", "колодки")).toBe(1);
+    expect(editDistance("abc", "abc")).toBe(0);
+    expect(editDistance("", "ab")).toBe(2);
   });
 });

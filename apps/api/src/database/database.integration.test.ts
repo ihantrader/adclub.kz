@@ -98,6 +98,67 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("registers changes of the catalog in the search outbox in their transaction, and rolls back keeping the catalog (search index)", async () => {
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('outbox_node', 'services', 1) RETURNING id",
+    );
+    const sub = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('outbox_sub', 'services', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const categoryId = sub.rows[0]!.id;
+    await client.query("DELETE FROM search_outbox");
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind) VALUES ('service', $1, 'services') RETURNING id",
+      [categoryId],
+    );
+    const itemId = item.rows[0]!.id;
+    await client.query(
+      "INSERT INTO translation (entity_type, entity_id, field, lang, text, origin, is_manually_edited) VALUES ('catalog_item', $1, 'name', 'ru', 'Масло', 'source', false)",
+      [itemId],
+    );
+    const subjects = await client.query<{ kind: string; id: string }>(
+      "SELECT subject_kind AS kind, subject_id AS id FROM search_outbox ORDER BY id",
+    );
+    expect(subjects.rows).toEqual([
+      { kind: "item", id: itemId },
+      { kind: "item", id: itemId },
+    ]);
+    // A rolled-back change leaves nothing; a change of nothing writes nothing.
+    await client.query("BEGIN");
+    await client.query(
+      "UPDATE catalog_item SET status = 'archived', archived_at = now() WHERE id = $1",
+      [itemId],
+    );
+    expect(await count("search_outbox", "true", [])).toBe(3);
+    await client.query("ROLLBACK");
+    expect(await count("search_outbox", "true", [])).toBe(2);
+    await client.query("UPDATE catalog_item SET status = status WHERE id = $1", [itemId]);
+    expect(await count("search_outbox", "true", [])).toBe(2);
+    // A kind it does not know is refused; the state is one row.
+    await expect(
+      client.query("INSERT INTO search_outbox (subject_kind, subject_id) VALUES ('order', $1)", [
+        itemId,
+      ]),
+    ).rejects.toThrow(/search_outbox_subject_kind_check/);
+    await expect(client.query("INSERT INTO search_index_state (id) VALUES (2)")).rejects.toThrow(
+      /search_index_state_single_check/,
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "search_outbox")).toBe(false);
+    expect(await tableExists(client, "search_index_state")).toBe(false);
+    expect(await count("catalog_item", "id = $1", [itemId])).toBe(1);
+    // The triggers are gone with it: a change of an item writes nowhere.
+    await client.query(
+      "UPDATE catalog_item SET status = 'archived', archived_at = now() WHERE id = $1",
+      [itemId],
+    );
+    await expect(client.query("SELECT search_outbox_register('x', NULL, NULL)")).rejects.toThrow(
+      /search_outbox_register/,
+    );
+  });
+
   it("holds search synonyms and the search key in the database, and rolls back keeping the catalog (catalog search)", async () => {
     const node = await client.query<{ id: string }>(
       "INSERT INTO category (code, kind, level) VALUES ('search_node', 'services', 1) RETURNING id",

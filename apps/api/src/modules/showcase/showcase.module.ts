@@ -1,5 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
+import { SearchIndexModule } from "../search-index";
 import { CatalogSearchService } from "./catalog-search.service";
+import { SearchEval } from "./search-eval";
 import { ShowcaseController } from "./showcase.controller";
 import { ShowcaseService } from "./showcase.service";
 
@@ -26,10 +28,10 @@ export class ShowcaseModule {
   static forRoot(options: ShowcaseModuleOptions): DynamicModule {
     return {
       module: ShowcaseModule,
-      imports: [options.catalog, options.compatibility, options.clubAccess],
+      imports: [options.catalog, options.compatibility, options.clubAccess, SearchIndexModule],
       controllers: options.http ? [ShowcaseController] : [],
-      providers: [ShowcaseService, CatalogSearchService],
-      exports: [ShowcaseService],
+      providers: [ShowcaseService, CatalogSearchService, SearchEval],
+      exports: [ShowcaseService, CatalogSearchService, SearchEval],
     };
   }
 }

@@ -12061,6 +12061,70 @@
             }
           },
           {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "onlyMyCity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "availability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "in_stock",
+                "on_order"
+              ]
+            }
+          },
+          {
+            "name": "receiving",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pickup",
+                "delivery"
+              ]
+            }
+          },
+          {
+            "name": "brandIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          {
+            "name": "attributes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 8000
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -23239,6 +23303,63 @@
           "too_many_photos"
         ]
       },
+      "CatalogSearchAttributeFacet": {
+        "type": "object",
+        "properties": {
+          "attributeId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "optionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "optionId",
+                "count"
+              ]
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "boolean"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "value",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "attributeId",
+          "options",
+          "values"
+        ]
+      },
       "CatalogSearchCategory": {
         "type": "object",
         "properties": {
@@ -23284,12 +23405,98 @@
           "parentName"
         ]
       },
+      "CatalogSearchCategoryFacet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CategoryKind"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "parentName": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "parentName",
+          "count"
+        ]
+      },
       "CatalogSearchEmptyReason": {
         "type": "string",
         "enum": [
           "vehicle",
           "city_required",
           "no_items"
+        ]
+      },
+      "CatalogSearchFacets": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogSearchCategoryFacet"
+            }
+          },
+          "brands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "count"
+              ]
+            }
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogSearchAttributeFacet"
+            }
+          }
+        },
+        "required": [
+          "categories",
+          "brands",
+          "attributes"
         ]
       },
       "CatalogSearchItem": {
@@ -23455,6 +23662,45 @@
             "minimum": 1900,
             "maximum": 2100
           },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "onlyMyCity": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false"
+            ]
+          },
+          "availability": {
+            "$ref": "#/components/schemas/OfferAvailability"
+          },
+          "receiving": {
+            "type": "string",
+            "enum": [
+              "pickup",
+              "delivery"
+            ]
+          },
+          "brandIds": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "attributes": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShowcaseAttributeFilter"
+            }
+          },
           "limit": {
             "type": "integer",
             "minimum": 1,
@@ -23539,6 +23785,9 @@
               "$ref": "#/components/schemas/CatalogSearchCategory"
             }
           },
+          "facets": {
+            "$ref": "#/components/schemas/CatalogSearchFacets"
+          },
           "nextCursor": {
             "type": [
               "string",
@@ -23558,6 +23807,7 @@
           "empty",
           "cityRequired",
           "categories",
+          "facets",
           "nextCursor"
         ]
       },

@@ -92,6 +92,26 @@ export function offersInReach(
   return reachable;
 }
 
+/**
+ * The filters of offers of M-CAT-03 — availability, receiving, «only in my
+ * city»: an item stays when one of its offers passes them all. The one
+ * place of the rule — the list and the search (TASK-045).
+ */
+export function offerFilterOf(
+  query: {
+    availability?: OfferAvailability | undefined;
+    receiving?: "pickup" | "delivery" | undefined;
+    onlyMyCity?: "true" | "false" | undefined;
+  },
+  cityId: string | null,
+): (entry: VisibleOffer) => boolean {
+  return (entry) =>
+    (query.availability === undefined || entry.availability === query.availability) &&
+    (query.receiving === undefined ||
+      (query.receiving === "pickup" ? entry.pickup : entry.delivery)) &&
+    (query.onlyMyCity !== "true" || (cityId !== null && entry.cityId === cityId));
+}
+
 /** The offers by their item, each item's in the order given. */
 export function groupByItem(offers: readonly VisibleOffer[]): Map<string, VisibleOffer[]> {
   const grouped = new Map<string, VisibleOffer[]>();

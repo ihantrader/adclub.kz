@@ -49,7 +49,13 @@ import {
 import type { AuthenticatedSession } from "../identity";
 import { AppSettings } from "../settings";
 import { city, localizedCityName } from "../suppliers";
-import { groupByItem, offersInReach, visibleOffers, type VisibleOffer } from "./showcase-offers";
+import {
+  groupByItem,
+  offerFilterOf,
+  offersInReach,
+  visibleOffers,
+  type VisibleOffer,
+} from "./showcase-offers";
 import {
   after,
   decodeListCursor,
@@ -224,11 +230,7 @@ export class ShowcaseService {
     const brands = await this.brandFacet(executor, items);
 
     // The filters: of offers first (an item stays when an offer passes them all), then of items.
-    const offerFilter = (entry: VisibleOffer) =>
-      (query.availability === undefined || entry.availability === query.availability) &&
-      (query.receiving === undefined ||
-        (query.receiving === "pickup" ? entry.pickup : entry.delivery)) &&
-      (query.onlyMyCity !== "true" || (cityId !== null && entry.cityId === cityId));
+    const offerFilter = offerFilterOf(query, cityId);
     const brandFilter = query.brandIds ? new Set(query.brandIds) : null;
     const attributePass = await this.attributeFilter(
       executor,
@@ -451,8 +453,8 @@ export class ShowcaseService {
     return given ? resolveVehicle(executor, given) : null;
   }
 
-  /** The brands of the listed items, with how many items each, by name. */
-  private async brandFacet(
+  /** The brands of the listed items, with how many items each, by name (the list and the search). */
+  async brandFacet(
     executor: DbExecutor,
     items: readonly CatalogItemRow[],
   ): Promise<ShowcaseListResponse["brands"]> {
@@ -487,9 +489,10 @@ export class ShowcaseService {
    * per filter; `null` — no filter applies. A filter by an attribute that
    * isn't an active filterable one of the subcategory filters nothing (an
    * archived attribute, a stale client); a filter of the wrong kind for its
-   * attribute is refused. An item without a value never passes.
+   * attribute is refused. An item without a value never passes. The one
+   * filter by characteristics — of the list and of the search (TASK-045).
    */
-  private async attributeFilter(
+  async attributeFilter(
     executor: DbExecutor,
     categoryId: string,
     filters: readonly ShowcaseAttributeFilter[],

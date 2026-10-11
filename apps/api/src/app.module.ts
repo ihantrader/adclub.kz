@@ -21,6 +21,7 @@ import { OffersModule } from "./modules/offers";
 import { ClubAccessModule } from "./modules/club-access";
 import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
+import { SearchIndexMetricsModule } from "./modules/search-index";
 import { SignalsModule } from "./modules/signals";
 import { AdminHomeModule } from "./modules/admin-home";
 import { UsersModule } from "./modules/users";
@@ -102,6 +103,8 @@ export class AppModule implements NestModule {
         clubAccess,
         signals,
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
+        // The API serves GET /metrics, so it samples the search index's state.
+        ...(config.metrics.enabled ? [SearchIndexMetricsModule] : []),
         OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
         AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers }),

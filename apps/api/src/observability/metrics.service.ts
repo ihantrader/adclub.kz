@@ -86,6 +86,22 @@ export class Metrics {
     "adclub_webhook_event_kinds",
     "What the retained webhook deliveries held, by kind (statuses, button presses, unknown shapes), from inbound_webhook_event",
   );
+  private readonly searchFallbacks = this.registry.counter(
+    "adclub_search_index_fallbacks_total",
+    "Searches answered from PostgreSQL because the search index could not answer, by reason (unavailable, missing, refused)",
+  );
+  private readonly searchOutbox = this.registry.gauge(
+    "adclub_search_outbox_pending",
+    "Changes waiting to be applied to the search index (from search_outbox)",
+  );
+  private readonly searchIndexFailures = this.registry.gauge(
+    "adclub_search_index_failures",
+    "Failed attempts in a row of the worker to reach the search index (0 — the last one worked)",
+  );
+  private readonly searchReconcileMismatches = this.registry.gauge(
+    "adclub_search_reconcile_mismatches",
+    "Documents the last nightly check found missing, extra or stale in the search index (and fixed)",
+  );
   private readonly dependencyUp = this.registry.gauge(
     "adclub_dependency_up",
     "1 when a dependency answered the last /ready check, 0 when it did not",
@@ -166,6 +182,31 @@ export class Metrics {
 
   setTranslationTasks(state: string, count: number): void {
     this.translationTasks.set({ state }, count);
+  }
+
+  countSearchFallback(reason: "unavailable" | "missing" | "refused"): void {
+    this.searchFallbacks.increment({ reason });
+  }
+
+  setSearchIndexState(state: {
+    outboxPending: number;
+    failures: number;
+    reconcileMismatches: number | null;
+  }): void {
+    this.searchOutbox.set({}, state.outboxPending);
+    this.searchIndexFailures.set({}, state.failures);
+    if (state.reconcileMismatches !== null) {
+      this.searchReconcileMismatches.set({}, state.reconcileMismatches);
+    }
+  }
+
+  /** The search index as the worker left it, sampled from the database like the others. */
+  collectSearch(collector: MetricCollector): void {
+    this.registry.collect("search", collector, [
+      this.searchOutbox,
+      this.searchIndexFailures,
+      this.searchReconcileMismatches,
+    ]);
   }
 
   setDependencyUp(dependency: string, up: boolean): void {

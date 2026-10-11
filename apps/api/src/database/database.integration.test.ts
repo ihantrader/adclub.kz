@@ -98,6 +98,57 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds price list uploads, their rows and remembered formats, and rolls back keeping the companies (price imports)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('price-import-city', 'Город прайса') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Автомир Степь', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77010000362') RETURNING id",
+    );
+    const member = await client.query<{ id: string }>(
+      "INSERT INTO supplier_member (supplier_id, account_id, display_name, added_by) VALUES ($1, $2, 'Ерлан', 'operator') RETURNING id",
+      [supplierId, account.rows[0]!.id],
+    );
+    const importId = "00000000-0000-4000-8000-000000000046";
+    await client.query(
+      "INSERT INTO price_import (id, supplier_id, uploaded_by_member_id, uploaded_by_account_id, file_kind, file_key, byte_size, checksum) VALUES ($1, $2, $3, $4, 'csv', 'price-imports/x/y', 10, 'sum')",
+      [importId, supplierId, member.rows[0]!.id, account.rows[0]!.id],
+    );
+    await client.query(
+      "INSERT INTO price_import_row (import_id, row_no, kind, raw) VALUES ($1, 1, 'data', '[\"X1\", 100]')",
+      [importId],
+    );
+    await expect(
+      client.query(
+        "INSERT INTO price_import_row (import_id, row_no, kind, raw) VALUES ($1, 2, 'note', '[]')",
+        [importId],
+      ),
+    ).rejects.toThrow(/price_import_row_kind_check/);
+    await expect(
+      client.query("UPDATE price_import SET status = 'applied' WHERE id = $1", [importId]),
+    ).rejects.toThrow(/price_import_status_check/);
+    await client.query(
+      "INSERT INTO price_import_format (supplier_id, header_key, roles, remembered_by_member_id) VALUES ($1, 'артикул', '[\"article\"]', $2)",
+      [supplierId, member.rows[0]!.id],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "price_import")).toBe(false);
+    expect(await tableExists(client, "price_import_row")).toBe(false);
+    expect(await tableExists(client, "price_import_format")).toBe(false);
+    expect(await count("supplier", "id = $1", [supplierId])).toBe(1);
+    // The next migrations' tests count companies and accounts of their own.
+    await client.query("DELETE FROM supplier_member WHERE id = $1", [member.rows[0]!.id]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM account WHERE id = $1", [account.rows[0]!.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+  });
+
   it("registers changes of the catalog in the search outbox in their transaction, and rolls back keeping the catalog (search index)", async () => {
     const node = await client.query<{ id: string }>(
       "INSERT INTO category (code, kind, level) VALUES ('outbox_node', 'services', 1) RETURNING id",

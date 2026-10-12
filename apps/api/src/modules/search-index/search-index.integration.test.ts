@@ -857,7 +857,9 @@ describe("the search index (PostgreSQL + Redis + Meilisearch)", () => {
     expect(await indexedDocument(w.oilService)).toBeNull();
 
     // Hours closed for the whole horizon — the point's offers leave.
-    const today = new Date();
+    // Days of the point's calendar: Almaty (UTC+5), not the UTC of the runner —
+    // after 19:00 UTC Almaty is already on the next day.
+    const today = new Date(Date.now() + 5 * 3_600_000);
     const closedDates = Array.from({ length: 62 }, (_, day) => ({
       date: new Date(today.getTime() + day * 86_400_000).toISOString().slice(0, 10),
       note: "Закрыто",

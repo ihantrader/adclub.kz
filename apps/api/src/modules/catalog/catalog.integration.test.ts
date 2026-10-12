@@ -1613,6 +1613,7 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
         recordId: randomUUID(),
         proposalId: randomUUID(),
         synonymId: randomUUID(),
+        requestId: randomUUID(),
       };
       const adminRoutes = Object.values(apiRoutes).filter((route) =>
         route.path.startsWith("/admin/catalog"),
@@ -1620,8 +1621,9 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       // 14 of the structure (TASK-010), 14 of brands, items and the fill
       // (TASK-011), 4 of photos (TASK-013), 5 of compatibility (TASK-015), and
       // an item's offers, the admin check of compatibility and locate (TASK-035),
-      // and 5 of search synonyms (TASK-044).
-      expect(adminRoutes).toHaveLength(45);
+      // 5 of search synonyms (TASK-044), and 5 of requests for items from
+      // price lists (`/admin/catalog-requests`, TASK-047).
+      expect(adminRoutes).toHaveLength(50);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },

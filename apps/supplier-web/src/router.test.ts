@@ -54,6 +54,15 @@ describe("the cabinet's addresses", () => {
     expect(menuOf("team")).toBe("team");
   });
 
+  it("puts «Модерация» under «Ещё» and the request for an item under «Предложения» (TASK-048)", () => {
+    expect(routeOf("/moderation")).toBe("moderation");
+    expect(tabOf("moderation")).toBe("more");
+    expect(menuOf("moderation")).toBe("moderation");
+    expect(routeOf("/offers/request")).toBe("offerRequest");
+    expect(tabOf("offerRequest")).toBe("offers");
+    expect(menuOf("offerRequest")).toBe("offers");
+  });
+
   it("gives an order its own address under «Заявки» — the link of W-01 (TASK-033)", () => {
     const id = "6f1e2d3c-4b5a-4987-8a6b-5c4d3e2f1a0b";
     expect(orderPath(id)).toBe(`/orders/${id}`);

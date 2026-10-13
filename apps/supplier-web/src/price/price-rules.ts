@@ -27,6 +27,7 @@ export const ROLE_ORDER: readonly PriceColumnRoleName[] = [
   "price",
   "availability",
   "lead_days",
+  "item_id",
   "ignore",
 ];
 
@@ -37,6 +38,7 @@ export const ROLE_TEXT: Record<PriceColumnRoleName, SupplierTextKey> = {
   price: "price.role.price",
   availability: "price.role.availability",
   lead_days: "price.role.leadDays",
+  item_id: "price.role.itemId",
   ignore: "price.role.ignore",
 };
 
@@ -214,6 +216,9 @@ export function rowErrorText(error: PriceRowErrorValue, t: Translate): string {
       return t("price.rowError.serviceItem");
     case "supplier_type":
       return t("price.rowError.supplierType");
+    // The hidden column of «Скачать мой прайс» (TASK-048): never says whose the item is.
+    case "unknown_item_id":
+      return t("price.rowError.unknownItemId");
   }
 }
 

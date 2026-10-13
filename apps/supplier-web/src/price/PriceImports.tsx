@@ -25,6 +25,7 @@ import {
   statusTone,
   uploadErrorText,
 } from "./price-rules";
+import { PriceExport } from "./PriceExport";
 import { uploadPriceFile } from "./upload";
 
 /** How often the history is asked again while a file is being read. */
@@ -60,7 +61,8 @@ const STATUS_ICON = {
  * too), sent with the progress of the upload; then the upload opens its
  * own page, where the reading goes on. Below — the history of uploads with
  * their state, asked again every two seconds while one of them is read.
- * «Скачать мой прайс» comes with TASK-048.
+ * «Скачать мой прайс» — the company's own offers as a file to edit and
+ * upload back (TASK-048).
  */
 export function PriceImports({ timeZone }: { timeZone: string }) {
   const { t, lang } = useLanguage();
@@ -229,6 +231,8 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
           {uploadError}
         </Banner>
       )}
+
+      <PriceExport />
 
       <h2 className="ac-text-title-s">{t("price.history")}</h2>
       {failure !== null && !page ? (

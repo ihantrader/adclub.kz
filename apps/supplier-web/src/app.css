@@ -1911,3 +1911,383 @@ a.ac-button {
     transition: none;
   }
 }
+
+/* ---------- the review and the result of a price list (S-PRICE-03, S-PRICE-04, TASK-048) ---------- */
+.price-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  min-width: 0;
+}
+
+.price-review__summary {
+  gap: var(--ac-space-2);
+}
+
+/* Five tabs with their counters: one line that scrolls sideways on a phone. */
+.price-tabs {
+  display: flex;
+  gap: var(--ac-space-2);
+  margin: 0 calc(-1 * var(--ac-space-4));
+  padding: 0 var(--ac-space-4) var(--ac-space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.price-tab {
+  flex: none;
+  min-height: var(--ac-touch-target);
+  padding: 0 var(--ac-space-4);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: 999px;
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.price-tab--on {
+  border-color: var(--ac-color-accent);
+  background: var(--ac-color-accent-tint);
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+.price-review__bulk {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.review-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+  padding: var(--ac-space-4);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.review-row--sharp {
+  box-shadow: inset 4px 0 0 var(--ac-color-warning);
+}
+
+.review-row__file,
+.review-row__item,
+.review-row__price,
+.review-row__actions-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}
+
+.review-row__price {
+  align-items: flex-start;
+}
+
+.review-row__sharp {
+  color: var(--ac-color-warning);
+}
+
+.review-row__ai {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-1);
+}
+
+.review-row__note {
+  color: var(--ac-color-warning);
+}
+
+.review-row__decided {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+  color: var(--ac-color-success);
+}
+
+.review-row__toggle {
+  align-self: flex-start;
+  padding: var(--ac-space-1) 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.review-row__errors {
+  color: var(--ac-color-danger);
+}
+
+.review-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+.review-item--muted {
+  opacity: 0.6;
+}
+
+.review-item__thumb {
+  width: 40px;
+  height: 40px;
+}
+
+.review-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-candidates__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-2);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface-raised);
+}
+
+.review-candidates__act {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.price-apply {
+  position: sticky;
+  bottom: var(--ac-space-2);
+  z-index: 1;
+  gap: var(--ac-space-2);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 12%);
+}
+
+.price-apply .ac-button {
+  white-space: normal;
+}
+
+.price-apply__note,
+.price-apply__blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  margin: 0;
+}
+
+.price-apply__blocked {
+  color: var(--ac-color-warning);
+}
+
+.price-apply__blocked .text-link {
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.price-missing__choice {
+  margin: 0;
+  border: 0;
+}
+
+.price-missing__choice legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--ac-space-2);
+}
+
+.review-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-3) var(--ac-space-4);
+}
+
+.review-missing + .review-missing {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.review-missing__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.price-result__done {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  margin: 0;
+}
+
+.price-result__done > .ac-icon {
+  flex: none;
+  color: var(--ac-color-success);
+}
+
+.price-result__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  margin: 0;
+  padding-left: var(--ac-space-5);
+}
+
+.price-result__reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-3) var(--ac-space-4);
+}
+
+.price-result__reason + .price-result__reason {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.price-result__reason-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+}
+
+.price-result__reason-head .text-link {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.price-result__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.price-export {
+  gap: var(--ac-space-3);
+}
+
+.price-export .ac-segments {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+.picker__list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.found-item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ---------- «Модерация» (S-MOD-01) and the request for an item (S-OFF-05) ---------- */
+.moderation-card__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.moderation-card__status,
+.moderation-card__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.menu-row .ac-count {
+  margin-left: auto;
+}
+
+.request-form {
+  max-width: 560px;
+}
+
+.price-screen > .ac-loading__content,
+.price-screen.ac-first-load {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+}
+
+@media (min-width: 1024px) {
+  .page > .price-screen--wide {
+    max-width: none;
+  }
+
+  /* From 1024 the rows of the review are a table (DESIGN 7.5): one line per row of the file. */
+  .review-list--table {
+    gap: 0;
+    overflow: hidden;
+    border-radius: var(--ac-radius-m);
+    background: var(--ac-color-surface);
+  }
+
+  .review-list--table .review-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.1fr) minmax(220px, 1.6fr) minmax(150px, 1fr) minmax(
+        200px,
+        1.2fr
+      );
+    align-items: start;
+    gap: var(--ac-space-4);
+    padding: var(--ac-space-3) var(--ac-space-4);
+    border-radius: 0;
+    font-size: 14px;
+  }
+
+  .review-list--table .review-row + .review-row {
+    border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+  }
+
+  .price-tabs {
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+}

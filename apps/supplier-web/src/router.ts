@@ -12,8 +12,12 @@ export const routePaths = {
   offers: "/offers",
   offerSearch: "/offers/search",
   offerNew: "/offers/new",
+  /** S-OFF-05 «Запрос на добавление позиции» (TASK-048). */
+  offerRequest: "/offers/request",
   scan: "/scan",
   price: "/price",
+  /** S-MOD-01 «Модерация» (TASK-048). */
+  moderation: "/moderation",
   more: "/more",
   settings: "/settings",
   team: "/team",
@@ -31,10 +35,16 @@ export type StaticRoute = keyof typeof routePaths;
 export type RouteKey = StaticRoute | "offer" | "order" | "priceImport";
 
 /** The pages reached from «Ещё» on a phone; they open with «назад» to it. */
-export const morePages: readonly RouteKey[] = ["settings", "team", "company", "install"];
+export const morePages: readonly RouteKey[] = [
+  "settings",
+  "team",
+  "company",
+  "install",
+  "moderation",
+];
 
-/** The pages under «Предложения»: their own arrow «назад» in the page (S-OFF-02, S-OFF-03). */
-export const offerPages: readonly RouteKey[] = ["offerSearch", "offerNew", "offer"];
+/** The pages under «Предложения»: their own arrow «назад» in the page (S-OFF-02, S-OFF-03, S-OFF-05). */
+export const offerPages: readonly RouteKey[] = ["offerSearch", "offerNew", "offer", "offerRequest"];
 
 export const DEFAULT_ROUTE: StaticRoute = "orders";
 

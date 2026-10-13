@@ -181,7 +181,18 @@ export function ItemSearch() {
         >
           {found &&
             (found.results.length === 0 ? (
-              <EmptyState icon="search" title={t("offerSearch.notFound")} />
+              <EmptyState
+                icon="search"
+                title={t("offerSearch.notFound")}
+                action={
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate("offerRequest", { state: { query: found.query } })}
+                  >
+                    {t("offerSearch.requestLink")}
+                  </Button>
+                }
+              />
             ) : (
               <>
                 <ul className="found-list">
@@ -205,6 +216,15 @@ export function ItemSearch() {
                     <p className="ac-text-body-s ac-muted">{t("offerSearch.limitReached")}</p>
                   )
                 )}
+                <p className="ac-text-body-s">
+                  <button
+                    type="button"
+                    className="text-link"
+                    onClick={() => navigate("offerRequest", { state: { query: found.query } })}
+                  >
+                    {t("offerSearch.requestLink")}
+                  </button>
+                </p>
               </>
             ))}
         </LoadingContent>

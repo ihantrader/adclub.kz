@@ -21,6 +21,8 @@ import { NewOfferScreen, OfferCardScreen } from "./offers/OfferScreen";
 import { OffersList } from "./offers/OffersList";
 import { OrderCardScreen } from "./orders/OrderScreen";
 import { OrdersList } from "./orders/OrdersList";
+import { Moderation } from "./moderation/Moderation";
+import { RequestFormScreen } from "./moderation/RequestForm";
 import { PriceImports } from "./price/PriceImports";
 import { PriceImportScreen } from "./price/PriceImportScreen";
 import { Scanner } from "./scan/Scanner";
@@ -230,7 +232,7 @@ function Page({
         />
       );
     case "more":
-      return <More />;
+      return <More generation={cabinet?.generation ?? null} />;
     case "install":
       return <Install firstTime={firstInstall} onDone={firstInstall ? onInstallDone : undefined} />;
     default:
@@ -274,6 +276,10 @@ function Page({
       return <PriceImports timeZone={card.timeZone} />;
     case "priceImport":
       return <PriceImportScreen timeZone={card.timeZone} />;
+    case "moderation":
+      return <Moderation generation={cabinet.generation} timeZone={card.timeZone} />;
+    case "offerRequest":
+      return <RequestFormScreen />;
     default:
       return <Company cabinet={cabinet} />;
   }

@@ -20,6 +20,8 @@ import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
 import { useVisiblePoll } from "../orders/live";
+import { PriceResult } from "./PriceResult";
+import { PriceReview } from "./PriceReview";
 import { formatWhen } from "../orders/order-rules";
 import { goBack, navigate, navigateTo, priceImportPath, useRouteId } from "../router";
 import {
@@ -79,6 +81,7 @@ export function PriceImportScreen({ timeZone }: { timeZone: string }) {
 
   const status = detail?.import.status;
   useVisiblePoll(() => void load(), RUNNING_POLL_MS, status !== undefined && isRunning(status));
+  const reload = useCallback(() => void load(), [load]);
 
   const head = (
     <div className="page__head page__head--back">
@@ -115,13 +118,25 @@ export function PriceImportScreen({ timeZone }: { timeZone: string }) {
     <>
       {head}
       <LoadingContent
+        className={
+          detail?.import.status === "review" || detail?.import.status === "applied"
+            ? "price-screen price-screen--wide"
+            : "price-screen"
+        }
         ready={detail !== null}
         indicator={gate.indicator}
         skeleton={<SkeletonList rows={4} label={t("common.loading")} />}
         label={t("common.loading")}
       >
         {detail && (
-          <Body detail={detail} editing={editing} setEditing={setEditing} onChanged={setDetail} />
+          <Body
+            detail={detail}
+            editing={editing}
+            setEditing={setEditing}
+            onChanged={setDetail}
+            timeZone={timeZone}
+            reload={reload}
+          />
         )}
       </LoadingContent>
     </>
@@ -133,11 +148,15 @@ function Body({
   editing,
   setEditing,
   onChanged,
+  timeZone,
+  reload,
 }: {
   detail: PriceImportDetailResponse;
   editing: boolean;
   setEditing: (editing: boolean) => void;
   onChanged: (detail: PriceImportDetailResponse) => void;
+  timeZone: string;
+  reload: () => void;
 }) {
   const { t, lang } = useLanguage();
   const entry = detail.import;
@@ -171,10 +190,13 @@ function Body({
         <div className="card price-running" role="status">
           <Icon name="clock" size={24} />
           <div className="stack-s">
-            <p className="ac-text-body-strong">{t("price.processing")}</p>
-            {progressText(entry, t, lang) !== t("price.processing") && (
-              <p className="ac-text-body-s ac-muted">{progressText(entry, t, lang)}</p>
-            )}
+            <p className="ac-text-body-strong">
+              {t(entry.status === "applying" ? "review.applying" : "price.processing")}
+            </p>
+            {entry.status !== "applying" &&
+              progressText(entry, t, lang) !== t("price.processing") && (
+                <p className="ac-text-body-s ac-muted">{progressText(entry, t, lang)}</p>
+              )}
           </div>
         </div>
       </>
@@ -217,6 +239,42 @@ function Body({
   }
 
   const stats = entry.stats;
+  const columnsLine = (
+    <p className="ac-text-body-s ac-muted">
+      {t(
+        entry.columnsSource === "remembered"
+          ? "price.parsed.columnsRemembered"
+          : "price.parsed.columnsConfirmed",
+      )}{" "}
+      {entry.status === "review" && (
+        <button type="button" className="text-link" onClick={() => setEditing(true)}>
+          {t("price.parsed.changeColumns")}
+        </button>
+      )}
+    </p>
+  );
+
+  if (entry.status === "review") {
+    return (
+      <>
+        {same}
+        {columnsLine}
+        <PriceReview entry={entry} timeZone={timeZone} onLeft={reload} />
+      </>
+    );
+  }
+
+  if (entry.status === "applied") {
+    return (
+      <>
+        <PriceResult entry={entry} />
+        {((stats?.errorRows ?? 0) > 0 || (entry.match?.errors ?? 0) > 0) && (
+          <RowErrors importId={entry.id} />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {same}
@@ -233,23 +291,18 @@ function Body({
               ? "price.parsed.columnsRemembered"
               : "price.parsed.columnsConfirmed",
           )}{" "}
-          {entry.status !== "applied" && (
-            <button type="button" className="text-link" onClick={() => setEditing(true)}>
-              {t("price.parsed.changeColumns")}
-            </button>
-          )}
+          <button type="button" className="text-link" onClick={() => setEditing(true)}>
+            {t("price.parsed.changeColumns")}
+          </button>
         </p>
         {stats && stats.serviceRows > 0 && (
           <p className="ac-text-body-s ac-muted">
             {t("price.parsed.serviceRows", { n: formatNumber(stats.serviceRows) })}
           </p>
         )}
-        {(entry.status === "review" || entry.status === "applied") && (
-          <p className="ac-text-body">{progressText(entry, t, lang)}</p>
-        )}
         <p className="ac-text-body-s price-summary__next">
           <Icon name="info" size={16} />
-          <span>{t(entry.status === "review" ? "price.matched.next" : "price.parsed.next")}</span>
+          <span>{t("price.parsed.next")}</span>
         </p>
       </div>
       {((stats?.errorRows ?? 0) > 0 || (entry.match?.errors ?? 0) > 0) && (

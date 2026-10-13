@@ -2,6 +2,7 @@ import type { IconName } from "@adclub/ui-core";
 import { Icon } from "@adclub/ui";
 import type { MouseEvent } from "react";
 import { useT } from "../i18n";
+import { useModerationUnseen } from "../moderation/unseen";
 import { useInstallWay } from "../pwa/install";
 import { navigate, routePaths, type StaticRoute } from "../router";
 
@@ -10,10 +11,15 @@ export function MenuLink({
   route,
   icon,
   label,
+  count,
+  countLabel,
 }: {
   route: StaticRoute;
   icon: IconName;
   label: string;
+  /** A counter beside the label (unseen decisions of «Модерация»); 0 or none — no counter. */
+  count?: number | null;
+  countLabel?: string;
 }) {
   return (
     <a
@@ -27,19 +33,32 @@ export function MenuLink({
     >
       <Icon name={icon} size={24} />
       <span className="menu-row__label">{label}</span>
+      {count ? (
+        <span className="ac-count" aria-label={countLabel}>
+          {count}
+        </span>
+      ) : null}
       <Icon name="chevronRight" size={20} className="ac-muted" />
     </a>
   );
 }
 
 /** «Ещё» (SCREENS 6.6): what is not a tab. «Установить на экран» — only where it isn't installed. */
-export function More() {
+export function More({ generation }: { generation: number | null }) {
   const t = useT();
   const installWay = useInstallWay();
+  const unseen = useModerationUnseen(generation);
   return (
     <>
       <h1 className="ac-text-title-l page__title">{t("more.title")}</h1>
       <nav className="menu" aria-label={t("more.title")}>
+        <MenuLink
+          route="moderation"
+          icon="checklist"
+          label={t("nav.moderation")}
+          count={unseen}
+          countLabel={unseen ? t("moderation.badgeLabel", { n: unseen }) : undefined}
+        />
         <MenuLink route="settings" icon="settings" label={t("nav.settings")} />
         <MenuLink route="team" icon="users" label={t("nav.team")} />
         <MenuLink route="company" icon="store" label={t("nav.company")} />

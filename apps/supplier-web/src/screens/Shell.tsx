@@ -15,6 +15,7 @@ import { companyBanners } from "../cabinet/company-state";
 import type { CabinetState } from "../cabinet/cabinet-store";
 import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
+import { refreshModerationUnseen, useModerationUnseen } from "../moderation/unseen";
 import { refreshNewOrders, useNewOrders, useVisiblePoll } from "../orders/live";
 import { useInstallWay } from "../pwa/install";
 import { useAppUpdated } from "../pwa/service-worker";
@@ -35,6 +36,8 @@ type Ready = Extract<CabinetState, { status: "ready" }>;
 
 /** How often the other pages ask for «Новые · N» of the badge («Заявки» tells it with every answer). */
 const BADGE_POLL_MS = 30_000;
+/** How often the counter of «Модерация» is asked while the page is visible. */
+const MODERATION_POLL_MS = 60_000;
 
 export interface ShellProps {
   route: RouteKey;
@@ -76,6 +79,19 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
     BADGE_POLL_MS,
     askBadge,
   );
+  // «Модерация» (TASK-048): the decisions this employee hasn't seen, asked on every page.
+  const unseen = useModerationUnseen(generation);
+  useEffect(() => {
+    if (generation !== null) void refreshModerationUnseen(generation);
+  }, [generation, route]);
+  useVisiblePoll(
+    () => {
+      if (generation !== null) void refreshModerationUnseen(generation);
+    },
+    MODERATION_POLL_MS,
+    generation !== null,
+  );
+  const unseenCount = unseen !== null && unseen > 0 ? unseen : null;
   const ordersItem: NavItem<StaticRoute> = {
     key: "orders",
     label: t("tabs.orders"),
@@ -92,7 +108,16 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
     ordersItem,
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
     { key: "price", label: t("tabs.price"), icon: "fileSpreadsheet", href: routePaths.price },
-    { key: "more", label: t("tabs.more"), icon: "dots", href: routePaths.more },
+    {
+      key: "more",
+      label: t("tabs.more"),
+      icon: "dots",
+      href: routePaths.more,
+      ...(unseenCount !== null && {
+        count: unseenCount,
+        countLabel: t("moderation.badgeLabel", { n: unseenCount }),
+      }),
+    },
   ];
   // The desktop menu lists the sections of «Ещё» directly (design/mockups/supplier.html).
   const menu: NavItem<StaticRoute>[] = [
@@ -100,6 +125,16 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
     { key: "scan", label: t("tabs.scan"), icon: "scan", href: routePaths.scan },
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
     { key: "price", label: t("tabs.price"), icon: "fileSpreadsheet", href: routePaths.price },
+    {
+      key: "moderation",
+      label: t("nav.moderation"),
+      icon: "checklist",
+      href: routePaths.moderation,
+      ...(unseenCount !== null && {
+        count: unseenCount,
+        countLabel: t("moderation.badgeLabel", { n: unseenCount }),
+      }),
+    },
     { key: "team", label: t("nav.team"), icon: "users", href: routePaths.team },
     { key: "company", label: t("nav.company"), icon: "store", href: routePaths.company },
     { key: "settings", label: t("nav.settings"), icon: "settings", href: routePaths.settings },

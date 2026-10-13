@@ -104,8 +104,16 @@ describe("supplier cabinet texts", () => {
     expect(supplierText("ru", "offers.add")).toBe("Добавить позицию");
     expect(supplierText("ru", "offers.return")).toBe("Вернуть в продажу");
     expect(supplierText("ru", "offerSearch.already")).toBe("Уже в ваших предложениях");
-    expect(supplierText("ru", "offerSearch.notFound")).toBe(
-      "Позиции нет в справочнике. Напишите администратору клуба",
+    // S-OFF-02 → S-OFF-05 (TASK-048): the request to add the item replaced «Напишите администратору».
+    expect(supplierText("ru", "offerSearch.notFound")).toBe("Позиции нет в справочнике");
+    expect(supplierText("ru", "offerSearch.requestLink")).toBe(
+      "Нет в справочнике? Отправьте запрос на добавление",
+    );
+    expect(supplierText("ru", "request.sent")).toBe(
+      "Запрос отправлен администратору. Результат — в разделе «Модерация»",
+    );
+    expect(supplierText("ru", "review.apply", { update: 2, withdraw: 0, request: 3 })).toBe(
+      "Применить: обновить 2 · снять 0 · отправить на добавление 3",
     );
     expect(supplierText("ru", "offerSearch.rateLimited", { seconds: 30 })).toBe(
       "Слишком много поисков, подождите 30 с",

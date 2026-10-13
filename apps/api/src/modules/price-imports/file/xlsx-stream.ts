@@ -23,10 +23,22 @@ const SPREADSHEET = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const RELATIONSHIPS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
+/**
+ * Whether XML 1.0 can hold a UTF-16 unit: not the C0 controls but tab, line
+ * feed and carriage return, and not U+FFFE or U+FFFF.
+ */
+function isXmlChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  if (code < 0x20) return code === 0x09 || code === 0x0a || code === 0x0d;
+  return code !== 0xfffe && code !== 0xffff;
+}
+
 /** What XML 1.0 can't hold at all, and the characters it escapes. */
 function escape(text: string): string {
   return text
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "")
+    .split("")
+    .filter(isXmlChar)
+    .join("")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

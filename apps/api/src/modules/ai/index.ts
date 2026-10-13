@@ -7,6 +7,8 @@ export {
   FALLBACK_WORTHY,
   priceMatchOperation,
   priceMatchOutputSchema,
+  reviewCheckOperation,
+  reviewCheckOutputSchema,
   translateOperation,
   translateOutputSchema,
   vehicleDocumentOperation,
@@ -23,6 +25,8 @@ export type {
   PriceMatchInput,
   PriceMatchOutput,
   PriceMatchRow,
+  ReviewCheckInput,
+  ReviewCheckOutput,
   TranslateGlossaryEntry,
   TranslateInput,
   TranslateItem,
@@ -40,7 +44,12 @@ export type {
   AiStatus,
 } from "./ai.service";
 export { OpenRouterAiGateway } from "./openrouter-ai-gateway";
-export { MISSING_MODEL_PREFIX, TestAiGateway, testTranslation } from "./test-ai-gateway";
+export {
+  MISSING_MODEL_PREFIX,
+  TEST_REVIEW_MARKERS,
+  TestAiGateway,
+  testTranslation,
+} from "./test-ai-gateway";
 export { aiJob, aiTables } from "./schema";
 export type { AiJobRow } from "./schema";
 export { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";

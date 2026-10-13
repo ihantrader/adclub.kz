@@ -27,6 +27,7 @@ import type {
   UserOrderSummary,
 } from "@adclub/contracts";
 import {
+  complaintReasonsFor,
   hidePhone,
   isActiveOrderStatus,
   localDateTime,
@@ -39,6 +40,7 @@ import { account, adminUser, supplier, supplierMember } from "../identity";
 import { offer } from "../offers";
 import { city, supplierClosedDate, supplierLocation } from "../suppliers";
 import { qrPayload } from "./order-code";
+import type { OrderFeedback } from "./order-feedback";
 import { orderEvent, type OrderEventRow, type OrderRow } from "./schema";
 
 /**
@@ -586,10 +588,12 @@ export async function userOrderView(
   row: OrderRow,
   lang: CatalogLanguage,
   photos: ItemPhotoSource,
+  feedback: OrderFeedback,
 ): Promise<UserOrder> {
   const [summary] = await userSummaries(executor, [row], lang);
   const events = (await eventsOf(executor, [row.id])).get(row.id) ?? [];
   const pickupPoint = showsPickupPoint(row) ? await pickupPointOf(executor, row) : undefined;
+  const own = (await feedback.forUser(executor, [row.id])).get(row.id)!;
   return {
     ...summary!,
     item: withPhoto(row, lang, await photosOf(executor, photos, [row])),
@@ -603,6 +607,11 @@ export async function userOrderView(
       : {}),
     givenOut: givenOutOf(row),
     history: events.map(stepOf).filter((step): step is UserOrderStep => step !== null),
+    // TASK-049: the review and the complaints (M-ORD-03, M-ORD-05, M-ORD-06).
+    canReview: reviewable(row, own.review !== null),
+    review: own.review,
+    complaint: own.complaint,
+    complaintReasons: own.complaintOpen ? [] : complaintReasonsFor(row.status),
   };
 }
 
@@ -694,11 +703,14 @@ export async function activeCopyEntries(
 
 // -------------------------------------------- the history (TASK-023)
 
-/** Whether «Оценить» belongs under a finished order (the review itself — TASK-049). */
-function reviewable(row: OrderRow): boolean {
-  // A test order of an employee is never reviewed (M-ORD-05); TASK-049
-  // will also take away the orders that already have one.
-  return row.status === "completed" && !row.isTest;
+/**
+ * Whether «Оценить» belongs under an order — **the one rule of «отзыв
+ * возможен»** (TASK-049; the history, the card and `POST /reviews` ask it): the
+ * order was given out (a visit done — `completed` of every kind), it is not a
+ * test order of an employee (M-ORD-05, PRODUCT 12.6) and has no review yet.
+ */
+export function reviewable(row: Pick<OrderRow, "status" | "isTest">, hasReview: boolean): boolean {
+  return row.status === "completed" && !row.isTest && !hasReview;
 }
 
 /**
@@ -713,12 +725,17 @@ export async function historyMonths(
   lang: CatalogLanguage,
   timeZone: string,
   photos: ItemPhotoSource,
+  feedback: OrderFeedback,
 ): Promise<UserHistoryMonth[]> {
   const names = await supplierNames(
     executor,
     rows.map((row) => row.supplierId),
   );
   const images = await photosOf(executor, photos, rows);
+  const reviewed = await feedback.reviewedOrderIds(
+    executor,
+    rows.map((row) => row.id),
+  );
   const months: UserHistoryMonth[] = [];
   for (const row of rows) {
     // Every finished order has the moment it finished (the database keeps
@@ -754,7 +771,7 @@ export async function historyMonths(
       // Whether the same offer can be had right now is `GET /orders/{id}/repeat`.
       // A service is not repeated until the checkout of TASK-039.B (`orderRepeatDecision`).
       canRepeat: row.kind === "stock" || row.kind === "on_order",
-      canReview: reviewable(row),
+      canReview: reviewable(row, reviewed.has(row.id)),
       serviceVisit: serviceVisitOf(row),
       createdAt: iso(row.createdAt),
     });
@@ -892,8 +909,10 @@ export async function adminOrderView(
   row: OrderRow,
   lang: CatalogLanguage,
   photos: ItemPhotoSource,
+  feedback: OrderFeedback,
   discipline: DisciplineMark[] = [],
 ): Promise<AdminOrder> {
+  const { review, complaints } = await feedback.forAdmin(executor, row.id);
   const [summary] = await adminSummaries(executor, [row], lang);
   const events = (await eventsOf(executor, [row.id])).get(row.id) ?? [];
   const members = await memberNames(executor, [
@@ -942,6 +961,8 @@ export async function adminOrderView(
             reason: row.cancelReason ?? "",
           }
         : null,
+    review,
+    complaints,
   };
 }
 

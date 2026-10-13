@@ -38,6 +38,8 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "prices.match-wake",
   "prices.apply",
   "prices.expire-reviews",
+  "reviews.check",
+  "reviews.expire-checks",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -80,6 +82,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "prices.expire-stalled", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Matching of price lists nobody works on, put back on the queue (TASK-047).
   { name: "prices.match-wake", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Reviews that waited longer than allowed for their check (TASK-049).
+  { name: "reviews.expire-checks", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The nightly check of the search index against the database (TASK-045).
   { name: "search.reconcile", cron: "20 4 * * *", timezone: "Asia/Almaty" },
   // Imports of the vehicle catalog stuck longer than allowed (TASK-014).

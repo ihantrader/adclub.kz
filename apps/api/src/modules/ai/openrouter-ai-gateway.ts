@@ -3,12 +3,14 @@ import {
   AiGateway,
   AiGatewayError,
   priceMatchOutputSchema,
+  reviewCheckOutputSchema,
   translateOutputSchema,
   vehicleDocumentOutputSchema,
   type AiFailureKind,
   type AiResult,
   type AiUsage,
   type PriceMatchInput,
+  type ReviewCheckInput,
   type TranslateGlossaryEntry,
   type TranslateInput,
   type VehicleDocumentInput,
@@ -206,6 +208,30 @@ const PRICE_MATCH_FORMAT = {
   },
 } as const;
 
+const REVIEW_CHECK_SYSTEM = `You check the text of a customer's review of a car parts and services supplier before it is published in a closed club app in Kazakhstan. The text may be in Russian, Kazakh or English, mixed, or in Latin letters for Russian or Kazakh words (transliteration), with typos and slang.
+
+Report only these violations:
+- profanity: swear words or insults aimed at a person (in any of the languages, transliterated or partly masked with symbols);
+- threat: a threat of violence or harm to a person or property;
+- personal_data: personal or confidential data of a person — a phone number (also written in words), an address of a person, a document number (passport, ИИН/ЖСН), a card number, a car plate;
+- advertising: advertising, promotion of another business, links, promo codes, invitations to a channel or a chat.
+
+Criticism is NOT a violation: complaints about the price, the waiting time, the quality, the service, rude staff described without insults, a low score, an angry but clean tone, «больше не приду» — all of these are allowed and must not be reported. Do not report the name of the supplier or of an employee — that is checked elsewhere.
+
+Return every violation found with its kind and one short sentence in Russian explaining it for the moderator (without repeating personal data). Return an empty list when there is none.`;
+
+/** The longest answer of a review check. */
+const REVIEW_CHECK_MAX_TOKENS = 1_000;
+
+const REVIEW_CHECK_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "review_check",
+    strict: true,
+    schema: strictJsonSchema(reviewCheckOutputSchema),
+  },
+} as const;
+
 export interface OpenRouterOptions {
   /** Tests give their own HTTP layer; nothing in development, tests or CI calls the real service. */
   fetch?: typeof fetch;
@@ -309,6 +335,29 @@ export class OpenRouterAiGateway extends AiGateway {
         messages: [
           { role: "system", content: PRICE_MATCH_SYSTEM },
           { role: "user", content: `Match these rows:\n${JSON.stringify({ rows })}` },
+        ],
+      },
+      signal,
+    );
+  }
+
+  /** The text of a review and its score (TASK-049); nothing about the author or the supplier. */
+  async checkReview(
+    input: ReviewCheckInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    return this.complete(
+      {
+        model,
+        max_tokens: REVIEW_CHECK_MAX_TOKENS,
+        response_format: REVIEW_CHECK_FORMAT,
+        messages: [
+          { role: "system", content: REVIEW_CHECK_SYSTEM },
+          {
+            role: "user",
+            content: `Check this review:\n${JSON.stringify({ score: input.score, text: input.text })}`,
+          },
         ],
       },
       signal,

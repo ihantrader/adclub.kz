@@ -115,7 +115,13 @@ function itemHistory(itemId: string): SQL {
  * `before`/`after` (`supplierId`): its employees and their invitations
  * (TASK-016, TASK-017).
  */
-const SUPPLIER_PART_ENTITIES = ["supplier_member", "supplier_invitation"] as const;
+const SUPPLIER_PART_ENTITIES = [
+  "supplier_member",
+  "supplier_invitation",
+  // TASK-049: the reviews of its orders and the complaints about them.
+  "review",
+  "complaint",
+] as const;
 
 /**
  * The history of one supplier (SCREENS A-SUP-03 «История»; TASK-036): the
@@ -142,7 +148,14 @@ function supplierHistory(supplierId: string): SQL {
  * `after` (`accountId`): its club access grants, its discipline marks, the
  * numbers opened on its orders (TASK-020, TASK-022, TASK-036.B).
  */
-const ACCOUNT_PART_ENTITIES = ["club_access_grant", "user_discipline_event", "order"] as const;
+const ACCOUNT_PART_ENTITIES = [
+  "club_access_grant",
+  "user_discipline_event",
+  "order",
+  // TASK-049: the user's reviews and complaints, the administrator's decisions on them.
+  "review",
+  "complaint",
+] as const;
 
 /**
  * The history of one user (SCREENS A-USR-02 «История»; TASK-036.B): the

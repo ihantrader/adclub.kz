@@ -52,6 +52,24 @@ export function describeViewer(viewer: Viewer): ShowcaseViewer {
   return { signedIn: viewer.accountId !== null, clubAccess: viewer.clubAccess };
 }
 
+/**
+ * Whether the viewer may see a supplier at all — the same rule for the
+ * supplier of an offer and for the supplier's own page with its reviews
+ * (TASK-049, M-CAT-09): without club access it is hidden, with the reason;
+ * with it, visible.
+ */
+export function supplierShownTo(
+  viewer: Viewer,
+): { kind: "hidden"; reason: "auth_required" | "subscription_required" } | { kind: "visible" } {
+  if (viewer.clubAccess) {
+    return { kind: "visible" };
+  }
+  return {
+    kind: "hidden",
+    reason: viewer.accountId === null ? "auth_required" : "subscription_required",
+  };
+}
+
 /** The supplier of each of these offers (by offer id) as the viewer may see it. */
 export async function offerSuppliers(
   executor: DbExecutor,
@@ -59,11 +77,9 @@ export async function offerSuppliers(
   offers: readonly { id: string; supplierId: string; locationId: string }[],
 ): Promise<Map<string, ShowcaseOfferSupplier>> {
   const described = new Map<string, ShowcaseOfferSupplier>();
-  if (!viewer.clubAccess) {
-    const hidden: ShowcaseOfferSupplier = {
-      kind: "hidden",
-      reason: viewer.accountId === null ? "auth_required" : "subscription_required",
-    };
+  const shown = supplierShownTo(viewer);
+  if (shown.kind === "hidden") {
+    const hidden: ShowcaseOfferSupplier = shown;
     for (const entry of offers) {
       described.set(entry.id, { ...hidden });
     }

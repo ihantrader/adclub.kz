@@ -26,6 +26,7 @@ import { SignalsModule } from "./modules/signals";
 import { AdminHomeModule } from "./modules/admin-home";
 import { UsersModule } from "./modules/users";
 import { PriceImportsModule } from "./modules/price-imports";
+import { ReviewsModule } from "./modules/reviews";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -65,6 +66,10 @@ export class AppModule implements NestModule {
     const vehicles = VehiclesModule.forRoot({ http: true });
     // One price imports module: the home screen counts its requests (TASK-047).
     const priceImports = PriceImportsModule.forRoot({ catalog });
+    // One orders module: reviews register their part of an order's views in it (TASK-049).
+    const orders = OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog });
+    // One reviews module: the home screen counts its queue (TASK-049).
+    const reviews = ReviewsModule.forRoot({ http: true, orders, clubAccess });
     return {
       module: AppModule,
       imports: [
@@ -108,8 +113,16 @@ export class AppModule implements NestModule {
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
         // The API serves GET /metrics, so it samples the search index's state.
         ...(config.metrics.enabled ? [SearchIndexMetricsModule] : []),
-        OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog }),
-        AdminHomeModule.forRoot({ catalog, compatibility, signals, suppliers, priceImports }),
+        orders,
+        reviews,
+        AdminHomeModule.forRoot({
+          catalog,
+          compatibility,
+          signals,
+          suppliers,
+          priceImports,
+          reviews,
+        }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers }),
         priceImports,
         // Must stay last: its catch-all route would otherwise shadow

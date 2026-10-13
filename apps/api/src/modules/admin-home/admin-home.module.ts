@@ -10,6 +10,8 @@ export interface AdminHomeModuleOptions {
   suppliers: DynamicModule;
   /** Its requests to add an item (TASK-047). */
   priceImports: DynamicModule;
+  /** The reviews held and the new complaints (TASK-049). */
+  reviews: DynamicModule;
 }
 
 /**
@@ -28,6 +30,7 @@ export class AdminHomeModule {
         options.signals,
         options.suppliers,
         options.priceImports,
+        options.reviews,
       ],
       controllers: [AdminHomeController],
       providers: [AdminHomeService],

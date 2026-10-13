@@ -131,7 +131,18 @@ describe("admin panel (PostgreSQL + Redis)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await db.query(TRUNCATE_ALL);
+    // The worker is live and its sweepers poll the tables every minute; an
+    // emptying that loses a deadlock to one of them is simply tried again
+    // (a fact of the test bench, as in the other suites with a worker).
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await db.query(TRUNCATE_ALL);
+        break;
+      } catch (error) {
+        if (attempt >= 10) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
     await Promise.all([app.get(AppSettings).refresh(), worker.get(AppSettings).refresh()]);
     await operatorSet({
       login_code_requests_per_phone: 10_000,

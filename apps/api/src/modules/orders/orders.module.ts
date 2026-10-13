@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { AccountStore } from "../identity";
 import { Discipline } from "./order-discipline";
+import { OrderFeedback } from "./order-feedback";
 import { OrderLookup } from "./order-lookup.service";
 import { OrderNotices } from "./order-notices";
 import { OrderTransitions } from "./order-transitions";
@@ -57,12 +58,13 @@ export class OrdersModule {
       providers: [
         AccountStore,
         Discipline,
+        OrderFeedback,
         OrderNotices,
         OrderTransitions,
         OrderLookup,
         OrdersService,
       ],
-      exports: [OrdersService],
+      exports: [OrdersService, OrderFeedback],
     };
   }
 }

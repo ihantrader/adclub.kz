@@ -496,6 +496,20 @@ const ai = group({
       description:
         "Запасная модель сопоставления прайса: используется, когда основная недоступна. Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
+    ai_model_review_check_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-2.5-flash-lite",
+      description:
+        "Модель OpenRouter для проверки текста отзыва до публикации: мат и оскорбления, угрозы, личные данные, реклама (TASK-049). Критика и низкая оценка нарушением не являются; модель не отклоняет, а только задерживает отзыв для администратора. Умолчание — как у автоперевода; замер на наборе ai-eval/review-check (D-058) — отдельной задачей. Меняется без релиза, действует не позже чем через 30 секунд.",
+    }),
+    ai_model_review_check_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "deepseek/deepseek-v4-flash",
+      description:
+        "Запасная модель проверки отзывов: используется, когда основная недоступна. Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
     ai_model_vehicle_document_primary: define.string({
       maxLength: 100,
       pattern: MODEL_ID,
@@ -730,6 +744,59 @@ const reviews = group({
       default: 60,
       description:
         "Если автоматическая проверка отзыва не завершилась за это время, отзыв уходит администратору.",
+    }),
+    // TASK-049 (ARCHITECTURE 4.69).
+    review_text_max_length: define.integer({
+      unit: "count",
+      min: 100,
+      max: 2000,
+      default: 1000,
+      description: "Наибольшая длина текста отзыва в знаках; длиннее — отказ у поля.",
+    }),
+    review_check_retry_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: 3600,
+      default: 60,
+      description:
+        "Через сколько секунд проверка отзыва снова обращается к ИИ, если тот был недоступен или исчерпан дневной бюджет; отзыв всё это время ждёт проверки.",
+    }),
+    review_create_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 20,
+      description:
+        "Сколько запросов на отзыв (новый отзыв) один пользователь может отправить за окно; сверх — отказ с временем ожидания (защита от цикла, не от человека).",
+    }),
+    review_create_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела новых отзывов одного пользователя.",
+    }),
+    complaint_text_max_length: define.integer({
+      unit: "count",
+      min: 100,
+      max: 2000,
+      default: 1000,
+      description: "Наибольшая длина текста жалобы в знаках; длиннее — отказ у поля.",
+    }),
+    complaint_create_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 10,
+      description:
+        "Сколько жалоб один пользователь может отправить за окно; сверх — отказ с временем ожидания.",
+    }),
+    complaint_create_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела жалоб одного пользователя.",
     }),
   },
 });

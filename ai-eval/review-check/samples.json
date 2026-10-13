@@ -1,0 +1,331 @@
+{
+  "version": 1,
+  "about": "Постоянный набор примеров для проверки отзывов до публикации (TASK-049, D-058). Отзыв к заявке у поставщика «Автомаркет» (сотрудники — «Айгерим Касымова», «Ерлан»). expected — виды причин задержки: contacts, supplier_name, employee_name находят детерминированные правила (юнит-тест сверяет их с этим файлом), profanity, threat, personal_data, advertising — ИИ (данные для будущего замера моделей; в тестах внешних вызовов нет). Пустой expected — отзыв публикуется: критика и низкая оценка нарушением не являются. Тексты выдуманы.",
+  "supplier": { "name": "Автомаркет", "employees": ["Айгерим Касымова", "Ерлан"] },
+  "samples": [
+    {
+      "id": "ru-critic-1",
+      "lang": "ru",
+      "score": 2,
+      "text": "долго ждал ответа, цена в итоге выше",
+      "expected": []
+    },
+    {
+      "id": "ru-critic-2",
+      "lang": "ru",
+      "score": 1,
+      "text": "Цена выше обещанной, больше не приду",
+      "expected": []
+    },
+    {
+      "id": "ru-critic-3",
+      "lang": "ru",
+      "score": 1,
+      "text": "Ужасное обслуживание: ждал три дня, никто не перезвонил. Не советую.",
+      "expected": []
+    },
+    {
+      "id": "ru-critic-4",
+      "lang": "ru",
+      "score": 2,
+      "text": "Продавец разговаривал грубо и не хотел искать деталь",
+      "expected": []
+    },
+    {
+      "id": "ru-praise-1",
+      "lang": "ru",
+      "score": 5,
+      "text": "Всё отлично, колодки подошли, спасибо",
+      "expected": []
+    },
+    {
+      "id": "ru-praise-2",
+      "lang": "ru",
+      "score": 5,
+      "text": "Быстро, вежливо, деталь оригинальная",
+      "expected": []
+    },
+    {
+      "id": "ru-neutral-1",
+      "lang": "ru",
+      "score": 3,
+      "text": "Нормально, но упаковка была мятая",
+      "expected": []
+    },
+    {
+      "id": "kk-critic-1",
+      "lang": "kk",
+      "score": 2,
+      "text": "Ұзақ күттім, бағасы қымбат болып шықты",
+      "expected": []
+    },
+    {
+      "id": "kk-praise-1",
+      "lang": "kk",
+      "score": 5,
+      "text": "Бәрі жақсы, тез берді, рахмет",
+      "expected": []
+    },
+    {
+      "id": "kk-critic-2",
+      "lang": "kk",
+      "score": 1,
+      "text": "Сатушы дөрекі сөйледі, енді бармаймын",
+      "expected": []
+    },
+    {
+      "id": "en-critic-1",
+      "lang": "en",
+      "score": 2,
+      "text": "Waited too long and the price was higher than shown",
+      "expected": []
+    },
+    {
+      "id": "en-praise-1",
+      "lang": "en",
+      "score": 5,
+      "text": "Great service, fast pickup",
+      "expected": []
+    },
+    {
+      "id": "mixed-critic-1",
+      "lang": "mixed",
+      "score": 2,
+      "text": "Kolodki ok, но ждал долго, bagasy kymbat",
+      "expected": []
+    },
+    {
+      "id": "translit-critic-1",
+      "lang": "translit",
+      "score": 1,
+      "text": "dolgo zhdal, tsena vyshe, bolshe ne pridu",
+      "expected": []
+    },
+    {
+      "id": "numbers-1",
+      "lang": "ru",
+      "score": 4,
+      "text": "Масло на 1 000 000 км пробега, до 31.12.2027 гарантия",
+      "expected": []
+    },
+
+    {
+      "id": "ru-contacts-1",
+      "lang": "ru",
+      "score": 5,
+      "text": "Автомаркет топ, звоните +7 705 555 01 01",
+      "expected": ["contacts", "supplier_name"]
+    },
+    {
+      "id": "ru-contacts-2",
+      "lang": "ru",
+      "score": 5,
+      "text": "пишите напрямую 8 (705) 555-01-01, дешевле чем в клубе",
+      "expected": ["contacts", "advertising"]
+    },
+    {
+      "id": "ru-contacts-3",
+      "lang": "ru",
+      "score": 4,
+      "text": "смотрите прайс на www.example-parts.kz",
+      "expected": ["contacts", "advertising"]
+    },
+    {
+      "id": "ru-contacts-4",
+      "lang": "ru",
+      "score": 4,
+      "text": "мой инстаграм @parts_almaty_review",
+      "expected": ["contacts", "advertising"]
+    },
+    {
+      "id": "en-contacts-1",
+      "lang": "en",
+      "score": 5,
+      "text": "write to shop@example.kz for a discount",
+      "expected": ["contacts", "advertising"]
+    },
+    {
+      "id": "ru-phone-words",
+      "lang": "ru",
+      "score": 5,
+      "text": "звоните восемь семьсот пять пять пять пять ноль один ноль один",
+      "expected": ["personal_data"],
+      "note": "номер словами — правила его не видят, только ИИ"
+    },
+
+    {
+      "id": "ru-name-1",
+      "lang": "ru",
+      "score": 5,
+      "text": "отличный магазин Автомаркет, рекомендую",
+      "expected": ["supplier_name"]
+    },
+    {
+      "id": "ru-name-2",
+      "lang": "ru",
+      "score": 2,
+      "text": "в автомаркете опять ждал два часа",
+      "expected": ["supplier_name"]
+    },
+    {
+      "id": "translit-name-1",
+      "lang": "translit",
+      "score": 5,
+      "text": "avtomarket top",
+      "expected": ["supplier_name"]
+    },
+    {
+      "id": "ru-name-split",
+      "lang": "ru",
+      "score": 5,
+      "text": "Авто маркет лучший в городе",
+      "expected": ["supplier_name"]
+    },
+    {
+      "id": "kk-name-1",
+      "lang": "kk",
+      "score": 5,
+      "text": "Автомаркет жақсы дүкен",
+      "expected": ["supplier_name"]
+    },
+    {
+      "id": "ru-employee-1",
+      "lang": "ru",
+      "score": 5,
+      "text": "менеджер Айгерим всё объяснила",
+      "expected": ["employee_name"]
+    },
+    {
+      "id": "ru-employee-2",
+      "lang": "ru",
+      "score": 4,
+      "text": "спасибо Ерлану за помощь",
+      "expected": ["employee_name"]
+    },
+    {
+      "id": "translit-employee-1",
+      "lang": "translit",
+      "score": 5,
+      "text": "Aigerim pomogla vybrat",
+      "expected": ["employee_name"]
+    },
+
+    {
+      "id": "ru-profanity-1",
+      "lang": "ru",
+      "score": 1,
+      "text": "продавец дурак, ничего не знает",
+      "expected": ["profanity"]
+    },
+    {
+      "id": "ru-profanity-2",
+      "lang": "ru",
+      "score": 1,
+      "text": "идиоты, а не магазин",
+      "expected": ["profanity"]
+    },
+    {
+      "id": "ru-profanity-masked",
+      "lang": "ru",
+      "score": 1,
+      "text": "с*ка, опять обманули",
+      "expected": ["profanity"],
+      "note": "мат, замаскированный звёздочкой"
+    },
+    {
+      "id": "kk-profanity-1",
+      "lang": "kk",
+      "score": 1,
+      "text": "сатушы ақымақ екен",
+      "expected": ["profanity"]
+    },
+    {
+      "id": "translit-profanity-1",
+      "lang": "translit",
+      "score": 1,
+      "text": "prodavets durak",
+      "expected": ["profanity"]
+    },
+    {
+      "id": "en-profanity-1",
+      "lang": "en",
+      "score": 1,
+      "text": "the seller is an idiot",
+      "expected": ["profanity"]
+    },
+    {
+      "id": "mixed-profanity-1",
+      "lang": "mixed",
+      "score": 1,
+      "text": "Сатушы tupoi, ничего не знает",
+      "expected": ["profanity"]
+    },
+
+    {
+      "id": "ru-threat-1",
+      "lang": "ru",
+      "score": 1,
+      "text": "ещё раз обманете — сожгу ваш склад",
+      "expected": ["threat"]
+    },
+    {
+      "id": "kk-threat-1",
+      "lang": "kk",
+      "score": 1,
+      "text": "тағы алдасаң, өлтіремін",
+      "expected": ["threat"]
+    },
+    {
+      "id": "en-threat-1",
+      "lang": "en",
+      "score": 1,
+      "text": "next time I will find you and kill you",
+      "expected": ["threat"]
+    },
+
+    {
+      "id": "ru-personal-1",
+      "lang": "ru",
+      "score": 3,
+      "text": "оформлял на паспорт N12345678, ИИН 900101300123",
+      "expected": ["contacts", "personal_data"],
+      "note": "длинный номер ИИН правило контактов читает как телефон — отзыв задержан правилом, ИИ не спрашивается"
+    },
+    {
+      "id": "ru-personal-2",
+      "lang": "ru",
+      "score": 3,
+      "text": "живу на Абая 150, кв 12, привезли быстро",
+      "expected": ["personal_data"]
+    },
+    {
+      "id": "ru-personal-plate",
+      "lang": "ru",
+      "score": 4,
+      "text": "мой номер машины 777ABC02, подобрали всё",
+      "expected": ["personal_data"]
+    },
+
+    {
+      "id": "ru-ads-1",
+      "lang": "ru",
+      "score": 5,
+      "text": "промокод SALE20 даёт скидку, подписывайтесь на наш канал",
+      "expected": ["advertising"]
+    },
+    {
+      "id": "ru-ads-2",
+      "lang": "ru",
+      "score": 5,
+      "text": "лучше покупайте в соседнем магазине на Райымбека, там дешевле",
+      "expected": ["advertising"]
+    },
+    {
+      "id": "en-ads-1",
+      "lang": "en",
+      "score": 5,
+      "text": "use promo code FAST for free delivery at another shop",
+      "expected": ["advertising"]
+    }
+  ]
+}

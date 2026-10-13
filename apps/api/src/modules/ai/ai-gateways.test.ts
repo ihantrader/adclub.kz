@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AiGatewayError,
   FALLBACK_WORTHY,
+  reviewCheckOutputSchema,
   translateOutputSchema,
   vehicleDocumentOutputSchema,
 } from "./ai-gateway";
@@ -123,6 +124,32 @@ describe("the test AI provider", () => {
       lang: "en",
       text: "Axle",
     });
+  });
+});
+
+describe("the test AI provider's review check (TASK-049)", () => {
+  it("finds its marker words and lets criticism through", async () => {
+    const gateway = new TestAiGateway();
+    const check = async (text: string, score = 3) =>
+      reviewCheckOutputSchema
+        .parse((await gateway.checkReview({ text, score }, MODEL, SIGNAL)).output)
+        .violations.map((violation) => violation.kind);
+    expect(await check("долго ждал ответа, цена в итоге выше", 1)).toEqual([]);
+    expect(await check("Цена выше обещанной, больше не приду", 2)).toEqual([]);
+    expect(await check("продавец ДУРАК")).toEqual(["profanity"]);
+    expect(await check("ақымақ сатушы")).toEqual(["profanity"]);
+    expect(await check("ещё раз так — убью")).toEqual(["threat"]);
+    expect(await check("вот мой паспорт и ИИН")).toEqual(["personal_data"]);
+    expect(await check("промокод SALE на канале")).toEqual(["advertising"]);
+    // A marker is looked for at the start of a word, not inside one.
+    expect(await check("недураковатый")).toEqual([]);
+    expect(gateway.reviewCheckRequests.at(-1)).toEqual({ chars: 13, model: MODEL });
+    gateway.mode = "unavailable";
+    await expect(gateway.checkReview({ text: "x", score: 5 }, MODEL, SIGNAL)).rejects.toMatchObject(
+      {
+        kind: "unavailable",
+      },
+    );
   });
 });
 
@@ -255,6 +282,34 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     expect(user.find((part) => part.type === "image_url")?.image_url?.url).toBe(
       `data:image/jpeg;base64,${Buffer.from(image).toString("base64")}`,
     );
+  });
+
+  it("sends only the text and the score of a review, privately, and reads the violations (TASK-049)", async () => {
+    const violations = [{ kind: "profanity", explanation: "Оскорбление продавца" }];
+    const { gateway, seen } = gatewayWith(() =>
+      answer({
+        model: MODEL,
+        usage: { prompt_tokens: 300, completion_tokens: 20, cost: 0.0001 },
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ violations }) } }],
+      }),
+    );
+    const result = await gateway.checkReview({ text: "продавец дурак", score: 1 }, MODEL, SIGNAL);
+    expect(reviewCheckOutputSchema.parse(result.output).violations).toEqual(violations);
+    const body = seen[0]!.body;
+    expect(body).toMatchObject({
+      model: MODEL,
+      provider: { zdr: true, data_collection: "deny", require_parameters: true },
+      response_format: { type: "json_schema", json_schema: { strict: true } },
+    });
+    const user = (body.messages as { role: string; content: string }[]).find(
+      (message) => message.role === "user",
+    )!.content;
+    expect(JSON.parse(user.slice(user.indexOf("{")))).toEqual({ score: 1, text: "продавец дурак" });
+    // The instruction says criticism and a low score are no violation.
+    const system = (body.messages as { role: string; content: string }[]).find(
+      (message) => message.role === "system",
+    )!.content;
+    expect(system).toMatch(/Criticism is NOT a violation/);
   });
 
   it("carries the term glossary with the texts, and sends nothing about terms without one", async () => {

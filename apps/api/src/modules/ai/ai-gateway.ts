@@ -33,7 +33,8 @@ export type AiJobKind =
   | "part_photo"
   | "assistant_turn"
   | "photo_search"
-  | "attr_fill";
+  | "attr_fill"
+  | "review_check";
 
 /**
  * What a provider reported for one call. `costUsd` is what the provider
@@ -264,6 +265,37 @@ export const priceMatchOutputSchema = z.object({
 
 export type PriceMatchOutput = z.infer<typeof priceMatchOutputSchema>;
 
+// ---------------------------------------------------------- review check
+
+/**
+ * The text of a review to check before it is published (TASK-049; PRODUCT
+ * 13): the text and the score only — no name of the author, the supplier or
+ * the order. The deterministic rules (contacts, the supplier's name, names of
+ * employees) run before and AI is not asked when they find anything.
+ */
+export interface ReviewCheckInput {
+  text: string;
+  /** 1–5: a low score is no violation, and the model is told so. */
+  score: number;
+}
+
+/**
+ * The violations found, each of a kind from the fixed list and with a short
+ * explanation for the administrator; empty — none. Criticism and a low score
+ * are never violations. AI never refuses a review: a violation only holds it
+ * for a person.
+ */
+export const reviewCheckOutputSchema = z.object({
+  violations: z.array(
+    z.object({
+      kind: z.enum(["profanity", "threat", "personal_data", "advertising"]),
+      explanation: z.string(),
+    }),
+  ),
+});
+
+export type ReviewCheckOutput = z.infer<typeof reviewCheckOutputSchema>;
+
 /**
  * The provider behind the interface. `model` is the one `AiService` chose
  * from the settings of the operation; `signal` is aborted when the call
@@ -282,6 +314,12 @@ export abstract class AiGateway {
 
   abstract matchPrices(
     input: PriceMatchInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult>;
+
+  abstract checkReview(
+    input: ReviewCheckInput,
     model: string,
     signal: AbortSignal,
   ): Promise<AiResult>;
@@ -333,4 +371,12 @@ export const priceMatchOperation: AiOperation<PriceMatchInput, PriceMatchOutput>
   models: { primary: "ai_model_price_match_primary", fallback: "ai_model_price_match_fallback" },
   outputSchema: priceMatchOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.matchPrices(input, model, signal),
+};
+
+/** Checking the text of a review before it is published (TASK-049): `ai_job.kind` is `review_check`. */
+export const reviewCheckOperation: AiOperation<ReviewCheckInput, ReviewCheckOutput> = {
+  kind: "review_check",
+  models: { primary: "ai_model_review_check_primary", fallback: "ai_model_review_check_fallback" },
+  outputSchema: reviewCheckOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.checkReview(input, model, signal),
 };

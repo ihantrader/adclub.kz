@@ -10,6 +10,9 @@ export { NoticeChannelWatch, noticeChannelWatchJob } from "./order-notice-channe
 export { SupplierReachWatch, supplierReachWatchJob } from "./supplier-reach";
 export { OrderLookup } from "./order-lookup.service";
 export { Discipline } from "./order-discipline";
+export { OrderFeedback } from "./order-feedback";
+export type { AdminOrderFeedback, OrderFeedbackSource, UserOrderFeedback } from "./order-feedback";
+export { reviewable } from "./order-views";
 export {
   OrderDeadlineSweeper,
   OrderJobsModule,

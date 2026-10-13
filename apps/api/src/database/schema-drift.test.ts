@@ -103,6 +103,8 @@ describe("ormTables", () => {
         "price_import_row",
         "supplier_sku_mapping",
         "catalog_request",
+        "review",
+        "complaint",
         "session",
         "supplier",
         "supplier_member",

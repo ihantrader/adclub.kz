@@ -10,6 +10,7 @@ import { AiService } from "../ai";
 import { CatalogItemsService, TranslationAdminService, UNTRANSLATED_STATES } from "../catalog";
 import { AdminSignals } from "../signals";
 import { CatalogRequestsService } from "../price-imports";
+import { ComplaintsService, ReviewsService } from "../reviews";
 import { SupplierLeadsService } from "../suppliers";
 
 /** The catalog cards, in the order their totals are read. */
@@ -41,24 +42,31 @@ export class AdminHomeService {
     @Inject(TranslationAdminService) private readonly translations: TranslationAdminService,
     @Inject(SupplierLeadsService) private readonly leads: SupplierLeadsService,
     @Inject(CatalogRequestsService) private readonly requests: CatalogRequestsService,
+    @Inject(ReviewsService) private readonly reviews: ReviewsService,
+    @Inject(ComplaintsService) private readonly complaints: ComplaintsService,
   ) {}
 
   async summary(): Promise<AdminHome> {
-    const [outage, signals, budget, leads, quality, queue, requests] = await Promise.all([
-      this.signals.currentOfKind("whatsapp_outage"),
-      this.signals.currentCounts(),
-      this.ai.budget(),
-      this.leads.list(supplierLeadListQuerySchema.parse({ status: "new", limit: 1 })),
-      Promise.all(
-        CATALOG_CARDS.map((card) =>
-          this.items
-            .page(catalogItemListQuerySchema.parse({ ...adminHomeCatalogFilters[card], limit: 1 }))
-            .then((page) => page.total),
+    const [outage, signals, budget, leads, quality, queue, requests, held, complaints] =
+      await Promise.all([
+        this.signals.currentOfKind("whatsapp_outage"),
+        this.signals.currentCounts(),
+        this.ai.budget(),
+        this.leads.list(supplierLeadListQuerySchema.parse({ status: "new", limit: 1 })),
+        Promise.all(
+          CATALOG_CARDS.map((card) =>
+            this.items
+              .page(
+                catalogItemListQuerySchema.parse({ ...adminHomeCatalogFilters[card], limit: 1 }),
+              )
+              .then((page) => page.total),
+          ),
         ),
-      ),
-      this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
-      this.requests.waiting(),
-    ]);
+        this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
+        this.requests.waiting(),
+        this.reviews.heldCount(),
+        this.complaints.newCount(),
+      ]);
     const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
       channelOutage: outage
@@ -78,6 +86,8 @@ export class AdminHomeService {
       },
       newSupplierLeads: leads.counts.new,
       catalogRequests: requests,
+      reviewsHeld: held,
+      complaintsNew: complaints,
       catalog: {
         withoutPhoto: withoutPhoto!,
         incomplete: incomplete!,

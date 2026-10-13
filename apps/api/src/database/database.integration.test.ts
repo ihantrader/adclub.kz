@@ -98,6 +98,151 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds reviews and complaints with their rules, and rolls back keeping the orders (reviews and complaints)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000149') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const admin = await client.query<{ id: string }>(
+      "INSERT INTO admin_user (account_id) VALUES ($1) RETURNING id",
+      [accountId],
+    );
+    const adminId = admin.rows[0]!.id;
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('reviews-city', 'Город отзывов') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Отзывы', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const location = await client.query<{ id: string }>(
+      "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+      [supplierId, city.rows[0]!.id],
+    );
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('reviews_node', 'goods', 1) RETURNING id",
+    );
+    const subcategory = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('reviews_sub', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const brand = await client.query<{ id: string }>(
+      "INSERT INTO brand DEFAULT VALUES RETURNING id",
+    );
+    const item = await client.query<{ id: string }>(
+      "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+      [subcategory.rows[0]!.id, brand.rows[0]!.id],
+    );
+    const offer = await client.query<{ id: string }>(
+      "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery) VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, true) RETURNING id",
+      [supplierId, location.rows[0]!.id, item.rows[0]!.id],
+    );
+    const order = await client.query<{ id: string }>(
+      `INSERT INTO customer_order (user_account_id, supplier_id, location_id, offer_id, item_id, offer_snapshot, unit_price, quantity, total, fulfillment, confirmation_code, qr_token, idempotency_key, respond_by, status, finished_at, code_released_at, closed_at, close_method, closed_by_admin_id, close_reason)
+       VALUES ($1, $2, $3, $4, $5, '{}', 1000, 1, 1000, 'pickup', '531846', $6, $7, now(), 'completed', now(), now(), now(), 'admin', $8, 'Тест') RETURNING id`,
+      [
+        accountId,
+        supplierId,
+        location.rows[0]!.id,
+        offer.rows[0]!.id,
+        item.rows[0]!.id,
+        `qr-review-${randomUUID()}`,
+        randomUUID(),
+        adminId,
+      ],
+    );
+    const orderId = order.rows[0]!.id;
+    const review = (values: Record<string, unknown>) => {
+      const row = {
+        order_id: orderId,
+        supplier_id: supplierId,
+        user_account_id: accountId,
+        score: 4,
+        text: "Хорошо",
+        status: "checking",
+        checking_since: new Date(),
+        idempotency_key: randomUUID(),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO review (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    // A score of 1–5; a text only while it is checked; a refused text has its reason.
+    await expect(review({ score: 6 })).rejects.toThrow(/review_score_check/);
+    await expect(review({ text: null })).rejects.toThrow(/review_text_status_check/);
+    await expect(review({ checking_since: null })).rejects.toThrow(/review_checking_check/);
+    await expect(review({ status: "text_rejected", checking_since: null })).rejects.toThrow(
+      /review_rejected_check/,
+    );
+    await expect(
+      review({ status: "hidden", checking_since: null, published_at: new Date() }),
+    ).rejects.toThrow(/review_hidden_check/);
+    await review({});
+    // One review per order.
+    await expect(review({})).rejects.toThrow(/review_order_key/);
+
+    const complaint = (values: Record<string, unknown>) => {
+      const row = {
+        order_id: orderId,
+        supplier_id: supplierId,
+        user_account_id: accountId,
+        reason: "not_received",
+        idempotency_key: randomUUID(),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO complaint (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    // «Другое» needs a text; a resolved complaint has the administrator's comment.
+    await expect(complaint({ reason: "other" })).rejects.toThrow(/complaint_text_check/);
+    await expect(
+      complaint({ status: "resolved", resolved_at: new Date(), resolved_by_admin_id: adminId }),
+    ).rejects.toThrow(/complaint_resolved_check/);
+    await complaint({
+      status: "resolved",
+      resolved_at: new Date(),
+      resolved_by_admin_id: adminId,
+      comment: "Решено",
+    });
+    await complaint({});
+    // One open complaint per order; a resolved one doesn't count.
+    await expect(complaint({ reason: "no_contact" })).rejects.toThrow(/complaint_open_order_key/);
+    // AI checks reviews by an operation of its own.
+    await client.query(
+      "INSERT INTO ai_job (kind, provider, model, initiator_type, status) VALUES ('review_check', 'test', 'm', 'system', 'running')",
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "review")).toBe(false);
+    expect(await tableExists(client, "complaint")).toBe(false);
+    await expect(
+      client.query(
+        "INSERT INTO ai_job (kind, provider, model, initiator_type, status) VALUES ('review_check', 'test', 'm', 'system', 'running')",
+      ),
+    ).rejects.toThrow(/ai_job_kind_check/);
+    // The order stays.
+    const kept = await client.query("SELECT 1 FROM customer_order WHERE id = $1", [orderId]);
+    expect(kept.rowCount).toBe(1);
+    await client.query("DELETE FROM customer_order WHERE id = $1", [orderId]);
+    await client.query("DELETE FROM offer WHERE id = $1", [offer.rows[0]!.id]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [item.rows[0]!.id]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brand.rows[0]!.id]);
+    await client.query("DELETE FROM category WHERE code = 'reviews_sub'");
+    await client.query("DELETE FROM category WHERE code = 'reviews_node'");
+    await client.query("DELETE FROM supplier_location WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM admin_user WHERE id = $1", [adminId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
   it("holds requests by hand, «Модерация» seen by an employee and rows of the export, and rolls back keeping the price list requests (price import moderation)", async () => {
     const city = await client.query<{ id: string }>(
       "INSERT INTO city (code, name_ru) VALUES ('price-moderation-city', 'Город модерации') RETURNING id",

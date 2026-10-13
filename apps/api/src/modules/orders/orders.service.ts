@@ -97,6 +97,7 @@ import {
   validationError,
 } from "./order-errors";
 import { Discipline } from "./order-discipline";
+import { OrderFeedback } from "./order-feedback";
 import { noticeStatesOf } from "./order-notice-channel";
 import { OrderNotices } from "./order-notices";
 import { repeatView } from "./order-repeat";
@@ -272,6 +273,8 @@ export class OrdersService {
     @Inject(OrderNotices) private readonly notices: OrderNotices,
     // The thumbnail of the item in the card of an order (TASK-030.A).
     @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
+    // The review and the complaints of an order (TASK-049), registered by the reviews module.
+    @Inject(OrderFeedback) private readonly feedback: OrderFeedback,
   ) {}
 
   // ---------------------------------------------------------------- create
@@ -332,7 +335,7 @@ export class OrdersService {
       `Order created order=${outcome.row.id} number=${String(outcome.row.number)} supplier=${outcome.row.supplierId} test=${String(outcome.row.isTest)}`,
     );
     return {
-      order: await userOrderView(this.database.db, outcome.row, lang, this.photos),
+      order: await userOrderView(this.database.db, outcome.row, lang, this.photos, this.feedback),
       created: true,
     };
   }
@@ -629,7 +632,10 @@ export class OrdersService {
     if (row.offerId !== input.offerId || !sameOrder) {
       throw idempotencyMismatch();
     }
-    return { order: await userOrderView(this.database.db, row, lang, this.photos), created: false };
+    return {
+      order: await userOrderView(this.database.db, row, lang, this.photos, this.feedback),
+      created: false,
+    };
   }
 
   /**
@@ -689,7 +695,7 @@ export class OrdersService {
 
   async userOrder(accountId: string, orderId: string, lang: CatalogLanguage): Promise<UserOrder> {
     const row = await this.fresh(await this.userRow(this.database.db, accountId, orderId));
-    return userOrderView(this.database.db, row, lang, this.photos);
+    return userOrderView(this.database.db, row, lang, this.photos, this.feedback);
   }
 
   /**
@@ -779,7 +785,14 @@ export class OrdersService {
     return {
       language: lang,
       timeZone: ALMATY_TIME_ZONE,
-      months: await historyMonths(this.database.db, rows, lang, ALMATY_TIME_ZONE, this.photos),
+      months: await historyMonths(
+        this.database.db,
+        rows,
+        lang,
+        ALMATY_TIME_ZONE,
+        this.photos,
+        this.feedback,
+      ),
       total: counted?.value ?? 0,
       nextCursor,
     };
@@ -830,7 +843,7 @@ export class OrdersService {
       },
       forUser: true,
     });
-    return userOrderView(this.database.db, row, lang, this.photos);
+    return userOrderView(this.database.db, row, lang, this.photos, this.feedback);
   }
 
   /**
@@ -858,7 +871,7 @@ export class OrdersService {
       },
       forUser: true,
     });
-    return userOrderView(this.database.db, row, lang, this.photos);
+    return userOrderView(this.database.db, row, lang, this.photos, this.feedback);
   }
 
   private async userRow(executor: DbExecutor, accountId: string, orderId: string) {
@@ -1388,6 +1401,9 @@ export class OrdersService {
           : sql`${customerOrder.closeMethod} IS DISTINCT FROM 'admin'`,
       );
     }
+    if (query.hasComplaint) {
+      conditions.push(this.feedback.complaintCondition(query.hasComplaint === "true"));
+    }
     if (query.accountId) {
       conditions.push(eq(customerOrder.userAccountId, query.accountId));
     }
@@ -1421,7 +1437,14 @@ export class OrdersService {
       throw notFound();
     }
     const row = await this.fresh(found);
-    return adminOrderView(this.database.db, row, lang, this.photos, await this.marksOf(row.id));
+    return adminOrderView(
+      this.database.db,
+      row,
+      lang,
+      this.photos,
+      this.feedback,
+      await this.marksOf(row.id),
+    );
   }
 
   /**
@@ -1456,7 +1479,14 @@ export class OrdersService {
       },
       forUser: false,
     });
-    return adminOrderView(this.database.db, row, lang, this.photos, await this.marksOf(row.id));
+    return adminOrderView(
+      this.database.db,
+      row,
+      lang,
+      this.photos,
+      this.feedback,
+      await this.marksOf(row.id),
+    );
   }
 
   /**
@@ -1490,7 +1520,14 @@ export class OrdersService {
       },
       forUser: false,
     });
-    return adminOrderView(this.database.db, row, lang, this.photos, await this.marksOf(row.id));
+    return adminOrderView(
+      this.database.db,
+      row,
+      lang,
+      this.photos,
+      this.feedback,
+      await this.marksOf(row.id),
+    );
   }
 
   /**
@@ -1535,6 +1572,7 @@ export class OrdersService {
       outcome.order,
       lang,
       this.photos,
+      this.feedback,
       await this.marksOf(orderId),
     );
   }

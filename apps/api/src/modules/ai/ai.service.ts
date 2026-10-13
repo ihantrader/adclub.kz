@@ -11,6 +11,7 @@ import {
   FALLBACK_WORTHY,
   NOT_BILLED,
   priceMatchOperation,
+  reviewCheckOperation,
   translateOperation,
   vehicleDocumentOperation,
   type AiFailureKind,
@@ -18,6 +19,8 @@ import {
   type AiResult,
   type PriceMatchInput,
   type PriceMatchOutput,
+  type ReviewCheckInput,
+  type ReviewCheckOutput,
   type TranslateInput,
   type TranslateOutput,
   type VehicleDocumentInput,
@@ -145,6 +148,11 @@ export class AiService {
   /** Rows of a price list matched with their candidates (TASK-047). */
   matchPrices(input: PriceMatchInput, meta: AiCallMeta): Promise<AiCallResult<PriceMatchOutput>> {
     return this.call(priceMatchOperation, input, meta);
+  }
+
+  /** The text of a review checked before it is published (TASK-049). */
+  checkReview(input: ReviewCheckInput, meta: AiCallMeta): Promise<AiCallResult<ReviewCheckOutput>> {
+    return this.call(reviewCheckOperation, input, meta);
   }
 
   /**

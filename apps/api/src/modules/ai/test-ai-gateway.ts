@@ -7,6 +7,7 @@ import {
   type AiResult,
   type PriceMatchInput,
   type PriceMatchRow,
+  type ReviewCheckInput,
   type TranslateInput,
   type TranslateItem,
   type VehicleDocumentInput,
@@ -82,6 +83,25 @@ export function testTranslation(text: string, lang: "kk" | "en", maxLength: numb
  * key: set the primary model setting to `missing/anything`.
  */
 export const MISSING_MODEL_PREFIX = "missing/";
+
+/**
+ * The words the test provider «finds» in a review (TASK-049), by the kind of
+ * violation: deterministic and plainly a stand-in for a model — a text with
+ * one of these words (as a word or its beginning, in any case) is reported
+ * with that kind, anything else is clean. Criticism and a low score are
+ * clean, as they must be for a real model too. Development, tests and CI.
+ */
+export const TEST_REVIEW_MARKERS = {
+  profanity: ["дурак", "идиот", "мразь", "ақымақ", "idiot", "durak", "fuck"],
+  threat: ["убью", "сожгу", "өлтіремін", "kill you", "ubyu"],
+  personal_data: ["паспорт", "иин", "номер карты", "passport"],
+  advertising: ["промокод", "подписывайтесь", "promo code", "заходите на канал"],
+} as const;
+
+function reviewMarkerFound(text: string, marker: string): boolean {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}`, "iu").test(text);
+}
 
 /**
  * Prices the test provider pretends its answers cost, USD per million
@@ -298,6 +318,59 @@ export class TestAiGateway extends AiGateway {
       1_000_000;
     return {
       output: { matches: answered },
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
+  }
+
+  /** Every review text received: its length and the model, never the text (TASK-049). */
+  readonly reviewCheckRequests: { chars: number; model: string }[] = [];
+
+  /**
+   * Reports a violation for each kind whose marker word the text has
+   * (`TEST_REVIEW_MARKERS`); a text without them is clean. `incomplete` —
+   * an answer that is not one at all for this operation (`invalid_output`).
+   */
+  async checkReview(
+    input: ReviewCheckInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    this.reviewCheckRequests.push({ chars: input.text.length, model });
+    if (model.startsWith(MISSING_MODEL_PREFIX) || this.failingModels.has(model)) {
+      throw new AiGatewayError("model_unavailable", `The test AI provider has no model ${model}`);
+    }
+    switch (this.mode) {
+      case "unavailable":
+        throw new AiGatewayError("unavailable", "The test AI provider is unavailable");
+      case "rejected":
+        throw new AiGatewayError("rejected", "The test AI provider refuses the request");
+      case "no_private_provider":
+        throw new AiGatewayError(
+          "no_private_provider",
+          "No provider of this model keeps requests unstored, so nothing was sent",
+        );
+      case "slow":
+        await this.wait(this.delayMs, signal);
+        break;
+      default:
+        break;
+    }
+    const violations = Object.entries(TEST_REVIEW_MARKERS).flatMap(([kind, markers]) => {
+      const found = markers.find((marker) => reviewMarkerFound(input.text, marker));
+      return found ? [{ kind, explanation: `test: найдено «${found}»` }] : [];
+    });
+    const tokensIn = 120 + Math.ceil(input.text.length / 4);
+    const tokensOut = 10 + violations.length * 20;
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    return {
+      output: this.mode === "incomplete" ? { found: violations } : { violations },
       model,
       usage: {
         tokensIn,

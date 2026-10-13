@@ -48,6 +48,15 @@ const NAMERS: Record<string, Namer> = {
         WHERE admin.id = ANY(${ids(list)})`,
   order: (list) =>
     sql`SELECT id, '№ ' || number AS name FROM customer_order WHERE id = ANY(${ids(list)})`,
+  // TASK-049: a review and a complaint by the order they are about.
+  review: (list) =>
+    sql`SELECT feedback.id, 'Отзыв по № ' || purchase.number AS name
+        FROM review AS feedback JOIN customer_order AS purchase ON purchase.id = feedback.order_id
+        WHERE feedback.id = ANY(${ids(list)})`,
+  complaint: (list) =>
+    sql`SELECT grievance.id, 'Жалоба по № ' || purchase.number AS name
+        FROM complaint AS grievance JOIN customer_order AS purchase ON purchase.id = grievance.order_id
+        WHERE grievance.id = ANY(${ids(list)})`,
   user_discipline_event: (list) =>
     sql`SELECT mark.id, 'Неявка по № ' || purchase.number AS name
         FROM user_discipline_event AS mark JOIN customer_order AS purchase ON purchase.id = mark.order_id

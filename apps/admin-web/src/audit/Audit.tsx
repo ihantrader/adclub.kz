@@ -13,6 +13,7 @@ import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import {
   actionText,
+  reasonText,
   actorText,
   almatyDayStart,
   changeLines,
@@ -309,7 +310,11 @@ export function AuditRow({ entry }: { entry: AuditLogEntry }) {
         </div>
       </td>
       <td className="ac-text-body-s reason-cell">
-        {entry.reason ?? <span className="ac-muted">—</span>}
+        {entry.reason ? (
+          reasonText(entry.action, entry.reason)
+        ) : (
+          <span className="ac-muted">—</span>
+        )}
       </td>
     </tr>
   );

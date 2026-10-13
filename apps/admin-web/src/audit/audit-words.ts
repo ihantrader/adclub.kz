@@ -1,9 +1,11 @@
 import type { AuditActor, AuditActorRole } from "@adclub/contracts";
 import { formatMoment } from "../format";
 import { ORDER_STATUS_TEXT } from "../orders/order-words";
+import { COMPLAINT_REASON_TEXT, HOLD_KIND_TEXT, REJECT_REASON_TEXT } from "../reviews/review-words";
 import {
   catalogItemPath,
   catalogRequestPath,
+  complaintPath,
   orderPath,
   routePaths,
   settingHistoryPath,
@@ -138,6 +140,18 @@ const ACTIONS: Record<string, string> = {
   "catalog_request.created": "Поставщик запросил добавить позицию",
   "catalog_request.approved": "Запрос на позицию закрыт: позиция в справочнике",
   "catalog_request.rejected": "Запрос на позицию отклонён",
+  // TASK-049.
+  "review.created": "Пользователь оставил отзыв",
+  "review.checked": "Отзыв проверен автоматически",
+  "review.published": "Отзыв опубликован администратором",
+  "review.text_rejected": "Текст отзыва отклонён",
+  "review.hidden": "Отзыв скрыт",
+  "review.restored": "Отзыв возвращён",
+  "review.text_edited": "Автор исправил текст отзыва",
+  "review.score_only": "Автор опубликовал только оценку",
+  "complaint.created": "Пользователь подал жалобу",
+  "complaint.taken": "Жалоба взята в работу",
+  "complaint.resolved": "Жалоба решена",
 };
 
 /** The actions the filter offers, in the order of the dictionary. */
@@ -145,6 +159,17 @@ export const knownActions: readonly string[] = Object.keys(ACTIONS);
 
 export function actionText(action: string): string {
   return ACTIONS[action] ?? action;
+}
+
+/**
+ * The reason of an entry: the administrator's own words as written, a reason
+ * from a list (the refused text of a review, TASK-049) in its words.
+ */
+export function reasonText(action: string, reason: string): string {
+  if (action === "review.text_rejected") {
+    return REJECT_REASON_TEXT[reason as keyof typeof REJECT_REASON_TEXT] ?? reason;
+  }
+  return reason;
 }
 
 const ENTITIES: Record<string, string> = {
@@ -179,6 +204,8 @@ const ENTITIES: Record<string, string> = {
   account: "Пользователь",
   price_import: "Загрузка прайса",
   catalog_request: "Запрос на позицию",
+  review: "Отзыв",
+  complaint: "Жалоба",
 };
 
 /** The kinds of objects the filter offers. */
@@ -332,6 +359,13 @@ export function entityLink(
     // mark — its order (the user's «Дисциплина» when the order isn't named).
     case "order":
       return UUID.test(entityId) ? orderPath(entityId) : null;
+    // TASK-049: a review opens the card of its order, a complaint its own card.
+    case "review": {
+      const orderId = named(payload, "orderId");
+      return orderId && UUID.test(orderId) ? orderPath(orderId) : null;
+    }
+    case "complaint":
+      return UUID.test(entityId) ? complaintPath(entityId) : null;
     case "account":
       return UUID.test(entityId) ? userPath(entityId) : null;
     case "club_access_grant": {
@@ -373,6 +407,11 @@ export interface ChangeContext {
  * fields of the entries the admin panel writes in it.
  */
 const FIELD_TEXT: Record<string, string> = {
+  // TASK-049: reviews and complaints.
+  score: "Оценка",
+  withText: "С текстом",
+  reasons: "Причины проверки",
+  rejectedReason: "Причина отклонения текста",
   value: "Значение",
   isDefault: "По умолчанию",
   version: "Версия",
@@ -527,6 +566,14 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
   admin_signal: { open: "Новый", acknowledged: "В работе", closed: "Закрыт" },
   offer: { active: "В продаже", withdrawn: "Снято с продажи", suspended: "Приостановлено" },
   catalog_request: { new: "Новый", approved: "Добавлено", rejected: "Отклонено" },
+  review: {
+    checking: "Проверяется",
+    held: "На проверке",
+    published: "Опубликован",
+    hidden: "Скрыт",
+    text_rejected: "Текст отклонён",
+  },
+  complaint: { new: "Новая", in_progress: "В работе", resolved: "Решена" },
   supplier_invitation: INVITATION_TEXT,
   catalog_item_photo: {
     proposed: "Предложено",
@@ -559,7 +606,18 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
     manual: "вручную",
     missing_in_import: "нет в прайсе",
     out_of_stock_in_import: "нет в наличии по прайсу",
+    // The reasons of a complaint (TASK-049).
+    ...COMPLAINT_REASON_TEXT,
   },
+  rejectedReason: REJECT_REASON_TEXT,
+  // The reasons a check gave, «source:kind» (TASK-049).
+  reasons: Object.fromEntries(
+    Object.entries(HOLD_KIND_TEXT).flatMap(([kind, text]) => [
+      [`rule:${kind}`, text],
+      [`ai:${kind}`, `[AI] ${text}`],
+      [`system:${kind}`, text],
+    ]),
+  ),
   language: { kk: "Қазақша", ru: "Русский", en: "English" },
   notificationLanguage: { kk: "Қазақша", ru: "Русский" },
   pauseReason: { admin: "решение администратора", billing: "не оплачена подписка" },

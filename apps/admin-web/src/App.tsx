@@ -15,6 +15,8 @@ import { Home } from "./home/Home";
 import { Extensions } from "./orders/Extensions";
 import { OrderCard } from "./orders/OrderCard";
 import { Orders } from "./orders/Orders";
+import { ComplaintCard, Complaints } from "./reviews/Complaints";
+import { Reviews } from "./reviews/Reviews";
 import { useLocation, useRoute, type RouteKey } from "./router";
 
 import { Shell } from "./screens/Shell";
@@ -200,6 +202,12 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
       return <NoShows />;
     case "user":
       return id ? <UserCard key={id} accountId={id} /> : null;
+    case "reviews":
+      return <Reviews />;
+    case "complaints":
+      return <Complaints />;
+    case "complaint":
+      return id ? <ComplaintCard key={id} complaintId={id} /> : null;
     default:
       return <Home />;
   }

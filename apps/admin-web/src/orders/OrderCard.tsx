@@ -7,6 +7,7 @@ import { JournalHistory } from "../audit/JournalHistory";
 import { AppLink } from "../catalog/shared";
 import { formatMoment } from "../format";
 import { PhoneReveal } from "../people/PhoneReveal";
+import { OrderFeedbackBlock } from "../reviews/Blocks";
 import { useAdminNames } from "../people/use-admin-names";
 import { goBack, orderPath, supplierPath, userPath } from "../router";
 import { ReasonDialog, WasNow } from "../suppliers/shared";
@@ -256,6 +257,10 @@ export function OrderCard({ orderId }: { orderId: string }) {
                 setError(null);
                 setMark(next);
               }}
+            />
+            <OrderFeedbackBlock
+              order={order}
+              onReviewChanged={(review) => card.replace({ order: { ...order, review } })}
             />
             <section className="card-section">
               <h2 className="ac-text-heading">Журнал заявки</h2>

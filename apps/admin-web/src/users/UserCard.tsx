@@ -48,6 +48,7 @@ import {
   LANGUAGE_TEXT,
   userErrorText,
 } from "./user-words";
+import { UserComplaints } from "../reviews/Blocks";
 
 const TAB_TEXT: Record<UserTab, string> = {
   profile: "Профиль",
@@ -55,6 +56,7 @@ const TAB_TEXT: Record<UserTab, string> = {
   garage: "Гараж",
   orders: "Заявки",
   discipline: "Дисциплина",
+  complaints: "Жалобы",
   sessions: "Сессии",
   history: "История",
 };
@@ -98,6 +100,9 @@ export function UserCard({ accountId }: { accountId: string }) {
         break;
       case "discipline":
         body = <UserDiscipline accountId={accountId} onChanged={card.reload} />;
+        break;
+      case "complaints":
+        body = <UserComplaints accountId={accountId} />;
         break;
       case "sessions":
         body = <Sessions accountId={accountId} onChanged={card.reload} />;

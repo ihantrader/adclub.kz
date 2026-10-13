@@ -36,6 +36,9 @@ export const routePaths = {
   orderExtensions: "/orders/extensions",
   users: "/users",
   userNoShows: "/users/no-shows",
+  // Reviews and complaints (TASK-049): A-REV-01, A-REV-02.
+  reviews: "/reviews",
+  complaints: "/complaints",
 } as const;
 
 export type StaticRoute = keyof typeof routePaths;
@@ -65,7 +68,8 @@ export type RouteKey =
   | "supplier"
   | "supplierLead"
   | "order"
-  | "user";
+  | "user"
+  | "complaint";
 
 const HISTORY_PATH = /^\/settings\/([a-z][a-z0-9_]{0,63})\/history$/;
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -81,7 +85,13 @@ const VEHICLE_PATHS: [RouteKey, RegExp][] = [
   ["supplier", new RegExp(`^/suppliers/(${UUID})$`, "i")],
   ["order", new RegExp(`^/orders/(${UUID})$`, "i")],
   ["user", new RegExp(`^/users/(${UUID})$`, "i")],
+  ["complaint", new RegExp(`^/complaints/(${UUID})$`, "i")],
 ];
+
+/** The card of a complaint (A-REV-02, TASK-049). */
+export function complaintPath(complaintId: string): string {
+  return `/complaints/${complaintId}`;
+}
 
 /** The card of an order (A-ORD-02). */
 export function orderPath(orderId: string): string {
@@ -95,7 +105,7 @@ export function orderExtensionsPath(from?: string): string {
 
 /** The tabs of a user's card (A-USR-02). */
 export type UserTab =
-  "profile" | "access" | "garage" | "orders" | "discipline" | "sessions" | "history";
+  "profile" | "access" | "garage" | "orders" | "discipline" | "complaints" | "sessions" | "history";
 
 /** A user's card, on a tab (`profile` when left out). */
 export function userPath(accountId: string, tab?: UserTab): string {
@@ -104,7 +114,7 @@ export function userPath(accountId: string, tab?: UserTab): string {
 
 /** The tabs of a supplier's card (A-SUP-03). */
 export type SupplierTab =
-  "profile" | "statuses" | "members" | "offers" | "orders" | "price" | "history";
+  "profile" | "statuses" | "members" | "offers" | "orders" | "reviews" | "price" | "history";
 
 /** A supplier's card, on a tab (`profile` when left out). */
 export function supplierPath(supplierId: string, tab?: SupplierTab): string {
@@ -235,6 +245,9 @@ export function menuOf(route: RouteKey): StaticRoute {
   }
   if (route === "user" || route === "userNoShows") {
     return "users";
+  }
+  if (route === "complaints" || route === "complaint") {
+    return "reviews";
   }
   return route;
 }

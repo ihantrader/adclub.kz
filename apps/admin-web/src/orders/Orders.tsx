@@ -29,8 +29,8 @@ const supplierSearch = createChoiceSources(apiClient).suppliers();
  * («1028», «№ 1028») and by the customer's phone (the server matches the
  * full number; the list shows it partly hidden), the filters — status,
  * kind (TASK-039), supplier, city, period, «Закрыта поздно», «Закрыта администратором»,
- * «Показывать тестовые» — in the address, «Всего N», «Показать ещё». Never
- * the code or the QR. «Есть жалоба» is stage C.
+ * «Есть жалоба» (TASK-049), «Показывать тестовые» — in the address, «Всего N»,
+ * «Показать ещё». Never the code or the QR.
  */
 export function Orders() {
   const { query, set } = useAddressFilters();
@@ -122,6 +122,11 @@ export function Orders() {
           label="Закрыта администратором"
           checked={filters.closedByAdmin === "true"}
           onChange={(on) => set({ closedByAdmin: on ? "true" : undefined })}
+        />
+        <Checkbox
+          label="Есть жалоба"
+          checked={filters.hasComplaint === "true"}
+          onChange={(on) => set({ hasComplaint: on ? "true" : undefined })}
         />
         <Checkbox
           label="Показывать тестовые"
@@ -247,7 +252,11 @@ export function OrdersTable({
  * The chosen supplier of the filter: its name from what was chosen here,
  * else from the rows, else from its card (an address opened from a link).
  */
-function useSupplierChoice(supplierId: string | null, rows: readonly AdminOrderSummary[]) {
+/** The supplier chosen in a filter, named from the rows or the server (shared with «Отзывы», TASK-049). */
+export function useSupplierChoice(
+  supplierId: string | null,
+  rows: readonly { supplier: { id: string; name: string } }[],
+) {
   const [chosen, setChosen] = useState<Choice | null>(null);
   const [loaded, setLoaded] = useState<Choice | null>(null);
   const fromRows = rows.find((row) => row.supplier.id === supplierId)?.supplier;

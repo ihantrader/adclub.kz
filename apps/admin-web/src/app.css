@@ -1570,3 +1570,24 @@ code,
 .orders-table td {
   vertical-align: top;
 }
+
+/* ---------- reviews and complaints (TASK-049) ----------
+   A review's text keeps its lines and wraps inside its cell; the stars are text. */
+.review-text {
+  max-width: 520px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.review-score {
+  color: var(--ac-color-warning);
+  letter-spacing: 1px;
+}
+
+.review-reasons {
+  color: var(--ac-color-danger);
+}
+
+.page-tabs--inner {
+  margin-top: 4px;
+}

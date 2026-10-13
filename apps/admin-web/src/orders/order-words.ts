@@ -410,6 +410,8 @@ export function orderFiltersOf(query: URLSearchParams): Omit<AdminOrderListQuery
     test: query.get("test") === "include" ? "include" : "exclude",
     closedLate: query.get("closedLate") === "true" ? "true" : undefined,
     closedByAdmin: query.get("closedByAdmin") === "true" ? "true" : undefined,
+    // A-ORD-01 «Есть жалоба» (TASK-049).
+    hasComplaint: query.get("hasComplaint") === "true" ? "true" : undefined,
   };
 }
 

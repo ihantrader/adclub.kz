@@ -10,6 +10,7 @@ import {
   entityLink,
   knownActions,
   numberText,
+  reasonText,
   valueText,
 } from "./audit-words";
 
@@ -35,6 +36,24 @@ describe("the words of the journal", () => {
     }
     expect(actionText("setting.changed")).toBe("Изменена настройка");
     expect(actionText("something.new")).toBe("something.new");
+  });
+
+  it("says reviews and complaints in words (TASK-049)", () => {
+    expect(reasonText("review.text_rejected", "personal_data")).toBe("личные данные");
+    expect(reasonText("review.hidden", "Проверено")).toBe("Проверено");
+    expect(valueText("ai:profanity", "reasons")).toBe("[AI] мат или оскорбления");
+    expect(valueText("rule:supplier_name", "reasons")).toBe("название поставщика");
+    expect(valueText("not_received", "reason")).toBe("Не получил товар или услугу");
+    expect(valueText("held", "status", { entityType: "review" })).toBe("На проверке");
+    expect(valueText("in_progress", "status", { entityType: "complaint" })).toBe("В работе");
+    expect(
+      entityLink("review", "11111111-1111-4111-8111-111111111111", {
+        after: { orderId: "22222222-2222-4222-8222-222222222222" },
+      }),
+    ).toBe("/orders/22222222-2222-4222-8222-222222222222");
+    expect(entityLink("complaint", "33333333-3333-4333-8333-333333333333")).toBe(
+      "/complaints/33333333-3333-4333-8333-333333333333",
+    );
   });
 
   it("names who acted by name and the partly hidden number, never more", () => {

@@ -15,6 +15,7 @@ import { SupplierPriceImports } from "./SupplierPriceImports";
 import { SupplierProfile } from "./SupplierProfile";
 import { SupplierStatuses } from "./SupplierStatuses";
 import { SUPPLIER_TYPE_TEXT } from "./supplier-words";
+import { SupplierReviews } from "../reviews/Blocks";
 
 const TAB_TEXT: Record<SupplierTab, string> = {
   profile: "Профиль",
@@ -22,6 +23,7 @@ const TAB_TEXT: Record<SupplierTab, string> = {
   members: "Сотрудники",
   offers: "Предложения",
   orders: "Заявки",
+  reviews: "Отзывы",
   price: "Прайс",
   history: "История",
 };
@@ -31,7 +33,7 @@ const TABS = Object.keys(TAB_TEXT) as SupplierTab[];
 /**
  * A-SUP-03 «Карточка поставщика» (SCREENS 7.4; TASK-036): the tabs in the
  * address (`?tab=`), so the journal, the home page and a signal open the
- * right one. «Рейтинг и отзывы», «Подписка», «Модерация» come with stages C–D.
+ * right one. «Отзывы» — TASK-049 (the rating — TASK-050); «Подписка», «Модерация» come later.
  */
 export function SupplierCard({ supplierId }: { supplierId: string }) {
   const { query } = useLocation();
@@ -61,6 +63,9 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
         break;
       case "orders":
         body = <SupplierOrders supplierId={supplierId} />;
+        break;
+      case "reviews":
+        body = <SupplierReviews supplierId={supplierId} />;
         break;
       case "price":
         body = <SupplierPriceImports supplierId={supplierId} />;

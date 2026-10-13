@@ -15,7 +15,7 @@ import { useLoad } from "../use-load";
  * cards in the order of importance, every counter from one answer of the
  * server (`GET /admin/home`). A card leads to its list; a list of the next
  * tasks opens its honest «появится», the number on the card is true all the
- * same. Reviews, moderation, complaints and payments come with stages C–D.
+ * same. Reviews and complaints — TASK-049; moderation and payments come later.
  */
 export function Home() {
   const home = useLoad(() => apiClient.getAdminHome(), "home");
@@ -176,9 +176,33 @@ function Cards({ home }: { home: AdminHome }) {
         </div>
       </section>
 
+      <section aria-labelledby="home-reviews" className="home-section">
+        <h2 id="home-reviews" className="ac-text-heading">
+          3. Отзывы и жалобы
+        </h2>
+        <div className="home-grid">
+          <Card
+            icon="star"
+            title="Отзывы на проверке"
+            value={home.reviewsHeld}
+            tone={home.reviewsHeld > 0 ? "attention" : "plain"}
+            note="Проверка задержала текст или не смогла проверить его вовремя: опубликовать или отклонить текст"
+            onOpen={() => navigateTo(routePaths.reviews)}
+          />
+          <Card
+            icon="alertTriangle"
+            title="Жалобы · новых"
+            value={home.complaintsNew}
+            tone={home.complaintsNew > 0 ? "attention" : "plain"}
+            note="Жалобы пользователей по заявкам, ещё не взятые в работу"
+            onOpen={() => navigateTo(withQuery(routePaths.complaints, { status: "new" }))}
+          />
+        </div>
+      </section>
+
       <section aria-labelledby="home-leads" className="home-section">
         <h2 id="home-leads" className="ac-text-heading">
-          3. Новые заявки на подключение
+          4. Новые заявки на подключение
         </h2>
         <div className="home-grid">
           <Card
@@ -194,7 +218,7 @@ function Cards({ home }: { home: AdminHome }) {
 
       <section aria-labelledby="home-catalog" className="home-section">
         <h2 id="home-catalog" className="ac-text-heading">
-          4. Качество справочника
+          5. Качество справочника
         </h2>
         <div className="home-grid">
           <Card

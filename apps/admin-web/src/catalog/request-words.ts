@@ -45,6 +45,8 @@ export function requestTermsText(data: AdminCatalogRequest["data"]): string {
 
 /** Where the request came from: «прайс price.xlsx, строка 214, 10.10.2026 14:05». */
 export function requestSourceText(request: AdminCatalogRequest): string {
+  // «Нет в справочнике? Отправьте запрос» of the cabinet (S-OFF-05, TASK-048).
+  if (request.source === "manual") return "вручную, из кабинета поставщика";
   if (!request.import) return "—";
   const file = request.import.fileName ? `прайс ${request.import.fileName}` : "прайс";
   const row = request.import.rowNo === null ? null : `строка ${String(request.import.rowNo)}`;
@@ -56,6 +58,8 @@ export interface RequestItemForm {
   brand: CatalogItemBrand | null;
   article: string;
   ru: string;
+  /** The subcategory the supplier suggested by hand (S-OFF-05); the administrator may change it. */
+  categoryId?: string;
 }
 
 /**
@@ -72,6 +76,7 @@ export function itemFormFromRequest(request: AdminCatalogRequest): RequestItemFo
       : null,
     article: request.data.article ?? "",
     ru: request.data.name ?? "",
+    ...(request.category && { categoryId: request.category.id }),
   };
 }
 

@@ -33,6 +33,9 @@ const request: AdminCatalogRequest = {
   decidedBy: null,
   decidedAt: null,
   createdAt: "2026-10-10T09:06:00.000Z",
+  source: "price_import",
+  category: null,
+  comment: null,
 };
 
 describe("a request to add an item", () => {
@@ -55,6 +58,19 @@ describe("a request to add an item", () => {
     expect(
       itemFormFromRequest({ ...request, brand: null, data: { ...request.data, article: null } }),
     ).toMatchObject({ type: "generic", brand: null, article: "" });
+  });
+
+  it("marks a request sent by hand and takes the subcategory the supplier suggested (TASK-048)", () => {
+    const manual: AdminCatalogRequest = {
+      ...request,
+      source: "manual",
+      import: null,
+      category: { id: A, name: "Тормозные колодки" },
+      comment: "Есть в наличии 10 комплектов",
+    };
+    expect(requestSourceText(manual)).toBe("вручную, из кабинета поставщика");
+    expect(itemFormFromRequest(manual)).toMatchObject({ categoryId: A });
+    expect(itemFormFromRequest(request)).not.toHaveProperty("categoryId");
   });
 
   it("says who decided a request meanwhile", () => {

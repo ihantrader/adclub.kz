@@ -119,7 +119,7 @@ export function Requests() {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Строка прайса</th>
+                  <th scope="col">Что просят</th>
                   <th scope="col">Поставщик</th>
                   <th scope="col">Пришёл</th>
                   <th scope="col">Состояние</th>
@@ -134,7 +134,9 @@ export function Requests() {
                           <span className="clamp">{requestTitle(request.data)}</span>
                         </AppLink>
                         <span className="ac-text-caption ac-muted">
-                          {requestTermsText(request.data)}
+                          {request.source === "manual"
+                            ? `вручную${request.category ? ` · ${request.category.name}` : ""}`
+                            : requestTermsText(request.data)}
                         </span>
                       </div>
                     </td>
@@ -279,10 +281,24 @@ export function RequestCard({ requestId }: { requestId: string }) {
                   <dt>Название</dt>
                   <dd className="long-text">{request.data.name ?? "—"}</dd>
                 </div>
-                <div>
-                  <dt>Цена и наличие в прайсе</dt>
-                  <dd>{requestTermsText(request.data) || "—"}</dd>
-                </div>
+                {request.source === "price_import" && (
+                  <div>
+                    <dt>Цена и наличие в прайсе</dt>
+                    <dd>{requestTermsText(request.data) || "—"}</dd>
+                  </div>
+                )}
+                {request.category && (
+                  <div>
+                    <dt>Подкатегория по мнению поставщика</dt>
+                    <dd>{request.category.name}</dd>
+                  </div>
+                )}
+                {request.comment && (
+                  <div>
+                    <dt>Комментарий поставщика</dt>
+                    <dd className="long-text">{request.comment}</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Поставщик</dt>
                   <dd>
@@ -333,8 +349,9 @@ export function RequestCard({ requestId }: { requestId: string }) {
                   </Button>
                 </div>
                 <p className="ac-text-caption ac-muted">
-                  Предложение по запросу не создаётся само: цена в старом прайсе могла устареть.
-                  Поставщик выставит его следующей загрузкой прайса.
+                  {request.source === "manual"
+                    ? "Предложение по запросу не создаётся само: поставщик увидит решение в «Модерации» и выставит позицию сам."
+                    : "Предложение по запросу не создаётся само: цена в старом прайсе могла устареть. Поставщик выставит его следующей загрузкой прайса."}
                 </p>
               </section>
             )}

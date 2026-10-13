@@ -29,6 +29,10 @@ import {
   priceRowDecidedResponseSchema,
   priceRowsSkippedResponseSchema,
   supplierCatalogRequestPageSchema,
+  priceExportLinkSchema,
+  supplierBrandSuggestionsSchema,
+  supplierCatalogRequestResponseSchema,
+  supplierModerationSummarySchema,
   supplierOfferResponseSchema,
   supplierOnboardedResponseSchema,
   totpSetupCompletedResponseSchema,
@@ -43,6 +47,7 @@ import {
   type SupplierOffer,
 } from "@adclub/contracts";
 import { kzBinCheckDigit, normalizeArticle } from "@adclub/domain";
+import { strFromU8, unzipSync } from "fflate";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
@@ -65,6 +70,8 @@ import { WorkerModule } from "../../worker.module";
 import { TestAiGateway } from "../ai";
 import { DevCatalogSeed } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
+import { readPriceFile } from "./file/price-file";
+import { writeXlsx } from "./testing/xlsx-writer";
 
 /**
  * TASK-047 end to end on a real PostgreSQL, Redis and object storage with a
@@ -1371,6 +1378,311 @@ describe("price list matching, review and application (PostgreSQL + Redis + MinI
     ]);
     const result = (await applied(shop, entry.id)).result!;
     expect(result).toMatchObject({ created: 0, updated: 0 });
+  });
+
+  // ------------------------------------------------------------- TASK-048
+
+  /** «Скачать мой прайс»: the link, then the file by it (no session — the link is the key). */
+  async function exported(of: Company, include: "on_sale" | "all" = "on_sale") {
+    const link = await ok(
+      of.as("post", "/supplier/price-exports", { include }),
+      (body) => priceExportLinkSchema.parse(body),
+      201,
+    );
+    rememberSecret(new URL(link.url, "http://x").searchParams.get("token")!);
+    const response = await http()
+      .get(link.url)
+      .buffer(true)
+      .parse((res, done) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => done(null, Buffer.concat(chunks)));
+      });
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("spreadsheetml");
+    return { link, bytes: response.body as Buffer };
+  }
+
+  /** The rows of an `.xlsx` as the price list reader sees them. */
+  async function sheetRows(bytes: Buffer) {
+    const rows: { rowNo: number; cells: (string | number | null)[] }[] = [];
+    await readPriceFile(bytes, "xlsx", 1000, {
+      row: (row) => rows.push(row),
+      flush: () => Promise.resolve(),
+    });
+    return rows;
+  }
+
+  it("exports only the company's own offers on goods, with the hidden item column", async () => {
+    const shop = await company("Автомир", { type: "both" });
+    const rival = await company("Конкурент");
+    const padsId = await itemByArticle("geely", "04465-0K090");
+    const trwId = await itemByArticle("trw", "GDB3534");
+    const oilId = await itemByName("Shell Helix HX8 5W-30, 4 л");
+    const serviceId = await itemByName("Замена моторного масла");
+    await offer(shop, padsId, { price: 12_500 });
+    await offer(shop, oilId, { price: 7_000, supplierSku: "SH-HX8-4" });
+    const gone = await offer(shop, trwId, { price: 9_800 });
+    await ok(
+      shop.as("post", `/supplier/offers/${gone.id}/withdraw`, { expectedVersion: gone.version }),
+      (body) => body,
+    );
+    await ok(
+      shop.as("post", "/supplier/offers", { itemId: serviceId, price: 8_000 }),
+      (b) => b,
+      201,
+    );
+    const rivals = await offer(rival, trwId, { price: 9_000 });
+
+    const onSale = await exported(shop);
+    expect(onSale.link.offers).toBe(2);
+    const sheet = strFromU8(unzipSync(new Uint8Array(onSale.bytes))["xl/worksheets/sheet1.xml"]!);
+    expect(sheet).toMatch(/<col min="1" max="1"[^>]*hidden="1"/);
+    const read = await sheetRows(onSale.bytes);
+    expect(read[0]!.cells.slice(0, 7)).toEqual([
+      "item_id",
+      "Артикул",
+      "Бренд",
+      "Название",
+      "Цена, ₸",
+      "Наличие",
+      "Срок, дн.",
+    ]);
+    expect(
+      read
+        .slice(1)
+        .map((row) => row.cells[0])
+        .sort(),
+    ).toEqual([padsId, oilId].sort());
+    const all = await sheetRows((await exported(shop, "all")).bytes);
+    const ids = all.slice(1).map((row) => row.cells[0]);
+    expect(ids.sort()).toEqual([padsId, oilId, trwId].sort());
+    // Never the service (prices by model), never another company's offer.
+    expect(ids).not.toContain(serviceId);
+    expect(all.find((row) => row.cells[0] === trwId)!.cells[5]).toBe("Нет в наличии");
+    expect(rivals.item.id).toBe(trwId);
+
+    // A forged link — 410, nothing about why.
+    const forged = await http().get(`${onSale.link.url}x`);
+    expect(forged.status).toBe(410);
+    // No offers: the file has the header and the hint, and nothing breaks.
+    const empty = await company("Пустой");
+    const nothing = await exported(empty);
+    expect(nothing.link.offers).toBe(0);
+    const files = unzipSync(new Uint8Array(nothing.bytes));
+    expect(strFromU8(files["xl/worksheets/sheet1.xml"]!)).toContain("item_id");
+    expect(strFromU8(files["xl/worksheets/sheet2.xml"]!)).toContain("Предложений пока нет");
+  });
+
+  it("takes the export back by its item column — all sure, no AI, nothing changes; two edited prices change", async () => {
+    const shop = await company("Автомир");
+    const padsId = await itemByArticle("geely", "04465-0K090");
+    const rearId = await itemByArticle("geely", "4050068800");
+    const oilId = await itemByName("Shell Helix HX8 5W-30, 4 л");
+    const pads = await offer(shop, padsId, { price: 12_500 });
+    const rear = await offer(shop, rearId, { price: 15_000 });
+    const oil = await offer(shop, oilId, {
+      price: 7_000,
+      availability: "on_order",
+      leadDays: 3,
+      supplierSku: "SH-HX8-4",
+    });
+    const { bytes } = await exported(shop);
+
+    const same = await imported(shop, bytes);
+    expect(same.columnsSource).toBe("remembered");
+    expect(same.match).toMatchObject({ confident: 3, review: 0, notFound: 0, errors: 0 });
+    expect(same.match?.bySource.itemId).toBe(3);
+    expect((await rows(shop, same.id, "confident")).map((r) => r.source)).toEqual([
+      "item_id",
+      "item_id",
+      "item_id",
+    ]);
+    const unchanged = (await applied(shop, same.id)).result!;
+    expect(unchanged).toMatchObject({ updated: 0, created: 0, unchanged: 3, requested: 0 });
+    for (const before of [pads, rear, oil]) {
+      const now = await offerNow(before.id);
+      expect(now.version).toBe(before.version);
+      expect(now.supplier_sku).toBe(before.supplierSku);
+    }
+
+    // The supplier changes two prices in Excel and saves the file anew.
+    const read = await sheetRows(bytes);
+    const priceOf: Record<string, number> = { [padsId]: 13_000, [oilId]: 7_300 };
+    const edited = writeXlsx([
+      {
+        name: "Прайс",
+        rows: read.map((row, index) =>
+          index === 0
+            ? row.cells
+            : row.cells.map((cell, column) =>
+                column === 4 ? (priceOf[String(row.cells[0])] ?? cell) : cell,
+              ),
+        ),
+      },
+    ]);
+    const back = await imported(shop, edited);
+    expect(back.match).toMatchObject({ confident: 3, review: 0 });
+    const result = (await applied(shop, back.id)).result!;
+    expect(result).toMatchObject({ updated: 2, unchanged: 1, created: 0 });
+    expect((await offerNow(pads.id)).price).toBe(13_000);
+    expect((await offerNow(oil.id)).price).toBe(7_300);
+    expect((await offerNow(rear.id)).price).toBe(15_000);
+    expect(ai.priceMatchRequests).toHaveLength(0);
+  });
+
+  it("errs a row naming another company's item or nothing by the item column, and matches one without it as usual", async () => {
+    const shop = await company("Автомир");
+    const rival = await company("Конкурент");
+    const padsId = await itemByArticle("geely", "04465-0K090");
+    const trwId = await itemByArticle("trw", "GDB3534");
+    await offer(shop, padsId, { price: 12_500 });
+    const rivals = await offer(rival, trwId, { price: 9_000 });
+    // The company's own export: its header and the format remembered with it.
+    const header = (await sheetRows((await exported(shop)).bytes))[0]!.cells;
+    const file = writeXlsx([
+      {
+        name: "Прайс",
+        rows: [
+          header,
+          [trwId, "GDB3534", "TRW", "Колодки тормозные передние TRW", 1, "В наличии", 0],
+          ["не-код", "04465-0K090", "Geely", "Колодки", 12_600, "В наличии", 0],
+          [null, "04465-0K090", "Geely", "Колодки тормозные передние", 12_700, "В наличии", 0],
+        ],
+      },
+    ]);
+    const entry = await imported(shop, file);
+    const errors = await rows(shop, entry.id, "errors");
+    expect(errors.map((r) => [r.rowNo, r.errors.map((e) => e.code)])).toEqual([
+      [2, ["unknown_item_id"]],
+      [3, ["unknown_item_id"]],
+    ]);
+    // The row says nothing of whose the item is.
+    expect(JSON.stringify(errors)).not.toContain(rival.name);
+    const confident = await rows(shop, entry.id, "confident");
+    expect(confident.map((r) => [r.rowNo, r.source, r.item?.id])).toEqual([
+      [4, "exact_article", padsId],
+    ]);
+    await applied(shop, entry.id);
+    expect((await offerNow(rivals.id)).price).toBe(9_000);
+  });
+
+  it("errs a row naming a service by its name — not «не найдено», not a request", async () => {
+    const shop = await company("Автомир");
+    const entry = await imported(shop, csv([";;Замена моторного масла;8000;есть;"]));
+    expect(entry.match).toMatchObject({ errors: 1, notFound: 0 });
+    expect((await rows(shop, entry.id, "errors"))[0]!.errors.map((e) => e.code)).toEqual([
+      "service_item",
+    ]);
+    const result = (await applied(shop, entry.id)).result!;
+    expect(result).toMatchObject({ requested: 0, created: 0 });
+    const requests = await db.query("SELECT 1 FROM catalog_request WHERE supplier_id = $1", [
+      shop.supplierId,
+    ]);
+    expect(requests.rowCount).toBe(0);
+  });
+
+  it("takes a request by hand once, shows the administrator's decision as «новое» to each employee until seen", async () => {
+    const shop = await company("Автомир");
+    const colleague2 = await colleague(shop, "Марат");
+    const pads = await categoryByCode("brake_pads");
+    const sent = await ok(
+      shop.as("post", "/supplier/catalog-requests", {
+        name: "Колодки тормозные передние Haval Jolion",
+        brand: "Haval",
+        article: "3501115XGW02A",
+        categoryId: pads,
+        comment: "Есть 10 комплектов",
+      }),
+      (body) => supplierCatalogRequestResponseSchema.parse(body).request,
+      201,
+    );
+    expect(sent).toMatchObject({
+      status: "new",
+      source: "manual",
+      importId: null,
+      comment: "Есть 10 комплектов",
+      isNew: false,
+      category: { id: pads, name: "Тормозные колодки" },
+    });
+    // The same article again, in any spelling: one request waiting.
+    const again = await shop.as("post", "/supplier/catalog-requests", {
+      name: "Колодки",
+      article: "3501115-xgw02a",
+    });
+    expectError(again, 409, "CATALOG_REQUEST_EXISTS");
+    expect(again.body.details).toEqual({ requestId: sent.id });
+    expectError(
+      await shop.as("post", "/supplier/catalog-requests", { name: "Х", categoryId: randomUUID() }),
+      400,
+      "VALIDATION_ERROR",
+    );
+    // The limit of the company a day.
+    await settings.set({ catalog_requests_per_supplier_day: 1 });
+    await new TestSettings(app).reload();
+    expectError(
+      await shop.as("post", "/supplier/catalog-requests", { name: "Фильтр салона Haval" }),
+      429,
+      "RATE_LIMITED",
+    );
+
+    // The administrator sees it among the requests, marked by hand.
+    const listed = await ok(asAdmin("get", "/admin/catalog-requests?status=new"), (body) =>
+      adminCatalogRequestPageSchema.parse(body),
+    );
+    const mine = listed.requests.find((request) => request.id === sent.id)!;
+    expect(mine).toMatchObject({ source: "manual", import: null, comment: "Есть 10 комплектов" });
+    expect(mine.category?.id).toBe(pads);
+    const summaryOf = (of: Company) =>
+      ok(of.as("get", "/supplier/moderation/summary"), (body) =>
+        supplierModerationSummarySchema.parse(body),
+      );
+    expect((await summaryOf(shop)).unseen.total).toBe(0);
+    await ok(
+      asAdmin("post", `/admin/catalog-requests/${sent.id}/reject`, {
+        expectedVersion: mine.version,
+        reason: "Нет в каталоге производителя",
+      }),
+      (body) => body,
+    );
+
+    // «новое» for both employees until each of them opens «Модерация».
+    for (const of of [shop, colleague2]) {
+      expect((await summaryOf(of)).unseen).toEqual({ requests: 1, compatibility: 0, total: 1 });
+      const page = await ok(of.as("get", "/supplier/catalog-requests"), (body) =>
+        supplierCatalogRequestPageSchema.parse(body),
+      );
+      expect(page.requests[0]).toMatchObject({
+        id: sent.id,
+        status: "rejected",
+        rejectReason: "Нет в каталоге производителя",
+        isNew: true,
+      });
+    }
+    const opened = await summaryOf(shop);
+    const seen = await ok(
+      shop.as("post", "/supplier/moderation/seen", { seenUntil: opened.serverTime }),
+      (body) => supplierModerationSummarySchema.parse(body),
+    );
+    expect(seen.unseen.total).toBe(0);
+    const afterSeen = await ok(shop.as("get", "/supplier/catalog-requests"), (body) =>
+      supplierCatalogRequestPageSchema.parse(body),
+    );
+    expect(afterSeen.requests[0]!.isNew).toBe(false);
+    // The colleague hasn't looked: still «новое» for him.
+    expect((await summaryOf(colleague2)).unseen.total).toBe(1);
+    // An older moment sent late takes nothing back.
+    await ok(
+      shop.as("post", "/supplier/moderation/seen", { seenUntil: "2020-01-01T00:00:00.000Z" }),
+      (body) => body,
+    );
+    expect((await summaryOf(shop)).unseen.total).toBe(0);
+
+    // Brands by any spelling for the form.
+    const brands = await ok(shop.as("get", "/supplier/catalog/brands?q=джи"), (body) =>
+      supplierBrandSuggestionsSchema.parse(body),
+    );
+    expect(brands.brands.map((brand) => brand.name)).toEqual(["Geely"]);
   });
 
   it("matches and applies fifty thousand rows", async () => {

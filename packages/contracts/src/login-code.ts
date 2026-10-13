@@ -187,6 +187,16 @@ export const rateLimitNameSchema = z.enum([
    * counted in the database by the uploads themselves, not by the guard.
    */
   "price_import_uploads_per_supplier",
+  /**
+   * «Скачать мой прайс» (TASK-048): links to the export an employee asks
+   * for — the file is written from the offers while it downloads.
+   */
+  "price_export_per_member",
+  /**
+   * Requests to add an item one company sends by hand (S-OFF-05, TASK-048)
+   * in a rolling day — counted in the database by the requests themselves.
+   */
+  "catalog_requests_per_supplier",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

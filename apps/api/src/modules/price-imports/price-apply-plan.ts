@@ -1,6 +1,7 @@
 import type { PriceRowDecisionKind, PriceRowNotAppliedReason } from "@adclub/contracts";
 import {
   offerTermsProblem,
+  priceNameKey,
   sharpPriceChange,
   type OfferLimits,
   type OfferTerms,
@@ -131,6 +132,37 @@ export function sendsRequest(
   return row.decision === "not_in_catalog" || row.source !== "remembered_skip";
 }
 
+/**
+ * A row of the cabinet's export (`item_id`, TASK-048) carries the catalog's
+ * article and name where the offer has none of its own — the file shows
+ * something in every cell. Coming back, such a cell is not the supplier's
+ * own article or name: the offer keeps having none, so a file returned
+ * unchanged changes nothing. A text the supplier did change is his.
+ */
+function exportedOwnTexts(
+  row: PlanRow,
+  item: MatchItem | undefined,
+  offer: PlanOffer | undefined,
+): ParsedPriceRow {
+  const file = row.parsed;
+  if (row.source !== "item_id" || !item || !offer) return file;
+  const catalogArticle =
+    offer.supplierSku === null &&
+    file.articleNorm !== null &&
+    item.articleNorm !== null &&
+    file.articleNorm === item.articleNorm;
+  const catalogName =
+    offer.supplierRawName === null &&
+    file.name !== null &&
+    priceNameKey(file.name) === priceNameKey(item.name);
+  if (!catalogArticle && !catalogName) return file;
+  return {
+    ...file,
+    ...(catalogArticle && { article: null, articleNorm: null }),
+    ...(catalogName && { name: null }),
+  };
+}
+
 /** The item a row is applied to, `null` — none; `undefined` — the row isn't about an item. */
 function finalItem(row: PlanRow): string | null | undefined {
   if (row.decision === "accept" || row.decision === "other") return row.decisionItemId;
@@ -197,12 +229,12 @@ function planRow(
   const remember: Remember =
     row.decision === "accept" || row.decision === "other"
       ? { decision: "item", itemId, by: "supplier" }
-      : row.source === "exact_article"
+      : row.source === "exact_article" || row.source === "item_id"
         ? { decision: "item", itemId, by: "auto" }
         : row.source === "mapping"
           ? { touch: true }
           : null;
-  const file = row.parsed;
+  const file = exportedOwnTexts(row, facts.items.get(itemId), facts.offers.get(itemId));
   const price = file.price!;
   const offer = facts.offers.get(itemId);
   if (!offer) {

@@ -40,7 +40,7 @@ export function priceRowKey(row: {
  * Returns the later rows with the number of the first one.
  */
 export function repeatedRows(
-  rows: readonly { rowNo: number; key: PriceRowKey | null }[],
+  rows: readonly { rowNo: number; key: { kind: string; key: string } | null }[],
 ): Map<number, number> {
   const first = new Map<string, number>();
   const repeated = new Map<number, number>();

@@ -443,9 +443,16 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
     memberId: string,
     now: Date,
   ): Promise<void> {
+    // One write per key: rows of the cabinet's export may share an article
+    // or a name (two offers of the company), and one statement can't change
+    // a row twice — the first row of the file decides, as everywhere.
+    const keys = new Set<string>();
     const writes = plans.flatMap((plan) => {
       const memory = plan.remember;
       if (!memory || "touch" in memory) return [];
+      const id = `${plan.row.keyKind}:${plan.row.key}`;
+      if (keys.has(id)) return [];
+      keys.add(id);
       return [
         {
           kind: plan.row.keyKind,

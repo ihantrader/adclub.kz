@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  CatalogRequestSource,
   CatalogRequestStatus,
   PriceColumnRoleName,
   PriceColumnSource,
@@ -79,6 +80,7 @@ export interface PriceImportStatsRecord {
     search: number;
     ai: number;
     remembered: number;
+    itemId?: number;
   };
   aiRows?: number;
   aiPending?: number;
@@ -88,7 +90,10 @@ export interface PriceImportStatsRecord {
 
 /** A matching error of a row (`price_import_row.match_error`). */
 export type PriceMatchError =
-  { code: "repeated_row"; value: number } | { code: "service_item" } | { code: "supplier_type" };
+  | { code: "repeated_row"; value: number }
+  | { code: "service_item" }
+  | { code: "supplier_type" }
+  | { code: "unknown_item_id" };
 
 /** Why a row sits where it does (`price_import_row.match_note`). */
 export interface PriceMatchNote {
@@ -257,6 +262,10 @@ export const catalogRequest = pgTable("catalog_request", {
   decidedByAdminId: uuid("decided_by_admin_id"),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   version: integer("version").notNull().default(1),
+  // TASK-048: a request by hand (S-OFF-05).
+  source: text("source").$type<CatalogRequestSource>().notNull().default("price_import"),
+  categoryId: uuid("category_id"),
+  comment: text("comment"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

@@ -10,4 +10,5 @@ export { DevCompatibilitySeed, DevCompatibilitySeedError } from "./dev-compatibi
 export type { DevCompatibilitySeedResult } from "./dev-compatibility-seed";
 export { compatibilityTables } from "./schema";
 export { describeConditions, resolveVehicle } from "./compatibility-conditions";
-export { itemCompatibility } from "./schema";
+export { itemCompatibility, itemCompatibilityProposal } from "./schema";
+export { describeSupplierProposals } from "./compatibility-store";

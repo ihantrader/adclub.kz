@@ -20,6 +20,12 @@ export const priceColumnRoles = [
   "price",
   "availability",
   "lead_days",
+  /**
+   * The hidden column of the cabinet's own export, «Скачать мой прайс»
+   * (TASK-048; ARCHITECTURE 12.4): the catalog item of the company's offer.
+   * A row that has it is matched by it alone — no search, no AI.
+   */
+  "item_id",
   "ignore",
 ] as const;
 
@@ -162,6 +168,8 @@ export const priceHeaderSpellings: Readonly<Record<PriceDataRole, readonly Price
       { text: "жеткізу мерзімі", weight: 1 },
       { text: "күн", weight: 0.7 },
     ],
+    // Only the cabinet's export names a column so (TASK-048).
+    item_id: [{ text: "item_id", weight: 1 }],
   };
 
 /**

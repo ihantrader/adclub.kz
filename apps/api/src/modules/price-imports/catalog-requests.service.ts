@@ -14,21 +14,31 @@ import {
   type ItemFromRequestResponse,
   type LinkCatalogRequestBody,
   type RejectCatalogRequestBody,
+  type CatalogRequestExistsDetails,
+  type CreateCatalogRequestBody,
+  type SupplierBrandSuggestions,
+  type SupplierCatalogRequest,
   type SupplierCatalogRequestPage,
+  type SupplierCatalogRequestResponse,
 } from "@adclub/contracts";
-import { rankCandidates, searchWords } from "@adclub/domain";
+import { normalizeArticle, priceRowKey, rankCandidates, searchWords } from "@adclub/domain";
 import { and, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { ApiException } from "../../common/errors";
+import { ApiException, rateLimitedException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
 import {
   CatalogItemsService,
   CatalogPhotosService,
+  loadTexts,
+  localize,
   spellingKey,
+  textsOf,
   type CatalogActor,
 } from "../catalog";
 import { adminUser, supplier, supplierMember } from "../identity";
-import { describeOfferItems } from "../offers";
+import { describeOfferItems, offer } from "../offers";
+import { AppSettings } from "../settings";
+import { moderationSeenAt } from "./moderation-seen";
 import { validationError } from "./price-import-errors";
 import {
   brandsBySpelling,
@@ -38,11 +48,18 @@ import {
   searchCandidates,
   type MatchItem,
 } from "./price-match-items";
-import { catalogRequest, priceImport, type CatalogRequestRow } from "./schema";
+import {
+  catalogRequest,
+  priceImport,
+  type CatalogRequestPayload,
+  type CatalogRequestRow,
+} from "./schema";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** How many look-alike items the card of a request shows. */
 const SIMILAR = 5;
+/** How many brands the suggestions of S-OFF-05 offer. */
+const BRAND_SUGGESTIONS = 10;
 
 function encodeCursor(row: CatalogRequestRow): string {
   return Buffer.from(JSON.stringify([row.createdAt.toISOString(), row.id]), "utf8").toString(
@@ -94,6 +111,7 @@ export class CatalogRequestsService {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(CatalogItemsService) private readonly items: CatalogItemsService,
     @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
+    @Inject(AppSettings) private readonly settings: AppSettings,
   ) {}
 
   /** Requests waiting, for the home screen (`GET /admin/catalog-requests?status=new`). */
@@ -217,7 +235,8 @@ export class CatalogRequestsService {
           status: "rejected",
           rejectReason: body.reason,
           decidedByAdminId: actor.adminId,
-          decidedAt: now,
+          // The database's clock, as «Модерация» compares it (`moderation_seen_at`).
+          decidedAt: sql`now()`,
           version: row.version + 1,
           updatedAt: now,
         })
@@ -241,9 +260,13 @@ export class CatalogRequestsService {
     return { request: request! };
   }
 
-  /** The company's own requests (S-MOD-01), newest first. */
+  /**
+   * The company's own requests (S-MOD-01), newest first, with «новое» for
+   * this employee (decided after the moment they last opened «Модерация»)
+   * and the company's offer on the item a request became («Выставить»).
+   */
   async supplierPage(
-    supplierId: string,
+    actor: { supplierId: string; memberId: string },
     query: CatalogRequestListQuery,
     lang: CatalogLanguage,
   ): Promise<SupplierCatalogRequestPage> {
@@ -254,7 +277,7 @@ export class CatalogRequestsService {
       .from(catalogRequest)
       .where(
         and(
-          eq(catalogRequest.supplierId, supplierId),
+          eq(catalogRequest.supplierId, actor.supplierId),
           query.status ? eq(catalogRequest.status, query.status) : undefined,
           after
             ? sql`(${catalogRequest.createdAt}, ${catalogRequest.id}) < (${after.createdAt}::timestamptz, ${after.id}::uuid)`
@@ -264,14 +287,151 @@ export class CatalogRequestsService {
       .orderBy(desc(catalogRequest.createdAt), desc(catalogRequest.id))
       .limit(query.limit + 1);
     const page = rows.slice(0, query.limit);
-    const items = await describeOfferItems(
-      db,
-      this.photos,
-      page.flatMap((row) => (row.resultItemId ? [row.resultItemId] : [])),
-      lang,
-    );
     return {
-      requests: page.map((row) => ({
+      requests: await this.describeSupplier(db, actor, page, lang),
+      nextCursor: rows.length > query.limit ? encodeCursor(page.at(-1)!) : null,
+    };
+  }
+
+  /**
+   * «Нет в справочнике? Отправьте запрос на добавление» (S-OFF-05): the same
+   * request a row of a price list makes, by hand. One waiting request per
+   * article (or name, without one) of the company — a second is refused
+   * with the first one's id; `catalog_requests_per_supplier_day` a day for
+   * the whole company.
+   */
+  async createManual(
+    actor: { supplierId: string; memberId: string; accountId: string },
+    body: CreateCatalogRequestBody,
+    lang: CatalogLanguage,
+  ): Promise<SupplierCatalogRequestResponse> {
+    const db = this.database.db;
+    const article = body.article ? normalizeArticle(body.article) : "";
+    const key = priceRowKey({ articleNorm: article === "" ? null : article, name: body.name });
+    if (!key) throw validationError("name", "Name the item");
+    const payload: CatalogRequestPayload = {
+      article: body.article ?? null,
+      articleNorm: article === "" ? null : article,
+      brand: body.brand ?? null,
+      name: body.name,
+      price: null,
+      availability: null,
+      leadDays: null,
+    };
+    const id = await db.transaction(async (tx) => {
+      // One company at a time: the count of the day and the waiting key are checked together.
+      await tx.execute(sql`SELECT id FROM supplier WHERE id = ${actor.supplierId} FOR UPDATE`);
+      if (body.categoryId) await this.assertSubcategory(tx, body.categoryId);
+      const [waiting] = await tx
+        .select({ id: catalogRequest.id })
+        .from(catalogRequest)
+        .where(
+          and(
+            eq(catalogRequest.supplierId, actor.supplierId),
+            eq(catalogRequest.keyKind, key.kind),
+            eq(catalogRequest.key, key.key),
+            eq(catalogRequest.status, "new"),
+          ),
+        );
+      if (waiting) {
+        const details: CatalogRequestExistsDetails = { requestId: waiting.id };
+        throw new ApiException(
+          409,
+          "CATALOG_REQUEST_EXISTS",
+          "The company already has a request on this item waiting for the administrator",
+          { details },
+        );
+      }
+      const limit = await this.settings.get("catalog_requests_per_supplier_day");
+      const day = await tx.execute<{ sent: number; wait: number | null }>(sql`
+        SELECT count(*)::int AS sent,
+          extract(epoch FROM min(created_at) + interval '1 day' - now())::float AS wait
+        FROM catalog_request
+        WHERE supplier_id = ${actor.supplierId} AND source = 'manual'
+          AND created_at > now() - interval '1 day'`);
+      const counted = day.rows[0];
+      if (counted && counted.sent >= limit) {
+        throw rateLimitedException(
+          "catalog_requests_per_supplier",
+          Math.max(1, Math.ceil(Number(counted.wait ?? 86_400))),
+        );
+      }
+      const [created] = await tx
+        .insert(catalogRequest)
+        .values({
+          supplierId: actor.supplierId,
+          source: "manual",
+          keyKind: key.kind,
+          key: key.key,
+          payload,
+          categoryId: body.categoryId ?? null,
+          comment: body.comment ?? null,
+          createdByMemberId: actor.memberId,
+        })
+        .returning({ id: catalogRequest.id });
+      await this.audit.record(
+        {
+          action: auditActions.catalogRequestCreated,
+          actor: { role: "supplier", ...actor },
+          entityType: auditEntities.catalogRequest,
+          entityId: created!.id,
+          after: { source: "manual", name: body.name, article: body.article ?? null },
+        },
+        tx,
+      );
+      return created!.id;
+    });
+    this.logger.log(`Catalog request sent by hand request=${id} supplier=${actor.supplierId}`);
+    const [request] = await this.describeSupplier(db, actor, [await this.find(db, id)], lang);
+    return { request: request! };
+  }
+
+  /** Brands of the catalog by the beginning of any spelling (S-OFF-05 «подсказки»). */
+  async brandSuggestions(q: string): Promise<SupplierBrandSuggestions> {
+    const key = spellingKey(q);
+    if (key === "") return { brands: [] };
+    const rows = await this.database.db.execute<{ id: string; name: string; matched: string }>(sql`
+      SELECT DISTINCT ON (b.id) b.id, n.text AS name, s.text AS matched
+      FROM brand b
+      JOIN brand_spelling s ON s.brand_id = b.id AND starts_with(s.key, ${key})
+      JOIN brand_spelling n ON n.brand_id = b.id AND n.is_name
+      WHERE b.status = 'active'
+      ORDER BY b.id, s.is_name DESC
+      LIMIT 50`);
+    return {
+      brands: rows.rows
+        .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+        .slice(0, BRAND_SUGGESTIONS)
+        .map((row) => ({ id: row.id, name: row.name, matched: row.matched })),
+    };
+  }
+
+  // ------------------------------------------------------------- helpers
+
+  /** Requests as the company sees them: the item, the company's offer on it, «новое». */
+  private async describeSupplier(
+    executor: DbExecutor,
+    actor: { supplierId: string; memberId: string },
+    rows: readonly CatalogRequestRow[],
+    lang: CatalogLanguage,
+  ): Promise<SupplierCatalogRequest[]> {
+    if (rows.length === 0) return [];
+    const itemIds = rows.flatMap((row) => (row.resultItemId ? [row.resultItemId] : []));
+    const [items, offers, categories, seenAt] = await Promise.all([
+      describeOfferItems(executor, this.photos, itemIds, lang),
+      itemIds.length === 0
+        ? Promise.resolve([])
+        : executor
+            .select({ itemId: offer.itemId, id: offer.id, status: offer.status })
+            .from(offer)
+            .where(and(eq(offer.supplierId, actor.supplierId), inArray(offer.itemId, itemIds))),
+      this.categoryNames(executor, rows, lang),
+      moderationSeenAt(executor, actor.memberId),
+    ]);
+    const offerOf = new Map(offers.map((row) => [row.itemId, row]));
+    return rows.map((row) => {
+      const own = row.resultItemId ? offerOf.get(row.resultItemId) : undefined;
+      return {
         id: row.id,
         status: row.status,
         data: this.data(row),
@@ -281,12 +441,38 @@ export class CatalogRequestsService {
         rejectReason: row.rejectReason,
         createdAt: row.createdAt.toISOString(),
         decidedAt: row.decidedAt?.toISOString() ?? null,
-      })),
-      nextCursor: rows.length > query.limit ? encodeCursor(page.at(-1)!) : null,
-    };
+        source: row.source,
+        category: row.categoryId ? (categories.get(row.categoryId) ?? null) : null,
+        comment: row.comment,
+        isNew: row.decidedAt !== null && row.decidedAt > seenAt,
+        offer: own ? { id: own.id, status: own.status } : null,
+      };
+    });
   }
 
-  // ------------------------------------------------------------- helpers
+  /** The subcategories the requests name, in the language of the request (Russian as the fallback). */
+  private async categoryNames(
+    executor: DbExecutor,
+    rows: readonly CatalogRequestRow[],
+    lang: CatalogLanguage,
+  ): Promise<Map<string, { id: string; name: string }>> {
+    const ids = [...new Set(rows.flatMap((row) => (row.categoryId ? [row.categoryId] : [])))];
+    if (ids.length === 0) return new Map();
+    const texts = await loadTexts(executor, "category", ids);
+    return new Map(
+      ids.map((id) => [id, { id, name: localize(textsOf(texts, id, "name"), lang)?.text ?? "" }]),
+    );
+  }
+
+  /** The subcategory a supplier suggests: an active category with a parent (two levels, 4.15). */
+  private async assertSubcategory(executor: DbExecutor, categoryId: string): Promise<void> {
+    const rows = await executor.execute<{ id: string }>(sql`
+      SELECT c.id FROM category c JOIN category p ON p.id = c.parent_id
+      WHERE c.id = ${categoryId} AND c.status = 'active' AND p.status = 'active'`);
+    if (rows.rows.length === 0) {
+      throw validationError("categoryId", "Choose an active subcategory of the catalog");
+    }
+  }
 
   /**
    * Approves the request with the item and remembers it for the company:
@@ -309,7 +495,7 @@ export class CatalogRequestsService {
         status: "approved",
         resultItemId: itemId,
         decidedByAdminId: actor.adminId,
-        decidedAt: now,
+        decidedAt: sql`now()`,
         version: row.version + 1,
         updatedAt: now,
       })
@@ -444,7 +630,10 @@ export class CatalogRequestsService {
     const importOf = new Map(imports.map((row) => [row.id, row]));
     const adminName = new Map(admins);
     const brandIds = [...new Set([...brands.values()].flat())];
-    const brandNames = await this.brandNames(executor, brandIds);
+    const [brandNames, categories] = await Promise.all([
+      this.brandNames(executor, brandIds),
+      this.categoryNames(executor, rows, lang),
+    ]);
     return rows.map((row) => {
       const imported = row.importId ? importOf.get(row.importId) : undefined;
       const brandId = row.payload.brand
@@ -475,6 +664,9 @@ export class CatalogRequestsService {
           : null,
         decidedAt: row.decidedAt?.toISOString() ?? null,
         createdAt: row.createdAt.toISOString(),
+        source: row.source,
+        category: row.categoryId ? (categories.get(row.categoryId) ?? null) : null,
+        comment: row.comment,
       };
     });
   }

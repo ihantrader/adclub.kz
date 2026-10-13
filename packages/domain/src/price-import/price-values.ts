@@ -266,6 +266,27 @@ export function readName(cell: PriceCell): string | null {
   return value === "" ? null : value;
 }
 
+/** The longest text of the item column kept: a wrong value is shown, not stored whole. */
+const ITEM_ID_MAX = 64;
+
+/**
+ * The cell of the hidden `item_id` column of the cabinet's export (TASK-048):
+ * the text as it stands, lower case — whether it is an item of the company
+ * is the server's to decide; `null` — an empty cell (a row the supplier
+ * added himself goes the usual way).
+ */
+export function readItemId(cell: PriceCell): string | null {
+  const value = text(cell).slice(0, ITEM_ID_MAX).toLowerCase();
+  return value === "" ? null : value;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Whether the text of an `item_id` cell is an id at all (anything else is an error of the row). */
+export function isItemIdText(value: string): boolean {
+  return UUID.test(value);
+}
+
 /** What one row of a price list says, by the roles of its columns. */
 export interface ParsedPriceRow {
   article: string | null;
@@ -276,6 +297,11 @@ export interface ParsedPriceRow {
   availability: PriceAvailability | null;
   quantity: number | null;
   leadDays: number | null;
+  /**
+   * The `item_id` cell of the cabinet's export (TASK-048); absent — the file
+   * has no such column.
+   */
+  itemId?: string | null;
 }
 
 export type PriceRowError =
@@ -350,6 +376,7 @@ export function readPriceRow(
       availability: availability.availability,
       quantity: availability.quantity,
       leadDays,
+      ...(roles.includes("item_id") && { itemId: readItemId(cellOf("item_id")) }),
     },
     errors,
   };

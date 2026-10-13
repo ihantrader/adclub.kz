@@ -45,4 +45,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791200000000_price-imports",
   "1791250000000_price-import-hardening",
   "1791300000000_price-import-matching",
+  "1791350000000_price-import-moderation",
 ];

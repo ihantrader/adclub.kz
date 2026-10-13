@@ -281,6 +281,9 @@ import { clientPlatformSchema } from "./client";
  * - `CATALOG_REQUEST_VERSION_CONFLICT` (409, TASK-047): the request to add
  *   an item was decided or changed after the page was loaded; `details` is
  *   `CatalogRequestConflictDetails`.
+ * - `CATALOG_REQUEST_EXISTS` (409, TASK-048): the company already has a
+ *   request on this article (or name) waiting for the administrator; no
+ *   second one is made. `details` is `CatalogRequestExistsDetails`.
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -460,6 +463,8 @@ export const errorCodeSchema = z.enum([
   "PRICE_IMPORT_ITEM_UNAVAILABLE",
   "PRICE_IMPORT_MISSING_CHOICE",
   "CATALOG_REQUEST_VERSION_CONFLICT",
+  // The supplier's own request to add an item (TASK-048).
+  "CATALOG_REQUEST_EXISTS",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

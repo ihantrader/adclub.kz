@@ -179,6 +179,12 @@ export class PriceReviewService {
     ];
     if (query.decided === "true") filter.push(isNotNull(priceImportRow.decision));
     if (query.decided === "false") filter.push(isNull(priceImportRow.decision));
+    if (query.notApplied) {
+      filter.push(
+        eq(priceImportRow.outcome, "not_applied"),
+        eq(priceImportRow.outcomeReason, query.notApplied),
+      );
+    }
     const [rows, [total]] = await Promise.all([
       db
         .select()
@@ -677,6 +683,10 @@ export class PriceReviewService {
                 requests.rejected.has(`${row.matchKeyKind}:${row.matchKey}`),
               )
             : false,
+        requestRejectReason:
+          row.matchGroup === "not_found" || row.decision === "not_in_catalog"
+            ? (requests.rejectReasons.get(`${row.matchKeyKind}:${row.matchKey}`) ?? null)
+            : null,
         outcome: row.outcome ? { kind: row.outcome, reason: row.outcomeReason } : null,
       };
     });

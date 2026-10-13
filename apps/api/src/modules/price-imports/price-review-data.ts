@@ -1,5 +1,5 @@
 import { activeOrderStatuses, type SupplierOfferType } from "@adclub/domain";
-import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { supplier, type SupplierStatus } from "../identity";
 import { offer, offerLimits } from "../offers";
@@ -169,22 +169,31 @@ export async function loadPlan(
 export async function requestKeys(
   executor: DbExecutor,
   supplierId: string,
-): Promise<{ open: Set<string>; rejected: Set<string> }> {
+): Promise<{ open: Set<string>; rejected: Set<string>; rejectReasons: Map<string, string> }> {
   const rows = await executor
     .select({
       keyKind: catalogRequest.keyKind,
       key: catalogRequest.key,
       status: catalogRequest.status,
+      rejectReason: catalogRequest.rejectReason,
     })
     .from(catalogRequest)
-    .where(and(eq(catalogRequest.supplierId, supplierId), ne(catalogRequest.status, "approved")));
+    .where(and(eq(catalogRequest.supplierId, supplierId), ne(catalogRequest.status, "approved")))
+    .orderBy(asc(catalogRequest.decidedAt));
   const open = new Set<string>();
   const rejected = new Set<string>();
+  // The latest refusal of a key: what the supplier sees by the row (TASK-048).
+  const rejectReasons = new Map<string, string>();
   for (const row of rows) {
-    (row.status === "new" ? open : rejected).add(`${row.keyKind}:${row.key}`);
+    const key = `${row.keyKind}:${row.key}`;
+    (row.status === "new" ? open : rejected).add(key);
+    if (row.status === "rejected" && row.rejectReason) rejectReasons.set(key, row.rejectReason);
   }
-  for (const key of open) rejected.delete(key);
-  return { open, rejected };
+  for (const key of open) {
+    rejected.delete(key);
+    rejectReasons.delete(key);
+  }
+  return { open, rejected, rejectReasons };
 }
 
 export interface MissingOfferRow extends Record<string, unknown> {

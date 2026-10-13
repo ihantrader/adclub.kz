@@ -242,11 +242,21 @@ export {
   readAvailability,
   readBrand,
   readDecimal,
+  readItemId,
   readLeadDays,
   readName,
   readPrice,
   readPriceRow,
+  isItemIdText,
 } from "./price-import/price-values";
+export {
+  PRICE_EXPORT_COLUMNS,
+  priceExportHeader,
+  priceExportHint,
+  priceExportRoles,
+  priceExportRow,
+} from "./price-import/price-export";
+export type { PriceExportOffer } from "./price-import/price-export";
 export type {
   ArticleReading,
   AvailabilityReading,

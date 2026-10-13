@@ -98,6 +98,75 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds requests by hand, «Модерация» seen by an employee and rows of the export, and rolls back keeping the price list requests (price import moderation)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('price-moderation-city', 'Город модерации') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Автомир Модерация', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77010000366') RETURNING id",
+    );
+    const member = await client.query<{ id: string }>(
+      "INSERT INTO supplier_member (supplier_id, account_id, display_name, added_by) VALUES ($1, $2, 'Ерлан', 'operator') RETURNING id, moderation_seen_at",
+      [supplierId, account.rows[0]!.id],
+    );
+    const memberId = member.rows[0]!.id;
+    expect(member.rows[0]).toMatchObject({ moderation_seen_at: null });
+    await client.query("UPDATE supplier_member SET moderation_seen_at = now() WHERE id = $1", [
+      memberId,
+    ]);
+    const importId = "00000000-0000-4000-8000-00000000048a";
+    await client.query(
+      "INSERT INTO price_import (id, supplier_id, uploaded_by_member_id, uploaded_by_account_id, status, file_kind, file_key, byte_size, checksum) VALUES ($1, $2, $3, $4, 'review', 'xlsx', 'price-imports/x/e', 10, 'sum')",
+      [importId, supplierId, memberId, account.rows[0]!.id],
+    );
+    // A row of the cabinet's export matched by its item column.
+    await client.query(
+      "INSERT INTO price_import_row (import_id, row_no, kind, raw, match_group, match_source) VALUES ($1, 2, 'data', '[]', 'confident', 'item_id')",
+      [importId],
+    );
+    const request = (source: string, withImport: boolean, key: string) =>
+      client.query(
+        "INSERT INTO catalog_request (supplier_id, import_id, row_no, key_kind, key, payload, source, comment, created_by_member_id) VALUES ($1, $2, NULL, 'article', $3, '{}', $4, 'есть 10 шт', $5)",
+        [supplierId, withImport ? importId : null, key, source, memberId],
+      );
+    await request("manual", false, "M1");
+    await request("price_import", true, "P1");
+    // A request by hand belongs to no import; one from a price list always does.
+    await expect(request("manual", true, "M2")).rejects.toThrow(/catalog_request_import_check/);
+    await expect(request("price_import", false, "P2")).rejects.toThrow(
+      /catalog_request_import_check/,
+    );
+    await expect(request("email", false, "E1")).rejects.toThrow(/catalog_request_source_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    const columns = await client.query(
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'supplier_member' AND column_name = 'moderation_seen_at'",
+    );
+    expect(columns.rowCount).toBe(0);
+    // Requests by hand go with the columns; those of price lists stay.
+    const left = await client.query<{ key: string }>(
+      "SELECT key FROM catalog_request WHERE supplier_id = $1",
+      [supplierId],
+    );
+    expect(left.rows.map((row) => row.key)).toEqual(["P1"]);
+    const row = await client.query<{ match_source: string | null }>(
+      "SELECT match_source FROM price_import_row WHERE import_id = $1",
+      [importId],
+    );
+    expect(row.rows[0]!.match_source).toBeNull();
+    await client.query("DELETE FROM catalog_request WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM price_import WHERE id = $1", [importId]);
+    await client.query("DELETE FROM supplier_member WHERE id = $1", [memberId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM account WHERE id = $1", [account.rows[0]!.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+  });
+
   it("holds the review of a price list, the company's memory and requests, and rolls back keeping the imports (price import matching)", async () => {
     const city = await client.query<{ id: string }>(
       "INSERT INTO city (code, name_ru) VALUES ('price-matching-city', 'Город сверки') RETURNING id",

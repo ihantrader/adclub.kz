@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   exactArticleDecision,
+  isItemIdText,
   priceRowKey,
   rankCandidates,
   repeatedRows,
@@ -108,6 +109,9 @@ function done(
  * `prices.match-ai`; TASK-047 requirement 1; ARCHITECTURE 12.1 step 4,
  * 4.67). The first step that decides a row wins:
  *
+ * 0. the hidden `item_id` column of the cabinet's export (TASK-048): the
+ *    item of an offer of the company → «уверенно»; any other value — an
+ *    error of the row;
  * 1. the company's remembered match of the row's key (`supplier_sku_mapping`)
  *    → «уверенно»;
  * 2. the exact article and the brand by any of its spellings
@@ -266,7 +270,16 @@ export class PriceMatcher {
       ...row,
       key: row.parsed ? priceRowKey(row.parsed) : null,
     }));
-    const repeated = repeatedRows(keyed.filter((row) => !row.errors));
+    // A row of the cabinet's export repeats another by its item, not by its
+    // article: two offers of the company may share an article (TASK-048).
+    const repeated = repeatedRows(
+      keyed
+        .filter((row) => !row.errors)
+        .map((row) => ({
+          rowNo: row.rowNo,
+          key: row.parsed?.itemId ? { kind: "item_id", key: row.parsed.itemId } : row.key,
+        })),
+    );
     const updates: {
       row_no: number;
       kind: string | null;
@@ -310,19 +323,60 @@ export class PriceMatcher {
     }
   }
 
-  /** Steps 1–3 for a batch of rows (every row of it gets a result). */
+  /** The export's item column, then steps 1–3, for a batch of rows (every row of it gets a result). */
   private async decide(
     supplierId: string,
     supplierType: SupplierOfferType,
     batch: { rowNo: number; parsed: ParsedPriceRow | null }[],
     names: () => Promise<PriceNameIndex>,
   ): Promise<RowResult[]> {
-    const db = this.database.db;
     const rows = batch.map((row) => ({
       rowNo: row.rowNo,
       parsed: row.parsed!,
       key: priceRowKey(row.parsed!)!,
     }));
+    // 0. The hidden column of the cabinet's export: the item of an offer of
+    //    the company — matched by it alone; anything else is an error of the
+    //    row, which never tells whose item it is (TASK-048).
+    const ownItems = await this.ownOfferItems(
+      supplierId,
+      rows.flatMap((row) =>
+        row.parsed.itemId && isItemIdText(row.parsed.itemId) ? [row.parsed.itemId] : [],
+      ),
+    );
+    const results: RowResult[] = [];
+    const rest: typeof rows = [];
+    for (const row of rows) {
+      const itemId = row.parsed.itemId;
+      if (!itemId) {
+        rest.push(row);
+        continue;
+      }
+      const item = ownItems.get(itemId);
+      if (!item) {
+        results.push(done(row.rowNo, "error", "item_id", { error: { code: "unknown_item_id" } }));
+        continue;
+      }
+      const refusal = itemRefusal(item, supplierType);
+      if (refusal === "service_item" || refusal === "supplier_type") {
+        results.push(done(row.rowNo, "error", "item_id", { error: { code: refusal } }));
+        continue;
+      }
+      // An item gone from the catalog since stays the row's: applying says why it isn't applied.
+      results.push(done(row.rowNo, "confident", "item_id", { itemId: item.id }));
+    }
+    if (rest.length === 0) return results;
+    return [...results, ...(await this.decideByCatalog(supplierId, supplierType, rest, names))];
+  }
+
+  /** Steps 1–3 for the rows without the export's item column. */
+  private async decideByCatalog(
+    supplierId: string,
+    supplierType: SupplierOfferType,
+    rows: { rowNo: number; parsed: ParsedPriceRow; key: PriceRowKey }[],
+    names: () => Promise<PriceNameIndex>,
+  ): Promise<RowResult[]> {
+    const db = this.database.db;
     const mappings = await this.mappingsOf(
       supplierId,
       rows.map((row) => row.key),
@@ -413,6 +467,16 @@ export class PriceMatcher {
       if (strong) {
         results.push(done(row.rowNo, "confident", "search", { itemId: strong.itemId }));
         continue;
+      }
+      // A row that names a service of the catalog as surely: services are
+      // never imported — an error of the row, not «не найдено» and not a
+      // request to add it (TASK-048 requirement 5).
+      if (words.length > 0) {
+        const services = (await names()).candidates(words, SEARCH_POOL, "services");
+        if (strongCandidate(nameRow(row.parsed), services.map(nameCandidate))) {
+          results.push(done(row.rowNo, "error", "search", { error: { code: "service_item" } }));
+          continue;
+        }
       }
       const ranked = rankCandidates(nameRow(row.parsed), named, CANDIDATES);
       if (ranked.length > 0) {
@@ -629,6 +693,7 @@ export class PriceMatcher {
       search: number;
       ai: number;
       remembered: number;
+      item_id: number;
       ai_pending: number;
     }>(sql`
       SELECT
@@ -642,6 +707,7 @@ export class PriceMatcher {
         count(*) FILTER (WHERE match_source = 'search' AND match_stage = 'done')::int AS search,
         count(*) FILTER (WHERE match_source = 'ai')::int AS ai,
         count(*) FILTER (WHERE match_source IN ('remembered_skip', 'remembered_absent'))::int AS remembered,
+        count(*) FILTER (WHERE match_source = 'item_id' AND match_group <> 'error')::int AS item_id,
         count(*) FILTER (WHERE match_stage = 'ai')::int AS ai_pending
       FROM price_import_row
       WHERE import_id = ${importId} AND kind = 'data'`);
@@ -658,6 +724,7 @@ export class PriceMatcher {
         search: row.search,
         ai: row.ai,
         remembered: row.remembered,
+        itemId: row.item_id,
       },
       aiPending: row.ai_pending,
     };
@@ -779,6 +846,26 @@ export class PriceMatcher {
       .where(and(eq(priceImportRow.importId, importId), eq(priceImportRow.matchStage, "ai")))
       .limit(1);
     return row !== undefined;
+  }
+
+  /**
+   * The items of these ids the company has an offer on (on sale or not), by
+   * id: only they can be named by the export's item column. Another
+   * company's item and an id of nothing are the same to the row.
+   */
+  private async ownOfferItems(
+    supplierId: string,
+    itemIds: readonly string[],
+  ): Promise<Map<string, MatchItem>> {
+    const unique = [...new Set(itemIds)];
+    if (unique.length === 0) return new Map();
+    const own = await this.database.db.execute<{ item_id: string }>(sql`
+      SELECT DISTINCT item_id FROM offer
+      WHERE supplier_id = ${supplierId} AND item_id = ANY(${`{${unique.join(",")}}`}::uuid[])`);
+    return itemsByIds(
+      this.database.db,
+      own.rows.map((row) => row.item_id),
+    );
   }
 
   private async supplierType(supplierId: string): Promise<SupplierOfferType> {

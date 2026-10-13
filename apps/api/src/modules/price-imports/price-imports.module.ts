@@ -29,6 +29,9 @@ import {
   PriceMatchWake,
   PriceReviewExpiry,
 } from "./price-match-runner";
+import { ModerationService } from "./moderation.service";
+import { PriceExportController } from "./price-export.controller";
+import { PriceExportService } from "./price-export.service";
 import { CatalogRequestsAdminController, PriceReviewController } from "./price-review.controller";
 import { PriceReviewService } from "./price-review.service";
 
@@ -57,12 +60,15 @@ export class PriceImportsModule {
         PriceImportsAdminController,
         PriceReviewController,
         CatalogRequestsAdminController,
+        PriceExportController,
       ],
       providers: [
         PriceImportsService,
         PriceFileStorage,
         PriceReviewService,
         CatalogRequestsService,
+        ModerationService,
+        PriceExportService,
       ],
       exports: [CatalogRequestsService],
     };

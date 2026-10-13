@@ -38,12 +38,30 @@ import {
   type PriceRowsSkippedResponse,
   type RejectCatalogRequestBody,
   type SupplierCatalogRequestPage,
+  createCatalogRequestBodySchema,
+  createPriceExportBodySchema,
+  markModerationSeenBodySchema,
+  supplierBrandSuggestionsQuerySchema,
+  supplierCompatibilityProposalQuerySchema,
+  type CreateCatalogRequestBody,
+  type CreatePriceExportBody,
+  type MarkModerationSeenBody,
+  type PriceExportLink,
+  type SupplierBrandSuggestions,
+  type SupplierBrandSuggestionsQuery,
+  type SupplierCatalogRequestResponse,
+  type SupplierCompatibilityProposalQuery,
+  type SupplierModerationProposalPage,
+  type SupplierModerationSummary,
 } from "@adclub/contracts";
 import { pickLanguage } from "@adclub/i18n";
 import { ZodValidationPipe } from "../../common/validation";
+import { RateLimitedRoute } from "../../rate-limit";
 import { adminActor } from "../catalog";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
 import { CatalogRequestsService } from "./catalog-requests.service";
+import { ModerationService } from "./moderation.service";
+import { PriceExportService } from "./price-export.service";
 import { PriceReviewService } from "./price-review.service";
 import type { PriceImportActor } from "./price-imports.service";
 
@@ -75,6 +93,8 @@ export class PriceReviewController {
   constructor(
     @Inject(PriceReviewService) private readonly review: PriceReviewService,
     @Inject(CatalogRequestsService) private readonly requests: CatalogRequestsService,
+    @Inject(ModerationService) private readonly moderation: ModerationService,
+    @Inject(PriceExportService) private readonly exports: PriceExportService,
   ) {}
 
   @SessionRoute(apiRoutes.getPriceImportReview)
@@ -164,11 +184,58 @@ export class PriceReviewController {
     @Headers("accept-language") acceptLanguage: string | undefined,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<SupplierCatalogRequestPage> {
-    return this.requests.supplierPage(
-      importActor(session).supplierId,
-      query,
-      pickLanguage(acceptLanguage),
-    );
+    return this.requests.supplierPage(importActor(session), query, pickLanguage(acceptLanguage));
+  }
+
+  @SessionRoute(apiRoutes.createSupplierCatalogRequest)
+  createCatalogRequest(
+    @Body(new ZodValidationPipe(createCatalogRequestBodySchema)) body: CreateCatalogRequestBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierCatalogRequestResponse> {
+    return this.requests.createManual(importActor(session), body, pickLanguage(acceptLanguage));
+  }
+
+  @RateLimitedRoute(apiRoutes.listSupplierBrandSuggestions)
+  brands(
+    @Query(new ZodValidationPipe(supplierBrandSuggestionsQuerySchema))
+    query: SupplierBrandSuggestionsQuery,
+  ): Promise<SupplierBrandSuggestions> {
+    return this.requests.brandSuggestions(query.q);
+  }
+
+  @SessionRoute(apiRoutes.getSupplierModerationSummary)
+  moderationSummary(
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierModerationSummary> {
+    return this.moderation.summary(importActor(session));
+  }
+
+  @SessionRoute(apiRoutes.markSupplierModerationSeen)
+  moderationSeen(
+    @Body(new ZodValidationPipe(markModerationSeenBodySchema)) body: MarkModerationSeenBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierModerationSummary> {
+    return this.moderation.markSeen(importActor(session), body);
+  }
+
+  @SessionRoute(apiRoutes.listSupplierModerationProposals)
+  moderationProposals(
+    @Query(new ZodValidationPipe(supplierCompatibilityProposalQuerySchema))
+    query: SupplierCompatibilityProposalQuery,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierModerationProposalPage> {
+    return this.moderation.proposals(importActor(session), query, pickLanguage(acceptLanguage));
+  }
+
+  @RateLimitedRoute(apiRoutes.createPriceExport)
+  priceExport(
+    @Body(new ZodValidationPipe(createPriceExportBodySchema)) body: CreatePriceExportBody,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<PriceExportLink> {
+    return this.exports.link(importActor(session), body, pickLanguage(acceptLanguage));
   }
 }
 

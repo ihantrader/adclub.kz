@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { adminCatalogItemCardSchema, createCatalogItemBodySchema } from "./catalog-items";
+import { supplierCompatibilityProposalSchema } from "./compatibility";
 import { offerItemSchema } from "./offers";
 import {
   parsedPriceRowSchema,
@@ -116,6 +117,12 @@ export const priceReviewRowSchema = z.object({
    * administrator as a request to add the item — on by default.
    */
   sendRequest: z.boolean(),
+  /**
+   * The administrator refused a request of this row's key before (TASK-048):
+   * the reason the supplier sees, and why «Отправить администратору» comes
+   * switched off; `null` — no refusal.
+   */
+  requestRejectReason: z.string().nullable(),
   /** What applying did; `null` until it is applied. */
   outcome: priceRowOutcomeSchema.nullable(),
 });
@@ -126,6 +133,11 @@ export const priceReviewRowsQuerySchema = z.object({
   group: priceReviewGroupSchema,
   /** `true` — only rows without a decision; `false` — only decided ones. */
   decided: z.enum(["true", "false"]).optional(),
+  /**
+   * Only the rows of the group applying left «не применено» for this reason
+   * (S-PRICE-04, TASK-048): the rows behind a line of the result.
+   */
+  notApplied: priceRowNotAppliedReasonSchema.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   /** The `nextCursor` of the previous page. */
   cursor: z.string().min(1).max(50).optional(),
@@ -312,7 +324,19 @@ export const catalogRequestDataSchema = z.object({
   leadDays: z.number().int().nullable(),
 });
 
-/** The supplier's own request (S-MOD-01, the screen — TASK-048). */
+/**
+ * Where a request came from: a row of a price list (`price_import`), or the
+ * form «Нет в справочнике? Отправьте запрос на добавление» (`manual`,
+ * S-OFF-05, TASK-048).
+ */
+export const catalogRequestSourceSchema = z.enum(["price_import", "manual"]);
+
+export type CatalogRequestSource = z.infer<typeof catalogRequestSourceSchema>;
+
+/** The subcategory the supplier suggested for the item (S-OFF-05); the administrator decides. */
+export const catalogRequestCategorySchema = z.object({ id: z.uuid(), name: z.string() });
+
+/** The supplier's own request (S-MOD-01, TASK-048). */
 export const supplierCatalogRequestSchema = z.object({
   id: z.uuid(),
   status: catalogRequestStatusSchema,
@@ -325,6 +349,19 @@ export const supplierCatalogRequestSchema = z.object({
   rejectReason: z.string().nullable(),
   createdAt: z.iso.datetime(),
   decidedAt: z.iso.datetime().nullable(),
+  // TASK-048.
+  source: catalogRequestSourceSchema,
+  category: catalogRequestCategorySchema.nullable(),
+  comment: z.string().nullable(),
+  /**
+   * Decided after this employee last opened «Модерация» (S-MOD-01 «новое»):
+   * kept for each employee on the server.
+   */
+  isNew: z.boolean(),
+  /** The company's offer on the item it became; `null` — none yet («Выставить»). */
+  offer: z
+    .object({ id: z.uuid(), status: z.enum(["active", "withdrawn", "suspended"]) })
+    .nullable(),
 });
 
 export type SupplierCatalogRequest = z.infer<typeof supplierCatalogRequestSchema>;
@@ -369,6 +406,10 @@ export const adminCatalogRequestSchema = z.object({
   decidedBy: z.object({ adminId: z.uuid(), name: z.string().nullable() }).nullable(),
   decidedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
+  // TASK-048: «вручную» (S-OFF-05) with what the supplier added.
+  source: catalogRequestSourceSchema,
+  category: catalogRequestCategorySchema.nullable(),
+  comment: z.string().nullable(),
 });
 
 export type AdminCatalogRequest = z.infer<typeof adminCatalogRequestSchema>;
@@ -455,3 +496,124 @@ export const catalogRequestConflictDetailsSchema = z.object({
 });
 
 export type CatalogRequestConflictDetails = z.infer<typeof catalogRequestConflictDetailsSchema>;
+
+// ------------------------------------------- the supplier's own request (S-OFF-05)
+
+/**
+ * «Нет в справочнике? Отправьте запрос на добавление» (S-OFF-05, TASK-048):
+ * the name is required; the brand (a spelling the suggestions offered, or
+ * any text), the article or characteristics, the subcategory the supplier
+ * thinks of and a comment are not. Photos — EPIC-26.
+ */
+export const createCatalogRequestBodySchema = z.object({
+  name: z.string().trim().min(2).max(300),
+  brand: z.string().trim().min(1).max(100).optional(),
+  article: z.string().trim().min(1).max(100).optional(),
+  categoryId: z.uuid().optional(),
+  comment: z.string().trim().min(1).max(1000).optional(),
+});
+
+export type CreateCatalogRequestBody = z.infer<typeof createCatalogRequestBodySchema>;
+
+export const supplierCatalogRequestResponseSchema = z.object({
+  request: supplierCatalogRequestSchema,
+});
+
+export type SupplierCatalogRequestResponse = z.infer<typeof supplierCatalogRequestResponseSchema>;
+
+/**
+ * `details` of `CATALOG_REQUEST_EXISTS` (409): the company already has a
+ * request on this article (or this name, without an article) waiting for
+ * the administrator; no second one is made.
+ */
+export const catalogRequestExistsDetailsSchema = z.object({ requestId: z.uuid() });
+
+export type CatalogRequestExistsDetails = z.infer<typeof catalogRequestExistsDetailsSchema>;
+
+// ------------------------------------------------- «Модерация» (S-MOD-01)
+
+/**
+ * What the employee hasn't seen of «Модерация» yet (TASK-048): the
+ * decisions of the administrator on the company's requests and
+ * compatibility proposals made after the employee last opened the section.
+ * `serverTime` — what `seenUntil` the screen sends back when it has shown
+ * them («просмотрено» is kept on the server, for each employee).
+ */
+export const supplierModerationSummarySchema = z.object({
+  unseen: z.object({
+    requests: z.number().int(),
+    compatibility: z.number().int(),
+    total: z.number().int(),
+  }),
+  seenAt: z.iso.datetime(),
+  serverTime: z.iso.datetime(),
+});
+
+export type SupplierModerationSummary = z.infer<typeof supplierModerationSummarySchema>;
+
+/** The decisions shown up to this moment (the `serverTime` of the summary) are seen now. */
+export const markModerationSeenBodySchema = z.object({ seenUntil: z.iso.datetime() });
+
+export type MarkModerationSeenBody = z.infer<typeof markModerationSeenBodySchema>;
+
+/** A compatibility proposal of the company with its item, as «Модерация» lists it. */
+export const supplierModerationProposalSchema = z.object({
+  proposal: supplierCompatibilityProposalSchema,
+  /** `null` — the item has left the catalog since. */
+  item: offerItemSchema.nullable(),
+  isNew: z.boolean(),
+});
+
+export type SupplierModerationProposal = z.infer<typeof supplierModerationProposalSchema>;
+
+export const supplierModerationProposalPageSchema = z.object({
+  entries: z.array(supplierModerationProposalSchema),
+  total: z.number().int(),
+  nextCursor: z.string().nullable(),
+});
+
+export type SupplierModerationProposalPage = z.infer<typeof supplierModerationProposalPageSchema>;
+
+// ------------------------------------------------ brands of the catalog
+
+export const supplierBrandSuggestionsQuerySchema = z.object({
+  /** The beginning of any spelling of the brand. */
+  q: z.string().trim().min(1).max(100),
+});
+
+export type SupplierBrandSuggestionsQuery = z.infer<typeof supplierBrandSuggestionsQuerySchema>;
+
+/** Brands of the catalog by any of their spellings (S-OFF-05 «бренд — подсказки»). */
+export const supplierBrandSuggestionsSchema = z.object({
+  brands: z.array(z.object({ id: z.uuid(), name: z.string(), matched: z.string() })),
+});
+
+export type SupplierBrandSuggestions = z.infer<typeof supplierBrandSuggestionsSchema>;
+
+// --------------------------------------------- «Скачать мой прайс» (S-PRICE-01)
+
+/**
+ * Which offers go into the export: those on sale (the default), or the
+ * withdrawn ones too. Services never do — their prices are by model.
+ */
+export const createPriceExportBodySchema = z.object({
+  include: z.enum(["on_sale", "all"]).default("on_sale"),
+});
+
+export type CreatePriceExportBody = z.infer<typeof createPriceExportBodySchema>;
+
+/**
+ * A link to download the export (TASK-048; ARCHITECTURE 12.4): the file is
+ * written while it is downloaded, straight from the offers; the link is the
+ * employee's and works for a short while (`expiresAt`).
+ */
+export const priceExportLinkSchema = z.object({
+  /** The address of the API to open (relative to it), with a signed token in the query. */
+  url: z.string(),
+  fileName: z.string(),
+  expiresAt: z.iso.datetime(),
+  /** How many offers the file holds. */
+  offers: z.number().int(),
+});
+
+export type PriceExportLink = z.infer<typeof priceExportLinkSchema>;

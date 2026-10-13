@@ -163,6 +163,8 @@ export const supplierMember = pgTable("supplier_member", {
   restoredAt: timestamp("restored_at", { withTimezone: true }),
   restoredByAdminId: uuid("restored_by_admin_id").references(() => adminUser.id),
   restoreReason: text("restore_reason"),
+  // TASK-048: «Модерация» seen up to this moment (`NULL` — never opened).
+  moderationSeenAt: timestamp("moderation_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

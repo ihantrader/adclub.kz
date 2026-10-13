@@ -68,7 +68,12 @@ export const priceImportFormatSchema = z.enum(["xlsx", "csv"]);
 
 export type PriceImportFormat = z.infer<typeof priceImportFormatSchema>;
 
-/** The role of a column (S-PRICE-02): Артикул · Бренд · Название · Цена · Наличие · Срок · Не использовать. */
+/**
+ * The role of a column (S-PRICE-02): Артикул · Бренд · Название · Цена ·
+ * Наличие · Срок · Не использовать. `item_id` (TASK-048) — the hidden
+ * column of the cabinet's own export («Скачать мой прайс»): a row with it
+ * is matched by it alone, without the search and AI.
+ */
 export const priceColumnRoleSchema = z.enum([
   "article",
   "brand",
@@ -76,6 +81,7 @@ export const priceColumnRoleSchema = z.enum([
   "price",
   "availability",
   "lead_days",
+  "item_id",
   "ignore",
 ]);
 
@@ -210,7 +216,9 @@ export const priceImportPersonSchema = z.object({
  * - `search` — one sure candidate of the search by the name;
  * - `ai` — AI chose among the candidates of the search; the supplier confirms it row by row;
  * - `remembered_skip` — the supplier skipped this row in an earlier import;
- * - `remembered_absent` — not in the catalog by an earlier import.
+ * - `remembered_absent` — not in the catalog by an earlier import;
+ * - `item_id` — the hidden column of the cabinet's export names the item of
+ *   the company's own offer (TASK-048).
  */
 export const priceMatchSourceSchema = z.enum([
   "mapping",
@@ -219,6 +227,7 @@ export const priceMatchSourceSchema = z.enum([
   "ai",
   "remembered_skip",
   "remembered_absent",
+  "item_id",
 ]);
 
 export type PriceMatchSource = z.infer<typeof priceMatchSourceSchema>;
@@ -245,6 +254,8 @@ export const priceImportMatchSchema = z.object({
     search: z.number().int(),
     ai: z.number().int(),
     remembered: z.number().int(),
+    /** By the hidden column of the cabinet's export (TASK-048). */
+    itemId: z.number().int(),
   }),
   /** Rows handed to AI so far, and those it is still to answer. */
   aiRows: z.number().int(),
@@ -485,6 +496,8 @@ export const parsedPriceRowSchema = z.object({
   quantity: z.number().int().nullable(),
   /** Working days. */
   leadDays: z.number().int().nullable(),
+  /** The `item_id` cell of the cabinet's export (TASK-048); absent — the file has no such column. */
+  itemId: z.string().nullable().optional(),
 });
 
 export type ParsedPriceRowValue = z.infer<typeof parsedPriceRowSchema>;
@@ -496,7 +509,9 @@ export type ParsedPriceRowValue = z.infer<typeof parsedPriceRowSchema>;
  * (TASK-047): `repeated_row` — the same article (or name) as row `value`,
  * which decides; `service_item` — the row is a service of the catalog,
  * whose prices are set by model, not imported; `supplier_type` — the
- * company's type doesn't let it sell goods.
+ * company's type doesn't let it sell goods. `unknown_item_id` (TASK-048) —
+ * the `item_id` cell of the cabinet's export names no offer of the company
+ * (another company's item, a typo): nothing says whose it is.
  */
 export const priceRowErrorSchema = z.object({
   code: z.enum([
@@ -508,6 +523,7 @@ export const priceRowErrorSchema = z.object({
     "repeated_row",
     "service_item",
     "supplier_type",
+    "unknown_item_id",
   ]),
   text: z.string().nullable(),
   value: z.number().nullable(),

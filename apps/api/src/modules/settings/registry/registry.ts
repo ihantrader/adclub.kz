@@ -692,6 +692,29 @@ const pricelist = group({
       description:
         "Сколько дней хранится незаконченная сверка прайса; после этого загрузка истекает и ничего из неё не применяется.",
     }),
+    price_export_per_member: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 10,
+      description:
+        "Сколько раз один сотрудник поставщика может скачать свой прайс («Скачать мой прайс») за окно; сверх — отказ с временем ожидания.",
+    }),
+    price_export_per_member_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 600,
+      description: "Окно лимита скачиваний своего прайса одним сотрудником.",
+    }),
+    catalog_requests_per_supplier_day: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 50,
+      description:
+        "Сколько запросов на добавление позиции сотрудники одного поставщика могут отправить вручную («Нет в справочнике?») за скользящие 24 часа; сверх — отказ с временем ожидания. Запросы из прайса не считаются.",
+    }),
   },
 });
 

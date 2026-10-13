@@ -3,6 +3,7 @@ import { toNestPath, type ServedRoute } from "../common/contract";
 import { WHATSAPP_WEBHOOK_PATH } from "../common/http";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
 import { DEV_MESSAGES_PATH } from "../modules/messaging";
+import { PRICE_EXPORT_DOWNLOAD_PATH } from "../modules/price-imports";
 import { METRICS_PATH } from "../observability";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
 
@@ -11,7 +12,9 @@ import { DEV_ONLY_PATHS } from "./openapi.controller";
  * development helpers, the metrics endpoint the collector scrapes
  * (Prometheus text, not JSON — ARCHITECTURE 15.3), and the message
  * provider's webhook (no client of ours calls it, and its subscription
- * check answers a plain-text challenge — ARCHITECTURE 4.35).
+ * check answers a plain-text challenge — ARCHITECTURE 4.35), and the
+ * download of the cabinet's own price list (a file opened as a plain link
+ * with a signed token — ARCHITECTURE 4.68).
  */
 const NON_CONTRACT_PATHS: readonly string[] = [
   ...DEV_ONLY_PATHS,
@@ -19,6 +22,7 @@ const NON_CONTRACT_PATHS: readonly string[] = [
   DEV_MESSAGES_PATH,
   WHATSAPP_WEBHOOK_PATH,
   METRICS_PATH,
+  PRICE_EXPORT_DOWNLOAD_PATH,
 ];
 
 function key(method: string, path: string): string {

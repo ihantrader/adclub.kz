@@ -8,7 +8,8 @@ const STEM_MIN = 3;
 const STEM_MAX = 10;
 
 /**
- * The names of the catalog's available goods in memory, for step 3 of
+ * The names of the catalog's available items in memory (goods, and since
+ * TASK-048 the services a row may name — an error of the row), for step 3 of
  * matching (TASK-047; ARCHITECTURE 4.67 I711): one query per matching run
  * instead of one search per row — a first price list of fifty thousand rows
  * the catalog doesn't know would otherwise search fifty thousand times.
@@ -32,7 +33,7 @@ export class PriceNameIndex {
       JOIN category c ON c.id = i.category_id
       LEFT JOIN category p ON p.id = c.parent_id
       WHERE t.entity_type = 'catalog_item' AND t.field = 'name'
-        AND i.item_type IN ('part', 'generic') AND i.status = 'active'
+        AND i.status = 'active'
         AND c.status = 'active' AND coalesce(p.status, 'active') = 'active'`);
     const byStem = new Map<string, Set<string>>();
     for (const row of rows.rows) {
@@ -63,9 +64,15 @@ export class PriceNameIndex {
 
   /**
    * Items any of `words` begins a word of (each word's readings included),
-   * those that more of the words name first, at most `limit`.
+   * those that more of the words name first, at most `limit` — goods, or
+   * (`services`) the services: a row naming a service is an error of the
+   * row, not a request to add it (TASK-048).
    */
-  candidates(words: readonly string[], limit: number): MatchItem[] {
+  candidates(
+    words: readonly string[],
+    limit: number,
+    kind: "goods" | "services" = "goods",
+  ): MatchItem[] {
     const hits = new Map<string, number>();
     for (const word of words) {
       const named = new Set<string>();
@@ -77,13 +84,14 @@ export class PriceNameIndex {
       for (const id of named) hits.set(id, (hits.get(id) ?? 0) + 1);
     }
     if (hits.size === 0) return [];
-    const chosen = [...hits]
+    return [...hits]
       .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-      .slice(0, limit)
-      .map(([id]) => id);
-    return chosen.flatMap((id) => {
-      const item = this.items.get(id);
-      return item?.available && item.itemType !== "service" ? [item] : [];
-    });
+      .flatMap(([id]) => {
+        const item = this.items.get(id);
+        return item?.available && (item.itemType === "service") === (kind === "services")
+          ? [item]
+          : [];
+      })
+      .slice(0, limit);
   }
 }

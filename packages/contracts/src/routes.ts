@@ -382,6 +382,15 @@ import {
   priceRowsSkippedResponseSchema,
   rejectCatalogRequestBodySchema,
   supplierCatalogRequestPageSchema,
+  createCatalogRequestBodySchema,
+  createPriceExportBodySchema,
+  markModerationSeenBodySchema,
+  priceExportLinkSchema,
+  supplierBrandSuggestionsQuerySchema,
+  supplierBrandSuggestionsSchema,
+  supplierCatalogRequestResponseSchema,
+  supplierModerationProposalPageSchema,
+  supplierModerationSummarySchema,
 } from "./price-review";
 import { healthCheckResponseSchema } from "./health";
 import type { RateLimitName } from "./login-code";
@@ -3751,6 +3760,98 @@ export const apiRoutes = {
     query: catalogRequestListQuerySchema,
     responses: {
       200: { description: "Requests", schema: supplierCatalogRequestPageSchema },
+    },
+  }),
+  // ------------------- «Модерация», requests by hand, the export (TASK-048)
+  createSupplierCatalogRequest: defineRoute({
+    operationId: "createSupplierCatalogRequest",
+    method: "POST",
+    path: "/supplier/catalog-requests",
+    summary:
+      "«Нет в справочнике? Отправьте запрос на добавление» (S-OFF-05): name, brand, article or characteristics, subcategory, comment. One request waiting per article (or name) of the company; limited per company per day",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "The request", schema: createCatalogRequestBodySchema },
+    responses: {
+      201: { description: "The request", schema: supplierCatalogRequestResponseSchema },
+    },
+  }),
+  getSupplierModerationSummary: defineRoute({
+    operationId: "getSupplierModerationSummary",
+    method: "GET",
+    path: "/supplier/moderation/summary",
+    summary:
+      "How many decisions of the administrator on the company's requests and compatibility proposals this employee hasn't seen yet (the counter of «Модерация»)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    responses: {
+      200: { description: "The unseen decisions", schema: supplierModerationSummarySchema },
+    },
+  }),
+  markSupplierModerationSeen: defineRoute({
+    operationId: "markSupplierModerationSeen",
+    method: "POST",
+    path: "/supplier/moderation/seen",
+    summary:
+      "The decisions shown to this employee up to `seenUntil` are seen: their «новое» goes away next time, the counter drops",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    requestBody: { description: "Up to when", schema: markModerationSeenBodySchema },
+    responses: {
+      200: { description: "What is still unseen", schema: supplierModerationSummarySchema },
+    },
+  }),
+  listSupplierModerationProposals: defineRoute({
+    operationId: "listSupplierModerationProposals",
+    method: "GET",
+    path: "/supplier/moderation/compatibility",
+    summary:
+      "The company's compatibility proposals for «Модерация», newest first, with their items and «новое» for this employee",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierCompatibilityProposalQuerySchema,
+    responses: {
+      200: { description: "Proposals", schema: supplierModerationProposalPageSchema },
+    },
+  }),
+  listSupplierBrandSuggestions: defineRoute({
+    operationId: "listSupplierBrandSuggestions",
+    method: "GET",
+    path: "/supplier/catalog/brands",
+    summary:
+      "Brands of the catalog by the beginning of any of their spellings, at most ten (S-OFF-05 «бренд — подсказки»)",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "offer_item_search_per_member", whenUnavailable: "allow" },
+    query: supplierBrandSuggestionsQuerySchema,
+    responses: {
+      200: { description: "Brands", schema: supplierBrandSuggestionsSchema },
+    },
+  }),
+  createPriceExport: defineRoute({
+    operationId: "createPriceExport",
+    method: "POST",
+    path: "/supplier/price-exports",
+    summary:
+      "«Скачать мой прайс»: a short-lived link to an .xlsx of the company's own offers (no services) with the hidden column `item_id` — the same file uploaded back is matched by it, without AI",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "price_export_per_member", whenUnavailable: "allow" },
+    requestBody: { description: "Which offers", schema: createPriceExportBodySchema },
+    responses: {
+      201: { description: "The link", schema: priceExportLinkSchema },
     },
   }),
   listAdminCatalogRequests: defineRoute({

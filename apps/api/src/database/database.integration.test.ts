@@ -141,7 +141,7 @@ describe("PostgreSQL: migrations and readiness", () => {
     await expect(request("price_import", false, "P2")).rejects.toThrow(
       /catalog_request_import_check/,
     );
-    await expect(request("email", false, "E1")).rejects.toThrow(/catalog_request_source_check/);
+    await expect(request("email", true, "E1")).rejects.toThrow(/catalog_request_source_check/);
 
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     const columns = await client.query(

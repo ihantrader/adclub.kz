@@ -294,6 +294,13 @@ export const adminHomeSchema = z.object({
    * «Запросы на позиции · N»): `GET /admin/catalog-requests?status=new`.
    */
   catalogRequests: z.number().int(),
+  /**
+   * TASK-049 (3, «Отзывы на проверке · N»): reviews held for the
+   * administrator — `GET /admin/reviews?status=held`.
+   */
+  reviewsHeld: z.number().int(),
+  /** TASK-049 (5, «Жалобы · новых N»): `GET /admin/complaints?status=new`. */
+  complaintsNew: z.number().int(),
   /** The quality of the catalog (8). Items that are not archived. */
   catalog: z.object({
     /** No approved photo. */

@@ -259,6 +259,25 @@ import { clientPlatformSchema } from "./client";
  *   `details` is `AdminSignalConflictDetails` with the signal as it is now
  *   («уже закрыт {кем}»).
  *
+ * Reviews and complaints (TASK-049, ARCHITECTURE 4.69):
+ * - `REVIEW_NOT_ALLOWED` (409): the order can't be reviewed — not given out
+ *   (`not_completed`) or a test one (`test_order`, «Отзыв недоступен: это
+ *   тестовый заказ»); `details` is `{ reason }`.
+ * - `REVIEW_EXISTS` (409): the order has a review already; `details.reviewId`.
+ * - `REVIEW_STATE` (409): the author's action is not possible now — the
+ *   text was corrected once already (`edit_used`) or it is not refused
+ *   (`not_rejected`).
+ * - `REVIEW_CONFLICT` (409): another administrator decided first, or the
+ *   review moved meanwhile; nothing changed. `details` is
+ *   `ReviewConflictDetails` with the review as it is now.
+ * - `COMPLAINT_NOT_ALLOWED` (409): the order still waits for an answer
+ *   (`order_not_accepted`), or «Не получил товар» about an order not given
+ *   out (`not_received_requires_completed`).
+ * - `COMPLAINT_EXISTS` (409): the order has an open complaint;
+ *   `details.complaintId`.
+ * - `COMPLAINT_CONFLICT` (409): another administrator acted first; nothing
+ *   changed. `details` is `ComplaintConflictDetails`.
+ *
  * Price list imports (TASK-046, ARCHITECTURE 4.66):
  * - `PRICE_IMPORT_FILE_INVALID` (400): the uploaded file can't be read as a
  *   price list — the content is looked at, not the name; `details` is
@@ -465,6 +484,14 @@ export const errorCodeSchema = z.enum([
   "CATALOG_REQUEST_VERSION_CONFLICT",
   // The supplier's own request to add an item (TASK-048).
   "CATALOG_REQUEST_EXISTS",
+  // Reviews and complaints (TASK-049, ARCHITECTURE 4.69).
+  "REVIEW_NOT_ALLOWED",
+  "REVIEW_EXISTS",
+  "REVIEW_STATE",
+  "REVIEW_CONFLICT",
+  "COMPLAINT_NOT_ALLOWED",
+  "COMPLAINT_EXISTS",
+  "COMPLAINT_CONFLICT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

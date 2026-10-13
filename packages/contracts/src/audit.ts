@@ -307,6 +307,31 @@ export const auditActions = {
   phoneRevealed: "phone.revealed",
   /** TASK-036.B (A-USR-02): an administrator ended sessions of a user's app; `after.ended` — how many. */
   accountSessionsEnded: "account.sessions_ended",
+  /**
+   * TASK-049 (M-ORD-05, A-REV-01): a review of an order — left by its author
+   * (`after`: the score, whether there is a text, the status), checked by
+   * the server (`held` with the kinds of the reasons, or `published`), and
+   * the decisions: published, the text refused (`reason` — the reason from
+   * the list), hidden (`reason` — the administrator's words), restored; the
+   * author's correction of a refused text and «только оценка». Every entry
+   * names the order, the supplier and the account in `after`; the text of
+   * the review is never written.
+   */
+  reviewCreated: "review.created",
+  reviewChecked: "review.checked",
+  reviewPublished: "review.published",
+  reviewTextRejected: "review.text_rejected",
+  reviewHidden: "review.hidden",
+  reviewRestored: "review.restored",
+  reviewTextEdited: "review.text_edited",
+  reviewScoreOnly: "review.score_only",
+  /**
+   * TASK-049 (M-ORD-06, A-REV-02): a complaint — made by the user (`after`:
+   * the reason), taken in work, resolved (`reason` — the internal comment).
+   */
+  complaintCreated: "complaint.created",
+  complaintTaken: "complaint.taken",
+  complaintResolved: "complaint.resolved",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -353,6 +378,10 @@ export const auditEntities = {
   priceImport: "price_import",
   /** A request to add an item to the catalog (TASK-047). */
   catalogRequest: "catalog_request",
+  /** A review of an order (TASK-049). */
+  review: "review",
+  /** A complaint about an order (TASK-049). */
+  complaint: "complaint",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

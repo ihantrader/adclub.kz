@@ -8,6 +8,13 @@ import {
   offerAvailabilitySchema,
   offerReceiptSchema,
 } from "./offers";
+import {
+  adminComplaintSchema,
+  adminReviewSchema,
+  complaintReasonSchema,
+  userOrderComplaintSchema,
+  userOrderReviewSchema,
+} from "./reviews";
 import { dayHoursSchema } from "./suppliers";
 
 /**
@@ -637,6 +644,21 @@ export const userOrderSchema = userOrderSummarySchema.extend({
   /** The order was given out: when, and whether after its time (PRODUCT 10.7). */
   givenOut: orderGivenOutSchema.nullable(),
   history: z.array(userOrderStepSchema),
+  /**
+   * TASK-049 (M-ORD-03, M-ORD-05): «Оценить» — the order was given out (a
+   * visit done), is not a test one and has no review yet.
+   */
+  canReview: z.boolean(),
+  /** The user's review of this order; `null` — none. */
+  review: userOrderReviewSchema.nullable(),
+  /** The latest complaint about this order; `null` — none. */
+  complaint: userOrderComplaintSchema.nullable(),
+  /**
+   * The reasons «Пожаловаться» (M-ORD-06) may take now: empty — no complaint
+   * (the order still waits for an answer, or a complaint is open);
+   * `not_received` only for an order given out (T-ORD-08).
+   */
+  complaintReasons: z.array(complaintReasonSchema),
 });
 
 export type UserOrder = z.infer<typeof userOrderSchema>;
@@ -857,8 +879,8 @@ export type ActiveOrdersResponse = z.infer<typeof activeOrdersResponseSchema>;
  *   be ordered right now is answered by `GET /orders/{orderId}/repeat`,
  *   which also gives the price as it is today;
  * - `canReview` — «Оценить»: the order was given out and no review has
- *   been left. Reviews themselves are TASK-049; a test order of an
- *   employee is never reviewed (M-ORD-05).
+ *   been left (TASK-049); a test order of an employee is never reviewed
+ *   (M-ORD-05).
  *
  * How an order was given out — by an employee in time, late, or by the
  * administrator — is not here: the user sees the ordinary «Получено»
@@ -1446,6 +1468,10 @@ export const adminOrderSchema = adminOrderSummarySchema.extend({
       reason: z.string(),
     })
     .nullable(),
+  /** TASK-049 (A-ORD-02): the review of this order; `null` — none. */
+  review: adminReviewSchema.nullable(),
+  /** TASK-049 (A-ORD-02): the complaints about this order, newest first. */
+  complaints: z.array(adminComplaintSchema),
 });
 
 export type AdminOrder = z.infer<typeof adminOrderSchema>;
@@ -1654,6 +1680,8 @@ export const adminOrderListQuerySchema = z.object({
   test: z.enum(["exclude", "only", "include"]).default("exclude"),
   closedLate: z.enum(["true", "false"]).optional(),
   closedByAdmin: z.enum(["true", "false"]).optional(),
+  /** TASK-049 (A-ORD-01 «Есть жалоба»): orders with a complaint, any status of it. */
+  hasComplaint: z.enum(["true", "false"]).optional(),
   limit: z.coerce.number().int().min(1).max(ORDER_PAGE_MAX_SIZE).default(ORDER_PAGE_DEFAULT_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });

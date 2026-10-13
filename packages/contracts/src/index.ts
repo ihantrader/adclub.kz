@@ -498,6 +498,7 @@ export * from "./offers";
 export * from "./club-access";
 export * from "./orders";
 export * from "./signals";
+export * from "./reviews";
 export * from "./users";
 export * from "./showcase";
 export * from "./search";

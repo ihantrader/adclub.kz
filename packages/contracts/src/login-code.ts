@@ -197,6 +197,9 @@ export const rateLimitNameSchema = z.enum([
    * in a rolling day — counted in the database by the requests themselves.
    */
   "catalog_requests_per_supplier",
+  /** Reviews and complaints one user sends (TASK-049): against a loop, not a person. */
+  "review_create_per_account",
+  "complaint_create_per_account",
 ]);
 
 export type RateLimitName = z.infer<typeof rateLimitNameSchema>;

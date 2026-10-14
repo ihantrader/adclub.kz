@@ -16,6 +16,7 @@ import { CheckoutScreen } from "../screens/orders/CheckoutScreen";
 import { ComplaintScreen } from "../screens/orders/ComplaintScreen";
 import { OrderQrScreen } from "../screens/orders/OrderQrScreen";
 import { ReviewScreen } from "../screens/orders/ReviewScreen";
+import { SupplierScreen } from "../screens/catalog/SupplierScreen";
 import { OrderScreen } from "../screens/orders/OrderScreen";
 import { OrdersScreen } from "../screens/tabs/OrdersScreen";
 import type { RootStart } from "../start/root-start";
@@ -103,6 +104,8 @@ export function RootNavigator({ start }: { start: RootStart }) {
         {/* M-ORD-05, M-ORD-06 (TASK-049.B): over the order, the system «назад» back. */}
         <Stack.Screen name="order-review" component={ReviewScreen} />
         <Stack.Screen name="order-complaint" component={ComplaintScreen} />
+        {/* M-CAT-09 (TASK-050): over the card or the order that opened it. */}
+        <Stack.Screen name="supplier-page" component={SupplierScreen} />
         {/* M-START-03 «Показать активные заявки»: the copy, read only (`OrdersReadOnly`). */}
         <Stack.Screen
           name="orders-readonly"

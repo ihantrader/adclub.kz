@@ -114,6 +114,15 @@ export function ItemScreen({
   const data = request.data;
   const tree = useCategoryTree();
   const ordering = useOrderButton(itemId, data?.viewer ?? null, request.reload);
+  const rootNavigation = useNavigation();
+  // M-CAT-09 (TASK-050): the supplier or the rating of an offer opens its page.
+  const openSupplier = useCallback(
+    (offerId: string) =>
+      rootNavigation
+        .getParent<NativeStackNavigationProp<RootParams>>(ROOT_NAVIGATOR)
+        ?.push("supplier-page", { offerId }),
+    [rootNavigation],
+  );
   const carName = carTitle(car);
   // M-CAT-08 (TASK-019): a service — by the chosen city, at the price for the
   // car's model; no compatibility, availability or receipt date.
@@ -323,7 +332,7 @@ export function ItemScreen({
                         offer={offer}
                         {...(service ? { serviceModel: car.model.label } : {})}
                         onOrder={ordering.press}
-                        onSupplierSignIn={ordering.askSupplierSignIn}
+                        onOpenSupplier={openSupplier}
                       />
                     ))}
                   </View>
@@ -443,9 +452,9 @@ function useOrderButton(
   const signIn = useSignIn();
   const navigation = useNavigation();
   const focused = useIsFocused();
-  // One sign-in sheet for the whole card (TASK-029.B): the reason says why
-  // it opened — «Оформить» or the hidden name of a supplier (T-GATE-02).
-  const [signInReason, setSignInReason] = useState<"order" | "supplier" | null>(null);
+  // One sign-in sheet for the whole card (TASK-029.B), for «Оформить» (T-GATE-01);
+  // the hidden name of a supplier now opens M-CAT-09, which asks there (TASK-050).
+  const [signInReason, setSignInReason] = useState<"order" | null>(null);
   const [clubSheet, setClubSheet] = useState(false);
   const [pending, setPending] = useState<{ offerId: string; afterReturn: boolean } | null>(null);
   const left = useRef(false);
@@ -512,13 +521,12 @@ function useOrderButton(
 
   return {
     press,
-    askSupplierSignIn: () => setSignInReason("supplier"),
     sheets: (
       <>
         <SignInSheet
           visible={signInReason !== null}
           onClose={() => setSignInReason(null)}
-          reason={t(signInReason === "supplier" ? "auth.gateSupplierName" : "auth.gateOrder")}
+          reason={t("auth.gateOrder")}
         />
         <ClubAccessSheet visible={clubSheet} onClose={() => setClubSheet(false)} />
       </>
@@ -530,7 +538,7 @@ function OfferCard({
   offer,
   serviceModel,
   onOrder,
-  onSupplierSignIn,
+  onOpenSupplier,
 }: {
   offer: ShowcaseOffer;
   /**
@@ -539,18 +547,17 @@ function OfferCard({
    */
   serviceModel?: string;
   onOrder: (offerId: string) => void;
-  /** A guest taps «Поставщик клуба»: the card's one sign-in sheet opens. */
-  onSupplierSignIn: () => void;
+  /**
+   * The supplier or its rating tapped (SCREENS M-CAT-07, TASK-050): M-CAT-09.
+   * A guest signs in there, for the reviews (it replaced T-GATE-02 here).
+   */
+  onOpenSupplier: (offerId: string) => void;
 }) {
   const { t, lang } = useLanguage();
   const { theme } = useTheme();
   const receiptText = useReceiptText();
   const service = serviceModel !== undefined;
   const date = service ? null : receiptText(offer.receipt, "withDate");
-  // A guest taps «Поставщик клуба» to sign in (T-GATE-02, SCREENS M-AUTH-00);
-  // a signed-in user without club access sees the same line, but nothing
-  // here can get them access yet (a subscription — EPIC-14), so it stays inert.
-  const opensSignIn = offer.supplier.kind === "hidden" && offer.supplier.reason === "auth_required";
 
   return (
     <View
@@ -598,44 +605,50 @@ function OfferCard({
       )}
       <View style={[styles.offerDivider, { backgroundColor: theme.colors.border }]} />
 
-      {/* D-005: without club access there is no name in the answer at all. */}
+      {/* M-CAT-07: the supplier and its rating open M-CAT-09 (TASK-050). D-005:
+          without club access there is no name in the answer at all. */}
       <Pressable
-        disabled={!opensSignIn}
-        accessibilityRole={opensSignIn ? "button" : undefined}
-        onPress={onSupplierSignIn}
-        style={styles.supplierLine}
+        accessibilityRole="button"
+        accessibilityHint={t("item.openSupplier")}
+        onPress={() => onOpenSupplier(offer.id)}
+        style={styles.supplierBlock}
       >
-        {offer.supplier.kind === "hidden" ? (
-          <>
-            <Icon name="lock" size={16} color="textMuted" />
-            <Text variant="bodyS" color="textMuted">
-              {t("item.supplierHidden")}
-            </Text>
-          </>
-        ) : (
-          <Text variant="bodyStrong">{offer.supplier.name}</Text>
-        )}
+        <View style={styles.grow}>
+          <View style={styles.supplierLine}>
+            {offer.supplier.kind === "hidden" ? (
+              <>
+                <Icon name="lock" size={16} color="textMuted" />
+                <Text variant="bodyS" color="textMuted">
+                  {t("item.supplierHidden")}
+                </Text>
+              </>
+            ) : (
+              <Text variant="bodyStrong">{offer.supplier.name}</Text>
+            )}
+          </View>
+          {offer.supplier.kind === "visible" &&
+            (offer.supplier.district ?? offer.supplier.address) && (
+              <Text variant="bodyS" color="textMuted">
+                {offer.supplier.district ?? offer.supplier.address}
+              </Text>
+            )}
+          <View style={styles.offerMarks}>
+            {offer.verifiedPartner && (
+              <Badge tone="success" icon="circleCheck">
+                {t("item.verifiedPartner")}
+              </Badge>
+            )}
+            <Rating
+              value={offer.rating?.value ?? null}
+              count={offer.rating?.count ?? 0}
+              emptyText={t("item.newSupplier")}
+              label={t("item.rating")}
+              locale={lang}
+            />
+          </View>
+        </View>
+        <Icon name="chevronRight" size={20} color="textMuted" />
       </Pressable>
-      {offer.supplier.kind === "visible" && (offer.supplier.district ?? offer.supplier.address) && (
-        <Text variant="bodyS" color="textMuted">
-          {offer.supplier.district ?? offer.supplier.address}
-        </Text>
-      )}
-
-      <View style={styles.offerMarks}>
-        {offer.verifiedPartner && (
-          <Badge tone="success" icon="circleCheck">
-            {t("item.verifiedPartner")}
-          </Badge>
-        )}
-        <Rating
-          value={offer.rating?.value ?? null}
-          count={offer.rating?.count ?? 0}
-          emptyText={t("item.newSupplier")}
-          label={t("item.rating")}
-          locale={lang}
-        />
-      </View>
       <Text variant="bodyS" color="textMuted">
         {offer.inCity ? t("item.inYourCity") : offer.city.name.text}
       </Text>
@@ -694,6 +707,12 @@ const styles = StyleSheet.create({
   offerDivider: { height: hairline, marginVertical: 6 },
   offerMarks: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   supplierLine: { flexDirection: "row", alignItems: "center", gap: 6 },
+  supplierBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: size.touchTarget,
+  },
   orderButton: { marginTop: 8 },
   orderLater: { paddingTop: 8 },
 });

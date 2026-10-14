@@ -1,6 +1,6 @@
 import { isApiError } from "@adclub/api-client";
 import type { MobileTextKey } from "@adclub/i18n";
-import { formatOrderCode, layout, radius } from "@adclub/ui-core";
+import { formatOrderCode, layout, radius, size } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
@@ -557,7 +557,22 @@ export function OrderScreen({ route, navigation }: Props) {
                 )}
               >
                 <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-                  <Text variant="bodyStrong">{order.supplier.name}</Text>
+                  {serverActions ? (
+                    // M-CAT-09 (TASK-050): the supplier's rating and reviews.
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityHint={t("item.openSupplier")}
+                      onPress={() => navigation.push("supplier-page", { orderId: order.id })}
+                      style={styles.supplierLink}
+                    >
+                      <Text variant="bodyStrong" style={styles.grow}>
+                        {order.supplier.name}
+                      </Text>
+                      <Icon name="chevronRight" size={20} color="textMuted" />
+                    </Pressable>
+                  ) : (
+                    <Text variant="bodyStrong">{order.supplier.name}</Text>
+                  )}
                   {view.place === "full" && order.pickupPoint ? (
                     <PickupPlace order={order} />
                   ) : (
@@ -923,6 +938,7 @@ const styles = StyleSheet.create({
   place: { gap: 8 },
   itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   grow: { flex: 1, gap: 2 },
+  supplierLink: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: size.touchTarget },
   divider: { height: hairline, marginVertical: 6 },
   term: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
   termValue: { flexShrink: 1, textAlign: "right" },

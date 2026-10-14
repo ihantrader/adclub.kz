@@ -189,6 +189,12 @@ export type RootParams = {
   "car-step": CarStepParams;
   /** M-GAR-03, final step. */
   "car-summary": CarSummaryParams;
+  /**
+   * M-CAT-09 (TASK-050): the page of the supplier of an offer of the catalog
+   * (`offerId`) or of the user's own order (`orderId`) — never a supplier's id,
+   * which a guest does not have.
+   */
+  "supplier-page": { offerId?: string; orderId?: string };
 } & AuthStackParams &
   OrderStackParams;
 

@@ -54,6 +54,8 @@ export function TextField({
       <View
         style={[
           styles.control,
+          // Several lines (a review, a complaint): the text starts at the top.
+          rest.multiline ? styles.controlMultiline : null,
           {
             backgroundColor: disabled ? colors.fill : ai ? colors.aiTint : colors.surface,
             borderColor: error
@@ -91,6 +93,7 @@ export function TextField({
           style={[
             textStyles.body,
             styles.input,
+            rest.multiline ? styles.inputMultiline : null,
             { color: disabled ? colors.textDisabled : colors.text },
           ]}
         />
@@ -369,6 +372,8 @@ const styles = StyleSheet.create({
     borderWidth: line.width,
   },
   input: { flex: 1, minHeight: 44, paddingVertical: 10 },
+  controlMultiline: { alignItems: "flex-start" },
+  inputMultiline: { minHeight: 120, maxHeight: 240, textAlignVertical: "top" },
   search: { paddingLeft: 12, paddingRight: 0 },
   entry: { paddingRight: 12 },
   entryText: { flex: 1 },

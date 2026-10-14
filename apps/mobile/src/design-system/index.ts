@@ -6,7 +6,16 @@ export { AiPilot, type AiPilotProps } from "./AiPilot";
 export { Button, ButtonRow, IconButton, type ButtonProps, type IconButtonProps } from "./Button";
 export { CodeBlock, QrCode, type CodeBlockProps, type QrCodeProps } from "./code";
 export { CategoryIcon, type CategoryIconProps } from "./CategoryIcon";
-export { Checkbox, Chip, Quantity, Radio, Segments, SelectButton, Switch } from "./controls";
+export {
+  Checkbox,
+  Chip,
+  Quantity,
+  Radio,
+  Segments,
+  SelectButton,
+  StarsInput,
+  Switch,
+} from "./controls";
 export {
   Banner,
   Dialog,

@@ -11,6 +11,7 @@ import type {
   UserOrder,
   UserOrderStep,
 } from "@adclub/contracts";
+import type { OrderFeedbackInput } from "./order-feedback";
 import { isActiveStatus } from "./order-status";
 
 type PickupPoint = NonNullable<UserOrder["pickupPoint"]>;
@@ -49,6 +50,11 @@ export interface OrderView {
   history: UserOrderStep[] | null;
   /** Accepted or ready: the code is to be shown, the QR may go full-screen. */
   awaitsReceipt: boolean;
+  /**
+   * TASK-049.B: the review and the complaint as the server said them
+   * (M-ORD-03, M-ORD-05, M-ORD-06); `null` — the copy does not carry them.
+   */
+  feedback: OrderFeedbackInput | null;
   updatedAt: string;
   source: "server" | "copy";
 }
@@ -76,6 +82,13 @@ export function orderViewOfServer(order: UserOrder): OrderView {
     serviceVisit: order.serviceVisit ?? null,
     history: order.history,
     awaitsReceipt: order.status === "accepted" || order.status === "ready",
+    feedback: {
+      canReview: order.canReview,
+      review: order.review,
+      complaint: order.complaint,
+      complaintReasons: order.complaintReasons,
+      reviewUnavailable: order.reviewUnavailable,
+    },
     updatedAt: order.updatedAt,
     source: "server",
   };
@@ -104,6 +117,7 @@ export function orderViewOfCopy(order: ActiveOrder): OrderView {
     serviceVisit: (order.serviceVisit as ServiceVisit | null | undefined) ?? null,
     history: null,
     awaitsReceipt: order.awaitsReceipt,
+    feedback: null,
     updatedAt: order.updatedAt,
     source: "copy",
   };

@@ -1,4 +1,4 @@
-import type { OrderFulfillment } from "@adclub/contracts";
+import type { ComplaintReasonValue, OrderFulfillment } from "@adclub/contracts";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { CarColorId } from "../garage/car-color";
 import type { CarDraft } from "../garage/car-picker";
@@ -166,6 +166,13 @@ export type OrderStackParams = {
   order: { orderId: string };
   /** M-ORD-04. */
   "order-qr": { orderId: string };
+  /**
+   * M-ORD-05 (TASK-049.B): `new` — «Оценить поставщика» / «Оценить»;
+   * `edit` — «Исправить текст» after T-REV-02.
+   */
+  "order-review": { orderId: string; mode: "new" | "edit" };
+  /** M-ORD-06 (TASK-049.B); `reason` — T-ORD-08 opens it with «Не получил…» chosen. */
+  "order-complaint": { orderId: string; reason?: ComplaintReasonValue };
   /** M-ORD-02 «только просмотр» after M-START-03 (D-027): the copy, nothing that needs the server. */
   "orders-readonly": undefined;
 };

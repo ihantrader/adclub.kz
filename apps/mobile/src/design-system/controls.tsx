@@ -60,6 +60,68 @@ export function Chip({ children, selected = false, onPress, icon, disabled }: Ch
   );
 }
 
+export interface StarsInputProps {
+  /** 1…5; `null` — not chosen yet. */
+  value: number | null;
+  onChange?: (value: number) => void;
+  /** «Оценка {n} из 5» for each star — what a screen reader says. */
+  starLabel: (n: number) => string;
+  /** Read only (the score of a review whose text is corrected): shown, not changed. */
+  disabled?: boolean;
+  /** Smaller stars to show a score, not to choose it. */
+  small?: boolean;
+}
+
+/**
+ * The score of a review (TASK-049.B, M-ORD-05): five stars, each a touch
+ * zone of 48 with a 32 star; each is a radio for screen readers, «Оценка 4
+ * из 5», checked when it is the score. Chosen stars are filled with the
+ * accent; the rest are outlines.
+ */
+export function StarsInput({ value, onChange, starLabel, disabled, small }: StarsInputProps) {
+  const starSize = small ? 20 : 32;
+  const star = (n: number) => {
+    const filled = value !== null && n <= value;
+    return (
+      <Icon
+        name="star"
+        size={starSize}
+        color={filled ? "accent" : disabled ? "textDisabled" : "textMuted"}
+        filled={filled}
+      />
+    );
+  };
+  if (small || !onChange) {
+    // Only shown: one label for the row, «Оценка 4 из 5».
+    return (
+      <View style={styles.starsShown} accessible accessibilityLabel={starLabel(value ?? 0)}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <View key={n}>{star(n)}</View>
+        ))}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.stars} accessibilityRole="radiogroup">
+      {[1, 2, 3, 4, 5].map((n) => {
+        return (
+          <Pressable
+            key={n}
+            accessibilityRole="radio"
+            accessibilityLabel={starLabel(n)}
+            accessibilityState={{ checked: value === n, disabled }}
+            disabled={disabled}
+            onPress={() => onChange(n)}
+            style={styles.star}
+          >
+            {star(n)}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export interface SelectButtonProps {
   icon: IconName;
   children: string;
@@ -526,6 +588,14 @@ export function Quantity({
 
 const styles = StyleSheet.create({
   shrink: { flexShrink: 1 },
+  stars: { flexDirection: "row", flexWrap: "wrap" },
+  starsShown: { flexDirection: "row", gap: 2 },
+  star: {
+    width: size.touchTarget,
+    height: size.touchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   chip: {
     flexDirection: "row",
     alignItems: "center",

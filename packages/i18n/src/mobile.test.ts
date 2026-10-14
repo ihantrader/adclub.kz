@@ -83,6 +83,21 @@ describe("mobile texts", () => {
     expect(mobileText("ru", "order.cancelConfirmText")).toBe(
       "Поставщик получит уведомление об отмене",
     );
+    // TASK-049.B: M-ORD-03, M-ORD-05, M-ORD-06.
+    expect(mobileText("ru", "complaint.notReceivedLine")).toBe("Не получали товар? Сообщите нам");
+    expect(mobileText("ru", "review.hint")).toBe(
+      "Пишите о заявке: товар, сроки, общение. Без мата, оскорблений, личных данных и названия поставщика — такие отзывы не публикуются",
+    );
+    expect(mobileText("ru", "review.sent")).toBe("Спасибо! Отзыв появится после проверки");
+    expect(mobileText("ru", "review.rejected")).toBe(
+      "Отзыв не опубликован: {reason}. Исправьте текст или опубликуйте только оценку",
+    );
+    expect(mobileText("ru", "review.testOrder")).toBe("Отзыв недоступен: это тестовый заказ");
+    expect(mobileText("ru", "complaint.sent")).toBe(
+      "Спасибо. Администратор клуба рассмотрит обращение",
+    );
+    expect(mobileText("ru", "complaint.inReview")).toBe("Жалоба на рассмотрении");
+    expect(mobileText("ru", "complaint.resolved")).toBe("Жалоба рассмотрена");
     expect(mobileText("ru", "orders.activeEmptyTitle")).toBe("Активных заявок нет");
     expect(mobileText("ru", "orders.historyEmptyTitle")).toBe("Здесь появятся выполненные заявки");
     expect(mobileText("ru", "orders.historyOffline")).toBe("История доступна при подключении");

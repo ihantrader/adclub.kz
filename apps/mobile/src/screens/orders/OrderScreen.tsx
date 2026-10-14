@@ -13,12 +13,14 @@ import {
   DataState,
   Dialog,
   hairline,
+  Icon,
   ListGroup,
   ListRow,
   OfflineBanner,
   Screen,
   Section,
   SkeletonList,
+  StarsInput,
   StatusBadge,
   Text,
   useTheme,
@@ -38,6 +40,13 @@ import {
 } from "../../orders/order-answer";
 import { copyIsBehind } from "../../orders/order-copy";
 import {
+  complaintReasonKeys,
+  orderFeedback,
+  rejectReasonKeys,
+  reviewFailure,
+  reviewFailureKeys,
+} from "../../orders/order-feedback";
+import {
   isActiveStatus,
   orderMarkKey,
   orderStatusView,
@@ -53,6 +62,7 @@ import {
 } from "../../orders/call-options";
 import { navigatorLinks, weeklyHoursLines } from "../../orders/pickup-place";
 import { apiClient } from "../../services/api";
+import { orderAnswers, orderRequestKey } from "../../services/order-answers";
 import { useOnline } from "../../services/use-network";
 import { useRequest } from "../../services/use-request";
 import { useLanguage } from "../../state/language";
@@ -90,9 +100,10 @@ export function OrderScreen({ route, navigation }: Props) {
   useLeaveWhenSignedOut(navigation);
 
   const request = useRequest(
-    readOnly ? null : `order:${orderId}:${lang}`,
+    readOnly ? null : orderRequestKey(orderId, lang),
     (signal) => apiClient.getUserOrder({ orderId }, { signal }),
-    { staleAfterMs: 0 },
+    // The answers are kept for «Оценить» and «Пожаловаться» opened from here (TASK-049.B).
+    { staleAfterMs: 0, cache: orderAnswers },
   );
   useFocusEffect(
     useCallback(() => {
@@ -136,6 +147,37 @@ export function OrderScreen({ route, navigation }: Props) {
   const [cancelling, setCancelling] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
   const [answering, setAnswering] = useState<"agree" | "reject" | null>(null);
+  const [confirmScoreOnly, setConfirmScoreOnly] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  // TASK-049.B: the review and the complaint — from the server's order; an
+  // order shown from the copy keeps those of the last answer, if there was one.
+  const feedback = orderFeedback(order?.feedback ?? server?.feedback ?? null);
+
+  // «Опубликовать только оценку» after «Текст не будет опубликован».
+  const publishScoreOnly = async () => {
+    setConfirmScoreOnly(false);
+    const reviewId = request.data?.order.review?.id;
+    if (!reviewId) return;
+    setPublishing(true);
+    try {
+      await apiClient.publishReviewScoreOnly({ reviewId });
+      toast.show(t("review.published"));
+    } catch (error) {
+      const problem = reviewFailure(error);
+      if (problem.kind !== "session_ended") {
+        toast.show(
+          t(
+            reviewFailureKeys[problem.kind],
+            problem.kind === "rate_limited" ? { minutes: problem.minutes } : {},
+          ),
+        );
+      }
+    } finally {
+      setPublishing(false);
+      request.reload();
+    }
+  };
 
   // M-ORD-03 «Ответ пользователя» (TASK-039): «Согласиться» at once,
   // «Отказаться» after «Заявка будет отменена». The server decides — the
@@ -333,6 +375,96 @@ export function OrderScreen({ route, navigation }: Props) {
               )}
             </View>
 
+            {/* The review and the complaint as the server says them (TASK-049.B, M-ORD-05, M-ORD-06). */}
+            {feedback.review && (
+              <Section title={t("review.blockTitle")}>
+                <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                  <StarsInput
+                    value={feedback.review.score}
+                    starLabel={(n) => t("review.scoreLabel", { n })}
+                    small
+                  />
+                  {feedback.review.kind === "rejected" ? (
+                    <Text color="warning">
+                      {t("review.rejected", {
+                        reason: feedback.review.reason
+                          ? t(rejectReasonKeys[feedback.review.reason])
+                          : "",
+                      })}
+                    </Text>
+                  ) : (
+                    <Text
+                      variant="bodyStrong"
+                      color={feedback.review.kind === "published" ? "success" : "textMuted"}
+                    >
+                      {t(
+                        feedback.review.kind === "published"
+                          ? "review.published"
+                          : "review.checking",
+                      )}
+                    </Text>
+                  )}
+                  {feedback.review.text && (
+                    <Text variant="bodyS" color="textMuted">
+                      {feedback.review.text}
+                    </Text>
+                  )}
+                  {serverActions &&
+                    feedback.review.kind === "rejected" &&
+                    (feedback.review.canEditText || feedback.review.canPublishScoreOnly) && (
+                      <View style={styles.reviewActions}>
+                        {feedback.review.canEditText && (
+                          <Button
+                            size="m"
+                            variant="secondary"
+                            disabled={!actionsLive || publishing}
+                            onPress={() =>
+                              navigation.push("order-review", { orderId: order.id, mode: "edit" })
+                            }
+                          >
+                            {t("review.editText")}
+                          </Button>
+                        )}
+                        {feedback.review.canPublishScoreOnly && (
+                          <Button
+                            size="m"
+                            variant="secondary"
+                            disabled={!actionsLive}
+                            loading={publishing}
+                            onPress={() => setConfirmScoreOnly(true)}
+                          >
+                            {t("review.scoreOnly")}
+                          </Button>
+                        )}
+                        {!actionsLive && (
+                          <Text variant="caption" color="textMuted" style={styles.center}>
+                            {t("order.needsNetwork")}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                </View>
+              </Section>
+            )}
+            {feedback.complaint && (
+              <Section title={t("complaint.blockTitle")}>
+                <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                  <Text variant="bodyStrong">
+                    {t(
+                      feedback.complaint.status === "resolved"
+                        ? "complaint.resolved"
+                        : "complaint.inReview",
+                    )}
+                  </Text>
+                  <Text variant="bodyS" color="textMuted">
+                    {t("complaint.reasonLine", {
+                      reason: t(complaintReasonKeys[feedback.complaint.reason]),
+                    })}
+                  </Text>
+                </View>
+              </Section>
+            )}
+
             {/* 2. The user's answer to another term (TASK-039, SCREENS M-ORD-03 block 2). */}
             {waitsForAnswer && (
               <Section title={t("order.answer.title")}>
@@ -506,9 +638,67 @@ export function OrderScreen({ route, navigation }: Props) {
               </Section>
             )}
 
-            {/* 7. The actions. «Оценить» and «Пожаловаться» are stage C and are not drawn. */}
+            {/* 7. The actions: «Оценить поставщика», «Пожаловаться» and T-ORD-08 as
+                the server allows them (TASK-049.B), then the rest. */}
             {serverActions && (
               <View style={styles.actions}>
+                {feedback.notReceived && (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!actionsLive}
+                    accessibilityState={{ disabled: !actionsLive }}
+                    onPress={() =>
+                      navigation.push("order-complaint", {
+                        orderId: order.id,
+                        reason: "not_received",
+                      })
+                    }
+                    style={[styles.notReceived, { backgroundColor: theme.colors.surface }]}
+                  >
+                    <Icon
+                      name="alertTriangle"
+                      size={20}
+                      color={actionsLive ? "warning" : "textDisabled"}
+                    />
+                    <Text
+                      variant="bodyStrong"
+                      color={actionsLive ? "text" : "textDisabled"}
+                      style={styles.grow}
+                    >
+                      {t("complaint.notReceivedLine")}
+                    </Text>
+                    <Icon
+                      name="chevronRight"
+                      size={20}
+                      color={actionsLive ? "textMuted" : "textDisabled"}
+                    />
+                  </Pressable>
+                )}
+                {feedback.rate && (
+                  <Button
+                    icon="star"
+                    disabled={!actionsLive}
+                    onPress={() =>
+                      navigation.push("order-review", { orderId: order.id, mode: "new" })
+                    }
+                  >
+                    {t("review.rate")}
+                  </Button>
+                )}
+                {feedback.testOrder && (
+                  <Text variant="bodyS" color="textMuted" style={styles.center}>
+                    {t("review.testOrder")}
+                  </Text>
+                )}
+                {feedback.complain && (
+                  <Button
+                    variant="secondary"
+                    disabled={!actionsLive}
+                    onPress={() => navigation.push("order-complaint", { orderId: order.id })}
+                  >
+                    {t("complaint.complain")}
+                  </Button>
+                )}
                 {view.cancellable && !waitsForAnswer && (
                   <Button
                     variant="secondary"
@@ -531,11 +721,15 @@ export function OrderScreen({ route, navigation }: Props) {
                     {t("order.repeat")}
                   </Button>
                 )}
-                {!actionsLive && ((view.cancellable && !waitsForAnswer) || repeatable) && (
-                  <Text variant="caption" color="textMuted" style={styles.center}>
-                    {t("order.needsNetwork")}
-                  </Text>
-                )}
+                {!actionsLive &&
+                  ((view.cancellable && !waitsForAnswer) ||
+                    repeatable ||
+                    feedback.rate ||
+                    feedback.complain) && (
+                    <Text variant="caption" color="textMuted" style={styles.center}>
+                      {t("order.needsNetwork")}
+                    </Text>
+                  )}
               </View>
             )}
           </View>
@@ -577,6 +771,21 @@ export function OrderScreen({ route, navigation }: Props) {
         }
       >
         <Text>{t("order.answer.rejectText")}</Text>
+      </Dialog>
+      <Dialog
+        visible={confirmScoreOnly}
+        onClose={() => setConfirmScoreOnly(false)}
+        title={t("review.scoreOnlyTitle")}
+        actions={
+          <>
+            <Button onPress={() => void publishScoreOnly()}>{t("review.scoreOnly")}</Button>
+            <Button variant="text" onPress={() => setConfirmScoreOnly(false)}>
+              {t("common.cancel")}
+            </Button>
+          </>
+        }
+      >
+        <Text>{t("review.scoreOnlyText")}</Text>
       </Dialog>
       {repeat.sheet}
     </Screen>
@@ -718,4 +927,15 @@ const styles = StyleSheet.create({
   term: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
   termValue: { flexShrink: 1, textAlign: "right" },
   actions: { gap: 8, paddingTop: 12 },
+  reviewActions: { gap: 8, paddingTop: 6 },
+  // T-ORD-08 «заметная строка» (M-ORD-03): a touch zone of at least 48.
+  notReceived: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 56,
+    borderRadius: radius.m,
+    paddingHorizontal: layout.cardPadding,
+    paddingVertical: 12,
+  },
 });

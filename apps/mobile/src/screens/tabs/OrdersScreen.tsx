@@ -260,17 +260,35 @@ function SignedInOrders() {
                           dateLine={finished.date}
                           onPress={() => openOrder(order.id)}
                           footer={
-                            order.canRepeat ? (
+                            order.canRepeat || order.canReview ? (
                               <View style={styles.repeat}>
-                                <Button
-                                  variant="text"
-                                  size="m"
-                                  icon="refresh"
-                                  loading={repeat.pending === order.id}
-                                  onPress={() => repeat.repeat(order.id)}
-                                >
-                                  {t("orders.repeat")}
-                                </Button>
+                                {order.canRepeat && (
+                                  <Button
+                                    variant="text"
+                                    size="m"
+                                    icon="refresh"
+                                    loading={repeat.pending === order.id}
+                                    onPress={() => repeat.repeat(order.id)}
+                                  >
+                                    {t("orders.repeat")}
+                                  </Button>
+                                )}
+                                {/* «Оценить» (M-ORD-02) — only where the server says so (TASK-049.B). */}
+                                {order.canReview && (
+                                  <Button
+                                    variant="text"
+                                    size="m"
+                                    icon="star"
+                                    onPress={() =>
+                                      root()?.push("order-review", {
+                                        orderId: order.id,
+                                        mode: "new",
+                                      })
+                                    }
+                                  >
+                                    {t("orders.rate")}
+                                  </Button>
+                                )}
                               </View>
                             ) : null
                           }
@@ -301,5 +319,11 @@ function SignedInOrders() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
   list: { gap: 12 },
-  repeat: { paddingHorizontal: 8, paddingBottom: 8, alignItems: "flex-start" },
+  repeat: {
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+  },
 });

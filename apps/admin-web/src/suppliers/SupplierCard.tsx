@@ -15,7 +15,7 @@ import { SupplierPriceImports } from "./SupplierPriceImports";
 import { SupplierProfile } from "./SupplierProfile";
 import { SupplierStatuses } from "./SupplierStatuses";
 import { SUPPLIER_TYPE_TEXT } from "./supplier-words";
-import { SupplierReviews } from "../reviews/Blocks";
+import { SupplierRating } from "./SupplierRating";
 
 const TAB_TEXT: Record<SupplierTab, string> = {
   profile: "Профиль",
@@ -23,7 +23,7 @@ const TAB_TEXT: Record<SupplierTab, string> = {
   members: "Сотрудники",
   offers: "Предложения",
   orders: "Заявки",
-  reviews: "Отзывы",
+  rating: "Рейтинг и отзывы",
   price: "Прайс",
   history: "История",
 };
@@ -33,7 +33,8 @@ const TABS = Object.keys(TAB_TEXT) as SupplierTab[];
 /**
  * A-SUP-03 «Карточка поставщика» (SCREENS 7.4; TASK-036): the tabs in the
  * address (`?tab=`), so the journal, the home page and a signal open the
- * right one. «Отзывы» — TASK-049 (the rating — TASK-050); «Подписка», «Модерация» come later.
+ * right one. «Рейтинг и отзывы» — TASK-049, TASK-050 (`?tab=reviews` of before opens it
+ * too); «Подписка», «Модерация» come later.
  */
 export function SupplierCard({ supplierId }: { supplierId: string }) {
   const { query } = useLocation();
@@ -42,7 +43,8 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
     `supplier:${supplierId}`,
   );
   const data = card.data && card.data.supplier.id === supplierId ? card.data.supplier : undefined;
-  const asked = (query.get("tab") ?? "profile") as SupplierTab;
+  const given = query.get("tab") ?? "profile";
+  const asked = (given === "reviews" ? "rating" : given) as SupplierTab;
   const tab: SupplierTab = TABS.includes(asked) ? asked : "profile";
   const changed = (next: AdminSupplierCard) => card.replace({ supplier: next });
 
@@ -64,8 +66,8 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
       case "orders":
         body = <SupplierOrders supplierId={supplierId} />;
         break;
-      case "reviews":
-        body = <SupplierReviews supplierId={supplierId} />;
+      case "rating":
+        body = <SupplierRating supplierId={supplierId} />;
         break;
       case "price":
         body = <SupplierPriceImports supplierId={supplierId} />;

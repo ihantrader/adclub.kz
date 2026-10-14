@@ -569,6 +569,11 @@ code,
   align-self: flex-start;
 }
 
+/* TASK-050: a rating below the threshold of the signal. */
+.rating-low {
+  color: var(--ac-color-danger);
+}
+
 .dialog-error {
   color: var(--ac-color-danger);
   font-size: 14px;

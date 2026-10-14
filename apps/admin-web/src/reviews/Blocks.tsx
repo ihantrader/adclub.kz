@@ -9,7 +9,7 @@ import { useReviewList } from "./Reviews";
 
 /**
  * The places reviews and complaints show up besides their section (TASK-049):
- * a supplier's «Отзывы» (A-SUP-03; every state — the rating is TASK-050), a
+ * a supplier's «Рейтинг и отзывы» (A-SUP-03; every state, under the rating of TASK-050), a
  * user's «Жалобы» (A-USR-02) and the order's card (A-ORD-02).
  */
 
@@ -22,7 +22,7 @@ export function SupplierReviews({ supplierId }: { supplierId: string }) {
         {counts
           ? ` · опубликовано ${counts.published.toLocaleString("ru-RU")}, на проверке ${counts.held.toLocaleString("ru-RU")}, скрыто ${counts.hidden.toLocaleString("ru-RU")}`
           : ""}
-        . Рейтинг поставщика появится отдельно.
+        .
       </p>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent

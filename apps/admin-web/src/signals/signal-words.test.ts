@@ -76,6 +76,17 @@ describe("the words of signals", () => {
     expect(subjectLink({ subjectType: "order", subjectId: id, kind: "supply_overdue" })).toBe(
       `/orders/${id}`,
     );
+    // TASK-050: «Низкий рейтинг» opens «Рейтинг и отзывы» of the supplier.
+    expect(KIND_TITLES.low_rating).toBe("Низкий рейтинг");
+    expect(subjectLink({ subjectType: "supplier", subjectId: id, kind: "low_rating" })).toBe(
+      `/suppliers/${id}?tab=rating`,
+    );
+    expect(
+      subjectText({
+        kind: "low_rating",
+        payload: { supplierName: "Автомаркет", rating: 3.4, ratingCount: 5, ratingThreshold: 3.5 },
+      }),
+    ).toBe("Автомаркет · ★ 3,4 (5) · порог 3,5");
   });
 
   it("tells who closed it first", () => {

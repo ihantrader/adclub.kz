@@ -6,6 +6,7 @@ import type {
 } from "@adclub/contracts";
 import { formatMoment } from "../format";
 import { orderExtensionsPath, orderPath, supplierPath } from "../router";
+import { ratingNumber, thresholdNumber } from "../suppliers/rating-words";
 
 /**
  * The words of A-HOME and A-SIG (TASK-034 requirement 3): what a signal is
@@ -19,6 +20,8 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   supply_overdue: "Срок поставки прошёл",
   // TASK-038.
   visit_unresolved: "Запись не разобрана",
+  // TASK-050.
+  low_rating: "Низкий рейтинг",
 };
 
 /** The kinds in the order of importance of A-HOME. */
@@ -27,6 +30,7 @@ export const KIND_ORDER: readonly AdminSignalKind[] = [
   "supplier_unreachable",
   "supply_overdue",
   "visit_unresolved",
+  "low_rating",
   "duplicate_after_late_close",
   "frequent_admin_closes",
 ];
@@ -105,6 +109,18 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
       ]
         .filter(Boolean)
         .join(" · ");
+    case "low_rating":
+      return [
+        payload.supplierName,
+        payload.rating !== undefined
+          ? `★ ${ratingNumber(payload.rating)}${payload.ratingCount !== undefined ? ` (${payload.ratingCount})` : ""}`
+          : null,
+        payload.ratingThreshold !== undefined
+          ? `порог ${thresholdNumber(payload.ratingThreshold)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
   }
 }
 
@@ -112,7 +128,8 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
  * «Открыть объект» (A-SIG): where the subject of a signal opens — an order
  * its card (TASK-036.B: «Двойная заявка при позднем закрытии»); a supplier
  * with frequent closes without a code — its orders, an unreachable one —
- * «Сотрудники» (who receives the notifications, TASK-036); the channel's
+ * «Сотрудники» (who receives the notifications, TASK-036), a low rating — «Рейтинг
+ * и отзывы» (TASK-050); the channel's
  * outage — the orders to extend (A-ORD-03) from when it began.
  */
 export function subjectLink(
@@ -125,7 +142,11 @@ export function subjectLink(
     case "supplier":
       return supplierPath(
         signal.subjectId,
-        signal.kind === "frequent_admin_closes" ? "orders" : "members",
+        signal.kind === "frequent_admin_closes"
+          ? "orders"
+          : signal.kind === "low_rating"
+            ? "rating"
+            : "members",
       );
     case "channel":
       return signal.kind === "whatsapp_outage"
@@ -148,6 +169,8 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "Подтверждённый срок поставки под заказ прошёл, а заявка ещё не готова к выдаче. Свяжитесь с поставщиком.",
   visit_unresolved:
     "Время записи на услугу прошло, а поставщик не отметил ни выполнение, ни неявку. Непонятно, кто кого подвёл — свяжитесь с поставщиком и клиентом.",
+  low_rating:
+    "Рейтинг поставщика ниже порога. Посмотрите составляющие и отзывы; блокировать или нет — решает человек. Сигнал закроется сам, когда рейтинг поднимется.",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

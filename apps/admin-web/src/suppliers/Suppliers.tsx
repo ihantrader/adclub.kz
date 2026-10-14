@@ -13,6 +13,7 @@ import {
   useAddressFilters,
   useCities,
 } from "./shared";
+import { listRatingText, RATING_FILTER_TEXT } from "./rating-words";
 import { SUPPLIER_TYPE_TEXT } from "./supplier-words";
 
 const STATES = [
@@ -25,12 +26,13 @@ const STATES = [
 
 type StateFilter = NonNullable<SupplierListQuery["state"]>;
 type TypeFilter = NonNullable<SupplierListQuery["type"]>;
+type RatingFilter = NonNullable<SupplierListQuery["rating"]>;
 
 /**
  * A-SUP-02 «Поставщики» (SCREENS 7.4; TASK-036): by name, with the state,
  * the city, the type and the search (a part of the name or digits of the
- * БИН) in the address; every number is the server's. The rating and «проблема
- * с оплатой» come with stages C–D.
+ * БИН) in the address; every number is the server's; the rating and its
+ * filter — TASK-050. «Проблема с оплатой» comes with stage D.
  */
 export function Suppliers() {
   const { query, set } = useAddressFilters();
@@ -40,6 +42,7 @@ export function Suppliers() {
     cityId: query.get("cityId") || undefined,
     type: (query.get("type") || undefined) as TypeFilter | undefined,
     q: query.get("q")?.trim() || undefined,
+    rating: (query.get("rating") || undefined) as RatingFilter | undefined,
   };
   const list = usePaged<AdminSupplierListItem>(async (cursor) => {
     const page = await apiClientList(filters, cursor);
@@ -81,6 +84,20 @@ export function Suppliers() {
           onChange={(type) => set({ type: type || undefined })}
           any="Все"
         />
+        <label className="select">
+          <span className="ac-text-caption ac-muted">Рейтинг</span>
+          <select
+            value={filters.rating ?? ""}
+            onChange={(event) => set({ rating: event.target.value || undefined })}
+          >
+            <option value="">Любой</option>
+            {(Object.keys(RATING_FILTER_TEXT) as RatingFilter[]).map((value) => (
+              <option key={value} value={value}>
+                {RATING_FILTER_TEXT[value]}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent
@@ -105,6 +122,7 @@ export function Suppliers() {
                   <th scope="col">Город</th>
                   <th scope="col">Что предлагает</th>
                   <th scope="col">Состояние</th>
+                  <th scope="col">Рейтинг</th>
                   <th scope="col" className="num">
                     Сотрудники
                   </th>
@@ -131,6 +149,11 @@ export function Suppliers() {
                     <td>
                       <StateMark state={supplier.state} verified={supplier.verified} />
                     </td>
+                    <td className={supplier.rating?.low ? "num rating-low" : "num"}>
+                      <AppLink href={supplierPath(supplier.id, "rating")}>
+                        {listRatingText(supplier.rating)}
+                      </AppLink>
+                    </td>
                     <td className="num">{supplier.memberCount}</td>
                     <td className="num">{supplier.offersOnSale.toLocaleString("ru-RU")}</td>
                   </tr>
@@ -146,7 +169,7 @@ export function Suppliers() {
 }
 
 function apiClientList(
-  filters: Pick<SupplierListQuery, "state" | "cityId" | "type" | "q">,
+  filters: Pick<SupplierListQuery, "state" | "cityId" | "type" | "q" | "rating">,
   cursor?: string,
 ) {
   return apiClient.listSuppliers({ query: { ...filters, limit: 50, cursor } });

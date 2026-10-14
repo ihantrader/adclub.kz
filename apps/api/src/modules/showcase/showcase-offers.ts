@@ -11,6 +11,7 @@ import type { DbExecutor } from "../../database";
 import { catalogItem } from "../catalog";
 import { supplier } from "../identity";
 import { offer, receiptSchedules, servicePricings, shownOffers } from "../offers";
+import { supplierRating } from "../ratings";
 import { supplierLocation } from "../suppliers";
 
 /**
@@ -58,6 +59,11 @@ export interface VisibleOffer {
   receipt: ShowcaseReceipt;
   /** Calendar days from today (at the point) to the receipt date. */
   receiptDays: number;
+  /**
+   * The supplier's rating, «★ 4,8 (23)» (TASK-050): the snapshot the worker
+   * keeps; `null` — «Новый поставщик» (also before the first calculation).
+   */
+  rating: { value: number; count: number } | null;
 }
 
 export type OfferScope = { categoryId: string } | { itemIds: readonly string[] };
@@ -154,11 +160,14 @@ export async function visibleOffers(
       warrantyMonths: offer.warrantyMonths,
       warrantyText: offer.warrantyText,
       verified: sql<boolean>`${isNotNull(supplier.verifiedAt)}`,
+      ratingScore: supplierRating.score,
+      ratingCount: supplierRating.reviewsCount,
     })
     .from(offer)
     .innerJoin(catalogItem, eq(catalogItem.id, offer.itemId))
     .innerJoin(supplierLocation, eq(supplierLocation.id, offer.locationId))
     .innerJoin(supplier, eq(supplier.id, offer.supplierId))
+    .leftJoin(supplierRating, eq(supplierRating.supplierId, offer.supplierId))
     .where(and(where, shownOffers(now)));
   if (rows.length === 0) {
     return [];
@@ -200,11 +209,16 @@ export async function visibleOffers(
     if (!date) {
       continue;
     }
+    const { ratingScore, ratingCount, ...offerRow } = row;
     visible.push({
-      ...row,
+      ...offerRow,
       pricing: pricings.get(row.id)!,
       receipt: date.receipt,
       receiptDays: date.days,
+      rating:
+        ratingScore === null || ratingCount === null
+          ? null
+          : { value: Number(ratingScore), count: ratingCount },
     });
   }
   return visible;

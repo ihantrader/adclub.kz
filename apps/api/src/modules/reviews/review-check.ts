@@ -13,6 +13,7 @@ import {
 import { AiBudgetExhaustedError, AiGatewayError, AiService, FALLBACK_WORTHY } from "../ai";
 import { AuditLog } from "../audit";
 import { supplier, supplierMember } from "../identity";
+import { ratingChanged } from "../ratings";
 import { AppSettings } from "../settings";
 import { checkReviewJob } from "./review-jobs";
 import { review, type ReviewRow } from "./schema";
@@ -188,6 +189,10 @@ export class ReviewChecker implements JobHandler<{ reviewId: string }> {
         },
         tx,
       );
+      if (!held) {
+        // TASK-050: a published score counts in the supplier's rating.
+        await ratingChanged(this.queue, tx, row.supplierId);
+      }
       return true;
     });
     if (written) {

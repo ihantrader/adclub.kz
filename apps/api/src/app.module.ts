@@ -27,6 +27,7 @@ import { AdminHomeModule } from "./modules/admin-home";
 import { UsersModule } from "./modules/users";
 import { PriceImportsModule } from "./modules/price-imports";
 import { ReviewsModule } from "./modules/reviews";
+import { RatingsModule } from "./modules/ratings";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -115,6 +116,8 @@ export class AppModule implements NestModule {
         ...(config.metrics.enabled ? [SearchIndexMetricsModule] : []),
         orders,
         reviews,
+        // The rating of suppliers (TASK-050): its admin view and the list's column.
+        RatingsModule.forRoot({ http: true, signals, suppliers }),
         AdminHomeModule.forRoot({
           catalog,
           compatibility,

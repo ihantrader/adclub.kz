@@ -23,6 +23,7 @@
   "src/modules/orders/service-orders.integration.test.ts": 90,
   "src/modules/price-imports/price-imports.integration.test.ts": 100,
   "src/modules/price-imports/price-review.integration.test.ts": 150,
+  "src/modules/ratings/ratings.integration.test.ts": 85,
   "src/modules/reviews/reviews.integration.test.ts": 95,
   "src/modules/search-index/search-index.integration.test.ts": 110,
   "src/modules/settings/settings.integration.test.ts": 33,

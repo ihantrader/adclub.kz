@@ -10,6 +10,7 @@ import {
   UserReviewsController,
 } from "./reviews.controller";
 import { ReviewsService } from "./reviews.service";
+import { SupplierProfiles } from "./supplier-profiles";
 
 export interface ReviewsModuleOptions {
   /** Serve the routes (the API process only). */
@@ -39,7 +40,7 @@ export class ReviewsModule {
       controllers: options.http
         ? [UserReviewsController, SupplierReviewsController, AdminReviewsController]
         : [],
-      providers: [ReviewsService, ComplaintsService, ReviewFeedback],
+      providers: [ReviewsService, ComplaintsService, ReviewFeedback, SupplierProfiles],
       exports: [ReviewsService, ComplaintsService],
     };
   }

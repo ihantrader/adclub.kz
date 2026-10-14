@@ -267,6 +267,7 @@ export class SuppliersService {
           ? eq(supplier.status, query.state)
           : undefined,
       query.q ? this.search(query.q) : undefined,
+      query.rating ? await this.listCounts.ratingCondition(query.rating) : undefined,
     ];
     const filters = and(...conditions);
     const after = query.cursor ? decodeCursor(query.cursor) : undefined;
@@ -289,10 +290,11 @@ export class SuppliersService {
       .where(filters);
     const shown = page.slice(0, query.limit);
     const ids = shown.map((row) => row.id);
-    const [cityRows, members, offers] = await Promise.all([
+    const [cityRows, members, offers, ratings] = await Promise.all([
       this.citiesById(shown.map((row) => row.cityId)),
       activeMemberCounts(this.database.db, ids),
       this.listCounts.offersOnSale(this.database.db, ids),
+      this.listCounts.ratings(this.database.db, ids),
     ]);
     const last = shown.at(-1);
     return {
@@ -300,6 +302,7 @@ export class SuppliersService {
         ...this.listItem(row, cityRows.get(row.cityId)!),
         memberCount: members.get(row.id) ?? 0,
         offersOnSale: offers.get(row.id) ?? 0,
+        rating: ratings.get(row.id) ?? null,
       })),
       total: counted?.total ?? 0,
       nextCursor:
@@ -766,7 +769,7 @@ export class SuppliersService {
   private listItem(
     row: SupplierRow,
     cityRow: CityRow,
-  ): Omit<AdminSupplierListItem, "memberCount" | "offersOnSale"> {
+  ): Omit<AdminSupplierListItem, "memberCount" | "offersOnSale" | "rating"> {
     const facts = stateFacts(row);
     return {
       id: row.id,

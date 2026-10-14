@@ -28,6 +28,7 @@ import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, escapeLike, TIME_POSITION } from "../catalog";
 import { account, supplier } from "../identity";
 import { customerOrder, reviewable } from "../orders";
+import { ratingChanged } from "../ratings";
 import { AppSettings } from "../settings";
 import { describeViewer, supplierShownTo, type Viewer } from "../showcase";
 import {
@@ -165,6 +166,9 @@ export class ReviewsService {
           { reviewId: row.id },
           { tx, singletonKey: row.id },
         );
+      } else {
+        // A score without a text is published at once (TASK-050: the rating).
+        await ratingChanged(this.queue, tx, row.supplierId);
       }
       return { review: userReviewView(row), created: true };
     });
@@ -252,6 +256,7 @@ export class ReviewsService {
         },
         tx,
       );
+      await ratingChanged(this.queue, tx, row.supplierId);
       return userReviewView(updated!);
     });
   }
@@ -363,6 +368,10 @@ export class ReviewsService {
         },
         tx,
       );
+      // TASK-050: published, hidden or restored — the scores of the rating changed.
+      if (next === "published" || current.status === "published") {
+        await ratingChanged(this.queue, tx, current.supplierId);
+      }
       return { updated: updated! };
     });
     if (outcome.conflict) {

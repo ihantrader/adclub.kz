@@ -600,7 +600,32 @@ const rating = group({
     rating_weights: define.composite({
       schema: ratingWeightsSchema,
       default: { reviews: 0.6, response_rate: 0.2, deadline_rate: 0.2 },
-      description: "Веса оценок, доли ответов и доли соблюдения сроков в рейтинге (в сумме 1).",
+      description:
+        "Веса оценок, доли ответов и доли соблюдения сроков в рейтинге (в сумме 1). Рейтинг — взвешенная сумма: доля переводится в звёзды как 1 + 4 × доля. Новые веса — на ближайшей ночной сверке (или operator jobs:run ratings.reconcile).",
+    }),
+    rating_window_days: define.duration({
+      unit: "days",
+      min: 30,
+      max: 730,
+      default: 180,
+      description:
+        "За сколько последних дней считаются оценки (по дате публикации) и заявки (по дате оформления) в рейтинге поставщика.",
+    }),
+    rating_min_orders: define.integer({
+      unit: "count",
+      min: 1,
+      max: 100,
+      default: 5,
+      description:
+        "С какого числа заявок показываются доля ответов и доля соблюдения сроков (до этого — «Мало заявок для оценки», и доля не входит в рейтинг).",
+    }),
+    rating_low_signal: define.number({
+      unit: "ratio",
+      min: 1,
+      max: 5,
+      default: 3.5,
+      description:
+        "Рейтинг ниже этого числа звёзд (при показанном рейтинге) — сигнал администратору «Низкий рейтинг». Автоматической блокировки нет.",
     }),
     views_signal_min: define.integer({
       unit: "count",
@@ -1071,7 +1096,7 @@ const offers = group({
  * «Рекомендуемые» of the catalog (TASK-020; ARCHITECTURE 4.29): the
  * weights of the parts of `recommendedScore` (`@adclub/domain`) — the
  * price, the receipt date, an offer in the chosen city, a verified partner
- * and the rating (none yet, EPIC-19). Each from 0 to 100; not all zero.
+ * and the rating of the supplier (TASK-050). Each from 0 to 100; not all zero.
  */
 const recommendedWeightsSchema = z
   .strictObject({
@@ -1096,7 +1121,7 @@ const showcase = group({
       schema: recommendedWeightsSchema,
       default: { price: 1, receipt: 1, city: 3, verified: 0.5, rating: 0.5 },
       description:
-        "Веса сортировки «Рекомендуемые» в каталоге: цена (дешевле — выше), дата получения (раньше — выше), предложение в выбранном городе, «проверенный партнёр», рейтинг (пока рейтинга нет, не влияет). Каждая часть — от 0 до 1, умножается на свой вес; по умолчанию предложение своего города выше остальных.",
+        "Веса сортировки «Рекомендуемые» в каталоге: цена (дешевле — выше), дата получения (раньше — выше), предложение в выбранном городе, «проверенный партнёр», рейтинг поставщика (звёзды ÷ 5; у «нового поставщика» — 0). Каждая часть — от 0 до 1, умножается на свой вес; по умолчанию предложение своего города выше остальных.",
     }),
   },
 });

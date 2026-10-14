@@ -7,6 +7,7 @@ import { orderJobCatalog } from "./modules/orders";
 import { searchJobCatalog } from "./modules/search-index";
 import { priceImportJobCatalog } from "./modules/price-imports";
 import { reviewJobCatalog } from "./modules/reviews";
+import { ratingJobCatalog } from "./modules/ratings";
 import { supplierJobCatalog } from "./modules/suppliers";
 import { vehicleJobCatalog } from "./modules/vehicles";
 
@@ -29,6 +30,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
     ...searchJobCatalog,
     ...priceImportJobCatalog,
     ...reviewJobCatalog,
+    ...ratingJobCatalog,
     ...(hasDevJobs(config) ? devJobCatalog : []),
   ];
 }

@@ -294,6 +294,12 @@ import {
   userReviewResponseSchema,
 } from "./reviews";
 import {
+  adminSupplierRatingResponseSchema,
+  offerSupplierPathSchema,
+  orderSupplierPathSchema,
+  supplierProfileResponseSchema,
+} from "./ratings";
+import {
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
   showcaseItemQuerySchema,
@@ -4752,6 +4758,57 @@ export const apiRoutes = {
     query: supplierReviewsQuerySchema,
     responses: {
       200: { description: "The reviews", schema: supplierReviewsResponseSchema },
+    },
+  }),
+  // ------------------------------------------------- the rating (TASK-050)
+  getOfferSupplier: defineRoute({
+    operationId: "getOfferSupplier",
+    method: "GET",
+    path: "/catalog/offers/{offerId}/supplier",
+    summary:
+      "M-CAT-09 from an offer of the catalog: the rating and «Новый поставщик», «Проверенный партнёр», the share of orders answered and kept in time — to every viewer; the name and the id of the supplier only by the rule of the showcase (club access). An offer users don't see now — 404",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    rateLimit: {
+      limit: "catalog_read_per_ip",
+      perAccount: "catalog_read_per_account",
+      whenUnavailable: "allow",
+    },
+    pathParams: offerSupplierPathSchema,
+    responses: {
+      200: { description: "The supplier's page", schema: supplierProfileResponseSchema },
+    },
+  }),
+  getOrderSupplier: defineRoute({
+    operationId: "getOrderSupplier",
+    method: "GET",
+    path: "/orders/{orderId}/supplier",
+    summary:
+      "M-CAT-09 from the user's own order: the same page as from an offer, for the supplier of this order. Another user's order answers like a missing one (404)",
+    tag: "orders",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderSupplierPathSchema,
+    responses: {
+      200: { description: "The supplier's page", schema: supplierProfileResponseSchema },
+    },
+  }),
+  getAdminSupplierRating: defineRoute({
+    operationId: "getAdminSupplierRating",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}/rating",
+    summary:
+      "A-SUP-03 «Рейтинг и отзывы»: the rating and its three parts with the numbers behind them, the formula and its version, when it was counted, the latest changes",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    responses: {
+      200: { description: "The rating", schema: adminSupplierRatingResponseSchema },
     },
   }),
   listAdminReviews: defineRoute({

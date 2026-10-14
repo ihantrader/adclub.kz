@@ -128,7 +128,7 @@ const brandIdsQuery = z
 /**
  * `recommended` — «Рекомендуемые», the default: not the price alone — the
  * price, the receipt date, an offer in the chosen city, a verified partner
- * and (when ratings exist) the rating, by the weights of the setting
+ * and the supplier's rating (TASK-050), by the weights of the setting
  * `catalog_recommended_weights` (ARCHITECTURE 4.29); `cheaper` — the
  * lowest price first; `faster` — the nearest receipt date first.
  */
@@ -136,7 +136,11 @@ export const showcaseListSortSchema = z.enum(["recommended", "cheaper", "faster"
 
 export type ShowcaseListSort = z.infer<typeof showcaseListSortSchema>;
 
-/** The offers of a card: the list's orders and `rating` (until ratings exist — as `recommended`). */
+/**
+ * The offers of a card: the list's orders and `rating` — the highest rating
+ * first, more scores first among equal ones, «Новый поставщик» last; ties by
+ * «Рекомендуемые» (TASK-050).
+ */
 export const showcaseOfferSortSchema = z.enum(["recommended", "cheaper", "faster", "rating"]);
 
 export type ShowcaseOfferSort = z.infer<typeof showcaseOfferSortSchema>;
@@ -360,7 +364,11 @@ export const showcaseOfferSchema = z.object({
   inCity: z.boolean(),
   /** «Проверенный партнёр». */
   verifiedPartner: z.boolean(),
-  /** The supplier's rating; `null` until ratings exist (EPIC-19). */
+  /**
+   * The supplier's rating, «★ 4,8 (23)»: 1–5 to one decimal and the number of
+   * published scores in the window (TASK-050); `null` — «Новый поставщик».
+   * Shown to every viewer, as «Проверенный партнёр»: it names nobody.
+   */
   rating: z.object({ value: z.number(), count: z.number().int() }).nullable(),
   /** «Новый поставщик» — no rating to show yet. */
   newSupplier: z.boolean(),

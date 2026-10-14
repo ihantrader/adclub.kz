@@ -6475,7 +6475,8 @@
                 "whatsapp_outage",
                 "supplier_unreachable",
                 "supply_overdue",
-                "visit_unresolved"
+                "visit_unresolved",
+                "low_rating"
               ]
             }
           },
@@ -7221,6 +7222,19 @@
                 "paused",
                 "blocked",
                 "verified"
+              ]
+            }
+          },
+          {
+            "name": "rating",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "new",
+                "rated"
               ]
             }
           },
@@ -8118,6 +8132,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminPriceImportPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{supplierId}/rating": {
+      "get": {
+        "operationId": "getAdminSupplierRating",
+        "summary": "A-SUP-03 «Рейтинг и отзывы»: the rating and its three parts with the numbers behind them, the formula and its version, when it was counted, the latest changes",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "supplierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The rating",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSupplierRatingResponse"
                 }
               }
             }
@@ -13041,6 +13108,65 @@
         }
       }
     },
+    "/catalog/offers/{offerId}/supplier": {
+      "get": {
+        "operationId": "getOfferSupplier",
+        "summary": "M-CAT-09 from an offer of the catalog: the rating and «Новый поставщик», «Проверенный партнёр», the share of orders answered and kept in time — to every viewer; the name and the id of the supplier only by the rule of the showcase (club access). An offer users don't see now — 404",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {},
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "x-rate-limit": {
+          "limit": "catalog_read_per_ip",
+          "perAccount": "catalog_read_per_account",
+          "whenUnavailable": "allow"
+        },
+        "responses": {
+          "200": {
+            "description": "The supplier's page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierProfileResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/catalog/search": {
       "get": {
         "operationId": "searchCatalog",
@@ -14285,6 +14411,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RepeatOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/supplier": {
+      "get": {
+        "operationId": "getOrderSupplier",
+        "summary": "M-CAT-09 from the user's own order: the same page as from an offer, for the supplier of this order. Another user's order answers like a missing one (404)",
+        "tags": [
+          "orders"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The supplier's page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierProfileResponse"
                 }
               }
             }
@@ -23703,7 +23882,8 @@
           "whatsapp_outage",
           "supplier_unreachable",
           "supply_overdue",
-          "visit_unresolved"
+          "visit_unresolved",
+          "low_rating"
         ]
       },
       "AdminSignalListQuery": {
@@ -23898,6 +24078,17 @@
             "type": "string",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "rating": {
+            "type": "number"
+          },
+          "ratingCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "ratingThreshold": {
+            "type": "number"
           }
         }
       },
@@ -24398,6 +24589,16 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminSupplierListRating"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -24411,7 +24612,32 @@
           "visibleOnShowcase",
           "createdAt",
           "memberCount",
-          "offersOnSale"
+          "offersOnSale",
+          "rating"
+        ]
+      },
+      "AdminSupplierListRating": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "low": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "value",
+          "count",
+          "low"
         ]
       },
       "AdminSupplierMember": {
@@ -24692,6 +24918,148 @@
         },
         "required": [
           "supplierId"
+        ]
+      },
+      "AdminSupplierRating": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "isNew": {
+            "type": "boolean"
+          },
+          "reviews": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "average": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "count",
+              "average"
+            ]
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "answered": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "required": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "rate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "answered",
+              "required",
+              "rate"
+            ]
+          },
+          "onTime": {
+            "type": "object",
+            "properties": {
+              "kept": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "judged": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "rate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kept",
+              "judged",
+              "rate"
+            ]
+          },
+          "rules": {
+            "$ref": "#/components/schemas/SupplierRatingRules"
+          },
+          "formulaVersion": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "computedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lowThreshold": {
+            "type": "number"
+          },
+          "low": {
+            "type": "boolean"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierRatingHistoryEntry"
+            }
+          }
+        },
+        "required": [
+          "score",
+          "isNew",
+          "reviews",
+          "response",
+          "onTime",
+          "rules",
+          "formulaVersion",
+          "computedAt",
+          "lowThreshold",
+          "low",
+          "history"
+        ]
+      },
+      "AdminSupplierRatingResponse": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "$ref": "#/components/schemas/AdminSupplierRating"
+          }
+        },
+        "required": [
+          "rating"
         ]
       },
       "AdminSupplierResponse": {
@@ -33032,6 +33400,19 @@
           "expectedVersion"
         ]
       },
+      "OfferSupplierPath": {
+        "type": "object",
+        "properties": {
+          "offerId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "offerId"
+        ]
+      },
       "OfferTab": {
         "type": "string",
         "enum": [
@@ -34214,6 +34595,19 @@
           "term_expired",
           "no_show",
           "visit_unresolved"
+        ]
+      },
+      "OrderSupplierPath": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "orderId"
         ]
       },
       "OrderTermAnswerBody": {
@@ -40499,6 +40893,9 @@
               "verified"
             ]
           },
+          "rating": {
+            "$ref": "#/components/schemas/SupplierRatingFilter"
+          },
           "cityId": {
             "type": "string",
             "format": "uuid",
@@ -41831,6 +42228,252 @@
         "enum": [
           "billing",
           "admin"
+        ]
+      },
+      "SupplierProfileResponse": {
+        "type": "object",
+        "properties": {
+          "viewer": {
+            "$ref": "#/components/schemas/ShowcaseViewer"
+          },
+          "supplier": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "hidden"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "auth_required",
+                      "subscription_required"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "reason"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "visible"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id",
+                  "name"
+                ]
+              }
+            ]
+          },
+          "verifiedPartner": {
+            "type": "boolean"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierRatingValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "newSupplier": {
+            "type": "boolean"
+          },
+          "responsePercent": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "onTimePercent": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "viewer",
+          "supplier",
+          "verifiedPartner",
+          "rating",
+          "newSupplier",
+          "responsePercent",
+          "onTimePercent"
+        ]
+      },
+      "SupplierRatingFigures": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "isNew": {
+            "type": "boolean"
+          },
+          "reviewsCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "responseRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "onTimeRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "score",
+          "isNew",
+          "reviewsCount",
+          "responseRate",
+          "onTimeRate"
+        ]
+      },
+      "SupplierRatingFilter": {
+        "type": "string",
+        "enum": [
+          "low",
+          "new",
+          "rated"
+        ]
+      },
+      "SupplierRatingHistoryEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "event",
+              "reconcile"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "before": {
+            "$ref": "#/components/schemas/SupplierRatingFigures"
+          },
+          "after": {
+            "$ref": "#/components/schemas/SupplierRatingFigures"
+          }
+        },
+        "required": [
+          "id",
+          "cause",
+          "at",
+          "before",
+          "after"
+        ]
+      },
+      "SupplierRatingRules": {
+        "type": "object",
+        "properties": {
+          "weights": {
+            "type": "object",
+            "properties": {
+              "reviews": {
+                "type": "number"
+              },
+              "response_rate": {
+                "type": "number"
+              },
+              "deadline_rate": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "reviews",
+              "response_rate",
+              "deadline_rate"
+            ]
+          },
+          "minReviews": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "minOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "windowDays": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "weights",
+          "minReviews",
+          "minOrders",
+          "windowDays"
+        ]
+      },
+      "SupplierRatingValue": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "value",
+          "count"
         ]
       },
       "SupplierReviewsQuery": {

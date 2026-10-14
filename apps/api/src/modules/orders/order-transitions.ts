@@ -13,6 +13,7 @@ import {
 import {
   acceptedReserveEnd,
   countsInStatistics,
+  ratingFollowsOrderEvent,
   isLateCancel,
   lateCloseUntil,
   orderTransition,
@@ -29,10 +30,12 @@ import {
 } from "@adclub/domain";
 import { and, desc, eq, gte, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
+import { JobQueue } from "../../jobs";
 import { AuditLog } from "../audit";
 import { supplier } from "../identity";
 import { receiptSchedules } from "../offers";
 import { AppSettings } from "../settings";
+import { ratingChanged } from "../ratings";
 import { AdminSignals } from "../signals";
 import { Discipline } from "./order-discipline";
 import { OrderNotices } from "./order-notices";
@@ -305,6 +308,7 @@ export class OrderTransitions {
     @Inject(Discipline) private readonly discipline: Discipline,
     @Inject(AdminSignals) private readonly signals: AdminSignals,
     @Inject(OrderNotices) private readonly notices: OrderNotices,
+    @Inject(JobQueue) private readonly queue: JobQueue,
   ) {}
 
   /** A person's move on an order (the caller has checked the order is theirs). */
@@ -1391,6 +1395,12 @@ export class OrderTransitions {
       payload,
       createdAt: at,
     });
+    // TASK-050: an answer, a silence, a verdict or an overdue supply changes
+    // the supplier's rating — counted again by the worker once this commits.
+    // A test order judges nobody.
+    if (ratingFollowsOrderEvent(action) && countsInStatistics(order)) {
+      await ratingChanged(this.queue, tx, order.supplierId);
+    }
   }
 }
 

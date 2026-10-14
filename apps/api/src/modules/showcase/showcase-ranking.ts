@@ -46,7 +46,7 @@ function rankedFacts(entry: VisibleOffer, cityId: string | null) {
     receiptDays: entry.receiptDays,
     inCity: cityId !== null && entry.cityId === cityId,
     verified: entry.verified,
-    rating: null,
+    rating: entry.rating?.value ?? null,
   };
 }
 
@@ -64,9 +64,22 @@ export function sortOffers(
         return [entry.price, entry.receipt.date, entry.id];
       case "faster":
         return [entry.receipt.date, entry.price, entry.id];
+      case "rating": {
+        // TASK-050: the highest rating first, more scores first among equal
+        // ones, «Новый поставщик» last; then «Рекомендуемые», the id last —
+        // a total order.
+        const score = recommendedScore(rankedFacts(entry, cityId), reference, weights);
+        return [
+          entry.rating === null ? 1 : 0,
+          -(entry.rating?.value ?? 0),
+          -(entry.rating?.count ?? 0),
+          -score,
+          entry.price,
+          entry.receipt.date,
+          entry.id,
+        ];
+      }
       default: {
-        // `rating`: there are no ratings yet (EPIC-19) — every offer has
-        // the same, so the order is «Рекомендуемые».
         const score = recommendedScore(rankedFacts(entry, cityId), reference, weights);
         return [-score, entry.price, entry.receipt.date, entry.id];
       }

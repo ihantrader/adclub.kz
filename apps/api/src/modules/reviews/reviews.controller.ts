@@ -15,6 +15,11 @@ import {
   supplierPathSchema,
   supplierReviewsQuerySchema,
   takeComplaintBodySchema,
+  offerSupplierPathSchema,
+  orderSupplierPathSchema,
+  type OfferSupplierPath,
+  type OrderSupplierPath,
+  type SupplierProfileResponse,
   type AdminComplaintListQuery,
   type AdminComplaintPage,
   type AdminComplaintResponse,
@@ -52,6 +57,7 @@ import {
 import { roleSafeCaching, viewerOf } from "../showcase";
 import { ComplaintsService } from "./complaints.service";
 import { ReviewsService, type ReviewAdmin } from "./reviews.service";
+import { SupplierProfiles } from "./supplier-profiles";
 
 /** The administrator a session of the `admin` context belongs to (the access rule set it). */
 function adminOf(session: AuthenticatedSession): ReviewAdmin {
@@ -72,7 +78,19 @@ export class UserReviewsController {
   constructor(
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
     @Inject(ComplaintsService) private readonly complaints: ComplaintsService,
+    @Inject(SupplierProfiles) private readonly profiles: SupplierProfiles,
+    @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
   ) {}
+
+  /** M-CAT-09 from the user's own order (TASK-050). */
+  @SessionRoute(apiRoutes.getOrderSupplier)
+  async orderSupplier(
+    @Param(new ZodValidationPipe(orderSupplierPathSchema)) params: OrderSupplierPath,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<SupplierProfileResponse> {
+    const viewer = await viewerOf(session, this.clubAccess);
+    return this.profiles.ofOrder(params.orderId, { ...viewer, accountId: session.accountId });
+  }
 
   @RateLimitedRoute(apiRoutes.createReview)
   create(
@@ -118,6 +136,7 @@ export class SupplierReviewsController {
   constructor(
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
     @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
+    @Inject(SupplierProfiles) private readonly profiles: SupplierProfiles,
   ) {}
 
   @RateLimitedRoute(apiRoutes.getSupplierReviews)
@@ -130,6 +149,24 @@ export class SupplierReviewsController {
   ): Promise<SupplierReviewsResponse> {
     const viewer = await viewerOf(session, this.clubAccess);
     const answer = await this.reviews.publicPage(params.supplierId, query, viewer);
+    roleSafeCaching(response, pickLanguage(acceptLanguage), session !== null);
+    return answer;
+  }
+
+  /**
+   * M-CAT-09 from an offer of the catalog (TASK-050): to every viewer the
+   * rating and the shares; the supplier by the rule of the showcase. Limited
+   * and cached as the catalog.
+   */
+  @RateLimitedRoute(apiRoutes.getOfferSupplier)
+  async offerSupplier(
+    @Param(new ZodValidationPipe(offerSupplierPathSchema)) params: OfferSupplierPath,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @OptionalSession() session: AuthenticatedSession | null,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<SupplierProfileResponse> {
+    const viewer = await viewerOf(session, this.clubAccess);
+    const answer = await this.profiles.ofOffer(params.offerId, viewer);
     roleSafeCaching(response, pickLanguage(acceptLanguage), session !== null);
     return answer;
   }

@@ -105,6 +105,8 @@ describe("ormTables", () => {
         "catalog_request",
         "review",
         "complaint",
+        "supplier_rating",
+        "supplier_rating_history",
         "session",
         "supplier",
         "supplier_member",

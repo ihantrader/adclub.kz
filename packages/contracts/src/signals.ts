@@ -47,7 +47,13 @@ import type { CatalogItemListQuery } from "./catalog-items";
  * signal per order (the subject is the order), raised once by the move that
  * expires the visit; a test order of an employee raises none.
  *
- * Later tasks add the others (a low rating, a spike of complaints, a failed
+ * TASK-050 adds `low_rating` (PRODUCT 13): a supplier's shown rating fell
+ * below `rating_low_signal`. One signal per supplier; it closes by itself when
+ * the rating rises to the threshold or above (or is no longer shown); closed
+ * by an administrator while still low, it opens again only at a new fall.
+ * Nothing is blocked automatically.
+ *
+ * Later tasks add the others (a spike of complaints, a failed
  * payment).
  */
 
@@ -58,6 +64,7 @@ export const adminSignalKindSchema = z.enum([
   "supplier_unreachable",
   "supply_overdue",
   "visit_unresolved",
+  "low_rating",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -129,6 +136,14 @@ export const adminSignalPayloadSchema = z.object({
   leadDays: z.number().int().optional(),
   /** `visit_unresolved` (TASK-038): the confirmed time of the visit; the order — `orderId`, `orderNumber`. */
   visitAt: z.iso.datetime().optional(),
+  /**
+   * `low_rating` (TASK-050): the rating, the published scores behind it and
+   * the threshold it is below (`rating_low_signal`); the supplier —
+   * `supplierId`, `supplierName`.
+   */
+  rating: z.number().optional(),
+  ratingCount: z.number().int().optional(),
+  ratingThreshold: z.number().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

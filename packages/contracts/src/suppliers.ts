@@ -933,6 +933,16 @@ export const adminSupplierResponseSchema = z.object({ supplier: adminSupplierCar
 
 export type AdminSupplierResponse = z.infer<typeof adminSupplierResponseSchema>;
 
+/** A row of A-SUP-02: the rating, or «новый» (`value` null) — TASK-050. */
+export const adminSupplierListRatingSchema = z.object({
+  value: z.number().nullable(),
+  count: z.number().int(),
+  /** Below `rating_low_signal`. */
+  low: z.boolean(),
+});
+
+export type AdminSupplierListRating = z.infer<typeof adminSupplierListRatingSchema>;
+
 export const adminSupplierListItemSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -951,17 +961,25 @@ export const adminSupplierListItemSchema = z.object({
    * is the showcase's rule, not this number).
    */
   offersOnSale: z.number().int(),
+  /** The rating (TASK-050, A-SUP-02); `null` — not counted yet («новый»). */
+  rating: adminSupplierListRatingSchema.nullable(),
 });
 
 export type AdminSupplierListItem = z.infer<typeof adminSupplierListItemSchema>;
 
+/** A-SUP-02 «рейтинг»: `low` — below `rating_low_signal`; `new` — «Новый поставщик»; `rated` — has a rating. */
+export const supplierRatingFilterSchema = z.enum(["low", "new", "rated"]);
+
+export type SupplierRatingFilter = z.infer<typeof supplierRatingFilterSchema>;
+
 /**
  * `state`: `active`, `paused`, `blocked` — the state; `verified` —
  * verified partners in any state. `q` — a part of the name or of the БИН.
- * By name.
+ * `rating` (TASK-050). By name.
  */
 export const supplierListQuerySchema = z.object({
   state: z.enum(["active", "paused", "blocked", "verified"]).optional(),
+  rating: supplierRatingFilterSchema.optional(),
   cityId: z.uuid().optional(),
   type: supplierTypeSchema.optional(),
   q: z.string().trim().min(1).max(100).optional(),

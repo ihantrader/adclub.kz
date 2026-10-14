@@ -625,23 +625,37 @@ describe("background jobs (PostgreSQL)", () => {
       singletonMaxActive = 0;
       const accepted: string[] = [];
       let refused = 0;
-      const workersSeen = () => new Set(runsOf(singletonJob.name).map((run) => run.worker));
-      // Which worker's poll lands first once the queue frees is a race, so
-      // the run goes on until both have taken a job (bounded): the point of
-      // the test is that a singleton is never run twice at a time, whoever
-      // takes it — not which of them happens to be quicker.
-      const until = Date.now() + 3000;
-      const deadline = Date.now() + 40_000;
-      while (Date.now() < until || (workersSeen().size < 2 && Date.now() < deadline)) {
-        const value = marker("singleton");
-        const id = await enqueue(singletonJob, { marker: value });
-        if (id) {
-          accepted.push(value);
-        } else {
-          refused += 1;
+      const offer = async (ms: number) => {
+        const until = Date.now() + ms;
+        while (Date.now() < until) {
+          const value = marker("singleton");
+          const id = await enqueue(singletonJob, { marker: value });
+          if (id) {
+            accepted.push(value);
+          } else {
+            refused += 1;
+          }
+          await sleep(50);
         }
-        await sleep(50);
-      }
+      };
+      // Both workers poll the queue together: a singleton is never run twice
+      // at a time whoever takes it. Which of them takes it is a race the
+      // first winner usually keeps winning: pg-boss waits `interval − the
+      // last poll's duration` before the next poll, and a poll that ran this
+      // 400 ms handler polls again at once (TASK-049.B).
+      await offer(3000);
+      // So that each of them demonstrably takes the singleton, each in turn
+      // is the only one polling: the other one is stopped and started again
+      // (stopping waits for its run to finish). Both are up again afterwards.
+      await stop(second);
+      await offer(1500);
+      second = await start("second");
+      await ready(second);
+      await stop(first);
+      await offer(1500);
+      first = await start("first");
+      await ready(first);
+      await offer(1500);
       await waitFor(
         () =>
           accepted.every((value) => runsOf(singletonJob.name, value).some((run) => run.finishedAt)),

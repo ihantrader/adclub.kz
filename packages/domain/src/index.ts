@@ -197,6 +197,29 @@ export {
 export type { VisitDay, VisitTimeProblem } from "./order/order-visit";
 export { countsInStatistics } from "./order/order-statistics";
 export type { OrderStatisticsFacts } from "./order/order-statistics";
+export {
+  lowRatingSignalMove,
+  RATING_FORMULA_VERSION,
+  ratingFollowsOrderEvent,
+  ratingIsLow,
+  ratingOrderActions,
+  ratingOrderOutcome,
+  ratingPercent,
+  roundRating,
+  shareOnScale,
+  supplierRating,
+  tallyRatingOrders,
+} from "./supplier/supplier-rating";
+export type {
+  RatingAnswer,
+  RatingInputs,
+  RatingOrderFacts,
+  RatingOrderTally,
+  RatingRules,
+  RatingTerm,
+  RatingWeights,
+  SupplierRating,
+} from "./supplier/supplier-rating";
 export { orderRepeatDecision } from "./order/order-repeat";
 export type {
   OrderRepeatBlocked,

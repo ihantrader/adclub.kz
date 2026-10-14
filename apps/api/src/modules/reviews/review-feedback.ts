@@ -2,6 +2,7 @@ import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
 import { sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { customerOrder, OrderFeedback, type UserOrderFeedback } from "../orders";
+import { AppSettings } from "../settings";
 import { ComplaintsService } from "./complaints.service";
 import {
   adminComplaintViews,
@@ -25,6 +26,7 @@ export class ReviewFeedback implements OnModuleInit {
     @Inject(OrderFeedback) private readonly registry: OrderFeedback,
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
     @Inject(ComplaintsService) private readonly complaints: ComplaintsService,
+    @Inject(AppSettings) private readonly settings: AppSettings,
   ) {}
 
   onModuleInit(): void {
@@ -45,6 +47,11 @@ export class ReviewFeedback implements OnModuleInit {
       },
       hasComplaint: () =>
         sql`EXISTS (SELECT 1 FROM ${complaint} WHERE ${complaint.orderId} = ${customerOrder.id})`,
+      // TASK-049.B: the counters of M-ORD-05 and M-ORD-06 count to what is refused.
+      textLimits: async () => ({
+        reviewText: await this.settings.get("review_text_max_length"),
+        complaintText: await this.settings.get("complaint_text_max_length"),
+      }),
     });
   }
 

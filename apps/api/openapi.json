@@ -44168,6 +44168,38 @@
             "items": {
               "$ref": "#/components/schemas/ComplaintReason"
             }
+          },
+          "reviewUnavailable": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "test_order"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feedbackLimits": {
+            "type": "object",
+            "properties": {
+              "reviewText": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "complaintText": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "reviewText",
+              "complaintText"
+            ]
           }
         },
         "required": [
@@ -44198,7 +44230,9 @@
           "canReview",
           "review",
           "complaint",
-          "complaintReasons"
+          "complaintReasons",
+          "reviewUnavailable",
+          "feedbackLimits"
         ]
       },
       "UserOrderComplaint": {

@@ -612,6 +612,9 @@ export async function userOrderView(
     review: own.review,
     complaint: own.complaint,
     complaintReasons: own.complaintOpen ? [] : complaintReasonsFor(row.status),
+    // TASK-049.B: the test order said in words, and what the counters count to.
+    reviewUnavailable: reviewUnavailable(row, own.review !== null),
+    feedbackLimits: await feedback.textLimits(),
   };
 }
 
@@ -711,6 +714,18 @@ export async function activeCopyEntries(
  */
 export function reviewable(row: Pick<OrderRow, "status" | "isTest">, hasReview: boolean): boolean {
   return row.status === "completed" && !row.isTest && !hasReview;
+}
+
+/**
+ * Why an order given out is not reviewed (TASK-049.B, M-ORD-05): a test
+ * order of an employee — «Отзыв недоступен: это тестовый заказ» in place of
+ * «Оценить». The same condition `POST /reviews` refuses with `test_order`.
+ */
+export function reviewUnavailable(
+  row: Pick<OrderRow, "status" | "isTest">,
+  hasReview: boolean,
+): "test_order" | null {
+  return row.status === "completed" && row.isTest && !hasReview ? "test_order" : null;
 }
 
 /**

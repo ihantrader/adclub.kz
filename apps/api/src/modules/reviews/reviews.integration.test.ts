@@ -541,6 +541,9 @@ describe("reviews and complaints (PostgreSQL + Redis + worker)", () => {
 
       const waiting = await place(buyer, offer);
       expect(waiting.canReview).toBe(false);
+      // TASK-049.B: not given out is not «тестовый заказ»; the counters count to the settings.
+      expect(waiting.reviewUnavailable).toBeNull();
+      expect(waiting.feedbackLimits).toEqual({ reviewText: 1000, complaintText: 1000 });
       expectError(
         await buyer.as("post", "/reviews", {
           orderId: waiting.id,
@@ -553,7 +556,12 @@ describe("reviews and complaints (PostgreSQL + Redis + worker)", () => {
 
       const order = await givenOut(buyer, shop, offer);
       const card = await userOrder(buyer, order.id);
-      expect(card).toMatchObject({ status: "completed", canReview: true, review: null });
+      expect(card).toMatchObject({
+        status: "completed",
+        canReview: true,
+        review: null,
+        reviewUnavailable: null,
+      });
       // Another user's order and a missing one answer alike.
       for (const orderId of [order.id, randomUUID()]) {
         expectError(
@@ -627,7 +635,11 @@ describe("reviews and complaints (PostgreSQL + Redis + worker)", () => {
       const employee = await customer({ phone: shop.phone });
       const order = await givenOut(employee, shop, offer);
       expect(order.isTest).toBe(true);
-      expect((await userOrder(employee, order.id)).canReview).toBe(false);
+      // TASK-049.B: the card says why in place of «Оценить».
+      expect(await userOrder(employee, order.id)).toMatchObject({
+        canReview: false,
+        reviewUnavailable: "test_order",
+      });
       const refused = await employee.as("post", "/reviews", {
         orderId: order.id,
         score: 5,

@@ -659,6 +659,22 @@ export const userOrderSchema = userOrderSummarySchema.extend({
    * `not_received` only for an order given out (T-ORD-08).
    */
   complaintReasons: z.array(complaintReasonSchema),
+  /**
+   * TASK-049.B (M-ORD-05): why the order is not reviewed although it was
+   * given out — `test_order`: «Отзыв недоступен: это тестовый заказ» in
+   * place of the button; `null` — nothing to say (it may be reviewed, has a
+   * review, or is not given out).
+   */
+  reviewUnavailable: z.enum(["test_order"]).nullable(),
+  /**
+   * TASK-049.B (M-ORD-05, M-ORD-06): the longest texts the server takes now
+   * (the settings `review_text_max_length`, `complaint_text_max_length`) —
+   * the counters of the fields count to them.
+   */
+  feedbackLimits: z.object({
+    reviewText: z.number().int(),
+    complaintText: z.number().int(),
+  }),
 });
 
 export type UserOrder = z.infer<typeof userOrderSchema>;

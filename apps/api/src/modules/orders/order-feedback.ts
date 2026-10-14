@@ -1,9 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import type {
-  AdminComplaint,
-  AdminReview,
-  UserOrderComplaint,
-  UserOrderReview,
+import {
+  COMPLAINT_TEXT_LIMIT,
+  REVIEW_TEXT_LIMIT,
+  type AdminComplaint,
+  type AdminReview,
+  type UserOrderComplaint,
+  type UserOrderReview,
 } from "@adclub/contracts";
 import { sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
@@ -40,9 +42,22 @@ export interface OrderFeedbackSource {
   forAdmin(executor: DbExecutor, orderId: string): Promise<AdminOrderFeedback>;
   /** A-ORD-01 «Есть жалоба»: the condition on `customer_order`. */
   hasComplaint(): SQL;
+  /** The longest texts of a review and a complaint the server takes now (TASK-049.B). */
+  textLimits(): Promise<FeedbackTextLimits>;
+}
+
+/** `UserOrder.feedbackLimits`: what the counters of M-ORD-05 and M-ORD-06 count to. */
+export interface FeedbackTextLimits {
+  reviewText: number;
+  complaintText: number;
 }
 
 const NONE: UserOrderFeedback = { review: null, complaint: null, complaintOpen: false };
+/** Without the reviews module nothing is taken; the contract's own limits are said. */
+const CONTRACT_LIMITS: FeedbackTextLimits = {
+  reviewText: REVIEW_TEXT_LIMIT,
+  complaintText: COMPLAINT_TEXT_LIMIT,
+};
 
 /**
  * The registry the reviews module registers its source in. Without it (the
@@ -72,6 +87,10 @@ export class OrderFeedback {
     return this.source && orderIds.length > 0
       ? this.source.reviewedOrderIds(executor, orderIds)
       : Promise.resolve(new Set());
+  }
+
+  textLimits(): Promise<FeedbackTextLimits> {
+    return this.source ? this.source.textLimits() : Promise.resolve(CONTRACT_LIMITS);
   }
 
   forAdmin(executor: DbExecutor, orderId: string): Promise<AdminOrderFeedback> {

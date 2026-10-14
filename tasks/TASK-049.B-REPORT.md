@@ -78,7 +78,7 @@ COMPLETED
   - `orders.integration.test.ts` — PASS (75/75).
   - `reviews.integration.test.ts` — PASS (15/15). Это повторный прогон; в первом, параллельно с typecheck, test и build, два теста упали по таймауту хука 120 с (`Hook timed out in 120000ms`). Отдельно — зелёные.
 - `jobs.integration.test.ts` (требование 4) — PASS: весь файл 22/22, затем ещё 5 прогонов подряд группы «makes up a periodic run | never runs a singleton» — все зелёные.
-- CI: прогон `CI_RUN_ID` (запущен пушем; результат проверяет архитектор).
+- CI: прогон `38577205324` (коммит `c6b1e7a`) (запущен пушем; результат проверяет архитектор).
 
 ## UAT / E2E
 Окружение: `api-test-ai`, `worker-test-ai`, `mobile-web` (375×812), `admin-web` (1440×900); dev-база, тестовый ИИ.
@@ -151,7 +151,7 @@ COMPLETED
 - **AC-6 — PASS.** `openapi:compat --base HEAD`: «Contract is backward compatible with HEAD», без трейлера.
 - **AC-7 — PASS.** `ARCHITECTURE.md` 0.72, раздел 4.70 (I753–I761); `CLAUDE.md` блок 0 — «Экраны приложения (TASK-049.B…)» в «Отзывы и жалобы в dev».
 - **AC-8 — PASS.** format:check, lint, typecheck, test, build — после последней правки кода. Интеграционные: `reviews` 15/15 и `orders` 75/75. `jobs.integration.test.ts`: весь файл и ещё 5 прогонов подряд — все зелёные.
-- **AC-9 — PASS.** Этот отчёт, прогон CI — `CI_RUN_ID`.
+- **AC-9 — PASS.** Этот отчёт, прогон CI — `38577205324` (коммит `c6b1e7a`).
 
 ## Errors & Fixes
 - Первый прогон `reviews.integration.test.ts` шёл параллельно с typecheck, test и build: два теста упали по `Hook timed out in 120000ms`. Отдельный прогон — 15/15. Код не менялся.

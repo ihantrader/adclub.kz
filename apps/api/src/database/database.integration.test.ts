@@ -98,6 +98,70 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds the rating of a supplier with its rules and history, and rolls back keeping the companies (supplier ratings)", async () => {
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('ratings-city', 'Город рейтинга') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Рейтинг', $1) RETURNING id",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    const rating = (values: Record<string, unknown>) => {
+      const row = {
+        supplier_id: supplierId,
+        score: 4.3,
+        is_new: false,
+        reviews_count: 5,
+        reviews_average: 4.2,
+        answered_count: 8,
+        answer_required_count: 10,
+        kept_count: 8,
+        judged_count: 8,
+        response_rate: 0.8,
+        on_time_rate: 1,
+        formula_version: 1,
+        rules: JSON.stringify({ weights: {}, minReviews: 5, minOrders: 5, windowDays: 180 }),
+        computed_at: new Date(),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO supplier_rating (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    // «Новый поставщик» is a rating without a score, and nothing else.
+    await expect(rating({ score: null })).rejects.toThrow(/supplier_rating_new_check/);
+    await expect(rating({ is_new: true })).rejects.toThrow(/supplier_rating_new_check/);
+    await expect(rating({ score: 5.5 })).rejects.toThrow(/supplier_rating_score_check/);
+    await expect(rating({ answered_count: 11 })).rejects.toThrow(/supplier_rating_counts_check/);
+    await expect(rating({ reviews_count: 0 })).rejects.toThrow(/supplier_rating_average_check/);
+    await expect(rating({ on_time_rate: 1.2 })).rejects.toThrow(/supplier_rating_rates_check/);
+    await rating({});
+    // One snapshot per supplier.
+    await expect(rating({})).rejects.toThrow(/supplier_rating_pkey/);
+    await expect(
+      client.query(
+        "INSERT INTO supplier_rating_history (supplier_id, cause, changed_at, before, after) VALUES ($1, 'manual', now(), '{}', '{}')",
+        [supplierId],
+      ),
+    ).rejects.toThrow(/supplier_rating_history_cause_check/);
+    await client.query(
+      "INSERT INTO supplier_rating_history (supplier_id, cause, changed_at, before, after) VALUES ($1, 'reconcile', now(), '{}', '{}')",
+      [supplierId],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "supplier_rating")).toBe(false);
+    expect(await tableExists(client, "supplier_rating_history")).toBe(false);
+    // The company stays.
+    const kept = await client.query("SELECT 1 FROM supplier WHERE id = $1", [supplierId]);
+    expect(kept.rowCount).toBe(1);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+  });
+
   it("holds reviews and complaints with their rules, and rolls back keeping the orders (reviews and complaints)", async () => {
     const account = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77470000149') RETURNING id",

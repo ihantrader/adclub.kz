@@ -20,6 +20,7 @@ export type OfferHiddenReason =
   | "offer_suspended"
   | "supplier_paused"
   | "supplier_blocked"
+  | "card_not_linked"
   | "supplier_type_mismatch"
   | "item_unavailable"
   | "category_hidden"
@@ -40,6 +41,14 @@ export interface OfferVisibilityFacts {
   offerStatus: OfferStatus;
   supplierPauseReason: SupplierPauseReason | null;
   supplierBlocked: boolean;
+  /**
+   * D-041 (TASK-040): the switch `supplier_card_required` is on — a supplier's
+   * offers are on the showcase only once a card is linked. Off (stage B and
+   * until TASK-042), a card counts for nothing.
+   */
+  cardRequired: boolean;
+  /** The supplier has linked a card (`supplier.card_linked_at`, set by TASK-042). */
+  cardLinked: boolean;
   /**
    * The supplier's type still lets it offer the item (`supplierOffers`,
    * TASK-019): an offer on a service of a supplier made «только товары»
@@ -63,7 +72,7 @@ export interface OfferVisibilityFacts {
 
 export interface OfferVisibility {
   visible: boolean;
-  /** In a fixed order: the offer, the supplier, the item, the category, the point, its hours. */
+  /** In a fixed order: the offer, the supplier (its card among it), the item, the category, the point, its hours. */
   reasons: OfferHiddenReason[];
 }
 
@@ -79,6 +88,9 @@ export function offerVisibility(facts: OfferVisibilityFacts): OfferVisibility {
   }
   if (facts.supplierPauseReason !== null) {
     reasons.push("supplier_paused");
+  }
+  if (facts.cardRequired && !facts.cardLinked) {
+    reasons.push("card_not_linked");
   }
   if (!facts.supplierTypeFits) {
     reasons.push("supplier_type_mismatch");

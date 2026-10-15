@@ -102,6 +102,9 @@ export const offerHiddenReasonSchema = z.enum([
   "offer_suspended",
   "supplier_blocked",
   "supplier_paused",
+  // D-041 (TASK-040): the switch `supplier_card_required` is on and the
+  // company hasn't linked a card (T-SUP-02).
+  "card_not_linked",
   // TASK-019: the company's type no longer lets it offer the item (a
   // service of a company made «только товары», or goods of «только услуги»).
   "supplier_type_mismatch",

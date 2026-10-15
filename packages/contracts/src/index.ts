@@ -496,6 +496,7 @@ export * from "./compatibility";
 export * from "./suppliers";
 export * from "./offers";
 export * from "./club-access";
+export * from "./subscriptions";
 export * from "./orders";
 export * from "./signals";
 export * from "./reviews";

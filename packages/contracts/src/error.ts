@@ -220,6 +220,13 @@ import { clientPlatformSchema } from "./client";
  * - `CLUB_ACCESS_NOT_GRANTED` (409): there is no current manual grant of
  *   the account to revoke (never given, already revoked or expired).
  *
+ * Subscriptions (TASK-040, ARCHITECTURE 4.72; the purchase routes of TASK-041):
+ * - `SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT` (409): the purchase belongs to
+ *   another account (the same Apple ID or Google account on another number,
+ *   T-SUB-04) — it stays there; moving it is the administrator's act.
+ * - `SUBSCRIPTION_ALREADY_ACTIVE` (409): the account pays for another
+ *   purchase that still gives access («Подписка уже активна»).
+ *
  * Orders (TASK-021, ARCHITECTURE 4.31):
  * - `SUBSCRIPTION_REQUIRED` (403): the user has no club access — only
  *   members of the club order (show the subscription screen, M-SUB-01).
@@ -449,6 +456,9 @@ export const errorCodeSchema = z.enum([
   "OFFER_WARRANTY_CONTACTS",
   // Club access (TASK-020, ARCHITECTURE 4.29).
   "CLUB_ACCESS_NOT_GRANTED",
+  // Subscriptions (TASK-040, ARCHITECTURE 4.72; returned by TASK-041's purchase routes).
+  "SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT",
+  "SUBSCRIPTION_ALREADY_ACTIVE",
   // Orders (TASK-021, ARCHITECTURE 4.31).
   "SUBSCRIPTION_REQUIRED",
   "ORDER_OFFER_UNAVAILABLE",

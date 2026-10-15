@@ -185,6 +185,11 @@ import {
   revokeClubAccessBodySchema,
 } from "./club-access";
 import {
+  adminUserSubscriptionResponseSchema,
+  mySubscriptionResponseSchema,
+  supplierSubscriptionResponseSchema,
+} from "./subscriptions";
+import {
   garageCarIdPathSchema,
   garageCarRemovedResponseSchema,
   garageCarsResponseSchema,
@@ -889,6 +894,20 @@ export const apiRoutes = {
       200: { description: "Registration is complete", schema: accountProfileSchema },
     },
   }),
+  getMySubscription: defineRoute({
+    operationId: "getMySubscription",
+    method: "GET",
+    path: "/me/subscription",
+    summary:
+      "The subscription of the signed-in account on any device (M-SUB-02): the status decided by the server, club access, the tariff and its announced change",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    responses: {
+      200: { description: "The subscription", schema: mySubscriptionResponseSchema },
+    },
+  }),
   getAccountProfile: defineRoute({
     operationId: "getAccountProfile",
     method: "GET",
@@ -1096,6 +1115,23 @@ export const apiRoutes = {
       200: {
         description: "The session now works for that company",
         schema: currentAccountResponseSchema,
+      },
+    },
+  }),
+  getSupplierSubscription: defineRoute({
+    operationId: "getSupplierSubscription",
+    method: "GET",
+    path: "/supplier/subscription",
+    summary:
+      "The company's card and the switch D-041 (offers on the showcase only after a card is linked), the suppliers' tariff and its announced change",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    responses: {
+      200: {
+        description: "The company's subscription",
+        schema: supplierSubscriptionResponseSchema,
       },
     },
   }),
@@ -4983,6 +5019,21 @@ export const apiRoutes = {
     pathParams: adminUserPathSchema,
     responses: {
       200: { description: "The user", schema: adminUserResponseSchema },
+    },
+  }),
+  getAdminUserSubscription: defineRoute({
+    operationId: "getAdminUserSubscription",
+    method: "GET",
+    path: "/admin/users/{accountId}/subscription",
+    summary:
+      "The subscription of a user (A-USR-02 «Клубный доступ»): its status and moments, the history of its events, club access now and the grant by hand beside it",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserPathSchema,
+    responses: {
+      200: { description: "The subscription", schema: adminUserSubscriptionResponseSchema },
     },
   }),
   getAdminUserGarage: defineRoute({

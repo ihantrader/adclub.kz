@@ -28,8 +28,12 @@ function plainText(max: number) {
     .regex(/^[^\p{Cc}]*$/u, { message: "Must not contain control characters" });
 }
 
-/** Where access comes from: `manual` — a grant by hand (stores' subscriptions come with TASK-040). */
-export const clubAccessSourceSchema = z.enum(["manual"]);
+/**
+ * Where access comes from: `manual` — a grant by hand; `subscription` — a
+ * user's subscription (TASK-040). With both, the one whose end is farther
+ * (a subscription on a tie).
+ */
+export const clubAccessSourceSchema = z.enum(["manual", "subscription"]);
 
 export type ClubAccessSource = z.infer<typeof clubAccessSourceSchema>;
 

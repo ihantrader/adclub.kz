@@ -7,6 +7,8 @@ const shown: OfferVisibilityFacts = {
   offerStatus: "active",
   supplierPauseReason: null,
   supplierBlocked: false,
+  cardRequired: false,
+  cardLinked: false,
   supplierTypeFits: true,
   itemStatus: "active",
   categoryVisible: true,
@@ -25,6 +27,7 @@ describe("an offer on the showcase", () => {
     [{ supplierPauseReason: "admin" as const }, ["supplier_paused"]],
     [{ supplierPauseReason: "billing" as const }, ["supplier_paused"]],
     [{ supplierBlocked: true }, ["supplier_blocked"]],
+    [{ cardRequired: true, cardLinked: false }, ["card_not_linked"]],
     [{ supplierTypeFits: false }, ["supplier_type_mismatch"]],
     [{ itemStatus: "archived" }, ["item_unavailable"]],
     [{ itemStatus: "draft" }, ["item_unavailable"]],
@@ -42,6 +45,8 @@ describe("an offer on the showcase", () => {
         offerStatus: "withdrawn",
         supplierPauseReason: "billing",
         supplierBlocked: true,
+        cardRequired: true,
+        cardLinked: false,
         supplierTypeFits: false,
         itemStatus: "archived",
         categoryVisible: false,
@@ -52,12 +57,27 @@ describe("an offer on the showcase", () => {
       "offer_withdrawn",
       "supplier_blocked",
       "supplier_paused",
+      "card_not_linked",
       "supplier_type_mismatch",
       "item_unavailable",
       "category_hidden",
       "no_city",
       "hours_not_set",
     ]);
+  });
+
+  it("counts a card only while the switch D-041 is on (TASK-040)", () => {
+    for (const cardLinked of [false, true]) {
+      expect(offerVisibility({ ...shown, cardRequired: false, cardLinked })).toEqual({
+        visible: true,
+        reasons: [],
+      });
+    }
+    expect(offerVisibility({ ...shown, cardRequired: true, cardLinked: true }).visible).toBe(true);
+    expect(offerVisibility({ ...shown, cardRequired: true, cardLinked: false })).toEqual({
+      visible: false,
+      reasons: ["card_not_linked"],
+    });
   });
 
   it("agrees with the supplier's showcase sign in every state", () => {

@@ -345,3 +345,40 @@ export type {
   PriceRowKey,
   PriceRowKeyKind,
 } from "./price-import/price-match";
+export {
+  audienceStatuses,
+  dueTimeEvent,
+  initialSubscriptionState,
+  isCurrentSubscription,
+  providerEventKinds,
+  subscriptionAudiences,
+  subscriptionEventKinds,
+  subscriptionStatuses,
+  subscriptionTransition,
+  timeEventKinds,
+} from "./subscription/subscription-machine";
+export type {
+  ProviderEventKind,
+  SubscriptionAudience,
+  SubscriptionEvent,
+  SubscriptionEventKind,
+  SubscriptionState,
+  SubscriptionStatus,
+  SubscriptionTimes,
+  SubscriptionTransition,
+  TimeEventKind,
+} from "./subscription/subscription-machine";
+export {
+  combineClubAccess,
+  subscriptionAccess,
+  subscriptionAccessUntil,
+} from "./subscription/subscription-access";
+export type {
+  ClubAccessCandidate,
+  ClubAccessSourceKind,
+  SubscriptionAccess,
+} from "./subscription/subscription-access";
+export { announcedPlan, planInEffect } from "./subscription/plans";
+export type { PlanRecord } from "./subscription/plans";
+export { purchaseLinkVerdict } from "./subscription/purchase-link";
+export type { PurchaseLinkFacts, PurchaseLinkVerdict } from "./subscription/purchase-link";

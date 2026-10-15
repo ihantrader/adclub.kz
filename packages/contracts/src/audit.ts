@@ -236,6 +236,22 @@ export const auditActions = {
   clubAccessGranted: "club_access.granted",
   clubAccessRevoked: "club_access.revoked",
   /**
+   * A subscription's status (or its moments) changed (TASK-040): by an event
+   * of its provider (actor `system`; `operator` — the test provider's event
+   * entered by the operator command) or by time (actor `system`).
+   * `before`/`after` — the status and the moments, `after.changedBy` —
+   * `provider`, `operator` or `system`, `after.accountId` — whose.
+   */
+  subscriptionChanged: "subscription.changed",
+  /** A tariff was added (TASK-040, operator command): `after` — the record. */
+  planAdded: "plan.added",
+  /**
+   * A supplier's card was marked linked or unlinked (TASK-040, only the
+   * operator command of development and tests until TASK-042):
+   * `before`/`after` — `{cardLinked}`.
+   */
+  supplierCardChanged: "supplier.card_changed",
+  /**
    * A price list applied (TASK-047), by an employee (actor `supplier`):
    * `after` — the numbers of the result. The offers it changed have their
    * own `offer.*` entries with `after.source: "price_import"` and the import.
@@ -366,6 +382,10 @@ export const auditEntities = {
   offer: "offer",
   /** A manual grant of club access (TASK-020). */
   clubAccessGrant: "club_access_grant",
+  /** A subscription of a user or a supplier (TASK-040). */
+  subscription: "subscription",
+  /** A tariff (TASK-040). */
+  plan: "plan",
   /** An order of a user (TASK-021). */
   order: "order",
   /** A discipline mark of a user (TASK-022). */

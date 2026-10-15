@@ -622,6 +622,12 @@ describe("background jobs (PostgreSQL)", () => {
     });
 
     it("never runs a singleton job twice at a time, whichever worker takes it", async () => {
+      // The first test of this block starts both workers; run alone (`-t`),
+      // this one starts them itself (TASK-040), and with them up already it
+      // only waits for their queues.
+      if (!first || !open.has(first)) first = await start("first");
+      if (!second || !open.has(second)) second = await start("second");
+      await Promise.all([ready(first), ready(second)]);
       singletonMaxActive = 0;
       const accepted: string[] = [];
       let refused = 0;
@@ -647,12 +653,25 @@ describe("background jobs (PostgreSQL)", () => {
       // So that each of them demonstrably takes the singleton, each in turn
       // is the only one polling: the other one is stopped and started again
       // (stopping waits for its run to finish). Both are up again afterwards.
+      // While only one is up, singletons are offered until it has finished one
+      // of them: a worker just started begins polling a moment after its
+      // queue is ready — on a quiet machine (the test alone, `-t`) a fixed
+      // time may end before that, and the other worker, back up, takes them.
+      const offerUntilRunBy = async (worker: string) => {
+        const deadline = Date.now() + 30_000;
+        do {
+          await offer(500);
+          if (Date.now() > deadline) {
+            throw new Error(`The worker ${worker} never ran a singleton job alone`);
+          }
+        } while (!runsOf(singletonJob.name).some((run) => run.worker === worker && run.finishedAt));
+      };
       await stop(second);
-      await offer(1500);
+      await offerUntilRunBy("first");
       second = await start("second");
       await ready(second);
       await stop(first);
-      await offer(1500);
+      await offerUntilRunBy("second");
       first = await start("first");
       await ready(first);
       await offer(1500);

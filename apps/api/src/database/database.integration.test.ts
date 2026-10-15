@@ -98,6 +98,158 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds tariffs, subscriptions and their events with their rules, and rolls back keeping the accounts (subscriptions)", async () => {
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77470000140') RETURNING id",
+    );
+    const accountId = account.rows[0]!.id;
+    const city = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru) VALUES ('billing-city', 'Город подписок') RETURNING id",
+    );
+    const supplier = await client.query<{ id: string; card_linked_at: Date | null }>(
+      "INSERT INTO supplier (name, city_id) VALUES ('Подписки', $1) RETURNING id, card_linked_at",
+      [city.rows[0]!.id],
+    );
+    const supplierId = supplier.rows[0]!.id;
+    // A company starts without a card (D-041).
+    expect(supplier.rows[0]!.card_linked_at).toBeNull();
+
+    const plan = (values: Record<string, unknown>) => {
+      const row = {
+        audience: "user",
+        code: "user-month",
+        price: 490,
+        valid_from: new Date("2026-10-01T00:00:00Z"),
+        announce_before_days: 7,
+        reason: "Старт",
+        created_by_role: "operator",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO plan (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    await expect(plan({ price: 0 })).rejects.toThrow(/plan_price_check/);
+    await expect(plan({ audience: "guest" })).rejects.toThrow(/plan_audience_check/);
+    await expect(plan({ valid_to: new Date("2026-09-01T00:00:00Z") })).rejects.toThrow(
+      /plan_dates_check/,
+    );
+    await expect(plan({ code: "Не код" })).rejects.toThrow(/plan_code_check/);
+    const planId = (await plan({})).rows[0]!.id;
+    await expect(plan({ code: "again" })).rejects.toThrow(/plan_audience_from_key/);
+    await plan({ audience: "supplier", code: "supplier-month", price: 1000 });
+
+    const subscription = (values: Record<string, unknown>) => {
+      const row = {
+        audience: "user",
+        account_id: accountId,
+        plan_id: planId,
+        provider: "test",
+        provider_ref: `ref-${String(Math.random())}`,
+        status: "active",
+        current_period_end: new Date(),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO subscription (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    // A user's subscription has the user's statuses, a supplier's — the supplier's.
+    await expect(subscription({ status: "past_due" })).rejects.toThrow(/subscription_status_check/);
+    await expect(
+      subscription({
+        audience: "supplier",
+        account_id: null,
+        supplier_id: supplierId,
+        status: "grace",
+      }),
+    ).rejects.toThrow(/subscription_status_check/);
+    await expect(subscription({ supplier_id: supplierId })).rejects.toThrow(
+      /subscription_subject_check/,
+    );
+    await expect(subscription({ status: "expired_unconfirmed" })).rejects.toThrow(
+      /subscription_unconfirmed_check/,
+    );
+    await expect(subscription({ provider: "paypal" })).rejects.toThrow(
+      /subscription_provider_check/,
+    );
+    const subscriptionId = (await subscription({ provider_ref: "one" })).rows[0]!.id;
+    // One purchase — one subscription; one current subscription per account.
+    await expect(subscription({ provider_ref: "one", status: "expired" })).rejects.toThrow(
+      /subscription_purchase_key/,
+    );
+    await expect(subscription({ provider_ref: "two" })).rejects.toThrow(
+      /subscription_current_account_key/,
+    );
+    await subscription({ provider_ref: "three", status: "expired" });
+    await subscription({
+      audience: "supplier",
+      account_id: null,
+      supplier_id: supplierId,
+      provider: "card_kz",
+      provider_ref: "card-1",
+      status: "past_due",
+    });
+
+    const billingEvent = (values: Record<string, unknown>) => {
+      const row = {
+        provider: "test",
+        provider_event_id: `event-${String(Math.random())}`,
+        source: "operator",
+        kind: "started",
+        provider_ref: "one",
+        account_id: accountId,
+        event_at: new Date(),
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query(
+        `INSERT INTO billing_event (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(", ")})`,
+        Object.values(row),
+      );
+    };
+    await expect(billingEvent({ kind: "bought" })).rejects.toThrow(/billing_event_kind_check/);
+    await expect(billingEvent({ source: "system" })).rejects.toThrow(/billing_event_system_check/);
+    await expect(billingEvent({ outcome: "applied" })).rejects.toThrow(
+      /billing_event_applied_check/,
+    );
+    await billingEvent({ provider_event_id: "same" });
+    // One event at its provider once.
+    await expect(billingEvent({ provider_event_id: "same" })).rejects.toThrow(
+      /billing_event_id_key/,
+    );
+    await billingEvent({
+      provider: "system",
+      source: "system",
+      kind: "period_lapsed",
+      provider_ref: null,
+      subscription_id: subscriptionId,
+      outcome: "applied",
+      applied_at: new Date(),
+    });
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "billing_event")).toBe(false);
+    // `pgboss.subscription` is pg-boss's own table: ours is the one in `public`.
+    const ours = await client.query<{ gone: boolean }>(
+      "SELECT to_regclass('public.subscription') IS NULL AS gone",
+    );
+    expect(ours.rows[0]!.gone).toBe(true);
+    expect(await tableExists(client, "plan")).toBe(false);
+    expect(await columnExists(client, "supplier", "card_linked_at")).toBe(false);
+    // The accounts and the companies stay.
+    expect((await client.query("SELECT 1 FROM account WHERE id = $1", [accountId])).rowCount).toBe(
+      1,
+    );
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city.rows[0]!.id]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
   it("holds the rating of a supplier with its rules and history, and rolls back keeping the companies (supplier ratings)", async () => {
     const city = await client.query<{ id: string }>(
       "INSERT INTO city (code, name_ru) VALUES ('ratings-city', 'Город рейтинга') RETURNING id",

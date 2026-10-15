@@ -9410,6 +9410,59 @@
         }
       }
     },
+    "/admin/users/{accountId}/subscription": {
+      "get": {
+        "operationId": "getAdminUserSubscription",
+        "summary": "The subscription of a user (A-USR-02 «Клубный доступ»): its status and moments, the history of its events, club access now and the grant by hand beside it",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/vehicles/engines": {
       "get": {
         "operationId": "listVehicleEngines",
@@ -13987,6 +14040,49 @@
         }
       }
     },
+    "/me/subscription": {
+      "get": {
+        "operationId": "getMySubscription",
+        "summary": "The subscription of the signed-in account on any device (M-SUB-02): the status decided by the server, club access, the tariff and its announced change",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySubscriptionResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/meta/client-policy": {
       "get": {
         "operationId": "getClientPolicy",
@@ -18231,6 +18327,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PriceImportRowsPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/subscription": {
+      "get": {
+        "operationId": "getSupplierSubscription",
+        "summary": "The company's card and the switch D-041 (offers on the showcase only after a card is linked), the suppliers' tariff and its announced change",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The company's subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierSubscriptionResponse"
                 }
               }
             }
@@ -25554,6 +25693,148 @@
           "ended"
         ]
       },
+      "AdminUserSubscription": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          },
+          "grantsAccess": {
+            "type": "boolean"
+          },
+          "statusConfirmed": {
+            "type": "boolean"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "accessUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "graceUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/SubscriptionProvider"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ios",
+                  "android"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "providerRef": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "status",
+          "grantsAccess",
+          "statusConfirmed",
+          "periodEnd",
+          "accessUntil",
+          "graceUntil",
+          "provider",
+          "platform",
+          "id",
+          "providerRef",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "AdminUserSubscriptionResponse": {
+        "type": "object",
+        "properties": {
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminUserSubscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionHistoryEntry"
+            }
+          },
+          "access": {
+            "$ref": "#/components/schemas/ClubAccessState"
+          },
+          "manualGrant": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "validUntil": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "validUntil"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "subscription",
+          "history",
+          "access",
+          "manualGrant"
+        ]
+      },
       "AdminUserSummary": {
         "type": "object",
         "properties": {
@@ -26747,6 +27028,43 @@
           "createdAt",
           "name",
           "lastSignInAt"
+        ]
+      },
+      "AnnouncedPlan": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "currency": {
+            "type": "string",
+            "const": "KZT"
+          },
+          "period": {
+            "type": "string",
+            "const": "month"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "notice": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "price",
+          "currency",
+          "period",
+          "validFrom",
+          "notice"
         ]
       },
       "ApiErrorResponse": {
@@ -29396,7 +29714,8 @@
       "ClubAccessSource": {
         "type": "string",
         "enum": [
-          "manual"
+          "manual",
+          "subscription"
         ]
       },
       "ClubAccessState": {
@@ -31974,6 +32293,8 @@
           "OFFER_ITEM_UNAVAILABLE",
           "OFFER_WARRANTY_CONTACTS",
           "CLUB_ACCESS_NOT_GRANTED",
+          "SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT",
+          "SUBSCRIPTION_ALREADY_ACTIVE",
           "SUBSCRIPTION_REQUIRED",
           "ORDER_OFFER_UNAVAILABLE",
           "ORDER_KIND_NOT_SUPPORTED",
@@ -32536,6 +32857,141 @@
           "seenUntil"
         ]
       },
+      "MySubscription": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          },
+          "grantsAccess": {
+            "type": "boolean"
+          },
+          "statusConfirmed": {
+            "type": "boolean"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "accessUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "graceUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/SubscriptionProvider"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ios",
+                  "android"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "grantsAccess",
+          "statusConfirmed",
+          "periodEnd",
+          "accessUntil",
+          "graceUntil",
+          "provider",
+          "platform"
+        ]
+      },
+      "MySubscriptionResponse": {
+        "type": "object",
+        "properties": {
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MySubscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "access": {
+            "$ref": "#/components/schemas/ClubAccessState"
+          },
+          "manualGrant": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "validUntil": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "validUntil"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "announcedPlan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnouncedPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "subscription",
+          "access",
+          "manualGrant",
+          "plan",
+          "announcedPlan"
+        ]
+      },
       "NotificationLanguage": {
         "type": "string",
         "enum": [
@@ -32599,6 +33055,7 @@
           "offer_suspended",
           "supplier_blocked",
           "supplier_paused",
+          "card_not_linked",
           "supplier_type_mismatch",
           "item_unavailable",
           "category_hidden",
@@ -40031,6 +40488,149 @@
           "consent"
         ]
       },
+      "SubscriptionHistoryEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "operator",
+              "system"
+            ]
+          },
+          "eventAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "applied",
+              "no_effect",
+              "refused"
+            ]
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fromStatus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toStatus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "periodEnd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "by",
+          "eventAt",
+          "receivedAt",
+          "outcome",
+          "detail",
+          "fromStatus",
+          "toStatus",
+          "periodEnd"
+        ]
+      },
+      "SubscriptionPlan": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "currency": {
+            "type": "string",
+            "const": "KZT"
+          },
+          "period": {
+            "type": "string",
+            "const": "month"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "code",
+          "price",
+          "currency",
+          "period",
+          "validFrom"
+        ]
+      },
+      "SubscriptionProvider": {
+        "type": "string",
+        "enum": [
+          "store",
+          "card_kz",
+          "test"
+        ]
+      },
+      "SubscriptionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "grace",
+          "past_due",
+          "cancelled",
+          "expired_unconfirmed",
+          "suspended",
+          "expired"
+        ]
+      },
       "SupplierAdminPath": {
         "type": "object",
         "properties": {
@@ -42780,6 +43380,47 @@
         },
         "required": [
           "refusal"
+        ]
+      },
+      "SupplierSubscriptionResponse": {
+        "type": "object",
+        "properties": {
+          "cardLinked": {
+            "type": "boolean"
+          },
+          "cardRequired": {
+            "type": "boolean"
+          },
+          "hiddenWithoutCard": {
+            "type": "boolean"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "announcedPlan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnouncedPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "cardLinked",
+          "cardRequired",
+          "hiddenWithoutCard",
+          "plan",
+          "announcedPlan"
         ]
       },
       "SupplierSummary": {

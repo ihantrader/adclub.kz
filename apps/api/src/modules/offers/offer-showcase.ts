@@ -10,8 +10,26 @@ import {
 } from "@adclub/domain";
 import { inArray, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
+import { defaultSettingValues } from "../settings";
 import { receiptSchedules } from "./offer-receipt";
 import { offer } from "./schema";
+
+/**
+ * The switch D-041 `supplier_card_required` as the statement reads it
+ * (TASK-040): the value in effect (`app_setting`, a reset removes the row),
+ * else its default. Read by the statement itself — `offerShowcase` and
+ * `shownOffers` take it from the same place at the same moment, so the
+ * rule and its twin can't disagree, and none of their callers changes. A
+ * stored value that isn't a boolean counts as the default, as `AppSettings`
+ * reads it.
+ */
+function cardRequired(): SQL<boolean> {
+  const fallback = defaultSettingValues().supplier_card_required;
+  return sql<boolean>`coalesce(
+    (SELECT CASE jsonb_typeof(setting.value) WHEN 'boolean' THEN (setting.value)::text::boolean END
+      FROM app_setting AS setting WHERE setting.key = 'supplier_card_required'),
+    ${fallback}::boolean)`;
+}
 
 /**
  * Whether users see an offer (TASK-018 requirement 6; ARCHITECTURE 4.28,
@@ -29,8 +47,23 @@ import { offer } from "./schema";
  * show: no hours given, or no working day in the horizon after today — no
  * day of the week works, or closed dates close it all (TASK-020.A). That
  * is `scheduleFact` of the receipt date, the one reason a date can't be
- * had; the cabinet names it.
+ * had; the cabinet names it. Since TASK-040 (D-041), while the switch
+ * `supplier_card_required` is on, a supplier without a linked card has its
+ * offers hidden (`card_not_linked`); turning it on changes no offer and no
+ * order.
  */
+
+/**
+ * The switch D-041 as the rule of the showcase reads it now — for the
+ * places that say it in words (the cabinet's `GET /supplier/subscription`),
+ * so they never disagree with what the showcase does.
+ */
+export async function supplierCardRequired(executor: DbExecutor): Promise<boolean> {
+  const result = await executor.execute<{ required: boolean }>(
+    sql`SELECT ${cardRequired()} AS required`,
+  );
+  return Boolean(result.rows[0]?.required);
+}
 
 interface FactsRow extends Record<string, unknown> {
   id: string;
@@ -38,6 +71,8 @@ interface FactsRow extends Record<string, unknown> {
   offer_status: "active" | "withdrawn" | "suspended";
   pause_reason: SupplierPauseReason | null;
   blocked: boolean;
+  card_linked: boolean;
+  card_required: boolean;
   supplier_type: SupplierOfferType;
   item_type: OfferItemType;
   item_status: string;
@@ -61,6 +96,8 @@ export async function offerShowcase(
       o.status AS offer_status,
       s.pause_reason,
       s.blocked_at IS NOT NULL AS blocked,
+      s.card_linked_at IS NOT NULL AS card_linked,
+      ${cardRequired()} AS card_required,
       s.type AS supplier_type,
       o.item_type,
       i.status AS item_status,
@@ -86,6 +123,8 @@ export async function offerShowcase(
         offerStatus: row.offer_status,
         supplierPauseReason: row.pause_reason,
         supplierBlocked: row.blocked,
+        cardRequired: row.card_required,
+        cardLinked: row.card_linked,
         supplierTypeFits: supplierOffers(row.supplier_type, row.item_type),
         itemStatus: row.item_status,
         categoryVisible: row.category_visible,
@@ -103,7 +142,8 @@ export async function offerShowcase(
  * blocked» — the database keeps it so (ARCHITECTURE 4.26 I254). The
  * supplier's type still lets it offer the item, as `supplierOffers`
  * (TASK-019): «both» — anything, «goods» — not a service, «services» —
- * only a service. The point's schedule, as `scheduleFact`: the hours are given, and one of the
+ * only a service. D-041 (TASK-040): with the switch `supplier_card_required`
+ * on, only a supplier with a card. The point's schedule, as `scheduleFact`: the hours are given, and one of the
  * `RECEIPT_DATE_HORIZON_DAYS` days after today in the point's time zone
  * has an interval on its day of the week and isn't a closed date. The
  * points are worked out once per statement (an uncorrelated subquery),
@@ -115,6 +155,7 @@ export function shownOffers(at: Date = new Date()): SQL {
     AND EXISTS (
       SELECT 1 FROM supplier s WHERE s.id = ${offer.supplierId} AND s.status = 'active'
         AND (s.type = 'both' OR (s.type = 'services') = (${offer.itemType} = 'service'))
+        AND (s.card_linked_at IS NOT NULL OR NOT ${cardRequired()})
     )
     AND EXISTS (
       SELECT 1 FROM catalog_item i

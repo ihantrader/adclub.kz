@@ -4,6 +4,7 @@
   "src/jobs/jobs.integration.test.ts": 236,
   "src/modules/admin-home/admin-panel.integration.test.ts": 11,
   "src/modules/audit/audit-log.integration.test.ts": 6,
+  "src/modules/billing/billing.integration.test.ts": 100,
   "src/modules/catalog/catalog-items.integration.test.ts": 25,
   "src/modules/catalog/catalog-photos.integration.test.ts": 25,
   "src/modules/catalog/catalog.integration.test.ts": 15,

@@ -48,4 +48,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791350000000_price-import-moderation",
   "1791400000000_reviews-and-complaints",
   "1791450000000_supplier-ratings",
+  "1791500000000_subscriptions",
 ];

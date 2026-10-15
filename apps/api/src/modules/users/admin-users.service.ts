@@ -20,7 +20,7 @@ import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
-import { ClubAccess, clubAccessUntil } from "../club-access";
+import { ClubAccess } from "../club-access";
 import { GarageService } from "../garage";
 import { account, ipHint, SessionStore } from "../identity";
 import { city } from "../suppliers";
@@ -117,7 +117,7 @@ export class AdminUsersService {
     if (query.q) {
       conditions.push(userSearchCondition(query.q));
     }
-    const until = clubAccessUntil(account.id, now);
+    const until = await this.clubAccess.untilSql(account.id, now);
     if (query.clubAccess === "active") {
       conditions.push(sql`${until} IS NOT NULL`);
     } else if (query.clubAccess === "none") {

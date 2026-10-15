@@ -55,6 +55,7 @@ export const ADMIN_ROUTES: readonly string[] = [
   "GET /admin/users/{accountId}",
   "GET /admin/users/{accountId}/garage",
   "GET /admin/users/{accountId}/sessions",
+  "GET /admin/users/{accountId}/subscription",
   "GET /admin/vehicles/engines",
   "GET /admin/vehicles/generations",
   "GET /admin/vehicles/generations/{generationId}",

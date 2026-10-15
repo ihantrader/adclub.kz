@@ -120,6 +120,8 @@ export const supplier = pgTable("supplier", {
   leadId: uuid("lead_id"),
   /** The starting value of «Доставка» in the form of a new offer (S-COMP-01, TASK-032). */
   deliveryByDefault: boolean("delivery_by_default").notNull().default(false),
+  /** D-041 (TASK-040): the company has linked a card; set by TASK-042 with the card itself. */
+  cardLinkedAt: timestamp("card_linked_at", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

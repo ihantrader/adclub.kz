@@ -45,6 +45,7 @@ import {
 } from "./modules/compatibility";
 import { DevSupplierSeed, DevSupplierSeedError, SuppliersModule } from "./modules/suppliers";
 import { ClubAccessGrants, ClubAccessModule } from "./modules/club-access";
+import { BillingModule, BillingOperator, Plans, SupplierCards } from "./modules/billing";
 import { SearchEval, ShowcaseModule } from "./modules/showcase";
 import {
   SearchIndexUnavailableError,
@@ -205,6 +206,7 @@ class OperatorModule {
         compatibility,
         SuppliersModule.forRoot({ http: false }),
         clubAccess,
+        BillingModule.forRoot({ http: false, clubAccess }),
         ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess }),
         JobsModule.forRoot({
           role: "producer",
@@ -229,6 +231,9 @@ const USAGE = `Usage: operator <command> [arguments]
   club-access:grant <phone> --until <YYYY-MM-DD | ISO time> --reason <text>
   club-access:revoke <phone> --reason <text>
   club-access:status <phone>
+  subscription:status <phone>
+  billing:plan:add --audience user|supplier --code <code> --price <tenge> --from <YYYY-MM-DD | ISO time> --announce-days <n> --reason <text> [--to <YYYY-MM-DD | ISO time>]
+  billing:plan:list
   settings:list
   settings:get <key>
   settings:set <key> <value> --reason <text> [--expected-version <n>]
@@ -263,7 +268,9 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:compatibility:seed
   dev:suppliers:seed
   dev:messages:webhook --message <id> [--status <status>] [--button confirm|decline|<payload>] [--from <phone>] [--twice] [--bad-signature]
-  dev:jobs:fail [--note <text>] [--on-query]`;
+  dev:jobs:fail [--note <text>] [--on-query]
+  dev:subscription:event <phone> <started|renewed|grace_started|suspended|cancelled|cancel_withdrawn|expired|refunded|revoked> [--until <YYYY-MM-DD | ISO time | +<n>d>] [--grace-until <…>] [--at <ISO time>] [--event-id <id>] [--ref <purchase>]
+  dev:supplier:card <supplierId> --linked | --unlinked`;
 
 function required(value: string | undefined, what: string): string {
   if (!value) {
@@ -319,6 +326,38 @@ function grantEnd(text: string): Date {
   return end;
 }
 
+/**
+ * A subscription's moment (`dev:subscription:event`): `+30d` / `+2h` / `-1h`
+ * from now, a date — through that day in Almaty (as `grantEnd`), or an ISO time.
+ */
+function termEnd(text: string, flag: string): Date {
+  const relative = /^([+-])(\d+)([dh])$/.exec(text);
+  if (relative) {
+    const unit = relative[3] === "d" ? 86_400_000 : 3_600_000;
+    const sign = relative[1] === "-" ? -1 : 1;
+    return new Date(Date.now() + sign * Number(relative[2]) * unit);
+  }
+  try {
+    return grantEnd(text);
+  } catch {
+    throw new OperatorCommandError(
+      `${flag} must be +<n>d, +<n>h, a date (YYYY-MM-DD) or an ISO time`,
+    );
+  }
+}
+
+/** The start of a tariff (`billing:plan:add --from/--to`): a date — 00:00 of that day in Almaty, or an ISO time. */
+function planStart(text: string): Date {
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  const start = date
+    ? new Date(Date.UTC(Number(date[1]), Number(date[2]) - 1, Number(date[3])) - 5 * 3_600_000)
+    : new Date(text);
+  if (Number.isNaN(start.getTime())) {
+    throw new OperatorCommandError("--from and --to must be a date (YYYY-MM-DD) or an ISO time");
+  }
+  return start;
+}
+
 interface Services {
   operator: OperatorService;
   messaging: MessagingAdmin;
@@ -331,6 +370,9 @@ interface Services {
   compatibilitySeed: DevCompatibilitySeed;
   supplierSeed: DevSupplierSeed;
   clubAccess: ClubAccessGrants;
+  billing: BillingOperator;
+  plans: Plans;
+  cards: SupplierCards;
   ai: AiService;
   translations: TranslationQueue;
   translationEval: TranslationEval;
@@ -353,6 +395,9 @@ async function run(
     compatibilitySeed,
     supplierSeed,
     clubAccess,
+    billing,
+    plans,
+    cards,
     ai,
     translations,
     translationEval,
@@ -389,6 +434,17 @@ async function run(
       from: { type: "string" },
       twice: { type: "boolean" },
       "bad-signature": { type: "boolean" },
+      audience: { type: "string" },
+      code: { type: "string" },
+      price: { type: "string" },
+      to: { type: "string" },
+      "announce-days": { type: "string" },
+      "grace-until": { type: "string" },
+      at: { type: "string" },
+      "event-id": { type: "string" },
+      ref: { type: "string" },
+      linked: { type: "boolean" },
+      unlinked: { type: "boolean" },
     },
   });
   const [command, first, second] = positionals;
@@ -643,6 +699,61 @@ async function run(
       );
     case "club-access:status":
       return clubAccess.statusOf(required(first, "<phone>"));
+    case "subscription:status":
+      return billing.status(required(first, "<phone>"));
+    case "billing:plan:add": {
+      const audience = required(values.audience, "--audience");
+      if (audience !== "user" && audience !== "supplier") {
+        throw new OperatorCommandError("--audience is user or supplier");
+      }
+      const row = await plans.add(
+        {
+          audience,
+          code: required(values.code, "--code"),
+          price: countOption(required(values.price, "--price"), "--price")!,
+          validFrom: planStart(required(values.from, "--from")),
+          validTo: values.to === undefined ? null : planStart(values.to),
+          announceBeforeDays: countOption(
+            required(values["announce-days"], "--announce-days"),
+            "--announce-days",
+          )!,
+          reason: required(values.reason, "--reason"),
+        },
+        { role: "operator" },
+      );
+      return { added: row, ...(await plans.overview()) };
+    }
+    case "billing:plan:list":
+      return plans.overview();
+    case "dev:subscription:event": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "dev:subscription:event is available in development and tests only",
+        );
+      }
+      return billing.testEvent({
+        phone: required(first, "<phone>"),
+        kind: required(second, "<event>"),
+        ...(values.until !== undefined && { periodEnd: termEnd(values.until, "--until") }),
+        ...(values["grace-until"] !== undefined && {
+          graceUntil: termEnd(values["grace-until"], "--grace-until"),
+        }),
+        ...(values.at !== undefined && { at: termEnd(values.at, "--at") }),
+        ...(values["event-id"] !== undefined && { eventId: values["event-id"] }),
+        ...(values.ref !== undefined && { ref: values.ref }),
+      });
+    }
+    case "dev:supplier:card": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "dev:supplier:card is available in development and tests only",
+        );
+      }
+      if (Boolean(values.linked) === Boolean(values.unlinked)) {
+        throw new OperatorCommandError("Give exactly one of --linked and --unlinked");
+      }
+      return cards.mark(required(first, "<supplierId>"), Boolean(values.linked));
+    }
     case "dev:supplier:create":
       return operator.createSupplier({
         name: required(values.name, "--name"),
@@ -697,6 +808,9 @@ async function main(): Promise<void> {
         compatibilitySeed: app.get(DevCompatibilitySeed),
         supplierSeed: app.get(DevSupplierSeed),
         clubAccess: app.get(ClubAccessGrants),
+        billing: app.get(BillingOperator),
+        plans: app.get(Plans),
+        cards: app.get(SupplierCards),
         ai: app.get(AiService),
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),

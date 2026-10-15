@@ -42,6 +42,9 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "reviews.expire-checks",
   "ratings.recompute-supplier",
   "ratings.reconcile",
+  "billing.apply-events",
+  "billing.wake-events",
+  "billing.expire-subscriptions",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -51,6 +54,10 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   cron: string;
   timezone: string;
 }[] = [
+  // Time's events of subscriptions: a term without a word, its tolerance (TASK-040).
+  { name: "billing.expire-subscriptions", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Events of subscriptions whose job was lost, put back on the queue (TASK-040).
+  { name: "billing.wake-events", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Files of photos no record points at (TASK-013): hourly.
   { name: "catalog.cleanup-photo-files", cron: "17 * * * *", timezone: "Asia/Almaty" },
   // Files of removed photos, once their retention has passed (TASK-013).

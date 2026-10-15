@@ -5,7 +5,7 @@ export { describeOfferItems } from "./offer-items";
 export { activeOrderCounts } from "./offer-active-orders";
 export type { OfferActor } from "./offers.service";
 export { OfferSnapshots } from "./offer-snapshots";
-export { offerShowcase, shownOffers } from "./offer-showcase";
+export { offerShowcase, shownOffers, supplierCardRequired } from "./offer-showcase";
 export { describeReceipt, receiptSchedules } from "./offer-receipt";
 export { servicePricings } from "./offer-pricing";
 export { offer, offerModelPrice, offerTables } from "./schema";

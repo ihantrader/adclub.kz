@@ -19,6 +19,7 @@ import { CompatibilityModule } from "./modules/compatibility";
 import { SuppliersModule } from "./modules/suppliers";
 import { OffersModule } from "./modules/offers";
 import { ClubAccessModule } from "./modules/club-access";
+import { BillingModule } from "./modules/billing";
 import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
 import { SearchIndexMetricsModule } from "./modules/search-index";
@@ -118,6 +119,8 @@ export class AppModule implements NestModule {
         reviews,
         // The rating of suppliers (TASK-050): its admin view and the list's column.
         RatingsModule.forRoot({ http: true, signals, suppliers }),
+        // Subscriptions (TASK-040): «Моя подписка», the company's card, the admin's view.
+        BillingModule.forRoot({ http: true, clubAccess }),
         AdminHomeModule.forRoot({
           catalog,
           compatibility,

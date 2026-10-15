@@ -45,6 +45,7 @@ const HIDDEN_REASONS: Record<OfferHiddenReasonValue, HiddenReason> = {
   offer_suspended: { key: "offers.hidden.suspended", toCompany: false },
   supplier_blocked: { key: "offers.hidden.blocked", toCompany: false },
   supplier_paused: { key: "offers.hidden.paused", toCompany: false },
+  card_not_linked: { key: "offers.hidden.cardNotLinked", toCompany: false },
   supplier_type_mismatch: { key: "offers.hidden.typeMismatch", toCompany: false },
   item_unavailable: { key: "offers.hidden.itemUnavailable", toCompany: false },
   category_hidden: { key: "offers.hidden.categoryHidden", toCompany: false },
@@ -83,6 +84,14 @@ export function scheduleProblem(
     }
   }
   return null;
+}
+
+/**
+ * D-041 (TASK-040): the company has no card while cards are required — every
+ * offer is hidden by it, so one banner over the list says it (T-SUP-02).
+ */
+export function cardMissing(offers: readonly Pick<SupplierOffer, "showcase">[]): boolean {
+  return offers.some((offer) => offer.showcase.reasons.includes("card_not_linked"));
 }
 
 // ------------------------------------------------------------ server errors

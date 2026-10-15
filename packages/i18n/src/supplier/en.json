@@ -230,6 +230,8 @@
   "offers.hidden.suspended": "suspended by the club",
   "offers.hidden.blocked": "the cabinet is blocked by the club's administrator",
   "offers.hidden.paused": "the company is paused",
+  "offers.hidden.cardNotLinked": "no card linked — link a card for your offers to appear in the catalog",
+  "offers.cardBanner": "Link a card for your offers to appear in the catalog",
   "offers.hidden.itemUnavailable": "the item was removed from the club's catalog",
   "offers.hidden.categoryHidden": "the catalog section is hidden by the club's administrator",
   "offers.hidden.noCity": "the point has no city — contact the club's administrator",

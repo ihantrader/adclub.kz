@@ -3,6 +3,12 @@ import { formatMoment } from "../format";
 import { ORDER_STATUS_TEXT } from "../orders/order-words";
 import { COMPLAINT_REASON_TEXT, HOLD_KIND_TEXT, REJECT_REASON_TEXT } from "../reviews/review-words";
 import {
+  SUBSCRIPTION_BY_TEXT,
+  SUBSCRIPTION_EVENT_TEXT,
+  SUBSCRIPTION_PROVIDER_TEXT,
+  SUBSCRIPTION_STATUS_TEXT,
+} from "../users/subscription-words";
+import {
   catalogItemPath,
   catalogRequestPath,
   complaintPath,
@@ -126,6 +132,9 @@ const ACTIONS: Record<string, string> = {
   "offer.returned": "Предложение возвращено в продажу",
   "club_access.granted": "Выдан клубный доступ",
   "club_access.revoked": "Отозван клубный доступ",
+  "subscription.changed": "Изменилась подписка",
+  "plan.added": "Добавлен тариф",
+  "supplier.card_changed": "Изменилась привязка карты поставщика",
   "order.phone_revealed": "Поставщику открыт телефон покупателя",
   "order.closed_by_admin": "Заявка закрыта администратором без кода",
   "order.lookup_blocked": "Поиск по коду временно закрыт после неверных кодов",
@@ -199,6 +208,8 @@ const ENTITIES: Record<string, string> = {
   city: "Город",
   offer: "Предложение",
   club_access_grant: "Клубный доступ",
+  subscription: "Подписка",
+  plan: "Тариф",
   order: "Заявка",
   user_discipline_event: "Дисциплинарная отметка",
   account: "Пользователь",
@@ -368,7 +379,9 @@ export function entityLink(
       return UUID.test(entityId) ? complaintPath(entityId) : null;
     case "account":
       return UUID.test(entityId) ? userPath(entityId) : null;
-    case "club_access_grant": {
+    // TASK-040: a subscription opens «Клубный доступ» of its user, as a grant does.
+    case "club_access_grant":
+    case "subscription": {
       const accountId = named(payload, "accountId");
       return accountId && UUID.test(accountId) ? userPath(accountId, "access") : null;
     }
@@ -518,6 +531,20 @@ const FIELD_TEXT: Record<string, string> = {
   code: "Код",
   icon: "Значок",
   compatibilityRequired: "Совместимость обязательна",
+  // TASK-040: a subscription, a tariff, a supplier's card.
+  periodEnd: "Оплачено до",
+  graceUntil: "Льготный период до",
+  unconfirmedSince: "Не подтверждена с",
+  changedBy: "Кто изменил",
+  eventKind: "Событие",
+  provider: "Провайдер",
+  audience: "Для кого",
+  validFrom: "Действует с",
+  validTo: "Действует по",
+  announceBeforeDays: "Объявить за, дней",
+  currency: "Валюта",
+  period: "Период",
+  cardLinked: "Карта привязана",
   isRequiredForComplete: "Участвует в полноте",
   isFilterable: "В фильтрах",
   unit: "Единица",
@@ -534,6 +561,7 @@ const FIELD_TEXT: Record<string, string> = {
  */
 const TECHNICAL_FIELDS = new Set([
   "accountId",
+  "billingEventId",
   "memberId",
   "noteId",
   "adminId",
@@ -566,6 +594,7 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
   admin_signal: { open: "Новый", acknowledged: "В работе", closed: "Закрыт" },
   offer: { active: "В продаже", withdrawn: "Снято с продажи", suspended: "Приостановлено" },
   catalog_request: { new: "Новый", approved: "Добавлено", rejected: "Отклонено" },
+  subscription: SUBSCRIPTION_STATUS_TEXT,
   review: {
     checking: "Проверяется",
     held: "На проверке",
@@ -621,6 +650,12 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
   language: { kk: "Қазақша", ru: "Русский", en: "English" },
   notificationLanguage: { kk: "Қазақша", ru: "Русский" },
   pauseReason: { admin: "решение администратора", billing: "не оплачена подписка" },
+  // TASK-040: a subscription's changes.
+  changedBy: SUBSCRIPTION_BY_TEXT,
+  eventKind: SUBSCRIPTION_EVENT_TEXT,
+  provider: SUBSCRIPTION_PROVIDER_TEXT,
+  audience: { user: "Пользователь", supplier: "Поставщик" },
+  note: { replaced: "заменена новой покупкой" },
   fulfillment: { pickup: "Самовывоз", delivery: "Доставка" },
   kind: {
     pickup_no_show: "Неявка",

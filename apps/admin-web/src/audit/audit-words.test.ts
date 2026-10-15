@@ -153,6 +153,15 @@ describe("the words of the journal", () => {
     expect(entityLink("club_access_grant", id, { after: { accountId: account } })).toBe(
       `/users/${account}?tab=access`,
     );
+    // TASK-040: a subscription opens «Клубный доступ» of its user, its words are words.
+    expect(entityLink("subscription", id, { after: { accountId: account } })).toBe(
+      `/users/${account}?tab=access`,
+    );
+    expect(valueText("expired_unconfirmed", "status", { entityType: "subscription" })).toBe(
+      "Статус не подтверждён",
+    );
+    expect(valueText("system", "changedBy")).toBe("система, по времени");
+    expect(valueText("period_lapsed", "eventKind")).toBe("Срок прошёл без подтверждения");
     expect(
       entityLink("user_discipline_event", id, {
         before: { orderId: order },

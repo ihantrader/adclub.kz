@@ -17,7 +17,7 @@ import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
 import { navigate, replaceRouteState, useRouteState } from "../router";
 import { OfferCardRow, OfferTableRow } from "./OfferRow";
-import { scheduleProblem } from "./offer-rules";
+import { cardMissing, scheduleProblem } from "./offer-rules";
 import { useWide } from "./use-wide";
 
 /** What the list is asked for; kept with the page's history entry (a reload keeps it). */
@@ -224,6 +224,7 @@ export function OffersList() {
   const tabLabel = (key: "offers.tabOnSale" | "offers.tabWithdrawn", n: number | undefined) =>
     n === undefined ? t(key) : `${t(key)} · ${n}`;
   const schedule = shown ? scheduleProblem(shown.offers) : null;
+  const noCard = shown ? cardMissing(shown.offers) : false;
   const retry = { label: t("common.retry"), onRetry: () => load(query) };
 
   const addButton = (
@@ -296,6 +297,8 @@ export function OffersList() {
           </Chip>
         </div>
       </div>
+
+      {noCard && <Banner tone="warning">{t("offers.cardBanner")}</Banner>}
 
       {schedule && (
         <Banner

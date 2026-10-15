@@ -98,6 +98,7 @@ export const SHOWCASE_REASON_TEXT: Record<OfferHiddenReasonValue, string> = {
   offer_suspended: "приостановлено",
   supplier_blocked: "компания заблокирована",
   supplier_paused: "компания на паузе",
+  card_not_linked: "карта не привязана (D-041)",
   supplier_type_mismatch: "тип компании не позволяет (только товары или только услуги)",
   item_unavailable: "позиция недоступна",
   category_hidden: "категория скрыта",

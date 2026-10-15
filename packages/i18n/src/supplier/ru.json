@@ -230,6 +230,8 @@
   "offers.hidden.suspended": "приостановлено клубом",
   "offers.hidden.blocked": "кабинет заблокирован администратором клуба",
   "offers.hidden.paused": "компания на паузе",
+  "offers.hidden.cardNotLinked": "карта не привязана — привяжите карту, чтобы предложения появились на витрине",
+  "offers.cardBanner": "Привяжите карту, чтобы предложения появились на витрине",
   "offers.hidden.itemUnavailable": "позиция убрана из справочника клуба",
   "offers.hidden.categoryHidden": "раздел справочника скрыт администратором клуба",
   "offers.hidden.noCity": "у точки не указан город — обратитесь к администратору клуба",

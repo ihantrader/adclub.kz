@@ -159,6 +159,9 @@ export function Users() {
                       >
                         {accessText(user.clubAccess)}
                       </span>
+                      {user.clubAccess.source === "subscription" && (
+                        <span className="ac-text-caption ac-muted"> по подписке</span>
+                      )}
                     </td>
                     <td className="num">{user.noShows}</td>
                     <td className="ac-text-body-s num">{formatMoment(user.createdAt)}</td>

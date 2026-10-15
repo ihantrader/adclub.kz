@@ -7,8 +7,17 @@ import type {
   AdminUserResponse,
   AdminUserSession,
   AdminUserSessionListResponse,
+  AdminUserSubscriptionResponse,
   ClubAccessGrantPage,
 } from "@adclub/contracts";
+import {
+  accessSourceText,
+  outcomeText,
+  SUBSCRIPTION_BY_TEXT,
+  SUBSCRIPTION_EVENT_TEXT,
+  SUBSCRIPTION_PROVIDER_TEXT,
+  SUBSCRIPTION_STATUS_TEXT,
+} from "./subscription-words";
 import {
   Banner,
   Button,
@@ -288,11 +297,22 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
       }),
     `grants:${user.accountId}:${historyKey}`,
   );
+  const paid = useLoad<AdminUserSubscriptionResponse>(
+    () => apiClient.getAdminUserSubscription({ accountId: user.accountId }),
+    `subscription:${user.accountId}:${historyKey}`,
+  );
   const [asking, setAsking] = useState<"grant" | "revoke" | null>(null);
   const [until, setUntil] = useState(endOfYear());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const access = user.clubAccess;
+  const access = paid.data?.access ?? user.clubAccess;
+  const source = accessSourceText(access);
+  // «Отозвать…» ends the grant by hand only; a subscription is the store's.
+  const manual = paid.data
+    ? paid.data.manualGrant
+    : access.source === "manual" && access.validUntil
+      ? { validUntil: access.validUntil }
+      : null;
 
   const grant = async (reason: string) => {
     const validUntil = grantUntil(until);
@@ -342,10 +362,17 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
     <div className="detail-stack">
       <p className="ac-text-body">
         Сейчас: <strong>{access.granted ? `есть, ${accessText(access)}` : "нет"}</strong>
-        <span className="ac-text-caption ac-muted">
-          {" "}
-          (подписок пока нет — доступ выдаётся вручную)
-        </span>
+        {source && <span className="ac-text-caption ac-muted"> ({source})</span>}
+      </p>
+      <Subscription
+        data={paid.data}
+        error={paid.error}
+        retry={paid.reload}
+        indicator={paid.indicator}
+      />
+      <h2 className="ac-text-heading">Выдача вручную</h2>
+      <p className="ac-text-body-s">
+        {manual ? `Действует до ${lastDayText(manual.validUntil)}` : "Действующей выдачи нет"}
       </p>
       <div className="button-row">
         <Button
@@ -357,7 +384,7 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
         >
           Выдать доступ…
         </Button>
-        {access.granted && (
+        {manual && (
           <Button
             variant="secondary"
             disabled={!online}
@@ -463,6 +490,107 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
         </p>
       </ReasonDialog>
     </div>
+  );
+}
+
+/**
+ * The subscription of A-USR-02 «Клубный доступ» (TASK-040): its status in
+ * words, until when, the provider, and the history of its events — the
+ * server's, read only (the stores manage it; the billing screens — TASK-043).
+ */
+function Subscription({
+  data,
+  error,
+  retry,
+  indicator,
+}: {
+  data: AdminUserSubscriptionResponse | undefined;
+  error: unknown;
+  retry: () => void;
+  indicator: boolean;
+}) {
+  const subscription = data?.subscription ?? null;
+  return (
+    <section className="detail-stack" aria-label="Подписка">
+      <h2 className="ac-text-heading">Подписка</h2>
+      <LoadError error={error} retry={retry} />
+      <LoadingContent
+        ready={data !== undefined}
+        indicator={indicator}
+        label="Загрузка"
+        skeleton={<SkeletonList rows={2} label="Загрузка" />}
+      >
+        {!subscription ? (
+          <p className="ac-text-body-s">Подписки не было</p>
+        ) : (
+          <dl className="facts">
+            <dt>Статус</dt>
+            <dd>
+              {SUBSCRIPTION_STATUS_TEXT[subscription.status]}
+              {subscription.grantsAccess ? " · даёт доступ" : " · доступа не даёт"}
+            </dd>
+            <dt>Оплачено до</dt>
+            <dd>{formatMoment(subscription.periodEnd)}</dd>
+            {subscription.graceUntil && (
+              <>
+                <dt>Льготный период до</dt>
+                <dd>{formatMoment(subscription.graceUntil)}</dd>
+              </>
+            )}
+            {subscription.accessUntil && (
+              <>
+                <dt>Доступ до</dt>
+                <dd>
+                  {formatMoment(subscription.accessUntil)}
+                  {!subscription.statusConfirmed && " (ждём подтверждения стора)"}
+                </dd>
+              </>
+            )}
+            <dt>Провайдер</dt>
+            <dd>
+              {SUBSCRIPTION_PROVIDER_TEXT[subscription.provider]}
+              {subscription.platform && ` · ${subscription.platform === "ios" ? "iOS" : "Android"}`}
+            </dd>
+          </dl>
+        )}
+        {(data?.history.length ?? 0) > 0 && (
+          <div className="table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Событие</th>
+                  <th scope="col">Когда</th>
+                  <th scope="col">Статус</th>
+                  <th scope="col">Итог</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.history.map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="ac-text-body-s">
+                      <div className="cell-stack">
+                        <span>{SUBSCRIPTION_EVENT_TEXT[entry.kind] ?? entry.kind}</span>
+                        <span className="ac-text-caption ac-muted">
+                          {SUBSCRIPTION_BY_TEXT[entry.by]}
+                          {entry.periodEnd && `, до ${formatMoment(entry.periodEnd)}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="ac-text-body-s">{formatMoment(entry.eventAt)}</td>
+                    <td className="ac-text-body-s">
+                      {entry.toStatus && entry.fromStatus !== entry.toStatus
+                        ? `${entry.fromStatus ? `${SUBSCRIPTION_STATUS_TEXT[entry.fromStatus]} → ` : ""}${SUBSCRIPTION_STATUS_TEXT[entry.toStatus]}`
+                        : "—"}
+                    </td>
+                    <td className="ac-text-body-s reason-cell">{outcomeText(entry)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </LoadingContent>
+    </section>
   );
 }
 

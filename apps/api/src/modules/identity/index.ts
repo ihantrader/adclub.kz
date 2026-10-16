@@ -36,6 +36,7 @@ export { REFRESH_COOKIE_NAMES, REFRESH_COOKIE_PATH } from "./session/session-coo
 export { SignInSettingsSource } from "./session/sign-in-settings.source";
 export type { SignInSettings } from "./session/sign-in-settings.source";
 export { OperatorCommandError, OperatorService } from "./admin/operator.service";
+export { ReviewLogins } from "./login-code/review-login";
 export {
   IdentityJobsModule,
   SignInDataRetentionSource,

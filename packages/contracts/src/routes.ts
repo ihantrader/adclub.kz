@@ -133,7 +133,7 @@ import {
   vehicleOptionIdPathSchema,
   vehicleOptionListQuerySchema,
 } from "./vehicles";
-import { clientPolicyResponseSchema } from "./client-policy";
+import { clientPolicyResponseSchema, clubInfoResponseSchema } from "./client-policy";
 import {
   adminCompatibilityProposalPageSchema,
   adminCompatibilityCheckBodySchema,
@@ -669,6 +669,18 @@ export const apiRoutes = {
     clientVersionCheck: "exempt",
     responses: {
       200: { description: "Current client policy", schema: clientPolicyResponseSchema },
+    },
+  }),
+  getClubInfo: defineRoute({
+    operationId: "getClubInfo",
+    method: "GET",
+    path: "/meta/club-info",
+    summary:
+      "The club's documents and contact (M-PRO-06) and the partner request page (S-PUB-01); open to guests",
+    tag: "meta",
+    clientVersionCheck: "enforced",
+    responses: {
+      200: { description: "What is set; null — not set", schema: clubInfoResponseSchema },
     },
   }),
   requestLoginCode: defineRoute({

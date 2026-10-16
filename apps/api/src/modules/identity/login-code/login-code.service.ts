@@ -28,16 +28,24 @@ import {
 } from "./login-code.crypto";
 import { LoginCodeSettingsSource } from "./login-code-settings.source";
 import { LoginCodeStore } from "./login-code.store";
+import { REVIEW_LOGIN_CODE_LENGTH, ReviewLogins, type ActiveReviewLogin } from "./review-login";
 
 export interface RequestLoginCodeInput {
   phone: string;
   channel?: LoginCodeChannel;
   ip: string;
+  /**
+   * The request comes from the mobile app: the number of an enabled sign-in
+   * for store review gets no message, its constant code is the code (TASK-077).
+   */
+  reviewAllowed?: boolean;
 }
 
 export interface VerifyLoginCodeInput {
   phone: string;
   code: string;
+  /** The session being signed in to is the mobile one: a store review code may be checked. */
+  reviewAllowed?: boolean;
 }
 
 /**
@@ -50,6 +58,8 @@ export interface VerifiedPhone {
   /** The channel the confirmed code was delivered through. */
   channel: LoginCodeChannel;
   challengeId: string;
+  /** Confirmed by the constant code of the sign-in for store review (TASK-077). */
+  reviewLoginId: string | null;
 }
 
 type VerifyOutcome =
@@ -99,6 +109,7 @@ export class LoginCodeService {
     @Inject(LoginCodeStore) private readonly store: LoginCodeStore,
     @Inject(RateLimiterService) private readonly rateLimiter: RateLimiterService,
     @Inject(Metrics) private readonly metrics: Metrics,
+    @Inject(ReviewLogins) private readonly reviewLogins: ReviewLogins,
   ) {}
 
   async requestCode(input: RequestLoginCodeInput): Promise<LoginCodeSentResponse> {
@@ -139,6 +150,14 @@ export class LoginCodeService {
       }
 
       try {
+        // The store review number, from the app, while enabled: nothing is
+        // sent, after the same limits as any other request.
+        const review = input.reviewAllowed
+          ? await this.reviewLogins.activeFor(phone, new Date())
+          : undefined;
+        if (review) {
+          return await this.issueForReview(phone, masked, review, settings);
+        }
         return await this.issue(phone, masked, ipSubject, input.channel, settings);
       } catch (error) {
         // Nothing usable reached the person: don't keep them waiting for a
@@ -195,6 +214,18 @@ export class LoginCodeService {
         if (challenge.expiresAt.getTime() <= now.getTime()) {
           return { decision: { kind: "expire" }, result: { kind: "expired" } };
         }
+        // A store review challenge (TASK-077): only for the mobile app, and
+        // only while its sign-in is enabled and in term — else it is spent.
+        const review = challenge.review;
+        if (
+          challenge.reviewLoginId !== null &&
+          (!input.reviewAllowed ||
+            !review ||
+            review.disabledAt !== null ||
+            review.validUntil.getTime() <= now.getTime())
+        ) {
+          return { decision: { kind: "expire" }, result: { kind: "expired" } };
+        }
         if (challenge.nextAttemptAt && challenge.nextAttemptAt.getTime() > now.getTime()) {
           // Too early after a wrong entry: not counted as an attempt.
           return {
@@ -204,15 +235,27 @@ export class LoginCodeService {
             },
           };
         }
-        if (
-          loginCodeMatches(
-            this.config.loginCode.hashSecret,
-            challenge.id,
-            input.code,
-            challenge.codeHash,
-          )
-        ) {
-          confirmed = { phone, channel: challenge.channel, challengeId: challenge.id };
+        const matches =
+          challenge.reviewLoginId !== null && review
+            ? loginCodeMatches(
+                this.config.loginCode.hashSecret,
+                review.id,
+                input.code,
+                review.codeHash,
+              )
+            : loginCodeMatches(
+                this.config.loginCode.hashSecret,
+                challenge.id,
+                input.code,
+                challenge.codeHash,
+              );
+        if (matches) {
+          confirmed = {
+            phone,
+            channel: challenge.channel,
+            challengeId: challenge.id,
+            reviewLoginId: challenge.reviewLoginId,
+          };
           return {
             decision: { kind: "consume" },
             result: { kind: "verified", verified: confirmed },
@@ -245,7 +288,11 @@ export class LoginCodeService {
     const outcome = attempt.result;
     switch (outcome.kind) {
       case "verified":
-        this.log(`Login code verified phone=${masked} channel=${outcome.verified.channel}`);
+        this.log(
+          outcome.verified.reviewLoginId
+            ? `Login code verified phone=${masked} store review reviewLogin=${outcome.verified.reviewLoginId}`
+            : `Login code verified phone=${masked} channel=${outcome.verified.channel}`,
+        );
         return { verified: outcome.verified, completed: attempt.consumed as U };
       case "no_code":
       case "expired":
@@ -268,6 +315,42 @@ export class LoginCodeService {
         throw new ApiException(400, "LOGIN_CODE_INVALID", "The code is incorrect", { details });
       }
     }
+  }
+
+  /**
+   * A challenge for the store review number (TASK-077): no channel is
+   * called, its code is the constant one of `review_login`, checked by
+   * `verifyCodeAnd` only while that row is enabled and in term.
+   */
+  private async issueForReview(
+    phone: string,
+    masked: string,
+    review: ActiveReviewLogin,
+    settings: LoginCodeSettings,
+  ): Promise<LoginCodeSentResponse> {
+    const id = randomUUID();
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + settings.ttlSeconds * 1000);
+    await this.store.createPending({
+      id,
+      phone,
+      // Unused: the code is checked against `review_login.code_hash`.
+      codeHash: "",
+      maxAttempts: settings.maxAttempts,
+      expiresAt,
+      reviewLoginId: review.id,
+    });
+    await this.store.activate(id, phone, "whatsapp", createdAt, expiresAt);
+    this.log(`Login code for store review opened phone=${masked} reviewLogin=${review.id}`);
+    return {
+      phone,
+      channel: "whatsapp",
+      codeLength: REVIEW_LOGIN_CODE_LENGTH,
+      expiresAt: expiresAt.toISOString(),
+      resendAvailableAt: new Date(
+        createdAt.getTime() + settings.resendIntervalSeconds * 1000,
+      ).toISOString(),
+    };
   }
 
   private async issue(

@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { LoginCodeChannel } from "@adclub/contracts";
 import { and, eq, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../../database";
-import { otpChallenge, phoneVerification } from "../schema";
+import { otpChallenge, phoneVerification, reviewLogin } from "../schema";
 
 const PURPOSE = "login";
 
@@ -12,6 +12,8 @@ export interface NewChallenge {
   codeHash: string;
   maxAttempts: number;
   expiresAt: Date;
+  /** A challenge of the sign-in for store review (TASK-077). */
+  reviewLoginId?: string;
 }
 
 export interface ActiveChallenge {
@@ -22,6 +24,9 @@ export interface ActiveChallenge {
   maxAttempts: number;
   expiresAt: Date;
   nextAttemptAt: Date | null;
+  reviewLoginId: string | null;
+  /** The `review_login` row of a store review challenge, as it is now. */
+  review: { id: string; codeHash: string; validUntil: Date; disabledAt: Date | null } | null;
 }
 
 /**
@@ -52,6 +57,7 @@ export class LoginCodeStore {
       codeHash: challenge.codeHash,
       maxAttempts: challenge.maxAttempts,
       expiresAt: challenge.expiresAt,
+      reviewLoginId: challenge.reviewLoginId ?? null,
     });
   }
 
@@ -125,8 +131,13 @@ export class LoginCodeStore {
           maxAttempts: otpChallenge.maxAttempts,
           expiresAt: otpChallenge.expiresAt,
           nextAttemptAt: otpChallenge.nextAttemptAt,
+          reviewLoginId: otpChallenge.reviewLoginId,
+          reviewCodeHash: reviewLogin.codeHash,
+          reviewValidUntil: reviewLogin.validUntil,
+          reviewDisabledAt: reviewLogin.disabledAt,
         })
         .from(otpChallenge)
+        .leftJoin(reviewLogin, eq(reviewLogin.id, otpChallenge.reviewLoginId))
         .where(
           and(
             eq(otpChallenge.phone, phone),
@@ -134,10 +145,32 @@ export class LoginCodeStore {
             eq(otpChallenge.status, "active"),
           ),
         )
-        .for("update");
+        // Only the challenge is locked (a left join's other side can't be);
+        // disabling the review sign-in expires its challenges, so it waits.
+        .for("update", { of: otpChallenge });
 
-      const challenge =
-        row && row.channel ? ({ ...row, channel: row.channel } as ActiveChallenge) : undefined;
+      const challenge: ActiveChallenge | undefined =
+        row && row.channel
+          ? {
+              id: row.id,
+              codeHash: row.codeHash,
+              channel: row.channel,
+              attempts: row.attempts,
+              maxAttempts: row.maxAttempts,
+              expiresAt: row.expiresAt,
+              nextAttemptAt: row.nextAttemptAt,
+              reviewLoginId: row.reviewLoginId,
+              review:
+                row.reviewLoginId && row.reviewCodeHash !== null && row.reviewValidUntil !== null
+                  ? {
+                      id: row.reviewLoginId,
+                      codeHash: row.reviewCodeHash,
+                      validUntil: row.reviewValidUntil,
+                      disabledAt: row.reviewDisabledAt,
+                    }
+                  : null,
+            }
+          : undefined;
       const { decision, result } = decide(challenge);
       if (!challenge || !decision) {
         return { result };
@@ -149,13 +182,16 @@ export class LoginCodeStore {
             .update(otpChallenge)
             .set({ status: "consumed", consumedAt: now, updatedAt: now })
             .where(eq(otpChallenge.id, challenge.id));
-          await tx
-            .insert(phoneVerification)
-            .values({ phone, channel: challenge.channel, verifiedAt: now })
-            .onConflictDoUpdate({
-              target: phoneVerification.phone,
-              set: { channel: challenge.channel, verifiedAt: now, updatedAt: now },
-            });
+          // A store review code reached nobody through a channel: nothing to record.
+          if (challenge.reviewLoginId === null) {
+            await tx
+              .insert(phoneVerification)
+              .values({ phone, channel: challenge.channel, verifiedAt: now })
+              .onConflictDoUpdate({
+                target: phoneVerification.phone,
+                set: { channel: challenge.channel, verifiedAt: now, updatedAt: now },
+              });
+          }
           if (onConsumed) {
             return { result, consumed: await onConsumed(tx) };
           }

@@ -97,6 +97,7 @@ describe("ormTables", () => {
         "account",
         "otp_challenge",
         "phone_verification",
+        "review_login",
         "price_import",
         "price_import_format",
         "price_import_refusal",

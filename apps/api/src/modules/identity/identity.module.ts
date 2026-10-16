@@ -8,6 +8,7 @@ import { AdminAuthService } from "./admin/admin-auth.service";
 import { AdminUserStore } from "./admin/admin-user.store";
 import { AdminController } from "./admin/admin.controller";
 import { OperatorService } from "./admin/operator.service";
+import { ReviewLogins } from "./login-code/review-login";
 import { DevLoginCodeOutbox } from "./login-code/channels/dev-login-code-outbox";
 import { LoginCodeChannels } from "./login-code/channels/login-code-channels";
 import { TestLoginCodeChannels } from "./login-code/channels/test-login-code-channels";
@@ -47,6 +48,7 @@ export const identityOperatorProviders = [
   SupplierMemberRemover,
   AdminAccessRevoker,
   OperatorService,
+  ReviewLogins,
 ];
 
 /**

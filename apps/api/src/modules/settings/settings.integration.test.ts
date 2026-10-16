@@ -6,6 +6,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
   apiErrorResponseSchema,
+  clubInfoResponseSchema,
   clientPolicyResponseSchema,
   loginCodeVerifiedResponseSchema,
   settingChangedResponseSchema,
@@ -392,6 +393,7 @@ describe("settings (PostgreSQL + Redis)", () => {
         "messages",
         "billing",
         "clients",
+        "club",
         "admin_panel",
         "cleanup",
         "login_code",
@@ -950,6 +952,52 @@ describe("settings (PostgreSQL + Redis)", () => {
         426,
         "CLIENT_UPDATE_REQUIRED",
       );
+    });
+  });
+
+  describe("the club's documents and contact (TASK-077)", () => {
+    const clubInfo = () => http().get("/meta/club-info").set("X-Client", "mobile/1.0.0 (ios)");
+
+    it("is empty by default and follows what an administrator sets, for anyone", async () => {
+      const empty = await clubInfo();
+      expect(empty.status).toBe(200);
+      expect(clubInfoResponseSchema.parse(empty.body)).toEqual({
+        termsUrl: null,
+        privacyUrl: null,
+        supportPhone: null,
+        supportUrl: null,
+        partnerFormUrl: null,
+      });
+
+      const admin = await setUpAdmin();
+      const set = (key: string, value: string, expectedVersion: number) =>
+        asAdmin("put", `/admin/settings/${key}`, admin.accessToken, {
+          value,
+          expectedVersion,
+          reason: "Тексты юриста",
+        });
+      expect((await set("club_terms_url", "https://adclub.kz/terms", 0)).status).toBe(200);
+      expect((await set("club_support_contact", "+77010000000", 0)).status).toBe(200);
+      expect(
+        (await set("club_partner_form_url", "https://partners.adclub.kz/join", 0)).status,
+      ).toBe(200);
+      // Not an address, not a number: refused, nothing stored.
+      expectError(await set("club_privacy_url", "adclub.kz/privacy", 0), 400, "VALIDATION_ERROR");
+      expectError(await set("club_support_contact", "8 701 000 00 00", 1), 400, "VALIDATION_ERROR");
+
+      expect(clubInfoResponseSchema.parse((await clubInfo()).body)).toEqual({
+        termsUrl: "https://adclub.kz/terms",
+        privacyUrl: null,
+        supportPhone: "+77010000000",
+        supportUrl: null,
+        partnerFormUrl: "https://partners.adclub.kz/join",
+      });
+      // A link instead of a number.
+      expect((await set("club_support_contact", "https://wa.me/77010000000", 1)).status).toBe(200);
+      expect((await clubInfo()).body).toMatchObject({
+        supportPhone: null,
+        supportUrl: "https://wa.me/77010000000",
+      });
     });
   });
 

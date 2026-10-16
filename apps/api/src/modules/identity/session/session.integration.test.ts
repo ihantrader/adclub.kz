@@ -35,6 +35,7 @@ import { TcpProxy } from "../../../testing/tcp-proxy";
 import { AccountStore } from "../account/account.store";
 import { LoginCodeChannels } from "../login-code/channels/login-code-channels";
 import { TestLoginCodeChannels } from "../login-code/channels/test-login-code-channels";
+import { ReviewLogins } from "../login-code/review-login";
 import { accessTokenIssuer, signAccessToken } from "./session-tokens";
 import { SessionService, type IssuedSession } from "./session.service";
 
@@ -1029,6 +1030,221 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
     });
   });
 
+  describe("the sign-in for store review (TASK-077)", () => {
+    const REVIEW_PHONE = "+77070000077";
+    const REVIEW_CODE = "246813";
+    const tomorrow = () => new Date(Date.now() + 86_400_000);
+
+    function requestCode(phone: string, client?: string): Test {
+      const call = http().post("/auth/login-code").set("X-Forwarded-For", nextIp());
+      if (client !== undefined) call.set("X-Client", client);
+      return call.send({ phone });
+    }
+
+    async function journal(action: string) {
+      return (
+        await db.query<{ entity_id: string; after: unknown; reason: string | null; row: string }>(
+          "SELECT entity_id, after, reason, row_to_json(audit_log)::text AS row FROM audit_log WHERE action = $1 ORDER BY created_at",
+          [action],
+        )
+      ).rows;
+    }
+
+    beforeEach(() => {
+      rememberCode(REVIEW_CODE);
+    });
+
+    it("signs the app in with the constant code, sending nothing, only while enabled", async () => {
+      const reviewLogins = app.get(ReviewLogins);
+      // Off by default: the number gets an ordinary code by WhatsApp.
+      expect((await reviewLogins.status()).state).toBe("none");
+      expect((await requestCode(REVIEW_PHONE, IOS)).status).toBe(200);
+      expect(channels.sent.filter((sent) => sent.phone === REVIEW_PHONE)).toHaveLength(1);
+      expectError(
+        await verify(REVIEW_PHONE, REVIEW_CODE, { client: IOS }),
+        400,
+        "LOGIN_CODE_INVALID",
+      );
+
+      const enabled = await reviewLogins.enable({
+        phone: REVIEW_PHONE,
+        code: REVIEW_CODE,
+        validUntil: tomorrow(),
+        reason: "App Store review",
+      });
+      channels.sent.length = 0;
+      await redis.del(`rl:login-code:resend:${REVIEW_PHONE}`);
+      const sent = await requestCode(REVIEW_PHONE, ANDROID);
+      expect(sent.status).toBe(200);
+      expect(sent.body).toMatchObject({ channel: "whatsapp", codeLength: 6 });
+      // No channel is called for it.
+      expect(channels.sent).toHaveLength(0);
+      const signedIn = await verify(REVIEW_PHONE, REVIEW_CODE, { client: ANDROID });
+      expect(signedIn.status).toBe(200);
+      const body = loginCodeVerifiedResponseSchema.parse(signedIn.body);
+      remember(body.session);
+      // An ordinary user session, nothing more.
+      expect(body.access).toEqual({ context: "user" });
+      expect(
+        (await db.query("SELECT kind FROM session WHERE id = $1", [body.session.sessionId]))
+          .rows[0],
+      ).toEqual({ kind: "mobile" });
+      expect((await me(body.session.accessToken, ANDROID)).status).toBe(200);
+      // Nothing recorded as a delivered channel.
+      expect(
+        (await db.query("SELECT 1 FROM phone_verification WHERE phone = $1", [REVIEW_PHONE]))
+          .rowCount,
+      ).toBe(0);
+
+      // The journal: enabled and signed in, never the code.
+      const [enabledEntry] = await journal("review_login.enabled");
+      expect(enabledEntry).toMatchObject({
+        entity_id: enabled.id,
+        reason: "App Store review",
+        after: { phoneMasked: "+7***0077" },
+      });
+      const [signedInEntry] = await journal("review_login.signed_in");
+      expect(signedInEntry).toMatchObject({ entity_id: enabled.id });
+      const everything = (
+        await db.query<{ row: string }>("SELECT row_to_json(audit_log)::text AS row FROM audit_log")
+      ).rows
+        .map((row) => row.row)
+        .join("\n");
+      expect(everything).not.toContain(REVIEW_CODE);
+      expect(everything).not.toContain(REVIEW_PHONE);
+      const stored = await db.query<{ code_hash: string }>("SELECT code_hash FROM review_login");
+      expect(stored.rows[0]!.code_hash).not.toContain(REVIEW_CODE);
+      expect(appLogText(output.text())).not.toContain(REVIEW_CODE);
+
+      // Disabled: back to an ordinary code, the constant one opens nothing.
+      await redis.del(`rl:login-code:resend:${REVIEW_PHONE}`);
+      await requestCode(REVIEW_PHONE, IOS);
+      expect((await reviewLogins.disable("Review passed")).disabled).toBe(enabled.id);
+      expectError(
+        await verify(REVIEW_PHONE, REVIEW_CODE, { client: IOS }),
+        400,
+        "LOGIN_CODE_EXPIRED",
+      );
+      await redis.del(`rl:login-code:resend:${REVIEW_PHONE}`);
+      expect((await requestCode(REVIEW_PHONE, IOS)).status).toBe(200);
+      expect(channels.sent.filter((message) => message.phone === REVIEW_PHONE)).toHaveLength(1);
+      expectError(
+        await verify(REVIEW_PHONE, REVIEW_CODE, { client: IOS }),
+        400,
+        "LOGIN_CODE_INVALID",
+      );
+      expect(await journal("review_login.disabled")).toHaveLength(1);
+      expect((await reviewLogins.status()).state).toBe("disabled");
+    });
+
+    it("lets nothing in once its term has passed", async () => {
+      const reviewLogins = app.get(ReviewLogins);
+      await reviewLogins.enable({
+        phone: REVIEW_PHONE,
+        code: REVIEW_CODE,
+        validUntil: tomorrow(),
+        reason: "Google Play review",
+      });
+      // A code opened before the night the term ran out…
+      expect((await requestCode(REVIEW_PHONE, IOS)).status).toBe(200);
+      expect(channels.sent).toHaveLength(0);
+      await db.query("UPDATE review_login SET valid_until = now() - interval '1 minute'");
+      // …is not accepted in the morning,
+      expectError(
+        await verify(REVIEW_PHONE, REVIEW_CODE, { client: IOS }),
+        400,
+        "LOGIN_CODE_EXPIRED",
+      );
+      // and a new request is an ordinary one.
+      await redis.del(`rl:login-code:resend:${REVIEW_PHONE}`);
+      expect((await requestCode(REVIEW_PHONE, IOS)).status).toBe(200);
+      expect(channels.sent).toHaveLength(1);
+      expectError(
+        await verify(REVIEW_PHONE, REVIEW_CODE, { client: IOS }),
+        400,
+        "LOGIN_CODE_INVALID",
+      );
+      expect((await reviewLogins.status()).state).toBe("expired");
+    });
+
+    it("never opens the cabinet or the admin panel", async () => {
+      const reviewLogins = app.get(ReviewLogins);
+      await reviewLogins.enable({
+        phone: REVIEW_PHONE,
+        code: REVIEW_CODE,
+        validUntil: tomorrow(),
+        reason: "App Store review",
+      });
+      for (const client of ["supplier-web/0.1.0", "admin-web/0.1.0"]) {
+        channels.sent.length = 0;
+        await redis.del(`rl:login-code:resend:${REVIEW_PHONE}`);
+        // From a web client the number gets an ordinary code…
+        expect((await requestCode(REVIEW_PHONE, client)).status).toBe(200);
+        expect(channels.sent).toHaveLength(1);
+        // …and the constant one is just a wrong code there.
+        expectError(await verify(REVIEW_PHONE, REVIEW_CODE, { client }), 400, "LOGIN_CODE_INVALID");
+      }
+      // A challenge the app opened is not finished by a web client either.
+      await redis.del(`rl:login-code:resend:${REVIEW_PHONE}`);
+      expect((await requestCode(REVIEW_PHONE, IOS)).status).toBe(200);
+      expectError(
+        await verify(REVIEW_PHONE, REVIEW_CODE, { client: "admin-web/0.1.0" }),
+        400,
+        "LOGIN_CODE_EXPIRED",
+      );
+      expect(await journal("review_login.signed_in")).toHaveLength(0);
+    });
+
+    it("counts a wrong code as any wrong code, and keeps the limits", async () => {
+      const reviewLogins = app.get(ReviewLogins);
+      await reviewLogins.enable({
+        phone: REVIEW_PHONE,
+        code: REVIEW_CODE,
+        validUntil: tomorrow(),
+        reason: "App Store review",
+      });
+      expect((await requestCode(REVIEW_PHONE, IOS)).status).toBe(200);
+      const wrong = await verify(REVIEW_PHONE, "000000", { client: IOS });
+      expectError(wrong, 400, "LOGIN_CODE_INVALID");
+      expect(wrong.body.details.attemptsRemaining).toBe(4);
+      expect(
+        (
+          await db.query<{ attempts: number }>(
+            "SELECT attempts FROM otp_challenge WHERE review_login_id IS NOT NULL",
+          )
+        ).rows[0]!.attempts,
+      ).toBe(1);
+      // The resend interval holds for it too.
+      expectError(await requestCode(REVIEW_PHONE, IOS), 429, "RATE_LIMITED");
+      // The right code still works within the attempts.
+      expect((await verify(REVIEW_PHONE, REVIEW_CODE, { client: IOS })).status).toBe(200);
+    });
+
+    it("is changed only by the operator: a code of six digits, a term ahead, a reason", async () => {
+      const reviewLogins = app.get(ReviewLogins);
+      const enable = (overrides: Partial<Parameters<ReviewLogins["enable"]>[0]>) =>
+        reviewLogins.enable({
+          phone: REVIEW_PHONE,
+          code: REVIEW_CODE,
+          validUntil: tomorrow(),
+          reason: "review",
+          ...overrides,
+        });
+      await expect(enable({ code: "12345" })).rejects.toThrow(/6 digits/);
+      await expect(enable({ validUntil: new Date(Date.now() - 1000) })).rejects.toThrow(/future/);
+      await expect(enable({ reason: " " })).rejects.toThrow(/reason/);
+      await expect(enable({ phone: "123" })).rejects.toThrow(/mobile number/);
+      const first = await enable({});
+      const second = await enable({ code: "135790" });
+      expect(second.replaced).toBe(first.id);
+      const status = await reviewLogins.status();
+      expect(status.state).toBe("enabled");
+      expect(status.current?.id).toBe(second.id);
+      expect(status.history.map((row) => row.disabledReason)).toEqual([null, "replaced"]);
+      expect(JSON.stringify(status)).not.toContain(REVIEW_CODE);
+    });
+  });
+
   describe("CORS", () => {
     const preflight = (origin: string) =>
       http()
@@ -1106,6 +1322,40 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect((await refresh(other.refreshToken)).status).toBe(200);
       // A refused refresh changed nothing: the token still works later.
       expect((await sessionRow(session.sessionId))?.refresh_generation).toBe(3);
+    });
+
+    it("lets a web page be reloaded 100 times an hour, and still limits it (TASK-077)", async () => {
+      expect(await settings.values()).toMatchObject({
+        session_refresh_per_web_session: 300,
+        session_refresh_per_web_session_window_seconds: 3600,
+      });
+      // Every reload of the admin panel is an exchange of the cookie.
+      const admin = await issueWebSession("admin_web");
+      let token = admin.tokens.refreshToken;
+      for (let reload = 0; reload < 100; reload += 1) {
+        const response = await cookieRefresh(ADMIN_ORIGIN, `adclub_admin_refresh=${token}`);
+        expect(response.status).toBe(200);
+        remember(response.body);
+        token = setCookies(response)[0]!.split(";")[0]!.split("=")[1]!;
+        issuedTokens.add(token);
+      }
+
+      // The web value is its own: lowering it limits the page, not the app.
+      await settings.set({ session_refresh_per_web_session: 2, session_refresh_per_session: 30 });
+      const supplier = await issueWebSession("supplier_web", OTHER_PHONE);
+      let cookie = `adclub_supplier_refresh=${supplier.tokens.refreshToken}`;
+      for (let reload = 0; reload < 2; reload += 1) {
+        const response = await cookieRefresh(SUPPLIER_ORIGIN, cookie);
+        expect(response.status).toBe(200);
+        remember(response.body);
+        cookie = setCookies(response)[0]!.split(";")[0]!;
+        issuedTokens.add(cookie.split("=")[1]!);
+      }
+      const limited = await cookieRefresh(SUPPLIER_ORIGIN, cookie);
+      expectError(limited, 429, "RATE_LIMITED");
+      expect(limited.body.details).toMatchObject({ limit: "session_refresh_per_web_session" });
+      const mobile = await signIn();
+      expect((await refreshed(mobile.refreshToken)).refreshToken).toBeDefined();
     });
 
     it("limits refreshes per address, garbage included", async () => {

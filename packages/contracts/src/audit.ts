@@ -246,6 +246,15 @@ export const auditActions = {
   /** A tariff was added (TASK-040, operator command): `after` — the record. */
   planAdded: "plan.added",
   /**
+   * The sign-in for store review (TASK-077, PRODUCT 5), only by the operator
+   * command: `enabled` — `after` the masked number and the term (a current
+   * one replaced is named in `before`); `disabled` — ended early; `signed_in`
+   * — the app signed in with it (actor `user`). Never the code.
+   */
+  reviewLoginEnabled: "review_login.enabled",
+  reviewLoginDisabled: "review_login.disabled",
+  reviewLoginSignedIn: "review_login.signed_in",
+  /**
    * A supplier's card was marked linked or unlinked (TASK-040, only the
    * operator command of development and tests until TASK-042):
    * `before`/`after` — `{cardLinked}`.
@@ -386,6 +395,8 @@ export const auditEntities = {
   subscription: "subscription",
   /** A tariff (TASK-040). */
   plan: "plan",
+  /** The sign-in for store review (TASK-077). */
+  reviewLogin: "review_login",
   /** An order of a user (TASK-021). */
   order: "order",
   /** A discipline mark of a user (TASK-022). */

@@ -61,6 +61,26 @@ export const otpChallenge = pgTable("otp_challenge", {
   nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  /** Opened for the store review number (TASK-077): checked against `review_login.code_hash`. */
+  reviewLoginId: uuid("review_login_id").references(() => reviewLogin.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * `review_login` (TASK-077; PRODUCT 5; ARCHITECTURE 4.73): the number and
+ * the HMAC of the constant code store reviewers sign in with. At most one
+ * enabled; only the operator command writes it.
+ */
+export const reviewLogin = pgTable("review_login", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  phone: text("phone").notNull(),
+  codeHash: text("code_hash").notNull(),
+  validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+  reason: text("reason").notNull(),
+  enabledAt: timestamp("enabled_at", { withTimezone: true }).notNull().defaultNow(),
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  disabledReason: text("disabled_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -277,6 +297,7 @@ export const session = pgTable(
 export const identityTables = [
   account,
   otpChallenge,
+  reviewLogin,
   phoneVerification,
   session,
   supplier,

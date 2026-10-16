@@ -71,6 +71,10 @@ export class SettingsSessionSource extends SessionSettingsSource {
         max: v.session_refresh_per_session,
         windowSeconds: v.session_refresh_per_session_window_seconds,
       },
+      refreshPerWebSession: {
+        max: v.session_refresh_per_web_session,
+        windowSeconds: v.session_refresh_per_web_session_window_seconds,
+      },
       refreshPerIp: {
         max: v.session_refresh_per_ip,
         windowSeconds: v.session_refresh_per_ip_window_seconds,

@@ -12,7 +12,7 @@ import type { Request, Response } from "express";
 import { getRequestClient } from "../../../common/client";
 import { ApiRoute } from "../../../common/contract";
 import { ZodValidationPipe } from "../../../common/validation";
-import { SignInService } from "../session/sign-in.service";
+import { SignInService, sessionKindForClient } from "../session/sign-in.service";
 import { setSignInStepCookie } from "../session/sign-in-step-cookie";
 import { deliverSession } from "../session/web-sign-in";
 import { LoginCodeService } from "./login-code.service";
@@ -28,9 +28,16 @@ export class LoginCodeController {
   @ApiRoute(apiRoutes.requestLoginCode)
   requestLoginCode(
     @Body(new ZodValidationPipe(requestLoginCodeBodySchema)) body: RequestLoginCodeBody,
+    @Req() request: Request,
     @Ip() ip: string | undefined,
   ): Promise<LoginCodeSentResponse> {
-    return this.loginCodes.requestCode({ phone: body.phone, channel: body.channel, ip: ip ?? "" });
+    return this.loginCodes.requestCode({
+      phone: body.phone,
+      channel: body.channel,
+      ip: ip ?? "",
+      // The store review number is a sign-in to the app only (TASK-077).
+      reviewAllowed: sessionKindForClient(getRequestClient(request)) === "mobile",
+    });
   }
 
   @ApiRoute(apiRoutes.verifyLoginCode)

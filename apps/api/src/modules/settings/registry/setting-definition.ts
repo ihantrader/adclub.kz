@@ -58,6 +58,8 @@ export interface StringDefinition extends DefinitionBase {
    * change is checked against the database (`SettingsChangeService`).
    */
   reference?: "city";
+  /** An empty value is a value — «not set» (TASK-077: the addresses of M-PRO-06). */
+  allowEmpty?: boolean;
   default: string;
 }
 
@@ -155,7 +157,11 @@ function schemaFor(definition: SettingDefinition, context: SettingCheckContext):
     case "boolean":
       return z.boolean();
     case "string": {
-      const text = z.string().trim().min(1).max(definition.maxLength);
+      const text = z
+        .string()
+        .trim()
+        .min(definition.allowEmpty ? 0 : 1)
+        .max(definition.maxLength);
       return definition.pattern
         ? text.regex(definition.pattern.regex, { message: definition.pattern.message })
         : text;
@@ -228,7 +234,7 @@ export function describeConstraints(
       return {};
     case "string":
       return {
-        minLength: 1,
+        minLength: definition.allowEmpty ? 0 : 1,
         maxLength: definition.maxLength,
         ...(definition.pattern ? { pattern: definition.pattern.regex.source } : {}),
         ...(definition.reference ? { reference: definition.reference } : {}),

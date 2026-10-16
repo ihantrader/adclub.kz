@@ -291,11 +291,13 @@ export class SessionService {
       );
       throw authRequiredException();
     }
+    // A web page exchanges on every reload; the app only when its token expires.
+    const web = found.kind !== "mobile";
     await this.withRateLimiter(() =>
       this.enforce(
         rateLimitKeys.refreshPerSession(sessionId),
-        settings.refreshPerSession,
-        "session_refresh_per_session",
+        web ? settings.refreshPerWebSession : settings.refreshPerSession,
+        web ? "session_refresh_per_web_session" : "session_refresh_per_session",
         sessionId,
       ),
     );

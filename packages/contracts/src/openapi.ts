@@ -153,7 +153,11 @@ import {
   setItemPhotoStatusBodySchema,
 } from "./catalog-photos";
 import { CLIENT_HEADER, clientPlatformSchema } from "./client";
-import { clientPolicyResponseSchema, platformPolicySchema } from "./client-policy";
+import {
+  clientPolicyResponseSchema,
+  clubInfoResponseSchema,
+  platformPolicySchema,
+} from "./client-policy";
 import {
   apiErrorResponseSchema,
   clientUpdateRequiredDetailsSchema,
@@ -274,6 +278,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ClientPlatform: clientPlatformSchema,
   ClientUpdateRequiredDetails: clientUpdateRequiredDetailsSchema,
   ClientPolicyResponse: clientPolicyResponseSchema,
+  ClubInfoResponse: clubInfoResponseSchema,
   PlatformPolicy: platformPolicySchema,
   HealthCheckResponse: healthCheckResponseSchema,
   ReadinessResponse: readinessResponseSchema,

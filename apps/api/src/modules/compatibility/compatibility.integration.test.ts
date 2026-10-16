@@ -1277,20 +1277,22 @@ describe("compatibility of items (PostgreSQL + Redis)", () => {
       });
       expect(await count("item_compatibility", `item_id = '${w.rearPads}'`)).toBe(records);
 
-      // A proposal equal to an approved record is marked from the start.
-      const late = await propose(second.token, { makeId: w.geely, generationId: w.atlasII });
-      const marked = await ok(asAdmin("get", "/admin/compatibility-proposals"), (body) =>
-        adminCompatibilityProposalPageSchema.parse(body),
+      // A proposal equal to an approved record is refused at once, naming it (TASK-077).
+      const late = await asSupplier(
+        second.token,
+        "post",
+        `/supplier/catalog/items/${w.rearPads}/compatibility-proposals`,
+        { conditions: { makeId: w.geely, generationId: w.atlasII }, evidence: "каталог" },
       );
-      expect(marked.proposals.find((entry) => entry.id === late.id)!.matchesRecordId).toBe(
-        corrected.record!.id,
-      );
+      expectError(late, 409, "COMPATIBILITY_DUPLICATE");
+      expect(late.body.details).toEqual({ existingId: corrected.record!.id });
       // The item's card lists what waits.
+      const waiting = await propose(second.token, { makeId: w.geely });
       const card = await ok(
         asAdmin("get", `/admin/catalog/items/${w.rearPads}/compatibility`),
         (body) => adminItemCompatibilityResponseSchema.parse(body),
       );
-      expect(card.proposals.map((entry) => entry.id)).toEqual([late.id]);
+      expect(card.proposals.map((entry) => entry.id)).toEqual([waiting.id]);
     });
 
     it("takes proposals for active goods only; limits their number per company", async () => {

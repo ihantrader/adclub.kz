@@ -64,6 +64,7 @@ describe("settings registry", () => {
       "messages",
       "billing",
       "clients",
+      "club",
       "admin_panel",
       "cleanup",
       "login_code",

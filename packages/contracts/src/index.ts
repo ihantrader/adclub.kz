@@ -20,8 +20,12 @@ export {
 } from "./client";
 export type { ClientInfo, ClientPlatform } from "./client";
 
-export { clientPolicyResponseSchema, platformPolicySchema } from "./client-policy";
-export type { ClientPolicyResponse, PlatformPolicy } from "./client-policy";
+export {
+  clientPolicyResponseSchema,
+  clubInfoResponseSchema,
+  platformPolicySchema,
+} from "./client-policy";
+export type { ClientPolicyResponse, ClubInfoResponse, PlatformPolicy } from "./client-policy";
 
 export {
   loginCodeChannelSchema,

@@ -1380,6 +1380,61 @@ const clients = group({
   },
 });
 
+/** An empty value, or an address a phone opens in the browser. */
+const WEB_ADDRESS = {
+  regex: /^$|^https?:\/\/[^\s]+$/,
+  message: "Адрес страницы (https://…) или пусто",
+};
+
+/**
+ * What the app shows on «Документы и поддержка» (M-PRO-06) and where «Стать
+ * партнёром клуба» leads (TASK-077): read by `GET /meta/club-info`. Empty —
+ * the item is not shown at all (no placeholder), until the lawyer's texts
+ * and the club's contact exist.
+ */
+const club = group({
+  id: "club",
+  title: "Документы и поддержка",
+  editableBy: "admin",
+  settings: {
+    club_terms_url: define.string({
+      maxLength: 500,
+      default: "",
+      allowEmpty: true,
+      pattern: WEB_ADDRESS,
+      description:
+        "Адрес страницы «Условия использования» (M-PRO-06); пусто — пункта в приложении нет.",
+    }),
+    club_privacy_url: define.string({
+      maxLength: 500,
+      default: "",
+      allowEmpty: true,
+      pattern: WEB_ADDRESS,
+      description:
+        "Адрес страницы «Политика конфиденциальности» (M-PRO-06); пусто — пункта в приложении нет.",
+    }),
+    club_support_contact: define.string({
+      maxLength: 500,
+      default: "",
+      allowEmpty: true,
+      pattern: {
+        regex: /^$|^\+7\d{10}$|^https:\/\/[^\s]+$/,
+        message: "Номер +7XXXXXXXXXX, ссылка https://… (например, https://wa.me/7…) или пусто",
+      },
+      description:
+        "«Связаться с клубом» (M-PRO-06): номер телефона (+7XXXXXXXXXX — позвонить или написать в WhatsApp) или ссылка https://…; пусто — пункта нет.",
+    }),
+    club_partner_form_url: define.string({
+      maxLength: 500,
+      default: "",
+      allowEmpty: true,
+      pattern: WEB_ADDRESS,
+      description:
+        "Адрес страницы «Станьте партнёром клуба» (S-PUB-01, /join кабинета); открывается из профиля приложения. Пусто — в разработке берётся кабинет на машине разработчика, в рабочей сборке пункта нет.",
+    }),
+  },
+});
+
 /** The admin panel's own limits (TASK-036.B): per administrator. */
 const adminPanel = group({
   id: "admin_panel",
@@ -1621,6 +1676,21 @@ const session = group({
       default: HOUR,
       description: "Окно лимита обновлений на сессию.",
     }),
+    session_refresh_per_web_session: define.integer({
+      unit: "count",
+      min: 1,
+      max: 100_000,
+      default: 300,
+      description:
+        "Сколько обновлений токенов одной сессии кабинета или админки допускается за окно: каждая перезагрузка страницы — обновление.",
+    }),
+    session_refresh_per_web_session_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: HOUR,
+      description: "Окно лимита обновлений на сессию кабинета или админки.",
+    }),
     session_refresh_per_ip: define.integer({
       unit: "count",
       min: 1,
@@ -1726,6 +1796,7 @@ export const settingGroups = [
   messages,
   billing,
   clients,
+  club,
   adminPanel,
   cleanup,
   loginCode,
@@ -1753,6 +1824,7 @@ export const settingDefinitions = {
   ...messages.settings,
   ...billing.settings,
   ...clients.settings,
+  ...club.settings,
   ...adminPanel.settings,
   ...cleanup.settings,
   ...loginCode.settings,

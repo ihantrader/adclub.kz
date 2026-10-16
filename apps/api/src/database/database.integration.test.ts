@@ -98,6 +98,50 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds the sign-in for store review with its rules, and rolls back keeping the codes (review login)", async () => {
+    const insert = (values: Record<string, unknown>) => {
+      const row = {
+        phone: "+77070000077",
+        code_hash: "a".repeat(64),
+        valid_until: new Date(Date.now() + 86_400_000),
+        reason: "App Store review",
+        ...values,
+      };
+      const columns = Object.keys(row);
+      return client.query<{ id: string }>(
+        `INSERT INTO review_login (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${String(index + 1)}`).join(", ")}) RETURNING id`,
+        Object.values(row),
+      );
+    };
+    await expect(insert({ phone: "87070000077" })).rejects.toThrow(/review_login_phone_format/);
+    await expect(insert({ reason: " " })).rejects.toThrow(/review_login_reason_present/);
+    await expect(insert({ disabled_at: new Date() })).rejects.toThrow(
+      /review_login_disabled_reason/,
+    );
+    const first = (await insert({})).rows[0]!.id;
+    // At most one enabled at a time.
+    await expect(insert({})).rejects.toThrow(/review_login_one_enabled/);
+    await client.query(
+      "UPDATE review_login SET disabled_at = now(), disabled_reason = 'replaced' WHERE id = $1",
+      [first],
+    );
+    const second = (await insert({})).rows[0]!.id;
+    const challenge = await client.query<{ id: string }>(
+      "INSERT INTO otp_challenge (phone, code_hash, max_attempts, expires_at, review_login_id) VALUES ('+77070000077', '', 5, now() + interval '5 minutes', $1) RETURNING id",
+      [second],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "review_login")).toBe(false);
+    expect(await columnExists(client, "otp_challenge", "review_login_id")).toBe(false);
+    // The login codes stay.
+    expect(
+      (await client.query("SELECT 1 FROM otp_challenge WHERE id = $1", [challenge.rows[0]!.id]))
+        .rowCount,
+    ).toBe(1);
+    await client.query("DELETE FROM otp_challenge WHERE id = $1", [challenge.rows[0]!.id]);
+  });
+
   it("holds tariffs, subscriptions and their events with their rules, and rolls back keeping the accounts (subscriptions)", async () => {
     const account = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77470000140') RETURNING id",

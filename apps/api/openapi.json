@@ -14115,6 +14115,41 @@
         }
       }
     },
+    "/meta/club-info": {
+      "get": {
+        "operationId": "getClubInfo",
+        "summary": "The club's documents and contact (M-PRO-06) and the partner request page (S-PUB-01); open to guests",
+        "tags": [
+          "meta"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What is set; null — not set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClubInfoResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/order-history": {
       "get": {
         "operationId": "getOrderHistory",
@@ -29753,6 +29788,48 @@
           "validUntil"
         ]
       },
+      "ClubInfoResponse": {
+        "type": "object",
+        "properties": {
+          "termsUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "privacyUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supportPhone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supportUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "partnerFormUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "termsUrl",
+          "privacyUrl",
+          "supportPhone",
+          "supportUrl",
+          "partnerFormUrl"
+        ]
+      },
       "CompatibilityCheckBody": {
         "type": "object",
         "properties": {
@@ -37301,6 +37378,7 @@
           "login_code_verify_delay",
           "session_refresh_per_session",
           "session_refresh_per_ip",
+          "session_refresh_per_web_session",
           "admin_totp_per_admin",
           "admin_totp_per_ip",
           "compatibility_proposals_per_supplier",

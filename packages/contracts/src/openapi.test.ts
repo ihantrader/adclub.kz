@@ -191,6 +191,7 @@ describe("buildOpenApiDocument", () => {
       "/health",
       "/me/subscription",
       "/meta/client-policy",
+      "/meta/club-info",
       "/order-history",
       "/order-visit-options",
       "/orders",

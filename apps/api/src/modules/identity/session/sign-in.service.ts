@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
+  auditActions,
+  auditEntities,
   clientPlatformSchema,
   type ClientInfo,
   type LoginCodeVerifiedResponse,
@@ -15,6 +17,7 @@ import { maskPhone } from "@adclub/domain";
 import type { RequestClient } from "../../../common/client";
 import { ApiException } from "../../../common/errors";
 import type { DbExecutor } from "../../../database";
+import { ActionJournal } from "../action-journal";
 import { AccountStore, type AccountRecord } from "../account/account.store";
 import { AdminUserStore } from "../admin/admin-user.store";
 import { LoginCodeService } from "../login-code/login-code.service";
@@ -122,6 +125,7 @@ export class SignInService {
     @Inject(AdminUserStore) private readonly admins: AdminUserStore,
     @Inject(SignInStepsService) private readonly steps: SignInStepsService,
     @Inject(SignInSettingsSource) private readonly settingsSource: SignInSettingsSource,
+    @Inject(ActionJournal) private readonly audit: ActionJournal,
   ) {}
 
   async signIn(input: SignInInput): Promise<SignInResult<LoginCodeVerifiedResponse>> {
@@ -130,7 +134,8 @@ export class SignInService {
     const settings = await this.settingsSource.getSettings();
 
     const { verified, completed } = await this.loginCodes.verifyCodeAnd<CodeOutcome>(
-      { phone: input.phone, code: input.code },
+      // A store review code opens only the mobile session (TASK-077).
+      { phone: input.phone, code: input.code, reviewAllowed: kind === "mobile" },
       async (confirmed, tx) => {
         const base = {
           client,
@@ -143,6 +148,19 @@ export class SignInService {
           case "mobile": {
             const account = await this.accounts.findOrCreateByPhone(confirmed.phone, tx);
             const issued = await this.sessions.issue({ ...base, account, kind }, tx);
+            if (confirmed.reviewLoginId) {
+              // An ordinary user session; the journal says how it was opened.
+              await this.audit.record(
+                {
+                  action: auditActions.reviewLoginSignedIn,
+                  actor: { role: "user", accountId: account.id },
+                  entityType: auditEntities.reviewLogin,
+                  entityId: confirmed.reviewLoginId,
+                  after: { phoneMasked: masked, sessionId: issued.tokens.sessionId },
+                },
+                tx,
+              );
+            }
             return { kind: "signed_in", account, issued, access: { context: "user" } };
           }
           case "supplier_web": {

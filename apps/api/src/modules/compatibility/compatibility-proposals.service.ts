@@ -19,6 +19,7 @@ import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { AppSettings } from "../settings";
 import { conditionsOf, resolveConditions, sameConditions } from "./compatibility-conditions";
 import {
+  duplicate,
   notApplicable,
   notFound,
   proposalDuplicate,
@@ -106,6 +107,13 @@ export class CompatibilityProposalsService {
       }
       await this.assertWithinLimit(tx, actor.supplierId, limit);
       const conditions = await resolveConditions(tx, input.conditions);
+      // Already approved as it is: nothing to check, the supplier is told so
+      // (TASK-077, S-OFF-07). A record approved later still marks the
+      // waiting proposal (`matchesRecordId`).
+      const approved = await approvedMatch(tx, itemId, conditions);
+      if (approved) {
+        throw duplicate(approved.id);
+      }
       const [pending] = await tx
         .select({ id: itemCompatibilityProposal.id })
         .from(itemCompatibilityProposal)

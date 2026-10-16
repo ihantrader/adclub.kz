@@ -47,6 +47,7 @@ describe("identity schema: login codes", () => {
       "admin_user",
       "otp_challenge",
       "phone_verification",
+      "review_login",
       "session",
       "sign_in_step",
       "supplier",

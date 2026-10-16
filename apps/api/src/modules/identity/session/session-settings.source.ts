@@ -16,7 +16,14 @@ export interface SessionSettings {
    * of counting as reuse.
    */
   refreshReuseGraceSeconds: number;
+  /** Refreshes of one mobile session: the app exchanges only when its access token expires. */
   refreshPerSession: RateLimitSettings;
+  /**
+   * Refreshes of one cabinet or admin panel session: the access token lives
+   * only in the page's memory, so every reload, new tab or link opened from
+   * WhatsApp is an exchange (TASK-077, ARCHITECTURE 4.73).
+   */
+  refreshPerWebSession: RateLimitSettings;
   refreshPerIp: RateLimitSettings;
 }
 

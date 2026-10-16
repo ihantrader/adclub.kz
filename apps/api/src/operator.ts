@@ -18,6 +18,7 @@ import {
   identityOperatorProviders,
   OperatorCommandError,
   OperatorService,
+  ReviewLogins,
 } from "./modules/identity";
 import { AiModule, AiService } from "./modules/ai";
 import { MessagingAdmin, MessagingCommandError, MessagingModule } from "./modules/messaging";
@@ -72,6 +73,16 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                current grant is replaced
  *   club-access:revoke <phone> --reason <text>   end the current grant now
  *   club-access:status <phone>   the access now and every grant of the account
+ *
+ * The sign-in for store review (TASK-077, PRODUCT 5) — sign-in security
+ * (D-053), off by default, never the code in the journal or the log:
+ *   review-login:enable <phone> --code <6 digits> --until <YYYY-MM-DD | ISO time> --reason <text>
+ *                                the mobile app signs this number in with this
+ *                                code, without WhatsApp or SMS, until then (a
+ *                                date — through that day, Almaty time); an
+ *                                enabled one is replaced
+ *   review-login:disable [--reason <text>]   end it now
+ *   review-login:status          enabled, expired, disabled or none, and the history
  *
  * Settings (ARCHITECTURE 4.11) — any setting, sign-in security ones
  * included (D-053); every change is recorded with `by=operator`:
@@ -231,6 +242,9 @@ const USAGE = `Usage: operator <command> [arguments]
   club-access:grant <phone> --until <YYYY-MM-DD | ISO time> --reason <text>
   club-access:revoke <phone> --reason <text>
   club-access:status <phone>
+  review-login:enable <phone> --code <6 digits> --until <YYYY-MM-DD | ISO time> --reason <text>
+  review-login:disable [--reason <text>]
+  review-login:status
   subscription:status <phone>
   billing:plan:add --audience user|supplier --code <code> --price <tenge> --from <YYYY-MM-DD | ISO time> --announce-days <n> --reason <text> [--to <YYYY-MM-DD | ISO time>]
   billing:plan:list
@@ -360,6 +374,7 @@ function planStart(text: string): Date {
 
 interface Services {
   operator: OperatorService;
+  reviewLogins: ReviewLogins;
   messaging: MessagingAdmin;
   settings: SettingsChangeService;
   jobs: JobAdmin;
@@ -385,6 +400,7 @@ interface Services {
 async function run(
   {
     operator,
+    reviewLogins,
     messaging,
     settings,
     jobs,
@@ -699,6 +715,17 @@ async function run(
       );
     case "club-access:status":
       return clubAccess.statusOf(required(first, "<phone>"));
+    case "review-login:enable":
+      return reviewLogins.enable({
+        phone: required(first, "<phone>"),
+        code: required(values.code, "--code"),
+        validUntil: grantEnd(required(values.until, "--until")),
+        reason: required(values.reason, "--reason"),
+      });
+    case "review-login:disable":
+      return reviewLogins.disable(values.reason);
+    case "review-login:status":
+      return reviewLogins.status();
     case "subscription:status":
       return billing.status(required(first, "<phone>"));
     case "billing:plan:add": {
@@ -798,6 +825,7 @@ async function main(): Promise<void> {
     const result = await run(
       {
         operator: app.get(OperatorService),
+        reviewLogins: app.get(ReviewLogins),
         messaging: app.get(MessagingAdmin),
         settings: app.get(SettingsChangeService),
         jobs: app.get(JobAdmin),

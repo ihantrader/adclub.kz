@@ -121,6 +121,8 @@ export const rateLimitNameSchema = z.enum([
   // Sessions (TASK-005).
   "session_refresh_per_session",
   "session_refresh_per_ip",
+  // A cabinet or admin panel session, which exchanges on every page load (TASK-077).
+  "session_refresh_per_web_session",
   // Admin second factor (TASK-006).
   "admin_totp_per_admin",
   "admin_totp_per_ip",

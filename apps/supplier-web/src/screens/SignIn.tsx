@@ -13,6 +13,7 @@ import { deviceName, formatPhone, type SignedOutReason, typePhone } from "@adclu
 import { loginErrorText } from "../errors";
 import { useT } from "../i18n";
 import { rememberedSupplier, rememberSupplier } from "../prefs";
+import { JOIN_PATH } from "../join/JoinPage";
 import { AuthLayout } from "./AuthLayout";
 
 /**
@@ -107,6 +108,13 @@ export function SignIn({ reason, onSignedIn }: SignInProps) {
         {step.kind === "not_member" && (
           <div className="auth-stack">
             <Banner tone="warning">{t("auth.notMember")}</Banner>
+            {/* S-PUB-01 (TASK-077): the request it speaks of, one press away. */}
+            <a
+              className="ac-button ac-button--primary ac-button--l ac-button--block"
+              href={JOIN_PATH}
+            >
+              {t("auth.joinLink")}
+            </a>
             <Button variant="secondary" size="l" block onClick={() => setStep({ kind: "phone" })}>
               {t("auth.otherNumber")}
             </Button>

@@ -38,6 +38,8 @@ import {
   useRouteId,
   useRouteState,
 } from "../router";
+import { CompatibilityProposal } from "./CompatibilityProposal";
+import { proposesCompatibility } from "./compatibility-proposal-rules";
 import { ActiveOrders, HiddenNote, Receiving } from "./OfferRow";
 import { ServiceOfferEditor } from "./ServiceOfferEditor";
 import {
@@ -185,13 +187,19 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
             onOffer={(offer) => setLoaded({ status: "ready", offer })}
           />
         ) : (
-          <OfferEditor
-            key={loaded.offer.id}
-            item={loaded.offer.item}
-            offer={loaded.offer}
-            company={company}
-            onOffer={(offer) => setLoaded({ status: "ready", offer })}
-          />
+          <>
+            <OfferEditor
+              key={loaded.offer.id}
+              item={loaded.offer.item}
+              offer={loaded.offer}
+              company={company}
+              onOffer={(offer) => setLoaded({ status: "ready", offer })}
+            />
+            {/* S-OFF-07 (TASK-077): only where compatibility is kept. */}
+            {proposesCompatibility(loaded.offer.item) && (
+              <CompatibilityProposal item={loaded.offer.item} />
+            )}
+          </>
         );
   }
   // What the card shows fades in when it changes from loading to the offer,

@@ -1,4 +1,5 @@
 import { Banner, Button, DelayedSkeleton, Logo, Spinner, useDelayedIndicator } from "@adclub/ui";
+import { useEffect } from "react";
 import { AuthLayout } from "./AuthLayout";
 
 /** The first moments of the page: the session is being found out (the cookie exchange). */
@@ -27,6 +28,36 @@ export function Unreachable({ onRetry }: { onRetry: () => unknown }) {
         <h1 className="ac-text-title">Нет связи с сервером</h1>
         <p className="ac-text-body-s ac-muted">
           Проверьте интернет. Админка попробует снова сама, когда связь вернётся.
+        </p>
+        <Button variant="secondary" icon="refresh" onClick={onRetry}>
+          Повторить
+        </Button>
+      </div>
+    </AuthLayout>
+  );
+}
+
+/**
+ * The first exchange was refused for too many of them (TASK-077): not «Нет
+ * связи», the wait instead. Tries again by itself once the wait has passed.
+ */
+export function Throttled({
+  retryAfterSeconds,
+  onRetry,
+}: {
+  retryAfterSeconds: number;
+  onRetry: () => unknown;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onRetry, retryAfterSeconds * 1000 + 1000);
+    return () => clearTimeout(timer);
+  }, [retryAfterSeconds, onRetry]);
+  return (
+    <AuthLayout>
+      <div className="auth-stack" role="alert">
+        <h1 className="ac-text-title">Слишком много обновлений страницы</h1>
+        <p className="ac-text-body-s ac-muted">
+          Попробуйте через {Math.max(1, Math.ceil(retryAfterSeconds / 60))} мин
         </p>
         <Button variant="secondary" icon="refresh" onClick={onRetry}>
           Повторить

@@ -379,6 +379,44 @@ describe("tabs of one browser", () => {
   });
 });
 
+describe("a refused exchange for too many of them (TASK-077)", () => {
+  const limited: ExchangeVerdict = { kind: "rate_limited", retryAfterSeconds: 600 };
+  const tokens = (accessToken: string): WebTokens => ({
+    sessionId: SESSION,
+    accessToken,
+    accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+  });
+
+  it("is not «no connection» at start, and «Повторить» signs in once it has passed", async () => {
+    let verdict: ExchangeVerdict = limited;
+    const session = createWebSession({
+      fetch: () => Promise.reject(new TypeError("unused")),
+      exchange: () => Promise.resolve(verdict),
+    });
+    await session.start();
+    expect(session.state()).toEqual({ status: "throttled", retryAfterSeconds: 600 });
+    verdict = { kind: "ok", tokens: tokens("at-2") };
+    await session.start();
+    expect(session.state()).toEqual({ status: "signed_in", tokens: tokens("at-2") });
+  });
+
+  it("gives an expired request the server's 429 and keeps the session", async () => {
+    const session = createWebSession({
+      fetch: () =>
+        Promise.resolve(json(401, { code: "ACCESS_TOKEN_EXPIRED", message: "", retryable: false })),
+      exchange: () => Promise.resolve(limited),
+    });
+    session.signedIn(tokens("at-1"));
+    const response = await session.fetch("/x", { headers: { Authorization: "Bearer at-1" } });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({
+      code: "RATE_LIMITED",
+      details: { retryAfterSeconds: 600 },
+    });
+    expect(session.state().status).toBe("signed_in");
+  });
+});
+
 describe("exchangeVerdictOf", () => {
   it("reads what is a verdict about the session and what is not", async () => {
     const error = (status: number, code: string) =>
@@ -390,7 +428,25 @@ describe("exchangeVerdictOf", () => {
       reason: "access_closed",
     });
     expect(await error(403, "ORIGIN_NOT_ALLOWED")).toEqual({ kind: "unavailable" });
-    expect(await error(429, "RATE_LIMITED")).toEqual({ kind: "unavailable" });
+    expect(
+      await exchangeVerdictOf(
+        json(429, {
+          code: "RATE_LIMITED",
+          message: "m",
+          retryable: true,
+          details: { limit: "session_refresh_per_web_session", retryAfterSeconds: 1234 },
+        }),
+      ),
+    ).toEqual({ kind: "rate_limited", retryAfterSeconds: 1234 });
+    expect(
+      await exchangeVerdictOf(
+        new Response("{}", { status: 429, headers: { "Retry-After": "90" } }),
+      ),
+    ).toEqual({ kind: "rate_limited", retryAfterSeconds: 90 });
+    expect(await error(429, "RATE_LIMITED")).toEqual({
+      kind: "rate_limited",
+      retryAfterSeconds: 60,
+    });
     expect(await error(503, "SERVICE_UNAVAILABLE")).toEqual({ kind: "unavailable" });
     expect(await error(426, "CLIENT_UPDATE_REQUIRED")).toEqual({
       kind: "update_required",

@@ -1,4 +1,4 @@
-import type { OfferItem, SupplierOffer, VehicleNamed } from "@adclub/contracts";
+import type { OfferItem, SupplierOffer } from "@adclub/contracts";
 import {
   Banner,
   Button,
@@ -9,7 +9,6 @@ import {
   TextField,
   toastObstacle,
   useToast,
-  type Choice,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useMemo, useState } from "react";
@@ -18,6 +17,7 @@ import { useLanguage, useT } from "../i18n";
 import { navigateTo, offerPath, replaceRouteState, useRouteState } from "../router";
 import { BackHead, ItemBlock, OfferStatePanel, PRICE_FIELD, ProblemLink } from "./OfferScreen";
 import { typeAmount, type WarrantyKind } from "./offer-rules";
+import { loadMakes, loadModels, searchNamed } from "./vehicle-choices";
 import {
   changedServiceValues,
   checkServiceForm,
@@ -32,56 +32,8 @@ import {
   type ServiceProblem,
 } from "./service-offer-rules";
 
-/**
- * The makes and the models of the vehicle catalog for the table of prices
- * (S-OFF-04): the public lists clients choose their car from (`/vehicles/…`),
- * each loaded once; the field searches them on the device by any spelling
- * («джили» → Geely), as the garage of the app does.
- */
-let makes: Promise<VehicleNamed[]> | null = null;
-const models = new Map<string, Promise<VehicleNamed[]>>();
-
-function loadMakes(): Promise<VehicleNamed[]> {
-  makes ??= apiClient.getVehicleMakes().then(
-    (answer) => answer.makes,
-    (error: unknown) => {
-      makes = null;
-      throw error;
-    },
-  );
-  return makes;
-}
-
-function loadModels(makeId: string): Promise<VehicleNamed[]> {
-  let found = models.get(makeId);
-  if (!found) {
-    found = apiClient.getVehicleMakeModels({ makeId }).then(
-      (answer) => answer.models,
-      (error: unknown) => {
-        models.delete(makeId);
-        throw error;
-      },
-    );
-    models.set(makeId, found);
-  }
-  return found;
-}
-
-function search(list: VehicleNamed[], query: string): Choice[] {
-  const wanted = query.trim().toLowerCase();
-  return list
-    .filter(
-      (entry) =>
-        wanted === "" ||
-        [entry.name, ...entry.aliases].some((name) => name.toLowerCase().includes(wanted)),
-    )
-    .slice(0, 50)
-    .map((entry) => ({
-      id: entry.id,
-      label: entry.name,
-      note: entry.aliases.length > 0 ? entry.aliases.join(", ") : null,
-    }));
-}
+// The makes and models of the table of prices: `vehicle-choices.ts`.
+const search = searchNamed;
 
 const sameField = (a: ServiceField | null, b: ServiceField) =>
   a !== null &&

@@ -38,7 +38,7 @@ import { More } from "./screens/More";
 import { Settings } from "./screens/Settings";
 import { Shell } from "./screens/Shell";
 import { SignIn } from "./screens/SignIn";
-import { Starting, Unreachable } from "./screens/Starting";
+import { Starting, Throttled, Unreachable } from "./screens/Starting";
 import { Team } from "./screens/Team";
 import { UpdateRequired } from "./screens/UpdateRequired";
 
@@ -141,6 +141,11 @@ export function App() {
               signedInHere.current = true;
             }}
           />,
+        ];
+      case "throttled":
+        return [
+          "throttled",
+          <Throttled retryAfterSeconds={state.retryAfterSeconds} onRetry={session.start} />,
         ];
       case "unreachable": {
         // Opened without a network: the shell with what the header knew, if anything.

@@ -1,4 +1,5 @@
 import { Button, DelayedSkeleton, Logo, Spinner, useDelayedIndicator } from "@adclub/ui";
+import { useEffect } from "react";
 import { useT } from "../i18n";
 import { AuthLayout } from "./AuthLayout";
 
@@ -18,6 +19,37 @@ export function Starting() {
       </DelayedSkeleton>
       <span className="ac-visually-hidden">{t("common.loading")}</span>
     </main>
+  );
+}
+
+/**
+ * The first exchange was refused for too many of them (TASK-077): not «Нет
+ * связи», the wait instead. Tries again by itself once the wait has passed.
+ */
+export function Throttled({
+  retryAfterSeconds,
+  onRetry,
+}: {
+  retryAfterSeconds: number;
+  onRetry: () => unknown;
+}) {
+  const t = useT();
+  useEffect(() => {
+    const timer = setTimeout(onRetry, retryAfterSeconds * 1000 + 1000);
+    return () => clearTimeout(timer);
+  }, [retryAfterSeconds, onRetry]);
+  return (
+    <AuthLayout>
+      <div className="auth-stack" role="alert">
+        <h1 className="ac-text-title">{t("auth.throttledTitle")}</h1>
+        <p className="ac-text-body-s ac-muted">
+          {t("auth.throttledText", { minutes: Math.max(1, Math.ceil(retryAfterSeconds / 60)) })}
+        </p>
+        <Button variant="secondary" icon="refresh" onClick={onRetry}>
+          {t("common.retry")}
+        </Button>
+      </div>
+    </AuthLayout>
   );
 }
 

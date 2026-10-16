@@ -7,13 +7,10 @@ import {
   FadeSwap,
   Icon,
   Logo,
-  Segments,
   Sidebar,
   toastArea,
-  useTheme,
   type NavItem,
 } from "@adclub/ui";
-import type { ThemeMode } from "@adclub/ui-core";
 import { formatPhone, useOnline } from "@adclub/web-session";
 import { useState, type ReactNode } from "react";
 import { apiClient, session } from "../api";
@@ -42,16 +39,10 @@ const MENU: NavItem<StaticRoute>[] = [
   { key: "security", label: "Безопасность", icon: "lock", href: routePaths.security },
 ];
 
-const THEMES: { value: ThemeMode; label: string }[] = [
-  { value: "light", label: "Светлая" },
-  { value: "dark", label: "Тёмная" },
-  { value: "system", label: "Как в системе" },
-];
-
 /**
  * The frame of every page (SCREENS 7.0; TASK-034 requirement 1): the side
  * menu of sections — the live ones and, below, those of the next tasks —
- * the administrator and «Выйти» in the header, the theme, the banners
+ * the administrator and «Выйти» in the header, the banners
  * («Нет сети», the backup codes running out). The page fades in its place
  * (D-069); the frame stays.
  */
@@ -65,7 +56,6 @@ export function Shell({
   children: ReactNode;
 }) {
   const online = useOnline();
-  const { mode, setMode } = useTheme();
   const remaining = useBackupCodesRemaining();
   const location = useLocation();
   const [leaving, setLeaving] = useState(false);
@@ -116,7 +106,6 @@ export function Shell({
           </div>
           <HeaderSearch />
           <div className="topbar__actions">
-            <Segments<ThemeMode> label="Тема" options={THEMES} value={mode} onChange={setMode} />
             <Button
               variant="secondary"
               size="s"

@@ -21,7 +21,7 @@ import { useLocation, useRoute, type RouteKey } from "./router";
 
 import { Shell } from "./screens/Shell";
 import { SignIn } from "./screens/SignIn";
-import { NarrowNotice, Starting, Unreachable, UpdateRequired } from "./screens/Starting";
+import { NarrowNotice, Starting, Throttled, Unreachable, UpdateRequired } from "./screens/Starting";
 import { Security } from "./security/Security";
 import { Cities } from "./settings/Cities";
 import { ClientPolicy } from "./settings/ClientPolicy";
@@ -118,6 +118,11 @@ export function App() {
         return ["sign-in", <SignIn reason={state.reason} />];
       case "unreachable":
         return ["unreachable", <Unreachable onRetry={() => session.start()} />];
+      case "throttled":
+        return [
+          "throttled",
+          <Throttled retryAfterSeconds={state.retryAfterSeconds} onRetry={session.start} />,
+        ];
       case "signed_in":
         return [
           "admin",

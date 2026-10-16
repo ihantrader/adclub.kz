@@ -23,8 +23,12 @@ import { sessionTokensSchema } from "@adclub/contracts";
  *   pair (ARCHITECTURE 4.6 I49).
  * - The session is over only when the server says so: `SESSION_ENDED`,
  *   `SUPPLIER_ACCESS_CLOSED`, or a refusal of the exchange. A network
- *   failure, a timeout, a 5xx or a rate limit is not a verdict: the session
- *   stays, the caller sees a network error, the next request tries again.
+ *   failure, a timeout or a 5xx is not a verdict: the session stays, the
+ *   caller sees a network error, the next request tries again.
+ * - A refused exchange for too many of them (429) is not a verdict either,
+ *   but it is not a lost connection: the page says how long to wait
+ *   (`throttled`), and a request gets the server's 429 to show as such
+ *   (TASK-077).
  */
 
 /** Why the client shows the sign-in screen: decides the message above it. */
@@ -46,8 +50,10 @@ export interface WebTokens {
 export type ExchangeVerdict =
   | { kind: "ok"; tokens: WebTokens }
   | { kind: "ended"; reason: SignedOutReason }
-  /** No answer worth believing: offline, timed out, a server error, a rate limit. */
+  /** No answer worth believing: offline, timed out, a server error. */
   | { kind: "unavailable" }
+  /** Too many exchanges of this session or address (429): try again in that many seconds. */
+  | { kind: "rate_limited"; retryAfterSeconds: number }
   /** This build is below the server's minimum (`CLIENT_UPDATE_REQUIRED`). */
   | { kind: "update_required"; message: string };
 
@@ -57,7 +63,9 @@ export type SessionState =
   | { status: "signed_in"; tokens: WebTokens }
   | { status: "signed_out"; reason: SignedOutReason }
   /** The first exchange could not reach the server: we don't know yet. */
-  | { status: "unreachable" };
+  | { status: "unreachable" }
+  /** The first exchange was refused for too many exchanges: «Слишком много обновлений страницы». */
+  | { status: "throttled"; retryAfterSeconds: number };
 
 /** What the tabs of one browser tell each other. */
 export type TabMessage =
@@ -107,6 +115,19 @@ function codeOf(body: unknown): string | undefined {
     : undefined;
 }
 
+/** Seconds to wait after a 429: `details.retryAfterSeconds`, else `Retry-After`, else a minute. */
+function retryAfterOf(response: Response, body: unknown): number {
+  const details =
+    typeof body === "object" && body !== null ? (body as { details?: unknown }).details : undefined;
+  const fromBody =
+    typeof details === "object" && details !== null
+      ? (details as { retryAfterSeconds?: unknown }).retryAfterSeconds
+      : undefined;
+  const seconds =
+    typeof fromBody === "number" ? fromBody : Number(response.headers.get("Retry-After") ?? NaN);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60;
+}
+
 /** What an exchange said, from the HTTP answer. */
 export async function exchangeVerdictOf(response: Response): Promise<ExchangeVerdict> {
   const body: unknown = await response.json().catch(() => undefined);
@@ -136,11 +157,10 @@ export async function exchangeVerdictOf(response: Response): Promise<ExchangeVer
   // A browser this API does not know (a wrong SUPPLIER_WEB_ORIGINS) is a
   // configuration problem, not a verdict about the session.
   if (code === "ORIGIN_NOT_ALLOWED") return { kind: "unavailable" };
-  const verdict =
-    response.status >= 400 &&
-    response.status < 500 &&
-    response.status !== 408 &&
-    response.status !== 429;
+  if (response.status === 429) {
+    return { kind: "rate_limited", retryAfterSeconds: retryAfterOf(response, body) };
+  }
+  const verdict = response.status >= 400 && response.status < 500 && response.status !== 408;
   return verdict ? { kind: "ended", reason: "none" } : { kind: "unavailable" };
 }
 
@@ -149,6 +169,23 @@ function errorResponse(status: number, code: string, message: string): Response 
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/** The server's refusal of the exchange, handed to the request that needed it. */
+function rateLimitedResponse(retryAfterSeconds: number): Response {
+  return new Response(
+    JSON.stringify({
+      code: "RATE_LIMITED",
+      message: "Too many requests, try again later",
+      retryable: true,
+      // Which limit it was is for logs; the screen needs only the wait.
+      details: { limit: "session_refresh_per_web_session", retryAfterSeconds },
+    }),
+    {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(retryAfterSeconds) },
+    },
+  );
 }
 
 const endedResponses: Record<SignedOutReason, () => Response> = {
@@ -182,6 +219,7 @@ type RefreshOutcome =
   | { kind: "token"; token: string }
   | { kind: "ended"; reason: SignedOutReason }
   | { kind: "unavailable" }
+  | { kind: "rate_limited"; retryAfterSeconds: number }
   | { kind: "update_required"; message: string };
 
 export interface WebSession {
@@ -354,6 +392,9 @@ export function createWebSession(deps: WebSessionDeps): WebSession {
       case "update_required":
         deps.onUpdateRequired?.(outcome.message);
         return errorResponse(426, "CLIENT_UPDATE_REQUIRED", outcome.message);
+      case "rate_limited":
+        // The server answered: the screen says how long to wait, not «Нет сети».
+        return rateLimitedResponse(outcome.retryAfterSeconds);
       default:
         // Not the server's verdict: fail like a lost connection does.
         throw new TypeError("Network request failed");
@@ -411,6 +452,11 @@ export function createWebSession(deps: WebSessionDeps): WebSession {
           case "update_required":
             deps.onUpdateRequired?.(verdict.message);
             if (current.status === "starting") set({ status: "unreachable" });
+            break;
+          case "rate_limited":
+            if (current.status !== "signed_in") {
+              set({ status: "throttled", retryAfterSeconds: verdict.retryAfterSeconds });
+            }
             break;
           default:
             if (current.status !== "signed_in") set({ status: "unreachable" });

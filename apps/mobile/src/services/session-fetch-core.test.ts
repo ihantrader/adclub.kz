@@ -170,6 +170,29 @@ describe("an expired access token", () => {
     expect(app.session?.accessToken).toBe("access-2");
   });
 
+  it("keeps the session and hands every waiting request the 429 of a limited exchange (TASK-077)", async () => {
+    const app = world({
+      exchange: async () => ({
+        kind: "rate_limited",
+        response: answerWith(429, {
+          code: "RATE_LIMITED",
+          message: "m",
+          retryable: true,
+          details: { limit: "session_refresh_per_session", retryAfterSeconds: 600 },
+        }),
+      }),
+    });
+    app.says(() => answer(401, "ACCESS_TOKEN_EXPIRED"));
+    const [first, second] = await Promise.all([app.call("/a"), app.call("/b")]);
+    for (const response of [first, second]) {
+      expect(response.status).toBe(429);
+      expect(((await response.json()) as { code: string }).code).toBe("RATE_LIMITED");
+    }
+    expect(app.exchanges).toHaveLength(1);
+    expect(app.ended).toBe(0);
+    expect(app.session?.refreshToken).toBe("refresh-1");
+  });
+
   it("does not end a sign-in that happened while an old exchange was refused", async () => {
     let finish: (value: ExchangeResult) => void = () => undefined;
     const app = world({
@@ -318,7 +341,9 @@ describe("what an exchange answered", () => {
         kind: "refused",
       });
     }
-    for (const status of [408, 429, 500, 502, 503]) {
+    const limited = await exchangeResultOf(answer(429, "RATE_LIMITED"));
+    expect(limited.kind).toBe("rate_limited");
+    for (const status of [408, 500, 502, 503]) {
       expect(await exchangeResultOf(answer(status)), String(status)).toEqual({
         kind: "unavailable",
       });

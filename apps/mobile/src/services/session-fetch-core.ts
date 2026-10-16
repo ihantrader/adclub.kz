@@ -18,6 +18,9 @@ import type { StoredSession } from "../state/session-store";
  * - A refresh that merely could not be done — no network, a timeout, a
  *   server error — signs nobody out: the session stays, the caller sees a
  *   network error, and the next request tries again.
+ * - A refresh refused for too many of them (429) signs nobody out either,
+ *   and is not a lost network: the caller gets that 429 and shows the wait
+ *   (TASK-077).
  * - Each attempt has its own time (`attemptTimeoutMs`, TASK-029.B): a
  *   request retried after a slow exchange is not cut short by the time the
  *   first attempt and the exchange already used. The caller's own signal
@@ -29,7 +32,12 @@ export type ExchangeResult =
   /** The server refused this refresh token: the session is over. */
   | { kind: "refused" }
   /** No answer worth believing: offline, timed out, a server error, a bad body. */
-  | { kind: "unavailable" };
+  | { kind: "unavailable" }
+  /**
+   * Too many exchanges (429, TASK-077): not the end of the session and not a
+   * lost network — the request gets the server's refusal to show as such.
+   */
+  | { kind: "rate_limited"; response: Response };
 
 export interface SessionFetchDeps {
   /** The wrapped `fetch`. */
@@ -56,12 +64,14 @@ export async function exchangeResultOf(response: Response): Promise<ExchangeResu
     const parsed = sessionTokensSchema.safeParse(await response.json().catch(() => null));
     return parsed.success ? { kind: "ok", tokens: parsed.data } : { kind: "unavailable" };
   }
-  // A refusal of the token itself, not a slow or broken server (408, 429, 5xx).
+  if (response.status === 429) return { kind: "rate_limited", response };
+  // A refusal of the token itself, not a slow or broken server (408, 5xx).
   const verdict = response.status >= 400 && response.status < 500;
-  return verdict && response.status !== 408 && response.status !== 429
-    ? { kind: "refused" }
-    : { kind: "unavailable" };
+  return verdict && response.status !== 408 ? { kind: "refused" } : { kind: "unavailable" };
 }
+
+/** A new access token, the end of the session, no verdict, or the server's 429. */
+type RefreshResult = string | "ended" | "unavailable" | { rateLimited: Response };
 
 function sessionEndedResponse(): Response {
   return new Response(
@@ -116,9 +126,9 @@ export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
 
   // Shared by every call: a second request expiring while the first exchange
   // is in flight waits for it instead of starting its own.
-  let refreshing: Promise<string | "ended" | "unavailable"> | null = null;
+  let refreshing: Promise<RefreshResult> | null = null;
 
-  async function refreshOnce(): Promise<string | "ended" | "unavailable"> {
+  async function refreshOnce(): Promise<RefreshResult> {
     const before = deps.currentSession();
     if (!before) return "ended";
     const result = await deps.exchange(before.refreshToken);
@@ -131,13 +141,14 @@ export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
       return "ended";
     }
     if (result.kind === "unavailable") return "unavailable";
+    if (result.kind === "rate_limited") return { rateLimited: result.response };
     // The session may have moved on while the exchange was in flight (a
     // sign-out, a sign-in of someone else): only the same one gets the pair.
     deps.renewSession(before.sessionId, result.tokens);
     return result.tokens.accessToken;
   }
 
-  function sharedRefresh(): Promise<string | "ended" | "unavailable"> {
+  function sharedRefresh(): Promise<RefreshResult> {
     if (!refreshing) {
       refreshing = refreshOnce().finally(() => {
         refreshing = null;
@@ -177,6 +188,8 @@ export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
       // Not the verdict of the server: a fetch that failed like a network one does.
       throw new TypeError("Network request failed");
     }
+    // Every request that waited for this exchange reads the refusal itself.
+    if (typeof token !== "string") return token.rateLimited.clone();
     return attempt(input, withBearer(init, token));
   };
 }

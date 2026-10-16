@@ -56,6 +56,8 @@ export type ProfileStackParams = {
   "profile-my-data": undefined;
   /** M-PRO-03. */
   "profile-devices": undefined;
+  /** M-PRO-06 (TASK-077). */
+  "profile-documents": undefined;
 };
 
 export type TabParams = {

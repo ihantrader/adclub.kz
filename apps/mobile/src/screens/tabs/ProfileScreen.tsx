@@ -2,8 +2,8 @@ import { languages, mobileText, type Lang, type MobileTextKey } from "@adclub/i1
 import { layout, radius, themeModes, type ThemeMode } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { lazy, Suspense, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { appInfo } from "../../config/environment";
+import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
+import { apiUrl, appInfo } from "../../config/environment";
 import {
   Button,
   Dialog,
@@ -18,9 +18,12 @@ import {
   Sheet,
   Text,
   useTheme,
+  useToast,
 } from "../../design-system";
 import type { ProfileStackParams } from "../../navigation/routes";
 import { useSignIn } from "../../navigation/use-sign-in";
+import { partnerFormUrl } from "../../profile/club-info";
+import { useClubInfo } from "../../services/use-club-info";
 import { useOnline } from "../../services/use-network";
 import { cityLabel } from "../../state/city";
 import { useCity } from "../../state/city-provider";
@@ -44,7 +47,8 @@ const ShowcaseScreen = __DEV__ ? lazy(() => import("../../dev/ShowcaseScreen")) 
  * "Устройства", and can sign out (T-PRO-01). City, language and appearance
  * are shown either way — they already live on the device (TASK-027) and,
  * once signed in, in the account too (`SessionProvider` keeps them in step).
- * Items the app doesn't have yet (subscription, notifications, documents,
+ * «Документы и поддержка» and «Стать партнёром клуба» (TASK-077) are there
+ * for both. Items the app doesn't have yet (subscription, notifications,
  * deleting the account) are left out on purpose, not shown disabled.
  */
 export function ProfileScreen({
@@ -60,6 +64,9 @@ export function ProfileScreen({
   const [sheet, setSheet] = useState<"city" | "language" | "appearance" | null>(null);
   const [showcase, setShowcase] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const { show } = useToast();
+  const clubInfo = useClubInfo();
+  const partnerUrl = partnerFormUrl(clubInfo.data, __DEV__ ? { apiUrl } : null);
 
   return (
     <Screen
@@ -132,6 +139,31 @@ export function ProfileScreen({
             </ListGroup>
           </Section>
         )}
+
+        {/* For a guest and a member alike (SCREENS M-PRO-01, TASK-077). */}
+        <Section>
+          <ListGroup>
+            <ListRow
+              first
+              icon="info"
+              title={t("profile.documents")}
+              navigates
+              onPress={() => navigation.navigate("profile-documents")}
+            />
+            {partnerUrl && (
+              <ListRow
+                icon="store"
+                title={t("profile.becomePartner")}
+                subtitle={t("profile.becomePartnerHint")}
+                trailing={<Icon name="externalLink" size={20} color="textMuted" />}
+                onPress={() => {
+                  // S-PUB-01 opens in the browser, outside the app.
+                  Linking.openURL(partnerUrl).catch(() => show(t("documents.openFailed")));
+                }}
+              />
+            )}
+          </ListGroup>
+        </Section>
 
         {session.status === "signed_in" && (
           <Button

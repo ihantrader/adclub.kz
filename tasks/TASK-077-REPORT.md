@@ -82,7 +82,7 @@ COMPLETED — 11 из 11 AC; у AC-10 оговорка: локально `settin
   - `suppliers/suppliers.integration.test.ts` — PASS 26/26 (отдельным прогоном; в общем прогоне вместе с `pnpm test` и сборкой на той же машине — таймауты хука `beforeEach` 120 с);
   - `database/database.integration.test.ts`, `database/schema-drift.integration.test.ts` — PASS;
   - `settings/settings.integration.test.ts` — 16/17 в последнем отдельном прогоне: все тесты, включая новый «the club's documents and contact», прошли; последний («logs» — проверка вывода) не дождался хука `beforeEach` (`TRUNCATE` 120 с), и не закрылся `afterAll`. В первом прогоне этого файла (под нагрузкой) прошли все тесты, кроме списка групп (группа `club`, исправлено), во втором — таймауты хуков с середины набора. Расценено как нестабильность окружения Windows/Docker, но не подтверждено — проверит CI.
-- CI — см. ниже (последний прогон main до задачи, `38897488839`, был красным из-за плавающего `messaging.integration.test.ts`, часть 5 — не относится к задаче).
+- CI — прогон `38924950415` (коммит `2c93da9`), результат не ожидался (TASK-076). Последний прогон main до задачи — `38897488839` — был красным из-за плавающего `messaging.integration.test.ts`, часть 5 — не относится к задаче.
 
 ## UAT / E2E
 Встроенный браузер, dev (`api-test-ai`, `supplier-web`, `admin-web`, `mobile-web`), тестовые номера.

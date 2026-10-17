@@ -6,6 +6,7 @@ import {
   Badge,
   Banner,
   Button,
+  DotLine,
   Icon,
   OfflineBanner,
   Screen,
@@ -13,7 +14,6 @@ import {
   Text,
   useToast,
 } from "../../design-system";
-import { joinDot } from "../../catalog/format";
 import { findCarColor } from "../../garage/car-color";
 import { carParameters, carTitle, type GarageCar } from "../../garage/garage";
 import { useSignIn } from "../../navigation/use-sign-in";
@@ -134,7 +134,7 @@ function CarCard({
 }) {
   const t = useT();
   const { theme } = useTheme();
-  const parameters = joinDot(carParameters(car));
+  const parameters = carParameters(car);
   const color = car.color !== null ? findCarColor(car.color) : undefined;
 
   return (
@@ -151,10 +151,8 @@ function CarCard({
       <View style={styles.cardHead}>
         <View style={styles.grow}>
           <Text variant="bodyStrong">{carTitle(car)}</Text>
-          {parameters !== "" && (
-            <Text variant="bodyS" color="textMuted">
-              {parameters}
-            </Text>
+          {parameters.length > 0 && (
+            <DotLine parts={parameters} variant="bodyS" color="textMuted" />
           )}
         </View>
         <Icon name="chevronRight" size={20} color="textMuted" />

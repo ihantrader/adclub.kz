@@ -14,6 +14,7 @@ import {
   Button,
   CategoryIcon,
   CompatibilityMark,
+  DotLine,
   hairline,
   IconLine,
   Text,
@@ -25,7 +26,7 @@ import {
   COMPATIBILITY_LEVEL_TEXT,
   type CompatibilityView,
 } from "../../catalog/compatibility-view";
-import { DOT, NBSP, formatTenge, joinDot, receiptDay } from "../../catalog/format";
+import { formatTenge, joinDot, receiptDay } from "../../catalog/format";
 import { useLanguage } from "../../state/language";
 
 /**
@@ -208,22 +209,19 @@ export function ItemPhoto({
 }
 
 /**
- * «от 12 500 ₸ · 3 предложения» as one paragraph (TASK-078 M11): the price
- * `priceS`, the count `bodyS` muted, bound by the non-breaking dot — a line
- * may wrap inside the price's words, never before the dot and never inside
- * the count («1 предложение» moves to the next line whole).
+ * «от 12 500 ₸ · 3 предложения» (TASK-078 M11): the price `priceS`, the count
+ * `bodyS` muted. One line when it fits; when it does not (a large system
+ * font, a narrow card) the count moves to the next line whole and without
+ * the dot — `DotLine`.
  */
 export function PriceLine({ price, count }: { price: string; count?: string }) {
   return (
-    <Text variant="priceS">
-      {price}
-      {count !== undefined && (
-        <Text variant="bodyS" color="textMuted">
-          {DOT}
-          {count.replace(/ /g, NBSP)}
-        </Text>
-      )}
-    </Text>
+    <DotLine
+      parts={[
+        { text: price, variant: "priceS" },
+        count !== undefined && { text: count, variant: "bodyS", color: "textMuted" },
+      ]}
+    />
   );
 }
 

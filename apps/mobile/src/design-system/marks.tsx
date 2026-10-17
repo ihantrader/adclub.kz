@@ -96,10 +96,12 @@ export function IconLine({
 
 /** "распознано" / "предложено ИИ" — sparkles + text in the AI color (DESIGN.md 7.9). */
 export function AiBadge({ children }: { children: ReactNode }) {
+  // Beside a field's value the badge gives way: at a large system font it
+  // ends in an ellipsis instead of running past the frame of the field.
   return (
-    <View style={styles.inline}>
+    <View style={[styles.inline, styles.shrink]}>
       <Icon name="sparkles" size={16} color="ai" />
-      <Text variant="captionStrong" color="ai">
+      <Text variant="captionStrong" color="ai" numberOfLines={1} style={styles.shrink}>
         {children}
       </Text>
     </View>

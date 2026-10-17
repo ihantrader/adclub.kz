@@ -28,7 +28,7 @@ export interface ChipProps {
   onPress?: () => void;
   icon?: IconName;
   disabled?: boolean;
-  /** Chips of one row that must be the same width (the days of a visit). */
+  /** Chips of one row that share a width (the days of a visit): the floor each one takes; a longer label widens its chip. */
   width?: number;
 }
 
@@ -61,7 +61,8 @@ export function Chip({
       hitSlop={touchSlop(size.chip)}
       style={({ pressed }) => [
         styles.chip,
-        width !== undefined && { width, justifyContent: "center" },
+        // A floor, not a fixed width: a label the system font made wider grows the chip instead of being cut.
+        width !== undefined && { minWidth: width, justifyContent: "center" },
         {
           backgroundColor: selected ? colors.accentTint : pressed ? colors.fill : "transparent",
           borderColor: selected ? colors.accentTint : disabled ? colors.border : colors.borderField,

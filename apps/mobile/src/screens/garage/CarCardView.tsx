@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Dialog,
+  DotLine,
   Icon,
   IconLine,
   ListGroup,
@@ -19,7 +20,6 @@ import {
   ValueRow,
 } from "../../design-system";
 import { formatKzPlate } from "@adclub/domain";
-import { joinDot } from "../../catalog/format";
 import { findCarColor } from "../../garage/car-color";
 import type { CarStep } from "../../garage/car-picker";
 import { checkDocumentFields } from "../../garage/document-flow";
@@ -111,7 +111,7 @@ export function CarCardView({ car, onEdit, onConfirm, onDeleted, onBack }: CarCa
   // the card leaves — not both at once.
   const dismissed = useAfterDismiss(confirmDelete);
   const primary = car.id === state.primaryId;
-  const parameters = joinDot(carParameters(car));
+  const parameters = carParameters(car);
   const color = car.color !== null ? findCarColor(car.color) : undefined;
   const complete = t("garage.complete");
   const notSet = t("common.notSet");
@@ -137,10 +137,8 @@ export function CarCardView({ car, onEdit, onConfirm, onDeleted, onBack }: CarCa
             <Text variant="titleL" accessibilityRole="header">
               {carTitle(car)}
             </Text>
-            {parameters !== "" && (
-              <Text variant="bodyS" color="textMuted">
-                {parameters}
-              </Text>
+            {parameters.length > 0 && (
+              <DotLine parts={parameters} variant="bodyS" color="textMuted" />
             )}
             <View style={styles.headMarks}>
               {color && (

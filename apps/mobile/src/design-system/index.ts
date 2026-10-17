@@ -72,5 +72,6 @@ export {
 } from "./loading";
 export { BottomTabs, ListGroup, ListRow, TopBar, type TabItem } from "./navigation";
 export { ValueRow, type ValueRowProps } from "./rows";
+export { DotLine, type DotLinePart, type DotLineProps } from "./inline";
 export { fontAssets, Text, textStyles, useAppFonts, type TextProps } from "./text";
 export { ThemeProvider, themeModeStore, useTheme, type ThemeContextValue } from "./theme";

@@ -1,5 +1,12 @@
 import { layout, radius, size } from "@adclub/ui-core";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useRef, useState } from "react";
+import {
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from "react-native";
 import { Icon } from "./Icon";
 import { hairline } from "./lines";
 import { AiBadge } from "./marks";
@@ -41,10 +48,15 @@ export interface ValueRowProps {
   layout?: "auto" | "inline" | "stacked";
 }
 
-/** A value that would not share a line with its label. */
-export function valueRowStacked(label: string, value: string | null): boolean {
+/**
+ * A value that would not share a line with its label. The room is counted in
+ * characters of the normal font: a larger system font (`fontScale`) fits
+ * proportionally fewer of them on the same line.
+ */
+export function valueRowStacked(label: string, value: string | null, fontScale = 1): boolean {
   if (value === null) return false;
-  return value.length > 24 || label.length + value.length > 34;
+  const scale = fontScale > 0 ? fontScale : 1;
+  return value.length > 24 / scale || label.length + value.length > 34 / scale;
 }
 
 export function ValueRow({
@@ -62,8 +74,39 @@ export function ValueRow({
   layout: layoutMode = "auto",
 }: ValueRowProps) {
   const { theme } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  // The rule of thumb counts characters; the row also looks: when the label
+  // and the value beside it came out of different heights, one of them had to
+  // wrap (a large font, a narrow screen) — the value goes under the label.
+  // The look is kept until the row's width changes.
+  const [wrapped, setWrapped] = useState(false);
+  const rowWidth = useRef(0);
+  const heights = useRef({ label: 0, value: 0 });
+  const onRow = (event: LayoutChangeEvent) => {
+    const next = event.nativeEvent.layout.width;
+    if (rowWidth.current !== 0 && rowWidth.current !== next) {
+      heights.current = { label: 0, value: 0 };
+      setWrapped(false);
+    }
+    rowWidth.current = next;
+  };
+  const judge = () => {
+    const { label: labelHeight, value: valueHeight } = heights.current;
+    if (labelHeight > 0 && valueHeight > 0 && Math.abs(labelHeight - valueHeight) > 2) {
+      setWrapped(true);
+    }
+  };
+  const onLabel = (event: LayoutChangeEvent) => {
+    heights.current.label = event.nativeEvent.layout.height;
+    judge();
+  };
+  const onValue = (event: LayoutChangeEvent) => {
+    heights.current.value = event.nativeEvent.layout.height;
+    judge();
+  };
   const stacked =
-    layoutMode === "stacked" || (layoutMode === "auto" && valueRowStacked(label, value));
+    layoutMode === "stacked" ||
+    (layoutMode === "auto" && (wrapped || valueRowStacked(label, value, fontScale)));
   const shown = value ?? placeholder ?? "";
   const valueColor = value === null ? "textMuted" : "text";
 
@@ -85,6 +128,7 @@ export function ValueRow({
       accessibilityLabel={`${label}: ${shown}${action ? `, ${action}` : ""}`}
       disabled={!onPress}
       onPress={onPress}
+      onLayout={onRow}
       style={({ pressed }) => [
         styles.row,
         stacked ? styles.stacked : styles.inline,
@@ -121,11 +165,21 @@ export function ValueRow({
         </>
       ) : (
         <>
-          <Text variant={strong ? "bodyStrong" : "body"} color="textMuted" style={styles.label}>
+          <Text
+            variant={strong ? "bodyStrong" : "body"}
+            color="textMuted"
+            style={styles.label}
+            onLayout={onLabel}
+          >
             {label}
           </Text>
           <View style={styles.inlineValue}>
-            <Text variant="bodyStrong" color={valueColor} style={styles.valueText}>
+            <Text
+              variant="bodyStrong"
+              color={valueColor}
+              style={styles.valueText}
+              onLayout={onValue}
+            >
               {shown}
             </Text>
             {hint !== undefined && (
@@ -156,7 +210,8 @@ const styles = StyleSheet.create({
   last: { borderBottomLeftRadius: radius.m, borderBottomRightRadius: radius.m },
   label: { flexShrink: 1 },
   inlineValue: { flex: 1, alignItems: "flex-end", gap: 2 },
-  valueText: { textAlign: "right" },
+  // Never wider than its column: a value the font made long wraps there instead of running over the label.
+  valueText: { textAlign: "right", maxWidth: "100%" },
   stackedText: { flex: 1, gap: 2 },
   trailing: { flexDirection: "row", alignItems: "center", gap: 8 },
   // The text of a repeated row action (M16): `text`, not the accent.

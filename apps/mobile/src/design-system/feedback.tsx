@@ -39,7 +39,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Button } from "./Button";
+import { Button, ButtonLayoutProvider, IconButton } from "./Button";
 import { Icon } from "./Icon";
 import { hairline } from "./lines";
 import { animateTo, useMotionPlan, useOverlayTransition } from "./motion";
@@ -342,7 +342,12 @@ export function EmptyState({ icon, title, text, action }: EmptyStateProps) {
           {text}
         </Text>
       )}
-      {action && <View style={styles.emptyAction}>{action}</View>}
+      {action && (
+        <View style={styles.emptyAction}>
+          {/* One button, centred and as wide as its label (DESIGN 7.7 «Пустое состояние»). */}
+          <ButtonLayoutProvider align="center">{action}</ButtonLayoutProvider>
+        </View>
+      )}
     </View>
   );
 }
@@ -382,6 +387,8 @@ export interface SheetProps {
   closeLabel: string;
   /** A required action: no closing by swipe or tapping the scrim. */
   required?: boolean;
+  /** A 48 close cross at the right of the title (M-GAR-02, TASK-078); swiping and the scrim still close. */
+  closable?: boolean;
   /**
    * Called once when the sheet has finished going away. An action that
    * belongs to closing it — going to another screen, deleting what was
@@ -414,6 +421,7 @@ export function Sheet({
   title,
   closeLabel,
   required,
+  closable,
   children,
 }: SheetProps) {
   const { theme, reduceMotion } = useTheme();
@@ -496,10 +504,15 @@ export function Sheet({
         >
           <View style={[styles.handle, { backgroundColor: theme.colors.borderField }]} />
           <Held hold={!visible}>
-            {title && (
-              <Text variant="title" accessibilityRole="header" style={styles.sheetTitle}>
-                {title}
-              </Text>
+            {(title || closable) && (
+              <View style={styles.sheetHead}>
+                {title && (
+                  <Text variant="title" accessibilityRole="header" style={styles.sheetTitle}>
+                    {title}
+                  </Text>
+                )}
+                {closable && <IconButton icon="x" label={closeLabel} onPress={onClose} />}
+              </View>
             )}
             {children}
           </Held>
@@ -561,7 +574,10 @@ export function Dialog({ visible, onClose, onDismissed, title, children, actions
               {title}
             </Text>
             {children && <Text color="textMuted">{children}</Text>}
-            <View style={styles.dialogActions}>{actions}</View>
+            <View style={styles.dialogActions}>
+              {/* Stacked, each across the dialog (DESIGN 7.7 «Диалог»). */}
+              <ButtonLayoutProvider align="stretch">{actions}</ButtonLayoutProvider>
+            </View>
           </Held>
         </Animated.View>
       </View>
@@ -615,7 +631,8 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginBottom: 8,
   },
-  sheetTitle: { marginBottom: 4 },
+  sheetHead: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 32 },
+  sheetTitle: { flex: 1, marginBottom: 4 },
   dialogRoot: { flex: 1, alignItems: "center", justifyContent: "center", padding: 16 },
   dialog: {
     width: "100%",

@@ -24,6 +24,17 @@ import { useTheme } from "./theme";
 
 export type ButtonVariant = "primary" | "secondary" | "text" | "danger";
 
+/**
+ * Where a button stands in its column (TASK-078 M14). A text button stands
+ * at the start of the column, as wide as its label — «У меня нет WhatsApp»,
+ * «Отправить по SMS», «Очистить» are not centred over a left-aligned
+ * screen; a filled or framed button takes the width. Centred — only in an
+ * empty state, where everything is centred. A dialog, a footer and a
+ * `ButtonRow` stretch what is in them (`ButtonLayout`), so a screen never
+ * has to say it.
+ */
+export type ButtonAlign = "start" | "center" | "stretch";
+
 export interface ButtonProps {
   children: ReactNode;
   /** A returned promise keeps the button loading; presses meanwhile are ignored. */
@@ -34,8 +45,16 @@ export interface ButtonProps {
   size?: "l" | "m";
   loading?: boolean;
   disabled?: boolean;
-  /** Secondary button with danger text ("Отменить заявку"). */
+  /** Secondary or text button with danger text ("Отменить заявку"). */
   destructive?: boolean;
+  /**
+   * A text button of the `text` colour instead of the accent: a row action
+   * that repeats down a list («Завершить» on every session, «Дополнить» on
+   * every empty parameter) — the accent is for the one link of a screen
+   * (DESIGN 7.1 п. 2, TASK-078 M16).
+   */
+  tone?: "accent" | "neutral";
+  align?: ButtonAlign;
   icon?: IconName;
   accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
@@ -53,8 +72,21 @@ const palette: Record<ButtonVariant, { background: ColorToken | null; text: Colo
   danger: { background: "danger", text: "onDanger" },
 };
 
-/** A button inside `ButtonRow` fills its half in height too, so a pair stays a pair. */
+/** How the buttons inside a row, a dialog, a footer or an empty state are laid out. */
+const ButtonLayout = createContext<ButtonAlign | null>(null);
+/** A button inside ButtonRow fills its half in height too, so a pair stays a pair. */
 const InRow = createContext(false);
+
+/** Gives every button inside it a place: a dialog and a footer stretch them, an empty state centres them. */
+export function ButtonLayoutProvider({
+  align,
+  children,
+}: {
+  align: ButtonAlign;
+  children: ReactNode;
+}) {
+  return <ButtonLayout.Provider value={align}>{children}</ButtonLayout.Provider>;
+}
 
 export function Button({
   children,
@@ -64,11 +96,14 @@ export function Button({
   loading = false,
   disabled = false,
   destructive = false,
+  tone = "accent",
+  align: alignProp,
   icon,
   accessibilityHint,
   style,
 }: ButtonProps) {
   const { theme } = useTheme();
+  const layoutAlign = useContext(ButtonLayout);
   const inRow = useContext(InRow);
   const [pending, setPending] = useState(false);
   const [guard] = useState(() => createPressGuard(setPending));
@@ -79,20 +114,24 @@ export function Button({
   const spinning = useDelayedIndicator(busy);
 
   const colors = palette[variant];
+  const framed = variant === "secondary";
+  const plain = variant === "text";
   const textColor: ColorToken = disabled
     ? "textDisabled"
-    : destructive && variant === "secondary"
+    : destructive && (framed || plain)
       ? "danger"
-      : colors.text;
-  const framed = variant === "secondary";
+      : plain && tone === "neutral"
+        ? "text"
+        : colors.text;
   const background =
-    disabled && !framed && variant !== "text"
+    disabled && !framed && !plain
       ? theme.colors.fill
       : colors.background && !disabled
         ? theme.colors[colors.background]
         : "transparent";
   // Without a fill there is nothing to darken: pressed shows `fill` instead.
-  const pressedFill = variant === "text" || framed;
+  const pressedFill = plain || framed;
+  const align: ButtonAlign = alignProp ?? layoutAlign ?? (plain ? "start" : "stretch");
 
   return (
     <Pressable
@@ -108,6 +147,9 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         inRow && styles.fill,
+        align === "start" && styles.start,
+        align === "center" && styles.center,
+        plain && align !== "stretch" && styles.plain,
         { minHeight: size.button[buttonSize], backgroundColor: background },
         framed && {
           borderWidth: line.width,
@@ -150,7 +192,9 @@ export function ButtonRow({ children }: { children: ReactNode }) {
     <View style={styles.row}>
       {items.map((child, index) => (
         <View key={index} style={styles.rowItem}>
-          <InRow.Provider value>{child}</InRow.Provider>
+          <InRow.Provider value>
+            <ButtonLayout.Provider value="stretch">{child}</ButtonLayout.Provider>
+          </InRow.Provider>
         </View>
       ))}
     </View>
@@ -205,6 +249,10 @@ const styles = StyleSheet.create({
   content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   hidden: { opacity: 0 },
   fill: { flexGrow: 1 },
+  start: { alignSelf: "flex-start" },
+  center: { alignSelf: "center" },
+  // A text button at the start of its column begins where the text of the column begins.
+  plain: { paddingHorizontal: 0 },
   row: { flexDirection: "row", gap: 8 },
   rowItem: { flex: 1, minWidth: 0 },
   label: { textAlign: "center", flexShrink: 1 },

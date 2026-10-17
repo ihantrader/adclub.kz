@@ -3,6 +3,7 @@ import {
   orderStatusGroups,
   radius,
   toneColors,
+  type ColorToken,
   type Compatibility,
   type IconName,
   type OrderStatusGroup,
@@ -64,6 +65,35 @@ export function CompatibilityMark({
   );
 }
 
+/**
+ * A small fact with its icon and no plate (TASK-078 M6): «В наличии»,
+ * «Самовывоз: завтра», «Есть в Алматы». Green and the plates are for
+ * compatibility and the state of an order (DESIGN 7.8); a fact is a line.
+ */
+export function IconLine({
+  icon,
+  color = "textMuted",
+  variant = "caption",
+  textColor,
+  children,
+}: {
+  icon: IconName;
+  color?: ColorToken;
+  variant?: "caption" | "bodyS" | "body";
+  /** The text's colour when it differs from the icon's (`text` next to a muted icon). */
+  textColor?: ColorToken;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.inlineCentered}>
+      <Icon name={icon} size={16} color={color} />
+      <Text variant={variant} color={textColor ?? color} style={styles.shrink}>
+        {children}
+      </Text>
+    </View>
+  );
+}
+
 /** "распознано" / "предложено ИИ" — sparkles + text in the AI color (DESIGN.md 7.9). */
 export function AiBadge({ children }: { children: ReactNode }) {
   return (
@@ -82,7 +112,16 @@ export function AiBadge({ children }: { children: ReactNode }) {
  * the cards of the garage. The plate is the icon's own size plus a ring of
  * the same width on each side of it, so a 28 icon sits on a 56 circle.
  */
-export function IconBadge({ children, size }: { children: ReactNode; size: number }) {
+export function IconBadge({
+  children,
+  size,
+  tone = "fill",
+}: {
+  children: ReactNode;
+  size: number;
+  /** `fill` — a neutral plate (the person of the profile); `accent` — the one accent plate of a screen. */
+  tone?: "accent" | "fill";
+}) {
   const { theme } = useTheme();
   return (
     <View
@@ -92,7 +131,7 @@ export function IconBadge({ children, size }: { children: ReactNode; size: numbe
           width: size * 2,
           height: size * 2,
           borderRadius: size,
-          backgroundColor: theme.colors.accentTint,
+          backgroundColor: tone === "accent" ? theme.colors.accentTint : theme.colors.fill,
         },
       ]}
     >
@@ -107,12 +146,18 @@ export interface RatingProps {
   emptyText: string;
   label: string;
   locale: string;
+  /**
+   * The rating of a supplier's page (M-CAT-09, TASK-078): a 24 star, the
+   * value `title` and the number of ratings in words (`countText`).
+   */
+  large?: boolean;
+  countText?: string;
 }
 
-export function Rating({ value, count, emptyText, label, locale }: RatingProps) {
+export function Rating({ value, count, emptyText, label, locale, large, countText }: RatingProps) {
   if (value === null) {
     return (
-      <Text variant="bodyS" color="textMuted">
+      <Text variant={large ? "body" : "bodyS"} color="textMuted">
         {emptyText}
       </Text>
     );
@@ -121,6 +166,19 @@ export function Rating({ value, count, emptyText, label, locale }: RatingProps) 
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
+  if (large) {
+    return (
+      <View style={styles.ratingLarge} accessible accessibilityLabel={label}>
+        <Icon name="star" size={24} color="accent" filled />
+        <Text variant="title" style={styles.tabular}>
+          {score}
+        </Text>
+        <Text variant="bodyS" color="textMuted">
+          {countText ?? count.toLocaleString(locale)}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.inline} accessible accessibilityLabel={label}>
       <Icon name="star" size={16} color="accent" filled />
@@ -143,6 +201,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   inline: { flexDirection: "row", alignItems: "flex-start", gap: 4, flexShrink: 1 },
+  inlineCentered: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 },
+  ratingLarge: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBadge: { alignItems: "center", justifyContent: "center" },
   shrink: { flexShrink: 1 },
   tabular: { fontVariant: ["tabular-nums"] },

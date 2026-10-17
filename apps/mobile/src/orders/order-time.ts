@@ -117,6 +117,54 @@ export function deadlineText(
   return sameDay(at, today) ? clockText(at) : `${clockText(at)}, ${dayText(at, monthName)}`;
 }
 
+/** The words a moment is told with: the month names, «сегодня», «вчера», and «{date} в {time}» of a visit. */
+export interface WhenWords {
+  monthName: (month: number) => string;
+  today: string;
+  yesterday: string;
+}
+
+/**
+ * One way of writing a moment of the server for people (TASK-078 M15):
+ * «сегодня, 15:27», «вчера, 09:10», «16 октября, 15:27», and with the year
+ * when it is another one — «16 октября 2025, 15:27». The step of an order,
+ * the session of a device, the date a consent was given: all through here,
+ * never through the engine's own date format.
+ */
+export function whenText(
+  iso: string,
+  timeZone: string | null,
+  now: Date,
+  words: WhenWords,
+): string | null {
+  const at = zonedParts(iso, timeZone);
+  const today = zonedParts(now.toISOString(), timeZone);
+  if (!at || !today) return null;
+  const clock = clockText(at);
+  if (sameDay(at, today)) return `${words.today}, ${clock}`;
+  const yesterday = zonedParts(new Date(now.getTime() - DAY_MS).toISOString(), timeZone);
+  if (yesterday && sameDay(at, yesterday)) return `${words.yesterday}, ${clock}`;
+  const day = dayText(at, words.monthName);
+  return at.year === today.year ? `${day}, ${clock}` : `${day} ${at.year}, ${clock}`;
+}
+
+/** The date alone, the same way: «сегодня», «вчера», «16 октября», «16 октября 2025». */
+export function whenDayText(
+  iso: string,
+  timeZone: string | null,
+  now: Date,
+  words: WhenWords,
+): string | null {
+  const at = zonedParts(iso, timeZone);
+  const today = zonedParts(now.toISOString(), timeZone);
+  if (!at || !today) return null;
+  if (sameDay(at, today)) return words.today;
+  const yesterday = zonedParts(new Date(now.getTime() - DAY_MS).toISOString(), timeZone);
+  if (yesterday && sameDay(at, yesterday)) return words.yesterday;
+  const day = dayText(at, words.monthName);
+  return at.year === today.year ? day : `${day} ${at.year}`;
+}
+
 /**
  * «Обновлено в 10:12» while the copy is less than a day old, «Обновлено 3
  * октября» after that (SCREENS «Сохранённая копия»). The moment is the

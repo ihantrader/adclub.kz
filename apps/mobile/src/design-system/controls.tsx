@@ -22,14 +22,30 @@ const touchSlop = (height: number) => Math.max(0, (size.touchTarget - height) / 
 
 export interface ChipProps {
   children: ReactNode;
+  /** A second line under the label — the date under the weekday of a day chip (TASK-078 M-ORD-01). */
+  sublabel?: string;
   selected?: boolean;
   onPress?: () => void;
   icon?: IconName;
   disabled?: boolean;
+  /** Chips of one row that must be the same width (the days of a visit). */
+  width?: number;
 }
 
-/** Filter chip: 36 high (touch zone 48); selected — tint and a check mark. */
-export function Chip({ children, selected = false, onPress, icon, disabled }: ChipProps) {
+/**
+ * Filter chip: 36 high (touch zone 48), a 1 px `borderField` frame like a
+ * field (TASK-078 M7: `border` was all but invisible in the light theme);
+ * selected — tint and a check mark.
+ */
+export function Chip({
+  children,
+  sublabel,
+  selected = false,
+  onPress,
+  icon,
+  disabled,
+  width,
+}: ChipProps) {
   const { theme } = useTheme();
   const { colors } = theme;
   const textColor = disabled ? "textDisabled" : selected ? "accentOnTint" : "text";
@@ -37,14 +53,18 @@ export function Chip({ children, selected = false, onPress, icon, disabled }: Ch
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected, disabled }}
+      accessibilityLabel={
+        sublabel && typeof children === "string" ? `${children}, ${sublabel}` : undefined
+      }
       disabled={disabled}
       onPress={onPress}
       hitSlop={touchSlop(size.chip)}
       style={({ pressed }) => [
         styles.chip,
+        width !== undefined && { width, justifyContent: "center" },
         {
           backgroundColor: selected ? colors.accentTint : pressed ? colors.fill : "transparent",
-          borderColor: selected ? colors.accentTint : colors.border,
+          borderColor: selected ? colors.accentTint : disabled ? colors.border : colors.borderField,
         },
       ]}
     >
@@ -53,9 +73,20 @@ export function Chip({ children, selected = false, onPress, icon, disabled }: Ch
       ) : (
         icon && <Icon name={icon} size={16} color={textColor} />
       )}
-      <Text variant="bodyS" color={textColor} style={styles.shrink}>
-        {children}
-      </Text>
+      {sublabel ? (
+        <View style={styles.chipLines}>
+          <Text variant="bodyS" color={textColor} numberOfLines={1}>
+            {children}
+          </Text>
+          <Text variant="caption" color={textColor} numberOfLines={1}>
+            {sublabel}
+          </Text>
+        </View>
+      ) : (
+        <Text variant="bodyS" color={textColor} style={styles.shrink}>
+          {children}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -79,7 +110,9 @@ export interface StarsInputProps {
  * accent; the rest are outlines.
  */
 export function StarsInput({ value, onChange, starLabel, disabled, small }: StarsInputProps) {
-  const starSize = small ? 20 : 32;
+  // A star to choose is 40 in its 48 zone — the zones touch, so the stars
+  // stand 8 apart (TASK-078 M-ORD-05); a shown score is small.
+  const starSize = small ? 20 : 40;
   const star = (n: number) => {
     const filled = value !== null && n <= value;
     return (
@@ -132,9 +165,10 @@ export interface SelectButtonProps {
 
 /**
  * A button that shows the current choice and opens the list to change it —
- * the car and the city of the catalog header (TASK-030.A): 44 high (touch
- * zone 48), `surface` with a `border` line, the icon, the value in one line
- * and a caret. A value that fits keeps 14; a long one first shrinks a little
+ * the car and the city of the catalog header (TASK-030.A): 48 high like a
+ * field, `surface` with a `borderField` frame (DESIGN 7.7 «Кнопка выбора»,
+ * TASK-078 M7), the icon, the value in one line and the caret at the right
+ * edge. A value that fits keeps 14; a long one first shrinks a little
  * (not below 12) and then ends in an ellipsis — it never wraps. The app
  * measures the value itself (`selectLabelFontSize`, TASK-030.C): a hidden copy
  * gives its full width, the label its box. Like a tab label, it grows with
@@ -151,12 +185,11 @@ export function SelectButton({ icon, children, onPress, accessibilityLabel }: Se
       accessibilityRole="button"
       accessibilityLabel={`${accessibilityLabel}: ${children}`}
       onPress={onPress}
-      hitSlop={touchSlop(size.button.m)}
       style={({ pressed }) => [
         styles.select,
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
-          borderColor: theme.colors.border,
+          borderColor: theme.colors.borderField,
         },
       ]}
     >
@@ -222,13 +255,13 @@ interface SegmentFrame {
  *
  * A label never wraps (TASK-030.A): it keeps one line and grows with the
  * system font only to 120 %, like a tab label; each option is as wide as its
- * label and the spare width is shared out, so «Рекомендуем · Дешевле ·
- * Быстрее» fits a 360-pt phone in every language. Where even that does not
- * fit (four options, the largest font, a narrow phone) the row scrolls
- * sideways instead of wrapping or clipping a word.
+ * label (DESIGN 7.7 «ширина по подписи», TASK-078 M-CAT-02) and the control
+ * is as wide as its options, so «Рекомендуем · Дешевле · Быстрее» fits a
+ * 360-pt phone in every language. Where even that does not fit (four
+ * options, the largest font, a narrow phone) the row scrolls sideways
+ * instead of wrapping or clipping a word.
  *
- * With `hint`s the line under the control keeps the height of the tallest
- * one, so switching options never moves what is below it.
+ * The line under the control («Сначала — …») is one line (TASK-078 M10).
  */
 export function Segments<T extends string>({ label, options, value, onChange }: SegmentsProps<T>) {
   const { theme } = useTheme();
@@ -237,7 +270,6 @@ export function Segments<T extends string>({ label, options, value, onChange }: 
   const [thumbX] = useState(() => new Animated.Value(0));
   const [thumbWidth] = useState(() => new Animated.Value(0));
   const [placed, setPlaced] = useState(false);
-  const [hintHeights, setHintHeights] = useState<Partial<Record<T, number>>>({});
   const frame = frames[value];
 
   useEffect(() => {
@@ -259,7 +291,6 @@ export function Segments<T extends string>({ label, options, value, onChange }: 
   }, [frame, placed, plan, thumbX, thumbWidth]);
 
   const hinted = options.some((option) => option.hint);
-  const hintHeight = Math.max(0, ...Object.values<number | undefined>(hintHeights).map(Number));
 
   return (
     <View style={styles.segmentsBlock}>
@@ -323,30 +354,9 @@ export function Segments<T extends string>({ label, options, value, onChange }: 
         })}
       </ScrollView>
       {hinted && (
-        <View style={[styles.segmentsHints, { minHeight: hintHeight }]}>
-          {options.map((option) =>
-            option.hint ? (
-              <Text
-                key={option.value}
-                variant="caption"
-                color="textMuted"
-                accessibilityElementsHidden={option.value !== value}
-                importantForAccessibility={option.value === value ? "auto" : "no-hide-descendants"}
-                onLayout={(event) => {
-                  const height = event.nativeEvent.layout.height;
-                  setHintHeights((current) =>
-                    current[option.value] === height
-                      ? current
-                      : { ...current, [option.value]: height },
-                  );
-                }}
-                style={[styles.segmentHint, option.value !== value && styles.hidden]}
-              >
-                {option.hint}
-              </Text>
-            ) : null,
-          )}
-        </View>
+        <Text variant="caption" color="textMuted" numberOfLines={1} style={styles.segmentHint}>
+          {options.find((option) => option.value === value)?.hint ?? " "}
+        </Text>
       )}
     </View>
   );
@@ -608,13 +618,14 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     maxWidth: "100%",
   },
+  chipLines: { alignItems: "center", flexShrink: 1 },
   select: {
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: selectLabelMetrics.gap,
-    minHeight: size.button.m,
+    minHeight: size.field,
     paddingHorizontal: selectLabelMetrics.paddingX,
     borderRadius: radius.s,
     borderWidth: line.width,
@@ -626,11 +637,11 @@ const styles = StyleSheet.create({
   // zero box that clips it, so it neither shows nor widens anything.
   measureClip: { position: "absolute", left: 0, top: 0, width: 0, height: 0, overflow: "hidden" },
   measureRow: { position: "absolute", left: 0, top: 0, width: 4000, flexDirection: "row" },
-  segmentsBlock: { gap: 6 },
-  segments: { flexGrow: 0, borderRadius: radius.s },
-  segmentsContent: { flexGrow: 1, minHeight: size.segments, padding: segmentMetrics.inset },
+  segmentsBlock: { gap: 6, alignItems: "flex-start", alignSelf: "stretch", minWidth: 0 },
+  segments: { flexGrow: 0, maxWidth: "100%", borderRadius: radius.s },
+  segmentsContent: { minHeight: size.segments, padding: segmentMetrics.inset },
   segment: {
-    flexGrow: 1,
+    flexGrow: 0,
     flexShrink: 0,
     flexDirection: "row",
     minHeight: size.segments - 2 * segmentMetrics.inset,
@@ -652,9 +663,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: fontFamily.native[typography.label.fontWeight],
   },
-  segmentsHints: { justifyContent: "flex-start" },
-  segmentHint: { position: "absolute", top: 0, left: 0, right: 0 },
-  hidden: { opacity: 0 },
+  segmentHint: { alignSelf: "stretch" },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",

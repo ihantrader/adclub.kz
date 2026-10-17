@@ -1,3 +1,4 @@
+import { KZ_PHONE_PLACEHOLDER, maskKzPhoneInput } from "@adclub/domain";
 import {
   formatOrderCode,
   line,
@@ -8,7 +9,15 @@ import {
   splitOrderCode,
 } from "@adclub/ui-core";
 import { useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type TextInputProps,
+  type TextStyle,
+} from "react-native";
 import { codeCellLayout } from "./code-cell-metrics";
 import { Icon } from "./Icon";
 import { AiBadge } from "./marks";
@@ -26,6 +35,14 @@ export interface TextFieldProps extends Omit<TextInputProps, "value" | "onChange
   aiLabel?: string;
   confirmed?: boolean;
   disabled?: boolean;
+  /**
+   * A value that is shown, not edited (the phone of the account, TASK-078
+   * M-PRO-02): readable `text` with a lock, not the `textDisabled` of a
+   * switched-off field — nothing is wrong with it, it just cannot change here.
+   */
+  readOnly?: boolean;
+  /** «0 / 1000» at the right of the hint line (TASK-078 M-ORD-05). */
+  counter?: { count: number; max: number; text: string };
   trailing?: ReactNode;
 }
 
@@ -38,6 +55,8 @@ export function TextField({
   aiLabel,
   confirmed,
   disabled,
+  readOnly,
+  counter,
   trailing,
   ...rest
 }: TextFieldProps) {
@@ -45,6 +64,7 @@ export function TextField({
   const { colors } = theme;
   const [focused, setFocused] = useState(false);
   const ai = Boolean(aiLabel) && !error;
+  const editable = !disabled && !readOnly;
 
   return (
     <View style={styles.field}>
@@ -60,7 +80,7 @@ export function TextField({
             backgroundColor: disabled ? colors.fill : ai ? colors.aiTint : colors.surface,
             borderColor: error
               ? colors.danger
-              : focused
+              : focused && editable
                 ? colors.accent
                 : ai
                   ? colors.aiBorder
@@ -75,8 +95,8 @@ export function TextField({
           {...rest}
           accessibilityLabel={label}
           accessibilityHint={error ?? hint}
-          accessibilityState={{ disabled }}
-          editable={!disabled}
+          accessibilityState={{ disabled: !editable }}
+          editable={editable}
           value={value}
           onChangeText={onChangeText}
           onFocus={(event) => {
@@ -99,6 +119,7 @@ export function TextField({
         />
         {ai && aiLabel && <AiBadge>{aiLabel}</AiBadge>}
         {confirmed && !ai && !error && <Icon name="circleCheck" size={20} color="success" />}
+        {readOnly && <Icon name="lock" size={20} color="textMuted" />}
         {trailing}
       </View>
       {error && (
@@ -109,12 +130,51 @@ export function TextField({
           </Text>
         </View>
       )}
-      {hint && (
-        <Text variant="caption" color="textMuted" style={styles.hint}>
-          {hint}
-        </Text>
+      {(hint !== undefined || counter) && (
+        <View style={styles.hintRow}>
+          {hint !== undefined && (
+            <Text variant="caption" color="textMuted" style={styles.helpText}>
+              {hint}
+            </Text>
+          )}
+          {counter && (
+            <Text
+              variant="caption"
+              color={counter.count > counter.max ? "danger" : "textMuted"}
+              style={styles.counter}
+            >
+              {counter.text}
+            </Text>
+          )}
+        </View>
       )}
     </View>
+  );
+}
+
+export interface PhoneFieldProps extends Omit<TextFieldProps, "value" | "onChangeText"> {
+  /** What the field shows — the masked text («+7 701 123 45 67»). */
+  value: string;
+  onChangeText: (masked: string) => void;
+}
+
+/**
+ * The field a Kazakhstan number is typed into (M-AUTH-01, TASK-078 M4):
+ * the mask «+7 7__ ___ __ __» of `@adclub/domain` groups the digits as they
+ * come and keeps the country code; the screen reads the number back with
+ * `normalizeKzMobilePhone`.
+ */
+export function PhoneField({ value, onChangeText, ...rest }: PhoneFieldProps) {
+  return (
+    <TextField
+      {...rest}
+      value={value}
+      onChangeText={(next) => onChangeText(maskKzPhoneInput(next, value))}
+      placeholder={KZ_PHONE_PLACEHOLDER}
+      keyboardType="phone-pad"
+      textContentType="telephoneNumber"
+      autoComplete="tel"
+    />
   );
 }
 
@@ -125,16 +185,20 @@ export interface SearchFieldProps extends Omit<TextInputProps, "value" | "onChan
   clearLabel: string;
 }
 
-/** Search: 48 high, search icon on the left, clear on the right (DESIGN.md 7.7). */
+/** Search: 48 high, search icon on the left, clear on the right; active — an `accent` frame (DESIGN.md 7.7). */
 export function SearchField({ label, value, onChangeText, clearLabel, ...rest }: SearchFieldProps) {
   const { theme } = useTheme();
   const input = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
   return (
     <View
       style={[
         styles.control,
         styles.search,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.borderField },
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: focused ? theme.colors.accent : theme.colors.borderField,
+        },
       ]}
     >
       <Icon name="search" size={20} color="textMuted" />
@@ -145,8 +209,17 @@ export function SearchField({ label, value, onChangeText, clearLabel, ...rest }:
         accessibilityRole="search"
         value={value}
         onChangeText={onChangeText}
+        onFocus={(event) => {
+          setFocused(true);
+          rest.onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          rest.onBlur?.(event);
+        }}
         returnKeyType="search"
         placeholderTextColor={theme.colors.textMuted}
+        cursorColor={theme.colors.accent}
         selectionColor={theme.colors.accent}
         style={[textStyles.body, styles.input, { color: theme.colors.text }]}
       />
@@ -172,6 +245,9 @@ export interface SearchEntryProps {
   label: string;
   placeholder: string;
   onPress: () => void;
+  /** Without a network the search cannot work: the entry says so instead of opening (TASK-078). */
+  disabled?: boolean;
+  disabledHint?: string;
 }
 
 /**
@@ -179,33 +255,58 @@ export interface SearchEntryProps {
  * или название», TASK-044): looks like `SearchField`, is a button — typing
  * happens on the search screen itself.
  */
-export function SearchEntry({ label, placeholder, onPress }: SearchEntryProps) {
+export function SearchEntry({
+  label,
+  placeholder,
+  onPress,
+  disabled,
+  disabledHint,
+}: SearchEntryProps) {
   const { theme } = useTheme();
   return (
     <Pressable
       accessibilityRole="search"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      accessibilityHint={disabled ? disabledHint : undefined}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.control,
         styles.search,
         styles.entry,
         {
-          backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
-          borderColor: theme.colors.borderField,
+          backgroundColor: disabled
+            ? theme.colors.fill
+            : pressed
+              ? theme.colors.surfaceRaised
+              : theme.colors.surface,
+          borderColor: disabled ? theme.colors.border : theme.colors.borderField,
         },
       ]}
     >
-      <Icon name="search" size={20} color="textMuted" />
-      <Text variant="body" color="textMuted" numberOfLines={1} style={styles.entryText}>
+      <Icon name="search" size={20} color={disabled ? "textDisabled" : "textMuted"} />
+      <Text
+        variant="body"
+        color={disabled ? "textDisabled" : "textMuted"}
+        numberOfLines={1}
+        style={styles.entryText}
+      >
         {placeholder}
       </Text>
+      {disabled && disabledHint && (
+        <Text variant="caption" color="textMuted">
+          {disabledHint}
+        </Text>
+      )}
     </Pressable>
   );
 }
 
 export interface CodeCellsProps {
   label: string;
+  /** The label is for screen readers only — the heading of the screen already says it. */
+  labelHidden?: boolean;
   value: string;
   onChangeText: (value: string) => void;
   error?: string;
@@ -213,12 +314,19 @@ export interface CodeCellsProps {
 }
 
 /**
- * Six code cells, groups 3 + 3 (DESIGN.md 7.10). A single hidden input
- * receives typing and paste; digits only. Cells are 48 wide and narrower,
- * down to 36, only where the row does not fit (a 320-pt phone, the showcase;
- * `codeCellLayout`).
+ * Six code cells, groups 3 + 3 (DESIGN.md 7.10), across the column: the two
+ * groups stand at its edges. A single hidden input receives typing and
+ * paste; digits only. Cells are 48 wide and narrower, down to 36, only where
+ * the row does not fit (a 320-pt phone, the showcase; `codeCellLayout`).
  */
-export function CodeCells({ label, value, onChangeText, error, autoFocus }: CodeCellsProps) {
+export function CodeCells({
+  label,
+  labelHidden,
+  value,
+  onChangeText,
+  error,
+  autoFocus,
+}: CodeCellsProps) {
   const { theme } = useTheme();
   const { colors } = theme;
   const input = useRef<TextInput>(null);
@@ -231,9 +339,11 @@ export function CodeCells({ label, value, onChangeText, error, autoFocus }: Code
 
   return (
     <View style={styles.field} onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}>
-      <Text variant="bodyS" color="textMuted" style={styles.label}>
-        {label}
-      </Text>
+      {!labelHidden && (
+        <Text variant="bodyS" color="textMuted" style={styles.label}>
+          {label}
+        </Text>
+      )}
       <Pressable
         accessibilityRole="none"
         onPress={() => input.current?.focus()}
@@ -371,7 +481,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.s,
     borderWidth: line.width,
   },
-  input: { flex: 1, minHeight: 44, paddingVertical: 10 },
+  // The browser draws its own focus outline inside an <input> (its style is
+  // `auto`, so a zero width does not remove it); the frame of the field is the
+  // focus (DESIGN 7.7, TASK-078 M3). React Native's types know no `none`.
+  input: {
+    flex: 1,
+    minHeight: 44,
+    paddingVertical: 10,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as unknown as TextStyle) : null),
+  },
   controlMultiline: { alignItems: "flex-start" },
   inputMultiline: { minHeight: 120, maxHeight: 240, textAlignVertical: "top" },
   search: { paddingLeft: 12, paddingRight: 0 },
@@ -385,8 +503,9 @@ const styles = StyleSheet.create({
   },
   help: { flexDirection: "row", gap: 4, marginTop: 6, alignItems: "flex-start" },
   helpText: { flex: 1 },
-  hint: { marginTop: 6 },
-  cells: { flexDirection: "row", alignSelf: "flex-start" },
+  hintRow: { flexDirection: "row", gap: 8, marginTop: 6, alignItems: "flex-start" },
+  counter: { marginLeft: "auto" },
+  cells: { flexDirection: "row", alignSelf: "stretch", justifyContent: "space-between" },
   group: { flexDirection: "row" },
   cell: {
     height: size.codeCell.height,

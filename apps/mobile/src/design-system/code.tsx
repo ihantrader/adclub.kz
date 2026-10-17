@@ -2,7 +2,6 @@ import {
   codeScreenColors,
   createQrMatrix,
   formatOrderCode,
-  HIDDEN_ORDER_CODE,
   qr,
   qrPath,
   radius,
@@ -10,6 +9,7 @@ import {
 import { useMemo, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
+import { Icon } from "./Icon";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -33,25 +33,36 @@ export function QrCode({ value, size, label }: QrCodeProps) {
   );
 }
 
-/** Stand-in pattern shown dimmed before acceptance: the real QR is not rendered yet. */
-const PENDING_QR_VALUE = "adclub:pending";
-
 export interface CodeBlockProps {
   code: string;
   qrValue: string;
   codeLabel: string;
   qrLabel: string;
+  /** T-ORD-05 «Покажите QR или назовите код сотруднику», inside the block under the code. */
+  note?: string;
   /** "Можно забирать": QR 208 instead of 176. */
   ready?: boolean;
-  /** Before acceptance: 30 % with T-ORD-06 on top; code hidden, QR a placeholder. */
+  /** Before acceptance: a muted square with a lock and T-ORD-06 in it; no code yet. */
   pending?: { text: ReactNode };
 }
 
 /**
  * Code block of the order card (M-ORD-03): `surface`, radius 6; white square
- * 176 (208 when ready) with the QR and 12 padding; code `code` in groups of three.
+ * 176 (208 when ready) with the QR — its four quiet modules are the white
+ * fields of the square, so the pattern is as large as the square allows
+ * (TASK-078 M-ORD-03) — and the code `code` in groups of three under it,
+ * centred with the square. Before acceptance the square is `surfaceRaised`
+ * with a lock and T-ORD-06 inside it: nothing is drawn that is not a code yet.
  */
-export function CodeBlock({ code, qrValue, codeLabel, qrLabel, ready, pending }: CodeBlockProps) {
+export function CodeBlock({
+  code,
+  qrValue,
+  codeLabel,
+  qrLabel,
+  note,
+  ready,
+  pending,
+}: CodeBlockProps) {
   const { theme } = useTheme();
   const square = ready ? qr.cardReady : qr.card;
   return (
@@ -62,61 +73,59 @@ export function CodeBlock({ code, qrValue, codeLabel, qrLabel, ready, pending }:
         { backgroundColor: theme.colors.surface },
       ]}
     >
-      <View
-        style={[styles.content, pending && { opacity: qr.pendingOpacity }]}
-        importantForAccessibility={pending ? "no-hide-descendants" : "auto"}
-        accessibilityElementsHidden={Boolean(pending)}
-      >
+      {pending ? (
         <View
+          accessibilityRole="text"
           style={[
-            styles.qrBox,
-            { width: square, height: square, backgroundColor: theme.colors.qrBg },
+            styles.pendingBox,
+            { width: square, height: square, backgroundColor: theme.colors.surfaceRaised },
           ]}
         >
-          <QrCode
-            value={pending ? PENDING_QR_VALUE : qrValue}
-            size={square - 2 * qr.padding}
-            label={qrLabel}
-          />
-        </View>
-        <View>
-          <Text variant="caption" color="textMuted">
-            {codeLabel}
-          </Text>
-          <Text variant="code" maxFontSizeMultiplier={1.3}>
-            {pending ? HIDDEN_ORDER_CODE : formatOrderCode(code)}
-          </Text>
-        </View>
-      </View>
-      {pending && (
-        <View style={styles.overlay}>
-          <Text
-            variant="bodyS"
-            style={[styles.overlayText, { backgroundColor: theme.colors.surface }]}
-          >
+          <Icon name="lock" size={32} color="textMuted" />
+          <Text variant="bodyS" color="textMuted" style={styles.pendingText}>
             {pending.text}
           </Text>
         </View>
+      ) : (
+        <>
+          <View
+            style={[
+              styles.qrBox,
+              { width: square, height: square, backgroundColor: theme.colors.qrBg },
+            ]}
+          >
+            <QrCode value={qrValue} size={square} label={qrLabel} />
+          </View>
+          <View style={styles.codeColumn}>
+            <Text variant="caption" color="textMuted">
+              {codeLabel}
+            </Text>
+            <Text variant="code" maxFontSizeMultiplier={1.3}>
+              {formatOrderCode(code)}
+            </Text>
+          </View>
+          {note !== undefined && (
+            <Text variant="caption" color="textMuted" style={styles.note}>
+              {note}
+            </Text>
+          )}
+        </>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  block: { borderRadius: radius.m, padding: 16 },
-  content: { alignItems: "center", gap: 16 },
-  qrBox: { padding: qr.padding, borderRadius: radius.s },
-  overlay: {
-    ...StyleSheet.absoluteFill,
+  block: { borderRadius: radius.m, padding: 16, alignItems: "center", gap: 16 },
+  qrBox: { borderRadius: radius.s, overflow: "hidden" },
+  codeColumn: { alignItems: "center", gap: 2 },
+  note: { textAlign: "center" },
+  pendingBox: {
+    borderRadius: radius.s,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    gap: 12,
+    padding: 16,
   },
-  overlayText: {
-    textAlign: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.s,
-    overflow: "hidden",
-  },
+  pendingText: { textAlign: "center" },
 });

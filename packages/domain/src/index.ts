@@ -7,6 +7,12 @@ export {
 } from "./version/app-version";
 export type { AppVersion } from "./version/app-version";
 export { hidePhone, maskPhone, normalizeKzMobilePhone } from "./phone/kz-mobile-phone";
+export {
+  formatKzPhone,
+  KZ_PHONE_PLACEHOLDER,
+  kzPhoneDigits,
+  maskKzPhoneInput,
+} from "./phone/format-phone";
 export { PHONE_SEARCH_MIN_DIGITS, phoneSearchDigits } from "./phone/phone-search";
 export { readAdminQuery } from "./search/admin-query";
 export type { AdminQueryReading } from "./search/admin-query";

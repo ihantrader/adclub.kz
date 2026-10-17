@@ -146,12 +146,29 @@ export interface TopBarProps {
   actions?: ReactNode;
   /** While the content is scrolled: `bar` background and a bottom line. */
   scrolled?: boolean;
+  /**
+   * The title is drawn only while `scrolled` (TASK-078 M12): a screen whose
+   * content opens with the same name as its heading (the card of an item)
+   * shows it in the bar once the heading has gone under it.
+   */
+  titleAfterScroll?: boolean;
+  /** The line under the bar belongs to a pinned header below it instead. */
+  lineBelow?: boolean;
 }
 
 /** Top bar: 56 high, title on the left (DESIGN.md 7.7). */
-export function TopBar({ title, root, back, actions, scrolled }: TopBarProps) {
+export function TopBar({
+  title,
+  root,
+  back,
+  actions,
+  scrolled,
+  titleAfterScroll,
+  lineBelow = true,
+}: TopBarProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const titleShown = !titleAfterScroll || scrolled;
   return (
     <View
       style={[
@@ -159,7 +176,7 @@ export function TopBar({ title, root, back, actions, scrolled }: TopBarProps) {
         {
           paddingTop: insets.top,
           backgroundColor: scrolled ? theme.colors.bar : theme.colors.bg,
-          borderBottomColor: scrolled ? theme.colors.border : "transparent",
+          borderBottomColor: scrolled && lineBelow ? theme.colors.border : "transparent",
         },
       ]}
     >
@@ -168,8 +185,14 @@ export function TopBar({ title, root, back, actions, scrolled }: TopBarProps) {
         <Text
           variant={root ? "titleL" : "title"}
           accessibilityRole="header"
-          numberOfLines={2}
-          style={[styles.topBarTitle, !back && styles.topBarTitleInset]}
+          accessibilityElementsHidden={!titleShown}
+          importantForAccessibility={titleShown ? "auto" : "no-hide-descendants"}
+          numberOfLines={titleAfterScroll ? 1 : 2}
+          style={[
+            styles.topBarTitle,
+            !back && styles.topBarTitleInset,
+            !titleShown && styles.unseen,
+          ]}
         >
           {title}
         </Text>
@@ -183,11 +206,19 @@ export interface ListRowProps {
   title: ReactNode;
   subtitle?: ReactNode;
   icon?: IconName;
+  /** Keeps the column of the icon empty, so rows with and without one align (TASK-078 M-CITY-01). */
+  iconSlot?: boolean;
+  /** Something other than a semantic icon at the left: the icon of a category, a colour swatch. */
+  leading?: ReactNode;
   trailing?: ReactNode;
   onPress?: () => void;
   /** Adds a chevron for rows that open a screen. */
   navigates?: boolean;
   first?: boolean;
+  /** The last row of a list that stands on the page itself (a FlatList): rounded below. */
+  last?: boolean;
+  /** A row of a card group on the page itself: rounded above when first. */
+  rounded?: boolean;
 }
 
 /**
@@ -198,10 +229,14 @@ export function ListRow({
   title,
   subtitle,
   icon,
+  iconSlot,
+  leading,
   trailing,
   onPress,
   navigates,
   first,
+  last,
+  rounded,
 }: ListRowProps) {
   const { theme } = useTheme();
   return (
@@ -211,6 +246,10 @@ export function ListRow({
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        // The caret glyph carries air of its own: 12 reads as the 16 of the text.
+        navigates && styles.rowWithChevron,
+        rounded && first && styles.rowFirst,
+        last && styles.rowLast,
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
           borderTopColor: theme.colors.border,
@@ -218,7 +257,12 @@ export function ListRow({
         },
       ]}
     >
-      {icon && <Icon name={icon} size={24} color="textMuted" />}
+      {leading ??
+        (icon ? (
+          <Icon name={icon} size={24} color="textMuted" />
+        ) : (
+          iconSlot && <View style={styles.iconSlot} />
+        ))}
       <View style={styles.rowText}>
         {typeof title === "string" ? <Text variant="bodyStrong">{title}</Text> : title}
         {typeof subtitle === "string" ? (
@@ -276,6 +320,7 @@ const styles = StyleSheet.create({
   },
   topBarTitle: { flex: 1 },
   topBarTitleInset: { paddingLeft: 12 },
+  unseen: { opacity: 0 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -284,5 +329,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.rowPadding,
     paddingVertical: layout.rowPadding,
   },
+  rowWithChevron: { paddingRight: 12 },
+  rowFirst: { borderTopLeftRadius: radius.m, borderTopRightRadius: radius.m },
+  rowLast: { borderBottomLeftRadius: radius.m, borderBottomRightRadius: radius.m },
+  iconSlot: { width: 24 },
   rowText: { flex: 1, gap: 2 },
 });

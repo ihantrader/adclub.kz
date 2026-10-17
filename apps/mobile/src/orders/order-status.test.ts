@@ -124,11 +124,14 @@ describe("the state of an order on its screen", () => {
     expect(
       orderStatusView({ status: "ready", fulfillment: "pickup", kind: "on_order" }),
     ).toMatchObject({ title: "orderStatus.readyPickup.title" });
-    // The words fill their places in every language.
+    // The words fill their places in every language. The date of a confirmed
+    // term stands on a line of its own (`order.bringBy`, TASK-078), so the
+    // explanation under it does not repeat it.
     for (const lang of ["ru", "kk", "en"] as const) {
       expect(mobileText(lang, "orderStatus.termProposed.text")).toContain("{date}");
       expect(mobileText(lang, "orderStatus.termProposed.text")).toContain("{time}");
-      expect(mobileText(lang, "orderStatus.termConfirmed.text")).toContain("{date}");
+      expect(mobileText(lang, "order.bringBy")).toContain("{date}");
+      expect(mobileText(lang, "orderStatus.termConfirmed.text")).not.toContain("{date}");
     }
   });
 

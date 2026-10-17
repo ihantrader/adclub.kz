@@ -12,6 +12,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ButtonLayoutProvider } from "./Button";
 import {
   Banner,
   EmptyState,
@@ -19,6 +20,7 @@ import {
   useToastObstacle,
   type EmptyStateProps,
 } from "./feedback";
+import { hairline } from "./lines";
 import { TopBar } from "./navigation";
 import { Text } from "./text";
 import { useContentOpacity, useDelayedIndicator, useFadeTo } from "./loading";
@@ -30,6 +32,12 @@ import { useTheme } from "./theme";
  * content, its error with "Повторить", its empty state and its "Нет сети"
  * from here instead of building them again. Texts are always props — the
  * dictionary lives in the app, not in the design system.
+ *
+ * The frame of a screen is the design system's too (TASK-078): the banner
+ * stands in the flow with the fields of the screen; a pinned header is one
+ * `bar` surface with a hairline under it once the content scrolls; a pinned
+ * footer gets the same surface and a hairline above it when there is
+ * content to scroll under it, and the content keeps clear of it.
  */
 
 export interface ScreenProps {
@@ -38,7 +46,13 @@ export interface ScreenProps {
   root?: boolean;
   back?: { label: string; onPress: () => void };
   actions?: ReactNode;
-  /** Flush under the top bar: "Нет сети" and other screen-wide notices. */
+  /**
+   * The title appears in the bar only once the content has scrolled past
+   * its own heading (TASK-078 M12) — the card of an item, whose name is the
+   * first thing on the screen.
+   */
+  titleAfterScroll?: boolean;
+  /** Under the top bar, in the flow of the screen: "Нет сети" and other screen-wide notices. */
   banner?: ReactNode;
   /** Above the scroll area and never scrolled away (the city switch of the catalog). */
   header?: ReactNode;
@@ -68,6 +82,11 @@ export interface ScreenProps {
   /** `false` for a screen that lays out its own list. */
   scroll?: boolean;
   /**
+   * A screen with its own list (`scroll={false}`) says whether it is
+   * scrolled, so the bar and the pinned header react like everywhere else.
+   */
+  scrolled?: boolean;
+  /**
    * Centers the content vertically while it fits the screen, and still
    * scrolls when it does not (a bigger system font, a long Kazakh word) — a
    * single state that is the whole of the screen, such as «Добавьте
@@ -90,6 +109,7 @@ export function Screen({
   root,
   back,
   actions,
+  titleAfterScroll,
   banner,
   header,
   footer,
@@ -99,12 +119,21 @@ export function Screen({
   lockWhileRefreshing = false,
   onPullToRefresh,
   scroll = true,
+  scrolled: scrolledProp,
   centerContent = false,
   bottomInset = false,
   children,
 }: ScreenProps) {
   const { theme } = useTheme();
-  const [scrolled, setScrolled] = useState(false);
+  const [ownScrolled, setOwnScrolled] = useState(false);
+  const scrolled = scrolledProp ?? ownScrolled;
+  // Whether the content is taller than its viewport: then a pinned footer
+  // separates itself from it (TASK-078 M13). A screen with its own list is
+  // taken as scrollable.
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const scrollable = !scroll || (viewportHeight > 0 && contentHeight > viewportHeight + 1);
+  const [footerHeight, setFooterHeight] = useState(0);
   // While a reload is seen the content stays where it is, dimmed under the
   // line; the next content takes its place with a fade (D-069).
   const opacity = useContentOpacity(refreshing, contentKey);
@@ -112,9 +141,16 @@ export function Screen({
   const content = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[styles.scrollContent, centerContent && styles.centeredContent]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        centerContent && styles.centeredContent,
+        // The content ends above the pinned footer, with air between them.
+        footer ? { paddingBottom: footerHeight + 16 } : null,
+      ]}
       keyboardShouldPersistTaps="handled"
-      onScroll={(event) => setScrolled(event.nativeEvent.contentOffset.y > 4)}
+      onScroll={(event) => setOwnScrolled(event.nativeEvent.contentOffset.y > 4)}
+      onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
+      onContentSizeChange={(_width, height) => setContentHeight(height)}
       scrollEventThrottle={32}
       refreshControl={
         onPullToRefresh ? (
@@ -139,12 +175,33 @@ export function Screen({
       style={[styles.flex, { backgroundColor: theme.colors.bg }]}
     >
       {title !== undefined && (
-        <TopBar title={title} root={root} back={back} actions={actions} scrolled={scrolled} />
+        <TopBar
+          title={title}
+          root={root}
+          back={back}
+          actions={actions}
+          scrolled={scrolled}
+          titleAfterScroll={titleAfterScroll}
+          lineBelow={!header}
+        />
       )}
-      {banner}
       {/* The slot is always there, so a refresh does not push the screen down 2 px and back. */}
       <RefreshLine label={refreshingLabel} active={refreshing} />
-      {header}
+      {header && (
+        // One surface with the bar while scrolled, the line under the whole pinned block (M10).
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: scrolled ? theme.colors.bar : theme.colors.bg,
+              borderBottomColor: scrolled ? theme.colors.border : "transparent",
+            },
+          ]}
+        >
+          {header}
+        </View>
+      )}
+      {banner && <View style={styles.bannerSlot}>{banner}</View>}
       {/* The keyboard pushes the content and the footer up instead of covering
           the main button (iOS; Android resizes the window itself) — TASK-030.A. */}
       <KeyboardAvoidingView
@@ -158,20 +215,61 @@ export function Screen({
         >
           {content}
         </Animated.View>
-        {footer && <Footer>{footer}</Footer>}
+        {footer && (
+          <Footer separated={scrollable} onHeight={setFooterHeight}>
+            {footer}
+          </Footer>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-/** The pinned main action of a screen: a toast stands above it, never on it (7.7, TASK-032). */
-function Footer({ children }: { children: ReactNode }) {
+/**
+ * The pinned main action of a screen: a toast stands above it, never on it
+ * (7.7, TASK-032). When content scrolls under it, it stands on `bar` with
+ * a hairline above (TASK-078 M13); its buttons take the width.
+ */
+function Footer({
+  children,
+  separated,
+  onHeight,
+}: {
+  children: ReactNode;
+  separated: boolean;
+  onHeight: (height: number) => void;
+}) {
+  const { theme } = useTheme();
   const { ref: footerRef, onLayout } = useToastObstacle();
   return (
-    <View ref={footerRef} onLayout={onLayout} style={styles.footer}>
-      {children}
+    <View
+      ref={footerRef}
+      onLayout={(event) => {
+        onHeight(event.nativeEvent.layout.height);
+        onLayout();
+      }}
+      style={[
+        styles.footer,
+        separated && {
+          backgroundColor: theme.colors.bar,
+          borderTopColor: theme.colors.border,
+          borderTopWidth: hairline,
+        },
+      ]}
+    >
+      <ButtonLayoutProvider align="stretch">{children}</ButtonLayoutProvider>
     </View>
   );
+}
+
+/**
+ * The body of a screen's content: the fields of the screen (16) and the air
+ * under the bar (12). Blocks inside it are `Section`s, which keep 32 between
+ * themselves (DESIGN 7.5); the body adds no gaps of its own, so there is one
+ * distance between blocks everywhere (TASK-078 M2).
+ */
+export function ScreenBody({ children, fill }: { children: ReactNode; fill?: boolean }) {
+  return <View style={[styles.body, fill && styles.flex]}>{children}</View>;
 }
 
 /** The bar of the refresh line: 120 wide, sweeping from the left edge to the right one. */
@@ -244,14 +342,16 @@ export function RefreshLine({ label, active = true }: { label?: string; active?:
 
 export interface OfflineBannerProps {
   label: string;
-  /** In the flow of a screen (radius 6) or flush under the top bar. */
+  /** In the flow of a screen (radius 6, the default) or flush under a bar. */
   placement?: "inline" | "flush";
+  /** «Войти», «Повторить» — one action under the text. */
+  action?: ReactNode;
 }
 
 /** "Нет сети" (SCREENS 2.4): `fill` and the "no network" icon (DESIGN 7.7). */
-export function OfflineBanner({ label, placement = "flush" }: OfflineBannerProps) {
+export function OfflineBanner({ label, placement = "inline", action }: OfflineBannerProps) {
   return (
-    <Banner icon="wifiOff" placement={placement}>
+    <Banner icon="wifiOff" placement={placement} action={action}>
       {label}
     </Banner>
   );
@@ -348,17 +448,30 @@ function DataStateContent({ status, error, empty, offline, children }: DataState
 export interface SectionProps {
   title?: string;
   icon?: IconName;
+  /** The first block of a screen: no air above it, the body already has it. */
+  first?: boolean;
+  /** Something at the right of the heading («Очистить» of the recent searches). */
+  action?: ReactNode;
   children: ReactNode;
 }
 
-/** A block of a screen: heading plus content, 32 between blocks (DESIGN 7.5, D-068). */
-export function Section({ title, children }: SectionProps) {
+/**
+ * A block of a screen: heading `heading`, 12 to its content, 32 between
+ * blocks (DESIGN 7.5, D-068; TASK-078 M2) — the one distance between blocks
+ * of every screen.
+ */
+export function Section({ title, first, action, children }: SectionProps) {
   return (
-    <View style={styles.section}>
-      {title !== undefined && (
-        <Text variant="heading" accessibilityRole="header">
-          {title}
-        </Text>
+    <View style={[styles.section, first && styles.sectionFirst]}>
+      {(title !== undefined || action) && (
+        <View style={styles.sectionHead}>
+          {title !== undefined && (
+            <Text variant="heading" accessibilityRole="header" style={styles.sectionTitle}>
+              {title}
+            </Text>
+          )}
+          {action}
+        </View>
       )}
       {children}
     </View>
@@ -369,6 +482,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { paddingBottom: layout.blockGap },
   centeredContent: { flexGrow: 1, justifyContent: "center" },
+  body: { paddingHorizontal: layout.screenPadding, paddingTop: 12 },
+  header: { borderBottomWidth: hairline, paddingBottom: 12 },
+  bannerSlot: { paddingHorizontal: layout.screenPadding, paddingTop: 12 },
   footer: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: 12,
@@ -378,4 +494,7 @@ const styles = StyleSheet.create({
   refreshTrack: { height: 2, overflow: "hidden" },
   refreshBar: { width: REFRESH_BAR, height: 2 },
   section: { gap: 12, paddingTop: layout.blockGap },
+  sectionFirst: { paddingTop: 0 },
+  sectionHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+  sectionTitle: { flex: 1 },
 });

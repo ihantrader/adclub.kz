@@ -51,7 +51,7 @@ export function GlyphIcon({ glyph, size, color }: { glyph: Glyph; size: number; 
 
 export interface IconProps {
   name: IconName;
-  size?: 16 | 20 | 24 | 28 | 32 | 48;
+  size?: 16 | 20 | 24 | 28 | 32 | 40 | 48;
   color?: ColorToken;
   /** Explicit color (e.g. on the white code screen). */
   colorValue?: string;

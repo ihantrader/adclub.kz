@@ -6,7 +6,22 @@
  * translated like every other text.
  */
 
-const NBSP = " ";
+export const NBSP = " ";
+
+/** Between the parts of one line: «Geely · 04465-0K090», «1 шт. · 12 700 ₸». */
+export const DOT = `${NBSP}·${NBSP}`;
+
+/**
+ * Parts of one line through «·» (TASK-078 M11): the spaces around the dot
+ * are non-breaking, so a line never starts or ends with a lone «·» — a
+ * long line wraps inside its parts, never at the separator. Empty parts
+ * are left out, so the line never opens with a dot either.
+ */
+export function joinDot(parts: readonly (string | null | undefined | false)[]): string {
+  return parts
+    .filter((part): part is string => typeof part === "string" && part.trim() !== "")
+    .join(DOT);
+}
 
 /** «12 500 ₸» — groups of three, a non-breaking space, the sign last. */
 export function formatTenge(value: number): string {

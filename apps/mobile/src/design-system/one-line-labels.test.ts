@@ -4,7 +4,7 @@ import { fontScale, layout, line, typography } from "@adclub/ui-core";
 import * as fontkit from "fontkit";
 import { describe, expect, it } from "vitest";
 import { codeCellLayout, codeCellMetrics, codeRowWidth } from "./code-cell-metrics";
-import { segmentMetrics } from "./segment-metrics";
+import { segmentMetrics, segmentsLayout } from "./segment-metrics";
 import { selectLabelFontSize, selectLabelMetrics } from "./select-label";
 
 // Plain Node checks: this file must not import react-native. They measure
@@ -47,6 +47,86 @@ describe("the sort segments of the list (TASK-030.A)", () => {
       "Дешевле",
       "Быстрее",
     ]);
+  });
+});
+
+describe("the layout of the segments (TASK-078.A)", () => {
+  const ITEM_SORTS: MobileTextKey[] = [...LIST_SORTS, "catalog.sort.rating"];
+  const ORDER_TABS: MobileTextKey[] = ["orders.active", "orders.history"];
+  const SCREENS = [320, 375, 390];
+  // The phone grows a segment label with the system font only to 120 %.
+  const SCALES = [1, 1.3];
+  const labelSize = (scale: number) =>
+    typography.bodyS.fontSize * Math.min(scale, fontScale.tabLabelMax);
+  const inside = (screen: number) => screen - 2 * layout.screenPadding - 2 * segmentMetrics.inset;
+
+  /** The room each label gets in the layout, against the room it needs. */
+  const cells = (screen: number, labels: number[]) => {
+    const available = inside(screen);
+    const result = segmentsLayout(available, labels);
+    return {
+      result,
+      fits: result.rows.every((row) => {
+        const needs = row.options.map(
+          (index) =>
+            labels[index]! * result.labelScale + 2 * result.paddingX + segmentMetrics.slack,
+        );
+        return row.equal
+          ? Math.max(...needs) * needs.length <= available
+          : needs.reduce((sum, need) => sum + need, 0) <= available;
+      }),
+    };
+  };
+
+  it.each(
+    LANGS.flatMap((lang) =>
+      SCREENS.flatMap((screen) =>
+        SCALES.flatMap((scale) =>
+          [LIST_SORTS, ITEM_SORTS, ORDER_TABS].map((keys) => [lang, screen, scale, keys] as const),
+        ),
+      ),
+    ),
+  )("%s on a %i-pt phone at %f: every label whole in its cell", (lang, screen, scale, keys) => {
+    const labels = keys.map((key) => width(mobileText(lang, key), labelSize(scale)));
+    const { result, fits } = cells(screen, labels);
+    expect(fits, JSON.stringify(result)).toBe(true);
+    expect(result.labelScale).toBeGreaterThanOrEqual(segmentMetrics.minLabelScale);
+    expect(result.paddingX).toBeGreaterThanOrEqual(segmentMetrics.minPaddingX);
+    expect(result.rows.flatMap((row) => row.options).sort()).toEqual(keys.map((_, i) => i));
+  });
+
+  it("gives the list three equal cells on a usual phone and keeps the sorts in one row everywhere", () => {
+    const at = (lang: (typeof LANGS)[number], screen: number, scale: number, keys = LIST_SORTS) =>
+      cells(
+        screen,
+        keys.map((key) => width(mobileText(lang, key), labelSize(scale))),
+      ).result;
+    for (const lang of LANGS) {
+      expect(at(lang, 390, 1)).toEqual({
+        rows: [{ options: [0, 1, 2], equal: true }],
+        paddingX: segmentMetrics.paddingX,
+        labelScale: 1,
+      });
+      for (const screen of SCREENS) {
+        for (const scale of SCALES) expect(at(lang, screen, scale).rows).toHaveLength(1);
+      }
+    }
+    // «Рекомендуем» is wider than a third of a 320-pt phone: cells by their labels.
+    expect(at("ru", 320, 1).rows[0]!.equal).toBe(false);
+    // Four sorts of the item at 120 % on a 320-pt phone: two rows of two.
+    expect(at("ru", 320, 1.3, ITEM_SORTS).rows.map((row) => row.options)).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+  });
+
+  it("shares one row equally until the widths are known", () => {
+    expect(segmentsLayout(0, [50, 60])).toEqual({
+      rows: [{ options: [0, 1], equal: true }],
+      paddingX: segmentMetrics.paddingX,
+      labelScale: 1,
+    });
+    expect(segmentsLayout(300, [50, 0]).rows).toEqual([{ options: [0, 1], equal: true }]);
   });
 });
 

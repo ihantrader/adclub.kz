@@ -10,10 +10,10 @@ import {
   type IconName,
 } from "@adclub/ui-core";
 import { useEffect, useState, type ReactNode } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { Icon } from "./Icon";
 import { animateLayoutTo, animateTo, useMotionPlan } from "./motion";
-import { segmentMetrics } from "./segment-metrics";
+import { segmentMetrics, segmentsLayout } from "./segment-metrics";
 import { selectLabelFontSize, selectLabelMetrics } from "./select-label";
 import { Text } from "./text";
 import { useTheme } from "./theme";
@@ -236,40 +236,82 @@ export interface SegmentsProps<T extends string> {
     label: string;
     icon?: IconName;
     /**
-     * One line under the control for the selected option — what choosing it
+     * The line under the control for the selected option — what choosing it
      * does («Сначала — самая низкая цена»: a sort is an order, not a filter).
      */
     hint?: string;
   }[];
   value: T;
   onChange: (value: T) => void;
+  /**
+   * Beside the hint, on its right, level with its first line — «Фильтры (N)»
+   * of the list (TASK-078.A M-CAT-02).
+   */
+  aside?: ReactNode;
 }
 
 interface SegmentFrame {
   x: number;
+  y: number;
   width: number;
+  height: number;
 }
+
+/** The icon of an option and the gap after it, in points. */
+const SEGMENT_ICON = 16;
+const SEGMENT_GAP = 6;
+/** Between the hint and what is beside it. */
+const SEGMENT_FOOT_GAP = 12;
+/** Between the hint and the aside under it. */
+const SEGMENT_FOOT_STACK_GAP = 8;
+/** The most lines the hint takes beside the aside before it goes across the width. */
+const SEGMENT_HINT_LINES_BESIDE = 3;
+
+/** Kept from the layout and from screen readers: what is drawn only to be measured. */
+const measureOnly = {
+  pointerEvents: "none",
+  accessibilityElementsHidden: true,
+  importantForAccessibility: "no-hide-descendants",
+  "aria-hidden": true,
+} as const;
 
 /**
  * Segments, 40 high (DESIGN 7.7): the container `fill`, the selected option
  * on a `surface` thumb that slides to it by the rule of a change of state.
  *
- * A label never wraps (TASK-030.A): it keeps one line and grows with the
- * system font only to 120 %, like a tab label; each option is as wide as its
- * label (DESIGN 7.7 «ширина по подписи», TASK-078 M-CAT-02) and the control
- * is as wide as its options, so «Рекомендуем · Дешевле · Быстрее» fits a
- * 360-pt phone in every language. Where even that does not fit (four
- * options, the largest font, a narrow phone) the row scrolls sideways
- * instead of wrapping or clipping a word.
+ * The control takes the whole width (TASK-078.A): equal cells while the
+ * longest label fits its share, cells by their labels when it does not, then
+ * a narrower padding and a label down to 12 — and where even that is not
+ * enough (four sorts on a 320-pt phone, a large system font) the options go
+ * to two rows. A label is never cut, never ends in an ellipsis and never
+ * scrolls out of sight; it grows with the system font only to 120 %, like a
+ * tab label. The rule is `segmentsLayout`; the widths it needs are the
+ * labels' own, measured in one line at the size the phone draws them.
  *
- * The line under the control («Сначала — …») is one line (TASK-078 M10).
+ * The hint under the control («Сначала — …») wraps rather than ending in an
+ * ellipsis, and keeps the height of the longest hint, so choosing another
+ * option does not move what is below.
  */
-export function Segments<T extends string>({ label, options, value, onChange }: SegmentsProps<T>) {
+export function Segments<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  aside,
+}: SegmentsProps<T>) {
   const { theme } = useTheme();
   const plan = useMotionPlan("state");
   const [frames, setFrames] = useState<Partial<Record<T, SegmentFrame>>>({});
+  const [labelWidths, setLabelWidths] = useState<Partial<Record<string, number>>>({});
+  // Heights of each hint beside the aside («beside:…») and across the whole
+  // width («full:…»), and of one line («line»).
+  const [hintHeights, setHintHeights] = useState<Partial<Record<string, number>>>({});
+  const [asideWidth, setAsideWidth] = useState(0);
+  const [available, setAvailable] = useState(0);
   const [thumbX] = useState(() => new Animated.Value(0));
+  const [thumbY] = useState(() => new Animated.Value(0));
   const [thumbWidth] = useState(() => new Animated.Value(0));
+  const [thumbHeight] = useState(() => new Animated.Value(0));
   const [placed, setPlaced] = useState(false);
   const frame = frames[value];
 
@@ -278,31 +320,81 @@ export function Segments<T extends string>({ label, options, value, onChange }: 
     // The first placing, and every move with reduced motion, is instant.
     if (!placed || !plan.moves) {
       thumbX.setValue(frame.x);
+      thumbY.setValue(frame.y);
       thumbWidth.setValue(frame.width);
+      thumbHeight.setValue(frame.height);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (!placed) setPlaced(true);
       return;
     }
     const animation = Animated.parallel([
       animateLayoutTo(thumbX, frame.x, plan),
+      animateLayoutTo(thumbY, frame.y, plan),
       animateLayoutTo(thumbWidth, frame.width, plan),
+      animateLayoutTo(thumbHeight, frame.height, plan),
     ]);
     animation.start();
     return () => animation.stop();
-  }, [frame, placed, plan, thumbX, thumbWidth]);
+  }, [frame, placed, plan, thumbX, thumbY, thumbWidth, thumbHeight]);
 
-  const hinted = options.some((option) => option.hint);
+  const widths = options.map((option) => {
+    const text = labelWidths[option.label];
+    return text === undefined ? 0 : text + (option.icon ? SEGMENT_ICON + SEGMENT_GAP : 0);
+  });
+  const layout = segmentsLayout(available, widths);
+  const scaled =
+    layout.labelScale === 1
+      ? null
+      : {
+          fontSize: typography.bodyS.fontSize * layout.labelScale,
+          lineHeight: typography.bodyS.lineHeight * layout.labelScale,
+        };
+
+  const hints = [...new Set(options.flatMap((option) => (option.hint ? [option.hint] : [])))];
+  const tallest = (where: "beside" | "full") =>
+    Math.max(0, ...hints.map((hint) => hintHeights[`${where}:${hint}`] ?? 0));
+  // The hint wraps beside the aside — two lines on a usual phone, three on a
+  // narrow one. Where it needs more (a large font), a narrow column of words
+  // reads badly: the hint goes across the whole width and the aside under it
+  // on the right. Nothing is cut either way.
+  const asideRoom = aside ? asideWidth + SEGMENT_FOOT_GAP : 0;
+  const line = hintHeights.line ?? 0;
+  const stacked =
+    Boolean(aside) && line > 0 && tallest("beside") > SEGMENT_HINT_LINES_BESIDE * line + 1;
+  const hintHeight = tallest(aside && !stacked ? "beside" : "full");
+  const remember =
+    (key: string, next: number) =>
+    (current: Partial<Record<string, number>>): Partial<Record<string, number>> =>
+      current[key] === next ? current : { ...current, [key]: next };
 
   return (
     <View style={styles.segmentsBlock}>
-      <ScrollView
-        horizontal
-        bounces={false}
-        showsHorizontalScrollIndicator={false}
+      {/* The labels in one line, unconstrained: the widths the layout needs. */}
+      <View {...measureOnly} style={styles.measureClip}>
+        <View style={styles.measureRow}>
+          {options.map((option) => (
+            <Text
+              key={option.value}
+              variant="bodyS"
+              numberOfLines={1}
+              maxFontSizeMultiplier={fontScale.tabLabelMax}
+              style={styles.segmentLabel}
+              onLayout={(event) =>
+                setLabelWidths(remember(option.label, event.nativeEvent.layout.width))
+              }
+            >
+              {option.label}
+            </Text>
+          ))}
+        </View>
+      </View>
+      <View
         accessibilityRole="radiogroup"
         accessibilityLabel={label}
+        onLayout={(event) =>
+          setAvailable(event.nativeEvent.layout.width - 2 * segmentMetrics.inset)
+        }
         style={[styles.segments, { backgroundColor: theme.colors.fill }]}
-        contentContainerStyle={styles.segmentsContent}
       >
         {frame && (
           <Animated.View
@@ -313,51 +405,126 @@ export function Segments<T extends string>({ label, options, value, onChange }: 
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
                 width: thumbWidth,
-                transform: [{ translateX: thumbX }],
+                height: thumbHeight,
+                transform: [{ translateX: thumbX }, { translateY: thumbY }],
               },
             ]}
           />
         )}
-        {options.map((option) => {
-          const on = option.value === value;
-          return (
-            <Pressable
-              key={option.value}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={option.label}
-              onPress={() => onChange(option.value)}
-              onLayout={(event) => {
-                const { x, width } = event.nativeEvent.layout;
-                setFrames((current) => {
-                  const known = current[option.value];
-                  return known && known.x === x && known.width === width
-                    ? current
-                    : { ...current, [option.value]: { x, width } };
-                });
-              }}
-              style={styles.segment}
-            >
-              {option.icon && (
-                <Icon name={option.icon} size={16} color={on ? "text" : "textMuted"} />
-              )}
-              <Text
-                variant="bodyS"
-                color={on ? "text" : "textMuted"}
-                numberOfLines={1}
-                maxFontSizeMultiplier={fontScale.tabLabelMax}
-                style={styles.segmentLabel}
+        {layout.rows.flatMap((row, rowIndex) => [
+          // A row after the first starts on a line of its own.
+          ...(rowIndex > 0 ? [<View key={`break-${rowIndex}`} style={styles.segmentBreak} />] : []),
+          ...row.options.map((index) => {
+            const option = options[index]!;
+            const on = option.value === value;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={option.label}
+                onPress={() => onChange(option.value)}
+                onLayout={(event) => {
+                  const { x, y, width, height } = event.nativeEvent.layout;
+                  setFrames((current) => {
+                    const known = current[option.value];
+                    return known &&
+                      known.x === x &&
+                      known.y === y &&
+                      known.width === width &&
+                      known.height === height
+                      ? current
+                      : { ...current, [option.value]: { x, y, width, height } };
+                  });
+                }}
+                style={[
+                  styles.segment,
+                  row.equal ? styles.segmentEqual : styles.segmentByLabel,
+                  { paddingHorizontal: layout.paddingX },
+                ]}
               >
-                {option.label}
+                {option.icon && (
+                  <Icon name={option.icon} size={SEGMENT_ICON} color={on ? "text" : "textMuted"} />
+                )}
+                <Text
+                  variant="bodyS"
+                  color={on ? "text" : "textMuted"}
+                  numberOfLines={2}
+                  maxFontSizeMultiplier={fontScale.tabLabelMax}
+                  style={[styles.segmentLabel, scaled]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          }),
+        ])}
+      </View>
+      {(hints.length > 0 || aside) && (
+        <View style={[styles.segmentFoot, stacked && styles.segmentFootStacked]}>
+          {/* Every hint beside the aside and across the whole width: the
+              widths here do not depend on where the aside is, so the choice
+              cannot swing back and forth. */}
+          <View {...measureOnly} style={[styles.hintMeasureClip, { right: asideRoom }]}>
+            <View style={styles.hintMeasureColumn}>
+              <Text
+                variant="caption"
+                onLayout={(event) =>
+                  setHintHeights(remember("line", event.nativeEvent.layout.height))
+                }
+              >
+                {"А"}
               </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-      {hinted && (
-        <Text variant="caption" color="textMuted" numberOfLines={1} style={styles.segmentHint}>
-          {options.find((option) => option.value === value)?.hint ?? " "}
-        </Text>
+              {hints.map((hint) => (
+                <Text
+                  key={hint}
+                  variant="caption"
+                  onLayout={(event) =>
+                    setHintHeights(remember(`beside:${hint}`, event.nativeEvent.layout.height))
+                  }
+                >
+                  {hint}
+                </Text>
+              ))}
+            </View>
+          </View>
+          <View {...measureOnly} style={styles.hintMeasureClip}>
+            <View style={styles.hintMeasureColumn}>
+              {hints.map((hint) => (
+                <Text
+                  key={hint}
+                  variant="caption"
+                  onLayout={(event) =>
+                    setHintHeights(remember(`full:${hint}`, event.nativeEvent.layout.height))
+                  }
+                >
+                  {hint}
+                </Text>
+              ))}
+            </View>
+          </View>
+          {hints.length > 0 && (
+            <Text
+              variant="caption"
+              color="textMuted"
+              testID="segments-hint"
+              style={[
+                stacked ? styles.segmentHintAcross : styles.segmentHint,
+                { minHeight: hintHeight },
+              ]}
+            >
+              {options.find((option) => option.value === value)?.hint ?? ""}
+            </Text>
+          )}
+          {aside && (
+            <View
+              style={stacked ? styles.segmentAsideUnder : styles.segmentAside}
+              onLayout={(event) => setAsideWidth(event.nativeEvent.layout.width)}
+            >
+              {aside}
+            </View>
+          )}
+        </View>
       )}
     </View>
   );
@@ -638,24 +805,28 @@ const styles = StyleSheet.create({
   // zero box that clips it, so it neither shows nor widens anything.
   measureClip: { position: "absolute", left: 0, top: 0, width: 0, height: 0, overflow: "hidden" },
   measureRow: { position: "absolute", left: 0, top: 0, width: 4000, flexDirection: "row" },
-  segmentsBlock: { gap: 6, alignItems: "flex-start", alignSelf: "stretch", minWidth: 0 },
-  segments: { flexGrow: 0, maxWidth: "100%", borderRadius: radius.s },
-  segmentsContent: { minHeight: size.segments, padding: segmentMetrics.inset },
+  segmentsBlock: { gap: 6, alignSelf: "stretch", minWidth: 0 },
+  segments: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    minHeight: size.segments,
+    padding: segmentMetrics.inset,
+    borderRadius: radius.s,
+  },
   segment: {
-    flexGrow: 0,
-    flexShrink: 0,
     flexDirection: "row",
     minHeight: size.segments - 2 * segmentMetrics.inset,
-    paddingHorizontal: segmentMetrics.paddingX,
     paddingVertical: 4,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: SEGMENT_GAP,
   },
+  segmentEqual: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
+  segmentByLabel: { flexGrow: 1, flexShrink: 0, flexBasis: "auto" },
+  segmentBreak: { flexBasis: "100%", height: 0 },
   segmentThumb: {
     position: "absolute",
-    top: segmentMetrics.inset,
-    bottom: segmentMetrics.inset,
+    top: 0,
     left: 0,
     borderRadius: radius.s,
     borderWidth: line.width,
@@ -664,7 +835,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: fontFamily.native[typography.label.fontWeight],
   },
-  segmentHint: { alignSelf: "stretch" },
+  segmentFoot: { flexDirection: "row", alignItems: "flex-start", gap: SEGMENT_FOOT_GAP },
+  segmentFootStacked: { flexDirection: "column", gap: SEGMENT_FOOT_STACK_GAP },
+  segmentHint: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
+  segmentHintAcross: { alignSelf: "stretch" },
+  segmentAside: { flexShrink: 0 },
+  segmentAsideUnder: { alignSelf: "flex-end" },
+  // Hints at the width of their place: the clip spans it, the column under it is unbounded.
+  hintMeasureClip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 0,
+    overflow: "hidden",
+  },
+  hintMeasureColumn: { position: "absolute", left: 0, right: 0, top: 0 },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",

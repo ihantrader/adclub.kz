@@ -184,27 +184,25 @@ export function ItemListScreen({
         <>
           <CatalogHeader onAddCar={onAddCar} services={services} />
           <View style={styles.controls}>
-            <View style={styles.sortRow}>
-              <View style={styles.sortCell}>
-                <Segments
-                  label={t("catalog.sort")}
-                  value={sort}
-                  onChange={setSort}
-                  options={sorts.map((value) => ({
-                    value,
-                    label: t(SORT_TEXT[value]),
-                    hint: t(SORT_HINT[value]),
-                  }))}
-                />
-              </View>
-              {!services && (
-                <View style={styles.filterChip}>
+            {/* The sorts across the whole width; under them the hint, and
+                «Фильтры (N)» on its right (TASK-078.A). */}
+            <Segments
+              label={t("catalog.sort")}
+              value={sort}
+              onChange={setSort}
+              options={sorts.map((value) => ({
+                value,
+                label: t(SORT_TEXT[value]),
+                hint: t(SORT_HINT[value]),
+              }))}
+              aside={
+                services ? undefined : (
                   <Chip icon="filters" selected={count > 0} onPress={openFilters}>
                     {count > 0 ? t("catalog.filtersCount", { n: count }) : t("catalog.filters")}
                   </Chip>
-                </View>
-              )}
-            </View>
+                )
+              }
+            />
           </View>
         </>
       }
@@ -371,10 +369,6 @@ export function ItemListScreen({
 
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: layout.screenPadding, paddingTop: 8 },
-  sortRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  // The segments take what the chip leaves and scroll inside it; the hint ends in an ellipsis.
-  sortCell: { flex: 1, minWidth: 0 },
-  filterChip: { paddingTop: 2 },
   // The rows are a card group inside the fields of the screen (M9).
   list: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: layout.blockGap },
   more: { paddingVertical: layout.cardPadding },

@@ -1,5 +1,5 @@
 import { StyleSheet, View } from "react-native";
-import { Button, Icon, IconBadge, Sheet, Text } from "../../design-system";
+import { Button, Icon, Sheet, Text } from "../../design-system";
 import { useT } from "../../state/language";
 
 /**
@@ -22,9 +22,8 @@ export function ClubAccessSheet({ visible, onClose }: { visible: boolean; onClos
       closeLabel={t("common.close")}
     >
       <View style={styles.content}>
-        <IconBadge size={28}>
-          <Icon name="lock" size={28} color="accent" />
-        </IconBadge>
+        {/* The lock alone, without a plate — one rule for every icon of a state (TASK-078). */}
+        <Icon name="lock" size={32} color="accent" />
         <Text color="textMuted">{t("club.text")}</Text>
         <Button onPress={onClose}>{t("club.ok")}</Button>
       </View>

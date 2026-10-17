@@ -1,5 +1,3 @@
-import { StyleSheet } from "react-native";
-import { Text } from "../design-system";
 import { CarAddingActions } from "../navigation/car-adding";
 import { useVehicleMakes } from "../services/use-vehicles";
 import { useT } from "../state/language";
@@ -12,7 +10,8 @@ import { FirstRunLayout } from "./FirstRunLayout";
  *
  * Since TASK-057 (D-064) the car is added by a photo of its registration
  * certificate — the camera first, the gallery next to it; the list appears
- * only after recognition did not work (`CarAddingActions`). Whatever the
+ * only after recognition did not work (`CarAddingActions`). T-GAR-02, about
+ * the photo, stands with the buttons it is about (TASK-078). Whatever the
  * way, the steps M-GAR-03 and the final step are the garage's own.
  */
 export function FirstRunCarScreen() {
@@ -26,16 +25,8 @@ export function FirstRunCarScreen() {
       icon="car"
       title={t("start.carTitle")}
       text={t("start.carText")}
-      note={
-        <Text variant="bodyS" color="textMuted" style={styles.center}>
-          {t("doc.privacy")}
-        </Text>
-      }
+      actionsNote={t("doc.privacy")}
       actions={<CarAddingActions origin="first-run" />}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  center: { textAlign: "center" },
-});

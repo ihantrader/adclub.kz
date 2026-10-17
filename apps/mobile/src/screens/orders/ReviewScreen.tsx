@@ -1,5 +1,4 @@
 import type { UserOrder } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { randomUUID } from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +9,7 @@ import {
   DataState,
   OfflineBanner,
   Screen,
+  ScreenBody,
   Section,
   SkeletonList,
   StarsInput,
@@ -27,6 +27,7 @@ import {
   sentText,
   type ReviewFailure,
 } from "../../orders/order-feedback";
+import { joinDot } from "../../catalog/format";
 import { apiClient } from "../../services/api";
 import { orderAnswers, orderRequestKey } from "../../services/order-answers";
 import { useOnline } from "../../services/use-network";
@@ -152,11 +153,11 @@ export function ReviewScreen({ route, navigation }: Props) {
         order && editable ? (
           <>
             {!online ? (
-              <Text variant="caption" color="textMuted" style={styles.center}>
+              <Text variant="caption" color="textMuted">
                 {t("order.needsNetwork")}
               </Text>
             ) : mode === "new" && score === null ? (
-              <Text variant="caption" color="textMuted" style={styles.center}>
+              <Text variant="caption" color="textMuted">
                 {t("review.scoreRequired")}
               </Text>
             ) : null}
@@ -191,22 +192,23 @@ export function ReviewScreen({ route, navigation }: Props) {
         }}
       >
         {order && (
-          <View style={styles.body}>
-            <View>
-              <Text variant="bodyStrong">{order.supplier.name}</Text>
-              <Text variant="bodyS" color="textMuted">
-                {t("order.title", { number: order.number })} · {order.item.name.text}
-              </Text>
-            </View>
-            <Section title={t("review.scoreTitle")}>
-              <StarsInput
-                value={shownScore}
-                starLabel={(n) => t("review.scoreLabel", { n })}
-                disabled={mode === "edit"}
-                {...(mode === "new" ? { onChange: setScore } : {})}
-              />
-            </Section>
-            <View>
+          <ScreenBody>
+            <View style={styles.stack}>
+              <View>
+                <Text variant="bodyStrong">{order.supplier.name}</Text>
+                <Text variant="bodyS" color="textMuted">
+                  {joinDot([t("order.title", { number: order.number }), order.item.name.text])}
+                </Text>
+              </View>
+              <Section title={t("review.scoreTitle")}>
+                <StarsInput
+                  value={shownScore}
+                  starLabel={(n) => t("review.scoreLabel", { n })}
+                  disabled={mode === "edit"}
+                  {...(mode === "new" ? { onChange: setScore } : {})}
+                />
+              </Section>
+              {/* The counter stands in the corner of the field (TASK-078 M-ORD-05). */}
               <TextField
                 label={t(mode === "edit" ? "review.editTextLabel" : "review.textLabel")}
                 value={text}
@@ -214,38 +216,36 @@ export function ReviewScreen({ route, navigation }: Props) {
                 multiline
                 maxLength={maxLength}
                 hint={t("review.hint")}
+                counter={{
+                  count: text.length,
+                  max: maxLength,
+                  text: t("feedback.counter", { n: text.length, max: maxLength }),
+                }}
               />
-              <Text
-                variant="caption"
-                color={text.length > maxLength ? "danger" : "textMuted"}
-                style={styles.counter}
-              >
-                {t("feedback.counter", { n: text.length, max: maxLength })}
-              </Text>
+              {mode === "edit" && (
+                <Text variant="bodyS" color="textMuted">
+                  {t("review.editOnce")}
+                </Text>
+              )}
+              {failure && failure.kind !== "session_ended" && (
+                <Banner
+                  tone="warning"
+                  action={
+                    failure.kind === "network" || failure.kind === "other" ? (
+                      <Button variant="text" size="m" icon="refresh" onPress={() => void send()}>
+                        {t("common.retry")}
+                      </Button>
+                    ) : undefined
+                  }
+                >
+                  {t(
+                    reviewFailureKeys[failure.kind],
+                    failure.kind === "rate_limited" ? { minutes: failure.minutes } : {},
+                  )}
+                </Banner>
+              )}
             </View>
-            {mode === "edit" && (
-              <Text variant="bodyS" color="textMuted">
-                {t("review.editOnce")}
-              </Text>
-            )}
-            {failure && failure.kind !== "session_ended" && (
-              <Banner
-                tone="warning"
-                action={
-                  failure.kind === "network" || failure.kind === "other" ? (
-                    <Button variant="text" size="m" icon="refresh" onPress={() => void send()}>
-                      {t("common.retry")}
-                    </Button>
-                  ) : undefined
-                }
-              >
-                {t(
-                  reviewFailureKeys[failure.kind],
-                  failure.kind === "rate_limited" ? { minutes: failure.minutes } : {},
-                )}
-              </Banner>
-            )}
-          </View>
+          </ScreenBody>
         )}
       </DataState>
     </Screen>
@@ -253,7 +253,5 @@ export function ReviewScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
-  center: { textAlign: "center" },
-  counter: { textAlign: "right", marginTop: 4 },
+  stack: { gap: 16 },
 });

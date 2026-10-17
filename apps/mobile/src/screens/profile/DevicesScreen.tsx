@@ -1,8 +1,6 @@
 import type { SessionSummary } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 import {
   Button,
   DataState,
@@ -10,6 +8,8 @@ import {
   ListGroup,
   ListRow,
   Screen,
+  ScreenBody,
+  Section,
   SkeletonList,
   useToast,
 } from "../../design-system";
@@ -17,16 +17,7 @@ import type { ProfileStackParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
 import { apiClient } from "../../services/api";
 import { useT, type LanguageContextValue } from "../../state/language";
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** A plain, locale-independent "27.09.2026 14:05" — no dependence on the device's ICU data. */
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { useNow, useOrderTime } from "../orders/parts";
 
 function deviceTitle(session: SessionSummary, t: LanguageContextValue["t"]): string {
   if (session.deviceName) return session.deviceName;
@@ -44,12 +35,20 @@ function deviceTitle(session: SessionSummary, t: LanguageContextValue["t"]): str
   }
 }
 
-/** M-PRO-03 «Устройства»: every session, "Это устройство", end one or all others (T-PRO-02). */
+/**
+ * M-PRO-03 «Устройства»: every session, in two groups — «Это устройство» and
+ * «Другие устройства» (TASK-078); the last activity in the one way of
+ * writing a moment (M15); «Завершить» on every other session is a row action
+ * of the `text` colour (M16), the danger is kept for «Завершить на всех
+ * других» (T-PRO-02).
+ */
 export function DevicesScreen({
   navigation,
 }: NativeStackScreenProps<ProfileStackParams, "profile-devices">) {
   const t = useT();
   const { show } = useToast();
+  const now = useNow();
+  const time = useOrderTime();
   useLeaveWhenSignedOut(navigation);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -96,6 +95,8 @@ export function DevicesScreen({
 
   const status = sessions ? "ready" : failed ? "error" : "loading";
   const endingSession = sessions?.find((session) => session.id === endingId) ?? null;
+  const current = sessions?.filter((session) => session.current) ?? [];
+  const others = sessions?.filter((session) => !session.current) ?? [];
 
   return (
     <Screen
@@ -112,33 +113,51 @@ export function DevicesScreen({
         }}
         empty={{ icon: "devices", title: t("state.errorTitle") }}
       >
-        <View style={styles.content}>
-          <ListGroup>
-            {sessions?.map((session, index) => (
-              <ListRow
-                key={session.id}
-                first={index === 0}
-                icon="devices"
-                title={deviceTitle(session, t)}
-                subtitle={
-                  session.current ? t("profile.thisDevice") : formatDateTime(session.lastUsedAt)
-                }
-                trailing={
-                  session.current ? undefined : (
-                    <Button variant="text" size="m" onPress={() => setEndingId(session.id)}>
-                      {t("profile.endSession")}
-                    </Button>
-                  )
-                }
-              />
-            ))}
-          </ListGroup>
-          {sessions && sessions.length > 1 && (
-            <Button variant="secondary" destructive onPress={() => setConfirmEndOthers(true)}>
-              {t("profile.endOthers")}
-            </Button>
+        <ScreenBody>
+          {current.length > 0 && (
+            <Section first title={t("profile.thisDevice")}>
+              <ListGroup>
+                {current.map((session, index) => (
+                  <ListRow
+                    key={session.id}
+                    first={index === 0}
+                    icon="devices"
+                    title={deviceTitle(session, t)}
+                    subtitle={time.when(session.lastUsedAt, null, now)}
+                  />
+                ))}
+              </ListGroup>
+            </Section>
           )}
-        </View>
+          {others.length > 0 && (
+            <Section first={current.length === 0} title={t("profile.otherDevices")}>
+              <ListGroup>
+                {others.map((session, index) => (
+                  <ListRow
+                    key={session.id}
+                    first={index === 0}
+                    icon="devices"
+                    title={deviceTitle(session, t)}
+                    subtitle={time.when(session.lastUsedAt, null, now)}
+                    trailing={
+                      <Button
+                        variant="text"
+                        tone="neutral"
+                        size="m"
+                        onPress={() => setEndingId(session.id)}
+                      >
+                        {t("profile.endSession")}
+                      </Button>
+                    }
+                  />
+                ))}
+              </ListGroup>
+              <Button variant="secondary" destructive onPress={() => setConfirmEndOthers(true)}>
+                {t("profile.endOthers")}
+              </Button>
+            </Section>
+          )}
+        </ScreenBody>
       </DataState>
 
       <Dialog
@@ -183,7 +202,3 @@ export function DevicesScreen({
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
-});

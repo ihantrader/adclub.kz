@@ -2,7 +2,7 @@ import { layout, type IconName } from "@adclub/ui-core";
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Icon, IconBadge, Text, useTheme } from "../design-system";
+import { ButtonLayoutProvider, Icon, Text, useTheme } from "../design-system";
 
 /**
  * The layout of a step of the first run (M-START-04, M-START-05): the icon, the
@@ -11,7 +11,9 @@ import { Icon, IconBadge, Text, useTheme } from "../design-system";
  * changes what is said and nothing else — the icon, the title and the buttons
  * stay where they were. The middle scrolls when it does not fit (the largest
  * system font on a narrow phone, TASK-030.A) instead of running under the
- * buttons.
+ * buttons. The icon stands alone, 48 `accent`, without a plate — the same rule
+ * as the empty states (TASK-078); a note that belongs to the actions
+ * (`actionsNote`) stands with them, as a caption.
  */
 export function FirstRunLayout({
   banner,
@@ -19,6 +21,7 @@ export function FirstRunLayout({
   title,
   text,
   note,
+  actionsNote,
   actions,
   children,
 }: {
@@ -29,6 +32,8 @@ export function FirstRunLayout({
   text: string;
   /** A line under the text, when something happened (the city could not be found). */
   note?: ReactNode;
+  /** A caption above the actions, about them (T-GAR-02). */
+  actionsNote?: string;
   actions: ReactNode;
   /** Overlays that belong to the step (its sheet). */
   children?: ReactNode;
@@ -38,9 +43,7 @@ export function FirstRunLayout({
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
       {banner}
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <IconBadge size={48}>
-          <Icon name={icon} size={48} color="accent" />
-        </IconBadge>
+        <Icon name={icon} size={48} color="accent" />
         <Text variant="titleL" accessibilityRole="header" style={styles.center}>
           {title}
         </Text>
@@ -49,7 +52,14 @@ export function FirstRunLayout({
         </Text>
         {note}
       </ScrollView>
-      <View style={styles.actions}>{actions}</View>
+      <View style={styles.actions}>
+        {actionsNote !== undefined && (
+          <Text variant="caption" color="textMuted" style={styles.center}>
+            {actionsNote}
+          </Text>
+        )}
+        <ButtonLayoutProvider align="stretch">{actions}</ButtonLayoutProvider>
+      </View>
       {children}
     </SafeAreaView>
   );
@@ -67,5 +77,10 @@ const styles = StyleSheet.create({
     paddingVertical: layout.blockGap,
   },
   center: { textAlign: "center" },
-  actions: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: 16, gap: 8 },
+  actions: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: 12,
+    paddingBottom: 16,
+    gap: 12,
+  },
 });

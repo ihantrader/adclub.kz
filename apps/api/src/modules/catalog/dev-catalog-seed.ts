@@ -39,6 +39,12 @@ interface Names {
 interface SeedSubcategory {
   code: string;
   names: Names;
+  /**
+   * A subcategory of services has an icon of its own (TASK-078 M8): it is a
+   * tile of M-CAT-01 and the placeholder of its items in orders, where the
+   * node's icon would say nothing. Subcategories of goods take their node's.
+   */
+  icon?: CategoryIcon;
   compatibilityRequired?: boolean;
   attributes?: CreateAttributeBody[];
 }
@@ -267,9 +273,14 @@ export const devCatalogTree: readonly SeedNode[] = [
     icon: "tool",
     names: { ru: "Техобслуживание", kk: "Техникалық қызмет", en: "Maintenance" },
     children: [
-      { code: "oil_change", names: { ru: "Замена масла", kk: "Май ауыстыру", en: "Oil change" } },
+      {
+        code: "oil_change",
+        icon: "droplet",
+        names: { ru: "Замена масла", kk: "Май ауыстыру", en: "Oil change" },
+      },
       {
         code: "brake_pad_replacement",
+        icon: "disc",
         names: {
           ru: "Замена тормозных колодок",
           kk: "Тежегіш қалыптарын ауыстыру",
@@ -286,6 +297,7 @@ export const devCatalogTree: readonly SeedNode[] = [
     children: [
       {
         code: "computer_diagnostics",
+        icon: "gauge",
         names: {
           ru: "Компьютерная диагностика",
           kk: "Компьютерлік диагностика",
@@ -302,6 +314,7 @@ export const devCatalogTree: readonly SeedNode[] = [
     children: [
       {
         code: "seasonal_tire_change",
+        icon: "wheel",
         names: {
           ru: "Сезонная замена шин",
           kk: "Шиналарды маусымдық ауыстыру",
@@ -310,6 +323,7 @@ export const devCatalogTree: readonly SeedNode[] = [
       },
       {
         code: "wheel_balancing",
+        icon: "gauge",
         names: { ru: "Балансировка колёс", kk: "Дөңгелек теңгерімі", en: "Wheel balancing" },
       },
     ],
@@ -578,6 +592,7 @@ export class DevCatalogSeed {
           kind: node.kind,
           parentId: nodeId,
           names: child.names,
+          ...(child.icon ? { icon: child.icon } : {}),
           compatibilityRequired: child.compatibilityRequired ?? false,
         });
         for (const spec of child.attributes ?? []) {
@@ -660,6 +675,18 @@ export class DevCatalogSeed {
           OPERATOR,
         );
         result.icons.push(spec.code);
+      }
+      // A subcategory with an icon of its own in the tree (services, TASK-078 M8).
+      for (const childSpec of spec.children) {
+        const child = node?.children.find((candidate) => candidate.code === childSpec.code);
+        if (childSpec.icon && child && child.icon !== childSpec.icon) {
+          await this.catalog.updateCategory(
+            child.id,
+            { expectedVersion: child.version, icon: childSpec.icon },
+            OPERATOR,
+          );
+          result.icons.push(childSpec.code);
+        }
       }
     }
     this.logger.log(

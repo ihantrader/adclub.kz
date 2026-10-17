@@ -1,5 +1,5 @@
 import type { ShowcaseListSort } from "@adclub/contracts";
-import { layout, size } from "@adclub/ui-core";
+import { layout } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
@@ -65,6 +65,10 @@ export interface ItemListScreenProps {
  * prices and their receipt dates. Paging is the server's cursor, so the
  * list neither loses nor repeats an item while offers change underneath.
  *
+ * The pinned header is short (TASK-078 M10): the car and the city, then the
+ * sorts with «Фильтры (N)» on the same line, and one line of what the sort
+ * means. The rows make one card group inside the fields of the screen (M9).
+ *
  * The list does not jump. Changing the sort or the filters keeps the rows
  * on screen under the refresh line until the new ones arrive, and only then
  * — a reason: the order is new — goes back to the top; a reload of the same
@@ -92,6 +96,7 @@ export function ItemListScreen({
   // is then an ordinary event instead of a state to synchronise.
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [sheet, setSheet] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const openFilters = () => {
     setDraftFilters(filters);
     setSheet(true);
@@ -174,39 +179,43 @@ export function ItemListScreen({
       // Another sort or other filters: the new rows fade in over the old ones.
       contentKey={list.generation}
       scroll={false}
+      scrolled={scrolled}
       header={
         <>
           <CatalogHeader onAddCar={onAddCar} services={services} />
           <View style={styles.controls}>
-            <Segments
-              label={t("catalog.sort")}
-              value={sort}
-              onChange={setSort}
-              options={sorts.map((value) => ({
-                value,
-                label: t(SORT_TEXT[value]),
-                hint: t(SORT_HINT[value]),
-              }))}
-            />
-            {!services && (
-              <View style={styles.filterRow}>
-                <Chip icon="filters" selected={count > 0} onPress={openFilters}>
-                  {count > 0 ? t("catalog.filtersCount", { n: count }) : t("catalog.filters")}
-                </Chip>
-                {count > 0 && (
-                  <Button variant="text" size="m" onPress={() => setFilters(EMPTY_FILTERS)}>
-                    {t("catalog.reset")}
-                  </Button>
-                )}
+            <View style={styles.sortRow}>
+              <View style={styles.sortCell}>
+                <Segments
+                  label={t("catalog.sort")}
+                  value={sort}
+                  onChange={setSort}
+                  options={sorts.map((value) => ({
+                    value,
+                    label: t(SORT_TEXT[value]),
+                    hint: t(SORT_HINT[value]),
+                  }))}
+                />
               </View>
-            )}
+              {!services && (
+                <View style={styles.filterChip}>
+                  <Chip icon="filters" selected={count > 0} onPress={openFilters}>
+                    {count > 0 ? t("catalog.filtersCount", { n: count }) : t("catalog.filters")}
+                  </Chip>
+                </View>
+              )}
+            </View>
           </View>
         </>
       }
     >
       <DataState
         status={status}
-        skeleton={<SkeletonList rows={5} label={t("common.loading")} />}
+        skeleton={
+          <View style={styles.list}>
+            <SkeletonList rows={5} label={t("common.loading")} />
+          </View>
+        }
         error={errorState()}
         offline={{
           title: t("state.offline"),
@@ -223,6 +232,9 @@ export function ItemListScreen({
           ref={listRef}
           data={list.items}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          onScroll={(event) => setScrolled(event.nativeEvent.contentOffset.y > 4)}
+          scrollEventThrottle={32}
           onEndReachedThreshold={0.4}
           onEndReached={() => list.hasMore && list.loadMore()}
           ListFooterComponent={
@@ -234,6 +246,7 @@ export function ItemListScreen({
             <ItemRow
               {...(services ? { serviceModel: car.model.label } : {})}
               first={index === 0}
+              last={index === list.items.length - 1}
               name={item.name.text}
               brand={item.brand?.name ?? null}
               article={item.article}
@@ -357,9 +370,12 @@ export function ItemListScreen({
 }
 
 const styles = StyleSheet.create({
-  controls: { gap: 8, paddingHorizontal: layout.screenPadding, paddingBottom: 8 },
-  // The height of the tallest thing that can be in the row («Сбросить»), so
-  // applying the first filter or resetting the last does not move the list.
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: size.button.m },
+  controls: { paddingHorizontal: layout.screenPadding, paddingTop: 8 },
+  sortRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  // The segments take what the chip leaves and scroll inside it; the hint ends in an ellipsis.
+  sortCell: { flex: 1, minWidth: 0 },
+  filterChip: { paddingTop: 2 },
+  // The rows are a card group inside the fields of the screen (M9).
+  list: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: layout.blockGap },
   more: { paddingVertical: layout.cardPadding },
 });

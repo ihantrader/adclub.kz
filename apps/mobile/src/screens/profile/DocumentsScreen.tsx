@@ -1,13 +1,14 @@
-import { layout } from "@adclub/ui-core";
+import { formatKzPhone } from "@adclub/domain";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { Linking, Platform, StyleSheet, View } from "react-native";
+import { Linking, Platform } from "react-native";
 import { appInfo, runEnvironment } from "../../config/environment";
 import {
   Icon,
   ListGroup,
   ListRow,
   Screen,
+  ScreenBody,
   Section,
   SkeletonList,
   Text,
@@ -25,22 +26,17 @@ import { useClubInfo } from "../../services/use-club-info";
 import { useT } from "../../state/language";
 import { useSession } from "../../state/session-provider";
 import { CallSheet } from "../orders/CallSheet";
-
-const pad = (value: number) => String(value).padStart(2, "0");
-
-/** «16.10.2026» — locale-independent, like the dates of «Устройства». */
-function formatDay(iso: string): string {
-  const date = new Date(iso);
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
-}
+import { useNow, useOrderTime } from "../orders/parts";
 
 type LinkRow = Exclude<DocumentsRow, { kind: "consents" }>;
 
 /**
  * M-PRO-06 «Документы и поддержка» (TASK-077), for a guest and a member:
  * the terms and the privacy policy, «Мои согласия» (what was accepted and
- * when — signed in only), «Связаться с клубом», the version of the app.
- * An item whose address the club has not set is not shown at all.
+ * when — signed in only), «Связаться с клубом», the version of the app as
+ * the last row of the group. An item whose address the club has not set is
+ * not shown; while there are none, the screen says documents will appear
+ * here (TASK-078).
  */
 export function DocumentsScreen({
   navigation,
@@ -49,12 +45,15 @@ export function DocumentsScreen({
   const { show } = useToast();
   const session = useSession();
   const info = useClubInfo();
+  const now = useNow();
+  const time = useOrderTime();
   const [callSheet, setCallSheet] = useState<CallOption[] | null>(null);
   const rows = documentsRows(info.data, session.status === "signed_in");
   const links = rows.filter((row): row is LinkRow => row.kind !== "consents");
   const consents = rows.some((row) => row.kind === "consents");
   const profile = session.profile;
   const phoneShare = profile?.phoneShareConsent ?? null;
+  const loading = info.status === "loading" && !info.data;
 
   const open = (url: string) => {
     Linking.openURL(url).catch(() => show(t("documents.openFailed")));
@@ -85,13 +84,23 @@ export function DocumentsScreen({
       title={t("profile.documents")}
       back={{ label: t("common.back"), onPress: navigation.goBack }}
     >
-      <View style={styles.content}>
-        {info.status === "loading" && !info.data && (
-          <SkeletonList rows={2} label={t("common.loading")} />
-        )}
-        {links.length > 0 && (
-          <Section>
+      <ScreenBody>
+        <Section first>
+          {loading ? (
+            <SkeletonList rows={2} label={t("common.loading")} />
+          ) : (
             <ListGroup>
+              {links.length === 0 && (
+                <ListRow
+                  first
+                  icon="info"
+                  title={
+                    <Text variant="body" color="textMuted">
+                      {t("documents.empty")}
+                    </Text>
+                  }
+                />
+              )}
               {links.map((row, index) =>
                 row.kind === "contact" ? (
                   <ListRow
@@ -99,7 +108,7 @@ export function DocumentsScreen({
                     first={index === 0}
                     icon="phone"
                     title={t("documents.contact")}
-                    subtitle={row.phone ?? undefined}
+                    subtitle={row.phone ? formatKzPhone(row.phone) : undefined}
                     navigates
                     onPress={() => void contact(row.phone, row.url)}
                   />
@@ -114,9 +123,17 @@ export function DocumentsScreen({
                   />
                 ),
               )}
+              <ListRow
+                title={
+                  <Text variant="body" color="textMuted">
+                    {t("profile.version")}
+                  </Text>
+                }
+                trailing={<Text variant="bodyS">{appInfo.version}</Text>}
+              />
             </ListGroup>
-          </Section>
-        )}
+          )}
+        </Section>
         {consents && (
           <Section title={t("documents.consents")}>
             <ListGroup>
@@ -127,7 +144,7 @@ export function DocumentsScreen({
                 subtitle={
                   phoneShare
                     ? t("documents.phoneShareGiven", {
-                        date: formatDay(phoneShare.at),
+                        date: time.whenDay(phoneShare.at, null, now),
                         version: phoneShare.version,
                       })
                     : t("documents.phoneShareMissing")
@@ -145,10 +162,7 @@ export function DocumentsScreen({
             </ListGroup>
           </Section>
         )}
-        <Text variant="caption" color="textMuted" style={styles.version}>
-          {t("profile.version")}: {appInfo.version}
-        </Text>
-      </View>
+      </ScreenBody>
 
       <CallSheet
         visible={callSheet !== null}
@@ -159,8 +173,3 @@ export function DocumentsScreen({
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 8 },
-  version: { paddingTop: layout.blockGap },
-});

@@ -173,7 +173,7 @@ function CatalogItem({
   route,
   navigation,
 }: NativeStackScreenProps<CatalogStackParams, "catalog-item">) {
-  const { completeEngine } = useGarageJump();
+  const { addCar, completeEngine } = useGarageJump();
   return (
     <ItemScreen
       itemId={route.params.itemId}
@@ -181,6 +181,7 @@ function CatalogItem({
       onBack={navigation.goBack}
       onOpenItem={(item) => navigation.push("catalog-item", { itemId: item.id, title: item.name })}
       onCompleteCar={completeEngine}
+      onAddCar={addCar}
       {...(route.params.notice ? { notice: route.params.notice } : {})}
     />
   );

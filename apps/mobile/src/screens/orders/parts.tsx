@@ -3,8 +3,8 @@ import type { MobileTextKey } from "@adclub/i18n";
 import { layout, radius } from "@adclub/ui-core";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Badge, Icon, StatusBadge, Text, useTheme } from "../../design-system";
-import { formatTenge } from "../../catalog/format";
+import { Badge, Icon, IconLine, StatusBadge, Text, useTheme } from "../../design-system";
+import { formatTenge, joinDot } from "../../catalog/format";
 import { ItemPhoto } from "../catalog/parts";
 import { listStatusKey, orderStatusView, type OrderStateInput } from "../../orders/order-status";
 import {
@@ -13,6 +13,8 @@ import {
   dayText,
   deadlineText,
   updatedLabel,
+  whenDayText,
+  whenText,
   zonedParts,
 } from "../../orders/order-time";
 import { useLanguage } from "../../state/language";
@@ -37,6 +39,7 @@ export function useNow(): Date {
 export function useOrderTime() {
   const { t } = useLanguage();
   const monthName = (month: number) => t(`month.${month}` as MobileTextKey);
+  const words = { monthName, today: t("common.today"), yesterday: t("common.yesterday") };
   return {
     /** «15:30» today, «15:30, 15 марта» on another day — in the point's zone (the club's before it is known). */
     deadline: (iso: string, timeZone: string | null, now: Date) =>
@@ -48,6 +51,16 @@ export function useOrderTime() {
         ? { date: dayText(parts, monthName), time: clockText(parts) }
         : { date: "", time: "" };
     },
+    /**
+     * «сегодня, 15:27» / «16 октября, 15:27» / «16 октября 2025, 15:27» — a
+     * moment that already happened (a step of an order, a session), one way
+     * everywhere (TASK-078 M15).
+     */
+    when: (iso: string, timeZone: string | null, now: Date) =>
+      whenText(iso, timeZone ?? CLUB_TIME_ZONE, now, words) ?? "",
+    /** The day alone, the same way: «сегодня», «вчера», «16 октября». */
+    whenDay: (iso: string, timeZone: string | null, now: Date) =>
+      whenDayText(iso, timeZone ?? CLUB_TIME_ZONE, now, words) ?? "",
     /**
      * «12 октября в 15:00» — the time of a visit for a service (TASK-039.B;
      * SCREENS M-ORD-02 «Ждём вас 14 марта в 10:00»), always with its date.
@@ -78,10 +91,28 @@ export function useOrderTime() {
   };
 }
 
-/** The status of an order as a mark: text and icon, the colour of its group (DESIGN 7.8; never red). */
-export function OrderStatusMark({ order }: { order: OrderStateInput }) {
+/**
+ * The status of an order as a mark: text and icon, the colour of its group
+ * (DESIGN 7.8; never red). An order that waits for the user's word is one
+ * `warning` mark «Нужен ваш ответ» — not a neutral one and a warning one with
+ * the same words side by side (TASK-078 M-ORD-02).
+ */
+export function OrderStatusMark({
+  order,
+  needsAnswer,
+}: {
+  order: OrderStateInput;
+  needsAnswer?: boolean;
+}) {
   const { t } = useLanguage();
   const view = orderStatusView(order);
+  if (needsAnswer) {
+    return (
+      <Badge tone="warning" icon="alertTriangle">
+        {t("orders.needsAnswer")}
+      </Badge>
+    );
+  }
   return <StatusBadge group={view.group}>{t(listStatusKey(order))}</StatusBadge>;
 }
 
@@ -95,13 +126,23 @@ export interface OrderRowProps {
     id: string;
     quantity: number;
     total: number;
-    item: { name: { text: string }; photo: ItemPhotoImage | null };
+    item: {
+      name: { text: string };
+      photo: ItemPhotoImage | null;
+      type?: "part" | "generic" | "service";
+    };
     supplier: { name: string };
     /** TASK-038: the car of a visit for a service; absent — goods (or a copy from before). */
     serviceVisit?: { car: OrderCar } | null;
   };
-  /** The line under the item: the main date of an active order, the date of a finished one. */
-  dateLine?: string | null;
+  /** The icon of the item's category for the placeholder of a missing photo. */
+  icon?: Parameters<typeof ItemPhoto>[0]["icon"];
+  /**
+   * The line under the item: the main date of an active order — a deadline
+   * or a visit, with the clock — or the date a finished one ended, plain
+   * (TASK-078 M15: the clock is for what is still ahead).
+   */
+  dateLine?: { text: string; deadline: boolean } | null;
   /** «Нужен ваш ответ» (M-ORD-02). */
   needsAnswer?: boolean;
   onPress: () => void;
@@ -111,10 +152,18 @@ export interface OrderRowProps {
 
 /**
  * A card of «Мои заявки»: the photo of the item on the left like a row of
- * the catalog (TASK-030.A), then the status, the item and its quantity,
- * the supplier, the main date.
+ * the catalog (TASK-030.A), then the status, the item, its quantity (or the
+ * car of a visit) and the sum, the supplier, the main date — the same
+ * order for every kind of order (TASK-078), and a chevron: the card opens.
  */
-export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: OrderRowProps) {
+export function OrderRow({
+  order,
+  icon = null,
+  dateLine,
+  needsAnswer,
+  onPress,
+  footer,
+}: OrderRowProps) {
   const { t } = useLanguage();
   const { theme } = useTheme();
   return (
@@ -122,37 +171,39 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
       <Pressable
         accessibilityRole="button"
         onPress={onPress}
-        style={({ pressed }) => [styles.rowBody, pressed && { opacity: 0.7 }]}
+        style={({ pressed }) => [
+          styles.rowBody,
+          pressed && { backgroundColor: theme.colors.surfaceRaised },
+        ]}
       >
-        <ItemPhoto photo={order.item.photo} icon={null} />
+        <ItemPhoto photo={order.item.photo} icon={icon} kind={order.item.type ?? "generic"} />
         <View style={styles.rowText}>
           <View style={styles.rowTop}>
-            <OrderStatusMark order={order} />
-            {needsAnswer && (
-              <Badge tone="warning" icon="alertTriangle">
-                {t("orders.needsAnswer")}
-              </Badge>
-            )}
+            <OrderStatusMark order={order} needsAnswer={needsAnswer} />
           </View>
           <Text variant="bodyStrong" numberOfLines={3}>
             {order.item.name.text}
           </Text>
           <Text variant="bodyS" color="textMuted">
-            {(order.serviceVisit
-              ? [carText(order.serviceVisit.car), formatTenge(order.total)]
-              : [t("orders.quantityShort", { n: order.quantity }), formatTenge(order.total)]
-            ).join(" · ")}
+            {joinDot([
+              order.serviceVisit
+                ? carText(order.serviceVisit.car)
+                : t("orders.quantityShort", { n: order.quantity }),
+              formatTenge(order.total),
+            ])}
           </Text>
           <Text variant="bodyS">{order.supplier.name}</Text>
           {dateLine ? (
-            <View style={styles.dateLine}>
-              <Icon name="clock" size={16} color="textMuted" />
-              <Text variant="caption" color="textMuted" style={styles.shrink}>
-                {dateLine}
+            dateLine.deadline ? (
+              <IconLine icon="clock">{dateLine.text}</IconLine>
+            ) : (
+              <Text variant="caption" color="textMuted">
+                {dateLine.text}
               </Text>
-            </View>
+            )
           ) : null}
         </View>
+        <Icon name="chevronRight" size={20} color="textMuted" />
       </Pressable>
       {footer}
     </View>
@@ -162,9 +213,7 @@ export function OrderRow({ order, dateLine, needsAnswer, onPress, footer }: Orde
 const styles = StyleSheet.create({
   // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
   row: { borderRadius: radius.m, overflow: "hidden" },
-  rowBody: { flexDirection: "row", gap: 12, padding: layout.cardPadding },
+  rowBody: { flexDirection: "row", gap: 12, padding: layout.cardPadding, alignItems: "center" },
   rowText: { flex: 1, gap: 4 },
   rowTop: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 4 },
-  dateLine: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 2 },
-  shrink: { flexShrink: 1 },
 });

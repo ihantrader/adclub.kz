@@ -13,9 +13,11 @@ const centered = { textAlign: "center" } as const;
 /**
  * M-START-04, the first run: "Где вы находитесь?", "Определить
  * автоматически" (the system prompt only after the press) and "Выбрать из
- * списка". Whatever happens next — a detected city, a refusal, an unknown
- * city, a list that would not load — the run can be finished: the app never
- * gets stuck on this screen.
+ * списка" — a pair of buttons, 12 apart, neither with an icon (TASK-078 M18).
+ * T-START-05 is the text of the system's own location prompt, not a line of
+ * this screen. Whatever happens next — a detected city, a refusal, an
+ * unknown city, a list that would not load — the run can be finished: the
+ * app never gets stuck on this screen.
  */
 export function FirstRunCityScreen({ onDone }: { onDone: () => void }) {
   const t = useT();
@@ -54,12 +56,9 @@ export function FirstRunCityScreen({ onDone }: { onDone: () => void }) {
       }
       actions={
         <>
-          <Button icon="myLocation" disabled={cities.status !== "ready"} onPress={detect}>
+          <Button disabled={cities.status !== "ready"} onPress={detect}>
             {t("city.detect")}
           </Button>
-          <Text variant="caption" color="textMuted" style={centered}>
-            {t("city.detectHint")}
-          </Text>
           <Button variant="secondary" onPress={() => setSheet(true)}>
             {t("city.chooseFromList")}
           </Button>

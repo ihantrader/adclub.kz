@@ -11,14 +11,20 @@ import {
   Badge,
   Button,
   DataState,
+  hairline,
+  IconLine,
+  ListGroup,
   OfflineBanner,
   Rating,
   Screen,
+  ScreenBody,
   Section,
   SkeletonList,
   StarsInput,
   Text,
+  useTheme,
 } from "../../design-system";
+import { joinDot } from "../../catalog/format";
 import {
   reviewMonthText,
   shareText,
@@ -51,7 +57,7 @@ const PAGE = 20;
  */
 export function SupplierScreen({ route, navigation }: Props) {
   const { offerId, orderId } = route.params;
-  const { t, lang } = useLanguage();
+  const { t, tn, lang } = useLanguage();
   const online = useOnline();
   const session = useSession();
   const signIn = useSignIn();
@@ -103,6 +109,8 @@ export function SupplierScreen({ route, navigation }: Props) {
     }
   };
 
+  const name = profile ? supplierName(profile) : null;
+
   return (
     <Screen
       title={t("supplier.title")}
@@ -128,52 +136,53 @@ export function SupplierScreen({ route, navigation }: Props) {
         empty={{ icon: "store", title: t("supplier.unavailable") }}
       >
         {profile && (
-          <View style={styles.body}>
-            <View style={styles.head}>
-              <Text variant="title">{supplierName(profile) ?? t("item.supplierHidden")}</Text>
-              {profile.verifiedPartner && (
-                <View style={styles.verified}>
-                  <Badge tone="success" icon="circleCheck">
-                    {t("item.verifiedPartner")}
-                  </Badge>
-                  <Text variant="bodyS" color="textMuted">
-                    {t("supplier.verifiedNote")}
-                  </Text>
-                </View>
-              )}
-            </View>
+          <ScreenBody>
+            <Section first>
+              <View style={styles.head}>
+                {name ? (
+                  <Text variant="title">{name}</Text>
+                ) : (
+                  // T-CAT-06 with the lock (DESIGN 7.8).
+                  <IconLine icon="lock" variant="body" textColor="textMuted">
+                    {t("item.supplierHidden")}
+                  </IconLine>
+                )}
+                {profile.verifiedPartner && (
+                  <View style={styles.verified}>
+                    <Badge tone="accent" icon="progressCheck">
+                      {t("item.verifiedPartner")}
+                    </Badge>
+                    <Text variant="bodyS" color="textMuted">
+                      {t("supplier.verifiedNote")}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Section>
 
             <Section title={t("item.rating")}>
               <View style={styles.rating}>
                 <Rating
+                  large
                   value={profile.rating?.value ?? null}
                   count={profile.rating?.count ?? 0}
+                  countText={tn("supplier.ratings", profile.rating?.count ?? 0)}
                   emptyText={t("item.newSupplier")}
                   label={t("item.rating")}
                   locale={lang}
                 />
-                <View style={styles.share}>
-                  <Text variant="caption" color="textMuted">
-                    {t("supplier.responseLabel")}
-                  </Text>
-                  <Text variant="body">
-                    {shareText(profile.responsePercent, {
-                      share: (n) => t("supplier.responseShare", { n }),
-                      fewOrders: t("supplier.fewOrders"),
-                    })}
-                  </Text>
-                </View>
-                <View style={styles.share}>
-                  <Text variant="caption" color="textMuted">
-                    {t("supplier.onTimeLabel")}
-                  </Text>
-                  <Text variant="body">
-                    {shareText(profile.onTimePercent, {
-                      share: (n) => t("supplier.onTimeShare", { n }),
-                      fewOrders: t("supplier.fewOrders"),
-                    })}
-                  </Text>
-                </View>
+                <Text variant="body">
+                  {shareText(profile.responsePercent, {
+                    share: (n) => t("supplier.responseShare", { n }),
+                    fewOrders: t("supplier.fewOrders"),
+                  })}
+                </Text>
+                <Text variant="body">
+                  {shareText(profile.onTimePercent, {
+                    share: (n) => t("supplier.onTimeShare", { n }),
+                    fewOrders: t("supplier.fewOrders"),
+                  })}
+                </Text>
               </View>
             </Section>
 
@@ -183,7 +192,8 @@ export function SupplierScreen({ route, navigation }: Props) {
               ) : (
                 <View style={styles.membersOnly}>
                   <Text color="textMuted">{t("supplier.membersOnly")}</Text>
-                  <Button variant="secondary" onPress={askMembership}>
+                  {/* The one action of the screen: the main button (TASK-078). */}
+                  <Button onPress={askMembership}>
                     {reviewsView?.kind === "members-only" &&
                     (reviewsView.action === "sign-in" || reviewsView.action === "register")
                       ? t("auth.signIn")
@@ -192,7 +202,7 @@ export function SupplierScreen({ route, navigation }: Props) {
                 </View>
               )}
             </Section>
-          </View>
+          </ScreenBody>
         )}
       </DataState>
       <SignInSheet
@@ -208,6 +218,7 @@ export function SupplierScreen({ route, navigation }: Props) {
 /** The published reviews of a supplier the server showed, newest first, a page at a time. */
 function ReviewsList({ supplierId }: { supplierId: string }) {
   const { t, lang } = useLanguage();
+  const { theme } = useTheme();
   const [more, setMore] = useState<{ reviews: PublicReview[]; cursor: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const first = useRequest<SupplierReviewsResponse>(
@@ -252,21 +263,32 @@ function ReviewsList({ supplierId }: { supplierId: string }) {
   }
   return (
     <View style={styles.reviews}>
-      {reviews.map((review) => (
-        <View key={review.id} style={styles.review}>
-          <StarsInput
-            value={review.score}
-            starLabel={(n) => t("review.scoreLabel", { n })}
-            disabled
-            small
-          />
-          {review.text ? <Text variant="body">{review.text}</Text> : null}
-          <Text variant="caption" color="textMuted">
-            {review.author ?? t("supplier.memberAuthor")} ·{" "}
-            {reviewMonthText(review.publishedMonth, lang)}
-          </Text>
-        </View>
-      ))}
+      {/* A card group: a hairline between reviews (TASK-078). */}
+      <ListGroup>
+        {reviews.map((review, index) => (
+          <View
+            key={review.id}
+            style={[
+              styles.review,
+              index > 0 && { borderTopWidth: hairline, borderTopColor: theme.colors.border },
+            ]}
+          >
+            <StarsInput
+              value={review.score}
+              starLabel={(n) => t("review.scoreLabel", { n })}
+              disabled
+              small
+            />
+            {review.text ? <Text variant="body">{review.text}</Text> : null}
+            <Text variant="caption" color="textMuted">
+              {joinDot([
+                review.author ?? t("supplier.memberAuthor"),
+                reviewMonthText(review.publishedMonth, lang),
+              ])}
+            </Text>
+          </View>
+        ))}
+      </ListGroup>
       {cursor && (
         <Button variant="secondary" loading={loadingMore} onPress={() => void loadMore()}>
           {t("catalog.loadMore")}
@@ -277,12 +299,10 @@ function ReviewsList({ supplierId }: { supplierId: string }) {
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 20 },
   head: { gap: 8 },
   verified: { gap: 4 },
-  rating: { gap: 12 },
-  share: { gap: 2 },
+  rating: { gap: 8 },
   membersOnly: { gap: 12 },
-  reviews: { gap: 16 },
-  review: { gap: 6 },
+  reviews: { gap: 12 },
+  review: { gap: 6, padding: layout.cardPadding },
 });

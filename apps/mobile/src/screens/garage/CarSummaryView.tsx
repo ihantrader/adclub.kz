@@ -1,19 +1,20 @@
-import { layout } from "@adclub/ui-core";
+import { radius } from "@adclub/ui-core";
 import { randomUUID } from "expo-crypto";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { formatKzPlate } from "@adclub/domain";
 import {
-  AiBadge,
   Button,
   Dialog,
   ListGroup,
-  ListRow,
   Screen,
+  ScreenBody,
+  Section,
   Text,
   TextField,
   useAfterDismiss,
   useToast,
+  ValueRow,
 } from "../../design-system";
 import {
   checkDocumentFields,
@@ -65,6 +66,9 @@ const LEVEL_TEXT = {
   drive: "car.level.drive",
 } as const satisfies Record<CarLevel, string>;
 
+/** The thumbnail of the photographed certificate: a 3:2 card, 96 wide. */
+const THUMBNAIL = { width: 96, height: 64 };
+
 export interface CarSummaryViewProps {
   /** The vehicle-catalog levels as they stood when the final step opened. */
   draft: CarDraft;
@@ -93,9 +97,14 @@ export interface CarSummaryViewProps {
  * either. Colour (D-063) is one more row of the very same list, picked from
  * its own sheet rather than a step, since it never gates anything below it.
  *
+ * With a photographed certificate it is M-GAR-05 (TASK-057; TASK-078): T-GAR-03
+ * with the thumbnail of the snapshot, the rows the recognition filled marked
+ * and tinted like AI fields until a person changes them (DESIGN 7.9), every
+ * row a step away (a chevron says so), «Всё верно, сохранить» at the bottom.
+ *
  * This screen does not know, and does not need to know, whether a value here
  * came from a step already answered or was filled in some other way — which
- * is exactly what lets it take recognised техпаспорт fields later (TASK-057)
+ * is exactly what lets it take recognised техпаспорт fields (TASK-057)
  * without being rebuilt: whatever hands it a `draft` and a `color` is enough.
  */
 export function CarSummaryView({
@@ -248,15 +257,18 @@ export function CarSummaryView({
   };
 
   const rows = summaryRows(draft);
+  const recognized = t("doc.recognized");
+  const notSet = t("common.notSet");
+  const complete = t("garage.complete");
 
   return (
     <Screen
       title={t("car.summary.title")}
       back={{ label: t("common.back"), onPress: onBack }}
       footer={
-        <View style={styles.footer}>
+        <>
           <Button onPress={save} loading={saving} disabled={offline}>
-            {t("car.summary.save")}
+            {t(recognition ? "doc.saveVerified" : "car.summary.save")}
           </Button>
           {recognition && onRetake && (
             <Button variant="secondary" onPress={onRetake} disabled={saving}>
@@ -268,82 +280,90 @@ export function CarSummaryView({
               {t("garage.needsNetwork")}
             </Text>
           )}
-        </View>
+        </>
       }
     >
-      <View style={styles.content}>
-        <Text variant="bodyS" color="textMuted">
-          {/* T-GAR-03 when the values came off a certificate. */}
-          {t(recognition ? "doc.check" : "car.summary.text")}
-        </Text>
-        <ListGroup>
-          {rows.map((row, index) => (
-            <ListRow
-              key={row.level}
-              first={index === 0}
-              title={t(STEP_TEXT[row.level])}
-              subtitle={row.label ?? t("common.notSet")}
-              trailing={
-                row.label === null ? (
-                  <Text variant="bodyS" color="accent">
-                    {t("garage.complete")}
-                  </Text>
-                ) : stillRecognized(recognition, draft, row.level) ? (
-                  <AiBadge>{t("doc.recognized")}</AiBadge>
-                ) : null
-              }
-              onPress={() => editLevel(row.level)}
+      <ScreenBody>
+        <Section first>
+          <View style={styles.intro}>
+            {recognition?.photoUri && (
+              <Image
+                source={{ uri: recognition.photoUri }}
+                accessibilityIgnoresInvertColors
+                style={styles.thumbnail}
+                resizeMode="cover"
+              />
+            )}
+            <Text variant="bodyS" color="textMuted" style={styles.introText}>
+              {/* T-GAR-03 when the values came off a certificate. */}
+              {t(recognition ? "doc.check" : "car.summary.text")}
+            </Text>
+          </View>
+          <ListGroup>
+            {rows.map((row, index) => (
+              <ValueRow
+                key={row.level}
+                first={index === 0}
+                label={t(STEP_TEXT[row.level])}
+                value={row.label}
+                placeholder={notSet}
+                {...(row.label === null ? { action: complete } : {})}
+                {...(stillRecognized(recognition, draft, row.level) ? { ai: recognized } : {})}
+                navigates
+                onPress={() => editLevel(row.level)}
+              />
+            ))}
+            <ValueRow
+              label={t("car.step.color")}
+              value={pickedColor === null ? null : t(`car.color.${pickedColor}`)}
+              placeholder={notSet}
+              {...(pickedColor === null ? { action: complete } : {})}
+              {...(recognition?.color !== null && pickedColor === recognition?.color
+                ? { ai: recognized }
+                : {})}
+              navigates
+              onPress={() => setColorSheet(true)}
             />
-          ))}
-          <ListRow
-            title={t("car.step.color")}
-            subtitle={pickedColor === null ? t("common.notSet") : t(`car.color.${pickedColor}`)}
-            trailing={
-              pickedColor === null ? (
-                <Text variant="bodyS" color="accent">
-                  {t("garage.complete")}
-                </Text>
-              ) : recognition?.color !== null && pickedColor === recognition?.color ? (
-                <AiBadge>{t("doc.recognized")}</AiBadge>
-              ) : null
-            }
-            onPress={() => setColorSheet(true)}
+          </ListGroup>
+        </Section>
+        <Section>
+          <TextField
+            label={t("car.vin")}
+            value={vin}
+            onChangeText={(value) => {
+              setVin(value);
+              setFieldErrors((errors) => ({ ...errors, vin: undefined }));
+            }}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={25}
+            {...(readVin !== "" && vin === readVin ? { aiLabel: recognized } : {})}
+            {...(fieldErrors.vin
+              ? { error: fieldErrorText(fieldErrors.vin) }
+              : { hint: t("car.vinRule") })}
           />
-        </ListGroup>
-        <TextField
-          label={t("car.vin")}
-          value={vin}
-          onChangeText={(value) => {
-            setVin(value);
-            setFieldErrors((errors) => ({ ...errors, vin: undefined }));
-          }}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={25}
-          {...(readVin !== "" && vin === readVin ? { aiLabel: t("doc.recognized") } : {})}
-          {...(fieldErrors.vin ? { error: fieldErrorText(fieldErrors.vin) } : {})}
-        />
-        <TextField
-          label={t("car.plate")}
-          value={plate}
-          onChangeText={(value) => {
-            setPlate(value);
-            setFieldErrors((errors) => ({ ...errors, plate: undefined }));
-          }}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={15}
-          {...(readPlate !== "" && plate === readPlate ? { aiLabel: t("doc.recognized") } : {})}
-          {...(fieldErrors.plate
-            ? { error: fieldErrorText(fieldErrors.plate) }
-            : { hint: t("car.vinPlateRule") })}
-        />
-        {unconfirmed && (
-          <Text variant="caption" color="textMuted">
-            {t("doc.listNote")}
-          </Text>
-        )}
-      </View>
+          <TextField
+            label={t("car.plate")}
+            value={plate}
+            onChangeText={(value) => {
+              setPlate(value);
+              setFieldErrors((errors) => ({ ...errors, plate: undefined }));
+            }}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={15}
+            {...(readPlate !== "" && plate === readPlate ? { aiLabel: recognized } : {})}
+            {...(fieldErrors.plate
+              ? { error: fieldErrorText(fieldErrors.plate) }
+              : { hint: t("car.plateRule") })}
+          />
+          {unconfirmed && (
+            <Text variant="caption" color="textMuted">
+              {t("doc.listNote")}
+            </Text>
+          )}
+        </Section>
+      </ScreenBody>
 
       <Dialog
         visible={confirmReset !== null}
@@ -416,7 +436,8 @@ export function CarSummaryView({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
-  footer: { gap: 8 },
+  intro: { flexDirection: "row", gap: 12, alignItems: "center" },
+  introText: { flex: 1 },
+  thumbnail: { width: THUMBNAIL.width, height: THUMBNAIL.height, borderRadius: radius.m },
   center: { textAlign: "center" },
 });

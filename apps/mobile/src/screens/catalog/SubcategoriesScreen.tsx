@@ -1,6 +1,4 @@
 import type { CategorySubcategory } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
-import { StyleSheet, View } from "react-native";
 import {
   Button,
   CategoryIcon,
@@ -10,6 +8,7 @@ import {
   ListRow,
   OfflineBanner,
   Screen,
+  ScreenBody,
   SkeletonList,
 } from "../../design-system";
 import { useCategoryTree } from "../../services/use-catalog";
@@ -67,7 +66,7 @@ export function SubcategoriesScreen({
       refreshing={tree.refreshing}
       refreshingLabel={t("common.loading")}
     >
-      <View style={styles.content}>
+      <ScreenBody>
         <DataState
           status={status}
           skeleton={<SkeletonList rows={5} label={t("common.loading")} />}
@@ -108,11 +107,7 @@ export function SubcategoriesScreen({
             ))}
           </ListGroup>
         </DataState>
-      </View>
+      </ScreenBody>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12 },
-});

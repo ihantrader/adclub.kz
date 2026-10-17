@@ -1,16 +1,20 @@
-import { layout } from "@adclub/ui-core";
+import { formatKzPhone } from "@adclub/domain";
 import { leaveAuthFlow } from "../../navigation/use-sign-in";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Button, CodeCells, Screen, Text } from "../../design-system";
+import { Button, CodeCells, Screen, ScreenBody, Section, Text } from "../../design-system";
 import type { RootParams } from "../../navigation/routes";
 import { apiClient } from "../../services/api";
 import { useT } from "../../state/language";
 import { toStoredSession, useSession } from "../../state/session-provider";
 import { loginErrorText } from "./auth-errors";
 
-/** M-AUTH-02 «Код»: the six digits, the resend countdown, the switch to SMS. */
+/**
+ * M-AUTH-02 «Код»: the six digits, the resend countdown, the switch to SMS.
+ * The number is written out («+7 701 000 03 80», M4); the cells take the
+ * column, the countdown and «Отправить по SMS» stand at its left (TASK-078).
+ */
 export function CodeScreen({ navigation, route }: NativeStackScreenProps<RootParams, "auth-code">) {
   const t = useT();
   const session = useSession();
@@ -92,45 +96,47 @@ export function CodeScreen({ navigation, route }: NativeStackScreenProps<RootPar
       back={{ label: t("common.back"), onPress: navigation.goBack }}
       bottomInset
     >
-      <View style={styles.content}>
-        <View style={styles.phoneRow}>
-          <Text color="textMuted">{phone}</Text>
-          <Button variant="text" size="m" onPress={navigation.goBack}>
-            {t("auth.changeNumber")}
-          </Button>
-        </View>
-        {switchedToSms && channel === "sms" && route.params.channel === "whatsapp" && (
-          <Text variant="bodyS" color="textMuted">
-            {t("auth.fellBackToSms")}
-          </Text>
-        )}
-        <CodeCells
-          label={t("auth.codeLabel")}
-          value={code}
-          onChangeText={onChangeCode}
-          error={error ?? undefined}
-          autoFocus
-        />
-        {secondsLeft > 0 ? (
-          <Text variant="bodyS" color="textMuted">
-            {t("auth.resendIn", { seconds: String(secondsLeft) })}
-          </Text>
-        ) : (
-          <Button variant="text" size="m" onPress={() => resend(false)}>
-            {t("auth.resend")}
-          </Button>
-        )}
-        {channel === "whatsapp" && (
-          <Button variant="text" size="m" onPress={() => resend(true)}>
-            {t("auth.sendSms")}
-          </Button>
-        )}
-      </View>
+      <ScreenBody>
+        <Section first>
+          <View style={styles.phoneRow}>
+            <Text color="textMuted">{formatKzPhone(phone)}</Text>
+            <Button variant="text" size="m" align="start" onPress={navigation.goBack}>
+              {t("auth.changeNumber")}
+            </Button>
+          </View>
+          {switchedToSms && channel === "sms" && route.params.channel === "whatsapp" && (
+            <Text variant="bodyS" color="textMuted">
+              {t("auth.fellBackToSms")}
+            </Text>
+          )}
+          <CodeCells
+            label={t("auth.codeLabel")}
+            labelHidden
+            value={code}
+            onChangeText={onChangeCode}
+            error={error ?? undefined}
+            autoFocus
+          />
+          {secondsLeft > 0 ? (
+            <Text variant="bodyS" color="textMuted">
+              {t("auth.resendIn", { seconds: String(secondsLeft) })}
+            </Text>
+          ) : (
+            <Button variant="text" size="m" onPress={() => resend(false)}>
+              {t("auth.resend")}
+            </Button>
+          )}
+          {channel === "whatsapp" && (
+            <Button variant="text" size="m" onPress={() => resend(true)}>
+              {t("auth.sendSms")}
+            </Button>
+          )}
+        </Section>
+      </ScreenBody>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
   phoneRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 });

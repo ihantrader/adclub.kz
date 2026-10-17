@@ -74,9 +74,8 @@ export function CarAddingActions({
   const run = (action: () => void) => (before ? before(action) : action());
   return (
     <View style={styles.actions}>
-      <Button icon="scan" onPress={() => run(adding.photo)}>
-        {t("doc.photo")}
-      </Button>
+      {/* A pair of buttons shares one rule: no icon on either (TASK-078 M18). */}
+      <Button onPress={() => run(adding.photo)}>{t("doc.photo")}</Button>
       <Button
         variant="secondary"
         onPress={() =>
@@ -121,6 +120,7 @@ export function AddCarProvider({ children }: { children: ReactNode }) {
         onDismissed={dismissed.onDismissed}
         title={t("doc.addTitle")}
         closeLabel={t("common.close")}
+        closable
       >
         <View style={styles.sheet}>
           <Text variant="bodyS" color="textMuted">
@@ -147,7 +147,7 @@ export function useAddCar(): () => void {
 }
 
 const styles = StyleSheet.create({
-  actions: { gap: 8 },
+  actions: { gap: 12 },
   sheet: { gap: 12 },
   center: { textAlign: "center" },
 });

@@ -61,11 +61,11 @@ export function CatalogHeader({
 }
 
 const styles = StyleSheet.create({
+  // The pinned header of the screen adds the air under the whole block.
   header: {
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: layout.screenPadding,
     paddingTop: 4,
-    paddingBottom: 12,
   },
 });

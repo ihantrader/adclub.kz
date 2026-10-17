@@ -36,9 +36,12 @@ import {
   hairline,
   Icon,
   IconButton,
+  IconLine,
   icons,
   Keypad,
+  ListGroup,
   ListRow,
+  PhoneField,
   Quantity,
   Radio,
   Rating,
@@ -54,8 +57,10 @@ import {
   TopBar,
   useTheme,
   useToast,
+  ValueRow,
   type TabItem,
 } from "../design-system";
+import { formatKzPhone, normalizeKzMobilePhone } from "@adclub/domain";
 import { carCandidateGlyphs, customCategoryIcons } from "./preview-glyphs";
 import { showcaseTexts, type ShowcaseLang, type ShowcaseTexts } from "./showcase-texts";
 
@@ -201,6 +206,9 @@ function Content({
   const toast = useToast();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("+7 701 12");
+  const [maskedPhone, setMaskedPhone] = useState("+7 ");
+  const [day, setDay] = useState("today");
+  const [closableSheet, setClosableSheet] = useState(false);
   const [vin, setVin] = useState("XWB3L32EDJA123456");
   const [vinConfirmed, setVinConfirmed] = useState(false);
   const [search, setSearch] = useState(t.searchValue);
@@ -353,6 +361,13 @@ function Content({
           </Button>
         </ButtonRow>
         <Button loading>{t.primary}</Button>
+        <Caption>{t.textButtons}</Caption>
+        <Button variant="text" size="m">
+          {t.noWhatsapp}
+        </Button>
+        <Button variant="text" size="m" tone="neutral">
+          {t.endSession}
+        </Button>
         <Caption>{t.pressGuard}</Caption>
         <Button
           variant="secondary"
@@ -435,6 +450,21 @@ function Content({
           onChangeText={setSearch}
           placeholder={t.searchPlaceholder}
         />
+        <TextField
+          label={t.fieldPhone}
+          value="+7 701 000 03 80"
+          onChangeText={() => undefined}
+          readOnly
+          hint={t.fieldHint}
+        />
+        <TextField
+          label={t.fieldName}
+          value={name}
+          onChangeText={setName}
+          multiline
+          hint={t.fieldHint}
+          counter={{ count: name.length, max: 1000, text: `${name.length} / 1000` }}
+        />
         <CodeCells label={t.codeLabel} value={code} onChangeText={setCode} />
         <CodeCells
           label={t.codeLabel}
@@ -450,7 +480,58 @@ function Content({
         />
       </Section>
 
+      <Section title={t.sections.phone}>
+        <Caption>{t.phoneNote}</Caption>
+        <PhoneField label={t.fieldPhone} value={maskedPhone} onChangeText={setMaskedPhone} />
+        <Caption>
+          {t.phoneShown}: {formatKzPhone(normalizeKzMobilePhone(maskedPhone) ?? "+77010000380")}
+        </Caption>
+      </Section>
+
+      <Section title={t.sections.valueRows}>
+        <Caption>{t.valueRowsNote}</Caption>
+        <ListGroup>
+          <ValueRow first label={t.valueMake} value="Geely" navigates onPress={() => undefined} />
+          <ValueRow
+            label={t.valueEngine}
+            value={null}
+            placeholder={t.notSet}
+            action={t.complete}
+            navigates
+            onPress={() => undefined}
+          />
+          <ValueRow
+            label={t.valueColor}
+            value="Белый"
+            ai={t.recognized}
+            navigates
+            onPress={() => undefined}
+          />
+          <ValueRow label={t.fieldName} value={t.valueLong} />
+          <ValueRow label={t.valueTotal} value="12 500 ₸" strong />
+        </ListGroup>
+      </Section>
+
       <Section title={t.sections.choice}>
+        <Caption>{t.dayChips}</Caption>
+        <View style={styles.wrap}>
+          <Chip
+            width={96}
+            sublabel="17 октября"
+            selected={day === "today"}
+            onPress={() => setDay("today")}
+          >
+            {t.today}
+          </Chip>
+          <Chip
+            width={96}
+            sublabel="20 октября"
+            selected={day === "mon"}
+            onPress={() => setDay("mon")}
+          >
+            {t.weekdayMon}
+          </Chip>
+        </View>
         <View style={styles.wrap}>
           {t.chips.map((chip, index) => (
             <Chip
@@ -529,6 +610,26 @@ function Content({
           emptyText={t.noRating}
         />
         <Rating value={null} count={0} locale="ru-RU" label="" emptyText={t.noRating} />
+        <Caption>{t.ratingLarge}</Caption>
+        <Rating
+          large
+          value={4.1}
+          count={9}
+          countText={t.ratingsCount}
+          locale={lang === "kk" ? "kk-KZ" : "ru-RU"}
+          label={t.ratingLabel}
+          emptyText={t.noRating}
+        />
+        <Caption>{t.facts}</Caption>
+        <IconLine icon="package" variant="bodyS" textColor="text">
+          {t.inStock}
+        </IconLine>
+        <IconLine icon="store" variant="bodyS" textColor="text">
+          {t.pickupToday}
+        </IconLine>
+        <IconLine icon="truck" variant="bodyS" textColor="text">
+          {t.deliveryBy}
+        </IconLine>
       </Section>
 
       <Section title={t.sections.feedback}>
@@ -540,6 +641,9 @@ function Content({
         </Button>
         <Button variant="secondary" size="m" onPress={() => setSheet(true)}>
           {t.openSheet}
+        </Button>
+        <Button variant="secondary" size="m" onPress={() => setClosableSheet(true)}>
+          {t.closableSheet}
         </Button>
         <Button variant="secondary" size="m" destructive onPress={() => setDialog(true)}>
           {t.cancelOrder}
@@ -595,12 +699,14 @@ function Content({
           qrValue="adclub:order:482915"
           codeLabel={t.codeTitle}
           qrLabel={t.qrLabel}
+          note={t.codeNote}
         />
         <CodeBlock
           code="482915"
           qrValue="adclub:order:482915"
           codeLabel={t.codeTitle}
           qrLabel={t.qrLabel}
+          note={t.codeNote}
           ready
         />
         <CodeBlock
@@ -637,6 +743,18 @@ function Content({
           onSelect={() => setDelivery("courier")}
         />
         <Button onPress={() => setSheet(false)}>{t.apply}</Button>
+      </Sheet>
+      <Sheet
+        visible={closableSheet}
+        onClose={() => setClosableSheet(false)}
+        title={t.closableSheet}
+        closeLabel={t.close}
+        closable
+      >
+        <Text color="textMuted">{t.sheetText}</Text>
+        <Button variant="secondary" onPress={() => setClosableSheet(false)}>
+          {t.close}
+        </Button>
       </Sheet>
       <Dialog
         visible={dialog}

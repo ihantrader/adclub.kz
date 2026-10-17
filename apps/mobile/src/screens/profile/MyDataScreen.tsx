@@ -1,14 +1,14 @@
 import { accountNameSchema, ACCOUNT_NAME_MAX_LENGTH } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
+import { formatKzPhone } from "@adclub/domain";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 import {
   Button,
   Checkbox,
   DataState,
   Screen,
-  Text,
+  ScreenBody,
+  Section,
   TextField,
   useToast,
 } from "../../design-system";
@@ -19,7 +19,12 @@ import { useSession } from "../../state/session-provider";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** M-PRO-02 «Мои данные»: name, read-only phone, optional e-mail and its newsletter consent. */
+/**
+ * M-PRO-02 «Мои данные»: name, read-only phone, optional e-mail and its
+ * newsletter consent. The phone is readable, written out, with a lock and
+ * «Номер телефона изменить нельзя» — not a switched-off field (TASK-078);
+ * «Сохранить» is active only when something changed.
+ */
 export function MyDataScreen({
   navigation,
 }: NativeStackScreenProps<ProfileStackParams, "profile-my-data">) {
@@ -53,7 +58,12 @@ export function MyDataScreen({
   const trimmedEmail = email.trim();
   const emailValid = trimmedEmail.length === 0 || EMAIL_PATTERN.test(trimmedEmail);
   const hasEmail = trimmedEmail.length > 0;
-  const canSave = nameValid && emailValid;
+  const changed =
+    !!profile &&
+    (trimmedName !== (profile.name ?? "") ||
+      (hasEmail ? trimmedEmail.toLowerCase() : null) !== (profile.email ?? null) ||
+      (hasEmail && newsConsent) !== profile.emailNewsConsent);
+  const canSave = nameValid && emailValid && changed;
 
   const save = async () => {
     if (!canSave) return;
@@ -88,52 +98,48 @@ export function MyDataScreen({
         error={{ title: t("state.errorTitle"), text: t("state.errorText") }}
         empty={{ icon: "user", title: t("state.errorTitle") }}
       >
-        <View style={styles.content}>
-          <TextField
-            label={t("auth.nameLabel")}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-            textContentType="name"
-            maxLength={ACCOUNT_NAME_MAX_LENGTH}
-            error={
-              error ?? (trimmedName.length > 0 && !nameValid ? t("auth.nameInvalid") : undefined)
-            }
-          />
-          <TextField
-            label={t("profile.phone")}
-            value={profile?.phone ?? ""}
-            onChangeText={() => undefined}
-            disabled
-            hint={t("profile.phoneReadOnly")}
-          />
-          <TextField
-            label={t("profile.email")}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            autoCapitalize="none"
-            autoComplete="email"
-            error={trimmedEmail.length > 0 && !emailValid ? t("profile.emailInvalid") : undefined}
-          />
-          <Checkbox
-            label={t("profile.emailNewsConsent")}
-            checked={hasEmail && newsConsent}
-            onChange={setNewsConsent}
-            disabled={!hasEmail}
-          />
-          {!hasEmail && (
-            <Text variant="caption" color="textMuted">
-              {t("profile.emailNewsNeedsEmail")}
-            </Text>
-          )}
-        </View>
+        <ScreenBody>
+          <Section first>
+            <TextField
+              label={t("auth.nameLabel")}
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              textContentType="name"
+              maxLength={ACCOUNT_NAME_MAX_LENGTH}
+              error={
+                error ?? (trimmedName.length > 0 && !nameValid ? t("auth.nameInvalid") : undefined)
+              }
+            />
+            <TextField
+              label={t("profile.phone")}
+              value={formatKzPhone(profile?.phone ?? "")}
+              onChangeText={() => undefined}
+              readOnly
+              hint={t("profile.phoneReadOnly")}
+            />
+            <TextField
+              label={t("profile.email")}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="name@example.kz"
+              error={trimmedEmail.length > 0 && !emailValid ? t("profile.emailInvalid") : undefined}
+              hint={t("profile.emailOptional")}
+            />
+            <Checkbox
+              label={t("profile.emailNewsConsent")}
+              {...(hasEmail ? {} : { description: t("profile.emailNewsNeedsEmail") })}
+              checked={hasEmail && newsConsent}
+              onChange={setNewsConsent}
+              disabled={!hasEmail}
+            />
+          </Section>
+        </ScreenBody>
       </DataState>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
-});

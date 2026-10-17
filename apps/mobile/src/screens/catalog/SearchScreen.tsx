@@ -1,16 +1,19 @@
 import type { CatalogSearchCategory, CatalogSearchItem } from "@adclub/contracts";
-import { layout, size } from "@adclub/ui-core";
+import { layout } from "@adclub/ui-core";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from "react-native";
 import {
   Banner,
   Button,
+  CategoryIcon,
   Chip,
   DataState,
+  ListGroup,
   ListRow,
   OfflineBanner,
   Screen,
   SearchField,
+  Section,
   SkeletonList,
   Text,
   useDelayedIndicator,
@@ -26,6 +29,7 @@ import {
   type FilterQuery,
   type FilterState,
 } from "../../catalog/filters";
+import { joinDot } from "../../catalog/format";
 import { rememberSearch, tidyQuery } from "../../catalog/recent-searches";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle } from "../../garage/garage";
@@ -57,11 +61,15 @@ export interface SearchScreenProps {
 /**
  * M-CAT-04 — the search of the catalog (TASK-044; ARCHITECTURE 4.64).
  *
+ * - The header is the catalog's: the car and the city first, then the field,
+ *   in the order of M-CAT-01 — the field does not jump when the search opens
+ *   (TASK-078).
  * - Before typing: the recent queries of this device (at most ten,
  *   «Очистить»).
  * - Typing: after a pause, the server's suggestions — the article first,
- *   then categories, then items; «Найти «…»» or the keyboard's search key
- *   runs the search.
+ *   then categories, then items, and «Найти «…»» last; the keyboard's search
+ *   key runs the search too. Every suggestion row keeps the icon column, so
+ *   their texts stand in one line.
  * - The results: rows of M-CAT-02 for the car and the city of the header,
  *   with the marks of compatibility; T-CAT-08 when the server read the
  *   query otherwise (a typo forgiven, TASK-045); pages as the list scrolls.
@@ -69,7 +77,7 @@ export interface SearchScreenProps {
  *   (TASK-045, the server's facets): one keeps its items; then «Фильтры» —
  *   the sheet of M-CAT-03 with the numbers at the values, «Показать N
  *   позиций», «Сбросить».
- * - Nothing found: «Ничего не нашли по „…“», the tips — and, instead of the
+ * - Nothing found: «Ничего не нашли по «…»», the tips — and, instead of the
  *   cancelled «Искать без фильтра по автомобилю» (D-062), «Искать для
  *   другого автомобиля из гаража»: the car switch of the header.
  * - Offline: «Нужна сеть» — the search is the server's.
@@ -86,6 +94,7 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   const [text, setText] = useState("");
   const [ran, setSubmitted] = useState<string | null>(null);
   const [sheet, setSheet] = useState<"car" | "city" | "filters" | null>(null);
+  const [scrolled, setScrolled] = useState(false);
   // The chip of a subcategory and its filters (TASK-045): a new query starts without them.
   const [category, setCategory] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
@@ -147,9 +156,11 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
       recentSearchesStore.set(rememberSearch(recentSearchesStore.get(), typed));
     onOpenItem({ id: item.id, name: item.name.text });
   };
+  const onScroll = (y: number) => setScrolled(y > 4);
 
   const header = (
     <>
+      <CatalogHeader onAddCar={onAddCar} />
       <View style={styles.field}>
         <SearchField
           label={t("search.label")}
@@ -163,7 +174,6 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
           onSubmitEditing={() => run(text)}
         />
       </View>
-      <CatalogHeader onAddCar={onAddCar} />
     </>
   );
 
@@ -175,6 +185,7 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
       refreshing={submitted !== null && results.first.refreshing}
       refreshingLabel={t("common.loading")}
       scroll={false}
+      scrolled={scrolled}
       header={header}
     >
       {!online && typed.length >= 2 ? (
@@ -218,7 +229,7 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   function renderRecent() {
     if (recent.length === 0) {
       return (
-        <View style={styles.hint}>
+        <View style={styles.body}>
           <Text variant="body" color="textMuted">
             {t("search.recentEmpty")}
           </Text>
@@ -226,24 +237,33 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
       );
     }
     return (
-      <ScrollView keyboardShouldPersistTaps="handled">
-        <View style={styles.sectionHead}>
-          <Text variant="heading" accessibilityRole="header">
-            {t("search.recent")}
-          </Text>
-          <Button variant="text" size="m" onPress={() => recentSearchesStore.set([])}>
-            {t("search.recentClear")}
-          </Button>
-        </View>
-        {recent.map((query, index) => (
-          <ListRow
-            key={query}
-            first={index === 0}
-            icon="clock"
-            title={query}
-            onPress={() => run(query)}
-          />
-        ))}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.body}
+        onScroll={(event) => onScroll(event.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={32}
+      >
+        <Section
+          first
+          title={t("search.recent")}
+          action={
+            <Button variant="text" size="m" onPress={() => recentSearchesStore.set([])}>
+              {t("search.recentClear")}
+            </Button>
+          }
+        >
+          <ListGroup>
+            {recent.map((query, index) => (
+              <ListRow
+                key={query}
+                first={index === 0}
+                icon="clock"
+                title={query}
+                onPress={() => run(query)}
+              />
+            ))}
+          </ListGroup>
+        </Section>
       </ScrollView>
     );
   }
@@ -253,29 +273,25 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
     const byArticle = (answer?.items ?? []).filter((item) => item.match === "article");
     const others = (answer?.items ?? []).filter((item) => item.match !== "article");
     return (
-      <ScrollView keyboardShouldPersistTaps="handled">
-        <ListRow
-          first
-          icon="search"
-          title={t("search.find", { query: typed })}
-          onPress={() => run(typed)}
-        />
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.body}
+        onScroll={(event) => onScroll(event.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={32}
+      >
         {answer?.usedQuery && (
-          <View style={styles.note}>
-            <Text variant="bodyS" color="textMuted">
-              {t("search.usedQuery", { query: answer.usedQuery })}
-            </Text>
-          </View>
+          <Text variant="bodyS" color="textMuted" style={styles.note}>
+            {t("search.usedQuery", { query: answer.usedQuery })}
+          </Text>
         )}
         {byArticle.length > 0 && (
-          <SuggestionGroup title={t("search.byArticle")}>
+          <SuggestionGroup title={t("search.byArticle")} first>
             {byArticle.map((item, index) => (
               <ListRow
                 key={item.id}
                 first={index === 0}
-                title={[item.article, item.brand?.name, item.category.name.text]
-                  .filter(Boolean)
-                  .join(" · ")}
+                iconSlot
+                title={joinDot([item.article, item.brand?.name, item.category.name.text])}
                 subtitle={item.name.text}
                 navigates
                 onPress={() => openItem(item)}
@@ -284,12 +300,18 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
           </SuggestionGroup>
         )}
         {(answer?.categories.length ?? 0) > 0 && (
-          <SuggestionGroup title={t("search.categories")}>
+          <SuggestionGroup title={t("search.categories")} first={byArticle.length === 0}>
             {answer!.categories.map((category, index) => (
               <ListRow
                 key={category.id}
                 first={index === 0}
-                icon="category"
+                leading={
+                  <CategoryIcon
+                    name={categoryIconOf(tree.data?.categories, category.id)}
+                    size={24}
+                    color="textMuted"
+                  />
+                }
                 title={category.name.text}
                 {...(category.parentName ? { subtitle: category.parentName.text } : {})}
                 navigates
@@ -299,19 +321,34 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
           </SuggestionGroup>
         )}
         {others.length > 0 && (
-          <SuggestionGroup title={t("search.items")}>
+          <SuggestionGroup
+            title={t("search.items")}
+            first={byArticle.length === 0 && (answer?.categories.length ?? 0) === 0}
+          >
             {others.map((item, index) => (
               <ListRow
                 key={item.id}
                 first={index === 0}
+                iconSlot
                 title={item.name.text}
-                subtitle={[item.brand?.name, item.article].filter(Boolean).join(" · ")}
+                subtitle={joinDot([item.brand?.name, item.article])}
                 navigates
                 onPress={() => openItem(item)}
               />
             ))}
           </SuggestionGroup>
         )}
+        {/* «Найти «…»» — the last row: the exact article comes first (SCREENS M-CAT-04). */}
+        <View style={styles.find}>
+          <ListGroup>
+            <ListRow
+              first
+              icon="search"
+              title={t("search.find", { query: typed })}
+              onPress={() => run(typed)}
+            />
+          </ListGroup>
+        </View>
       </ScrollView>
     );
   }
@@ -331,7 +368,11 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
     return (
       <DataState
         status={status}
-        skeleton={<SkeletonList rows={5} label={t("common.loading")} />}
+        skeleton={
+          <View style={styles.body}>
+            <SkeletonList rows={5} label={t("common.loading")} />
+          </View>
+        }
         error={{
           title:
             results.first.failure === "rate_limited"
@@ -350,6 +391,9 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
           data={results.items}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.body}
+          onScroll={(event) => onScroll(event.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={32}
           onEndReachedThreshold={0.4}
           onEndReached={() => results.hasMore && results.loadMore()}
           ListHeaderComponent={resultsHead()}
@@ -362,6 +406,7 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
             <ItemRow
               {...(item.type === "service" ? { serviceModel: car.model.label } : {})}
               first={index === 0}
+              last={index === results.items.length - 1}
               name={item.name.text}
               brand={item.brand?.name ?? null}
               article={item.article}
@@ -419,7 +464,7 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
                 selected={category === facet.id}
                 onPress={() => chooseCategory(category === facet.id ? null : facet.id)}
               >
-                {`${facet.name.text} · ${facet.count}`}
+                {joinDot([facet.name.text, String(facet.count)])}
               </Chip>
             ))}
           </ScrollView>
@@ -486,32 +531,35 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   }
 }
 
-function SuggestionGroup({ title, children }: { title: string; children: ReactNode }) {
+/** A group of suggestions: a muted caption, then a card group of rows. */
+function SuggestionGroup({
+  title,
+  first,
+  children,
+}: {
+  title: string;
+  first?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <View style={styles.group}>
+    <View style={[styles.group, first && styles.groupFirst]}>
       <Text variant="bodyS" color="textMuted" style={styles.groupTitle}>
         {title}
       </Text>
-      {children}
+      <ListGroup>{children}</ListGroup>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  field: { paddingHorizontal: layout.screenPadding, paddingTop: 4, paddingBottom: 8 },
-  hint: { paddingHorizontal: layout.screenPadding, paddingTop: layout.blockGap },
-  note: { paddingHorizontal: layout.screenPadding, paddingVertical: 8 },
-  sectionHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: layout.screenPadding,
-    paddingVertical: 8,
-    minHeight: size.button.m,
-  },
+  field: { paddingHorizontal: layout.screenPadding, paddingTop: 8 },
+  body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, paddingBottom: layout.blockGap },
+  note: { paddingBottom: 8 },
   group: { paddingTop: 16 },
-  groupTitle: { paddingHorizontal: layout.screenPadding, paddingBottom: 8 },
-  head: { gap: 12, paddingHorizontal: layout.screenPadding, paddingBottom: 12 },
+  groupFirst: { paddingTop: 0 },
+  groupTitle: { paddingBottom: 8 },
+  find: { paddingTop: 16 },
+  head: { gap: 12, paddingBottom: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chipRow: { flexDirection: "row", gap: 8 },
   more: { paddingVertical: layout.cardPadding },

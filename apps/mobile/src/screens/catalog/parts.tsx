@@ -15,7 +15,7 @@ import {
   CategoryIcon,
   CompatibilityMark,
   hairline,
-  Icon,
+  IconLine,
   Text,
   useTheme,
 } from "../../design-system";
@@ -25,7 +25,7 @@ import {
   COMPATIBILITY_LEVEL_TEXT,
   type CompatibilityView,
 } from "../../catalog/compatibility-view";
-import { formatTenge, receiptDay } from "../../catalog/format";
+import { DOT, NBSP, formatTenge, joinDot, receiptDay } from "../../catalog/format";
 import { useLanguage } from "../../state/language";
 
 /**
@@ -53,22 +53,31 @@ export const SORT_HINT = {
   rating: "catalog.sortHint.rating",
 } as const satisfies Record<ShowcaseOfferSort, string>;
 
+/** A receipt date in words, and whether it is «сегодня» / «завтра» rather than a date. */
+export interface ReceiptText {
+  text: string;
+  soon: boolean;
+}
+
 /**
  * The receipt date in words. A list card says just «Завтра» (M-CAT-02); an
  * offer says «Самовывоз: завтра, 14 марта» (M-CAT-07) — the word and the
- * date, because the date is what a person writes down.
+ * date, because the date is what a person writes down. `soon` tells the
+ * caller a delivery is «сегодня, 16 октября», not «до сегодня» (TASK-078).
  */
 export function useReceiptText() {
   const { t, lang } = useLanguage();
   return (
     receipt: { date: string; confirmedOn: string },
     form: "short" | "withDate" = "short",
-  ): string | null => {
+  ): ReceiptText | null => {
     const day = receiptDay(receipt.date, receipt.confirmedOn);
     if (!day) return null;
-    if (day.kind === "date") return `${day.day} ${t(`month.${day.month}` as "month.1")}`;
+    if (day.kind === "date") {
+      return { text: `${day.day} ${t(`month.${day.month}` as "month.1")}`, soon: false };
+    }
     const word = t(day.kind === "today" ? "catalog.today" : "catalog.tomorrow");
-    if (form === "short") return word;
+    if (form === "short") return { text: word, soon: true };
     const parts = receiptDay(receipt.date, "0000-01-01");
     const date =
       parts && parts.kind === "date"
@@ -76,7 +85,7 @@ export function useReceiptText() {
         : null;
     // Mid-sentence the word is not capitalised: «Самовывоз: завтра, 14 марта».
     const lower = word.toLocaleLowerCase(lang);
-    return date ? `${lower}, ${date}` : lower;
+    return { text: date ? `${lower}, ${date}` : lower, soon: true };
   };
 }
 
@@ -117,7 +126,7 @@ export function CompatibilityLine({
     <View style={styles.compat}>
       <CompatibilityMark value={mark}>{markText(view)}</CompatibilityMark>
       {view.kind === "needsDetails" && variant === "card" && onComplete && (
-        <Button variant="text" size="m" onPress={onComplete} style={styles.completeButton}>
+        <Button variant="text" size="m" onPress={onComplete}>
           {t("compat.completeCar")}
         </Button>
       )}
@@ -151,16 +160,26 @@ function sentenceCase(text: string): string {
   return text.length === 0 ? text : text[0]?.toUpperCase() + text.slice(1);
 }
 
+/**
+ * The photo of an item, 72 × 72, or its placeholder: `surfaceRaised` and the
+ * icon of its category, 28, `textMuted` (DESIGN 7.8) — the same in a list, in
+ * the search, in an order (TASK-078 M8).
+ */
 export function ItemPhoto({
   photo,
   icon,
+  kind,
   side = size.thumbnail,
 }: {
   photo: ItemPhotoImage | null;
   icon: CategoryIconName | null;
+  /** When the category's icon is not known (an order): a service shows a tool, goods a package. */
+  kind?: "part" | "generic" | "service";
   side?: number;
 }) {
   const { theme } = useTheme();
+  const shownIcon: CategoryIconName | null =
+    icon ?? (kind === undefined ? null : kind === "service" ? "tool" : "package");
   // A picture that does not load — a signed link of the saved copy of
   // orders that expired while there was no network — gives the placeholder,
   // not an empty square.
@@ -183,8 +202,28 @@ export function ItemPhoto({
         { width: side, height: side, backgroundColor: theme.colors.surfaceRaised },
       ]}
     >
-      <CategoryIcon name={icon} size={28} color="textMuted" />
+      <CategoryIcon name={shownIcon} size={28} color="textMuted" />
     </View>
+  );
+}
+
+/**
+ * «от 12 500 ₸ · 3 предложения» as one paragraph (TASK-078 M11): the price
+ * `priceS`, the count `bodyS` muted, bound by the non-breaking dot — a line
+ * may wrap inside the price's words, never before the dot and never inside
+ * the count («1 предложение» moves to the next line whole).
+ */
+export function PriceLine({ price, count }: { price: string; count?: string }) {
+  return (
+    <Text variant="priceS">
+      {price}
+      {count !== undefined && (
+        <Text variant="bodyS" color="textMuted">
+          {DOT}
+          {count.replace(/ /g, NBSP)}
+        </Text>
+      )}
+    </Text>
   );
 }
 
@@ -205,10 +244,16 @@ export interface ItemRowProps {
    */
   serviceModel?: string;
   first?: boolean;
+  /** The last row of a list on the page: the card group closes under it. */
+  last?: boolean;
   onPress: () => void;
 }
 
-/** A row of the list (DESIGN 7.8: rows, not tiles; the name up to three lines). */
+/**
+ * A row of the list (DESIGN 7.8: rows, not tiles; the name up to three
+ * lines). Rows make a card group (TASK-078 M9): `surface` inside the fields
+ * of the screen, `radiusM` at the first and the last row, a hairline between.
+ */
 export function ItemRow({
   name,
   brand,
@@ -222,15 +267,17 @@ export function ItemRow({
   cityName,
   serviceModel,
   first,
+  last,
   onPress,
 }: ItemRowProps) {
   const { t, tn } = useLanguage();
   const { theme } = useTheme();
   const receiptText = useReceiptText();
-  const subtitle = [brand, article].filter((part): part is string => Boolean(part)).join(" · ");
-  const characteristics = keyAttributes.map((value) => value.display.text).join(" · ");
+  const subtitle = joinDot([brand, article]);
+  const characteristics = joinDot(keyAttributes.map((value) => value.display.text));
   const nearest = receiptText(offers.nearestReceipt);
   const service = serviceModel !== undefined;
+  const inCity = offers.inCity && cityName;
 
   return (
     <Pressable
@@ -238,6 +285,8 @@ export function ItemRow({
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        first && styles.rowFirst,
+        last && styles.rowLast,
         {
           backgroundColor: pressed ? theme.colors.surfaceRaised : theme.colors.surface,
           borderTopColor: theme.colors.border,
@@ -261,28 +310,22 @@ export function ItemRow({
           </Text>
         )}
         {!service && <CompatibilityLine result={compatibility} carName={carName} variant="list" />}
-        <View style={styles.priceLine}>
-          <Text variant="priceS">
-            {service
+        <PriceLine
+          price={
+            service
               ? t("catalog.servicePriceFor", {
                   price: formatTenge(offers.minPrice),
                   model: serviceModel,
                 })
-              : t("catalog.priceFrom", { price: formatTenge(offers.minPrice) })}
-          </Text>
-          <Text variant="bodyS" color="textMuted">
-            · {tn("catalog.offersCount", offers.count)}
-          </Text>
-        </View>
-        {!service && (
-          <View style={styles.receiptLine}>
-            <Icon name="clock" size={16} color="textMuted" />
-            <Text variant="caption" color="textMuted">
-              {offers.inCity && cityName
-                ? t("catalog.inCity", { city: cityName })
-                : (nearest ?? "")}
-            </Text>
-          </View>
+              : t("catalog.priceFrom", { price: formatTenge(offers.minPrice) })
+          }
+          count={tn("catalog.offersCount", offers.count)}
+        />
+        {!service && (inCity || nearest) && (
+          // A place gets the pin, a date the clock (TASK-078 M-CAT-02).
+          <IconLine icon={inCity ? "mapPin" : "clock"}>
+            {inCity ? t("catalog.inCity", { city: cityName }) : (nearest?.text ?? "")}
+          </IconLine>
         )}
       </View>
     </Pressable>
@@ -291,16 +334,15 @@ export function ItemRow({
 
 const styles = StyleSheet.create({
   compat: { gap: 4 },
-  completeButton: { alignSelf: "flex-start", paddingHorizontal: 0 },
   photo: { borderRadius: radius.m },
   placeholder: { alignItems: "center", justifyContent: "center" },
   row: {
     flexDirection: "row",
     gap: 12,
-    paddingHorizontal: layout.screenPadding,
+    paddingHorizontal: layout.rowPadding,
     paddingVertical: layout.rowPadding,
   },
+  rowFirst: { borderTopLeftRadius: radius.m, borderTopRightRadius: radius.m },
+  rowLast: { borderBottomLeftRadius: radius.m, borderBottomRightRadius: radius.m },
   rowBody: { flex: 1, gap: 4 },
-  priceLine: { flexDirection: "row", alignItems: "baseline", gap: 4, flexWrap: "wrap" },
-  receiptLine: { flexDirection: "row", alignItems: "center", gap: 4 },
 });

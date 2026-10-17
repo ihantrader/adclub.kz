@@ -1,6 +1,6 @@
 import type { VehicleDocumentAttempts, VehicleDocumentResponse } from "@adclub/contracts";
 import { formatKzPlate } from "@adclub/domain";
-import { layout, radius } from "@adclub/ui-core";
+import { radius } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -12,6 +12,7 @@ import {
   EmptyState,
   Icon,
   Screen,
+  ScreenBody,
   Text,
   useAfterDismiss,
   useLoadingGate,
@@ -44,7 +45,8 @@ import { garageErrorText } from "./garage-errors";
 type Phase =
   { kind: "camera" } | { kind: "busy" } | { kind: "failed"; failure: RecognitionFailure };
 
-type Outcome = { ok: true; answer: VehicleDocumentResponse } | { ok: false; error: unknown };
+type Outcome =
+  { ok: true; answer: VehicleDocumentResponse; uri: string } | { ok: false; error: unknown };
 
 const FAILURE_TEXT: Record<
   RecognitionFailure,
@@ -229,7 +231,8 @@ export function CarDocumentScreen({
       void confirmWith(answer, true, merge);
       return;
     }
-    const start = recognitionStart(answer);
+    // The snapshot stays on the device only as the thumbnail of the check (M-GAR-05).
+    const start = recognitionStart(answer, outcome.uri);
     setPhase({ kind: "camera" });
     // This screen stays under the steps: «назад» from the first of them is «Переснять».
     navigation.push("car-step", { origin, draft: start.draft, recognition: start.recognition });
@@ -250,7 +253,7 @@ export function CarDocumentScreen({
     let outcome: Outcome;
     try {
       const bytes = await preparedSnapshot(source, ownFile);
-      outcome = { ok: true, answer: await recognizeDocument(bytes) };
+      outcome = { ok: true, answer: await recognizeDocument(bytes), uri: source.uri };
     } catch (error) {
       outcome = { ok: false, error };
     }
@@ -306,6 +309,13 @@ export function CarDocumentScreen({
   );
 
   const failed = phase.kind === "failed" ? FAILURE_TEXT[phase.failure] : null;
+  // T-GAR-04: a guest's trial recognitions left — a caption with the buttons it is about (TASK-078).
+  const attemptsNote =
+    attempts?.scope === "guest" && !(phase.kind === "failed" && phase.failure === "limit") ? (
+      <Text variant="caption" color="textMuted" style={styles.center}>
+        {t("doc.attemptsLeft", { count: attempts.remaining })}
+      </Text>
+    ) : null;
 
   return (
     <Screen
@@ -314,11 +324,14 @@ export function CarDocumentScreen({
         label: t("common.back"),
         onPress: () => navigation.isFocused() && navigation.goBack(),
       }}
+      // A state that is the whole screen stands in its middle, the buttons at the bottom.
+      centerContent={phase.kind !== "camera"}
       footer={
         phase.kind === "camera" ? (
           <View style={styles.footer}>
+            {attemptsNote}
             {cameraUsable && (
-              <Button icon="scan" onPress={() => void shoot()} disabled={!cameraReady}>
+              <Button onPress={() => void shoot()} disabled={!cameraReady}>
                 {t("doc.shoot")}
               </Button>
             )}
@@ -329,6 +342,7 @@ export function CarDocumentScreen({
           </View>
         ) : failed ? (
           <View style={styles.footer}>
+            {attemptsNote}
             {failed.retake && (
               <Button onPress={() => setPhase({ kind: "camera" })}>{t("doc.retake")}</Button>
             )}
@@ -343,74 +357,66 @@ export function CarDocumentScreen({
         ) : null
       }
     >
-      <View style={styles.content}>
-        {phase.kind === "camera" && (
-          <>
-            {cameraUsable ? (
-              <View style={[styles.camera, { backgroundColor: theme.colors.fill }]}>
-                <CameraView
-                  ref={camera}
-                  style={StyleSheet.absoluteFill}
-                  facing="back"
-                  onCameraReady={() => setCameraReady(true)}
-                  onMountError={() => setCameraBroken(true)}
-                />
-                <View pointerEvents="none" style={styles.overlay}>
-                  <View style={styles.frame} />
-                  <Text variant="bodyS" style={styles.hint}>
-                    {t("doc.hint")}
-                  </Text>
+      <ScreenBody>
+        <View style={styles.stack}>
+          {phase.kind === "camera" && (
+            <>
+              {cameraUsable ? (
+                <View style={[styles.camera, { backgroundColor: theme.colors.fill }]}>
+                  <CameraView
+                    ref={camera}
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    onCameraReady={() => setCameraReady(true)}
+                    onMountError={() => setCameraBroken(true)}
+                  />
+                  <View pointerEvents="none" style={styles.overlay}>
+                    <View style={styles.frame} />
+                    <Text variant="bodyS" style={styles.hint}>
+                      {t("doc.hint")}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ) : cameraDenied ? (
-              <EmptyState
-                icon="cameraSlash"
-                title={t("doc.cameraDeniedTitle")}
-                text={t("doc.cameraDeniedText")}
-                action={
-                  permission?.canAskAgain && !cameraBroken ? (
-                    <Button variant="secondary" size="m" onPress={() => void requestPermission()}>
-                      {t("doc.cameraAllow")}
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <View style={[styles.camera, { backgroundColor: theme.colors.fill }]} />
-            )}
-            <Text variant="bodyS" color="textMuted">
-              {t("doc.privacy")}
-            </Text>
-            {attempts?.scope === "guest" && (
+              ) : cameraDenied ? (
+                <EmptyState
+                  icon="cameraSlash"
+                  title={t("doc.cameraDeniedTitle")}
+                  text={t("doc.cameraDeniedText")}
+                  action={
+                    permission?.canAskAgain && !cameraBroken ? (
+                      <Button variant="secondary" size="m" onPress={() => void requestPermission()}>
+                        {t("doc.cameraAllow")}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <View style={[styles.camera, { backgroundColor: theme.colors.fill }]} />
+              )}
               <Text variant="bodyS" color="textMuted">
-                {t("doc.attemptsLeft", { count: attempts.remaining })}
+                {t("doc.privacy")}
               </Text>
-            )}
-          </>
-        )}
+            </>
+          )}
 
-        {busy && gate.indicator && (
-          <View style={styles.busy} accessibilityLiveRegion="polite">
-            <Icon name="sparkles" size={32} color="ai" />
-            <Text color="textMuted">{t("doc.recognizing")}</Text>
-          </View>
-        )}
+          {busy && gate.indicator && (
+            <View style={styles.busy} accessibilityLiveRegion="polite">
+              <Icon name="sparkles" size={32} color="ai" />
+              <Text color="textMuted">{t("doc.recognizing")}</Text>
+            </View>
+          )}
 
-        {failed && (
-          <EmptyState
-            icon={
-              phase.kind === "failed" && phase.failure === "offline" ? "wifiOff" : "alertTriangle"
-            }
-            title={t(failed.title)}
-            text={t(failed.text)}
-          />
-        )}
-        {phase.kind === "failed" && attempts?.scope === "guest" && phase.failure !== "limit" && (
-          <Text variant="bodyS" color="textMuted" style={styles.center}>
-            {t("doc.attemptsLeft", { count: attempts.remaining })}
-          </Text>
-        )}
-      </View>
+          {failed && (
+            <EmptyState
+              icon={
+                phase.kind === "failed" && phase.failure === "offline" ? "wifiOff" : "alertTriangle"
+              }
+              title={t(failed.title)}
+              text={t(failed.text)}
+            />
+          )}
+        </View>
+      </ScreenBody>
 
       <Dialog
         visible={conflict !== null}
@@ -459,7 +465,7 @@ export function CarDocumentScreen({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
+  stack: { gap: 12 },
   camera: {
     width: "100%",
     aspectRatio: 3 / 4,

@@ -3,7 +3,7 @@ import { layout, radius } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { randomUUID } from "expo-crypto";
 import { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import type { MobileTextKey } from "@adclub/i18n";
 import {
   Banner,
@@ -11,19 +11,22 @@ import {
   Chip,
   DataState,
   Dialog,
+  ListGroup,
   OfflineBanner,
   Quantity,
   Radio,
   Rating,
   Screen,
+  ScreenBody,
   Section,
   SkeletonList,
   Text,
   useTheme,
   useToast,
+  ValueRow,
 } from "../../design-system";
 import { catalogEntry } from "../../catalog/catalog-gate";
-import { formatTenge } from "../../catalog/format";
+import { formatTenge, joinDot } from "../../catalog/format";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle, type GarageCar } from "../../garage/garage";
 import { useCarPicker } from "../../navigation/car-picker";
@@ -67,6 +70,13 @@ import { ClubAccessSheet } from "./ClubAccessSheet";
 type Props = NativeStackScreenProps<RootParams, "order-checkout">;
 
 /**
+ * The chips of the days of a visit: one width, two lines — the weekday and
+ * the date. 112 holds «Сегодня» with its check mark at 100 %; the width grows
+ * with the system font (to 200 %), so the label is never cut (TASK-078 M-ORD-01).
+ */
+const DAY_CHIP_WIDTH = 112;
+
+/**
  * M-ORD-01 — the checkout of one offer (TASK-030 requirement 1). There is
  * no checkout without a car (D-062): the card it reads is always asked for
  * the main car of the garage, as the catalog does.
@@ -106,6 +116,13 @@ type Asking =
   | { kind: "duplicate_active"; existingOrderId: string }
   | { kind: "offer_unavailable" };
 
+/**
+ * The checkout itself (TASK-078): the blocks of SCREENS M-ORD-01 as
+ * sections; «Итого» a value row that shows the formula only for more than
+ * one; T-ORD-01 with the button it is about; the days of a visit as chips
+ * of one width in two lines, the times under them — all above the pinned
+ * button, never beneath it.
+ */
 function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
   const { itemId, offerId, preset, previousPrice } = route.params;
   const { t, tn, lang } = useLanguage();
@@ -317,15 +334,23 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
   const noPriceForCar = service && !offer && visitOptions.status === "ready";
   const visitDay = visit ? visitDays.find((day) => day.date === visit.date) : undefined;
 
-  const dayLabel = (date: string) => {
+  const { fontScale: systemFontScale } = useWindowDimensions();
+  const dayChipWidth = Math.round(DAY_CHIP_WIDTH * Math.min(systemFontScale, 2));
+  /** The two lines of a day chip: «Сегодня» / «Пн» and the date. */
+  const dayChip = (date: string): { label: string; sublabel: string } => {
     const label = visitDayLabel(date, today);
-    if (label.kind === "today") return t("catalog.today");
-    if (label.kind === "tomorrow") return t("catalog.tomorrow");
-    return t("checkout.visitDay", {
-      weekday: t(`day.${label.weekday}` as MobileTextKey),
-      date: `${label.day} ${t(`month.${label.month}` as MobileTextKey)}`,
-    });
+    const parts = date.split("-").map(Number);
+    const written = `${parts[2]} ${t(`month.${parts[1]}` as MobileTextKey)}`;
+    if (label.kind === "today") return { label: t("catalog.today"), sublabel: written };
+    if (label.kind === "tomorrow") return { label: t("catalog.tomorrow"), sublabel: written };
+    return { label: t(`day.${label.weekday}` as MobileTextKey), sublabel: written };
   };
+  const dateFor = (way: OrderFulfillment) =>
+    receipt
+      ? way === "pickup"
+        ? t("item.pickupDate", { date: receipt.text })
+        : t(receipt.soon ? "item.deliveryDateSoon" : "item.deliveryDate", { date: receipt.text })
+      : null;
 
   return (
     <Screen
@@ -338,15 +363,14 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
       footer={
         offer && fulfillment && (!service || visitDays.length > 0) ? (
           <>
-            {!online ? (
-              <Text variant="caption" color="textMuted" style={styles.center}>
-                {t("order.needsNetwork")}
-              </Text>
-            ) : service && desiredAt === null ? (
-              <Text variant="caption" color="textMuted" style={styles.center}>
-                {t("checkout.chooseTime")}
-              </Text>
-            ) : null}
+            {/* T-ORD-01 belongs to the button (TASK-078). */}
+            <Text variant="caption" color="textMuted">
+              {!online
+                ? t("order.needsNetwork")
+                : service && desiredAt === null
+                  ? t("checkout.chooseTime")
+                  : t("checkout.phoneNotice")}
+            </Text>
             <Button
               onPress={() => submit()}
               loading={sending}
@@ -373,7 +397,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                 icon: "car",
                 title: t("checkout.noPriceForCar", { model: carTitle(car) }),
                 action: (
-                  <Button variant="secondary" onPress={() => setCarSheet(true)}>
+                  <Button variant="secondary" size="m" onPress={() => setCarSheet(true)}>
                     {t("checkout.chooseCar")}
                   </Button>
                 ),
@@ -382,7 +406,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                 icon: "package",
                 title: t("checkout.offerGone"),
                 action: (
-                  <Button variant="secondary" onPress={leaveToCard}>
+                  <Button variant="secondary" size="m" onPress={leaveToCard}>
                     {t("common.back")}
                   </Button>
                 ),
@@ -390,33 +414,33 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
         }
       >
         {data && offer && (
-          <View style={styles.body}>
-            <View style={styles.itemRow}>
-              <ItemPhoto photo={data.item.photos[0] ?? null} icon={null} />
-              <View style={styles.grow}>
-                <Text variant="bodyStrong">{data.item.name.text}</Text>
-                {(data.item.brand || data.item.article) && (
-                  <Text variant="bodyS" color="textMuted">
-                    {[data.item.brand?.name, data.item.article].filter(Boolean).join(" · ")}
-                  </Text>
-                )}
+          <ScreenBody>
+            <Section first>
+              <View style={styles.itemRow}>
+                <ItemPhoto photo={data.item.photos[0] ?? null} icon={null} kind={data.item.type} />
+                <View style={styles.grow}>
+                  <Text variant="bodyStrong">{data.item.name.text}</Text>
+                  {(data.item.brand || data.item.article) && (
+                    <Text variant="bodyS" color="textMuted">
+                      {joinDot([data.item.brand?.name, data.item.article])}
+                    </Text>
+                  )}
+                </View>
               </View>
-            </View>
-            {/* The mark is the server's (D-029), the same line as on the card. */}
-            {!service && data.compatibility.mark !== "fits" && (
-              <CompatibilityLine
-                result={data.compatibility}
-                carName={carTitle(car)}
-                variant="card"
-              />
-            )}
+              {/* The mark is the server's (D-029), the same line as on the card. */}
+              {!service && data.compatibility.mark !== "fits" && (
+                <CompatibilityLine
+                  result={data.compatibility}
+                  carName={carTitle(car)}
+                  variant="card"
+                />
+              )}
+            </Section>
 
             <Section title={t("checkout.offer")}>
               <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
                 <Text variant="caption" color="accent">
-                  {service
-                    ? t("item.servicePriceFor", { model: car.model.label })
-                    : t("item.clubPrice")}
+                  {service ? t("item.clubPriceFor", { model: carTitle(car) }) : t("item.clubPrice")}
                 </Text>
                 <Text variant="price">{formatTenge(offer.price)}</Text>
                 {priceWas && (
@@ -453,15 +477,19 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
 
             {onOrder && (
               <Section title={t("checkout.term")}>
-                {receipt && (
-                  <Text variant="bodyStrong">{t("checkout.onOrderTerm", { date: receipt })}</Text>
-                )}
-                <Text variant="bodyS" color="textMuted">
-                  {t("checkout.onOrderAgree")}
-                </Text>
-                <Text variant="bodyS" color="textMuted">
-                  {t("checkout.onOrderPrepay")}
-                </Text>
+                <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+                  {receipt && (
+                    <Text variant="bodyStrong">
+                      {t("checkout.onOrderTerm", { date: receipt.text })}
+                    </Text>
+                  )}
+                  <Text variant="bodyS" color="textMuted">
+                    {t("checkout.onOrderAgree")}
+                  </Text>
+                  <Text variant="bodyS" color="textMuted">
+                    {t("checkout.onOrderPrepay")}
+                  </Text>
+                </View>
               </Section>
             )}
 
@@ -513,15 +541,20 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.chips}
                       >
-                        {visitDays.map((day) => (
-                          <Chip
-                            key={day.date}
-                            selected={visit?.date === day.date}
-                            onPress={() => setVisitChoice({ date: day.date, time: null })}
-                          >
-                            {dayLabel(day.date)}
-                          </Chip>
-                        ))}
+                        {visitDays.map((day) => {
+                          const chip = dayChip(day.date);
+                          return (
+                            <Chip
+                              key={day.date}
+                              width={dayChipWidth}
+                              sublabel={chip.sublabel}
+                              selected={visit?.date === day.date}
+                              onPress={() => setVisitChoice({ date: day.date, time: null })}
+                            >
+                              {chip.label}
+                            </Chip>
+                          );
+                        })}
                       </ScrollView>
                       <Text variant="caption" color="textMuted">
                         {t("checkout.visitTime")}
@@ -544,9 +577,6 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                   <Text variant="bodyS" color="textMuted">
                     {t("checkout.visitHint")}
                   </Text>
-                  <Text variant="bodyS" color="textMuted">
-                    {t("checkout.phoneNotice")}
-                  </Text>
                 </Section>
               </>
             )}
@@ -554,27 +584,31 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
             {!service && (
               <>
                 <Section title={t("checkout.quantity")}>
-                  <View style={styles.quantityRow}>
-                    <Quantity
-                      value={quantity}
-                      onChange={setQuantity}
-                      min={1}
-                      max={maxQuantity}
-                      label={t("checkout.quantity")}
-                      decreaseLabel={t("checkout.decrease")}
-                      increaseLabel={t("checkout.increase")}
+                  <Quantity
+                    value={quantity}
+                    onChange={setQuantity}
+                    min={1}
+                    max={maxQuantity}
+                    label={t("checkout.quantity")}
+                    decreaseLabel={t("checkout.decrease")}
+                    increaseLabel={t("checkout.increase")}
+                  />
+                  <ListGroup>
+                    <ValueRow
+                      first
+                      label={t("order.totalLabel")}
+                      value={formatTenge(offer.price * quantity)}
+                      strong
+                      {...(quantity > 1
+                        ? {
+                            hint: t("checkout.formula", {
+                              n: quantity,
+                              price: formatTenge(offer.price),
+                            }),
+                          }
+                        : {})}
                     />
-                    <Text variant="bodyStrong" style={styles.grow}>
-                      {t("checkout.total", {
-                        n: quantity,
-                        price: formatTenge(offer.price),
-                        total: formatTenge(offer.price * quantity),
-                      })}
-                    </Text>
-                  </View>
-                  <Text variant="bodyS" color="textMuted">
-                    {t("checkout.phoneNotice")}
-                  </Text>
+                  </ListGroup>
                 </Section>
 
                 <Section title={t("checkout.receiving")}>
@@ -585,22 +619,13 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
                         checked={fulfillment === way}
                         onSelect={() => setFulfillment(way)}
                         label={way === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
-                        {...(receipt && !onOrder
-                          ? {
-                              description:
-                                way === "pickup"
-                                  ? t("item.pickupDate", { date: receipt })
-                                  : t("item.deliveryDate", { date: receipt }),
-                            }
-                          : {})}
+                        {...(receipt && !onOrder ? { description: dateFor(way) } : {})}
                       />
                     ))
                   ) : (
                     <Text variant="bodyStrong">
-                      {receipt && !onOrder
-                        ? fulfillment === "pickup"
-                          ? t("item.pickupDate", { date: receipt })
-                          : t("item.deliveryDate", { date: receipt })
+                      {receipt && !onOrder && fulfillment
+                        ? dateFor(fulfillment)
                         : fulfillment === "pickup"
                           ? t("catalog.pickup")
                           : t("catalog.delivery")}
@@ -627,22 +652,24 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
             )}
 
             {notice && (
-              <Banner
-                tone="warning"
-                action={
-                  notice.kind === "network" ||
-                  notice.kind === "rate_limited" ||
-                  notice.kind === "other" ? (
-                    <Button variant="text" size="m" icon="refresh" onPress={() => submit()}>
-                      {t("common.retry")}
-                    </Button>
-                  ) : undefined
-                }
-              >
-                {noticeText(notice)}
-              </Banner>
+              <Section>
+                <Banner
+                  tone="warning"
+                  action={
+                    notice.kind === "network" ||
+                    notice.kind === "rate_limited" ||
+                    notice.kind === "other" ? (
+                      <Button variant="text" size="m" icon="refresh" onPress={() => submit()}>
+                        {t("common.retry")}
+                      </Button>
+                    ) : undefined
+                  }
+                >
+                  {noticeText(notice)}
+                </Banner>
+              </Section>
             )}
-          </View>
+          </ScreenBody>
         )}
       </DataState>
 
@@ -761,14 +788,11 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
-  itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  itemRow: { flexDirection: "row", gap: 12, alignItems: "center" },
   grow: { flex: 1 },
   // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
   card: { borderRadius: radius.m, padding: layout.cardPadding, gap: 4 },
-  quantityRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   carRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   chips: { gap: 8, paddingVertical: 4 },
   times: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  center: { textAlign: "center" },
 });

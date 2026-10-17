@@ -24,7 +24,8 @@ export function NoCarContent({ onAdd }: { onAdd: () => void }) {
       title={t("car.needCarTitle")}
       text={t("car.needCarText")}
       action={
-        <Button icon="plus" onPress={onAdd}>
+        // One button of an empty state: M, as wide as its label (DESIGN 7.7, TASK-078).
+        <Button size="m" onPress={onAdd}>
           {t("garage.add")}
         </Button>
       }

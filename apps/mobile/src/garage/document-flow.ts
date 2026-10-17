@@ -36,10 +36,19 @@ export interface CarRecognition {
   color: CarColorId | null;
   /** The server's signature: the saved car is marked «документ показан». */
   proof: string;
+  /**
+   * The snapshot on this device, for the thumbnail of M-GAR-05 (SCREENS:
+   * «миниатюра фото»; TASK-078). A local address that lives as long as the
+   * screens of this choice: the photo is kept nowhere (D-064).
+   */
+  photoUri?: string;
 }
 
 /** The draft the steps start from and what the recognition brings along. */
-export function recognitionStart(answer: VehicleDocumentResponse): {
+export function recognitionStart(
+  answer: VehicleDocumentResponse,
+  photoUri?: string,
+): {
   draft: CarDraft;
   recognition: CarRecognition;
 } {
@@ -71,6 +80,7 @@ export function recognitionStart(answer: VehicleDocumentResponse): {
       engineIds: match.engine.candidates.map((value) => value.id),
       color: match.color.value,
       proof: answer.documentProof ?? "",
+      ...(photoUri ? { photoUri } : {}),
     },
   };
 }

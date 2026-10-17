@@ -1,5 +1,4 @@
 import type { MobileTextKey } from "@adclub/i18n";
-import { layout } from "@adclub/ui-core";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useCallback, useRef, useState } from "react";
@@ -12,9 +11,10 @@ import {
   OfflineBanner,
   OfflineContent,
   Screen,
+  ScreenBody,
+  Section,
   Segments,
   SkeletonList,
-  Text,
   useDelayedIndicator,
 } from "../../design-system";
 import { ROOT_NAVIGATOR, type RootParams } from "../../navigation/routes";
@@ -55,15 +55,18 @@ export function OrdersScreen() {
       <Screen
         title={t("tabs.orders")}
         root
+        centerContent
         banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
       >
-        <View style={styles.content}>
-          <EmptyState
-            icon="receipt"
-            title={t("orders.guestEmptyTitle")}
-            action={<Button onPress={signIn.start}>{t("auth.signIn")}</Button>}
-          />
-        </View>
+        <EmptyState
+          icon="receipt"
+          title={t("orders.guestEmptyTitle")}
+          action={
+            <Button size="m" onPress={signIn.start}>
+              {t("auth.signIn")}
+            </Button>
+          }
+        />
       </Screen>
     );
   }
@@ -112,7 +115,7 @@ function SignedInOrders() {
   const openOrder = (orderId: string) => root()?.push("order", { orderId });
 
   const banner = readOnly ? (
-    <Banner tone="warning" icon="refresh" placement="flush">
+    <Banner tone="warning" icon="refresh">
       {t("orders.readOnlyBanner")}
     </Banner>
   ) : !online ? (
@@ -137,6 +140,8 @@ function SignedInOrders() {
         ? "error"
         : "loading";
 
+  const monthName = (month: number) => t(`month.${month}` as MobileTextKey);
+
   return (
     <Screen
       title={t("tabs.orders")}
@@ -149,20 +154,22 @@ function SignedInOrders() {
         ? { onPullToRefresh: () => (tab === "active" ? void orders.refresh() : history.reload()) }
         : {})}
     >
-      <View style={styles.content}>
+      <ScreenBody>
         {!readOnly && (
-          <Segments<Tab>
-            label={t("tabs.orders")}
-            value={tab}
-            onChange={(next) => {
-              if (next === "history" && tab !== "history") reloadHistory();
-              setTab(next);
-            }}
-            options={[
-              { value: "active", label: t("orders.active") },
-              { value: "history", label: t("orders.history") },
-            ]}
-          />
+          <View style={styles.tabs}>
+            <Segments<Tab>
+              label={t("tabs.orders")}
+              value={tab}
+              onChange={(next) => {
+                if (next === "history" && tab !== "history") reloadHistory();
+                setTab(next);
+              }}
+              options={[
+                { value: "active", label: t("orders.active") },
+                { value: "history", label: t("orders.history") },
+              ]}
+            />
+          </View>
         )}
 
         {tab === "active" ? (
@@ -184,6 +191,7 @@ function SignedInOrders() {
                     action: (
                       <Button
                         variant="secondary"
+                        size="m"
                         onPress={() => root()?.navigate("tabs", { screen: "catalog" })}
                       >
                         {t("orders.toCatalog")}
@@ -200,19 +208,31 @@ function SignedInOrders() {
                   </Banner>
                 )}
                 {orderActiveOrders(copy.orders).map((order) => {
-                  const main = mainDateText(
-                    order.mainDate,
-                    order.pickupPoint?.timeZone ?? order.serviceVisit?.timeZone ?? CLUB_TIME_ZONE,
-                    now,
-                    (month) => t(`month.${month}` as MobileTextKey),
-                    (date, time) => t("order.visitAt", { date, time }),
+                  const zone =
+                    order.pickupPoint?.timeZone ?? order.serviceVisit?.timeZone ?? CLUB_TIME_ZONE;
+                  const main = mainDateText(order.mainDate, zone, now, monthName, (date, clock) =>
+                    t("order.visitAt", { date, time: clock }),
                   );
+                  // An order under order whose term is confirmed has no deadline
+                  // yet; its main date is the day the goods come (TASK-078).
+                  const readyOn =
+                    !main && order.kind === "on_order" && order.onOrderTerm?.confirmed?.readyOn
+                      ? t("order.bringBy", {
+                          date: time.calendarDate(order.onOrderTerm.confirmed.readyOn),
+                        })
+                      : null;
                   return (
                     <OrderRow
                       key={order.id}
                       order={order}
                       needsAnswer={order.needsAnswer}
-                      dateLine={main ? t(main.key, { time: main.time }) : null}
+                      dateLine={
+                        main
+                          ? { text: t(main.key, { time: main.time }), deadline: true }
+                          : readyOn
+                            ? { text: readyOn, deadline: true }
+                            : null
+                      }
                       onPress={() => openOrder(order.id)}
                     />
                   );
@@ -241,23 +261,28 @@ function SignedInOrders() {
             }}
             empty={{ icon: "archive", title: t("orders.historyEmptyTitle") }}
           >
-            <View style={styles.list}>
-              {history.history.months.map((month) => {
+            <View>
+              {history.history.months.map((month, monthIndex) => {
                 const parts = monthOf(month.month);
                 return (
-                  <View key={month.month} style={styles.list}>
-                    <Text variant="heading" accessibilityRole="header">
-                      {parts
+                  <Section
+                    key={month.month}
+                    first={monthIndex === 0}
+                    title={
+                      parts
                         ? `${t(`monthName.${parts.month}` as MobileTextKey)} ${parts.year}`
-                        : month.month}
-                    </Text>
-                    {month.orders.map((order) => {
-                      const finished = time.dateAndTime(order.finishedAt, CLUB_TIME_ZONE);
-                      return (
+                        : month.month
+                    }
+                  >
+                    <View style={styles.list}>
+                      {month.orders.map((order) => (
                         <OrderRow
                           key={order.id}
                           order={order}
-                          dateLine={finished.date}
+                          dateLine={{
+                            text: time.whenDay(order.finishedAt, CLUB_TIME_ZONE, now),
+                            deadline: false,
+                          }}
                           onPress={() => openOrder(order.id)}
                           footer={
                             order.canRepeat || order.canReview ? (
@@ -266,7 +291,6 @@ function SignedInOrders() {
                                   <Button
                                     variant="text"
                                     size="m"
-                                    icon="refresh"
                                     loading={repeat.pending === order.id}
                                     onPress={() => repeat.repeat(order.id)}
                                   >
@@ -278,7 +302,6 @@ function SignedInOrders() {
                                   <Button
                                     variant="text"
                                     size="m"
-                                    icon="star"
                                     onPress={() =>
                                       root()?.push("order-review", {
                                         orderId: order.id,
@@ -293,37 +316,42 @@ function SignedInOrders() {
                             ) : null
                           }
                         />
-                      );
-                    })}
-                  </View>
+                      ))}
+                    </View>
+                  </Section>
                 );
               })}
               {history.history.nextCursor && (
-                <Button
-                  variant="secondary"
-                  loading={history.loadingMore}
-                  onPress={history.loadMore}
-                >
-                  {t("catalog.loadMore")}
-                </Button>
+                <Section>
+                  <Button
+                    variant="secondary"
+                    loading={history.loadingMore}
+                    onPress={history.loadMore}
+                  >
+                    {t("catalog.loadMore")}
+                  </Button>
+                </Section>
               )}
             </View>
           </DataState>
         )}
-      </View>
+      </ScreenBody>
       {repeat.sheet}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
+  tabs: { paddingBottom: 12 },
   list: { gap: 12 },
+  // The actions under a finished order: their own row, clear of the card's text.
   repeat: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
+    paddingTop: 4,
     paddingBottom: 8,
     flexDirection: "row",
     flexWrap: "wrap",
-    alignItems: "flex-start",
+    gap: 16,
+    alignItems: "center",
   },
 });

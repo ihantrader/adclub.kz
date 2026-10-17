@@ -1,3 +1,4 @@
+import { formatKzPhone } from "@adclub/domain";
 import { languages, mobileText, type Lang, type MobileTextKey } from "@adclub/i18n";
 import { layout, radius, themeModes, type ThemeMode } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -14,6 +15,7 @@ import {
   OfflineBanner,
   Radio,
   Screen,
+  ScreenBody,
   Section,
   Sheet,
   Text,
@@ -44,12 +46,13 @@ const ShowcaseScreen = __DEV__ ? lazy(() => import("../../dev/ShowcaseScreen")) 
 /**
  * M-PRO-01, guest and signed in (TASK-029): a guest sees the invitation to
  * sign in; a signed-in member sees their name and phone, "Мои данные" and
- * "Устройства", and can sign out (T-PRO-01). City, language and appearance
- * are shown either way — they already live on the device (TASK-027) and,
- * once signed in, in the account too (`SessionProvider` keeps them in step).
- * «Документы и поддержка» and «Стать партнёром клуба» (TASK-077) are there
- * for both. Items the app doesn't have yet (subscription, notifications,
- * deleting the account) are left out on purpose, not shown disabled.
+ * "Устройства", and can sign out (T-PRO-01) — a row of its own group, not a
+ * centred accent button (TASK-078). City, language and appearance are shown
+ * either way — they already live on the device (TASK-027) and, once signed
+ * in, in the account too (`SessionProvider` keeps them in step). «Документы
+ * и поддержка» and «Стать партнёром клуба» (TASK-077) are there for both.
+ * Items the app doesn't have yet (subscription, notifications, deleting the
+ * account) are left out on purpose, not shown disabled.
  */
 export function ProfileScreen({
   navigation,
@@ -74,24 +77,26 @@ export function ProfileScreen({
       root
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
     >
-      <View style={styles.content}>
-        {session.status === "signed_in" ? (
-          <SignedInCard
-            name={session.profile?.name ?? null}
-            phone={session.profile?.phone ?? null}
-            onResumeRegistration={
-              session.profile && !session.profile.registrationCompleted
-                ? signIn.resumeRegistration
-                : undefined
-            }
-          />
-        ) : (
-          <PersonCard
-            title={t("profile.guestTitle")}
-            text={t("profile.guestText")}
-            onPress={signIn.start}
-          />
-        )}
+      <ScreenBody>
+        <Section first>
+          {session.status === "signed_in" ? (
+            <SignedInCard
+              name={session.profile?.name ?? null}
+              phone={session.profile?.phone ? formatKzPhone(session.profile.phone) : null}
+              onResumeRegistration={
+                session.profile && !session.profile.registrationCompleted
+                  ? signIn.resumeRegistration
+                  : undefined
+              }
+            />
+          ) : (
+            <PersonCard
+              title={t("profile.guestTitle")}
+              text={t("profile.guestText")}
+              onPress={signIn.start}
+            />
+          )}
+        </Section>
 
         <Section>
           <ListGroup>
@@ -166,27 +171,29 @@ export function ProfileScreen({
         </Section>
 
         {session.status === "signed_in" && (
-          <Button
-            variant="text"
-            size="m"
-            icon="logout"
-            destructive
-            onPress={() => setConfirmSignOut(true)}
-          >
-            {t("profile.signOut")}
-          </Button>
+          <Section>
+            <ListGroup>
+              <ListRow
+                first
+                icon="logout"
+                title={t("profile.signOut")}
+                onPress={() => setConfirmSignOut(true)}
+              />
+            </ListGroup>
+          </Section>
         )}
 
-        <Text variant="caption" color="textMuted" style={styles.version}>
-          {t("profile.version")}: {appInfo.version}
-        </Text>
-
-        {ShowcaseScreen && (
-          <Button variant="text" size="m" icon="category" onPress={() => setShowcase(true)}>
-            Витрина компонентов (dev)
-          </Button>
-        )}
-      </View>
+        <Section>
+          <Text variant="caption" color="textMuted">
+            {t("profile.version")}: {appInfo.version}
+          </Text>
+          {ShowcaseScreen && (
+            <Button variant="text" size="m" tone="neutral" onPress={() => setShowcase(true)}>
+              Витрина компонентов (dev)
+            </Button>
+          )}
+        </Section>
+      </ScreenBody>
 
       <CitySheet visible={sheet === "city"} onClose={() => setSheet(null)} />
 
@@ -294,10 +301,10 @@ function SignedInCard({
 }
 
 /**
- * The card at the top of the profile: the person on the round accent plate,
- * a title and a line under it; with `onPress` it reads as a button — it
- * darkens when pressed and has a chevron (TASK-030.A: the guest's «Войдите»
- * looked like a note).
+ * The card at the top of the profile: the person on a neutral round plate
+ * (`fill` — the accent is for the one action of a screen, TASK-078), a title
+ * and a line under it; with `onPress` it reads as a button — it darkens when
+ * pressed and has a chevron (TASK-030.A: the guest's «Войдите» looked like a note).
  */
 function PersonCard({
   title,
@@ -321,8 +328,8 @@ function PersonCard({
         },
       ]}
     >
-      <IconBadge size={24}>
-        <Icon name="user" size={24} color="accent" />
+      <IconBadge size={24} tone="fill">
+        <Icon name="user" size={24} color="textMuted" />
       </IconBadge>
       <View style={styles.personText}>
         <Text variant="bodyStrong">{title}</Text>
@@ -338,7 +345,6 @@ function PersonCard({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 4 },
   personCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -348,5 +354,4 @@ const styles = StyleSheet.create({
   },
   personText: { flex: 1, gap: 2 },
   choices: { paddingBottom: 8 },
-  version: { paddingTop: layout.blockGap },
 });

@@ -7,8 +7,11 @@ import {
   Button,
   CategoryIcon,
   DataState,
+  ListGroup,
+  ListRow,
   OfflineBanner,
   Screen,
+  ScreenBody,
   SearchEntry,
   Section,
   SkeletonList,
@@ -39,12 +42,13 @@ export interface CatalogHomeScreenProps {
 /**
  * M-CAT-01 — the main screen of the catalog: the car and the city in the
  * header, one hint card, the top-level categories of goods as tiles and
- * «Услуги в {город}» — the subcategories of services as tiles (TASK-019).
- * Services are shown only by a city (PRODUCT 11): with «Весь Казахстан» the
- * block says so (T-CITY-01) and offers to choose one. There is no
- * advertising anywhere. The catalog is for a car (D-062), so the card that
- * used to ask for one is gone — the only hint left is to say which engine
- * it has.
+ * «Услуги в {город}» — the subcategories of services as rows of a card
+ * group (TASK-019; TASK-078: rows, so a long Kazakh name is a line, not a
+ * tile three lines tall). Services are shown only by a city (PRODUCT 11):
+ * with «Весь Казахстан» the block says so (T-CITY-01) and offers to choose
+ * one. There is no advertising anywhere. The catalog is for a car (D-062),
+ * so the card that used to ask for one is gone — the only hint left is to
+ * say which engine it has.
  */
 export function CatalogHomeScreen({
   onOpenNode,
@@ -61,9 +65,12 @@ export function CatalogHomeScreen({
   const [citySheet, setCitySheet] = useState(false);
 
   const nodes = (tree.data?.categories ?? []).filter((node) => node.kind === "goods");
+  // A subcategory of services with its own icon, or its node's (M8).
   const services = (tree.data?.categories ?? [])
     .filter((node) => node.kind === "services")
-    .flatMap((node) => node.children);
+    .flatMap((node) =>
+      node.children.map((child) => ({ child, icon: child.icon ?? node.icon ?? null })),
+    );
 
   const status =
     !online && tree.data === null
@@ -95,7 +102,8 @@ export function CatalogHomeScreen({
     <Screen
       title={t("tabs.catalog")}
       root
-      banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
+      // Without a network the catalog cannot search; the orders can still be read (SCREENS 2.4).
+      banner={!online ? <OfflineBanner label={t("catalog.offlineBanner")} /> : null}
       refreshing={tree.refreshing}
       refreshingLabel={t("common.loading")}
       header={
@@ -106,13 +114,15 @@ export function CatalogHomeScreen({
               label={t("search.open")}
               placeholder={t("search.placeholder")}
               onPress={onOpenSearch}
+              disabled={!online}
+              disabledHint={t("search.needsNetwork")}
             />
           </View>
         </>
       }
     >
-      <View style={styles.content}>
-        {hint}
+      <ScreenBody>
+        {hint && <View style={styles.hint}>{hint}</View>}
         <DataState
           status={status}
           skeleton={<SkeletonList rows={4} label={t("common.loading")} />}
@@ -136,7 +146,7 @@ export function CatalogHomeScreen({
             text: t("catalog.emptyText"),
           }}
         >
-          <Section title={t("catalog.goods")}>
+          <Section title={t("catalog.goods")} first={!hint}>
             <View style={styles.tiles}>
               {tileRows(nodes).map((row) => (
                 <View
@@ -163,26 +173,18 @@ export function CatalogHomeScreen({
               }
             >
               {selection.kind === "city" ? (
-                <View style={styles.tiles}>
-                  {tileRows(services).map((row) => (
-                    <View
-                      key={row.map((node) => node?.id ?? "spacer").join(":")}
-                      style={styles.tileRow}
-                    >
-                      {row.map((node) =>
-                        node ? (
-                          <CategoryTile
-                            key={node.id}
-                            node={node}
-                            onPress={() => onOpenServices(node)}
-                          />
-                        ) : (
-                          <View key="spacer" style={styles.spacer} />
-                        ),
-                      )}
-                    </View>
+                <ListGroup>
+                  {services.map(({ child, icon }, index) => (
+                    <ListRow
+                      key={child.id}
+                      first={index === 0}
+                      title={child.name.text}
+                      leading={<CategoryIcon name={icon} size={24} color="accent" />}
+                      navigates
+                      onPress={() => onOpenServices(child)}
+                    />
                   ))}
-                </View>
+                </ListGroup>
               ) : (
                 // «Весь Казахстан»: services are only by a city (T-CITY-01).
                 <Banner
@@ -200,7 +202,7 @@ export function CatalogHomeScreen({
             </Section>
           )}
         </DataState>
-      </View>
+      </ScreenBody>
       <CitySheet visible={citySheet} onClose={() => setCitySheet(false)} services />
     </Screen>
   );
@@ -209,8 +211,8 @@ export function CatalogHomeScreen({
 /**
  * A tile: the icon 32 of `accent` in the middle, without a plate (D-068), the name under
  * it in the middle, up to two lines (a Kazakh name is never cut: the tile
- * grows). Tiles of one row are as tall as the tallest of them, and their
- * icons stand on one line.
+ * grows). Tiles of one row are as tall as the tallest of them; the content
+ * stands in the middle of the tile (TASK-078 M-CAT-01).
  */
 function CategoryTile({
   node,
@@ -242,18 +244,18 @@ function CategoryTile({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, gap: 12 },
-  search: { paddingHorizontal: layout.screenPadding, paddingBottom: 12 },
+  search: { paddingHorizontal: layout.screenPadding, paddingTop: 8 },
+  hint: { paddingBottom: 12 },
   tiles: { gap: 12 },
   tileRow: { flexDirection: "row", gap: 12, alignItems: "stretch" },
   tile: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 104,
     borderRadius: radius.m,
     padding: layout.cardPadding,
     gap: 12,
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   tileName: { textAlign: "center" },
   spacer: { flex: 1 },

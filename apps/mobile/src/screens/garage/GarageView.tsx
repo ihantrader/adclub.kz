@@ -4,16 +4,19 @@ import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   Badge,
+  Banner,
   Button,
   Icon,
-  IconBadge,
   OfflineBanner,
   Screen,
+  ScreenBody,
   Text,
   useToast,
 } from "../../design-system";
+import { joinDot } from "../../catalog/format";
 import { findCarColor } from "../../garage/car-color";
 import { carParameters, carTitle, type GarageCar } from "../../garage/garage";
+import { useSignIn } from "../../navigation/use-sign-in";
 import { useOnline } from "../../services/use-network";
 import { NoCarContent } from "../NoCarState";
 import { useGarage } from "../../state/garage-provider";
@@ -30,8 +33,8 @@ export interface GarageViewProps {
 /**
  * M-GAR-01 — the garage. A guest's cars live on the device, so the screen
  * works without a network: the banner says there is none, the garage stays
- * (SCREENS 2.4). «Войдите — гараж сохранится» is a guest's note only: a
- * signed-in member was told it while already signed in (TASK-030.A).
+ * (SCREENS 2.4). «Войдите — гараж сохранится» is a guest's note only — a
+ * banner with «Войти» (TASK-078), not a grey line nobody can press.
  *
  * Signed in, the garage is the account's (TASK-029.B): opening the tab reads
  * it again, so a car added or removed on another phone shows here; without a
@@ -42,6 +45,7 @@ export function GarageView({ onAdd, onOpen }: GarageViewProps) {
   const online = useOnline();
   const { cars, state, remote, makePrimary, sync } = useGarage();
   const session = useSession();
+  const signIn = useSignIn();
   const toast = useToast();
   const offline = remote && !online;
   const [pendingPrimary, setPendingPrimary] = useState<string | null>(null);
@@ -69,18 +73,12 @@ export function GarageView({ onAdd, onOpen }: GarageViewProps) {
       root
       centerContent={cars.length === 0}
       banner={!online ? <OfflineBanner label={t("state.offline")} /> : null}
-      footer={
-        cars.length > 0 ? (
-          <Button icon="plus" onPress={onAdd}>
-            {t("garage.add")}
-          </Button>
-        ) : null
-      }
+      footer={cars.length > 0 ? <Button onPress={onAdd}>{t("garage.add")}</Button> : null}
     >
-      <View style={cars.length === 0 ? undefined : styles.content}>
-        {cars.length === 0 ? (
-          <NoCarContent onAdd={onAdd} />
-        ) : (
+      {cars.length === 0 ? (
+        <NoCarContent onAdd={onAdd} />
+      ) : (
+        <ScreenBody>
           <View style={styles.list}>
             {cars.map((car) => (
               <CarCard
@@ -93,19 +91,31 @@ export function GarageView({ onAdd, onOpen }: GarageViewProps) {
                 offline={offline}
               />
             ))}
-            {/* The guest's note of M-GAR-01. */}
+            {/* The guest's note of M-GAR-01, with the way in. */}
             {session.status === "guest" && (
-              <Text variant="bodyS" color="textMuted" style={styles.note}>
+              <Banner
+                icon="user"
+                action={
+                  <Button variant="text" size="m" onPress={signIn.start}>
+                    {t("auth.signIn")}
+                  </Button>
+                }
+              >
                 {t("garage.guestNote")}
-              </Text>
+              </Banner>
             )}
           </View>
-        )}
-      </View>
+        </ScreenBody>
+      )}
     </Screen>
   );
 }
 
+/**
+ * A card of a car: one column (TASK-078) — the name with the chevron, the
+ * parameters as one line through «·», the colour, «Основной» or the way to
+ * make it so.
+ */
 function CarCard({
   car,
   primary,
@@ -124,7 +134,8 @@ function CarCard({
 }) {
   const t = useT();
   const { theme } = useTheme();
-  const parameters = carParameters(car);
+  const parameters = joinDot(carParameters(car));
+  const color = car.color !== null ? findCarColor(car.color) : undefined;
 
   return (
     <Pressable
@@ -138,16 +149,13 @@ function CarCard({
       ]}
     >
       <View style={styles.cardHead}>
-        <IconBadge size={20}>
-          <Icon name="car" size={20} color="accent" />
-        </IconBadge>
         <View style={styles.grow}>
           <Text variant="bodyStrong">{carTitle(car)}</Text>
-          {parameters.length > 0 ? (
+          {parameters !== "" && (
             <Text variant="bodyS" color="textMuted">
-              {parameters.join(" · ")}
+              {parameters}
             </Text>
-          ) : null}
+          )}
         </View>
         <Icon name="chevronRight" size={20} color="textMuted" />
       </View>
@@ -156,19 +164,17 @@ function CarCard({
           {t("garage.engineMissing")}
         </Text>
       )}
-      {car.color !== null && (
+      {color && (
         <View style={styles.colorRow}>
+          {/* A ring of `borderField`, so white reads on a white card (M19). */}
           <View
             style={[
               styles.swatch,
-              {
-                backgroundColor: findCarColor(car.color)?.swatch,
-                borderColor: theme.colors.border,
-              },
+              { backgroundColor: color.swatch, borderColor: theme.colors.borderField },
             ]}
           />
           <Text variant="bodyS" color="textMuted">
-            {t(`car.color.${car.color}`)}
+            {t(`car.color.${car.color!}`)}
           </Text>
         </View>
       )}
@@ -184,7 +190,6 @@ function CarCard({
             onPress={onMakePrimary}
             loading={primaryPending}
             disabled={offline}
-            style={styles.primaryButton}
           >
             {t("garage.makePrimary")}
           </Button>
@@ -200,7 +205,6 @@ function CarCard({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12 },
   list: { gap: 12 },
   // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
   card: {
@@ -213,6 +217,4 @@ const styles = StyleSheet.create({
   colorRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   swatch: { width: 14, height: 14, borderRadius: 7, borderWidth: 1 },
   primaryRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  primaryButton: { alignSelf: "flex-start", paddingHorizontal: 0 },
-  note: { paddingTop: 8 },
 });

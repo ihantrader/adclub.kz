@@ -1,4 +1,5 @@
 import { isApiError } from "@adclub/api-client";
+import { formatKzPhone } from "@adclub/domain";
 import type { MobileTextKey } from "@adclub/i18n";
 import { formatOrderCode, layout, radius, size } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
@@ -14,10 +15,12 @@ import {
   Dialog,
   hairline,
   Icon,
+  IconLine,
   ListGroup,
   ListRow,
   OfflineBanner,
   Screen,
+  ScreenBody,
   Section,
   SkeletonList,
   StarsInput,
@@ -25,8 +28,9 @@ import {
   Text,
   useTheme,
   useToast,
+  ValueRow,
 } from "../../design-system";
-import { formatTenge, parseDate } from "../../catalog/format";
+import { formatTenge, joinDot, parseDate } from "../../catalog/format";
 import { runEnvironment } from "../../config/environment";
 import type { RootParams } from "../../navigation/routes";
 import { useLeaveWhenSignedOut } from "../../navigation/use-leave-when-signed-out";
@@ -85,6 +89,15 @@ const DAY_KEYS = ["", "day.1", "day.2", "day.3", "day.4", "day.5", "day.6", "day
  * actions that need the server switched off («Нужна сеть», SCREENS 2.4). An
  * order the server has moved meanwhile is shown as it is now, not as an
  * error (SCREENS 2.3).
+ *
+ * TASK-078: the blocks of SCREENS M-ORD-03 are sections 32 apart; the code
+ * block carries T-ORD-05 inside it and, before acceptance, a muted square
+ * with a lock; the details of the item are value rows and «Итого» appears
+ * only when there is more than one; the phone of the point is said under
+ * «Позвонить», written out; the actions — one main button, the finished
+ * order's «Повторить заказ», pinned at the bottom, the rest in the body:
+ * «Отменить заявку» a secondary button with the danger text, «Пожаловаться»
+ * a text button; the place of a finished order is only the supplier's name.
  */
 export function OrderScreen({ route, navigation }: Props) {
   const { orderId } = route.params;
@@ -282,6 +295,30 @@ export function OrderScreen({ route, navigation }: Props) {
 
   const serverActions = !readOnly;
   const actionsLive = online && !fromCopy;
+  const finished = view?.finished ?? false;
+  // «Посмотрите другие предложения» of a declined or expired order: the card of the item.
+  const otherOffers =
+    order &&
+    (order.status === "declined_by_supplier" ||
+      order.status === "response_expired" ||
+      order.status === "reserve_expired");
+  const openItem = () => {
+    if (!order) return;
+    navigation.navigate("tabs", {
+      screen: "catalog",
+      params: {
+        screen: "catalog-item",
+        params: { itemId: order.item.id, title: order.item.name.text },
+        initial: false,
+      },
+    });
+  };
+
+  const needsNetwork = (
+    <Text variant="caption" color="textMuted">
+      {t("order.needsNetwork")}
+    </Text>
+  );
 
   return (
     <Screen
@@ -289,7 +326,7 @@ export function OrderScreen({ route, navigation }: Props) {
       back={{ label: t("common.back"), onPress: navigation.goBack }}
       banner={
         readOnly ? (
-          <Banner tone="warning" icon="refresh" placement="flush">
+          <Banner tone="warning" icon="refresh">
             {t("orders.readOnlyBanner")}
           </Banner>
         ) : !online ? (
@@ -300,6 +337,21 @@ export function OrderScreen({ route, navigation }: Props) {
       refreshingLabel={t("common.loading")}
       {...(!readOnly && online ? { onPullToRefresh: request.reload } : {})}
       bottomInset
+      // The one main button of a finished order, pinned: a toast stands above it (DESIGN 7.7).
+      footer={
+        serverActions && order && repeatable ? (
+          <>
+            <Button
+              disabled={!actionsLive}
+              loading={repeat.pending === order.id}
+              onPress={() => repeat.repeat(order.id)}
+            >
+              {t("order.repeat")}
+            </Button>
+            {!actionsLive && needsNetwork}
+          </>
+        ) : null
+      }
     >
       <DataState
         status={status}
@@ -317,63 +369,77 @@ export function OrderScreen({ route, navigation }: Props) {
         empty={{ icon: "receipt", title: t("order.notFound") }}
       >
         {order && view && (
-          <View style={styles.body}>
-            {offlineNote && (
-              <Text variant="bodyS" color="textMuted">
-                {offlineNote}
-              </Text>
-            )}
-
+          <ScreenBody>
             {/* 1. The status: heading, explanation, deadline. */}
-            <View style={styles.block}>
-              <StatusBadge group={view.group}>{t(orderMarkKey(order))}</StatusBadge>
-              <Text variant="title" accessibilityRole="header">
-                {view.title === "orderStatus.completed.title" && order.givenOut
-                  ? t(view.title, time.dateAndTime(order.givenOut.at, timeZone))
-                  : view.title === "orderStatus.completed.title"
-                    ? t("orderStatus.completed.short")
-                    : // TASK-039.B: «Ждём вас {дата} в {время}» of a confirmed visit.
-                      t(view.title, { visit: visitLine })}
-              </Text>
-              {view.text && (
-                <Text color="textMuted">
-                  {t(view.text, {
-                    time:
-                      view.deadline === "respondBy"
-                        ? time.deadline(order.respondBy, timeZone, now)
-                        : view.deadline === "reserveUntil" && order.reserveUntil
-                          ? time.deadline(order.reserveUntil, timeZone, now)
-                          : view.deadline === "answerBy" && order.onOrderTerm?.proposed
-                            ? time.deadline(order.onOrderTerm.proposed.answerBy, timeZone, now)
-                            : view.deadline === "answerBy" && order.serviceVisit?.proposed
-                              ? time.deadline(order.serviceVisit.proposed.answerBy, timeZone, now)
-                              : "",
-                    // TASK-038: the time of a visit for a service.
-                    visit: visitLine,
-                    // TASK-037: the date of the term of an order under order.
-                    date: time.calendarDate(
-                      view.termDate === "proposed"
-                        ? order.onOrderTerm?.proposed?.readyOn
-                        : view.termDate === "confirmed"
-                          ? order.onOrderTerm?.confirmed?.readyOn
-                          : null,
-                    ),
-                  })}
+            <Section first>
+              {offlineNote && (
+                <Text variant="bodyS" color="textMuted">
+                  {offlineNote}
                 </Text>
               )}
-              {supplyOverdue(order) && (
-                <Text variant="bodyS" color="warning">
-                  {t("order.supplyOverdue")}
+              <View style={styles.status}>
+                <StatusBadge group={view.group}>{t(orderMarkKey(order))}</StatusBadge>
+                <Text variant="title" accessibilityRole="header">
+                  {view.title === "orderStatus.completed.title" && order.givenOut
+                    ? t(view.title, time.dateAndTime(order.givenOut.at, timeZone))
+                    : view.title === "orderStatus.completed.title"
+                      ? t("orderStatus.completed.short")
+                      : // TASK-039.B: «Ждём вас {дата} в {время}» of a confirmed visit.
+                        t(view.title, { visit: visitLine })}
                 </Text>
-              )}
-              {order.status === "accepted" && order.reserveUntil && (
-                <Text variant="bodyS">
-                  {t("orders.mainDate.reserveUntil", {
-                    time: time.deadline(order.reserveUntil, timeZone, now),
-                  })}
-                </Text>
-              )}
-            </View>
+                {/* TASK-037: the day the goods come, on a line of its own (TASK-078). */}
+                {view.termDate === "confirmed" && order.onOrderTerm?.confirmed && (
+                  <Text variant="bodyStrong">
+                    {t("order.bringBy", {
+                      date: time.calendarDate(order.onOrderTerm.confirmed.readyOn),
+                    })}
+                  </Text>
+                )}
+                {view.text && (
+                  <Text color="textMuted">
+                    {t(view.text, {
+                      time:
+                        view.deadline === "respondBy"
+                          ? time.deadline(order.respondBy, timeZone, now)
+                          : view.deadline === "reserveUntil" && order.reserveUntil
+                            ? time.deadline(order.reserveUntil, timeZone, now)
+                            : view.deadline === "answerBy" && order.onOrderTerm?.proposed
+                              ? time.deadline(order.onOrderTerm.proposed.answerBy, timeZone, now)
+                              : view.deadline === "answerBy" && order.serviceVisit?.proposed
+                                ? time.deadline(order.serviceVisit.proposed.answerBy, timeZone, now)
+                                : "",
+                      // TASK-038: the time of a visit for a service.
+                      visit: visitLine,
+                      // TASK-037: the date of the term of an order under order.
+                      date: time.calendarDate(
+                        view.termDate === "proposed"
+                          ? order.onOrderTerm?.proposed?.readyOn
+                          : view.termDate === "confirmed"
+                            ? order.onOrderTerm?.confirmed?.readyOn
+                            : null,
+                      ),
+                    })}
+                  </Text>
+                )}
+                {supplyOverdue(order) && (
+                  <Text variant="bodyS" color="warning">
+                    {t("order.supplyOverdue")}
+                  </Text>
+                )}
+                {order.status === "accepted" && order.reserveUntil && (
+                  <IconLine icon="clock" variant="bodyS" textColor="text">
+                    {t("orders.mainDate.reserveUntil", {
+                      time: time.deadline(order.reserveUntil, timeZone, now),
+                    })}
+                  </IconLine>
+                )}
+                {otherOffers && serverActions && (
+                  <Button variant="text" size="m" disabled={!actionsLive} onPress={openItem}>
+                    {t("order.otherOffers")}
+                  </Button>
+                )}
+              </View>
+            </Section>
 
             {/* The review and the complaint as the server says them (TASK-049.B, M-ORD-05, M-ORD-06). */}
             {feedback.review && (
@@ -436,11 +502,7 @@ export function OrderScreen({ route, navigation }: Props) {
                             {t("review.scoreOnly")}
                           </Button>
                         )}
-                        {!actionsLive && (
-                          <Text variant="caption" color="textMuted" style={styles.center}>
-                            {t("order.needsNetwork")}
-                          </Text>
-                        )}
+                        {!actionsLive && needsNetwork}
                       </View>
                     )}
                 </View>
@@ -507,11 +569,7 @@ export function OrderScreen({ route, navigation }: Props) {
                           {t("order.answer.reject")}
                         </Button>
                       </ButtonRow>
-                      {!actionsLive && (
-                        <Text variant="caption" color="textMuted" style={styles.center}>
-                          {t("order.needsNetwork")}
-                        </Text>
-                      )}
+                      {!actionsLive && needsNetwork}
                     </>
                   )}
                 </View>
@@ -520,7 +578,7 @@ export function OrderScreen({ route, navigation }: Props) {
 
             {/* 3. The code and the QR — while the order is active, for its user only. */}
             {view.code !== "none" && order.confirmation && (
-              <View style={styles.block}>
+              <Section>
                 <Pressable
                   disabled={view.code === "dimmed"}
                   accessibilityRole={view.code === "dimmed" ? undefined : "button"}
@@ -533,19 +591,17 @@ export function OrderScreen({ route, navigation }: Props) {
                     codeLabel={t("order.codeLabel")}
                     qrLabel={t("order.qrLabel", { code: formatOrderCode(order.confirmation.code) })}
                     ready={view.code === "large"}
+                    // A service's status already says «Покажите код на месте» (TASK-078).
+                    {...(order.kind === "service" ? {} : { note: t("order.showCode") })}
                     {...(view.code === "dimmed" ? { pending: { text: t("order.codeLater") } } : {})}
                   />
                 </Pressable>
-                {view.code !== "dimmed" && (
-                  <Text variant="bodyS" color="textMuted" style={styles.center}>
-                    {t("order.showCode")}
-                  </Text>
-                )}
-              </View>
+              </Section>
             )}
 
             {/* 4. The supplier and the place — exactly as the server gave them:
-                «Где забрать» for a pickup, «Поставщик» for a delivery (TASK-030.A). */}
+                «Где забрать» for a pickup, «Поставщик» for a delivery (TASK-030.A);
+                for a finished order only the supplier's name (TASK-078). */}
             {view.place !== "none" && (
               <Section
                 title={t(
@@ -573,61 +629,70 @@ export function OrderScreen({ route, navigation }: Props) {
                   ) : (
                     <Text variant="bodyStrong">{order.supplier.name}</Text>
                   )}
-                  {view.place === "full" && order.pickupPoint ? (
+                  {view.place === "full" && order.pickupPoint && !finished ? (
                     <PickupPlace order={order} />
-                  ) : (
+                  ) : !finished ? (
                     <Text variant="bodyS" color="textMuted">
                       {[order.supplier.district, order.supplier.cityName]
                         .filter(Boolean)
                         .join(", ")}
                     </Text>
-                  )}
+                  ) : null}
                 </View>
               </Section>
             )}
 
             {/* 5. The item. */}
             <Section title={t("order.item")}>
-              <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+              <ListGroup>
                 <View style={styles.itemRow}>
-                  <ItemPhoto photo={order.item.photo} icon={null} />
+                  <ItemPhoto photo={order.item.photo} icon={null} kind={order.item.type} />
                   <View style={styles.grow}>
                     <Text variant="bodyStrong">{order.item.name.text}</Text>
                     {(order.item.brand || order.item.article) && (
                       <Text variant="bodyS" color="textMuted">
-                        {[order.item.brand, order.item.article].filter(Boolean).join(" · ")}
+                        {joinDot([order.item.brand, order.item.article])}
                       </Text>
                     )}
                   </View>
                 </View>
-                <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
                 {order.serviceVisit ? (
                   <>
                     {/* TASK-038: the car and the time of a visit for a service. */}
-                    <Term label={t("order.carLabel")}>{carText(order.serviceVisit.car)}</Term>
-                    <Term label={t("order.visitLabel")}>
-                      {time.visit(
+                    <ValueRow label={t("order.carLabel")} value={carText(order.serviceVisit.car)} />
+                    <ValueRow
+                      label={t("order.visitLabel")}
+                      value={time.visit(
                         order.serviceVisit.confirmed?.visitAt ?? order.serviceVisit.desiredAt,
                         timeZone,
                       )}
-                    </Term>
-                    <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
+                    />
+                    <ValueRow label={t("order.priceLabel")} value={formatTenge(order.unitPrice)} />
                   </>
                 ) : (
                   <>
-                    <Term label={t("order.quantityLabel")}>
-                      {t("orders.quantityShort", { n: order.quantity })}
-                    </Term>
-                    <Term label={t("order.priceLabel")}>{formatTenge(order.unitPrice)}</Term>
-                    <Term label={t("order.fulfillmentLabel")}>
-                      {order.fulfillment === "pickup" ? t("catalog.pickup") : t("catalog.delivery")}
-                    </Term>
+                    <ValueRow
+                      label={t("order.quantityLabel")}
+                      value={t("orders.quantityShort", { n: order.quantity })}
+                    />
+                    <ValueRow label={t("order.priceLabel")} value={formatTenge(order.unitPrice)} />
+                    <ValueRow
+                      label={t("order.fulfillmentLabel")}
+                      value={
+                        order.fulfillment === "pickup" ? t("catalog.pickup") : t("catalog.delivery")
+                      }
+                    />
+                    {/* «Итого» says something only when there is more than one (TASK-078). */}
+                    {order.quantity > 1 && (
+                      <ValueRow
+                        label={t("order.totalLabel")}
+                        value={formatTenge(order.total)}
+                        strong
+                      />
+                    )}
                   </>
                 )}
-                <Term label={t("order.totalLabel")} strong>
-                  {formatTenge(order.total)}
-                </Term>
-              </View>
+              </ListGroup>
             </Section>
 
             {/* 6. The course of the order — moves and times, never an employee's name. */}
@@ -639,12 +704,9 @@ export function OrderScreen({ route, navigation }: Props) {
                       key={`${step.at}-${index}`}
                       first={index === 0}
                       title={<Text variant="body">{t(orderStepKey(step, order))}</Text>}
-                      trailing={
+                      subtitle={
                         <Text variant="caption" color="textMuted">
-                          {(() => {
-                            const parts = time.dateAndTime(step.at, timeZone);
-                            return `${parts.date}, ${parts.time}`;
-                          })()}
+                          {time.when(step.at, timeZone, now)}
                         </Text>
                       }
                     />
@@ -656,98 +718,85 @@ export function OrderScreen({ route, navigation }: Props) {
             {/* 7. The actions: «Оценить поставщика», «Пожаловаться» and T-ORD-08 as
                 the server allows them (TASK-049.B), then the rest. */}
             {serverActions && (
-              <View style={styles.actions}>
-                {feedback.notReceived && (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={!actionsLive}
-                    accessibilityState={{ disabled: !actionsLive }}
-                    onPress={() =>
-                      navigation.push("order-complaint", {
-                        orderId: order.id,
-                        reason: "not_received",
-                      })
-                    }
-                    style={[styles.notReceived, { backgroundColor: theme.colors.surface }]}
-                  >
-                    <Icon
-                      name="alertTriangle"
-                      size={20}
-                      color={actionsLive ? "warning" : "textDisabled"}
-                    />
-                    <Text
-                      variant="bodyStrong"
-                      color={actionsLive ? "text" : "textDisabled"}
-                      style={styles.grow}
+              <Section>
+                <View style={styles.actions}>
+                  {feedback.notReceived && (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={!actionsLive}
+                      accessibilityState={{ disabled: !actionsLive }}
+                      onPress={() =>
+                        navigation.push("order-complaint", {
+                          orderId: order.id,
+                          reason: "not_received",
+                        })
+                      }
+                      style={[styles.notReceived, { backgroundColor: theme.colors.surface }]}
                     >
-                      {t("complaint.notReceivedLine")}
-                    </Text>
-                    <Icon
-                      name="chevronRight"
-                      size={20}
-                      color={actionsLive ? "textMuted" : "textDisabled"}
-                    />
-                  </Pressable>
-                )}
-                {feedback.rate && (
-                  <Button
-                    icon="star"
-                    disabled={!actionsLive}
-                    onPress={() =>
-                      navigation.push("order-review", { orderId: order.id, mode: "new" })
-                    }
-                  >
-                    {t("review.rate")}
-                  </Button>
-                )}
-                {feedback.testOrder && (
-                  <Text variant="bodyS" color="textMuted" style={styles.center}>
-                    {t("review.testOrder")}
-                  </Text>
-                )}
-                {feedback.complain && (
-                  <Button
-                    variant="secondary"
-                    disabled={!actionsLive}
-                    onPress={() => navigation.push("order-complaint", { orderId: order.id })}
-                  >
-                    {t("complaint.complain")}
-                  </Button>
-                )}
-                {view.cancellable && !waitsForAnswer && (
-                  <Button
-                    variant="secondary"
-                    destructive
-                    disabled={!actionsLive}
-                    loading={cancelling}
-                    onPress={() => setConfirmCancel(true)}
-                  >
-                    {t("order.cancel")}
-                  </Button>
-                )}
-                {repeatable && (
-                  <Button
-                    variant="secondary"
-                    icon="refresh"
-                    disabled={!actionsLive}
-                    loading={repeat.pending === order.id}
-                    onPress={() => repeat.repeat(order.id)}
-                  >
-                    {t("order.repeat")}
-                  </Button>
-                )}
-                {!actionsLive &&
-                  ((view.cancellable && !waitsForAnswer) ||
-                    repeatable ||
-                    feedback.rate ||
-                    feedback.complain) && (
-                    <Text variant="caption" color="textMuted" style={styles.center}>
-                      {t("order.needsNetwork")}
+                      <Icon
+                        name="alertTriangle"
+                        size={20}
+                        color={actionsLive ? "warning" : "textDisabled"}
+                      />
+                      <Text
+                        variant="bodyStrong"
+                        color={actionsLive ? "text" : "textDisabled"}
+                        style={styles.grow}
+                      >
+                        {t("complaint.notReceivedLine")}
+                      </Text>
+                      <Icon
+                        name="chevronRight"
+                        size={20}
+                        color={actionsLive ? "textMuted" : "textDisabled"}
+                      />
+                    </Pressable>
+                  )}
+                  {feedback.rate && (
+                    <Button
+                      variant={repeatable ? "secondary" : "primary"}
+                      disabled={!actionsLive}
+                      onPress={() =>
+                        navigation.push("order-review", { orderId: order.id, mode: "new" })
+                      }
+                    >
+                      {t("review.rate")}
+                    </Button>
+                  )}
+                  {feedback.testOrder && (
+                    <Text variant="bodyS" color="textMuted">
+                      {t("review.testOrder")}
                     </Text>
                   )}
-              </View>
+                  {view.cancellable && !waitsForAnswer && (
+                    <Button
+                      variant="secondary"
+                      destructive
+                      disabled={!actionsLive}
+                      loading={cancelling}
+                      onPress={() => setConfirmCancel(true)}
+                    >
+                      {t("order.cancel")}
+                    </Button>
+                  )}
+                  {feedback.complain && (
+                    <Button
+                      variant="text"
+                      size="m"
+                      tone="neutral"
+                      disabled={!actionsLive}
+                      onPress={() => navigation.push("order-complaint", { orderId: order.id })}
+                    >
+                      {t("complaint.complain")}
+                    </Button>
+                  )}
+                  {!actionsLive &&
+                    ((view.cancellable && !waitsForAnswer) || feedback.rate || feedback.complain) &&
+                    needsNetwork}
+                </View>
+              </Section>
             )}
-          </View>
+          </ScreenBody>
         )}
       </DataState>
 
@@ -810,7 +859,8 @@ export function OrderScreen({ route, navigation }: Props) {
 /**
  * The place after acceptance: address, hours, closed dates, and «Маршрут» |
  * «Позвонить» — two equal buttons across the width, or the one there is
- * (TASK-030.A). «Маршрут» lets the person choose the navigation app.
+ * (TASK-030.A), with the phone written out under them (M4). «Маршрут» lets
+ * the person choose the navigation app.
  */
 function PickupPlace({ order }: { order: OrderView }) {
   const { t } = useLanguage();
@@ -874,14 +924,17 @@ function PickupPlace({ order }: { order: OrderView }) {
             const parts = parseDate(closed.date);
             return (
               <Text key={closed.date} variant="bodyS">
-                {parts ? `${parts.day} ${t(`month.${parts.month}` as MobileTextKey)}` : closed.date}
-                {closed.note ? ` · ${closed.note}` : ""}
+                {joinDot([
+                  parts
+                    ? `${parts.day} ${t(`month.${parts.month}` as MobileTextKey)}`
+                    : closed.date,
+                  closed.note,
+                ])}
               </Text>
             );
           })}
         </View>
       )}
-      {point.phone && <Text variant="bodyS">{point.phone}</Text>}
       {(canRoute || call) && (
         <ButtonRow>
           {canRoute && (
@@ -896,6 +949,11 @@ function PickupPlace({ order }: { order: OrderView }) {
           )}
         </ButtonRow>
       )}
+      {point.phone && (
+        <IconLine icon="phone" variant="caption">
+          {formatKzPhone(point.phone)}
+        </IconLine>
+      )}
       <NavigatorSheet visible={navigators} onClose={() => setNavigators(false)} place={point} />
       <CallSheet
         visible={callSheet}
@@ -907,51 +965,28 @@ function PickupPlace({ order }: { order: OrderView }) {
   );
 }
 
-/** A term of the order: the label on the left, the value on the right. */
-function Term({
-  label,
-  strong = false,
-  children,
-}: {
-  label: string;
-  strong?: boolean;
-  children: string;
-}) {
-  return (
-    <View style={styles.term}>
-      <Text variant={strong ? "bodyStrong" : "bodyS"} color={strong ? "text" : "textMuted"}>
-        {label}
-      </Text>
-      <Text variant={strong ? "priceS" : "bodyS"} style={styles.termValue}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 12 },
-  block: { gap: 8 },
-  center: { textAlign: "center" },
+  status: { gap: 8 },
+  grow: { flex: 1 },
   // `surface` sets the card apart from the page: no frame (DESIGN.md 7.6, D-068).
-  card: { borderRadius: radius.m, padding: layout.cardPadding, gap: 6 },
-  place: { gap: 8 },
-  itemRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  grow: { flex: 1, gap: 2 },
+  card: { borderRadius: radius.m, padding: layout.cardPadding, gap: 8 },
   supplierLink: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: size.touchTarget },
-  divider: { height: hairline, marginVertical: 6 },
-  term: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
-  termValue: { flexShrink: 1, textAlign: "right" },
-  actions: { gap: 8, paddingTop: 12 },
-  reviewActions: { gap: 8, paddingTop: 6 },
-  // T-ORD-08 «заметная строка» (M-ORD-03): a touch zone of at least 48.
+  place: { gap: 8 },
+  itemRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    padding: layout.cardPadding,
+    borderBottomWidth: hairline,
+    borderBottomColor: "transparent",
+  },
+  reviewActions: { gap: 8, paddingTop: 4 },
+  actions: { gap: 12 },
   notReceived: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    minHeight: 56,
+    padding: layout.cardPadding,
     borderRadius: radius.m,
-    paddingHorizontal: layout.cardPadding,
-    paddingVertical: 12,
   },
 });

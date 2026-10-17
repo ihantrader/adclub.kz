@@ -11,6 +11,7 @@ import {
   ListGroup,
   ListRow,
   Screen,
+  ScreenBody,
   SearchField,
   SkeletonList,
   Text,
@@ -291,7 +292,7 @@ export function CarStepView({
         ) : null
       }
     >
-      <View style={styles.body}>
+      <ScreenBody fill>
         <DataState
           status={status}
           skeleton={<SkeletonList rows={5} label={t("common.loading")} />}
@@ -361,7 +362,7 @@ export function CarStepView({
             </>
           )}
         </DataState>
-      </View>
+      </ScreenBody>
 
       <Dialog
         visible={confirmReset !== null}
@@ -396,7 +397,6 @@ export function CarStepView({
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, paddingHorizontal: layout.screenPadding, paddingTop: 12 },
   chosen: {
     flexDirection: "row",
     flexWrap: "wrap",

@@ -23,7 +23,10 @@ import { useT } from "../state/language";
  * M-CITY-01: search, "Определить автоматически", "Весь Казахстан", the
  * cities of `/cities` in the interface language, the current one marked.
  * The same list is what the first run opens (M-START-04) — one screen for
- * one job, used from two places.
+ * one job, used from two places. Every row keeps the icon column, so the
+ * names of the cities stand in one line with «Весь Казахстан» (TASK-078);
+ * T-CITY-01 is said only where it applies — under the disabled «Весь
+ * Казахстан» of the services.
  *
  * A choice is applied when the sheet has gone: it closes, and then the city
  * changes on the screen behind it (and the first run goes on to its next
@@ -106,6 +109,8 @@ export function CitySheet({
           ? "empty"
           : "ready";
 
+  const check = <Icon name="check" size={20} color="accent" />;
+
   return (
     <Sheet
       visible={visible}
@@ -135,9 +140,6 @@ export function CitySheet({
         >
           {t("city.detect")}
         </Button>
-        <Text variant="caption" color="textMuted">
-          {t("city.detectHint")}
-        </Text>
         {detection === "denied" && (
           <View style={styles.note}>
             <Text variant="bodyS" color="textMuted">
@@ -197,20 +199,17 @@ export function CitySheet({
                   title={t("city.all")}
                   icon="mapPin"
                   onPress={() => pick(null)}
-                  trailing={selection.kind === "all" ? <Icon name="check" color="accent" /> : null}
+                  trailing={selection.kind === "all" ? check : null}
                 />
               ))}
             {visibleCities.map((city, index) => (
               <ListRow
                 key={city.id}
                 first={index === 0 && query !== ""}
+                iconSlot
                 title={city.name.text}
                 onPress={() => pick(city)}
-                trailing={
-                  selection.kind === "city" && selection.id === city.id ? (
-                    <Icon name="check" color="accent" />
-                  ) : null
-                }
+                trailing={selection.kind === "city" && selection.id === city.id ? check : null}
               />
             ))}
             {visibleCities.length === 0 && query !== "" && (
@@ -220,13 +219,6 @@ export function CitySheet({
             )}
           </ScrollView>
         </DataState>
-
-        {/* The list is per-city for services (T-CITY-01). */}
-        {!services && (
-          <Text variant="caption" color="textMuted">
-            {t("city.servicesNote")}
-          </Text>
-        )}
       </View>
     </Sheet>
   );
@@ -237,7 +229,7 @@ const ROW_HEIGHT = 56;
 const MAX_LIST_HEIGHT = 320;
 
 const styles = StyleSheet.create({
-  body: { gap: 8, paddingBottom: 8 },
+  body: { gap: 12, paddingBottom: 8 },
   note: { gap: 4 },
   searchEmpty: { paddingVertical: layout.cardPadding, textAlign: "center" },
 });

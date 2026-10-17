@@ -1,8 +1,18 @@
 import type { CatalogSearchAttributeFacet, CategoryAttribute } from "@adclub/contracts";
 import { space } from "@adclub/ui-core";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Button, Chip, Sheet, Text, TextField, useAfterDismiss } from "../../design-system";
+import {
+  Button,
+  Chip,
+  hairline,
+  Sheet,
+  Switch,
+  Text,
+  TextField,
+  useAfterDismiss,
+  useTheme,
+} from "../../design-system";
 import {
   EMPTY_FILTERS,
   hasFilters,
@@ -44,6 +54,11 @@ export interface FiltersSheetProps {
  * category, so a new characteristic appears here without a release.
  * «Показать N позиций» and the numbers at the values are the server's, not
  * counts made on the device.
+ *
+ * The title of the sheet is `title`, the sections `bodyStrong` (TASK-078:
+ * they were almost the size of the title); «Только в моём городе» is a
+ * switch, not a chip repeating its own heading; a hairline separates the
+ * title from the list once it scrolls.
  */
 export function FiltersSheet({
   visible,
@@ -57,6 +72,8 @@ export function FiltersSheet({
   counts,
 }: FiltersSheetProps) {
   const { t, tn } = useLanguage();
+  const { theme } = useTheme();
+  const [scrolled, setScrolled] = useState(false);
   // The filters are applied when the sheet has gone: it closes, and then the
   // list changes and goes back to its top — not both under a sheet that is
   // still sliding away.
@@ -76,7 +93,18 @@ export function FiltersSheet({
       title={t("catalog.filters")}
       closeLabel={t("common.close")}
     >
-      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+      <View
+        style={[
+          styles.divider,
+          { backgroundColor: scrolled ? theme.colors.border : "transparent" },
+        ]}
+      />
+      <ScrollView
+        style={styles.list}
+        keyboardShouldPersistTaps="handled"
+        onScroll={(event) => setScrolled(event.nativeEvent.contentOffset.y > 4)}
+        scrollEventThrottle={32}
+      >
         <Group title={t("catalog.availability")}>
           <Chip
             selected={draft.availability === "in_stock"}
@@ -127,14 +155,13 @@ export function FiltersSheet({
           </Chip>
         </Group>
 
-        <Group title={t("catalog.onlyMyCity")}>
-          <Chip
-            selected={draft.onlyMyCity}
-            onPress={() => setDraft((current) => ({ ...current, onlyMyCity: !current.onlyMyCity }))}
-          >
-            {t("catalog.onlyMyCity")}
-          </Chip>
-        </Group>
+        <View style={styles.group}>
+          <Switch
+            label={t("catalog.onlyMyCity")}
+            checked={draft.onlyMyCity}
+            onChange={(onlyMyCity) => setDraft((current) => ({ ...current, onlyMyCity }))}
+          />
+        </View>
 
         {brands.length > 0 && (
           <Group title={t("catalog.brand")}>
@@ -283,7 +310,7 @@ function AttributeGroup({
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.group}>
-      <Text variant="heading" accessibilityRole="header">
+      <Text variant="bodyStrong" accessibilityRole="header">
         {title}
       </Text>
       <View style={styles.chips}>{children}</View>
@@ -292,6 +319,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 }
 
 const styles = StyleSheet.create({
+  divider: { height: hairline, marginHorizontal: -16 },
   list: { maxHeight: 420 },
   group: { gap: 8, paddingVertical: 8 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "flex-end" },

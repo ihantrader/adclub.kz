@@ -1,14 +1,13 @@
 import { isApiError } from "@adclub/api-client";
 import { leaveAuthFlow } from "../../navigation/use-sign-in";
 import { accountNameSchema, ACCOUNT_NAME_MAX_LENGTH } from "@adclub/contracts";
-import { layout } from "@adclub/ui-core";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { Button, Checkbox, Screen, Text, TextField } from "../../design-system";
+import { Button, Checkbox, Screen, ScreenBody, Section, TextField } from "../../design-system";
 import type { RootParams } from "../../navigation/routes";
 import { useT } from "../../state/language";
 import { useSession } from "../../state/session-provider";
+import { PolicyNotice } from "./PolicyNotice";
 
 /**
  * M-AUTH-03 «Завершение регистрации»: the account already exists (the code
@@ -51,33 +50,31 @@ export function RegisterScreen({
       title={t("auth.registerTitle")}
       bottomInset
       footer={
-        <Button onPress={submit} disabled={!canSubmit}>
-          {t("common.done")}
-        </Button>
+        <>
+          <PolicyNotice />
+          <Button onPress={submit} disabled={!canSubmit}>
+            {t("common.done")}
+          </Button>
+        </>
       }
     >
-      <View style={styles.content}>
-        <TextField
-          label={t("auth.nameLabel")}
-          value={name}
-          onChangeText={setName}
-          autoFocus
-          autoCapitalize="words"
-          textContentType="name"
-          maxLength={ACCOUNT_NAME_MAX_LENGTH}
-          error={
-            error ?? (trimmed.length > 0 && !nameLooksUsable ? t("auth.nameInvalid") : undefined)
-          }
-        />
-        <Checkbox label={t("auth.consentLabel")} checked={consent} onChange={setConsent} />
-        <Text variant="caption" color="textMuted">
-          {t("auth.policyNotice")}
-        </Text>
-      </View>
+      <ScreenBody>
+        <Section first>
+          <TextField
+            label={t("auth.nameLabel")}
+            value={name}
+            onChangeText={setName}
+            autoFocus
+            autoCapitalize="words"
+            textContentType="name"
+            maxLength={ACCOUNT_NAME_MAX_LENGTH}
+            error={
+              error ?? (trimmed.length > 0 && !nameLooksUsable ? t("auth.nameInvalid") : undefined)
+            }
+          />
+          <Checkbox label={t("auth.consentLabel")} checked={consent} onChange={setConsent} />
+        </Section>
+      </ScreenBody>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { paddingHorizontal: layout.screenPadding, paddingTop: 12, gap: 16 },
-});

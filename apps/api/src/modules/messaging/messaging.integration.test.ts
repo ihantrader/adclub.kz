@@ -31,6 +31,7 @@ import {
 import { TestSettings } from "../../testing/settings";
 import { WorkerModule } from "../../worker.module";
 import { OperatorService } from "../identity";
+import { AppSettings } from "../settings";
 import { SupplierInvitations, SupplierMembersService } from "../suppliers";
 import {
   MessageChannel,
@@ -254,14 +255,18 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
   const nextIp = () => `198.51.100.${String((ipCounter++ % 250) + 1)}`;
   const sentAll = () => channels.flatMap((channel) => channel.sent);
   /**
-   * Changes settings and waits until the workers — whose cache of them is 50 ms
-   * in tests — have certainly read the change. A message queued by a job in a
-   * worker (an invitation) takes its attempts and pauses from what the worker
-   * sees, not from what this process was just told.
+   * Changes settings and makes both workers read them with a query that starts
+   * after the change. A message queued by a job in a worker (an invitation)
+   * takes its attempts and pauses from what the worker sees, not from what this
+   * process was just told — and a pause long enough to "certainly" outlast the
+   * worker's 50 ms cache is not certain: while a read is in flight the cache
+   * hands out the snapshot before it, and on a loaded machine that read can
+   * have started before the change (TASK-078.A: an invitation queued with the
+   * default 60 s pause outlived the test's wait).
    */
   const configure = async (values: Parameters<TestSettings["set"]>[0]) => {
     await settings.set(values);
-    await sleep(250);
+    await Promise.all([worker1, worker2].map((worker) => worker.get(AppSettings).refresh()));
   };
   const setMode = (mode: TestMessageChannel["mode"], delayMs?: number) => {
     for (const channel of channels) {
@@ -638,12 +643,32 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
       setMode("unavailable");
       await configure({ message_retry_delay_seconds: 1, message_send_attempts: 5 });
       const invitationId = await invite(supplierId, memberId);
-      // The channel is down: the message waits for a retry, unsent.
-      await waitFor("a first failed attempt", async () =>
-        ((await messagesOf(invitationId))[0]?.attempts ?? 0) > 0 ? true : undefined,
+      // The channel is down: the message waits for a retry, unsent — back on
+      // the queue after its attempt, not merely claimed for one (`attempts`
+      // counts from the claim, before the provider is called).
+      const waiting = await waitFor("a first failed attempt", async () => {
+        const [row] = await messagesOf(invitationId);
+        return row?.status === "queued" && row.attempts > 0 ? row : undefined;
+      });
+      // The pause the message was queued with is the setting's, so the retry
+      // comes within the wait below.
+      expect(waiting.max_attempts).toBe(5);
+      const {
+        rows: [job],
+      } = await db.query<{ retry_delay: number }>(
+        "SELECT retry_delay FROM pgboss.job WHERE name = 'messaging.send' AND data->>'messageId' = $1",
+        [waiting.id],
       );
+      expect(job?.retry_delay).toBe(1);
       const removed = await app.get(OperatorService).removeMember(memberId);
       expect(removed.sessionsEnded).toBeGreaterThanOrEqual(0);
+      // A retry claimed before the removal committed (the claim holds the
+      // employee with a share lock, so the removal waited for it) still sees
+      // the employee and calls the provider: it must meet the channel down.
+      // Once no attempt is in flight, every later claim sees the removal.
+      await waitFor("the attempts claimed before the removal to end", async () =>
+        (await message(waiting.id)).status === "sending" ? undefined : true,
+      );
       setMode("ok");
       const cancelled = await waitFor("the message to be cancelled", async () => {
         const [row] = await messagesOf(invitationId);

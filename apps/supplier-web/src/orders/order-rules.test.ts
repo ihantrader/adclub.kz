@@ -13,6 +13,7 @@ import {
   finishedQuery,
   formatAt,
   formatDate,
+  formatShortDate,
   formatWhen,
   journalLines,
   nextTimerTick,
@@ -271,7 +272,7 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
     });
     expect(service("created", true)).toEqual({ primary: null, secondary: [] });
     expect(service("term_proposed")).toEqual({ primary: null, secondary: ["decline"] });
-    // «Отметить выполнение по QR / коду» · «Отказать»; no «Готово к выдаче».
+    // «Отметить выполнение» · «Отказать»; no «Готово к выдаче».
     expect(service("accepted")).toEqual({ primary: "giveOut", secondary: ["decline"] });
     expect(service("accepted", true)).toEqual({ primary: "giveOut", secondary: [] });
     expect(service("visit_unresolved")).toEqual({ primary: "closeLate", secondary: [] });
@@ -499,6 +500,18 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
         }),
       ),
     ).toBe(false);
+  });
+
+  it("says a date inside a button with the short month (TASK-079.A)", () => {
+    expect(formatShortDate("2026-09-28", "ru")).toBe("28 сент.");
+    expect(formatShortDate("2026-09-28", "kk").length).toBeLessThan(
+      formatDate("2026-09-28", "kk").length,
+    );
+    const t = createTranslate("ru", null);
+    expect(formatAt("2026-09-28T13:30:00Z", ALMATY, "ru", t, NOON, "short")).toBe(
+      "28 сент. в 18:30",
+    );
+    expect(formatAt("2026-10-07T09:02:00Z", ALMATY, "ru", t, NOON, "short")).toBe("завтра в 14:02");
   });
 
   it("says the dates of another term short, and a refused date apart from a conflict", () => {

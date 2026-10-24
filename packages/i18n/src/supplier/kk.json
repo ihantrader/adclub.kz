@@ -112,7 +112,7 @@
 
   "compat.title": "Сәйкестік деректері",
   "compat.lead": "Позиция қай көліктерге сәйкес келетінін білесіз бе? Ұсыныңыз — клуб әкімшісі тексеріп, қосады",
-  "compat.open": "Сәйкестік деректерін ұсыну",
+  "compat.open": "Деректерді ұсыну",
   "compat.formLead": "Анықтамалықтағы көлік: маркасы міндетті, қалғаны — белгілі болғанынша",
   "compat.make": "Маркасы",
   "compat.model": "Моделі",
@@ -508,7 +508,7 @@
   "orders.accept": "Қабылдау",
   "orders.confirmTerm": "Мерзімді растау",
   "orders.confirmTime": "Уақытты растау",
-  "orders.markDone": "QR / код бойынша орындалды деп белгілеу",
+  "orders.markDone": "Орындалды деп белгілеу",
   "orders.confirmTermUntil": "{date} дейін мерзімді растау",
   "orders.proposeTerm": "Басқа мерзім ұсыну",
   "orders.termDialog.title": "Басқа мерзім",

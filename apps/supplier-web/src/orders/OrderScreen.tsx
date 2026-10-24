@@ -42,7 +42,9 @@ import {
   actionProblem,
   changeNotice,
   declineReasonKey,
+  formatAt,
   formatDate,
+  formatShortDate,
   journalLines,
   noShowProblem,
   orderActions,
@@ -366,12 +368,15 @@ function OrderView({
   };
 
   const actions = orderActions(order, now, { blocked });
+  // A date in a button — the short month, or the label won't fit a 320 phone (TASK-079.A).
   const label = (action: OrderAction) =>
     action === "accept" && order.kind === "on_order" && confirmOn
-      ? t("orders.confirmTermUntil", { date: formatDate(confirmOn, lang) })
+      ? t("orders.confirmTermUntil", { date: formatShortDate(confirmOn, lang) })
       : // TASK-039.B: «Подтвердить {дата} в {время}» — the time the customer asked for.
         action === "accept" && order.kind === "service" && order.serviceVisit
-        ? t("orders.confirmTimeAt", { at: at(order.serviceVisit.desiredAt) })
+        ? t("orders.confirmTimeAt", {
+            at: formatAt(order.serviceVisit.desiredAt, timeZone, lang, t, now, "short"),
+          })
         : t(actionLabel(action, order.kind));
   const day = (date: string) => formatDate(date, lang);
   const journal = journalLines(order.events, when, t, day, order.kind);

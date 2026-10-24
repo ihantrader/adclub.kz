@@ -112,7 +112,7 @@
 
   "compat.title": "Данные о совместимости",
   "compat.lead": "Знаете, к каким автомобилям подходит позиция? Предложите — администратор клуба проверит и добавит",
-  "compat.open": "Предложить данные о совместимости",
+  "compat.open": "Предложить данные",
   "compat.formLead": "Автомобиль из справочника: марка обязательна, остальное — насколько известно",
   "compat.make": "Марка",
   "compat.model": "Модель",
@@ -508,7 +508,7 @@
   "orders.accept": "Принять",
   "orders.confirmTerm": "Подтвердить срок",
   "orders.confirmTime": "Подтвердить время",
-  "orders.markDone": "Отметить выполнение по QR / коду",
+  "orders.markDone": "Отметить выполнение",
   "orders.confirmTermUntil": "Подтвердить срок до {date}",
   "orders.proposeTerm": "Предложить другой срок",
   "orders.termDialog.title": "Другой срок",

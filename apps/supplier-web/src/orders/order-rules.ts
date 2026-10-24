@@ -57,7 +57,13 @@ type Moment =
   | { day: "date"; date: string; time: string };
 
 /** Which day `iso` falls on, seen from `now`, in the time zone of the company's point. */
-function momentOf(iso: string, timeZone: string, lang: Lang, now: number): Moment {
+function momentOf(
+  iso: string,
+  timeZone: string,
+  lang: Lang,
+  now: number,
+  month: "long" | "short" = "long",
+): Moment {
   const at = Date.parse(iso);
   const { date, time } = wallClock(at, timeZone);
   const dayMs = 86_400_000;
@@ -66,7 +72,7 @@ function momentOf(iso: string, timeZone: string, lang: Lang, now: number): Momen
   if (date === wallClock(now + dayMs, timeZone).date) return { day: "tomorrow", time };
   const day = new Intl.DateTimeFormat(localeOf(lang), {
     day: "numeric",
-    month: "long",
+    month,
     timeZone,
   }).format(new Date(at));
   return { day: "date", date: day, time };
@@ -110,8 +116,9 @@ export function formatAt(
   lang: Lang,
   t: Translate,
   now: number = Date.now(),
+  month: "long" | "short" = "long",
 ): string {
-  const moment = momentOf(iso, timeZone, lang, now);
+  const moment = momentOf(iso, timeZone, lang, now, month);
   switch (moment.day) {
     case "today":
       return t("orders.at.today", { time: moment.time });
@@ -130,6 +137,20 @@ export function formatDate(date: string, lang: Lang): string {
     new Intl.DateTimeFormat(localeOf(lang), {
       day: "numeric",
       month: "long",
+      timeZone: "UTC",
+    }).format(new Date(`${date}T12:00:00Z`)),
+  );
+}
+
+/**
+ * «28 сент.» — a date inside a button label («Подтвердить срок до 28 сент.»):
+ * with the long month it doesn't fit a 320 phone in one line (TASK-079.A).
+ */
+export function formatShortDate(date: string, lang: Lang): string {
+  return keepTogether(
+    new Intl.DateTimeFormat(localeOf(lang), {
+      day: "numeric",
+      month: "short",
       timeZone: "UTC",
     }).format(new Date(`${date}T12:00:00Z`)),
   );
@@ -380,7 +401,7 @@ const NONE: OrderActions = { primary: null, secondary: [] };
  * a confirmed term — the buttons of «Принята»; while the customer decides —
  * only «Отказать» (D-072). A service (TASK-038, TASK-039.B): a new one —
  * «Подтвердить {дата} в {время}» · «Предложить другое время» · «Отказать»;
- * a confirmed one — «Отметить выполнение по QR / коду» · «Отказать», and
+ * a confirmed one — «Отметить выполнение» · «Отказать», and
  * from the time of the visit on «Клиент не пришёл» (SCREENS 1.9; until the
  * end of its window, after which the server expires it unresolved); while
  * the customer decides — «Отказать»; an unresolved one inside its window —

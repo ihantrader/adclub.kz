@@ -1962,17 +1962,6 @@ a.ac-button {
   order: 6;
 }
 
-/* «Позвонить · Написать в WhatsApp» — two halves at any width (S-ORD-02),
-   one under the other where a half can't hold a word (a card at 320). */
-.order-customer .ac-action-bar__others {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr));
-}
-
-.order-customer .ac-action-bar .ac-button {
-  width: 100%;
-}
-
 .order-summary {
   display: flex;
   flex-direction: column;

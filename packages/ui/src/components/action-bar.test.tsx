@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionBar } from "./ActionBar";
+import { fitsInHalves } from "./action-bar-core";
 import { Button } from "./Button";
 
 afterEach(cleanup);
@@ -109,26 +110,179 @@ describe("ActionBar (C1)", () => {
     expect(element.hasAttribute("data-ac-toast-obstacle")).toBe(true);
   });
 
-  it("under 600 px: a column, every button L across; two others in halves while halves fit", () => {
+  it("under 600 px: a column, every button L across, one column of others unless measured halves", () => {
     expect(rule(".ac-action-bar__buttons")).toContain("flex-direction: column");
     expect(rule(".ac-action-bar .ac-button")).toContain("width: 100%");
     expect(rule(".ac-action-bar .ac-button")).toContain("min-height: var(--ac-button-l)");
     expect(rule(".ac-action-bar__others")).toContain("grid-template-columns: minmax(0, 1fr)");
-    // At least 136 a half: 2 × 136 + 8 fits a phone of 320 (288 wide), not a card on it.
-    expect(rule(".ac-action-bar--others-2 .ac-action-bar__others")).toContain(
-      "grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
+    expect(rule(".ac-action-bar__others--halves")).toContain(
+      "grid-template-columns: repeat(2, minmax(0, 1fr))",
     );
+    // The fixed floor of a half is gone: the labels decide (TASK-079.A).
+    expect(css).not.toContain("136px");
   });
 
-  it("from 600 px: one row on the right, the main last, buttons by their text", () => {
+  it("from 600 px: one row on the right; a --column bar (stacked, a card pair) stays a column", () => {
     const wide = "(min-width: 600px)";
-    expect(rule(".ac-action-bar__buttons", wide)).toContain("flex-direction: row-reverse");
-    expect(rule(".ac-action-bar__buttons", wide)).toContain("justify-content: flex-start");
-    expect(rule(".ac-action-bar .ac-button", wide)).toContain("width: auto");
+    const row = ".ac-action-bar:not(.ac-action-bar--column)";
+    expect(rule(`${row} .ac-action-bar__buttons`, wide)).toContain("flex-direction: row-reverse");
+    expect(rule(`${row} .ac-action-bar__buttons`, wide)).toContain("justify-content: flex-start");
+    expect(rule(`${row} .ac-button`, wide)).toContain("width: auto");
+    // Nothing turns a bar without a main action, or a stacked one, into a row.
+    const selectors = [...blockAfter(`@media ${wide} {`).matchAll(/([^{}]+)\{/g)].map((found) =>
+      (found[1] ?? "").trim(),
+    );
+    const layoutRules = selectors.filter(
+      (selector) =>
+        selector.startsWith(".ac-action-bar") &&
+        /__(buttons|others|note)$|\.ac-button$/.test(selector),
+    );
+    expect(layoutRules.length).toBeGreaterThan(0);
+    for (const selector of layoutRules) {
+      if (selector === ".ac-action-bar .ac-button") continue;
+      expect(selector.startsWith(row)).toBe(true);
+    }
+    expect(rule(".ac-action-bar .ac-button", wide)).toContain("min-height: var(--ac-button-m)");
+    expect(rule(".ac-action-bar .ac-button", wide)).not.toContain("width");
   });
 
-  it("pinned: clear of the raised center button, static from 1024", () => {
+  it("a column at any width: stacked, and two actions of a card with no main action", () => {
+    const column = (element: HTMLElement) => element.classList.contains("ac-action-bar--column");
+    expect(column(bar(2, false))).toBe(true);
+    cleanup();
+    // One action of a card (Выйти, Скачать .xlsx) keeps its own width on a computer.
+    expect(column(bar(1, false))).toBe(false);
+    cleanup();
+    expect(column(bar(2))).toBe(false);
+    cleanup();
+    const stacked = render(
+      <ActionBar
+        stacked
+        main={<Button>Выдать</Button>}
+        others={[<Button key="c">Отмена</Button>]}
+      />,
+    ).container.firstElementChild as HTMLElement;
+    expect(column(stacked)).toBe(true);
+  });
+
+  it("pinned: clear of the raised center button, in the flow from 1024", () => {
     expect(rule(".ac-action-bar--pinned")).toContain("var(--ac-center-tab-lift)");
-    expect(rule(".ac-action-bar--pinned", "(min-width: 1024px)")).toContain("position: static");
+    const desktop = rule(".ac-action-bar--pinned", "(min-width: 1024px)");
+    expect(desktop).toContain("position: relative");
+    // The sticky offset would shift a relative bar up over the content above it.
+    expect(desktop).toContain("bottom: auto");
+  });
+});
+
+/** Text widths jsdom can't measure: the container and each hidden copy by its label. */
+function layout(container: number, widths: Record<string, number>) {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    let width = 0;
+    if (this.classList.contains("ac-action-bar__others")) width = container;
+    if (this.classList.contains("ac-action-bar__measure-item")) {
+      width = widths[this.textContent ?? ""] ?? 0;
+    }
+    return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 0, width, height: 0 } as DOMRect;
+  });
+}
+
+function pair(labels: readonly string[], props: { main?: boolean; stacked?: boolean } = {}) {
+  const element = render(
+    <ActionBar
+      stacked={props.stacked}
+      main={props.main ? <Button>Готово к выдаче</Button> : undefined}
+      others={labels.map((text) => (
+        <Button key={text} variant="secondary">
+          {text}
+        </Button>
+      ))}
+    />,
+  ).container.firstElementChild as HTMLElement;
+  return element.querySelector(".ac-action-bar__others") as HTMLElement;
+}
+
+const halves = (others: HTMLElement) => others.classList.contains("ac-action-bar__others--halves");
+
+describe("ActionBar: two others in halves only while each label fits (TASK-079.A)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("two short labels — halves", () => {
+    // A phone of 390: 358 across, a half 175.
+    layout(358, { Отказать: 112, Позвонить: 128 });
+    expect(halves(pair(["Отказать", "Позвонить"]))).toBe(true);
+  });
+
+  it("one long label — both across, one under the other", () => {
+    layout(358, { "Выдать по QR / коду": 186, Отказать: 112 });
+    expect(halves(pair(["Выдать по QR / коду", "Отказать"]))).toBe(false);
+  });
+
+  it("a narrow container on a wide window decides by the container", () => {
+    window.innerWidth = 1440;
+    const labels = ["Выдать по QR / коду", "Отказать"];
+    const widths = { "Выдать по QR / коду": 186, Отказать: 112 };
+    // The side column of the order card at 1440.
+    layout(360, widths);
+    expect(halves(pair(labels, { main: true, stacked: true }))).toBe(false);
+    cleanup();
+    // The same buttons in a wide container stand side by side.
+    layout(560, widths);
+    expect(halves(pair(labels, { main: true, stacked: true }))).toBe(true);
+  });
+
+  it("three others — each across, nothing measured", () => {
+    layout(1200, { Отказать: 112, Позвонить: 128, Готово: 100 });
+    const element = render(
+      <ActionBar
+        others={["Отказать", "Позвонить", "Готово"].map((text) => (
+          <Button key={text} variant="secondary">
+            {text}
+          </Button>
+        ))}
+      />,
+    ).container.firstElementChild as HTMLElement;
+    expect(halves(element.querySelector(".ac-action-bar__others") as HTMLElement)).toBe(false);
+    expect(element.querySelector(".ac-action-bar__measure")).toBeNull();
+  });
+
+  it("unmeasured widths — each across, so a label never wraps even for a frame", () => {
+    layout(358, {});
+    expect(halves(pair(["Отказать", "Позвонить"]))).toBe(false);
+  });
+
+  it("the hidden copies are out of the accessibility tree and inert", () => {
+    layout(358, { Отказать: 112, Позвонить: 128 });
+    const others = pair(["Отказать", "Позвонить"]);
+    const copies = others.closest(".ac-action-bar")?.querySelector(".ac-action-bar__measure");
+    expect(copies?.getAttribute("aria-hidden")).toBe("true");
+    expect(copies?.hasAttribute("inert")).toBe(true);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Отказать",
+      "Позвонить",
+    ]);
+  });
+
+  it("no button is taller than its size: the label never wraps, heights are only L and M", () => {
+    expect(rule(".ac-action-bar .ac-button__label")).toContain("white-space: nowrap");
+    const heights = [...css.matchAll(/\.ac-action-bar[^{]*\.ac-button\s*\{([^}]*)\}/g)]
+      .map((found) => found[1] ?? "")
+      .flatMap((body) => [...body.matchAll(/(?:min-)?height:\s*([^;]+);/g)].map((m) => m[1]));
+    expect(heights.length).toBeGreaterThan(0);
+    for (const height of heights) {
+      expect(["var(--ac-button-l)", "var(--ac-button-m)"]).toContain(height);
+    }
+  });
+});
+
+describe("fitsInHalves", () => {
+  it("each width against its half of the container, minus the gap", () => {
+    // (358 − 8) / 2 = 175: 174 fits with the slack of 1, 175 does not.
+    expect(fitsInHalves(358, [174, 100])).toBe(true);
+    expect(fitsInHalves(358, [175, 100])).toBe(false);
+    expect(fitsInHalves(358, [100, 175])).toBe(false);
+    expect(fitsInHalves(0, [10, 10])).toBe(false);
+    expect(fitsInHalves(358, [0, 10])).toBe(false);
   });
 });

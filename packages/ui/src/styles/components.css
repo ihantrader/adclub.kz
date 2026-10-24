@@ -1982,6 +1982,7 @@ textarea {
 
 /* ---------- the actions of a screen (TASK-079, C1, C2) ---------- */
 .ac-action-bar {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-2);
@@ -2000,18 +2001,24 @@ textarea {
   gap: var(--ac-space-2);
 }
 
-/* Two secondary actions side by side, in halves; one, three and more — each across.
-   Halves narrower than 136 (a card at 320) would break «Позвонить» inside the
-   word — then the two go one under the other, each across. */
-.ac-action-bar--others-2 .ac-action-bar__others {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr));
+/* Two secondary actions side by side, in halves — only while the label of each
+   fits its half in one line, measured against the bar's own container
+   (`fitsInHalves`, TASK-079.A); one, three and more — each across. */
+.ac-action-bar__others--halves {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* On a phone every button of the bar is L and across its cell; long words wrap, never cut. */
+/* On a phone every button of the bar is L and across its cell. */
 .ac-action-bar .ac-button {
   display: flex;
   width: 100%;
   min-height: var(--ac-button-l);
+}
+
+/* A label in one line, so a button is never taller than its size: a label
+   too long even for the whole width is a text to shorten (TASK-079.A). */
+.ac-action-bar .ac-button__label {
+  white-space: nowrap;
 }
 
 .ac-action-bar--compact .ac-button {
@@ -2038,54 +2045,62 @@ textarea {
 }
 
 @media (min-width: 600px) {
-  .ac-action-bar__buttons {
+  .ac-action-bar .ac-button {
+    min-height: var(--ac-button-m);
+  }
+
+  /* One row on the right, the main last, buttons by their text. A `--column`
+     bar — `stacked` (a side column) or two actions of a card with no main
+     action («Позвонить · Написать в WhatsApp») — stays a column at any
+     width, across its own container, as on a phone (TASK-079.A). */
+  .ac-action-bar:not(.ac-action-bar--column) .ac-action-bar__buttons {
     flex-direction: row-reverse;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
   }
 
-  .ac-action-bar__others,
-  .ac-action-bar--others-2 .ac-action-bar__others {
+  .ac-action-bar:not(.ac-action-bar--column) .ac-action-bar__others {
     display: flex;
     flex-wrap: wrap;
     gap: var(--ac-space-2);
   }
 
-  .ac-action-bar .ac-button {
+  .ac-action-bar:not(.ac-action-bar--column) .ac-button {
     width: auto;
-    min-height: var(--ac-button-m);
   }
 
-  .ac-action-bar__note {
+  .ac-action-bar:not(.ac-action-bar--column) .ac-action-bar__note {
     text-align: right;
-  }
-
-  /* A column at any width: the main on top, every other under it, all across. */
-  .ac-action-bar--stacked .ac-action-bar__buttons {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .ac-action-bar--stacked .ac-action-bar__others {
-    display: grid;
-  }
-
-  .ac-action-bar--stacked .ac-button {
-    width: 100%;
-  }
-
-  .ac-action-bar--stacked .ac-action-bar__note {
-    text-align: left;
   }
 }
 
 @media (min-width: 1024px) {
   .ac-action-bar--pinned {
-    position: static;
+    position: relative;
+    bottom: auto;
     margin-inline: 0;
     padding: 0;
     border-top: 0;
     background: transparent;
   }
+}
+
+/* Hidden copies of two secondary actions, each by its own one-line width —
+   what `fitsInHalves` measures; clipped to the bar, never adds a scroll. */
+.ac-action-bar__measure {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ac-action-bar__measure-item {
+  width: max-content;
+}
+
+.ac-action-bar .ac-action-bar__measure .ac-button {
+  display: inline-flex;
+  width: auto;
 }

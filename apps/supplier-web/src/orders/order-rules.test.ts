@@ -1,6 +1,6 @@
 import { ApiError } from "@adclub/api-client";
+import { createTranslate } from "../translate";
 import type { OrderEvent, SupplierOrderSummary } from "@adclub/contracts";
-import { supplierText } from "@adclub/i18n";
 import { describe, expect, it } from "vitest";
 import type { Translate } from "../i18n";
 import {
@@ -31,7 +31,8 @@ import {
   visitWords,
 } from "./order-rules";
 
-const t: Translate = (key, params) => supplierText("ru", key, params);
+// The cabinet's own `t`: a number keeps its word with a no-break space (TASK-079).
+const t: Translate = createTranslate("ru", null);
 const ALMATY = "Asia/Almaty";
 const MINUTE = 60_000;
 /** 2026-10-06 12:00 in Almaty (UTC+5). */
@@ -96,9 +97,9 @@ describe("the answer timer (S-ORD-01)", () => {
   });
 
   it("says minutes and hours as a person would", () => {
-    expect(durationText(45, t)).toBe("45 мин");
-    expect(durationText(120, t)).toBe("2 ч");
-    expect(durationText(135, t)).toBe("2 ч 15 мин");
+    expect(durationText(45, t)).toBe("45\u00a0мин");
+    expect(durationText(120, t)).toBe("2\u00a0ч");
+    expect(durationText(135, t)).toBe("2\u00a0ч 15\u00a0мин");
   });
 
   it("knows when the shown minute changes next", () => {
@@ -113,14 +114,14 @@ describe("times in the zone of the point", () => {
     expect(formatWhen("2026-10-06T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("13:40");
     expect(formatWhen("2026-10-05T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("вчера, 13:40");
     expect(formatWhen("2026-10-07T03:00:00Z", ALMATY, "ru", t, NOON)).toBe("завтра, 08:00");
-    expect(formatWhen("2026-10-01T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("1 октября, 13:40");
+    expect(formatWhen("2026-10-01T08:40:00Z", ALMATY, "ru", t, NOON)).toBe("1\u00a0октября, 13:40");
     // Just after midnight in Almaty is still «yesterday» in UTC.
     expect(formatWhen("2026-10-05T19:30:00Z", ALMATY, "ru", t, NOON)).toBe("00:30");
   });
 
   it("says a moment inside a sentence with its preposition, in three languages (TASK-033.A)", () => {
     const say = (lang: "ru" | "kk" | "en", iso: string) =>
-      formatAt(iso, ALMATY, lang, (key, params) => supplierText(lang, key, params), NOON);
+      formatAt(iso, ALMATY, lang, createTranslate(lang, null), NOON);
     const today = "2026-10-06T09:02:00Z";
     const yesterday = "2026-10-05T09:02:00Z";
     const tomorrow = "2026-10-07T09:02:00Z";
@@ -129,18 +130,22 @@ describe("times in the zone of the point", () => {
       "в 14:02",
       "вчера в 14:02",
       "завтра в 14:02",
-      "12 сентября в 14:02",
+      "12\u00a0сентября в 14:02",
     ]);
     expect([today, yesterday, tomorrow, earlier].map((iso) => say("en", iso))).toEqual([
       "at 14:02",
       "yesterday at 14:02",
       "tomorrow at 14:02",
-      "on September 12 at 14:02",
+      "on September 12\u00a0at 14:02",
     ]);
     const kk = [today, yesterday, tomorrow, earlier].map((iso) => say("kk", iso));
-    expect(kk.slice(0, 3)).toEqual(["14:02 кезінде", "кеше 14:02 кезінде", "ертең 14:02 кезінде"]);
+    expect(kk.slice(0, 3)).toEqual([
+      "14:02\u00a0кезінде",
+      "кеше 14:02\u00a0кезінде",
+      "ертең 14:02\u00a0кезінде",
+    ]);
     // The month by the platform's Kazakh data («12 қыркүйек»), then the time.
-    expect(kk[3]).toMatch(/^12 \S+ 14:02 кезінде$/);
+    expect(kk[3]).toMatch(/^12\s\S+ 14:02\u00a0кезінде$/);
   });
 
   it("finds the start of today in the point's zone", () => {
@@ -361,7 +366,7 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
 
   it("says a service in its own words and keeps confirmed visits apart by time (TASK-038)", () => {
     expect(t(statusKey("accepted", "service"))).toBe("Подтверждена");
-    expect(t(statusKey("no_show", "service"))).toBe("Неявка клиента");
+    expect(t(statusKey("no_show", "service"))).toBe("Клиент не пришёл");
     expect(t(statusKey("visit_unresolved", "service"))).toBe("Запись не разобрана");
     const visit = (visitAt: string) => ({
       car: {
@@ -390,8 +395,11 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
     const groups = workGroups([later, goods, sooner]);
     expect(groups.map((group) => group.group)).toEqual(["preparing", "services"]);
     expect(groups[1]!.orders.map((order) => order.id)).toEqual([sooner.id, later.id]);
-    const words = visitWords(later, () => "7 октября, 15:00", t);
-    expect(words).toEqual({ car: "Geely Coolray 2024", time: "Подтверждено: 7 октября, 15:00" });
+    const words = visitWords(later, () => "7\u00a0октября, 15:00", t);
+    expect(words).toEqual({
+      car: "Geely Coolray 2024",
+      time: "Подтверждено: 7\u00a0октября, 15:00",
+    });
     expect(visitWords(goods, () => "", t)).toBeNull();
     const proposed = visitWords(
       {
@@ -438,10 +446,9 @@ describe("the buttons of an order (S-ORD-02, rows «Наличие» and «Лю�
       (date) => date,
       "service",
     );
-    expect(lines.map((line) => line.text)).toEqual([
-      "Подтвердил время Ерлан, 12:00 (через WhatsApp)",
-      "Неявка клиента — Айжан, 12:00",
-    ]);
+    expect(
+      lines.map((line) => (line.viaWhatsapp ? `${line.text} (через WhatsApp)` : line.text)),
+    ).toEqual(["Подтвердил время Ерлан, 12:00 (через WhatsApp)", "Неявка клиента — Айжан, 12:00"]);
   });
 
   it("gives an order under order its buttons of S-ORD-02 (TASK-037, TASK-039, D-072)", () => {
@@ -552,7 +559,7 @@ describe("an order under order in words (TASK-037)", () => {
   it("says the term: expected, proposed with the customer's deadline, confirmed, overdue", () => {
     expect(termWords(summary({ onOrderTerm: null }), day, format, t)).toBeNull();
     expect(termWords(summary({ kind: "on_order", onOrderTerm: term }), day, format, t)).toEqual({
-      text: "Под заказ: 3 раб. дн., до 9 октября",
+      text: "Под заказ: 3\u00a0раб. дн., до 9\u00a0октября",
       note: null,
     });
     const proposed = {
@@ -571,7 +578,7 @@ describe("an order under order in words (TASK-037)", () => {
         format,
         t,
       )!.text,
-    ).toBe("Предложен другой срок: 5 раб. дн., до 11 октября. Клиент ответит до 15:00");
+    ).toBe("Предложен другой срок: 5\u00a0раб. дн., до 11\u00a0октября. Клиент ответит до 15:00");
     expect(
       termWords(
         summary({
@@ -588,7 +595,7 @@ describe("an order under order in words (TASK-037)", () => {
         t,
       ),
     ).toEqual({
-      text: "Срок подтверждён: 5 раб. дн., до 11 октября",
+      text: "Срок подтверждён: 5\u00a0раб. дн., до 11\u00a0октября",
       note: "Срок поставки прошёл, а заявка ещё не готова к выдаче",
     });
   });
@@ -622,7 +629,7 @@ describe("an order under order in words (TASK-037)", () => {
       day,
     );
     expect(lines.map((line) => line.text)).toEqual([
-      "Другой срок — Ерлан, 12:02: 5 раб. дн., до 11 октября",
+      "Другой срок — Ерлан, 12:02: 5\u00a0раб. дн., до 11\u00a0октября",
       "Клиент согласился на срок, 12:30",
     ]);
     expect(
@@ -684,7 +691,7 @@ describe("a conflict is a notice naming who acted (PRODUCT 12.6)", () => {
       "Заявку уже принял Ерлан вчера в 14:02",
     );
     expect(conflictText(earlier("2026-09-12T09:02:00Z"), format, t)).toBe(
-      "Заявку уже принял Ерлан 12 сентября в 14:02",
+      "Заявку уже принял Ерлан 12\u00a0сентября в 14:02",
     );
     expect(conflictText({ currentStatus: "accepted", version: 2 }, format, t)).toBe(
       "Заявка изменилась — посмотрите её текущий статус",
@@ -750,7 +757,7 @@ describe("a conflict is a notice naming who acted (PRODUCT 12.6)", () => {
       details: { retryAfterSeconds: 90 },
     });
     expect(actionProblem(limited, format, t).text).toBe(
-      "Слишком много запросов. Попробуйте через 2 мин",
+      "Слишком много запросов. Попробуйте через 2\u00a0мин",
     );
   });
 
@@ -818,7 +825,7 @@ describe("the journal in words (S-ORD-02)", () => {
       ],
       format,
       t,
-    ).map((line) => line.text);
+    ).map((line) => (line.viaWhatsapp ? `${line.text} (через WhatsApp)` : line.text));
     expect(lines).toEqual([
       "Создана 11:40",
       "Принял Ерлан, 12:02 (через WhatsApp)",

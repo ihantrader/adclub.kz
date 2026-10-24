@@ -28,6 +28,8 @@ describe("S-INST-01: how this browser installs the cabinet", () => {
   it("uses the browser's dialog where there is one, the Share steps on iPhone, the menu otherwise", () => {
     expect(installWay({ ...base, userAgent: ANDROID_CHROME, hasPrompt: true })).toBe("prompt");
     expect(installWay({ ...base, userAgent: IPHONE, maxTouchPoints: 5 })).toBe("ios");
-    expect(installWay({ ...base, userAgent: ANDROID_CHROME })).toBe("menu");
+    // Android before the browser offers its dialog: the steps of its menu, drawn (TASK-079).
+    expect(installWay({ ...base, userAgent: ANDROID_CHROME })).toBe("android");
+    expect(installWay({ ...base, userAgent: IPAD_AS_MAC })).toBe("menu");
   });
 });

@@ -4,6 +4,7 @@ import type {
   SupplierModerationSummary,
 } from "@adclub/contracts";
 import {
+  ActionBar,
   Badge,
   Banner,
   Button,
@@ -15,11 +16,20 @@ import {
   SkeletonList,
   useLoadingGate,
 } from "@adclub/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
 import { formatWhen } from "../orders/order-rules";
-import { navigate, navigateTo, offerPath, replaceRouteState, useRouteState } from "../router";
+import { useWide } from "../offers/use-wide";
+import {
+  goBackTo,
+  navigate,
+  navigateTo,
+  offerPath,
+  replaceRouteState,
+  useRouteState,
+} from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import {
   addedAction,
   conditionsText,
@@ -80,12 +90,21 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title page__title">{t("moderation.title")}</h1>
-        <Button variant="secondary" icon="plus" onClick={() => navigate("offerRequest")}>
-          {t("moderation.addRequest")}
-        </Button>
-      </div>
+      <PageHeader
+        title={t("moderation.title")}
+        back={() => goBackTo("more")}
+        deskRoot
+        actions={
+          <Button
+            variant="secondary"
+            icon="plus"
+            className="page__head-action"
+            onClick={() => navigate("offerRequest")}
+          >
+            {t("moderation.addRequest")}
+          </Button>
+        }
+      />
       <div className="offers-controls">
         <Segments<ModerationTab>
           label={t("moderation.title")}
@@ -160,9 +179,12 @@ function Requests({ timeZone }: { timeZone: string }) {
     return { entries: page.requests, next: page.nextCursor };
   }, []);
   const list = usePages<SupplierCatalogRequest>(load);
+  const toRow = useRequestRow(timeZone);
   return (
     <List
       list={list}
+      toRow={toRow}
+      aboutHeader={t("moderation.tableAbout")}
       empty={
         <EmptyState
           icon="checklist"
@@ -175,7 +197,6 @@ function Requests({ timeZone }: { timeZone: string }) {
           }
         />
       }
-      render={(request) => <RequestCard key={request.id} request={request} timeZone={timeZone} />}
     />
   );
 }
@@ -189,11 +210,13 @@ function Proposals({ timeZone }: { timeZone: string }) {
     return { entries: page.entries, next: page.nextCursor };
   }, []);
   const list = usePages<SupplierModerationProposal>(load);
+  const toRow = useProposalRow(timeZone);
   return (
     <List
       list={list}
+      toRow={toRow}
+      aboutHeader={t("moderation.tableCar")}
       empty={<EmptyState icon="car" title={t("moderation.emptyCompatibility")} />}
-      render={(entry) => <ProposalCard key={entry.proposal.id} entry={entry} timeZone={timeZone} />}
     />
   );
 }
@@ -201,13 +224,17 @@ function Proposals({ timeZone }: { timeZone: string }) {
 function List<T>({
   list,
   empty,
-  render,
+  toRow,
+  aboutHeader,
 }: {
   list: ReturnType<typeof usePages<T>>;
   empty: React.ReactNode;
-  render: (entry: T) => React.ReactNode;
+  toRow: (entry: T) => ModerationRow;
+  aboutHeader: string;
 }) {
   const { t } = useLanguage();
+  const wide = useWide();
+  const rows = list.entries?.map(toRow) ?? [];
   if (list.failure !== null && !list.entries) {
     return (
       <ScreenError
@@ -225,9 +252,16 @@ function List<T>({
       label={t("common.loading")}
     >
       {list.entries && list.entries.length === 0 && empty}
-      {list.entries && list.entries.length > 0 && (
-        <div className="offer-list">{list.entries.map(render)}</div>
-      )}
+      {rows.length > 0 &&
+        (wide ? (
+          <RowsTable rows={rows} aboutHeader={aboutHeader} />
+        ) : (
+          <div className="card-grid">
+            {rows.map((row) => (
+              <RowCard key={row.id} row={row} />
+            ))}
+          </div>
+        ))}
       {list.failure !== null && list.entries && (
         <Banner tone="danger">{t("common.errorText")}</Banner>
       )}
@@ -251,127 +285,170 @@ function NewMark() {
   );
 }
 
-function RequestCard({ request, timeZone }: { request: SupplierCatalogRequest; timeZone: string }) {
-  const { t, lang } = useLanguage();
-  const title = requestTitle(request);
-  const action = addedAction(request);
+/**
+ * One template for every decision (TASK-079): the status and «новое» on
+ * top, the item and «бренд · артикул», what it was about and when, then
+ * the one action. From 1024 the same parts are the cells of a table row.
+ */
+interface ModerationRow {
+  id: string;
+  isNew: boolean;
+  status: Parameters<typeof statusTone>[0];
+  statusText: string;
+  /** When it was decided, or nothing yet. */
+  decided: string | null;
+  name: string;
+  line: string | null;
+  /** «Из прайса · Категория …» / the car of a compatibility proposal. */
+  about: ReactNode;
+  /** The comment, the source of a proposal — said in full on a card. */
+  details: string | null;
+  sent: string;
+  action: ReactNode;
+}
+
+function StatusMark({ row }: { row: ModerationRow }) {
+  return (
+    <Badge
+      tone={statusTone(row.status)}
+      icon={
+        row.status === "approved" ? "circleCheck" : row.status === "rejected" ? "circleX" : "clock"
+      }
+    >
+      {row.statusText}
+    </Badge>
+  );
+}
+
+function RowCard({ row }: { row: ModerationRow }) {
   return (
     <article className="offer-card moderation-card">
-      <div className="offer-card__head">
-        <span className="ac-text-body-strong price-wrap moderation-card__title">{title.name}</span>
-        {request.isNew && <NewMark />}
-      </div>
-      {title.line && <span className="ac-text-body-s num">{title.line}</span>}
-      <span className="ac-text-body-s ac-muted">
-        {[
-          requestSource(request, t),
-          request.category ? t("moderation.category", { name: request.category.name }) : null,
-          formatWhen(request.createdAt, timeZone, lang, t),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </span>
-      {request.comment && (
-        <span className="ac-text-body-s price-wrap">
-          {t("moderation.comment", { text: request.comment })}
-        </span>
-      )}
       <div className="moderation-card__status">
-        <Badge
-          tone={statusTone(request.status)}
-          icon={
-            request.status === "approved"
-              ? "circleCheck"
-              : request.status === "rejected"
-                ? "circleX"
-                : "clock"
-          }
-        >
-          {statusText(request.status, request.rejectReason, t)}
-        </Badge>
-        {request.decidedAt && (
-          <span className="ac-text-caption ac-muted">
-            {formatWhen(request.decidedAt, timeZone, lang, t)}
-          </span>
-        )}
+        <StatusMark row={row} />
+        {row.isNew && <NewMark />}
+        {row.decided && <span className="ac-text-caption ac-muted">{row.decided}</span>}
       </div>
-      {request.item && (
-        <div className="moderation-card__item">
-          <Icon name="package" size={20} />
-          <span className="price-wrap">{request.item.name.text}</span>
-        </div>
-      )}
-      {action && (
-        <div className="actions-row">
-          {action === "open" ? (
-            <Button
-              variant="secondary"
-              size="s"
-              onClick={() => request.offer && navigateTo(offerPath(request.offer.id))}
-            >
-              {t("moderation.open")}
-            </Button>
-          ) : (
-            <Button
-              size="s"
-              icon="plus"
-              onClick={() => navigate("offerNew", { state: { item: request.item } })}
-            >
-              {t("moderation.put")}
-            </Button>
-          )}
-        </div>
-      )}
+      <div className="moderation-card__title">
+        <span className="ac-text-body-strong price-wrap">{row.name}</span>
+        {row.line && <span className="ac-text-caption ac-muted num">{row.line}</span>}
+      </div>
+      <span className="ac-text-body-s price-wrap">{row.about}</span>
+      {row.details && <span className="ac-text-body-s ac-muted price-wrap">{row.details}</span>}
+      <span className="ac-text-caption ac-muted">{row.sent}</span>
+      {row.action && <ActionBar compact others={[row.action]} />}
     </article>
   );
 }
 
-function ProposalCard({
-  entry,
-  timeZone,
-}: {
-  entry: SupplierModerationProposal;
-  timeZone: string;
-}) {
-  const { t, lang } = useLanguage();
-  const { proposal, item } = entry;
+function RowsTable({ rows, aboutHeader }: { rows: ModerationRow[]; aboutHeader: string }) {
+  const { t } = useLanguage();
   return (
-    <article className="offer-card moderation-card">
-      <div className="offer-card__head">
-        <span className="ac-text-body-strong price-wrap moderation-card__title">
-          {item?.name.text ?? t("moderation.itemGone")}
-        </span>
-        {entry.isNew && <NewMark />}
-      </div>
-      {item && (item.brand || item.article) && (
-        <span className="ac-text-body-s num">
-          {[item.brand?.name, item.article].filter(Boolean).join(" · ")}
-        </span>
-      )}
-      <span className="ac-text-body-s price-wrap">
-        <Icon name="car" size={16} /> {conditionsText(proposal.label)}
-      </span>
-      <span className="ac-text-body-s ac-muted price-wrap">
-        {t("moderation.evidence", { text: proposal.evidence })} ·{" "}
-        {formatWhen(proposal.createdAt, timeZone, lang, t)}
-      </span>
-      <div className="moderation-card__status">
-        <Badge
-          tone={statusTone(proposal.status)}
-          icon={
-            proposal.status === "approved"
-              ? "circleCheck"
-              : proposal.status === "rejected"
-                ? "circleX"
-                : "clock"
+    <div className="table-wrap">
+      <table className="data-table moderation-table">
+        <caption className="ac-visually-hidden">{t("moderation.title")}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("moderation.tableItem")}</th>
+            <th scope="col">{aboutHeader}</th>
+            <th scope="col">{t("moderation.tableSent")}</th>
+            <th scope="col">{t("moderation.tableStatus")}</th>
+            <th scope="col">
+              <span className="ac-visually-hidden">{t("offers.tableActions")}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td className="moderation-table__item">
+                <span className="price-wrap">{row.name}</span>
+                {row.line && <div className="ac-text-caption ac-muted num">{row.line}</div>}
+              </td>
+              <td>
+                <span className="price-wrap">{row.about}</span>
+                {row.details && (
+                  <div className="ac-text-caption ac-muted price-wrap">{row.details}</div>
+                )}
+              </td>
+              <td className="moderation-table__date">{row.sent}</td>
+              <td>
+                <span className="moderation-card__status">
+                  <StatusMark row={row} />
+                  {row.isNew && <NewMark />}
+                </span>
+                {row.decided && <div className="ac-text-caption ac-muted">{row.decided}</div>}
+              </td>
+              <td className="data-table__action">{row.action}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function useRequestRow(timeZone: string): (request: SupplierCatalogRequest) => ModerationRow {
+  const { t, lang } = useLanguage();
+  return (request) => {
+    const title = requestTitle(request);
+    const action = addedAction(request);
+    // The item the request became, unless it is the same name said again (TASK-079).
+    const became =
+      request.item && request.item.name.text !== title.name ? request.item.name.text : null;
+    return {
+      id: request.id,
+      isNew: request.isNew,
+      status: request.status,
+      statusText: statusText(request.status, request.rejectReason, t),
+      decided: request.decidedAt ? formatWhen(request.decidedAt, timeZone, lang, t) : null,
+      name: title.name,
+      line: title.line || null,
+      about: [
+        requestSource(request, t),
+        request.category ? t("moderation.category", { name: request.category.name }) : null,
+        became,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      details: request.comment ? t("moderation.comment", { text: request.comment }) : null,
+      sent: formatWhen(request.createdAt, timeZone, lang, t),
+      // A row's action is secondary: the screen has no main button in its rows (C15).
+      action: action ? (
+        <Button
+          key="action"
+          variant="secondary"
+          size="s"
+          icon={action === "open" ? undefined : "plus"}
+          onClick={() =>
+            action === "open"
+              ? request.offer && navigateTo(offerPath(request.offer.id))
+              : navigate("offerNew", { state: { item: request.item } })
           }
         >
-          {statusText(proposal.status, proposal.rejectionReason, t)}
-        </Badge>
-        {proposal.approvedWithChanges && (
-          <span className="ac-text-caption ac-muted">{t("moderation.withChanges")}</span>
-        )}
-      </div>
-    </article>
-  );
+          {t(action === "open" ? "moderation.open" : "moderation.put")}
+        </Button>
+      ) : null,
+    };
+  };
+}
+
+function useProposalRow(timeZone: string): (entry: SupplierModerationProposal) => ModerationRow {
+  const { t, lang } = useLanguage();
+  return ({ proposal, item, isNew }) => ({
+    id: proposal.id,
+    isNew,
+    status: proposal.status,
+    statusText: statusText(proposal.status, proposal.rejectionReason, t),
+    decided: proposal.approvedWithChanges ? t("moderation.withChanges") : null,
+    name: item?.name.text ?? t("moderation.itemGone"),
+    line: item ? [item.brand?.name, item.article].filter(Boolean).join(" · ") || null : null,
+    about: (
+      <>
+        <Icon name="car" size={16} /> {conditionsText(proposal.label)}
+      </>
+    ),
+    details: t("moderation.evidence", { text: proposal.evidence }),
+    sent: formatWhen(proposal.createdAt, timeZone, lang, t),
+    action: null,
+  });
 }

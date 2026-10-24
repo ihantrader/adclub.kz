@@ -21,6 +21,16 @@ export function createTranslate(
       warned.add(key);
       warn(`[i18n] the cabinet has no text for "${key}"`);
     }
-    return supplierText(lang, key, params);
+    return keepTogether(supplierText(lang, key, params));
   };
+}
+
+/**
+ * A number never parts from its word at a line end (TASK-079, C19): «13
+ * октября», «12 500 ₸», «3 раб. дн.», «15 мин» — the space after a digit
+ * before a letter or «₸», and between the groups of a sum, becomes a
+ * no-break space. Every text of the cabinet goes through it.
+ */
+export function keepTogether(text: string): string {
+  return text.replace(/(\d) (?=[\p{L}₸]|\d{3}(?!\d))/gu, "$1\u00a0");
 }

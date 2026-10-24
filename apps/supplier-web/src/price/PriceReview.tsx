@@ -45,8 +45,10 @@ import {
   noteText,
   REVIEW_TABS,
   reviewRefusal,
-  summaryText,
+  tabCount,
   tabLabel,
+  tabName,
+  totalRowsText,
   missingOrdersText,
   uncheckedText,
   type ReviewRefusal,
@@ -200,10 +202,33 @@ export function PriceReview({
     >
       {summary && tab && (
         <div className="price-review">
+          {/* The summary is five numbers, and the numbers are the tabs (TASK-079):
+              «уверенно — …; нужно проверить — …» as one sentence was hard to read. */}
           <section className="card price-review__summary" aria-label={t("review.title")}>
-            <p className="ac-text-body-strong">{summaryText(summary, t, lang)}</p>
+            <p className="ac-text-body-s ac-muted">
+              {totalRowsText(summary, t, lang)}
+              {summary.missing.withActiveOrders > 0 &&
+                ` · ${t("review.summaryOrders", {
+                  n: formatNumber(summary.missing.withActiveOrders),
+                })}`}
+            </p>
+            <div className="review-stats" role="tablist" aria-label={t("review.tabsLabel")}>
+              {REVIEW_TABS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  className={tab === key ? "review-stat review-stat--on" : "review-stat"}
+                  onClick={() => setTab(key)}
+                >
+                  <span className="ac-text-title num">{formatNumber(tabCount(summary, key))}</span>
+                  <span className="ac-text-caption">{tabName(key, t)}</span>
+                </button>
+              ))}
+            </div>
             {summary.import.reviewUntil && (
-              <p className="ac-text-body-s ac-muted">
+              <p className="ac-text-caption ac-muted">
                 {t("review.until", {
                   when: formatWhen(summary.import.reviewUntil, timeZone, lang, t),
                 })}
@@ -227,22 +252,11 @@ export function PriceReview({
             </Banner>
           )}
 
-          <div className="price-tabs" role="tablist" aria-label={t("review.tabsLabel")}>
-            {REVIEW_TABS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                className={tab === key ? "price-tab price-tab--on" : "price-tab"}
-                onClick={() => setTab(key)}
-              >
-                {tabLabel(summary, key, t)}
-              </button>
-            ))}
-          </div>
-
-          <div role="tabpanel" className="price-review__panel">
+          <div
+            role="tabpanel"
+            aria-label={tabLabel(summary, tab, t)}
+            className="price-review__panel"
+          >
             {tab === "missing" ? (
               <MissingOffers
                 key={`missing-${String(lists)}`}
@@ -359,9 +373,9 @@ function ApplyBar({
           <Icon name="alertTriangle" size={16} />
           <span>
             {t("review.applyNeedsMissing")}{" "}
-            <button type="button" className="text-link" onClick={onMissing}>
+            <Button variant="text" size="s" onClick={onMissing}>
               {t("review.tab.missing")}
-            </button>
+            </Button>
           </span>
         </p>
       )}
@@ -615,8 +629,15 @@ function RowCard({
       </div>
     ) : (
       <div className="actions-row review-row__actions">
+        {/* «Верно» in every row is secondary: the screen's main button is «Применить» (C15). */}
         {row.item && (
-          <Button size={size} disabled={busy} onClick={() => act({ decision: "accept" })}>
+          <Button
+            variant="secondary"
+            size={size}
+            icon="check"
+            disabled={busy}
+            onClick={() => act({ decision: "accept" })}
+          >
             {t("review.accept")}
           </Button>
         )}
@@ -677,10 +698,7 @@ function RowCard({
   }
 
   return (
-    <article
-      className={row.sharpPrice && !notApplicable ? "review-row review-row--sharp" : "review-row"}
-      role="listitem"
-    >
+    <article className="review-row" role="listitem">
       <div className="review-row__file">
         <span className="ac-text-caption ac-muted">{t("price.parsed.row", { n: row.rowNo })}</span>
         <span className="price-wrap">{fileText(row) || "—"}</span>
@@ -741,12 +759,8 @@ function RowCard({
         {group !== "errors" &&
           !notApplicable &&
           changes.map((line, index) => (
-            <span
-              key={line}
-              className={
-                index === 0 && row.sharpPrice ? "ac-text-body-strong review-row__sharp" : "num"
-              }
-            >
+            // The price in `text`; a sharp change is said by its badge, not by colour (TASK-079).
+            <span key={line} className={index === 0 ? "num ac-text-body-strong" : "num"}>
               {line}
             </span>
           ))}
@@ -768,14 +782,15 @@ function RowCard({
       <div className="review-row__actions-cell">
         {body}
         {group === "confident" && (
-          <button
-            type="button"
-            className="text-link review-row__toggle"
+          <Button
+            variant="text"
+            size="s"
+            className="review-row__toggle"
             aria-expanded={expanded}
             onClick={() => setExpanded((value) => !value)}
           >
             {t(expanded ? "review.collapse" : "review.expand")}
-          </button>
+          </Button>
         )}
       </div>
 

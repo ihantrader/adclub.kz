@@ -24,7 +24,7 @@ describe("S-PUB-01 «Заявка на подключение» (TASK-077)", () 
     expect(joinErrors({ ...filled, bin: "080740000129" }, ru).bin).toBe(
       "Проверьте БИН: в нём ошибка",
     );
-    expect(joinErrors({ ...filled, bin: "0807" }, ru).bin).toBe("БИН — 12 цифр");
+    expect(joinErrors({ ...filled, bin: "0807" }, ru).bin).toBe("БИН — 12\u00a0цифр");
     expect(joinErrors({ ...filled, bin: "080740000129" }, kk).bin).toBe(
       "БСН-ді тексеріңіз: онда қате бар",
     );
@@ -36,7 +36,7 @@ describe("S-PUB-01 «Заявка на подключение» (TASK-077)", () 
     );
     expect(joinBody(emptyJoinForm, "ru")).toBeNull();
     expect(joinBody({ ...filled, consent: false }, "ru")).toBeNull();
-    expect(joinBody({ ...filled, phone: "+7 495 123 45 67" }, "ru")).toBeNull();
+    expect(joinBody({ ...filled, phone: "+7\u00a0495\u00a0123 45 67" }, "ru")).toBeNull();
   });
 
   it("sends goods, services or both, normalized, in the page's language", () => {
@@ -65,7 +65,9 @@ describe("S-PUB-01 «Заявка на подключение» (TASK-077)", () 
       retryable: true,
       details: { limit: "supplier_lead_per_phone", retryAfterSeconds: 3600 },
     });
-    expect(joinRefusal(limited, ru).text).toBe("Слишком много заявок. Попробуйте через 60 мин");
+    expect(joinRefusal(limited, ru).text).toBe(
+      "Слишком много заявок. Попробуйте через 60\u00a0мин",
+    );
     const down = new ApiError({
       status: 503,
       code: "SERVICE_UNAVAILABLE",

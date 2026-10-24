@@ -6,6 +6,7 @@ import type {
   SupplierOffer,
 } from "@adclub/contracts";
 import {
+  ActionBar,
   Badge,
   Banner,
   Button,
@@ -15,12 +16,10 @@ import {
   EmptyState,
   FadeSwap,
   Icon,
-  IconButton,
   ScreenError,
   Segments,
   SkeletonList,
   TextField,
-  toastObstacle,
   useLoadingGate,
   useToast,
 } from "@adclub/ui";
@@ -40,7 +39,8 @@ import {
 } from "../router";
 import { CompatibilityProposal } from "./CompatibilityProposal";
 import { proposesCompatibility } from "./compatibility-proposal-rules";
-import { ActiveOrders, HiddenNote, Receiving } from "./OfferRow";
+import { PageHeader } from "../screens/PageHeader";
+import { ActiveOrders, HiddenNote } from "./OfferRow";
 import { ServiceOfferEditor } from "./ServiceOfferEditor";
 import {
   activeOrdersWarningKey,
@@ -63,6 +63,8 @@ const PREVIEW_DELAY_MS = 300;
 
 /** The price field: «Проверьте цену» puts the cursor there. */
 export const PRICE_FIELD = "offer-price";
+/** The form's id: its «Сохранить» stands in the action bar after the form (TASK-079). */
+export const FORM_ID = "offer-form";
 
 function focusPrice(): void {
   document.getElementById(PRICE_FIELD)?.focus();
@@ -211,29 +213,31 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
   );
 }
 
+/** An offer is a child page of «Предложения»: the title and «назад» in the top bar (C3). */
 export function BackHead({ title }: { title: string }) {
-  const t = useT();
-  return (
-    <div className="page__head page__head--back">
-      <IconButton icon="arrowLeft" label={t("common.back")} onClick={() => goBack("offers")} />
-      <h1 className="ac-text-title page__title">{title}</h1>
-    </div>
-  );
+  return <PageHeader title={title} back={() => goBack("offers")} />;
 }
 
-/** The item of an offer — read only (S-OFF-03). */
-export function ItemBlock({ item }: { item: OfferItem }) {
+/** The item of an offer — read only (S-OFF-03); the state of the offer under it. */
+export function ItemBlock({ item, children }: { item: OfferItem; children?: ReactNode }) {
   const line = [item.brand?.name, item.article].filter(Boolean).join(" · ");
   return (
-    <section className="card item-block">
-      <span className="item-block__thumb" aria-hidden="true">
-        {item.photo ? <img src={item.photo.thumbUrl} alt="" /> : <Icon name="package" size={24} />}
-      </span>
-      <div className="item-block__text">
-        <p className="ac-text-body-strong item-block__name">{item.name.text}</p>
-        {line && <p className="ac-text-body-s num">{line}</p>}
-        <p className="ac-text-body-s ac-muted">{categoryLine(item)}</p>
+    <section className="card item-card">
+      <div className="item-block">
+        <span className="item-block__thumb" aria-hidden="true">
+          {item.photo ? (
+            <img src={item.photo.thumbUrl} alt="" />
+          ) : (
+            <Icon name={item.type === "service" ? "wrench" : "package"} size={24} />
+          )}
+        </span>
+        <div className="item-block__text">
+          <p className="ac-text-body-strong item-block__name">{item.name.text}</p>
+          {line && <p className="ac-text-body-s num">{line}</p>}
+          <p className="ac-text-body-s ac-muted">{categoryLine(item)}</p>
+        </div>
       </div>
+      {children}
     </section>
   );
 }
@@ -478,158 +482,200 @@ function OfferEditor({
         </Banner>
       )}
 
-      <ItemBlock item={item} />
+      {/* The item and, under it, the state of the offer in one line (TASK-079). */}
+      <ItemBlock item={item}>{offer && <OfferStateLine offer={offer} />}</ItemBlock>
+
+      {/* The bar is pinned while its form is in sight, never over what follows (C2). */}
+      <div className="form-with-bar">
+        <form
+          id={FORM_ID}
+          className="card offer-form"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <div className="form-grid">
+            <TextField
+              id={PRICE_FIELD}
+              label={t("offers.price")}
+              value={form.price}
+              onChange={(value) => set({ price: typeAmount(value) })}
+              inputMode="numeric"
+              autoComplete="off"
+              hint={offer ? t("offers.newPriceHint") : t("offerForm.priceHint")}
+              error={fieldError("price")}
+              trailing={<span className="ac-muted">₸</span>}
+            />
+
+            <div className="field-block">
+              <span className="field-block__label">{t("offers.availability")}</span>
+              <Segments<OfferAvailability>
+                label={t("offers.availability")}
+                value={form.availability}
+                onChange={(availability) => set({ availability })}
+                options={[
+                  { value: "in_stock", label: t("offers.inStock") },
+                  { value: "on_order", label: t("offers.onOrder") },
+                ]}
+              />
+            </div>
+
+            <TextField
+              label={t("offerForm.leadDays")}
+              value={form.leadDays}
+              onChange={(value) => set({ leadDays: value.replace(/\D/g, "").slice(0, 3) })}
+              inputMode="numeric"
+              autoComplete="off"
+              hint={t(
+                form.availability === "on_order"
+                  ? "offerForm.leadDaysOnOrder"
+                  : "offerForm.leadDaysInStock",
+              )}
+              error={fieldError("leadDays")}
+            />
+
+            <fieldset className="field-block">
+              <legend className="field-block__label">{t("offers.receiving")}</legend>
+              <div className="check-row">
+                <Checkbox
+                  label={t("offers.pickup")}
+                  checked={form.pickup}
+                  onChange={(pickup) => set({ pickup })}
+                />
+                <Checkbox
+                  label={t("offers.delivery")}
+                  checked={form.delivery}
+                  onChange={(delivery) => set({ delivery })}
+                />
+              </div>
+              {field("pickup")}
+              <p className="ac-text-caption ac-muted">{t("offerForm.pickupHint")}</p>
+            </fieldset>
+
+            <div className="field-block form-grid__wide">
+              <span className="field-block__label">{t("offerForm.warranty")}</span>
+              <Segments<WarrantyKind>
+                label={t("offerForm.warranty")}
+                value={form.warranty}
+                onChange={(warranty) => set({ warranty })}
+                options={[
+                  { value: "none", label: t("offerForm.warrantyNone") },
+                  { value: "months", label: t("offerForm.warrantyMonths") },
+                  { value: "text", label: t("offerForm.warrantyText") },
+                ]}
+              />
+            </div>
+            {form.warranty === "months" && (
+              <TextField
+                label={t("offerForm.warrantyMonthsLabel")}
+                value={form.warrantyMonths}
+                onChange={(value) => set({ warrantyMonths: value.replace(/\D/g, "").slice(0, 3) })}
+                inputMode="numeric"
+                autoComplete="off"
+                error={fieldError("warrantyMonths")}
+              />
+            )}
+            {form.warranty === "text" && (
+              <TextField
+                className="form-grid__wide"
+                label={t("offerForm.warrantyTextLabel")}
+                value={form.warrantyText}
+                onChange={(warrantyText) => set({ warrantyText })}
+                maxLength={100}
+                hint={t("offerForm.warrantyTextHint")}
+                error={fieldError("warrantyText")}
+              />
+            )}
+
+            {/* «Ваши данные — по желанию» is the title of a block, not the label of a field. */}
+            <h2 className="ac-text-heading form-grid__wide offer-form__block">
+              {t("offerForm.own")}
+            </h2>
+            <TextField
+              label={t("offerForm.supplierSku")}
+              value={form.supplierSku}
+              onChange={(supplierSku) => set({ supplierSku })}
+              maxLength={64}
+              autoComplete="off"
+              error={fieldError("supplierSku")}
+            />
+            <TextField
+              label={t("offerForm.supplierName")}
+              value={form.supplierName}
+              onChange={(supplierName) => set({ supplierName })}
+              maxLength={200}
+              autoComplete="off"
+              hint={t("offerForm.ownHint")}
+              error={fieldError("supplierName")}
+            />
+          </div>
+
+          <ReceiptPreview form={form} initial={offer?.receipt ?? null} />
+        </form>
+
+        <ActionBar
+          pinned
+          main={
+            <Button
+              type="submit"
+              form={FORM_ID}
+              size="l"
+              loading={saving}
+              disabled={!online || !dirty}
+            >
+              {offer ? t("common.save") : t("offerForm.create")}
+            </Button>
+          }
+          note={online ? undefined : t("common.needNetwork")}
+        />
+      </div>
 
       {offer && (
-        <OfferStatePanel
+        <OfferStatusAction
           offer={offer}
           onOffer={(next) => onOffer?.(next)}
           onProblem={(error) => setProblem(offerProblem(error))}
         />
       )}
-
-      <form
-        className="card stack-m offer-form"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          void save();
-        }}
-      >
-        <TextField
-          id={PRICE_FIELD}
-          label={t("offers.price")}
-          value={form.price}
-          onChange={(value) => set({ price: typeAmount(value) })}
-          inputMode="numeric"
-          autoComplete="off"
-          hint={offer ? t("offers.newPriceHint") : t("offerForm.priceHint")}
-          error={fieldError("price")}
-          trailing={<span className="ac-muted">₸</span>}
-          className="field-narrow"
-        />
-
-        <div className="field-block">
-          <span className="field-block__label">{t("offers.availability")}</span>
-          <Segments<OfferAvailability>
-            label={t("offers.availability")}
-            value={form.availability}
-            onChange={(availability) => set({ availability })}
-            options={[
-              { value: "in_stock", label: t("offers.inStock") },
-              { value: "on_order", label: t("offers.onOrder") },
-            ]}
-          />
-        </div>
-
-        <TextField
-          label={t("offerForm.leadDays")}
-          value={form.leadDays}
-          onChange={(value) => set({ leadDays: value.replace(/\D/g, "").slice(0, 3) })}
-          inputMode="numeric"
-          autoComplete="off"
-          hint={t(
-            form.availability === "on_order"
-              ? "offerForm.leadDaysOnOrder"
-              : "offerForm.leadDaysInStock",
-          )}
-          error={fieldError("leadDays")}
-          className="field-narrow"
-        />
-
-        <fieldset className="field-block">
-          <legend className="field-block__label">{t("offers.receiving")}</legend>
-          <Checkbox
-            label={t("offers.pickup")}
-            checked={form.pickup}
-            onChange={(pickup) => set({ pickup })}
-          />
-          <Checkbox
-            label={t("offers.delivery")}
-            checked={form.delivery}
-            onChange={(delivery) => set({ delivery })}
-          />
-          {field("pickup")}
-          <p className="ac-text-body-s ac-muted">{t("offerForm.pickupHint")}</p>
-        </fieldset>
-
-        <div className="field-block">
-          <span className="field-block__label">{t("offerForm.warranty")}</span>
-          <Segments<WarrantyKind>
-            label={t("offerForm.warranty")}
-            value={form.warranty}
-            onChange={(warranty) => set({ warranty })}
-            options={[
-              { value: "none", label: t("offerForm.warrantyNone") },
-              { value: "months", label: t("offerForm.warrantyMonths") },
-              { value: "text", label: t("offerForm.warrantyText") },
-            ]}
-          />
-          {form.warranty === "months" && (
-            <TextField
-              label={t("offerForm.warrantyMonthsLabel")}
-              value={form.warrantyMonths}
-              onChange={(value) => set({ warrantyMonths: value.replace(/\D/g, "").slice(0, 3) })}
-              inputMode="numeric"
-              autoComplete="off"
-              error={fieldError("warrantyMonths")}
-              className="field-narrow"
-            />
-          )}
-          {form.warranty === "text" && (
-            <TextField
-              label={t("offerForm.warrantyTextLabel")}
-              value={form.warrantyText}
-              onChange={(warrantyText) => set({ warrantyText })}
-              maxLength={100}
-              hint={t("offerForm.warrantyTextHint")}
-              error={fieldError("warrantyText")}
-            />
-          )}
-        </div>
-
-        <div className="field-block">
-          <span className="field-block__label">{t("offerForm.own")}</span>
-          <TextField
-            label={t("offerForm.supplierSku")}
-            value={form.supplierSku}
-            onChange={(supplierSku) => set({ supplierSku })}
-            maxLength={64}
-            autoComplete="off"
-            error={fieldError("supplierSku")}
-          />
-          <TextField
-            label={t("offerForm.supplierName")}
-            value={form.supplierName}
-            onChange={(supplierName) => set({ supplierName })}
-            maxLength={200}
-            autoComplete="off"
-            hint={t("offerForm.ownHint")}
-            error={fieldError("supplierName")}
-          />
-        </div>
-
-        <ReceiptPreview form={form} initial={offer?.receipt ?? null} />
-        {offer && <Receiving offer={offer} />}
-
-        <div className="save-bar" {...toastObstacle}>
-          <Button type="submit" size="l" loading={saving} disabled={!online || !dirty}>
-            {offer ? t("common.save") : t("offerForm.create")}
-          </Button>
-          {!online && <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>}
-        </div>
-      </form>
     </>
   );
 }
 
 /**
- * The state of a saved offer on its card: on the showcase or why not,
- * «Активные заявки: N», «Снять с продажи» (asking when orders are still
- * going through) and «Вернуть в продажу» (then «Проверьте цену»). The same
- * for an offer on goods and on a service.
+ * The state of a saved offer, one line under its item (TASK-079): on the
+ * showcase or why not (`warning`), «Активные заявки: N» when there are any.
+ * The same for an offer on goods and on a service.
  */
-export function OfferStatePanel({
+export function OfferStateLine({ offer }: { offer: SupplierOffer }) {
+  const t = useT();
+  const withdrawn = offer.status === "withdrawn";
+  return (
+    <div className="offer-state">
+      <div className="offer-state__line">
+        {withdrawn ? (
+          <Badge tone="neutral" icon="archive">
+            {t("offers.hidden.withdrawn")}
+          </Badge>
+        ) : offer.showcase.visible ? (
+          <Badge tone="success" icon="circleCheck">
+            {t("offerForm.visible")}
+          </Badge>
+        ) : null}
+        <ActiveOrders count={offer.activeOrders} />
+      </div>
+      <HiddenNote offer={offer} withWithdrawn={false} />
+    </div>
+  );
+}
+
+/**
+ * «Снять с продажи» (asking when orders are still going through) or
+ * «Вернуть в продажу» (then «Проверьте цену») — at the end of the card,
+ * after the form (TASK-079), never above it.
+ */
+export function OfferStatusAction({
   offer,
   onOffer,
   onProblem,
@@ -670,40 +716,32 @@ export function OfferStatePanel({
   };
 
   return (
-    <section className="card offer-state">
+    <section className="offer-status-action">
       {withdrawn ? (
-        <Badge tone="neutral" icon="archive">
-          {t("offers.hidden.withdrawn")}
-        </Badge>
-      ) : offer.showcase.visible ? (
-        <Badge tone="success" icon="circleCheck">
-          {t("offerForm.visible")}
-        </Badge>
-      ) : null}
-      <HiddenNote offer={offer} withWithdrawn={false} />
-      <p className="ac-text-body-s">
-        <ActiveOrders count={offer.activeOrders} />
-      </p>
-      <div className="actions-row">
-        {withdrawn ? (
-          <Button
-            variant="secondary"
-            icon="refresh"
-            disabled={!online}
-            onClick={() => changeStatus("return")}
-          >
-            {t("offers.return")}
-          </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            disabled={!online}
-            onClick={() => (offer.activeOrders > 0 ? setAsking(true) : changeStatus("withdraw"))}
-          >
-            {t("offers.withdraw")}
-          </Button>
-        )}
-      </div>
+        <ActionBar
+          others={[
+            <Button
+              key="return"
+              variant="secondary"
+              icon="refresh"
+              disabled={!online}
+              onClick={() => changeStatus("return")}
+            >
+              {t("offers.return")}
+            </Button>,
+          ]}
+        />
+      ) : (
+        <Button
+          variant="text"
+          destructive
+          icon="archive"
+          disabled={!online}
+          onClick={() => (offer.activeOrders > 0 ? setAsking(true) : changeStatus("withdraw"))}
+        >
+          {t("offers.withdraw")}
+        </Button>
+      )}
       <WithdrawDialog
         open={asking}
         count={offer.activeOrders}

@@ -20,7 +20,8 @@ import {
   noteText,
   notAppliedGroups,
   notAppliedText,
-  resultLines,
+  reasonParts,
+  resultRows,
   resultText,
   reviewRefusal,
   summaryText,
@@ -97,7 +98,7 @@ function row(overrides: Partial<PriceReviewRow> = {}): PriceReviewRow {
 describe("the summary and the button of S-PRICE-03 (TASK-048)", () => {
   it("says the groups word for word, with the missing offers and their orders", () => {
     expect(summaryText(summary(), t, "ru")).toBe(
-      `${formatNumber(1240)} строк: уверенно — ${formatNumber(1100)}; нужно проверить — 80; не найдено — 48; ошибки в строках — 12. Пропали из файла — 5 (по 2 есть активные заявки)`,
+      `${formatNumber(1240)}\u00a0строк: уверенно — ${formatNumber(1100)}; нужно проверить — 80; не найдено — 48; ошибки в строках — 12. Пропали из файла — 5 (по 2\u00a0есть активные заявки)`,
     );
     expect(
       summaryText(
@@ -134,8 +135,8 @@ describe("the summary and the button of S-PRICE-03 (TASK-048)", () => {
 
   it("tells the rows left out beside the button", () => {
     expect(applyNotes(summary(), t, "ru")).toEqual([
-      "78 строк не проверены и не будут применены",
-      "Ждут подтверждения новой цены: 1 строка",
+      "78\u00a0строк не проверены и не будут применены",
+      "Ждут подтверждения новой цены: 1\u00a0строка",
     ]);
     expect(
       applyNotes(
@@ -156,8 +157,8 @@ describe("the summary and the button of S-PRICE-03 (TASK-048)", () => {
   });
 
   it("agrees the verb with the number of rows left unchecked", () => {
-    expect(uncheckedText(821, t, "ru")).toBe("821 строка не проверена и не будет применена");
-    expect(uncheckedText(800, t, "ru")).toBe("800 строк не проверены и не будут применены");
+    expect(uncheckedText(821, t, "ru")).toBe("821\u00a0строка не проверена и не будет применена");
+    expect(uncheckedText(800, t, "ru")).toBe("800\u00a0строк не проверены и не будут применены");
   });
 
   it("opens on what wants a decision first, with the counters on the tabs", () => {
@@ -174,7 +175,9 @@ describe("the summary and the button of S-PRICE-03 (TASK-048)", () => {
 describe("a row of the review", () => {
   it("shows the file as written and «было → стало»", () => {
     expect(fileText(row())).toBe("04465-0K090 · Geely · Колодки передние");
-    expect(changeLines(row(), t)).toEqual([`${formatNumber(12_500)} → ${formatNumber(13_000)} ₸`]);
+    expect(changeLines(row(), t)).toEqual([
+      `${formatNumber(12_500)} → ${formatNumber(13_000)}\u00a0₸`,
+    ]);
     expect(
       changeLines(
         row({
@@ -183,12 +186,12 @@ describe("a row of the review", () => {
         t,
       ),
     ).toEqual([
-      `${formatNumber(12_500)} → ${formatNumber(13_000)} ₸`,
+      `${formatNumber(12_500)} → ${formatNumber(13_000)}\u00a0₸`,
       "в наличии → под заказ",
-      "срок 0 → 3 дн.",
+      "срок 0 → 3\u00a0дн.",
     ]);
     expect(changeLines(row({ offer: null }), t)).toEqual([
-      `${formatNumber(13_000)} ₸ · новое предложение`,
+      `${formatNumber(13_000)}\u00a0₸ · новое предложение`,
       "в наличии",
     ]);
   });
@@ -325,14 +328,23 @@ describe("the result (S-PRICE-04)", () => {
     expect(resultText(result, t)).toBe(
       "Готово: обновлено 122, снято 4, на добавление отправлено 7 — результат в разделе «Модерация»",
     );
-    expect(resultLines(result, t)).toEqual([
-      "Создано новых предложений: 4",
-      "Вернулось в продажу: 2",
-      "Снято — «нет в наличии» в файле: 3",
-      "Снято — нет в файле: 1",
-      "Без изменений: 900",
-      "Пропущено и не проверено: 60",
+    expect(resultRows(result, t)).toEqual([
+      { label: "Создано новых предложений", count: "4" },
+      { label: "Вернулось в продажу", count: "2" },
+      { label: "Снято — «нет в наличии» в файле", count: "3" },
+      { label: "Снято — нет в файле", count: "1" },
+      { label: "Без изменений", count: "900" },
+      { label: "Пропущено и не проверено", count: "60" },
     ]);
+  });
+
+  it("says a reason by its short name, the explanation apart", () => {
+    expect(reasonParts(notAppliedText("price_confirmation_required", t))).toEqual({
+      name: "Требует подтверждения цены",
+      explanation:
+        "цена изменилась резко, а подтверждения не было (или цену поменяли после сверки)",
+    });
+    expect(reasonParts("Без пояснения")).toEqual({ name: "Без пояснения", explanation: null });
   });
 
   it("groups «Не применено» by reason in words, the most rows first", () => {

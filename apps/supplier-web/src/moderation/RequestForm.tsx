@@ -1,10 +1,11 @@
 import type { Choice } from "@adclub/ui";
-import { Banner, Button, IconButton, SearchSelect, TextField } from "@adclub/ui";
+import { ActionBar, Banner, Button, SearchSelect, TextAreaField, TextField } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useCallback, useState } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
 import { goBack, navigate, useRouteState } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import { formFromQuery, requestBody, requestRefusal, type RequestForm } from "./moderation-rules";
 
 /** The subcategories of the catalog, loaded once: the suggestions of «Категория». */
@@ -91,33 +92,31 @@ export function RequestFormScreen() {
     }
   }
 
-  const head = (
-    <div className="page__head page__head--back">
-      <IconButton icon="arrowLeft" label={t("common.back")} onClick={() => goBack("offers")} />
-      <h1 className="ac-text-title page__title">{t("request.title")}</h1>
-    </div>
-  );
+  const head = <PageHeader title={t("request.title")} back={() => goBack("offers")} />;
 
   if (sent) {
     return (
       <>
         {head}
         <Banner icon="circleCheck">{t("request.sent")}</Banner>
-        <div className="actions-row">
-          <Button onClick={() => navigate("moderation")}>{t("result.toModeration")}</Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setSent(false);
-              setTouched(false);
-              setForm(formFromQuery(""));
-              setBrand(null);
-              setCategory(null);
-            }}
-          >
-            {t("request.another")}
-          </Button>
-        </div>
+        <ActionBar
+          main={<Button onClick={() => navigate("moderation")}>{t("result.toModeration")}</Button>}
+          others={[
+            <Button
+              key="another"
+              variant="secondary"
+              onClick={() => {
+                setSent(false);
+                setTouched(false);
+                setForm(formFromQuery(""));
+                setBrand(null);
+                setCategory(null);
+              }}
+            >
+              {t("request.another")}
+            </Button>,
+          ]}
+        />
       </>
     );
   }
@@ -127,7 +126,8 @@ export function RequestFormScreen() {
       {head}
       <p className="ac-text-body-s ac-muted">{t("request.lead")}</p>
       <form
-        className="stack-m request-form"
+        id="request-form"
+        className="card request-form form-grid"
         onSubmit={(event) => {
           event.preventDefault();
           void send();
@@ -135,10 +135,12 @@ export function RequestFormScreen() {
       >
         <TextField
           autoFocus
+          className="form-grid__wide"
           label={t("request.name")}
           value={form.name}
           maxLength={300}
           onChange={(name) => setForm((current) => ({ ...current, name }))}
+          hint={touched && !body ? undefined : t("request.nameRequired")}
           error={touched && !body ? t("request.nameNeeded") : undefined}
         />
         <SearchSelect
@@ -178,31 +180,44 @@ export function RequestFormScreen() {
             searching: t("searchSelect.searching"),
           }}
         />
-        <TextField
+        <TextAreaField
+          className="form-grid__wide"
           label={t("request.comment")}
           value={form.comment}
           maxLength={1000}
           onChange={(comment) => setForm((current) => ({ ...current, comment }))}
         />
         {refusal && (
-          <Banner
-            tone="danger"
-            icon="alertTriangle"
-            action={
-              <Button variant="text" size="s" onClick={() => navigate("moderation")}>
-                {t("nav.moderation")}
-              </Button>
-            }
-          >
-            {refusal}
-          </Banner>
+          <div className="form-grid__wide">
+            <Banner
+              tone="danger"
+              icon="alertTriangle"
+              action={
+                <Button variant="text" size="s" onClick={() => navigate("moderation")}>
+                  {t("nav.moderation")}
+                </Button>
+              }
+            >
+              {refusal}
+            </Banner>
+          </div>
         )}
-        <div className="actions-row">
-          <Button type="submit" loading={sending} disabled={!online || sending}>
+      </form>
+      <ActionBar
+        pinned
+        main={
+          <Button
+            type="submit"
+            form="request-form"
+            size="l"
+            loading={sending}
+            disabled={!online || sending}
+          >
             {t("request.send")}
           </Button>
-        </div>
-      </form>
+        }
+        note={online ? undefined : t("common.needNetwork")}
+      />
     </>
   );
 }

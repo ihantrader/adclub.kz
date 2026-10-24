@@ -8,7 +8,7 @@ import {
 } from "@adclub/contracts";
 import { normalizeKzMobilePhone } from "@adclub/domain";
 import {
-  Badge,
+  ActionBar,
   Banner,
   Button,
   Dialog,
@@ -18,6 +18,7 @@ import {
   SkeletonList,
   Switch,
   TextField,
+  TypeMark,
   useLoadingGate,
   useToast,
 } from "@adclub/ui";
@@ -28,7 +29,10 @@ import { canAddMembers } from "../cabinet/company-state";
 import { formatPhone, typePhone, useOnline } from "@adclub/web-session";
 import { rateLimitName, retryMinutes, saveErrorText } from "../errors";
 import { useT, type Translate } from "../i18n";
+import { useWide } from "../offers/use-wide";
 import { forgetPerson } from "../prefs";
+import { goBackTo } from "../router";
+import { PageHeader } from "./PageHeader";
 
 /**
  * Under a notification switch: why it can't be turned on (the limit is
@@ -85,6 +89,7 @@ export function Team() {
   const t = useT();
   const toast = useToast();
   const online = useOnline();
+  const wide = useWide();
   const [list, setList] = useState<SupplierMemberListResponse | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,16 +180,59 @@ export function Team() {
     }
   };
 
+  const languageSwitch = (member: SupplierMember) => (
+    <Segments<NotificationLanguage>
+      label={`${t("team.notificationLanguage")}: ${member.displayName}`}
+      value={member.notificationLanguage}
+      onChange={(value) => {
+        if (online) void update(member, { notificationLanguage: value });
+      }}
+      options={[
+        { value: "kk", label: t("language.kk") },
+        { value: "ru", label: t("language.ru") },
+      ]}
+    />
+  );
+  // «Удалить» is a text action in `danger` (TASK-079): four big red buttons shouted over the list.
+  const removeButton = (member: SupplierMember) => (
+    <Button
+      variant="text"
+      destructive
+      disabled={!online}
+      aria-label={`${t("team.remove")}: ${member.displayName}`}
+      onClick={() => setRemoving(member)}
+    >
+      {t("team.remove")}
+    </Button>
+  );
+  const who = (member: SupplierMember) => (
+    <div className="member__head">
+      <span className="ac-text-body-strong member__name">{member.displayName}</span>
+      <a className="member__phone num" href={`tel:${member.phone}`}>
+        {formatPhone(member.phone)}
+      </a>
+      <span className="member__badges">
+        {member.isMe && <TypeMark icon="user">{t("team.me")}</TypeMark>}
+        {member.isContactPerson && <TypeMark icon="phone">{t("team.contactPerson")}</TypeMark>}
+      </span>
+    </div>
+  );
+
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title page__title">{t("team.title")}</h1>
-        {!adding && mayAdd && (
-          <Button variant="secondary" icon="plus" onClick={() => setAdding(true)}>
-            {t("team.add")}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={t("team.title")}
+        back={() => goBackTo("more")}
+        deskRoot
+        actions={
+          !adding &&
+          mayAdd && (
+            <Button variant="secondary" icon="plus" onClick={() => setAdding(true)}>
+              {t("team.add")}
+            </Button>
+          )
+        }
+      />
       {list && (
         <p className="ac-text-body-s ac-muted">
           {t("team.explanation", { n: list.notifications.limit })}
@@ -232,28 +280,58 @@ export function Team() {
             )
           }
         >
-          {list && (
-            <ul className="member-list">
+          {list && wide && (
+            // From 1024 a table (DESIGN 7.5): who, the notifications, their language, «Удалить».
+            <div className="table-wrap">
+              <table className="data-table">
+                <caption className="ac-visually-hidden">{t("team.title")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("team.tableMember")}</th>
+                    <th scope="col">{t("team.receives")}</th>
+                    <th scope="col">{t("team.notificationLanguage")}</th>
+                    <th scope="col">
+                      <span className="ac-visually-hidden">{t("offers.tableActions")}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.members.map((member) => {
+                    const note = notificationNote(member, list.notifications, t);
+                    return (
+                      <tr key={member.id}>
+                        <td>{who(member)}</td>
+                        <td>
+                          <Switch
+                            label={
+                              <span className="ac-visually-hidden">
+                                {t("team.receives")}: {member.displayName}
+                              </span>
+                            }
+                            description={note ?? undefined}
+                            checked={member.notificationsEnabled}
+                            disabled={
+                              !online || (!member.notificationsEnabled && list.notifications.full)
+                            }
+                            onChange={(checked) =>
+                              update(member, { notificationsEnabled: checked })
+                            }
+                          />
+                        </td>
+                        <td>{languageSwitch(member)}</td>
+                        <td className="data-table__action">{removeButton(member)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {list && !wide && (
+            <ul className="member-list card-grid">
               {list.members.map((member) => (
                 <li key={member.id} className="card member">
-                  <div className="member__head">
-                    <span className="ac-text-body-strong member__name">{member.displayName}</span>
-                    <a className="member__phone num" href={`tel:${member.phone}`}>
-                      {formatPhone(member.phone)}
-                    </a>
-                    <span className="member__badges">
-                      {member.isMe && (
-                        <Badge tone="accent" icon="user">
-                          {t("team.me")}
-                        </Badge>
-                      )}
-                      {member.isContactPerson && (
-                        <Badge tone="neutral" icon="phone">
-                          {t("team.contactPerson")}
-                        </Badge>
-                      )}
-                    </span>
-                  </div>
+                  {who(member)}
                   <Switch
                     label={t("team.receives")}
                     description={notificationNote(member, list.notifications, t) ?? undefined}
@@ -263,29 +341,9 @@ export function Team() {
                   />
                   <div className="field-block">
                     <span className="field-block__label">{t("team.notificationLanguage")}</span>
-                    <Segments<NotificationLanguage>
-                      label={`${t("team.notificationLanguage")}: ${member.displayName}`}
-                      value={member.notificationLanguage}
-                      onChange={(value) => {
-                        if (online) void update(member, { notificationLanguage: value });
-                      }}
-                      options={[
-                        { value: "kk", label: t("language.kk") },
-                        { value: "ru", label: t("language.ru") },
-                      ]}
-                    />
+                    {languageSwitch(member)}
                   </div>
-                  <div className="member__actions">
-                    <Button
-                      variant="secondary"
-                      destructive
-                      icon="trash"
-                      disabled={!online}
-                      onClick={() => setRemoving(member)}
-                    >
-                      {t("team.remove")}
-                    </Button>
-                  </div>
+                  <div className="member__actions">{removeButton(member)}</div>
                 </li>
               ))}
             </ul>
@@ -359,39 +417,45 @@ function AddMember({ onCancel, onAdded }: { onCancel: () => void; onAdded: () =>
     <section className="card stack-m" aria-label={t("team.addTitle")}>
       <h2 className="ac-text-heading">{t("team.addTitle")}</h2>
       <p className="ac-text-body-s ac-muted">{t("team.addHint")}</p>
-      <TextField
-        label={t("team.nameLabel")}
-        value={name}
-        onChange={(value) => {
-          setName(value);
-          setNameError(null);
-        }}
-        autoComplete="off"
-        maxLength={100}
-        error={nameError ?? undefined}
-      />
-      <TextField
-        label={t("auth.phoneLabel")}
-        value={rawPhone}
-        onChange={(value) => {
-          setRawPhone(typePhone(value));
-          setPhoneError(null);
-        }}
-        type="tel"
-        inputMode="tel"
-        autoComplete="off"
-        error={phoneError ?? (phoneInvalid ? t("auth.phoneInvalid") : undefined)}
-      />
-      {error && <Banner tone="danger">{error}</Banner>}
-      <div className="actions-row">
-        <Button disabled={!online || !phone || name.trim().length === 0} onClick={submit}>
-          {t("common.add")}
-        </Button>
-        <Button variant="secondary" onClick={onCancel}>
-          {t("common.cancel")}
-        </Button>
+      <div className="form-grid">
+        <TextField
+          label={t("team.nameLabel")}
+          value={name}
+          onChange={(value) => {
+            setName(value);
+            setNameError(null);
+          }}
+          autoComplete="off"
+          maxLength={100}
+          error={nameError ?? undefined}
+        />
+        <TextField
+          label={t("auth.phoneLabel")}
+          value={rawPhone}
+          onChange={(value) => {
+            setRawPhone(typePhone(value));
+            setPhoneError(null);
+          }}
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
+          error={phoneError ?? (phoneInvalid ? t("auth.phoneInvalid") : undefined)}
+        />
       </div>
-      {!online && <p className="ac-text-caption ac-muted">{t("common.needNetwork")}</p>}
+      {error && <Banner tone="danger">{error}</Banner>}
+      <ActionBar
+        main={
+          <Button disabled={!online || !phone || name.trim().length === 0} onClick={submit}>
+            {t("common.add")}
+          </Button>
+        }
+        others={[
+          <Button key="cancel" variant="secondary" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>,
+        ]}
+        note={online ? undefined : t("common.needNetwork")}
+      />
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import { ApiError } from "@adclub/api-client";
+import { createTranslate } from "../translate";
 import type { SupplierOffer } from "@adclub/contracts";
-import { supplierText } from "@adclub/i18n";
 import { describe, expect, it } from "vitest";
 import {
   changedServiceValues,
@@ -15,8 +15,8 @@ import {
   type ServiceForm,
 } from "./service-offer-rules";
 
-const t = (key: Parameters<typeof supplierText>[1], params?: Record<string, string | number>) =>
-  supplierText("ru", key, params);
+// The cabinet's own `t`: a number keeps its word with a no-break space (TASK-079).
+const t = createTranslate("ru", null);
 
 const COOLRAY = "11111111-1111-4111-8111-111111111111";
 const ATLAS = "22222222-2222-4222-8222-222222222222";
@@ -70,12 +70,16 @@ const offer = {
 
 describe("the form of an offer on a service (S-OFF-04)", () => {
   it("sends one price, or the table of prices by model", () => {
-    expect(checkServiceForm({ ...newServiceForm(), price: "7 000" })).toMatchObject({
+    expect(checkServiceForm({ ...newServiceForm(), price: "7\u00a0000" })).toMatchObject({
       ok: true,
       values: { price: 7_000 },
     });
     const check = checkServiceForm(
-      byModel([row(COOLRAY, "Coolray", "8 000"), row(ATLAS, "Atlas", "10 000"), newModelRow()]),
+      byModel([
+        row(COOLRAY, "Coolray", "8\u00a0000"),
+        row(ATLAS, "Atlas", "10\u00a0000"),
+        newModelRow(),
+      ]),
     );
     expect(check).toMatchObject({
       ok: true,
@@ -100,14 +104,14 @@ describe("the form of an offer on a service (S-OFF-04)", () => {
     });
     expect(
       checkServiceForm(
-        byModel([row(COOLRAY, "Coolray", "8 000"), row(COOLRAY, "Coolray", "9 000")]),
+        byModel([row(COOLRAY, "Coolray", "8\u00a0000"), row(COOLRAY, "Coolray", "9\u00a0000")]),
       ),
     ).toMatchObject({
       ok: false,
       problem: { field: { row: 1, part: "model" }, key: "serviceForm.error.duplicate" },
     });
     expect(
-      checkServiceForm(byModel([{ ...newModelRow(), make: GEELY, price: "5 000" }])),
+      checkServiceForm(byModel([{ ...newModelRow(), make: GEELY, price: "5\u00a0000" }])),
     ).toMatchObject({ ok: false, problem: { field: { row: 0, part: "model" } } });
     expect(checkServiceForm(byModel([row(COOLRAY, "Coolray", "")]))).toMatchObject({
       ok: false,
@@ -123,7 +127,7 @@ describe("the form of an offer on a service (S-OFF-04)", () => {
     const cheaper = checkServiceForm({
       ...form,
       rows: form.rows.map((entry) =>
-        entry.model?.id === COOLRAY ? { ...entry, price: "7 500" } : entry,
+        entry.model?.id === COOLRAY ? { ...entry, price: "7\u00a0500" } : entry,
       ),
     });
     expect(cheaper.ok && changedServiceValues(offer, cheaper.values)).toEqual({
@@ -132,7 +136,7 @@ describe("the form of an offer on a service (S-OFF-04)", () => {
         { modelId: COOLRAY, price: 7_500 },
       ],
     });
-    const single = checkServiceForm({ ...form, mode: "single", price: "8 000" });
+    const single = checkServiceForm({ ...form, mode: "single", price: "8\u00a0000" });
     // One price of the same amount is still another kind of price.
     expect(single.ok && changedServiceValues(offer, single.values)).toEqual({ price: 8_000 });
   });
@@ -140,7 +144,7 @@ describe("the form of an offer on a service (S-OFF-04)", () => {
   it("puts the server's refusal at the row it numbers", () => {
     const form = byModel([
       newModelRow(),
-      row(COOLRAY, "Coolray", "8 000"),
+      row(COOLRAY, "Coolray", "8\u00a0000"),
       row(ATLAS, "Atlas", "1"),
     ]);
     const range = apiError("VALIDATION_ERROR", [
@@ -149,7 +153,7 @@ describe("the form of an offer on a service (S-OFF-04)", () => {
     expect(serviceProblem(range, form)).toMatchObject({
       field: { row: 2, part: "price" },
       key: "offers.error.priceRange",
-      params: { min: "100", max: "50 000" },
+      params: { min: "100", max: "50\u00a0000" },
     });
     const twice = apiError("VALIDATION_ERROR", [
       { path: "modelPrices.0.modelId", message: "This model already has a price in the table" },
@@ -170,18 +174,22 @@ describe("the form of an offer on a service (S-OFF-04)", () => {
   });
 
   it("says the price «от N ₸ · M моделей» and what each model's owner sees", () => {
-    expect(servicePriceLine(offer, "ru", t)).toBe("от 8 000 ₸ · 2 модели");
+    expect(servicePriceLine(offer, "ru", t)).toBe("от 8\u00a0000\u00a0₸ · 2\u00a0модели");
     expect(
       servicePriceLine({ price: 5_000, pricing: { mode: "single", models: [] } }, "ru", t),
-    ).toBe("5 000 ₸");
+    ).toBe("5\u00a0000\u00a0₸");
     expect(
       servicePreview(
-        byModel([row(COOLRAY, "Coolray", "8 000"), row(ATLAS, "Atlas", "10 000", false)]),
+        byModel([row(COOLRAY, "Coolray", "8\u00a0000"), row(ATLAS, "Atlas", "10\u00a0000", false)]),
         t,
       ),
-    ).toEqual(["Geely Coolray — 8 000 ₸", "Geely Atlas — не увидят", "Другие модели — не увидят"]);
-    expect(servicePreview({ ...newServiceForm(), price: "7 000" }, t)).toEqual([
-      "7 000 ₸ — для любой модели",
+    ).toEqual([
+      "Geely Coolray — 8\u00a0000\u00a0₸",
+      "Geely Atlas — не увидят",
+      "Другие модели — не увидят",
+    ]);
+    expect(servicePreview({ ...newServiceForm(), price: "7\u00a0000" }, t)).toEqual([
+      "7\u00a0000\u00a0₸ — для любой модели",
     ]);
   });
 });

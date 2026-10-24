@@ -1,6 +1,6 @@
 import { ApiError } from "@adclub/api-client";
+import { createTranslate } from "../translate";
 import type { OfferReceipt, SupplierOffer } from "@adclub/contracts";
-import { supplierText, type SupplierTextKey } from "@adclub/i18n";
 import { describe, expect, it } from "vitest";
 import {
   activeOrdersWarningKey,
@@ -20,8 +20,8 @@ import {
   typeAmount,
 } from "./offer-rules";
 
-const t = (key: SupplierTextKey, params?: Readonly<Record<string, string | number>>) =>
-  supplierText("ru", key, params);
+// The cabinet's own `t`: a number keeps its word with a no-break space (TASK-079).
+const t = createTranslate("ru", null);
 
 function error(code: string, details?: unknown, status = 400): ApiError {
   return new ApiError({
@@ -84,7 +84,7 @@ describe("a refusal of the server, next to its field", () => {
     ).toEqual({
       field: "price",
       key: "offers.error.priceRange",
-      params: { min: "1", max: "100 000 000" },
+      params: { min: "1", max: "100\u00a0000\u00a0000" },
     });
     expect(
       offerProblem(error("VALIDATION_ERROR", [{ path: "leadDays", min: 0, max: 90 }])),
@@ -143,13 +143,13 @@ describe("«Клиент увидит» from the server's receipt date", () => {
   it("says «сегодня», «завтра», or the date; delivery — «до» the same date", () => {
     expect(
       receiptPreview(receipt("2026-03-14"), { pickup: true, delivery: true }, "ru", t),
-    ).toEqual(["Самовывоз — завтра, 14 марта", "Доставка — до 14 марта"]);
+    ).toEqual(["Самовывоз — завтра, 14\u00a0марта", "Доставка — до 14\u00a0марта"]);
     expect(
       receiptPreview(receipt("2026-03-13"), { pickup: true, delivery: false }, "ru", t),
-    ).toEqual(["Самовывоз — сегодня, 13 марта"]);
+    ).toEqual(["Самовывоз — сегодня, 13\u00a0марта"]);
     expect(
       receiptPreview(receipt("2026-03-17"), { pickup: true, delivery: false }, "ru", t),
-    ).toEqual(["Самовывоз — 17 марта"]);
+    ).toEqual(["Самовывоз — 17\u00a0марта"]);
   });
 
   it("has no date to show when the point has no hours", () => {
@@ -165,15 +165,15 @@ describe("whole numbers in the fields", () => {
     expect(parseAmount("13 000")).toBe(13_000);
     expect(parseAmount("13,5")).toBeNull();
     expect(parseAmount("")).toBeNull();
-    expect(formatAmount(100_000_000)).toBe("100 000 000");
-    expect(typeAmount("0012a500")).toBe("12 500");
+    expect(formatAmount(100_000_000)).toBe("100\u00a0000\u00a0000");
+    expect(typeAmount("0012a500")).toBe("12\u00a0500");
     expect(typeAmount("")).toBe("");
   });
 });
 
 describe("editing a row in place", () => {
   it("sends only what changed, and keeps the previous values for «Отменить»", () => {
-    const draft = { ...rowDraftOf(offer), price: "13 000" };
+    const draft = { ...rowDraftOf(offer), price: "13\u00a0000" };
     expect(rowCommit(offer, draft)).toEqual({
       kind: "save",
       change: { price: 13_000 },
@@ -203,10 +203,10 @@ describe("editing a row in place", () => {
 
   it("warns of active orders in the right form of the noun", () => {
     expect(t(activeOrdersWarningKey("ru", 1), { n: 1 })).toBe(
-      "По этому предложению 1 активная заявка — её нужно выполнить",
+      "По этому предложению 1\u00a0активная заявка — её нужно выполнить",
     );
-    expect(t(activeOrdersWarningKey("ru", 3), { n: 3 })).toContain("3 активные заявки");
-    expect(t(activeOrdersWarningKey("ru", 11), { n: 11 })).toContain("11 активных заявок");
+    expect(t(activeOrdersWarningKey("ru", 3), { n: 3 })).toContain("3\u00a0активные заявки");
+    expect(t(activeOrdersWarningKey("ru", 11), { n: 11 })).toContain("11\u00a0активных заявок");
   });
 });
 
@@ -217,7 +217,7 @@ describe("the form of an offer (S-OFF-03)", () => {
   });
 
   it("gives the values the contract carries, or the first field that can't be sent", () => {
-    const form = { ...newOfferForm(false), price: "12 500", warranty: "text" as const };
+    const form = { ...newOfferForm(false), price: "12\u00a0500", warranty: "text" as const };
     expect(checkOfferForm(form)).toMatchObject({ ok: false, field: "warrantyText" });
     const filled = { ...form, warrantyText: "  12 месяцев   по чеку " };
     expect(checkOfferForm(filled)).toEqual({
@@ -241,7 +241,7 @@ describe("the form of an offer (S-OFF-03)", () => {
   });
 
   it("saves only the fields of the card that differ", () => {
-    const form = { ...offerFormOf(offer), price: "13 000", delivery: true };
+    const form = { ...offerFormOf(offer), price: "13\u00a0000", delivery: true };
     const checked = checkOfferForm(form);
     expect(checked.ok && changedValues(offer, checked.values)).toEqual({
       price: 13_000,

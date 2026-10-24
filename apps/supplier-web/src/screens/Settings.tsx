@@ -2,6 +2,7 @@ import { isApiError } from "@adclub/api-client";
 import type { NotificationLanguage, SupplierMemberResponse } from "@adclub/contracts";
 import type { ThemeMode } from "@adclub/ui-core";
 import {
+  ActionBar,
   Banner,
   Button,
   DelayedSkeleton,
@@ -21,7 +22,9 @@ import { saveErrorText } from "../errors";
 import { useT } from "../i18n";
 import { forgetPerson, settleNotificationLanguage } from "../prefs";
 import { useInstallWay } from "../pwa/install";
+import { goBackTo } from "../router";
 import { CompanyChoices } from "./CompanySwitch";
+import { PageHeader } from "./PageHeader";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { MenuLink } from "./More";
 import { notificationNote } from "./Team";
@@ -103,7 +106,7 @@ export function Settings({ cabinet }: { cabinet: Ready }) {
 
   return (
     <>
-      <h1 className="ac-text-title page__title">{t("settings.title")}</h1>
+      <PageHeader title={t("settings.title")} back={() => goBackTo("more")} deskRoot />
       {error && <Banner tone="danger">{error}</Banner>}
 
       <section className="card">
@@ -119,7 +122,7 @@ export function Settings({ cabinet }: { cabinet: Ready }) {
           </DelayedSkeleton>
         ) : (
           <>
-            <dl className="facts">
+            <dl className="facts facts--rows">
               <div>
                 <dt>{t("settings.name")}</dt>
                 <dd>{me.member.displayName}</dd>
@@ -189,18 +192,22 @@ export function Settings({ cabinet }: { cabinet: Ready }) {
         )}
       </nav>
 
-      <Button
-        variant="secondary"
-        destructive
-        size="l"
-        block
-        icon="logout"
-        disabled={!online}
-        onClick={() => setSigningOut(true)}
-      >
-        {t("settings.signOut")}
-      </Button>
-      {!online && <p className="ac-text-caption ac-muted">{t("common.needNetwork")}</p>}
+      {/* «Выйти» — as every action of a page (C1): across on a phone, by its text from 600. */}
+      <ActionBar
+        others={[
+          <Button
+            key="signOut"
+            variant="secondary"
+            destructive
+            icon="logout"
+            disabled={!online}
+            onClick={() => setSigningOut(true)}
+          >
+            {t("settings.signOut")}
+          </Button>,
+        ]}
+        note={online ? undefined : t("common.needNetwork")}
+      />
 
       <Dialog
         open={signingOut}

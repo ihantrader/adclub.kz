@@ -1,5 +1,5 @@
 import type { OfferAvailability, SupplierOffer } from "@adclub/contracts";
-import { Badge, Button, Dialog, Icon, IconButton, useToast } from "@adclub/ui";
+import { ActionBar, Button, Dialog, Icon, MenuButton, TypeMark, useToast } from "@adclub/ui";
 import { useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { apiClient } from "../api";
 import { useOnline } from "@adclub/web-session";
@@ -8,6 +8,7 @@ import { navigate, navigateTo, offerPath } from "../router";
 import {
   activeOrdersWarningKey,
   formatAmount,
+  TENGE,
   hiddenReasons,
   nowValues,
   offerProblem,
@@ -173,12 +174,15 @@ function RowFields({
   const service = offer.item.type === "service";
 
   // A service (TASK-019): only its one price is edited here; prices by
-  // model are a table — on the card.
+  // model are a table — on the card, «Изменить цены ›».
   if (service && offer.pricing.mode === "by_model") {
     return (
       <p className="offer-fields offer-fields--service">
         <span className="num">{servicePriceLine(offer, lang, t)}</span>
-        <TitleLink offer={offer}>{t("offers.byModelPrices")}</TitleLink>
+        <TitleLink offer={offer} className="text-link offer-fields__more">
+          {t("offers.byModelPrices")}
+          <Icon name="chevronRight" size={16} />
+        </TitleLink>
       </p>
     );
   }
@@ -188,7 +192,8 @@ function RowFields({
     setDraft(next);
     if (availability === "on_order" && draft.leadDays.replace(/\D/g, "") === "0") {
       editor.setProblem({ field: "leadDays", text: t("offers.error.onOrderNeedsDays") });
-      leadInput.current?.focus();
+      // The term field appears with «Под заказ»: focused once it is there.
+      setTimeout(() => leadInput.current?.focus());
       return;
     }
     void commit(next);
@@ -272,53 +277,90 @@ function GoodsTerms({
         </select>
         <Icon name="chevronDown" size={16} />
       </label>
-      <label
-        className={
-          problem?.field === "leadDays"
-            ? "inline-field inline-field--days inline-field--error"
-            : "inline-field inline-field--days"
-        }
-      >
-        <span className="ac-visually-hidden">{`${t("offers.leadDays")}: ${name}`}</span>
-        <input
-          ref={leadInput}
-          className="inline-field__input num"
-          inputMode="numeric"
-          autoComplete="off"
-          value={draft.leadDays}
-          disabled={disabled}
-          aria-invalid={problem?.field === "leadDays" || undefined}
-          onChange={(event) =>
-            setDraft({ ...draft, leadDays: event.target.value.replace(/\D/g, "").slice(0, 3) })
+      {/* A term only «под заказ» or when there is one: «0 дн.» said nothing (C18). */}
+      {(draft.availability === "on_order" || draft.leadDays.replace(/\D/g, "") !== "0") && (
+        <label
+          className={
+            problem?.field === "leadDays"
+              ? "inline-field inline-field--days inline-field--error"
+              : "inline-field inline-field--days"
           }
-          onBlur={() => void commit(draft)}
-          onKeyDown={blurOnEnter}
-        />
-        <span className="inline-field__unit" aria-hidden="true">
-          {t("offers.days")}
-        </span>
-      </label>
+        >
+          <span className="ac-visually-hidden">{`${t("offers.leadDays")}: ${name}`}</span>
+          <input
+            ref={leadInput}
+            className="inline-field__input num"
+            inputMode="numeric"
+            autoComplete="off"
+            value={draft.leadDays}
+            disabled={disabled}
+            aria-invalid={problem?.field === "leadDays" || undefined}
+            onChange={(event) =>
+              setDraft({ ...draft, leadDays: event.target.value.replace(/\D/g, "").slice(0, 3) })
+            }
+            onBlur={() => void commit(draft)}
+            onKeyDown={blurOnEnter}
+          />
+          <span className="inline-field__unit" aria-hidden="true">
+            {t("offers.days")}
+          </span>
+        </label>
+      )}
     </>
   );
 }
 
-/** Pickup and delivery as two marks, with words for screen readers. */
+/** «⌂ Самовывоз · ⛟ Доставка» — words with their icons (TASK-079: a lone icon read as nothing). */
 export function Receiving({ offer }: { offer: Pick<SupplierOffer, "pickup" | "delivery"> }) {
   const t = useT();
   return (
-    <span className="receiving">
-      {offer.pickup && <Icon name="store" size={20} label={t("offers.pickup")} />}
-      {offer.delivery && <Icon name="truck" size={20} label={t("offers.delivery")} />}
+    <span className="receiving receiving--words">
+      {offer.pickup && (
+        <span>
+          <Icon name="store" size={16} />
+          {t("offers.pickup")}
+        </span>
+      )}
+      {offer.delivery && (
+        <span>
+          <Icon name="truck" size={16} />
+          {t("offers.delivery")}
+        </span>
+      )}
     </span>
   );
 }
 
-/** «Активные заявки: N», marked when there are any. */
+/** «Активные заявки: N» — only when there are any (C18). */
 export function ActiveOrders({ count }: { count: number }) {
   const t = useT();
+  if (count <= 0) return null;
   return (
-    <span className={count > 0 ? "active-orders active-orders--some" : "active-orders"}>
+    <span className="active-orders active-orders--some">
       {t("offers.activeOrders", { n: count })}
+    </span>
+  );
+}
+
+/** The photo of the item, or the placeholder that says «без фото» by itself (C11). */
+function Thumb({ offer, size }: { offer: SupplierOffer; size: 40 | 56 }) {
+  const t = useT();
+  const photo = offer.item.photo;
+  return (
+    <span
+      className={`offer-thumb offer-thumb--${size}`}
+      role={photo ? undefined : "img"}
+      aria-label={photo ? undefined : t("offers.noPhoto")}
+      title={photo ? undefined : t("offers.noPhoto")}
+    >
+      {photo ? (
+        <img src={photo.thumbUrl} alt="" loading="lazy" />
+      ) : (
+        <Icon
+          name={offer.item.type === "service" ? "wrench" : "package"}
+          size={size === 56 ? 24 : 20}
+        />
+      )}
     </span>
   );
 }
@@ -337,7 +379,7 @@ export function HiddenNote({
   const toCompany = reasons.some((reason) => reason.toCompany);
   return (
     <p className="hidden-note">
-      <Icon name="info" size={16} />
+      <Icon name="alertTriangle" size={16} />
       <span>
         {t("offers.hiddenTitle")}: {reasons.map((reason) => t(reason.key)).join("; ")}
         {toCompany && (
@@ -433,10 +475,18 @@ function useStatusActions(offer: SupplierOffer, onMoved: (offer: SupplierOffer) 
   };
 }
 
-function TitleLink({ offer, children }: { offer: SupplierOffer; children: ReactNode }) {
+function TitleLink({
+  offer,
+  className = "offer-title",
+  children,
+}: {
+  offer: SupplierOffer;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <a
-      className="offer-title"
+      className={className}
       href={offerPath(offer.id)}
       onClick={(event) => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -449,48 +499,71 @@ function TitleLink({ offer, children }: { offer: SupplierOffer; children: ReactN
   );
 }
 
-function StatusButton({
+/**
+ * «Снять с продажи» goes into «⋯» (TASK-079): a rare action, not a button
+ * beside every price. «Вернуть в продажу» of a withdrawn offer is the point
+ * of that tab and stays a button.
+ */
+function StatusAction({
   offer,
   actions,
   disabled,
-  compact = false,
+  size = "m",
 }: {
   offer: SupplierOffer;
   actions: ReturnType<typeof useStatusActions>;
   disabled: boolean;
-  /** A line of the table: the icon alone, the words for screen readers and as a tooltip. */
-  compact?: boolean;
+  size?: "m" | "s";
 }) {
   const t = useT();
-  if (compact) {
-    const withdrawn = offer.status === "withdrawn";
+  if (offer.status === "withdrawn") {
     return (
-      <IconButton
-        icon={withdrawn ? "refresh" : "archive"}
-        label={`${t(withdrawn ? "offers.return" : "offers.withdraw")}: ${itemName(offer)}`}
+      <Button
+        variant="secondary"
+        size={size}
+        icon="refresh"
         disabled={disabled}
-        onClick={withdrawn ? actions.giveBack : actions.askWithdraw}
-      />
+        aria-label={`${t("offers.return")}: ${itemName(offer)}`}
+        onClick={actions.giveBack}
+      >
+        {t("offers.return")}
+      </Button>
     );
   }
-  return offer.status === "withdrawn" ? (
-    <Button
-      variant="secondary"
-      size="s"
-      icon="refresh"
+  return (
+    <MenuButton
+      label={t("offers.rowActions", { name: itemName(offer) })}
       disabled={disabled}
-      onClick={actions.giveBack}
-    >
-      {t("offers.return")}
-    </Button>
-  ) : (
-    <Button variant="text" size="s" disabled={disabled} onClick={actions.askWithdraw}>
-      {t("offers.withdraw")}
-    </Button>
+      actions={[
+        {
+          key: "withdraw",
+          label: t("offers.withdraw"),
+          icon: "archive",
+          destructive: true,
+          onSelect: actions.askWithdraw,
+        },
+      ]}
+    />
   );
 }
 
-/** A row of S-OFF-01 on a phone: a card with the fields editable in place. */
+/** The price line of a withdrawn offer (nothing is edited there). */
+function shownPrice(
+  offer: SupplierOffer,
+  lang: Parameters<typeof servicePriceLine>[1],
+  t: ReturnType<typeof useT>,
+) {
+  if (offer.item.type === "service") return servicePriceLine(offer, lang, t);
+  const kind = t(offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder");
+  return `${formatAmount(offer.price)}${TENGE} · ${kind}`;
+}
+
+/**
+ * A row of S-OFF-01 on a phone (TASK-079): the photo 56 and the name with
+ * «бренд · артикул»; one line of price and availability (the term only
+ * «под заказ»); «Самовывоз · Доставка» in words, «Активные заявки» when
+ * there are any; «Снять» in «⋯».
+ */
 export function OfferCardRow({ offer, onChanged, onMoved }: OfferRowProps) {
   const t = useT();
   const { lang } = useLanguage();
@@ -501,35 +574,27 @@ export function OfferCardRow({ offer, onChanged, onMoved }: OfferRowProps) {
   return (
     <article className="offer-card">
       <div className="offer-card__head">
-        <TitleLink offer={offer}>{itemName(offer)}</TitleLink>
-        {service && (
-          <Badge tone="neutral" icon="settings">
-            {t("offers.service")}
-          </Badge>
-        )}
-        {!service && !offer.item.photo && (
-          <Badge tone="neutral" icon="package">
-            {t("offers.noPhoto")}
-          </Badge>
-        )}
+        <Thumb offer={offer} size={56} />
+        <div className="offer-card__title">
+          <TitleLink offer={offer}>{itemName(offer)}</TitleLink>
+          <span className="ac-text-caption ac-muted offer-card__line">
+            {service ? (
+              <TypeMark icon="wrench">{t("offers.service")}</TypeMark>
+            ) : (
+              itemLine(offer) && <span className="num">{itemLine(offer)}</span>
+            )}
+          </span>
+        </div>
+        {onSale && <StatusAction offer={offer} actions={actions} disabled={!editor.online} />}
       </div>
-      <p className="ac-text-body-s ac-muted offer-card__line">
-        {itemLine(offer) && <span className="num">{itemLine(offer)}</span>}
-        <ActiveOrders count={offer.activeOrders} />
-      </p>
       {onSale ? (
         <RowFields offer={offer} editor={editor} editable />
       ) : (
-        <p className="ac-text-body num">
-          {service
-            ? servicePriceLine(offer, lang, t)
-            : `${formatAmount(offer.price)} ₸ · ${t(
-                offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder",
-              )}`}
-        </p>
+        <p className="ac-text-body num">{shownPrice(offer, lang, t)}</p>
       )}
       <div className="offer-card__meta">
-        <Receiving offer={offer} />
+        {!service && <Receiving offer={offer} />}
+        <ActiveOrders count={offer.activeOrders} />
         {(editor.priceSaved || editor.draft.price !== formatAmount(offer.price)) && onSale && (
           <span className="ac-text-caption ac-muted">{t("offers.newPriceHint")}</span>
         )}
@@ -547,9 +612,14 @@ export function OfferCardRow({ offer, onChanged, onMoved }: OfferRowProps) {
         </p>
       )}
       <HiddenNote offer={offer} withWithdrawn={false} />
-      <div className="offer-card__actions">
-        <StatusButton offer={offer} actions={actions} disabled={!editor.online} />
-      </div>
+      {!onSale && (
+        <ActionBar
+          compact
+          others={[
+            <StatusAction key="return" offer={offer} actions={actions} disabled={!editor.online} />,
+          ]}
+        />
+      )}
       {actions.dialog}
     </article>
   );
@@ -566,25 +636,14 @@ export function OfferTableRow({ offer, onChanged, onMoved }: OfferRowProps) {
   const problem = editor.problem?.text ?? actions.error;
   return (
     <tr>
+      <td className="offers-table__photo">
+        <Thumb offer={offer} size={40} />
+      </td>
       <td className="offers-table__item">
         <TitleLink offer={offer}>{itemName(offer)}</TitleLink>
-        {service && (
-          <>
-            {" "}
-            <Badge tone="neutral" icon="settings">
-              {t("offers.service")}
-            </Badge>
-          </>
-        )}
-        {!service && !offer.item.photo && (
-          <>
-            {" "}
-            <Badge tone="neutral" icon="package">
-              {t("offers.noPhoto")}
-            </Badge>
-          </>
-        )}
-        {itemLine(offer) && <div className="ac-text-caption ac-muted num">{itemLine(offer)}</div>}
+        <div className="ac-text-caption ac-muted num">
+          {service ? <TypeMark icon="wrench">{t("offers.service")}</TypeMark> : itemLine(offer)}
+        </div>
         {problem && (
           <p className="ac-field__help ac-field__help--error" role="alert">
             <Icon name="alertTriangle" size={16} />
@@ -597,33 +656,20 @@ export function OfferTableRow({ offer, onChanged, onMoved }: OfferRowProps) {
         <HiddenNote offer={offer} withWithdrawn={false} />
         {actions.dialog}
       </td>
-      <td colSpan={onSale ? 3 : 1}>
+      <td colSpan={3}>
         {onSale ? (
           <RowFields offer={offer} editor={editor} editable />
         ) : (
-          <span className="num">
-            {service ? servicePriceLine(offer, lang, t) : `${formatAmount(offer.price)} ₸`}
-          </span>
+          <span className="num">{shownPrice(offer, lang, t)}</span>
         )}
       </td>
-      {!onSale && (
-        <>
-          <td>
-            {service
-              ? "—"
-              : t(offer.availability === "in_stock" ? "offers.inStock" : "offers.onOrder")}
-          </td>
-          <td className="num">{service ? "—" : offer.leadDays}</td>
-        </>
-      )}
-      <td>
-        <Receiving offer={offer} />
+      <td>{!service && <Receiving offer={offer} />}</td>
+      {/* An empty cell for none (C18): only real numbers stand in the column. */}
+      <td className={offer.activeOrders > 0 ? "num-col active-orders--some" : "num-col"}>
+        {offer.activeOrders > 0 ? offer.activeOrders : ""}
       </td>
-      <td className={offer.activeOrders > 0 ? "num active-orders--some" : "num ac-muted"}>
-        {offer.activeOrders}
-      </td>
-      <td>
-        <StatusButton offer={offer} actions={actions} disabled={!editor.online} compact />
+      <td className="data-table__action">
+        <StatusAction offer={offer} actions={actions} disabled={!editor.online} size="s" />
       </td>
     </tr>
   );

@@ -1,21 +1,29 @@
 import type { OfferItem, SupplierOffer } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
   Icon,
-  IconButton,
+  Radio,
   SearchSelect,
   Segments,
   TextField,
-  toastObstacle,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { apiClient } from "../api";
 import { useLanguage, useT } from "../i18n";
 import { navigateTo, offerPath, replaceRouteState, useRouteState } from "../router";
-import { BackHead, ItemBlock, OfferStatePanel, PRICE_FIELD, ProblemLink } from "./OfferScreen";
+import {
+  BackHead,
+  FORM_ID,
+  ItemBlock,
+  OfferStateLine,
+  OfferStatusAction,
+  PRICE_FIELD,
+  ProblemLink,
+} from "./OfferScreen";
 import { typeAmount, type WarrantyKind } from "./offer-rules";
 import { loadMakes, loadModels, searchNamed } from "./vehicle-choices";
 import {
@@ -66,6 +74,7 @@ export function ServiceOfferEditor({
   const [problem, setProblem] = useState<ServiceProblem | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const pricingName = useId();
   const checkPrice = offer !== null && opened?.checkPrice === true && offer.status !== "withdrawn";
 
   const texts = useMemo(
@@ -149,205 +158,237 @@ export function ServiceOfferEditor({
         </Banner>
       )}
 
-      <ItemBlock item={item} />
+      <ItemBlock item={item}>{offer && <OfferStateLine offer={offer} />}</ItemBlock>
+
+      {/* The bar is pinned while its form is in sight, never over what follows (C2). */}
+      <div className="form-with-bar">
+        <form
+          id={FORM_ID}
+          className="card offer-form"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <p className="ac-text-body-s ac-muted">{t("serviceForm.atPoint")}</p>
+
+          {/* Two long choices: radio rows across, not segments cut at the edge (TASK-079). */}
+          <fieldset className="field-block">
+            <legend className="field-block__label">{t("serviceForm.pricing")}</legend>
+            <Radio
+              name={pricingName}
+              label={t("serviceForm.single")}
+              checked={form.mode === "single"}
+              onChange={() => set({ mode: "single" })}
+            />
+            <Radio
+              name={pricingName}
+              label={t("serviceForm.byModel")}
+              checked={form.mode === "by_model"}
+              onChange={() => set({ mode: "by_model" })}
+            />
+          </fieldset>
+
+          {form.mode === "single" ? (
+            <div className="form-grid">
+              <TextField
+                id={PRICE_FIELD}
+                label={t("offers.price")}
+                value={form.price}
+                onChange={(value) => set({ price: typeAmount(value) })}
+                inputMode="numeric"
+                autoComplete="off"
+                hint={offer ? t("offers.newPriceHint") : t("serviceForm.priceHint")}
+                error={errorAt("price")}
+                trailing={<span className="ac-muted">₸</span>}
+              />
+            </div>
+          ) : (
+            <div className="field-block model-prices">
+              <ul className="model-prices__list">
+                {form.rows.map((row, index) => (
+                  // A model is a small card of its own: what «Удалить» removes is plain (TASK-079).
+                  <li key={row.key} className="model-prices__row">
+                    <div className="model-prices__head">
+                      <span className="ac-text-body-strong">
+                        {[row.make?.label, row.model?.label].filter(Boolean).join(" ") ||
+                          t("serviceForm.newModel", { n: index + 1 })}
+                      </span>
+                      <Button
+                        variant="text"
+                        destructive
+                        disabled={form.rows.length === 1}
+                        aria-label={`${t("serviceForm.removeModel")}: ${row.model?.label ?? String(index + 1)}`}
+                        onClick={() =>
+                          set({ rows: form.rows.filter((entry) => entry.key !== row.key) })
+                        }
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </div>
+                    <div className="form-grid model-prices__fields">
+                      <SearchSelect
+                        label={t("serviceForm.make")}
+                        value={row.make}
+                        onChange={(make) =>
+                          setRow(row.key, {
+                            make,
+                            // Another make — the model was of the previous one.
+                            model: make?.id === row.make?.id ? row.model : null,
+                            available: true,
+                          })
+                        }
+                        search={async (query) => search(await loadMakes(), query)}
+                        texts={texts}
+                        name={`modelPrices.${String(index)}.make`}
+                      />
+                      <SearchSelect
+                        label={t("serviceForm.model")}
+                        value={row.model}
+                        onChange={(model) => setRow(row.key, { model, available: true })}
+                        search={async (query) =>
+                          row.make ? search(await loadModels(row.make.id), query) : []
+                        }
+                        sourceKey={row.make?.id ?? ""}
+                        disabled={row.make === null}
+                        placeholder={
+                          row.make === null ? t("serviceForm.chooseMakeFirst") : undefined
+                        }
+                        hint={row.available ? undefined : t("serviceForm.archived")}
+                        error={errorAt({ row: index, part: "model" })}
+                        texts={texts}
+                        name={`modelPrices.${String(index)}.modelId`}
+                      />
+                      <TextField
+                        label={t("serviceForm.modelPrice")}
+                        value={row.price}
+                        onChange={(value) => setRow(row.key, { price: typeAmount(value) })}
+                        inputMode="numeric"
+                        autoComplete="off"
+                        error={errorAt({ row: index, part: "price" })}
+                        trailing={<span className="ac-muted">₸</span>}
+                        className="model-prices__price"
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div>
+                <Button
+                  variant="secondary"
+                  icon="plus"
+                  onClick={() => set({ rows: [...form.rows, newModelRow()] })}
+                >
+                  {t("serviceForm.addModel")}
+                </Button>
+              </div>
+              {errorAt("rows") && (
+                <p className="ac-field__help ac-field__help--error" role="alert">
+                  <Icon name="alertTriangle" size={16} />
+                  <span>{errorAt("rows")}</span>
+                </p>
+              )}
+              <p className="ac-text-body-s ac-muted">{t("serviceForm.noPriceHint")}</p>
+            </div>
+          )}
+
+          <div className="form-grid">
+            <div className="field-block form-grid__wide">
+              <span className="field-block__label">{t("offerForm.warranty")}</span>
+              <Segments<WarrantyKind>
+                label={t("offerForm.warranty")}
+                value={form.warranty}
+                onChange={(warranty) => set({ warranty })}
+                options={[
+                  { value: "none", label: t("offerForm.warrantyNone") },
+                  { value: "months", label: t("offerForm.warrantyMonths") },
+                  { value: "text", label: t("offerForm.warrantyText") },
+                ]}
+              />
+            </div>
+            {form.warranty === "months" && (
+              <TextField
+                label={t("offerForm.warrantyMonthsLabel")}
+                value={form.warrantyMonths}
+                onChange={(value) => set({ warrantyMonths: value.replace(/\D/g, "").slice(0, 3) })}
+                inputMode="numeric"
+                autoComplete="off"
+                error={errorAt("warrantyMonths")}
+              />
+            )}
+            {form.warranty === "text" && (
+              <TextField
+                className="form-grid__wide"
+                label={t("offerForm.warrantyTextLabel")}
+                value={form.warrantyText}
+                onChange={(warrantyText) => set({ warrantyText })}
+                maxLength={100}
+                hint={t("offerForm.warrantyTextHint")}
+                error={errorAt("warrantyText")}
+              />
+            )}
+
+            <h2 className="ac-text-heading form-grid__wide offer-form__block">
+              {t("offerForm.own")}
+            </h2>
+            <TextField
+              label={t("offerForm.supplierSku")}
+              value={form.supplierSku}
+              onChange={(supplierSku) => set({ supplierSku })}
+              maxLength={64}
+              autoComplete="off"
+              error={errorAt("supplierSku")}
+            />
+            <TextField
+              label={t("offerForm.supplierName")}
+              value={form.supplierName}
+              onChange={(supplierName) => set({ supplierName })}
+              maxLength={200}
+              autoComplete="off"
+              hint={t("offerForm.ownHint")}
+              error={errorAt("supplierName")}
+            />
+          </div>
+
+          <section className="card preview" aria-live="polite" lang={lang}>
+            <p className="ac-text-caption ac-muted">{t("offerForm.preview")}</p>
+            {preview.length === 0 ? (
+              <p className="ac-text-body-s ac-muted"> </p>
+            ) : (
+              preview.map((line) => (
+                <p key={line} className="ac-text-body num">
+                  {line}
+                </p>
+              ))
+            )}
+          </section>
+        </form>
+
+        <ActionBar
+          pinned
+          main={
+            <Button
+              type="submit"
+              form={FORM_ID}
+              size="l"
+              loading={saving}
+              disabled={!online || !dirty}
+            >
+              {offer ? t("common.save") : t("offerForm.create")}
+            </Button>
+          }
+          note={online ? undefined : t("common.needNetwork")}
+        />
+      </div>
 
       {offer && (
-        <OfferStatePanel
+        <OfferStatusAction
           offer={offer}
-          onOffer={(next) => {
-            onOffer?.(next);
-          }}
+          onOffer={(next) => onOffer?.(next)}
           onProblem={(error) => setProblem(serviceProblem(error, form))}
         />
       )}
-
-      <form
-        className="card stack-m offer-form"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          void save();
-        }}
-      >
-        <p className="ac-text-body-s ac-muted">{t("serviceForm.atPoint")}</p>
-
-        <div className="field-block">
-          <span className="field-block__label">{t("serviceForm.pricing")}</span>
-          <Segments<ServiceForm["mode"]>
-            label={t("serviceForm.pricing")}
-            value={form.mode}
-            onChange={(mode) => set({ mode })}
-            options={[
-              { value: "single", label: t("serviceForm.single") },
-              { value: "by_model", label: t("serviceForm.byModel") },
-            ]}
-          />
-        </div>
-
-        {form.mode === "single" ? (
-          <TextField
-            id={PRICE_FIELD}
-            label={t("offers.price")}
-            value={form.price}
-            onChange={(value) => set({ price: typeAmount(value) })}
-            inputMode="numeric"
-            autoComplete="off"
-            hint={offer ? t("offers.newPriceHint") : t("serviceForm.priceHint")}
-            error={errorAt("price")}
-            trailing={<span className="ac-muted">₸</span>}
-            className="field-narrow"
-          />
-        ) : (
-          <div className="field-block model-prices">
-            <ul className="model-prices__list">
-              {form.rows.map((row, index) => (
-                <li key={row.key} className="model-prices__row">
-                  <SearchSelect
-                    label={t("serviceForm.make")}
-                    value={row.make}
-                    onChange={(make) =>
-                      setRow(row.key, {
-                        make,
-                        // Another make — the model was of the previous one.
-                        model: make?.id === row.make?.id ? row.model : null,
-                        available: true,
-                      })
-                    }
-                    search={async (query) => search(await loadMakes(), query)}
-                    texts={texts}
-                    name={`modelPrices.${String(index)}.make`}
-                  />
-                  <SearchSelect
-                    label={t("serviceForm.model")}
-                    value={row.model}
-                    onChange={(model) => setRow(row.key, { model, available: true })}
-                    search={async (query) =>
-                      row.make ? search(await loadModels(row.make.id), query) : []
-                    }
-                    sourceKey={row.make?.id ?? ""}
-                    disabled={row.make === null}
-                    placeholder={row.make === null ? t("serviceForm.chooseMakeFirst") : undefined}
-                    hint={row.available ? undefined : t("serviceForm.archived")}
-                    error={errorAt({ row: index, part: "model" })}
-                    texts={texts}
-                    name={`modelPrices.${String(index)}.modelId`}
-                  />
-                  <TextField
-                    label={t("serviceForm.modelPrice")}
-                    value={row.price}
-                    onChange={(value) => setRow(row.key, { price: typeAmount(value) })}
-                    inputMode="numeric"
-                    autoComplete="off"
-                    error={errorAt({ row: index, part: "price" })}
-                    className="model-prices__price"
-                  />
-                  <IconButton
-                    icon="trash"
-                    label={`${t("serviceForm.removeModel")}: ${row.model?.label ?? String(index + 1)}`}
-                    disabled={form.rows.length === 1}
-                    onClick={() =>
-                      set({ rows: form.rows.filter((entry) => entry.key !== row.key) })
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-            <div>
-              <Button
-                variant="secondary"
-                size="s"
-                icon="plus"
-                onClick={() => set({ rows: [...form.rows, newModelRow()] })}
-              >
-                {t("serviceForm.addModel")}
-              </Button>
-            </div>
-            {errorAt("rows") && (
-              <p className="ac-field__help ac-field__help--error" role="alert">
-                <Icon name="alertTriangle" size={16} />
-                <span>{errorAt("rows")}</span>
-              </p>
-            )}
-            <p className="ac-text-body-s ac-muted">{t("serviceForm.noPriceHint")}</p>
-          </div>
-        )}
-
-        <div className="field-block">
-          <span className="field-block__label">{t("offerForm.warranty")}</span>
-          <Segments<WarrantyKind>
-            label={t("offerForm.warranty")}
-            value={form.warranty}
-            onChange={(warranty) => set({ warranty })}
-            options={[
-              { value: "none", label: t("offerForm.warrantyNone") },
-              { value: "months", label: t("offerForm.warrantyMonths") },
-              { value: "text", label: t("offerForm.warrantyText") },
-            ]}
-          />
-          {form.warranty === "months" && (
-            <TextField
-              label={t("offerForm.warrantyMonthsLabel")}
-              value={form.warrantyMonths}
-              onChange={(value) => set({ warrantyMonths: value.replace(/\D/g, "").slice(0, 3) })}
-              inputMode="numeric"
-              autoComplete="off"
-              error={errorAt("warrantyMonths")}
-              className="field-narrow"
-            />
-          )}
-          {form.warranty === "text" && (
-            <TextField
-              label={t("offerForm.warrantyTextLabel")}
-              value={form.warrantyText}
-              onChange={(warrantyText) => set({ warrantyText })}
-              maxLength={100}
-              hint={t("offerForm.warrantyTextHint")}
-              error={errorAt("warrantyText")}
-            />
-          )}
-        </div>
-
-        <div className="field-block">
-          <span className="field-block__label">{t("offerForm.own")}</span>
-          <TextField
-            label={t("offerForm.supplierSku")}
-            value={form.supplierSku}
-            onChange={(supplierSku) => set({ supplierSku })}
-            maxLength={64}
-            autoComplete="off"
-            error={errorAt("supplierSku")}
-          />
-          <TextField
-            label={t("offerForm.supplierName")}
-            value={form.supplierName}
-            onChange={(supplierName) => set({ supplierName })}
-            maxLength={200}
-            autoComplete="off"
-            hint={t("offerForm.ownHint")}
-            error={errorAt("supplierName")}
-          />
-        </div>
-
-        <section className="card preview" aria-live="polite" lang={lang}>
-          <p className="ac-text-caption ac-muted">{t("offerForm.preview")}</p>
-          {preview.length === 0 ? (
-            <p className="ac-text-body-s ac-muted"> </p>
-          ) : (
-            preview.map((line) => (
-              <p key={line} className="ac-text-body num">
-                {line}
-              </p>
-            ))
-          )}
-        </section>
-
-        <div className="save-bar" {...toastObstacle}>
-          <Button type="submit" size="l" loading={saving} disabled={!online || !dirty}>
-            {offer ? t("common.save") : t("offerForm.create")}
-          </Button>
-          {!online && <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>}
-        </div>
-      </form>
     </>
   );
 }

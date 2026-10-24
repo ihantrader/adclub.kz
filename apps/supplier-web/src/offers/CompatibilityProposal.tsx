@@ -1,5 +1,5 @@
 import type { OfferItem } from "@adclub/contracts";
-import { Banner, Button, SearchSelect, TextField } from "@adclub/ui";
+import { ActionBar, Banner, Button, SearchSelect, TextField } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useRef, useState } from "react";
 import { apiClient } from "../api";
@@ -88,16 +88,22 @@ export function CompatibilityProposal({ item }: { item: OfferItem }) {
           <h2 className="ac-text-heading">{t("compat.title")}</h2>
           <p className="ac-text-body-s ac-muted">{t("compat.lead")}</p>
         </div>
-        <Button
-          variant="secondary"
-          icon="car"
-          onClick={() => {
-            setOpen(true);
-            setSent(false);
-          }}
-        >
-          {t("compat.open")}
-        </Button>
+        <ActionBar
+          compact
+          others={[
+            <Button
+              key="open"
+              variant="secondary"
+              icon="car"
+              onClick={() => {
+                setOpen(true);
+                setSent(false);
+              }}
+            >
+              {t("compat.open")}
+            </Button>,
+          ]}
+        />
       </section>
     );
   }
@@ -108,25 +114,28 @@ export function CompatibilityProposal({ item }: { item: OfferItem }) {
       {sent ? (
         <>
           <Banner icon="circleCheck">{t("compat.sent")}</Banner>
-          <div className="actions-row">
-            <Button variant="secondary" onClick={() => navigate("moderation")}>
-              {t("result.toModeration")}
-            </Button>
-            <Button variant="text" onClick={() => setSent(false)}>
-              {t("compat.another")}
-            </Button>
-          </div>
+          <ActionBar
+            compact
+            others={[
+              <Button key="moderation" variant="secondary" onClick={() => navigate("moderation")}>
+                {t("result.toModeration")}
+              </Button>,
+              <Button key="another" variant="secondary" onClick={() => setSent(false)}>
+                {t("compat.another")}
+              </Button>,
+            ]}
+          />
         </>
       ) : (
         <form
-          className="stack-m"
+          className="form-grid"
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void send();
           }}
         >
-          <p className="ac-text-body-s ac-muted">{t("compat.formLead")}</p>
+          <p className="ac-text-body-s ac-muted form-grid__wide">{t("compat.formLead")}</p>
           <SearchSelect
             label={t("compat.make")}
             value={form.make}
@@ -206,6 +215,7 @@ export function CompatibilityProposal({ item }: { item: OfferItem }) {
             />
           </div>
           <TextField
+            className="form-grid__wide"
             label={t("compat.evidence")}
             value={form.evidence}
             maxLength={COMPATIBILITY_EVIDENCE_MAX_LENGTH}
@@ -214,18 +224,31 @@ export function CompatibilityProposal({ item }: { item: OfferItem }) {
             error={errors.evidence}
           />
           {refusal && (
-            <Banner tone="danger" icon="alertTriangle">
-              {refusal}
-            </Banner>
+            <div className="form-grid__wide">
+              <Banner tone="danger" icon="alertTriangle">
+                {refusal}
+              </Banner>
+            </div>
           )}
-          <div className="actions-row">
-            <Button type="submit" loading={sending} disabled={sending || !online}>
-              {t("compat.send")}
-            </Button>
-            <Button variant="text" onClick={() => setOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-          </div>
+          {/* Secondary: the page's main button is the offer's «Сохранить» (C15). */}
+          <ActionBar
+            compact
+            className="form-grid__wide"
+            others={[
+              <Button
+                key="send"
+                type="submit"
+                variant="secondary"
+                loading={sending}
+                disabled={sending || !online}
+              >
+                {t("compat.send")}
+              </Button>,
+              <Button key="cancel" variant="secondary" onClick={() => setOpen(false)}>
+                {t("common.cancel")}
+              </Button>,
+            ]}
+          />
         </form>
       )}
     </section>

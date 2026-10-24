@@ -141,6 +141,8 @@ describe("the request for an item (S-OFF-05)", () => {
       retryable: true,
       details: { limit: "catalog_requests_per_supplier", retryAfterSeconds: 600 },
     });
-    expect(requestRefusal(limited, t).text).toBe("Слишком много запросов. Попробуйте через 10 мин");
+    expect(requestRefusal(limited, t).text).toBe(
+      "Слишком много запросов. Попробуйте через 10\u00a0мин",
+    );
   });
 });

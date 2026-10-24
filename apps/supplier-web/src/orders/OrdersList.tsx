@@ -6,8 +6,9 @@ import type {
 import {
   Banner,
   Button,
-  Chip,
   EmptyState,
+  FilterSelect,
+  Icon,
   LoadingContent,
   ScreenError,
   Segments,
@@ -22,11 +23,13 @@ import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
 import { useWide } from "../offers/use-wide";
 import { navigateTo, orderPath, replaceRouteState, useRouteState } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import { DeclineDialog, type DeclineTarget } from "./DeclineDialog";
 import { reportNewOrders, useVisiblePoll } from "./live";
 import {
   AnswerTimer,
   Money,
+  OrderKindMark,
   OrderMarks,
   OrderReceiving,
   OrderStatus,
@@ -42,6 +45,7 @@ import {
   actionProblem,
   arrivedIds,
   finishedQuery,
+  statusKey,
   workGroups,
   type FinishedFilter,
   type FinishedPeriod,
@@ -301,9 +305,7 @@ export function OrdersList({
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title page__title">{t("orders.title")}</h1>
-      </div>
+      <PageHeader title={t("orders.title")} />
 
       <div className="offers-controls">
         <Segments<Tab>
@@ -316,50 +318,49 @@ export function OrdersList({
           options={[
             {
               value: "new",
-              label: counts ? `${t("orders.tabNew")} · ${counts.new}` : t("orders.tabNew"),
+              // The counter only when there is something (TASK-079).
+              label:
+                counts && counts.new > 0
+                  ? `${t("orders.tabNew")} · ${counts.new}`
+                  : t("orders.tabNew"),
             },
             { value: "in_progress", label: t("orders.tabInProgress") },
             { value: "finished", label: t("orders.tabFinished") },
           ]}
         />
         {query.tab === "finished" && (
-          <>
-            <div className="chips" role="group" aria-label={t("orders.filterPeriod")}>
-              {periods.map((period) => (
-                <Chip
-                  key={period}
-                  selected={query.finished.period === period}
-                  onClick={() =>
-                    setQuery((current) => ({
-                      ...current,
-                      finished: { ...current.finished, period },
-                    }))
-                  }
-                >
-                  {t(`orders.period.${period}`)}
-                </Chip>
-              ))}
-            </div>
-            <div className="chips" role="group" aria-label={t("orders.filterStatus")}>
-              {finishedStatuses.map((status) => (
-                <Chip
-                  key={status}
-                  selected={query.finished.status === status}
-                  onClick={() =>
-                    setQuery((current) => ({
-                      ...current,
-                      finished: {
-                        ...current.finished,
-                        status: current.finished.status === status ? null : status,
-                      },
-                    }))
-                  }
-                >
-                  {t(`orders.filter.${status}`)}
-                </Chip>
-              ))}
-            </div>
-          </>
+          // The period — segments; the status — one chip with its list (C10).
+          <div className="filters-row">
+            <Segments<FinishedPeriod>
+              label={t("orders.filterPeriod")}
+              value={query.finished.period}
+              onChange={(period) =>
+                setQuery((current) => ({ ...current, finished: { ...current.finished, period } }))
+              }
+              options={periods.map((period) => ({
+                value: period,
+                label: t(`orders.period.${period}`),
+              }))}
+            />
+            <FilterSelect<SupplierFinishedStatus | "all">
+              label={t("orders.filterStatus")}
+              value={query.finished.status ?? "all"}
+              onChange={(status) =>
+                setQuery((current) => ({
+                  ...current,
+                  finished: { ...current.finished, status: status === "all" ? null : status },
+                }))
+              }
+              options={[
+                { value: "all", label: t("orders.statusAll") },
+                // One dictionary: the filter says a status as its badge does.
+                ...finishedStatuses.map((status) => ({
+                  value: status,
+                  label: t(statusKey(status)),
+                })),
+              ]}
+            />
+          </div>
         )}
       </div>
 
@@ -528,13 +529,17 @@ function ListBody({
   if (wide) {
     return (
       <div className="table-wrap">
-        <table className="offers-table orders-table">
+        <table className="data-table orders-table">
           <caption className="ac-visually-hidden">{t("orders.title")}</caption>
           <thead>
             <tr>
               <th scope="col">{t("orders.tableNumber")}</th>
               <th scope="col">{t("orders.tableItem")}</th>
-              <th scope="col">{t("orders.tableTotal")}</th>
+              <th scope="col">{t("orders.tableKind")}</th>
+              <th scope="col">{t("orders.tableReceiving")}</th>
+              <th scope="col" className="num-col">
+                {t("orders.tableTotal")}
+              </th>
               <th scope="col">{t("orders.tableState")}</th>
               <th scope="col">
                 <span className="ac-visually-hidden">{t("offers.tableActions")}</span>
@@ -545,7 +550,7 @@ function ListBody({
             <tbody key={section.key}>
               {section.title && (
                 <tr className="orders-table__group">
-                  <th scope="rowgroup" colSpan={5} className="ac-text-body-strong">
+                  <th scope="rowgroup" colSpan={7}>
                     {section.title} · {section.orders.length}
                   </th>
                 </tr>
@@ -571,7 +576,7 @@ function ListBody({
               {section.title} · {section.orders.length}
             </h2>
           )}
-          <div className="offer-list">{section.orders.map(row)}</div>
+          <div className="card-grid">{section.orders.map(row)}</div>
         </section>
       ))}
     </div>
@@ -612,6 +617,8 @@ function OrderRow({
     );
 
   if (wide) {
+    // One line of 48 a row (DESIGN 7.5): the item cut to one line, its kind and its
+    // receiving in their own columns, the sum on the right.
     return (
       <tr className={fresh ? "order-row--fresh" : undefined}>
         <td className="orders-table__number">
@@ -622,22 +629,29 @@ function OrderRow({
           >
             {t("orders.number", { number: order.number })}
           </a>
-          <div className="ac-text-caption ac-muted">{when(order.createdAt)}</div>
+          <span className="ac-text-caption ac-muted"> · {when(order.createdAt)}</span>
         </td>
-        <td className="offers-table__item">
-          <div>{title}</div>
-          <div className="offer-card__meta">
-            <OrderReceiving order={order} when={when} />
-            <OrderMarks order={order} />
-          </div>
+        <td className="orders-table__item">
+          <span className="orders-table__item-name" title={title}>
+            {title}
+          </span>
         </td>
-        <td className="orders-table__money">
+        <td>
+          <span className="order-marks">
+            <OrderKindMark kind={order.kind} stock />
+            <OrderMarks order={order} withKind={false} />
+          </span>
+        </td>
+        <td>
+          <OrderReceiving order={order} when={when} />
+        </td>
+        <td className="num-col">
           <Money value={order.total} />
         </td>
         <td>
           <div className="order-state">{state}</div>
         </td>
-        <td>
+        <td className="data-table__action">
           <QuickActions
             order={order}
             blocked={blocked}
@@ -655,7 +669,10 @@ function OrderRow({
     <article
       className={fresh ? "offer-card order-card order-card--fresh" : "offer-card order-card"}
     >
-      <div className="order-state">{state}</div>
+      <div className="order-card__top">
+        {state}
+        <Icon name="chevronRight" size={20} className="order-card__chevron" />
+      </div>
       <a
         className="order-card__link"
         href={orderPath(order.id)}
@@ -666,12 +683,14 @@ function OrderRow({
         </span>
         <span className="offer-title">{title}</span>
       </a>
-      <div className="offer-card__meta">
-        <span className="ac-text-body-strong">
+      <div className="order-card__bottom">
+        <span className="ac-text-price-s">
           <Money value={order.total} />
         </span>
-        <OrderReceiving order={order} when={when} />
-        <OrderMarks order={order} />
+        <span className="order-card__meta">
+          <OrderReceiving order={order} when={when} />
+          <OrderMarks order={order} />
+        </span>
       </div>
       <QuickActions
         order={order}

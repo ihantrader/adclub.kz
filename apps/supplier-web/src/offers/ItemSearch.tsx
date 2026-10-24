@@ -1,11 +1,11 @@
 import { isApiError } from "@adclub/api-client";
 import { OFFER_ITEM_SEARCH_MIN_LENGTH, type OfferItemSearchResult } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
   EmptyState,
   Icon,
-  IconButton,
   LoadingContent,
   SearchField,
   SkeletonList,
@@ -24,6 +24,7 @@ import {
   replaceRouteState,
   useRouteState,
 } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 
 const SEARCH_DELAY_MS = 400;
 
@@ -140,10 +141,7 @@ export function ItemSearch() {
 
   return (
     <>
-      <div className="page__head page__head--back">
-        <IconButton icon="arrowLeft" label={t("common.back")} onClick={() => goBack("offers")} />
-        <h1 className="ac-text-title page__title">{t("offerSearch.title")}</h1>
-      </div>
+      <PageHeader title={t("offerSearch.title")} back={() => goBack("offers")} />
 
       <div className="stack-s">
         <SearchField
@@ -216,15 +214,23 @@ export function ItemSearch() {
                     <p className="ac-text-body-s ac-muted">{t("offerSearch.limitReached")}</p>
                   )
                 )}
-                <p className="ac-text-body-s">
-                  <button
-                    type="button"
-                    className="text-link"
-                    onClick={() => navigate("offerRequest", { state: { query: found.query } })}
-                  >
-                    {t("offerSearch.requestLink")}
-                  </button>
-                </p>
+                {/* «Нет в справочнике?» — words and a real button, not a link in a frame (C5). */}
+                <div className="request-offer">
+                  <p className="ac-text-body-s ac-muted">{t("offerSearch.requestLink")}</p>
+                  <ActionBar
+                    compact
+                    others={[
+                      <Button
+                        key="request"
+                        variant="secondary"
+                        icon="plusSquare"
+                        onClick={() => navigate("offerRequest", { state: { query: found.query } })}
+                      >
+                        {t("offerSearch.requestAction")}
+                      </Button>,
+                    ]}
+                  />
+                </div>
               </>
             ))}
         </LoadingContent>
@@ -249,17 +255,18 @@ function FoundItem({ result }: { result: OfferItemSearchResult }) {
           {item.photo ? (
             <img src={item.photo.thumbUrl} alt="" loading="lazy" />
           ) : (
-            <Icon name={item.type === "service" ? "settings" : "package"} size={24} />
+            <Icon name={item.type === "service" ? "wrench" : "package"} size={24} />
           )}
         </span>
         <span className="found-item__text">
           <span className="ac-text-body-strong found-item__name">{item.name.text}</span>
-          <span className="ac-text-body-s ac-muted">
+          {/* «Бренд · артикул» first — the supplier looks for the article (TASK-079). */}
+          {line && <span className="ac-text-body-s num">{line}</span>}
+          <span className="ac-text-caption ac-muted">
             {item.type === "service"
               ? `${t("offers.service")} · ${categoryLine(item)}`
               : categoryLine(item)}
           </span>
-          {line && <span className="ac-text-body-s num">{line}</span>}
           {offer && (
             <span className="ac-text-body-s found-item__already">
               <Icon name="check" size={16} />

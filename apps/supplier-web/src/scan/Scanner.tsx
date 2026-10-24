@@ -1,5 +1,6 @@
 import type { SupplierScanOrder } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
   CodeCells,
@@ -9,7 +10,7 @@ import {
   Spinner,
   useDelayedIndicator,
 } from "@adclub/ui";
-import { darkColors, scannerFrameColor } from "@adclub/ui-core";
+import { darkColors, sanitizeOrderCode, scannerFrameColor } from "@adclub/ui-core";
 import {
   useCallback,
   useEffect,
@@ -387,6 +388,18 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
     setView({ kind: "manual" });
   };
 
+  // «Вставить» on the keypad (S-SCAN-02, TASK-079): a code copied from a
+  // message goes in whole; where the browser keeps the clipboard closed the
+  // key is not offered (pasting into the cells still works).
+  const canPaste = typeof navigator !== "undefined" && Boolean(navigator.clipboard?.readText);
+  const pasteCode = async () => {
+    try {
+      typeCode(sanitizeOrderCode(await navigator.clipboard.readText()));
+    } catch {
+      // Refused by the browser: nothing typed, nothing to say.
+    }
+  };
+
   const waitMinutes =
     wait && wait.until > wait.now ? Math.max(1, Math.ceil((wait.until - wait.now) / 60_000)) : null;
 
@@ -460,8 +473,10 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
           onCode={typeCode}
           onDigit={typeDigit}
           onErase={eraseDigit}
+          onPaste={canPaste ? pasteCode : null}
           onClose={close}
           onCamera={noCamera ? null : next}
+          noCamera={noCamera}
           searching={false}
           waitMinutes={waitMinutes}
         />
@@ -478,8 +493,10 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
             onCode={typeCode}
             onDigit={typeDigit}
             onErase={eraseDigit}
+            onPaste={canPaste ? pasteCode : null}
             onClose={close}
             onCamera={null}
+            noCamera={noCamera}
             searching
             waitMinutes={null}
           />
@@ -506,6 +523,8 @@ export function Scanner({ companyName, timeZone }: { companyName: string; timeZo
         <ResultPanel
           result={view.result}
           from={view.from}
+          typedCode={code}
+          canScan={!noCamera}
           when={when}
           companyName={companyName}
           onClose={close}
@@ -662,7 +681,9 @@ function ManualEntry({
   onClose,
   onDigit,
   onErase,
+  onPaste,
   onCamera,
+  noCamera,
   searching,
   waitMinutes,
 }: {
@@ -673,8 +694,12 @@ function ManualEntry({
   /** A key of the keypad: from the cells as they are now. */
   onDigit: (digit: string) => void;
   onErase: () => void;
+  /** «Вставить»; `null` — the browser gives no clipboard. */
+  onPaste: (() => void) | null;
   onClose: () => void;
   onCamera: (() => void) | null;
+  /** The device has no camera: the entry says why it opened instead (TASK-079). */
+  noCamera: boolean;
   /** The typed code is being searched: the cells and the keys wait. */
   searching: boolean;
   /** After 429: minutes until a search may go; the typing goes on meanwhile. */
@@ -695,6 +720,12 @@ function ManualEntry({
     >
       <div className="manual">
         <h1 className="ac-text-title">{t("scan.manualTitle")}</h1>
+        {noCamera && (
+          <p className="manual__hint ac-text-body-s ac-muted">
+            <Icon name="cameraSlash" size={20} />
+            <span>{t("scan.noCameraHint")}</span>
+          </p>
+        )}
         <CodeCells
           label={t("scan.codeLabel")}
           value={code}
@@ -703,6 +734,7 @@ function ManualEntry({
           disabled={searching}
           systemKeyboard={false}
         />
+        {finePointer && <p className="ac-text-caption ac-muted">{t("scan.typeHint")}</p>}
         <p className="manual__status ac-text-body-s ac-muted" role="status" aria-live="polite">
           {indicator ? (
             <>
@@ -713,12 +745,16 @@ function ManualEntry({
             t("scan.searchWaits", { n: waitMinutes })
           ) : null}
         </p>
-        <Keypad
-          onDigit={onDigit}
-          onErase={onErase}
-          eraseLabel={t("scan.erase")}
-          disabled={searching}
-        />
+        {/* The keypad stands at the bottom, under the thumb (TASK-079). */}
+        <div className="manual__keypad">
+          <Keypad
+            onDigit={onDigit}
+            onErase={onErase}
+            eraseLabel={t("scan.erase")}
+            paste={onPaste ? { label: t("scan.paste"), onPress: onPaste } : undefined}
+            disabled={searching}
+          />
+        </div>
       </div>
     </Panel>
   );
@@ -817,20 +853,26 @@ function Found({
         {late && (
           <Banner tone="warning">{t("scan.lateText", { when: when(late.expiredAt) })}</Banner>
         )}
-        <div className="scanner__actions">
-          <Button size="l" block onClick={onGiveOut}>
-            {t(
-              late
-                ? "scan.closeOrder"
-                : order.kind === "service"
-                  ? "scan.markDone"
-                  : "scan.giveOut",
-            )}
-          </Button>
-          <Button size="l" variant="secondary" block onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-        </div>
+        <ActionBar
+          stacked
+          className="scanner__actions"
+          main={
+            <Button size="l" onClick={onGiveOut}>
+              {t(
+                late
+                  ? "scan.closeOrder"
+                  : order.kind === "service"
+                    ? "scan.markDone"
+                    : "scan.giveOut",
+              )}
+            </Button>
+          }
+          others={[
+            <Button key="cancel" size="l" variant="secondary" onClick={onCancel}>
+              {t("common.cancel")}
+            </Button>,
+          ]}
+        />
       </div>
     </Panel>
   );
@@ -839,6 +881,8 @@ function Found({
 function ResultPanel({
   result,
   from,
+  typedCode,
+  canScan,
   when,
   companyName,
   onClose,
@@ -849,6 +893,10 @@ function ResultPanel({
 }: {
   result: ScanResult;
   from: From;
+  /** The code typed by hand that was looked up (memory only, never kept). */
+  typedCode: string;
+  /** There is a camera to go back to («Сканировать QR»). */
+  canScan: boolean;
   when: (iso: string) => string;
   companyName: string;
   onClose: () => void;
@@ -859,7 +907,12 @@ function ResultPanel({
 }) {
   const t = useT();
   const tone = resultTone(result);
-  const words = resultWords(result, when, t);
+  const found = resultWords(result, when, t);
+  // «Код не найден» is said once, in the title; the text shows what was typed (TASK-079).
+  const words =
+    result.kind === "notFound" && from === "manual" && typedCode
+      ? { ...found, text: t("scan.result.checkDigits", { code: shownCode(typedCode) }) }
+      : found;
   const [switchFailed, setSwitchFailed] = useState(false);
 
   let main: ReactNode;
@@ -868,7 +921,6 @@ function ResultPanel({
     main = (
       <Button
         size="l"
-        block
         onClick={async () => {
           setSwitchFailed(false);
           try {
@@ -883,28 +935,29 @@ function ResultPanel({
     );
   } else if (result.kind === "notFound" && from === "manual") {
     main = (
-      <Button size="l" block onClick={onManual}>
+      <Button size="l" onClick={onManual}>
         {t("scan.enterAgain")}
       </Button>
     );
   } else if (result.kind === "offline" && result.code) {
     main = (
-      <Button size="l" block icon="refresh" onClick={onRetry}>
+      <Button size="l" icon="refresh" onClick={onRetry}>
         {t("common.retry")}
       </Button>
     );
   } else {
     main = (
-      <Button size="l" block onClick={onNext}>
+      <Button size="l" onClick={onNext}>
         {t("scan.next")}
       </Button>
     );
   }
   const showNext =
-    main !== null &&
-    ((result.kind === "otherSupplier" && result.supplier !== null) ||
-      (result.kind === "notFound" && from === "manual") ||
-      (result.kind === "offline" && result.code !== null));
+    (result.kind === "otherSupplier" && result.supplier !== null) ||
+    (result.kind === "notFound" && from === "manual" && canScan) ||
+    (result.kind === "offline" && result.code !== null);
+  // After a code not found the other way is the camera: «Сканировать QR».
+  const nextLabel = result.kind === "notFound" ? t("scan.scanQr") : t("scan.next");
 
   return (
     <Panel companyName={companyName} onClose={onClose} tone={tone}>
@@ -921,17 +974,21 @@ function ResultPanel({
             <p className="result__code ac-text-code-x-l">{shownCode(result.code)}</p>
           )}
           {switchFailed && <Banner tone="danger">{t("common.saveFailed")}</Banner>}
-          <div className="scanner__actions">
-            {main}
-            {showNext && (
-              <Button size="l" variant="secondary" block onClick={onNext}>
-                {t("scan.next")}
-              </Button>
-            )}
-            <Button size="l" variant="text" block onClick={() => navigate("orders")}>
-              {t("scan.toOrders")}
-            </Button>
-          </div>
+          <ActionBar
+            stacked
+            className="scanner__actions"
+            main={main}
+            others={[
+              showNext && (
+                <Button key="next" size="l" variant="secondary" onClick={onNext}>
+                  {nextLabel}
+                </Button>
+              ),
+            ]}
+          />
+          <Button variant="text" className="scanner__to-orders" onClick={() => navigate("orders")}>
+            {t("scan.toOrders")}
+          </Button>
         </div>
       </div>
     </Panel>
@@ -983,16 +1040,22 @@ function CameraProblemPanel({
             <p className="ac-text-body-s">{t("scan.camera.androidSteps")}</p>
           </div>
         )}
-        <div className="scanner__actions">
-          <Button size="l" block icon="keyboard" onClick={onManual}>
-            {t("scan.manual")}
-          </Button>
-          {problem !== "insecure" && problem !== "unsupported" && problem !== "noCamera" && (
-            <Button size="l" variant="secondary" block icon="refresh" onClick={onRetry}>
-              {t("scan.camera.retry")}
+        <ActionBar
+          stacked
+          className="scanner__actions"
+          main={
+            <Button size="l" icon="keyboard" onClick={onManual}>
+              {t("scan.manual")}
             </Button>
-          )}
-        </div>
+          }
+          others={[
+            problem !== "insecure" && problem !== "unsupported" && problem !== "noCamera" && (
+              <Button key="retry" size="l" variant="secondary" icon="refresh" onClick={onRetry}>
+                {t("scan.camera.retry")}
+              </Button>
+            ),
+          ]}
+        />
       </div>
     </Panel>
   );

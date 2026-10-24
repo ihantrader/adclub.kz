@@ -11,12 +11,14 @@ import {
   useLoadingGate,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
 import { useVisiblePoll } from "../orders/live";
 import { formatWhen } from "../orders/order-rules";
+import { useWide } from "../offers/use-wide";
 import { navigateTo, priceImportPath } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import {
   isRunning,
   progressText,
@@ -67,6 +69,7 @@ const STATUS_ICON = {
 export function PriceImports({ timeZone }: { timeZone: string }) {
   const { t, lang } = useLanguage();
   const online = useOnline();
+  const wide = useWide();
   const gate = useLoadingGate();
   const [page, setPage] = useState<PriceImportPage | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
@@ -167,64 +170,67 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title page__title">{t("price.title")}</h1>
-      </div>
+      <PageHeader title={t("price.title")} />
 
-      <section
-        className={dragging ? "price-drop price-drop--over" : "price-drop"}
-        aria-label={t("price.dropTitle")}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!disabled) setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={drop}
-      >
-        <Icon name="fileSpreadsheet" size={28} />
-        <p className="ac-text-title-s">{t("price.dropTitle")}</p>
-        {uploading ? (
-          <div className="price-drop__progress" role="status">
-            <span className="ac-text-body-s price-wrap">
-              {t("price.uploading", { name: uploading.name, size: sizeText(uploading.size, t) })}
-            </span>
-            <div
-              className="progress"
-              role="progressbar"
-              aria-label={t("price.uploadingLabel")}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(uploading.fraction * 100)}
-            >
-              <span style={{ width: `${String(Math.round(uploading.fraction * 100))}%` }} />
+      {/* The upload and «Скачать мой прайс» side by side from 1024 (TASK-079). */}
+      <div className="price-top">
+        <section
+          className={dragging ? "price-drop price-drop--over" : "price-drop"}
+          aria-label={t("price.dropTitle")}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!disabled) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={drop}
+        >
+          <Icon name="table" size={24} />
+          <p className="ac-text-heading">{t("price.dropTitle")}</p>
+          {uploading ? (
+            <div className="price-drop__progress" role="status">
+              <span className="ac-text-body-s price-wrap">
+                {t("price.uploading", { name: uploading.name, size: sizeText(uploading.size, t) })}
+              </span>
+              <div
+                className="progress"
+                role="progressbar"
+                aria-label={t("price.uploadingLabel")}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(uploading.fraction * 100)}
+              >
+                <span style={{ width: `${String(Math.round(uploading.fraction * 100))}%` }} />
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <p className="ac-text-body-s ac-muted">
-              {limits
-                ? t("price.dropHint", {
-                    mb: limits.maxFileMb,
-                    rows: limits.maxRows.toLocaleString("ru-RU").replace(/\s/g, "\u202f"),
-                  })
-                : t("price.dropHintShort")}
-            </p>
-            <Button icon="plus" disabled={disabled} onClick={() => input.current?.click()}>
-              {t("price.choose")}
-            </Button>
-          </>
-        )}
-        <input
-          ref={input}
-          type="file"
-          accept={ACCEPT}
-          className="ac-visually-hidden"
-          tabIndex={-1}
-          aria-hidden="true"
-          data-testid="price-file"
-          onChange={(event) => chosen(event.target.files)}
-        />
-      </section>
+          ) : (
+            <>
+              <p className="ac-text-body-s ac-muted">
+                {limits
+                  ? t("price.dropHint", {
+                      mb: limits.maxFileMb,
+                      rows: limits.maxRows.toLocaleString("ru-RU").replace(/\s/g, "\u202f"),
+                    })
+                  : t("price.dropHintShort")}
+              </p>
+              <Button icon="plus" disabled={disabled} onClick={() => input.current?.click()}>
+                {t("price.choose")}
+              </Button>
+            </>
+          )}
+          <input
+            ref={input}
+            type="file"
+            accept={ACCEPT}
+            className="ac-visually-hidden"
+            tabIndex={-1}
+            aria-hidden="true"
+            data-testid="price-file"
+            onChange={(event) => chosen(event.target.files)}
+          />
+        </section>
+
+        <PriceExport />
+      </div>
 
       {uploadError && (
         <Banner tone="danger" icon="alertTriangle">
@@ -232,9 +238,7 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
         </Banner>
       )}
 
-      <PriceExport />
-
-      <h2 className="ac-text-title-s">{t("price.history")}</h2>
+      <h2 className="ac-text-heading section-title">{t("price.history")}</h2>
       {failure !== null && !page ? (
         <ScreenError
           title={t("common.errorTitle")}
@@ -251,7 +255,10 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
           {page && page.imports.length === 0 && (
             <EmptyState icon="fileSpreadsheet" title={t("price.historyEmpty")} />
           )}
-          {page && page.imports.length > 0 && (
+          {page && page.imports.length > 0 && wide && (
+            <HistoryTable imports={page.imports} timeZone={timeZone} />
+          )}
+          {page && page.imports.length > 0 && !wide && (
             <ul className="price-history">
               {page.imports.map((entry) => (
                 <HistoryRow key={entry.id} entry={entry} timeZone={timeZone} />
@@ -268,6 +275,71 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
         </LoadingContent>
       )}
     </>
+  );
+}
+
+/** Opens an upload in the cabinet; a modifier click — in a new tab. */
+function openImport(event: MouseEvent, href: string) {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+  event.preventDefault();
+  navigateTo(href);
+}
+
+/** The history from 1024 px (TASK-079): a table, a row of 48 for an upload. */
+function HistoryTable({ imports, timeZone }: { imports: PriceImport[]; timeZone: string }) {
+  const { t, lang } = useLanguage();
+  return (
+    <div className="table-wrap">
+      <table className="data-table price-history-table">
+        <caption className="ac-visually-hidden">{t("price.history")}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("price.tableFile")}</th>
+            <th scope="col">{t("price.tableWhen")}</th>
+            <th scope="col">{t("price.tableWho")}</th>
+            <th scope="col" className="num-col">
+              {t("price.tableSize")}
+            </th>
+            <th scope="col">{t("price.tableResult")}</th>
+            <th scope="col">{t("price.tableState")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {imports.map((entry) => {
+            const href = priceImportPath(entry.id);
+            return (
+              <tr
+                key={entry.id}
+                className="data-table__row--link"
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest("a")) return;
+                  navigateTo(href);
+                }}
+              >
+                <td className="price-history-table__file">
+                  <a
+                    className="offer-title"
+                    href={href}
+                    onClick={(event) => openImport(event, href)}
+                  >
+                    {entry.fileName ?? t("price.noFileName")}
+                  </a>
+                </td>
+                <td className="num">{formatWhen(entry.createdAt, timeZone, lang, t)}</td>
+                <td>{entry.uploadedBy.name}</td>
+                <td className="num-col">{sizeText(entry.byteSize, t)}</td>
+                <td className="ac-text-caption">{progressText(entry, t, lang)}</td>
+                <td>
+                  <Badge tone={statusTone(entry.status)} icon={STATUS_ICON[entry.status]}>
+                    {t(STATUS_TEXT[entry.status])}
+                  </Badge>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

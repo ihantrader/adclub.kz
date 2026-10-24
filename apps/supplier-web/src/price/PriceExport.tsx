@@ -1,5 +1,5 @@
 import { isApiError } from "@adclub/api-client";
-import { Banner, Button, Segments } from "@adclub/ui";
+import { ActionBar, Banner, Button, Segments } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
@@ -48,7 +48,7 @@ export function PriceExport() {
   return (
     <section className="card price-export" aria-label={t("price.export.title")}>
       <div className="stack-s">
-        <h2 className="ac-text-title-s">{t("price.export.title")}</h2>
+        <h2 className="ac-text-heading">{t("price.export.title")}</h2>
         <p className="ac-text-body-s ac-muted">{t("price.export.hint")}</p>
       </div>
       <Segments<Include>
@@ -60,17 +60,23 @@ export function PriceExport() {
           { value: "all", label: t("price.export.all") },
         ]}
       />
-      <div>
-        <Button
-          variant="secondary"
-          icon="download"
-          loading={busy}
-          disabled={!online || busy}
-          onClick={() => download()}
-        >
-          {t("price.export.download")}
-        </Button>
-      </div>
+      {/* Across on a phone, by its words from 600 (C1). */}
+      <ActionBar
+        compact
+        className="price-export__action"
+        others={[
+          <Button
+            key="download"
+            variant="secondary"
+            icon="download"
+            loading={busy}
+            disabled={!online || busy}
+            onClick={() => download()}
+          >
+            {t("price.export.download")}
+          </Button>,
+        ]}
+      />
       {note && <Banner icon="info">{note}</Banner>}
       {error && <Banner tone="danger">{error}</Banner>}
     </section>

@@ -9,7 +9,6 @@ import {
   Button,
   Checkbox,
   Icon,
-  IconButton,
   LoadingContent,
   ScreenError,
   SkeletonList,
@@ -24,6 +23,7 @@ import { PriceResult } from "./PriceResult";
 import { PriceReview } from "./PriceReview";
 import { formatWhen } from "../orders/order-rules";
 import { goBack, navigate, navigateTo, priceImportPath, useRouteId } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import {
   assignRole,
   cellText,
@@ -83,22 +83,25 @@ export function PriceImportScreen({ timeZone }: { timeZone: string }) {
   useVisiblePoll(() => void load(), RUNNING_POLL_MS, status !== undefined && isRunning(status));
   const reload = useCallback(() => void load(), [load]);
 
+  // The file's name is the title of the top bar (C3); when and who — the first line of the page.
   const head = (
-    <div className="page__head page__head--back">
-      <IconButton icon="arrowLeft" label={t("price.back")} onClick={() => goBack("price")} />
-      <div className="stack-s">
-        <h1 className="ac-text-title page__title price-wrap">
-          {detail?.import.fileName ?? t("price.title")}
-        </h1>
-        {detail && (
-          <span className="ac-text-body-s ac-muted">
-            {[formatWhen(detail.import.createdAt, timeZone, lang, t), detail.import.uploadedBy.name]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-        )}
-      </div>
-    </div>
+    <>
+      <PageHeader
+        title={detail?.import.fileName ?? t("price.title")}
+        back={() => goBack("price")}
+      />
+      {detail && (
+        <p className="ac-text-body-s ac-muted price-wrap">
+          {[
+            detail.import.fileName,
+            formatWhen(detail.import.createdAt, timeZone, lang, t),
+            detail.import.uploadedBy.name,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
+    </>
   );
 
   if (failure !== null && !detail) {
@@ -247,9 +250,9 @@ function Body({
           : "price.parsed.columnsConfirmed",
       )}{" "}
       {entry.status === "review" && (
-        <button type="button" className="text-link" onClick={() => setEditing(true)}>
+        <Button variant="text" size="s" onClick={() => setEditing(true)}>
           {t("price.parsed.changeColumns")}
-        </button>
+        </Button>
       )}
     </p>
   );
@@ -279,7 +282,7 @@ function Body({
     <>
       {same}
       <div className="card price-summary">
-        <p className="ac-text-title-s">
+        <p className="ac-text-heading">
           {t("price.parsed.summary", {
             rows: rowsText(lang, stats?.dataRows ?? 0, t),
             errors: formatNumber(stats?.errorRows ?? 0),
@@ -291,9 +294,9 @@ function Body({
               ? "price.parsed.columnsRemembered"
               : "price.parsed.columnsConfirmed",
           )}{" "}
-          <button type="button" className="text-link" onClick={() => setEditing(true)}>
+          <Button variant="text" size="s" onClick={() => setEditing(true)}>
             {t("price.parsed.changeColumns")}
-          </button>
+          </Button>
         </p>
         {stats && stats.serviceRows > 0 && (
           <p className="ac-text-body-s ac-muted">
@@ -367,7 +370,7 @@ function ColumnsEditor({
   return (
     <div className="price-columns">
       <div className="stack-s">
-        <h2 className="ac-text-title-s">{t("price.columns.title")}</h2>
+        <h2 className="ac-text-heading">{t("price.columns.title")}</h2>
         <p className="ac-text-body-s ac-muted">{t("price.columns.lead")}</p>
       </div>
       <div className="table-wrap">
@@ -538,7 +541,7 @@ function RowErrors({ importId }: { importId: string }) {
 
   return (
     <section className="stack-s" aria-label={t("price.parsed.errorsTitle")}>
-      <h2 className="ac-text-title-s">
+      <h2 className="ac-text-heading">
         {total === null
           ? t("price.parsed.errorsTitle")
           : `${t("price.parsed.errorsTitle")} · ${formatNumber(total)}`}

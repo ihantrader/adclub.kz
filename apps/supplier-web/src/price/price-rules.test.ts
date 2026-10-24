@@ -65,7 +65,7 @@ describe("words of the price list", () => {
       uploadErrorText(apiError("PRICE_IMPORT_FILE_INVALID", { reason: "old_excel" }), t, 20),
     ).toBe("Это старый формат .xls. Сохраните файл как .xlsx");
     expect(uploadErrorText(apiError("PAYLOAD_TOO_LARGE"), t, 20)).toBe(
-      "Файл больше 20 МБ. Уменьшите его или разделите прайс на несколько файлов",
+      "Файл больше 20\u00a0МБ. Уменьшите его или разделите прайс на несколько файлов",
     );
     expect(
       uploadErrorText(
@@ -76,7 +76,7 @@ describe("words of the price list", () => {
         t,
         20,
       ),
-    ).toBe("Слишком много загрузок. Попробуйте через 3 мин");
+    ).toBe("Слишком много загрузок. Попробуйте через 3\u00a0мин");
     expect(failureText({ reason: "too_many_rows", limit: 50_000 }, t)).toBe(
       "Слишком много строк: не больше 50000. Разделите прайс на несколько файлов",
     );
@@ -117,7 +117,7 @@ describe("words of the price list", () => {
         t,
       ),
     ).toBe(
-      `Цена ${formatNumber(150_000_000)} ₸ — вне допустимого: от 1 до ${formatNumber(100_000_000)} ₸`,
+      `Цена ${formatNumber(150_000_000)}\u00a0₸ — вне допустимого: от 1\u00a0до ${formatNumber(100_000_000)}\u00a0₸`,
     );
     expect(rowErrorText({ ...base, code: "no_article_or_name" }, t)).toBe(
       "Нет ни артикула, ни названия",
@@ -125,9 +125,9 @@ describe("words of the price list", () => {
   });
 
   it("count rows in the right form of the noun", () => {
-    expect(rowsText("ru", 1, t)).toBe("1 строка");
-    expect(rowsText("ru", 3, t)).toBe("3 строки");
-    expect(rowsText("ru", 1240, t)).toBe(`${formatNumber(1240)} строк`);
+    expect(rowsText("ru", 1, t)).toBe("1\u00a0строка");
+    expect(rowsText("ru", 3, t)).toBe("3\u00a0строки");
+    expect(rowsText("ru", 1240, t)).toBe(`${formatNumber(1240)}\u00a0строк`);
     expect(formatNumber(1240)).toBe("1\u202f240");
   });
 
@@ -158,6 +158,6 @@ describe("words of the price list", () => {
         t,
         "ru",
       ),
-    ).toBe(`${formatNumber(1240)} строк, ошибки в строках — 12`);
+    ).toBe(`${formatNumber(1240)}\u00a0строк, ошибки в строках — 12`);
   });
 });

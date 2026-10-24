@@ -174,11 +174,49 @@ function PhoneStep({ onSent }: { onSent: (step: Extract<Step, { kind: "code" }>)
       <Button size="l" block disabled={!phone} onClick={() => send()}>
         {t("auth.getCode")}
       </Button>
-      <Button variant="text" disabled={!phone} onClick={() => send("sms")}>
+      {/* Always pressable (TASK-079): without a number it says what is missing. */}
+      <Button
+        variant="text"
+        onClick={() => (phone ? send("sms") : setError(t("auth.phoneInvalid")))}
+      >
         {t("auth.noWhatsapp")}
       </Button>
-      <p className="ac-text-caption ac-muted auth-note">{t("auth.policyNotice")}</p>
+      <PolicyNotice />
     </form>
+  );
+}
+
+/**
+ * «Продолжая, вы принимаете Политику конфиденциальности» — the policy a
+ * link in `accent` when the club has set its address (`/meta/club-info`),
+ * the words alone otherwise.
+ */
+function PolicyNotice() {
+  const t = useT();
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    apiClient
+      .getClubInfo()
+      .then((info) => live && setUrl(info.privacyUrl))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return (
+    <p className="ac-text-caption ac-muted auth-note">
+      {url ? (
+        <>
+          {t("auth.policyLead")}{" "}
+          <a className="text-link" href={url} target="_blank" rel="noopener noreferrer">
+            {t("auth.policyLink")}
+          </a>
+        </>
+      ) : (
+        t("auth.policyNotice")
+      )}
+    </p>
   );
 }
 
@@ -283,6 +321,7 @@ function CodeStep({
         </Button>
       </div>
       {fellBack && <p className="ac-text-body-s ac-muted">{t("auth.fellBackToSms")}</p>}
+      {/* Big digits in columns, «6 цифр» under them (TASK-079): not an empty box. */}
       <TextField
         label={t("auth.codeLabel")}
         value={code}
@@ -292,7 +331,9 @@ function CodeStep({
         maxLength={codeLength}
         autoFocus
         className="auth-code"
+        placeholder={"0".repeat(codeLength)}
         aria-busy={pending || undefined}
+        hint={error ? undefined : t("auth.codeDigits", { n: codeLength })}
         error={error ?? undefined}
       />
       {secondsLeft > 0 ? (

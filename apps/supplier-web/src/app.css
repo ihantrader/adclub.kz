@@ -61,11 +61,92 @@ ul {
   gap: var(--ac-space-2);
 }
 
+/* The login code: big digits in columns (`code` 32/36), not an empty box. */
+.auth-code .ac-field__control {
+  min-height: 64px;
+}
+
 .auth-code .ac-field__input {
-  font-size: 24px;
-  line-height: 30px;
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: var(--ac-font-weight-code);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+}
+
+.auth-code .ac-field__input::placeholder {
+  color: var(--ac-color-text-disabled);
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+}
+
+/* Rows of choice on the card of the sign-in keep a frame: the card is `surface` too. */
+.auth-card .choice-list__item {
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+fieldset.field-block {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+fieldset.field-block > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+/* A text button inside a sentence keeps the line of the sentence; its touch zone stays 48. */
+p .ac-button--text,
+.ac-text-body-s > .ac-button--text,
+span > .ac-button--text {
+  min-height: 0;
+  padding-block: 0;
+  vertical-align: baseline;
+}
+
+.moderation-table__item {
+  width: 40%;
+}
+
+.moderation-table__date,
+.moderation-table .ac-badge {
+  white-space: nowrap;
+}
+
+.form-with-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+  min-width: 0;
+}
+
+/* From 600 a card in the middle of the window, the language right under it. */
+@media (min-width: 600px) {
+  .auth-page {
+    justify-content: center;
+    gap: var(--ac-space-4);
+  }
+
+  .auth-card {
+    max-width: 400px;
+    padding: var(--ac-space-8);
+    border-radius: var(--ac-radius-l);
+    background: var(--ac-color-surface);
+  }
+
+  .join-card {
+    max-width: 480px;
+  }
+
+  .auth-footer {
+    margin-top: 0;
+  }
 }
 
 .auth-note {
@@ -173,8 +254,16 @@ ul {
   cursor: pointer;
 }
 
-.choice-list__item:hover,
-.menu-row:hover {
+/* Only a pointer that hovers shades a row: on a phone a tapped row stayed «hovered» and looked chosen. */
+@media (hover: hover) {
+  .choice-list__item:hover,
+  .menu-row:hover {
+    background: var(--ac-color-surface-raised);
+  }
+}
+
+.choice-list__item:active,
+.menu-row:active {
   background: var(--ac-color-surface-raised);
 }
 
@@ -238,8 +327,8 @@ ul {
   flex: 1;
   flex-direction: column;
   min-width: 0;
-  /* Room for the bottom tabs on a phone. */
-  padding-bottom: calc(var(--ac-tab-bar) + env(safe-area-inset-bottom));
+  /* Room for the bottom tabs and the raised «Сканер» over them (C2). */
+  padding-bottom: calc(var(--ac-tab-bar) + env(safe-area-inset-bottom) + var(--ac-center-tab-lift));
 }
 
 .shell__tabs {
@@ -265,6 +354,31 @@ ul {
 
 .topbar__back {
   margin-left: calc(-1 * var(--ac-space-3));
+}
+
+/* A child page: «назад», its title (`title`), the company small on the right (C3). */
+.topbar__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar__company {
+  flex: 0 1 auto;
+  max-width: 40%;
+  overflow: hidden;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Things that exist only from 1024 px (the side menu shows the section). */
+.desk-only {
+  display: none;
 }
 
 /* The company is always in the header (SCREENS 6.0); a long Kazakh name
@@ -317,13 +431,53 @@ ul {
   column-gap: var(--ac-space-3);
 }
 
+/* One grid for every page (C12): 16 at the sides on a phone, 32 from
+   1024, the content up to 1200; tables and forms take the same width as
+   the title above them. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-6);
   width: 100%;
-  max-width: 720px;
   padding: var(--ac-space-6) var(--ac-space-4) var(--ac-space-8);
+}
+
+.page__head--desk {
+  display: none;
+}
+
+/* Cards of a list: one column on a phone, two from 600 (DESIGN 7.5). */
+.card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ac-space-3);
+}
+
+/* The fields of a form: one column on a phone, two from 600, a label as wide as its column (C9). */
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ac-space-4) var(--ac-space-4);
+  align-items: start;
+}
+
+.form-grid > .form-grid__wide {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 600px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A block title inside a page (C4): `heading` 18/24 400, 32 above, 12 below. */
+.section-title {
+  margin: var(--ac-space-2) 0 calc(-1 * var(--ac-space-3));
 }
 
 /* A part of a page that fades on its own (D-069), laid out like the page. */
@@ -399,10 +553,18 @@ ul {
   align-items: center;
   gap: var(--ac-space-3);
   min-width: 0;
+  min-height: var(--ac-touch-target);
   padding: var(--ac-space-2) var(--ac-space-3);
+  border-radius: var(--ac-radius-s);
   color: var(--ac-color-text-muted);
   font-size: 14px;
   line-height: 20px;
+  text-decoration: none;
+}
+
+.sidebar-member:hover,
+.sidebar-member[aria-current="page"] {
+  color: var(--ac-color-text);
 }
 
 .sidebar-member__name {
@@ -411,39 +573,54 @@ ul {
 }
 
 @media (min-width: 1024px) {
+  /* The menu stands still, the whole height of the window, and scrolls on its own (C13). */
   .shell__sidebar {
-    position: sticky;
+    position: fixed;
     top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 6;
     display: flex;
-    flex: none;
-    height: 100dvh;
+    width: var(--ac-sidebar);
     overflow-y: auto;
   }
 
   .shell__sidebar > .ac-sidebar {
+    flex: 1;
     min-height: 100%;
   }
 
   .shell__tabs,
-  .topbar__back {
+  .topbar--phone {
     display: none;
   }
 
   .shell__main {
+    margin-left: var(--ac-sidebar);
     padding-bottom: 0;
   }
 
+  /* The bar of a child page on the grid of the page under it; no company (C14). */
   .topbar {
-    padding: 0 var(--ac-space-8);
+    padding: 0 max(var(--ac-space-8), calc((100% - 1200px) / 2));
+  }
+
+  .topbar__company {
+    display: none;
   }
 
   .page {
-    max-width: 1200px;
+    max-width: calc(1200px + 2 * var(--ac-space-8));
+    margin-inline: auto;
     padding: var(--ac-space-8);
   }
 
-  .page > * {
-    max-width: 760px;
+  .desk-only {
+    display: revert;
+  }
+
+  .page__head--desk {
+    display: flex;
   }
 }
 
@@ -496,6 +673,157 @@ ul {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--ac-space-2);
+}
+
+/* «Подпись — значение» rows with a hairline between (S-ORD-02, S-COMP-01, TASK-079). */
+.facts--rows {
+  gap: 0;
+}
+
+.facts--rows > div {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ac-space-4);
+  min-height: var(--ac-touch-target);
+  padding: var(--ac-space-3) 0;
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.facts--rows > div:last-child {
+  border-bottom: 0;
+}
+
+.facts--rows dt {
+  flex: 0 1 auto;
+  max-width: 50%;
+}
+
+.facts--rows dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  text-align: right;
+}
+
+.facts--rows dd .facts__note {
+  text-align: right;
+}
+
+/* A table of the cabinet from 1024 (DESIGN 7.5, C17): rows 48, the head
+   sticks under the top of the window, numbers right-aligned and in columns. */
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--ac-space-3) var(--ac-space-3);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: var(--ac-font-weight-caption);
+  text-align: left;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.data-table td {
+  height: var(--ac-table-row);
+  padding: var(--ac-space-1) var(--ac-space-3);
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table thead th:first-child {
+  border-top-left-radius: var(--ac-radius-m);
+}
+
+.data-table thead th:last-child {
+  border-top-right-radius: var(--ac-radius-m);
+}
+
+/* A sticky head needs the page to scroll, not the frame of the table. */
+@media (min-width: 1024px) {
+  .table-wrap:has(> .data-table) {
+    overflow: visible;
+  }
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+  padding-left: var(--ac-space-4);
+}
+
+.data-table th:last-child,
+.data-table td:last-child {
+  padding-right: var(--ac-space-4);
+}
+
+.data-table .num-col {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-table__action {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.data-table__action > * {
+  vertical-align: middle;
+}
+
+.data-table .ac-toggle {
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+}
+
+.data-table .ac-segments {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+/* The row opens its page; it says so with the pointer and a pressed shade. */
+.data-table__row--link {
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .data-table__row--link:hover > td {
+    background: var(--ac-color-surface-raised);
+  }
+}
+
+/* The page's save panel stays in sight on a computer too (S-COMP-01). */
+@media (min-width: 1024px) {
+  .save-panel.ac-action-bar--pinned {
+    position: sticky;
+    bottom: 0;
+    padding: var(--ac-space-3) 0;
+    border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+    background: var(--ac-color-bg);
+  }
+
+  .save-panel .ac-action-bar__buttons {
+    flex-direction: row-reverse;
+  }
 }
 
 .field-block {
@@ -570,12 +898,50 @@ ul {
 
 .member__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+}
+
+.data-table .member__head {
+  padding: var(--ac-space-2) 0;
 }
 
 /* ---------- S-INST-01 ---------- */
 .install {
+  align-items: stretch;
+  max-width: 560px;
+}
+
+.install__lead {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-4);
+}
+
+.install__icon {
+  flex: none;
+}
+
+.install__actions {
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
+  gap: var(--ac-space-2);
+}
+
+.android-picture__bar {
+  justify-content: space-between;
+  padding: 0 var(--ac-space-2) 0 var(--ac-space-3);
+}
+
+.android-picture__address {
+  flex: 1;
+  padding: 4px var(--ac-space-3);
+  border-radius: var(--ac-radius-full);
+  background: var(--ac-color-fill);
+}
+
+.android-picture__menu .ac-icon {
+  transform: rotate(90deg);
 }
 
 .install__icon {
@@ -724,11 +1090,120 @@ ul {
 .offer-card__head {
   display: flex;
   align-items: flex-start;
-  gap: var(--ac-space-2);
+  gap: var(--ac-space-3);
+}
+
+/* One line of a card: the price and the availability share it (the term only «под заказ»). */
+.offer-card .offer-fields {
+  flex-wrap: nowrap;
+}
+
+.offer-card .offer-fields > .inline-field {
+  flex: 1 1 0;
+}
+
+.offer-card .offer-fields > .inline-field--days {
+  flex: 0 0 auto;
+}
+
+.offer-card .inline-field__input--price {
+  width: 100%;
+}
+
+.offer-card .inline-field--select .inline-field__select {
+  width: 100%;
 }
 
 .offer-card__head > .ac-badge {
   flex: none;
+}
+
+.offer-card__title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.offer-card__head > .ac-menu {
+  flex: none;
+  margin: -8px -12px 0 0;
+}
+
+/* The photo of a row: 56 in a card, 40 in the table; no photo — the placeholder says it. */
+.offer-thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface-raised);
+  color: var(--ac-color-text-muted);
+}
+
+.offer-thumb--56 {
+  width: 56px;
+  height: 56px;
+}
+
+.offer-thumb--40 {
+  width: 40px;
+  height: 40px;
+}
+
+.offer-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.receiving--words {
+  flex-wrap: wrap;
+  column-gap: var(--ac-space-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.receiving--words > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.offer-fields__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  text-decoration: none;
+}
+
+/* The action beside a root title («Добавить позицию»): across under it on a phone. */
+@media (max-width: 599px) {
+  .page__head > .page__head-action {
+    width: 100%;
+  }
+}
+
+/* Fields in a table row are S 36 (DESIGN 7.5), the row stays 48. */
+.data-table .inline-field {
+  min-height: var(--ac-button-s);
+}
+
+.data-table .inline-field__input,
+.data-table .inline-field__select {
+  font-size: 14px;
+}
+
+.offers-table__photo {
+  width: 1%;
+  padding-right: 0;
+}
+
+.offers-table .offers-table__item {
+  min-width: 220px;
 }
 
 .offer-title {
@@ -875,41 +1350,6 @@ ul {
   background: var(--ac-color-surface);
 }
 
-.offers-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.offers-table th {
-  padding: var(--ac-space-3) var(--ac-space-2);
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-  color: var(--ac-color-text-muted);
-  font-weight: var(--ac-font-weight-body);
-  text-align: left;
-  vertical-align: bottom;
-}
-
-.offers-table td {
-  padding: var(--ac-space-3) var(--ac-space-2);
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-  vertical-align: top;
-}
-
-.offers-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.offers-table th:first-child,
-.offers-table td:first-child {
-  padding-left: var(--ac-space-4);
-}
-
-.offers-table__item {
-  min-width: 180px;
-}
-
 .offers-table__item > * + * {
   margin-top: var(--ac-space-1);
 }
@@ -1006,16 +1446,10 @@ ul {
 
 /* S-OFF-03 and the card */
 .item-block {
+  display: flex;
   flex-direction: row;
   align-items: flex-start;
-}
-
-.offer-state {
   gap: var(--ac-space-3);
-}
-
-.offer-state > .ac-badge {
-  align-self: flex-start;
 }
 
 .offer-form fieldset.field-block {
@@ -1039,36 +1473,73 @@ ul {
   list-style: none;
 }
 
+/* A model of the table «марка — модель — цена» is a small card: «Geely Atlas · Удалить»
+   on top, the fields under it (TASK-079). */
 .model-prices__row {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-3) var(--ac-space-4) var(--ac-space-4);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+}
+
+.model-prices__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+}
+
+@media (min-width: 1024px) {
+  .model-prices__fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 200px;
+  }
+}
+
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--ac-space-6);
+}
+
+.check-row > .ac-check {
+  padding-block: var(--ac-space-2);
+}
+
+.offer-form {
+  gap: var(--ac-space-6);
+}
+
+.offer-form__block {
+  margin-top: var(--ac-space-2);
+}
+
+.item-card {
+  gap: var(--ac-space-3);
+}
+
+.offer-state {
+  display: flex;
+  flex-direction: column;
   gap: var(--ac-space-2);
-  align-items: end;
-  padding-bottom: var(--ac-space-3);
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  padding-top: var(--ac-space-3);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
 }
 
-.model-prices__row > .search-select,
-.model-prices__row > .model-prices__price {
-  grid-column: 1 / 2;
+.offer-state__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-3);
+  font-size: 14px;
+  line-height: 20px;
 }
 
-.model-prices__row > .ac-icon-button {
-  grid-row: 1;
-  grid-column: 2;
-}
-
-@media (min-width: 720px) {
-  .model-prices__row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 160px auto;
-  }
-
-  .model-prices__row > .search-select,
-  .model-prices__row > .model-prices__price,
-  .model-prices__row > .ac-icon-button {
-    grid-row: 1;
-    grid-column: auto;
-  }
+.offer-status-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .preview {
@@ -1193,11 +1664,120 @@ ul {
   z-index: 1;
 }
 
-.order-card__actions {
+.data-table .order-card__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: var(--ac-space-2);
+}
+
+/* S-ORD-01 card: the status and the deadline on top, «№ · время», the item,
+   the sum on the left and how it is received on the right (TASK-079). */
+.order-card__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1) var(--ac-space-3);
+}
+
+.order-card__top > .timer:not(:first-child) {
+  margin-left: auto;
+}
+
+.order-card__chevron {
+  margin-left: auto;
+  color: var(--ac-color-text-muted);
+}
+
+.order-card__top > .timer:not(:first-child) + .order-card__chevron {
+  margin-left: 0;
+}
+
+.order-card__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ac-space-1) var(--ac-space-3);
+}
+
+.order-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ac-space-1) var(--ac-space-3);
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.order-card__meta .receiving {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The whole card is pressed: it shades under the finger, the pointer says it too. */
+.order-card:has(.order-card__link:active) {
+  background: var(--ac-color-surface-raised);
+}
+
+@media (hover: hover) {
+  .order-card:has(.order-card__link:hover) {
+    background: var(--ac-color-surface-raised);
+  }
+}
+
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+/* The item takes what the other columns leave and ends with «…» (full name in its title). */
+.orders-table__item {
+  width: 100%;
+  min-width: 160px;
+  max-width: 0;
+}
+
+.orders-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.orders-table td:nth-child(4) {
+  min-width: 180px;
+  max-width: 240px;
+}
+
+.orders-table td:nth-child(6) {
+  min-width: 200px;
+  max-width: 260px;
+}
+
+/* A long deadline («1 сағ 52 мин ішінде жауап беріңіз») wraps inside its
+   column instead of pushing the table past the page. */
+.orders-table .timer {
+  align-items: flex-start;
+}
+
+.orders-table .timer > .ac-icon {
+  margin-top: 2px;
+}
+
+.orders-table__item-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-marks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-1) var(--ac-space-2);
 }
 
 /* A new order that came in while the page was open lights up for a moment (S-ORD-01). */
@@ -1240,20 +1820,19 @@ ul {
 }
 
 .orders-table__group th {
+  position: static;
   padding-top: var(--ac-space-4);
   background: var(--ac-color-surface-raised);
   color: var(--ac-color-text);
-}
-
-.orders-table td {
-  vertical-align: middle;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--ac-font-weight-body-strong);
+  white-space: normal;
 }
 
 /* Numbers, sums and times stay on one line; the item takes what is left. */
 .orders-table__number,
-.orders-table__money,
-.orders-table .timer,
-.orders-table .receiving {
+.orders-table__money {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -1301,12 +1880,175 @@ a.ac-button {
   line-height: 20px;
 }
 
+/* The course of an order: a timeline, each event a dot on one thin line (TASK-079). */
 .journal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  margin: 0;
+  padding: 0 0 0 var(--ac-space-5);
+  list-style: none;
+}
+
+.journal::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 4px;
+  border-left: var(--ac-line-hairline) solid var(--ac-color-border-field);
+}
+
+.journal > li {
+  position: relative;
+}
+
+.journal > li::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: calc(-1 * var(--ac-space-5));
+  width: 9px;
+  height: 9px;
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  border-radius: 50%;
+  background: var(--ac-color-surface);
+}
+
+.journal > li:last-child::before {
+  border-color: var(--ac-color-accent);
+  background: var(--ac-color-accent);
+}
+
+/* ---------- S-ORD-02 layout: one column on a phone, two from 1024 ---------- */
+.order-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+  min-width: 0;
+}
+
+/* On a phone the side column melts into the page: the client after the head,
+   the actions pinned at the very bottom. */
+.order-layout__side {
+  display: contents;
+}
+
+.order-layout > .order-summary {
+  order: 1;
+}
+
+.order-banners {
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-2);
+  order: 2;
+}
+
+.order-customer {
+  order: 3;
+}
+
+.order-layout > .order-item {
+  order: 4;
+}
+
+.order-layout > .order-journal {
+  order: 5;
+}
+
+.order-layout .order-actions {
+  order: 6;
+}
+
+/* «Позвонить · Написать в WhatsApp» — two halves at any width (S-ORD-02),
+   one under the other where a half can't hold a word (a card at 320). */
+.order-customer .ac-action-bar__others {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr));
+}
+
+.order-customer .ac-action-bar .ac-button {
+  width: 100%;
+}
+
+.order-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+}
+
+.order-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
   margin: 0;
-  padding-left: var(--ac-space-5);
+}
+
+.order-headline > .ac-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.order-headline--neutral > .ac-icon {
+  color: var(--ac-color-text-muted);
+}
+
+.order-headline--accent > .ac-icon {
+  color: var(--ac-color-accent);
+}
+
+.order-headline--success > .ac-icon {
+  color: var(--ac-color-success);
+}
+
+.order-headline--warning > .ac-icon {
+  color: var(--ac-color-warning);
+}
+
+.facts__note--warning {
+  color: var(--ac-color-warning);
+}
+
+@media (min-width: 1024px) {
+  .order-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-areas:
+      "summary side"
+      "banner side"
+      "item side"
+      "journal side";
+    grid-template-rows: auto auto auto 1fr;
+    gap: var(--ac-space-6) var(--ac-space-8);
+    align-items: start;
+  }
+
+  .order-layout > .order-summary {
+    grid-area: summary;
+  }
+
+  .order-banners {
+    grid-area: banner;
+  }
+
+  .order-layout > .order-item {
+    grid-area: item;
+  }
+
+  .order-layout > .order-journal {
+    grid-area: journal;
+  }
+
+  .order-layout__side {
+    position: sticky;
+    top: calc(var(--ac-top-bar) + var(--ac-space-4));
+    display: flex;
+    grid-area: side;
+    flex-direction: column;
+    gap: var(--ac-space-4);
+  }
 }
 
 .decline-reasons {
@@ -1615,8 +2357,51 @@ a.ac-button {
   gap: var(--ac-space-4);
 }
 
-.manual .ac-keypad {
-  margin-top: var(--ac-space-2);
+/* The manual entry fills the panel: the cells as wide as the keypad, the
+   keypad at the bottom under the thumb (S-SCAN-02, TASK-079). */
+.manual {
+  flex: 1;
+}
+
+.manual .ac-code__cells {
+  width: 100%;
+  column-gap: var(--ac-space-4);
+}
+
+.manual .ac-code__group {
+  flex: 1 1 0;
+  max-width: none;
+}
+
+.manual .ac-code__cell {
+  flex: 1 1 0;
+  width: auto;
+}
+
+.manual__hint {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.manual__keypad {
+  margin-top: auto;
+  padding-top: var(--ac-space-2);
+}
+
+.scanner__to-orders {
+  align-self: center;
+}
+
+/* A computer types on its keyboard: the entry stays together in the middle. */
+@media (min-width: 1024px) {
+  .manual {
+    flex: none;
+  }
+
+  .manual__keypad {
+    margin-top: 0;
+  }
 }
 
 /* «Ищем заявку» after 300 ms, or why the search waits (429): the line keeps its
@@ -1969,34 +2754,76 @@ a.ac-button {
   gap: var(--ac-space-2);
 }
 
-/* Five tabs with their counters: one line that scrolls sideways on a phone. */
-.price-tabs {
-  display: flex;
+/* The summary of a review (TASK-079): five numbers, `title` over their names;
+   a number is the tab of its rows (radius S, the chosen one tinted). */
+.review-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
   gap: var(--ac-space-2);
-  margin: 0 calc(-1 * var(--ac-space-4));
-  padding: 0 var(--ac-space-4) var(--ac-space-1);
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.price-tab {
-  flex: none;
+.review-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-height: var(--ac-touch-target);
-  padding: 0 var(--ac-space-4);
+  padding: var(--ac-space-2) var(--ac-space-3);
   border: var(--ac-line-hairline) solid var(--ac-color-border);
-  border-radius: 999px;
-  background: var(--ac-color-surface);
+  border-radius: var(--ac-radius-s);
+  background: transparent;
   color: var(--ac-color-text);
-  font: inherit;
-  font-size: 14px;
-  white-space: nowrap;
+  text-align: left;
   cursor: pointer;
 }
 
-.price-tab--on {
-  border-color: var(--ac-color-accent);
+.review-stat .ac-text-caption {
+  color: var(--ac-color-text-muted);
+}
+
+.review-stat--on {
+  border-color: transparent;
   background: var(--ac-color-accent-tint);
-  font-weight: var(--ac-font-weight-body-strong);
+  color: var(--ac-color-accent-on-tint);
+}
+
+.review-stat--on .ac-text-caption {
+  color: var(--ac-color-accent-on-tint);
+}
+
+/* The upload and «Скачать мой прайс»: one under the other, side by side from 1024. */
+.price-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ac-space-4);
+  align-items: stretch;
+}
+
+@media (min-width: 1024px) {
+  .price-top {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
+.price-history__row > .ac-badge {
+  flex: none;
+  white-space: nowrap;
+}
+
+.price-history-table__file {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.price-result {
+  gap: var(--ac-space-8);
+}
+
+.price-result__reason-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .price-review__bulk {
@@ -2019,10 +2846,6 @@ a.ac-button {
   padding: var(--ac-space-4);
   border-radius: var(--ac-radius-m);
   background: var(--ac-color-surface);
-}
-
-.review-row--sharp {
-  box-shadow: inset 4px 0 0 var(--ac-color-warning);
 }
 
 .review-row__file,
@@ -2125,16 +2948,32 @@ a.ac-button {
   gap: var(--ac-space-2);
 }
 
+/* «Применить: …» stays in reach: above the tabs and the raised «Сканер» on a phone (C2). */
 .price-apply {
   position: sticky;
-  bottom: var(--ac-space-2);
-  z-index: 1;
+  bottom: calc(
+    var(--ac-tab-bar) + env(safe-area-inset-bottom) + var(--ac-center-tab-lift) + var(--ac-space-2)
+  );
+  z-index: 3;
   gap: var(--ac-space-2);
-  box-shadow: 0 2px 12px rgb(0 0 0 / 12%);
+  box-shadow: var(--ac-float-shadow);
 }
 
-.price-apply .ac-button {
+.price-apply > .ac-button {
+  width: 100%;
+  min-height: var(--ac-button-l);
   white-space: normal;
+}
+
+@media (min-width: 1024px) {
+  .price-apply {
+    bottom: var(--ac-space-2);
+  }
+
+  .price-apply > .ac-button {
+    width: auto;
+    align-self: flex-end;
+  }
 }
 
 .price-apply__note,
@@ -2334,10 +3173,8 @@ a.ac-button {
 
   .review-list--table .review-row {
     display: grid;
-    grid-template-columns: minmax(160px, 1.1fr) minmax(220px, 1.6fr) minmax(150px, 1fr) minmax(
-        200px,
-        1.2fr
-      );
+    /* The decisions take the width of their words (never «Ве / рн / о»). */
+    grid-template-columns: minmax(140px, 1fr) minmax(200px, 1.4fr) minmax(150px, 1fr) auto;
     align-items: start;
     gap: var(--ac-space-4);
     padding: var(--ac-space-3) var(--ac-space-4);
@@ -2349,10 +3186,13 @@ a.ac-button {
     border-top: var(--ac-line-hairline) solid var(--ac-color-border);
   }
 
-  .price-tabs {
-    flex-wrap: wrap;
-    margin: 0;
-    padding: 0;
-    overflow: visible;
+  /* The three decisions of a row in one line, S 36 (TASK-079). */
+  .review-list--table .review-row__actions {
+    flex-wrap: nowrap;
+  }
+
+  .review-list--table .review-row__actions-cell .ac-button {
+    flex: none;
+    white-space: nowrap;
   }
 }

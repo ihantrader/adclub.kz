@@ -3,6 +3,7 @@ import {
   Banner,
   Button,
   Chip,
+  ChipRow,
   EmptyState,
   LoadingContent,
   ScreenError,
@@ -16,6 +17,7 @@ import { apiClient } from "../api";
 import { useOnline } from "@adclub/web-session";
 import { useT } from "../i18n";
 import { navigate, replaceRouteState, useRouteState } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import { OfferCardRow, OfferTableRow } from "./OfferRow";
 import { cardMissing, scheduleProblem } from "./offer-rules";
 import { useWide } from "./use-wide";
@@ -227,18 +229,25 @@ export function OffersList() {
   const noCard = shown ? cardMissing(shown.offers) : false;
   const retry = { label: t("common.retry"), onRetry: () => load(query) };
 
+  // A secondary button (C15): on a phone across under the title, from 600 beside it.
   const addButton = (
-    <Button icon="plus" onClick={() => navigate("offerSearch")} disabled={!online}>
+    <Button
+      variant="secondary"
+      icon="plus"
+      className="page__head-action"
+      onClick={() => navigate("offerSearch")}
+      disabled={!online}
+    >
       {t("offers.add")}
     </Button>
   );
+  // An empty «Снятые» has nothing to search or filter (TASK-079).
+  const emptyWithdrawn =
+    query.tab === "withdrawn" && counts !== null && counts !== undefined && counts.withdrawn === 0;
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title page__title">{t("offers.title")}</h1>
-        {addButton}
-      </div>
+      <PageHeader title={t("offers.title")} actions={addButton} />
 
       <div className="offers-controls">
         <Segments<OfferTab>
@@ -250,52 +259,56 @@ export function OffersList() {
             { value: "withdrawn", label: tabLabel("offers.tabWithdrawn", counts?.withdrawn) },
           ]}
         />
-        <SearchField
-          label={t("offers.searchLabel")}
-          placeholder={t("offers.searchPlaceholder")}
-          clearLabel={t("offers.clearSearch")}
-          value={typed}
-          maxLength={100}
-          onChange={setTyped}
-        />
-        <div className="chips" role="group" aria-label={t("offers.filters")}>
-          <Chip
-            selected={query.availability === "in_stock"}
-            onClick={() =>
-              setQuery((current) => ({
-                ...current,
-                availability: current.availability === "in_stock" ? null : "in_stock",
-              }))
-            }
-          >
-            {t("offers.inStock")}
-          </Chip>
-          <Chip
-            selected={query.availability === "on_order"}
-            onClick={() =>
-              setQuery((current) => ({
-                ...current,
-                availability: current.availability === "on_order" ? null : "on_order",
-              }))
-            }
-          >
-            {t("offers.onOrder")}
-          </Chip>
-          <Chip
-            selected={query.withoutPhoto}
-            onClick={() =>
-              setQuery((current) => ({ ...current, withoutPhoto: !current.withoutPhoto }))
-            }
-          >
-            {t("offers.filterNoPhoto")}
-          </Chip>
-          <Chip
-            selected={query.services}
-            onClick={() => setQuery((current) => ({ ...current, services: !current.services }))}
-          >
-            {t("offers.filterServices")}
-          </Chip>
-        </div>
+        {!emptyWithdrawn && (
+          <SearchField
+            label={t("offers.searchLabel")}
+            placeholder={t("offers.searchPlaceholder")}
+            clearLabel={t("offers.clearSearch")}
+            value={typed}
+            maxLength={100}
+            onChange={setTyped}
+          />
+        )}
+        {!emptyWithdrawn && (
+          <ChipRow label={t("offers.filters")}>
+            <Chip
+              selected={query.availability === "in_stock"}
+              onClick={() =>
+                setQuery((current) => ({
+                  ...current,
+                  availability: current.availability === "in_stock" ? null : "in_stock",
+                }))
+              }
+            >
+              {t("offers.inStock")}
+            </Chip>
+            <Chip
+              selected={query.availability === "on_order"}
+              onClick={() =>
+                setQuery((current) => ({
+                  ...current,
+                  availability: current.availability === "on_order" ? null : "on_order",
+                }))
+              }
+            >
+              {t("offers.onOrder")}
+            </Chip>
+            <Chip
+              selected={query.withoutPhoto}
+              onClick={() =>
+                setQuery((current) => ({ ...current, withoutPhoto: !current.withoutPhoto }))
+              }
+            >
+              {t("offers.filterNoPhoto")}
+            </Chip>
+            <Chip
+              selected={query.services}
+              onClick={() => setQuery((current) => ({ ...current, services: !current.services }))}
+            >
+              {t("offers.filterServices")}
+            </Chip>
+          </ChipRow>
+        )}
       </div>
 
       {noCard && <Banner tone="warning">{t("offers.cardBanner")}</Banner>}
@@ -408,7 +421,11 @@ function ListBody({
       );
     }
     return query.tab === "withdrawn" ? (
-      <EmptyState icon="archive" title={t("offers.emptyWithdrawn")} />
+      <EmptyState
+        icon="archive"
+        title={t("offers.emptyWithdrawn")}
+        text={t("offers.withdrawnHint")}
+      />
     ) : (
       <EmptyState
         icon="tags"
@@ -422,24 +439,21 @@ function ListBody({
   if (wide) {
     return (
       <div className="table-wrap">
-        <table className="offers-table">
+        <table className="data-table offers-table">
           <caption className="ac-visually-hidden">{t("offers.title")}</caption>
           <thead>
             <tr>
+              <th scope="col">
+                <span className="ac-visually-hidden">{t("offers.tablePhoto")}</span>
+              </th>
               <th scope="col">{t("offers.tableItem")}</th>
-              {query.tab === "on_sale" ? (
-                <th scope="col" colSpan={3}>
-                  {t("offers.tablePriceTerms")}
-                </th>
-              ) : (
-                <>
-                  <th scope="col">{t("offers.price")}</th>
-                  <th scope="col">{t("offers.availability")}</th>
-                  <th scope="col">{t("offers.leadDays")}</th>
-                </>
-              )}
+              <th scope="col" colSpan={3}>
+                {t("offers.tablePriceTerms")}
+              </th>
               <th scope="col">{t("offers.receiving")}</th>
-              <th scope="col">{t("offers.tableActive")}</th>
+              <th scope="col" className="num-col">
+                {t("offers.tableActive")}
+              </th>
               <th scope="col">
                 <span className="ac-visually-hidden">{t("offers.tableActions")}</span>
               </th>
@@ -456,7 +470,7 @@ function ListBody({
   }
 
   return (
-    <div className="offer-list">
+    <div className="card-grid">
       {offers.map((offer) => (
         <OfferCardRow key={offer.id} offer={offer} onChanged={onChanged} onMoved={onMoved} />
       ))}

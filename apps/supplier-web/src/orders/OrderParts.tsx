@@ -1,14 +1,16 @@
 import type { OrderFulfillment, OrderKind, SupplierOrderSummary } from "@adclub/contracts";
-import { Badge, Button, Icon, StatusBadge } from "@adclub/ui";
+import { orderStatusGroups, type IconName } from "@adclub/ui-core";
+import { ActionBar, Badge, Button, Icon, StatusBadge, TypeMark } from "@adclub/ui";
 import { useCallback, type MouseEvent } from "react";
 import { useLanguage, useT } from "../i18n";
-import { formatAmount } from "../offers/offer-rules";
+import { formatAmount, TENGE } from "../offers/offer-rules";
 import { navigateTo, orderPath } from "../router";
 import { useNow } from "./live";
 import {
   answerTimer,
   durationText,
   formatAt,
+  formatDate,
   formatWhen,
   orderActions,
   statusGroup,
@@ -32,7 +34,7 @@ export function useAt(timeZone: string): (iso: string) => string {
 
 /** «12 500 ₸» */
 export function Money({ value }: { value: number }) {
-  return <span className="num">{formatAmount(value)} ₸</span>;
+  return <span className="num">{`${formatAmount(value)}${TENGE}`}</span>;
 }
 
 /**
@@ -59,12 +61,59 @@ export function AnswerTimer({ respondBy }: { respondBy: string }) {
   );
 }
 
+/**
+ * The icon of a finished order says how it ended (TASK-079): given out —
+ * a check, cancelled or declined — a cross, ran out of time — a clock;
+ * the colour stays the group's (DESIGN 7.8). Orders in progress keep the
+ * icon of their group.
+ */
+function outcomeIcon(status: SupplierOrderSummary["status"]): IconName | null {
+  switch (status) {
+    case "completed":
+      return "circleCheck";
+    case "cancelled_by_user":
+    case "cancelled_by_admin":
+    case "declined_by_supplier":
+    case "no_show":
+      return "circleX";
+    case "response_expired":
+    case "reserve_expired":
+    case "term_expired":
+    case "visit_unresolved":
+      return "clock";
+    default:
+      return null;
+  }
+}
+
 export function OrderStatus({ order }: { order: Pick<SupplierOrderSummary, "status" | "kind"> }) {
   const t = useT();
+  const group = statusGroup(order.status);
+  const icon = outcomeIcon(order.status);
+  const text = t(statusKey(order.status, order.kind));
+  return icon ? (
+    <Badge tone={orderStatusGroups[group].tone} icon={icon}>
+      {text}
+    </Badge>
+  ) : (
+    <StatusBadge group={group}>{text}</StatusBadge>
+  );
+}
+
+/**
+ * The status as the heading of the order card (S-ORD-02, DESIGN 7.4:
+ * `title` «статус заявки»): the word, with the icon of its group in the
+ * group's colour — the meaning is never the colour alone.
+ */
+export function OrderHeadline({ order }: { order: Pick<SupplierOrderSummary, "status" | "kind"> }) {
+  const t = useT();
+  const group = statusGroup(order.status);
+  const { tone, icon } = orderStatusGroups[group];
   return (
-    <StatusBadge group={statusGroup(order.status)}>
-      {t(statusKey(order.status, order.kind))}
-    </StatusBadge>
+    <h2 className={`ac-text-title order-headline order-headline--${tone}`}>
+      <Icon name={outcomeIcon(order.status) ?? icon} size={24} />
+      <span>{t(statusKey(order.status, order.kind))}</span>
+    </h2>
   );
 }
 
@@ -106,44 +155,42 @@ export function OrderReceiving({
  */
 export function OrderMarks({
   order,
+  withKind = true,
 }: {
   order: Pick<SupplierOrderSummary, "isTest" | "closure" | "kind" | "status" | "onOrderTerm">;
+  /**
+   * `false` — the table: the kind has a column of its own, and an overdue
+   * supply is said by the deadline in the «Срок и статус» column.
+   */
+  withKind?: boolean;
 }) {
   const t = useT();
+  // Kinds and properties are quiet marks, not badges (C11); only a problem is a badge.
   return (
     <>
-      {order.kind === "on_order" && (
-        <Badge tone="neutral" icon="package">
-          {t("orders.mark.onOrder")}
-        </Badge>
-      )}
-      {order.kind === "service" && (
-        <Badge tone="neutral" icon="car">
-          {t("orders.mark.service")}
-        </Badge>
-      )}
-      {supplyOverdue(order) && (
+      {withKind && <OrderKindMark kind={order.kind} />}
+      {withKind && supplyOverdue(order) && (
         <Badge tone="warning" icon="alertTriangle">
           {t("orders.mark.supplyOverdue")}
         </Badge>
       )}
-      {order.isTest && (
-        <Badge tone="neutral" icon="info">
-          {t("orders.mark.test")}
-        </Badge>
-      )}
+      {order.isTest && <TypeMark icon="info">{t("orders.mark.test")}</TypeMark>}
       {order.closure?.method === "admin" && (
-        <Badge tone="neutral" icon="lock">
-          {t("orders.mark.closedByAdmin")}
-        </Badge>
+        <TypeMark icon="lock">{t("orders.mark.closedByAdmin")}</TypeMark>
       )}
       {order.closure?.late && order.closure.method !== "admin" && (
-        <Badge tone="neutral" icon="clock">
-          {t("orders.mark.closedLate")}
-        </Badge>
+        <TypeMark icon="clock">{t("orders.mark.closedLate")}</TypeMark>
       )}
     </>
   );
+}
+
+/** «Под заказ», «Услуга» — the kind of an order; one in stock says nothing unless asked (`stock`). */
+export function OrderKindMark({ kind, stock = false }: { kind: OrderKind; stock?: boolean }) {
+  const t = useT();
+  if (kind === "on_order") return <TypeMark icon="clock">{t("orders.mark.onOrder")}</TypeMark>;
+  if (kind === "service") return <TypeMark icon="wrench">{t("orders.mark.service")}</TypeMark>;
+  return stock ? <TypeMark icon="package">{t("orders.mark.inStock")}</TypeMark> : null;
 }
 
 /**
@@ -158,6 +205,7 @@ export function WorkDeadline({
   when: (iso: string) => string;
 }) {
   const t = useT();
+  const { lang } = useLanguage();
   if (
     (order.status === "reserve_expired" || order.status === "visit_unresolved") &&
     order.lateCloseUntil
@@ -193,6 +241,18 @@ export function WorkDeadline({
       <span className="timer">
         <Icon name="clock" size={16} />
         {t("orders.visitAt", { time: when(order.serviceVisit.confirmed.visitAt) })}
+      </span>
+    );
+  }
+  // An order under order with its term confirmed: by when to bring it (TASK-079);
+  // past it — `warning`, with its icon.
+  const confirmedOn = order.onOrderTerm?.confirmed?.readyOn;
+  if (order.status === "accepted" && confirmedOn) {
+    const overdue = supplyOverdue(order);
+    return (
+      <span className={overdue ? "timer timer--urgent" : "timer"}>
+        <Icon name={overdue ? "alertTriangle" : "clock"} size={16} />
+        {t("orders.bringBy", { date: formatDate(confirmedOn, lang) })}
       </span>
     );
   }
@@ -257,15 +317,44 @@ export function QuickActions({
   const now = useNow();
   const actions = orderActions(order, now, { blocked });
   if (actions.primary !== "accept") return null;
-  const size = compact ? "s" : "m";
+  // In a list every row has them: secondary, never the screen's main button (C15).
+  const accept = (
+    <Button
+      key="accept"
+      variant="secondary"
+      size={compact ? "s" : "m"}
+      disabled={!online}
+      onClick={onAccept}
+    >
+      {t(actionLabel("accept", order.kind))}
+    </Button>
+  );
+  const decline = (
+    <Button
+      key="decline"
+      variant="secondary"
+      destructive
+      size={compact ? "s" : "m"}
+      disabled={!online}
+      onClick={onDecline}
+    >
+      {t("orders.decline")}
+    </Button>
+  );
+  if (compact) {
+    return (
+      <div className="order-card__actions">
+        {decline}
+        {accept}
+      </div>
+    );
+  }
   return (
-    <div className="order-card__actions">
-      <Button variant="secondary" size={size} disabled={!online} onClick={onDecline}>
-        {t("orders.decline")}
-      </Button>
-      <Button size={size} disabled={!online} onClick={onAccept}>
-        {t(actionLabel("accept", order.kind))}
-      </Button>
-    </div>
+    <ActionBar
+      compact
+      className="order-card__actions"
+      label={t("orders.actionsLabel")}
+      others={[accept, decline]}
+    />
   );
 }

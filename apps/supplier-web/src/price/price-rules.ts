@@ -257,6 +257,28 @@ export function sizeText(bytes: number, t: Translate): string {
 }
 
 /** The line under an upload in the history: how far its reading is. */
+type CountKey =
+  | "price.part.confident"
+  | "price.part.review"
+  | "price.part.notFound"
+  | "price.part.updated"
+  | "price.part.created"
+  | "price.part.withdrawn"
+  | "price.part.requested";
+
+/**
+ * «Обновлено — 12, на добавление — 3»: only the parts that happened (C18,
+ * TASK-079) — «снято — 0, создано — 0» said nothing; none at all — «Без изменений».
+ */
+export function countsText(parts: readonly (readonly [CountKey, number])[], t: Translate): string {
+  const said = parts
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => t(key, { n: formatNumber(n) }))
+    .join(", ");
+  if (!said) return t("price.part.none");
+  return said.charAt(0).toLocaleUpperCase() + said.slice(1);
+}
+
 export function progressText(entry: PriceImport, t: Translate, lang: Lang): string | null {
   if (entry.status === "parsing") {
     return entry.progress && entry.progress.done > 0
@@ -286,19 +308,25 @@ export function progressText(entry: PriceImport, t: Translate, lang: Lang): stri
     });
   }
   if (entry.status === "review" && entry.match) {
-    return t("price.matched.short", {
-      confident: formatNumber(entry.match.confident),
-      review: formatNumber(entry.match.review),
-      notFound: formatNumber(entry.match.notFound),
-    });
+    return countsText(
+      [
+        ["price.part.confident", entry.match.confident],
+        ["price.part.review", entry.match.review],
+        ["price.part.notFound", entry.match.notFound],
+      ],
+      t,
+    );
   }
   if (entry.status === "applied" && entry.result) {
-    return t("price.applied.short", {
-      updated: formatNumber(entry.result.updated + entry.result.returned),
-      created: formatNumber(entry.result.created),
-      withdrawn: formatNumber(entry.result.withdrawnOutOfStock + entry.result.withdrawnMissing),
-      requested: formatNumber(entry.result.requested),
-    });
+    return countsText(
+      [
+        ["price.part.updated", entry.result.updated + entry.result.returned],
+        ["price.part.created", entry.result.created],
+        ["price.part.withdrawn", entry.result.withdrawnOutOfStock + entry.result.withdrawnMissing],
+        ["price.part.requested", entry.result.requested],
+      ],
+      t,
+    );
   }
   if (entry.status === "expired") return t("price.expired.short");
   return null;

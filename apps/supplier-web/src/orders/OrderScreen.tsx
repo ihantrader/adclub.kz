@@ -1,6 +1,7 @@
 import { isApiError } from "@adclub/api-client";
 import type { SupplierOrder } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
   DelayedSkeleton,
@@ -8,10 +9,8 @@ import {
   EmptyState,
   FadeSwap,
   Icon,
-  IconButton,
   ScreenError,
   SkeletonList,
-  toastObstacle,
   useLoadingGate,
   useToast,
 } from "@adclub/ui";
@@ -20,7 +19,9 @@ import { apiClient } from "../api";
 import { refreshCompany } from "../cabinet/cabinet-store";
 import { formatPhone, useOnline } from "@adclub/web-session";
 import { useLanguage, useT } from "../i18n";
+import { useWide } from "../offers/use-wide";
 import { goBack, navigate, useRouteId } from "../router";
+import { PageHeader } from "../screens/PageHeader";
 import { DeclineDialog } from "./DeclineDialog";
 import { TermDialog } from "./TermDialog";
 import { TimeDialog } from "./TimeDialog";
@@ -29,8 +30,8 @@ import {
   AnswerTimer,
   FulfillmentLabel,
   Money,
+  OrderHeadline,
   OrderMarks,
-  OrderStatus,
   WorkDeadline,
   actionLabel,
   useAt,
@@ -158,14 +159,36 @@ function OrderCard({ id, timeZone, blocked }: { id: string; timeZone: string; bl
   );
 }
 
-function BackHead({ title }: { title: string }) {
-  const t = useT();
+/** A button of the card's action bar: the main one L, the others secondary, «Отказать» in `danger`. */
+function ActionButton({
+  action,
+  main,
+  disabled,
+  label,
+  onPress,
+}: {
+  action: OrderAction;
+  main: boolean;
+  disabled: boolean;
+  label: string;
+  onPress: (action: OrderAction) => unknown;
+}) {
   return (
-    <div className="page__head page__head--back">
-      <IconButton icon="arrowLeft" label={t("common.back")} onClick={() => goBack("orders")} />
-      <h1 className="ac-text-title page__title">{title}</h1>
-    </div>
+    <Button
+      size={main ? "l" : "m"}
+      variant={main ? "primary" : "secondary"}
+      destructive={action === "decline" || action === "noShow"}
+      disabled={disabled}
+      onClick={() => onPress(action)}
+    >
+      {label}
+    </Button>
   );
+}
+
+/** The order is a child page: its title and «назад» are in the top bar (C3). */
+function BackHead({ title }: { title: string }) {
+  return <PageHeader title={title} back={() => goBack("orders")} />;
 }
 
 function OrderView({
@@ -185,6 +208,7 @@ function OrderView({
   const { lang } = useLanguage();
   const toast = useToast();
   const online = useOnline();
+  const wide = useWide();
   const now = useNow();
   const when = useWhen(timeZone);
   const at = useAt(timeZone);
@@ -357,202 +381,240 @@ function OrderView({
   const priceChanged =
     order.currentOfferPrice !== null && order.currentOfferPrice !== order.unitPrice;
 
+  // The card says a date once (TASK-079): a visit's time and a confirmed term are in their rows.
+  const deadlineInRows =
+    (order.status === "accepted" && Boolean(order.serviceVisit?.confirmed)) ||
+    (order.status === "accepted" && Boolean(order.onOrderTerm?.confirmed));
+  const hasActions = actions.primary !== null || actions.secondary.length > 0;
+  const offline = !online && needsNetwork(actions.primary ?? actions.secondary[0] ?? "giveOut");
+  const button = (action: OrderAction, main: boolean) => (
+    <ActionButton
+      key={action}
+      action={action}
+      main={main}
+      disabled={held || (!online && needsNetwork(action))}
+      label={label(action)}
+      onPress={press}
+    />
+  );
+
   return (
     <>
       <BackHead title={t("orders.number", { number: order.number })} />
 
-      <div className="order-head">
-        <OrderStatus order={order} />
-        {order.status === "created" ? (
-          <AnswerTimer respondBy={order.respondBy} />
-        ) : (
-          <WorkDeadline order={order} when={when} />
-        )}
-        <OrderMarks order={order} />
-      </div>
-
-      {notice && (
-        <Banner
-          tone={notice.conflict ? "neutral" : "danger"}
-          icon={notice.conflict ? "info" : undefined}
-        >
-          {notice.text}
-        </Banner>
-      )}
-      {blocked && (actions.primary !== null || actions.secondary.length > 0) && (
-        <Banner tone="warning">{t("orders.blockedNote")}</Banner>
-      )}
-
-      <section className="card" aria-labelledby="order-customer">
-        <h2 id="order-customer" className="ac-text-heading">
-          {t("orders.customer")}
-        </h2>
-        {order.customer.kind === "hidden" ? (
-          <p className="order-hidden">
-            <Icon name="lock" size={20} />
-            <span>{t("orders.customerHidden")}</span>
+      <div className="order-layout">
+        <section className="order-summary" aria-label={t("orders.cardTitle")}>
+          <OrderHeadline order={order} />
+          <p className="ac-text-body-s ac-muted">
+            {t("orders.createdAt", { time: when(order.createdAt) })}
           </p>
-        ) : (
-          <div className="stack-s">
-            <p className="ac-text-body-strong">
-              {order.customer.name ?? t("orders.customerNoName")}
-            </p>
-            <p className="num">{formatPhone(order.customer.phone)}</p>
-            <div className="actions-row">
-              <a
-                className="ac-button ac-button--secondary ac-button--m"
-                href={`tel:${order.customer.phone}`}
-              >
-                <Icon name="phone" size={20} />
-                <span>{t("orders.call")}</span>
-              </a>
-              <a
-                className="ac-button ac-button--secondary ac-button--m"
-                href={whatsappLink(order.customer.phone)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Icon name="whatsapp" size={20} />
-                <span>{t("orders.whatsapp")}</span>
-              </a>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className="card" aria-labelledby="order-item">
-        <h2 id="order-item" className="ac-text-heading">
-          {t("orders.item")}
-        </h2>
-        <div className="item-block">
-          <span className="item-block__thumb" aria-hidden="true">
-            {order.item.photo ? (
-              <img src={order.item.photo.thumbUrl} alt="" />
+          <div className="order-head">
+            {order.status === "created" ? (
+              <AnswerTimer respondBy={order.respondBy} />
             ) : (
-              <Icon name="package" size={24} />
+              !deadlineInRows && <WorkDeadline order={order} when={when} />
             )}
-          </span>
-          <div className="item-block__text">
-            <p className="ac-text-body-strong item-block__name">{order.item.name.text}</p>
-            {(order.item.brand || order.item.article) && (
-              <p className="ac-text-body-s ac-muted">
-                {[order.item.brand, order.item.article].filter(Boolean).join(" · ")}
-              </p>
-            )}
+            <OrderMarks order={order} />
           </div>
-        </div>
-        <dl className="facts">
-          {/* A visit for a service has no quantity (SCREENS M-ORD-01, TASK-039.B). */}
-          {!visit && (
-            <div>
-              <dt>{t("orders.quantity")}</dt>
-              <dd className="num">{order.quantity}</dd>
-            </div>
-          )}
-          <div>
-            <dt>{t("orders.priceByOrder")}</dt>
-            <dd>
-              <Money value={order.unitPrice} />
-              {priceChanged && <span className="facts__note">{t("orders.priceFixed")}</span>}
-            </dd>
-          </div>
-          <div>
-            <dt>{t("orders.total")}</dt>
-            <dd className="ac-text-body-strong">
-              <Money value={order.total} />
-            </dd>
-          </div>
-          {visit ? (
-            <>
-              <div>
-                <dt>{t("orders.car")}</dt>
-                <dd>{visit.car}</dd>
-              </div>
-              <div>
-                <dt>{t("orders.visitTime")}</dt>
-                <dd>{visit.time}</dd>
-              </div>
-            </>
-          ) : (
-            <div>
-              <dt>{t("orders.receiving")}</dt>
-              <dd>
-                <FulfillmentLabel fulfillment={order.fulfillment} />
-                {order.receiptOn && (
-                  <span className="facts__note">
-                    {t("orders.receiptOn", { date: formatDate(order.receiptOn, lang) })}
-                  </span>
-                )}
-              </dd>
-            </div>
-          )}
-          {term && (
-            <div>
-              <dt>{t("orders.term")}</dt>
-              <dd>
-                {term.text}
-                {term.note && <span className="facts__note">{term.note}</span>}
-              </dd>
-            </div>
-          )}
-        </dl>
-        {order.comment && (
-          <p className="ac-text-body-s">
-            <span className="ac-muted">{t("orders.comment")}: </span>
-            {order.comment}
-          </p>
-        )}
-        {order.decline && (order.decline.reason || order.decline.note) && (
-          <p className="ac-text-body-s">
-            <span className="ac-muted">{t("orders.declineReason")}: </span>
-            {[order.decline.reason && t(declineReasonKey(order.decline.reason)), order.decline.note]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        )}
-      </section>
-
-      {journal.length > 0 && (
-        <section className="card" aria-labelledby="order-journal">
-          <h2 id="order-journal" className="ac-text-heading">
-            {t("orders.journal")}
-          </h2>
-          <ol className="journal">
-            {journal.map((line) => (
-              <li key={line.id} className="ac-text-body-s">
-                {line.text}
-              </li>
-            ))}
-          </ol>
         </section>
-      )}
 
-      {(actions.primary || actions.secondary.length > 0) && (
-        <div className="save-bar order-actions" {...toastObstacle}>
-          {actions.secondary.map((action) => (
-            <Button
-              key={action}
-              variant="secondary"
-              destructive={action === "decline"}
-              disabled={held || (!online && needsNetwork(action))}
-              onClick={() => press(action)}
-            >
-              {label(action)}
-            </Button>
-          ))}
-          {actions.primary && (
-            <Button
-              disabled={held || (!online && needsNetwork(actions.primary))}
-              onClick={() => press(actions.primary!)}
-            >
-              {label(actions.primary)}
-            </Button>
-          )}
-          {!online && needsNetwork(actions.primary ?? actions.secondary[0]!) && (
-            <span className="ac-text-caption ac-muted">{t("common.needNetwork")}</span>
+        {(notice || (blocked && hasActions)) && (
+          <div className="order-banners">
+            {notice && (
+              <Banner
+                tone={notice.conflict ? "neutral" : "danger"}
+                icon={notice.conflict ? "info" : undefined}
+              >
+                {notice.text}
+              </Banner>
+            )}
+            {blocked && hasActions && <Banner tone="warning">{t("orders.blockedNote")}</Banner>}
+          </div>
+        )}
+
+        {/* From 1024 the client and the actions stand in a column on the right, in sight. */}
+        <div className="order-layout__side">
+          <section className="card order-customer" aria-labelledby="order-customer">
+            <h2 id="order-customer" className="ac-text-heading">
+              {t("orders.customer")}
+            </h2>
+            {order.customer.kind === "hidden" ? (
+              <p className="order-hidden">
+                <Icon name="lock" size={20} />
+                <span>{t("orders.customerHidden")}</span>
+              </p>
+            ) : (
+              <>
+                <div className="stack-s">
+                  <p className="ac-text-body-strong">
+                    {order.customer.name ?? t("orders.customerNoName")}
+                  </p>
+                  <p className="num">{formatPhone(order.customer.phone)}</p>
+                </div>
+                <ActionBar
+                  compact
+                  others={[
+                    <a
+                      key="call"
+                      className="ac-button ac-button--secondary ac-button--m"
+                      href={`tel:${order.customer.phone}`}
+                    >
+                      <span className="ac-button__content">
+                        <Icon name="phone" size={20} />
+                        <span className="ac-button__label">{t("orders.call")}</span>
+                      </span>
+                    </a>,
+                    <a
+                      key="whatsapp"
+                      className="ac-button ac-button--secondary ac-button--m"
+                      href={whatsappLink(order.customer.phone)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <span className="ac-button__content">
+                        <Icon name="whatsapp" size={20} />
+                        <span className="ac-button__label">{t("orders.whatsapp")}</span>
+                      </span>
+                    </a>,
+                  ]}
+                />
+              </>
+            )}
+          </section>
+
+          {hasActions && (
+            <ActionBar
+              pinned
+              stacked={wide}
+              className="order-actions"
+              label={t("orders.actionsLabel")}
+              main={actions.primary && button(actions.primary, true)}
+              others={actions.secondary.map((action) => button(action, false))}
+              note={offline ? t("common.needNetwork") : undefined}
+            />
           )}
         </div>
-      )}
+
+        <section className="card order-item" aria-labelledby="order-item">
+          <h2 id="order-item" className="ac-text-heading">
+            {t("orders.item")}
+          </h2>
+          <div className="item-block">
+            <span className="item-block__thumb" aria-hidden="true">
+              {order.item.photo ? (
+                <img src={order.item.photo.thumbUrl} alt="" />
+              ) : (
+                <Icon name={order.kind === "service" ? "wrench" : "package"} size={24} />
+              )}
+            </span>
+            <div className="item-block__text">
+              <p className="ac-text-body-strong item-block__name">{order.item.name.text}</p>
+              {(order.item.brand || order.item.article) && (
+                <p className="ac-text-body-s ac-muted">
+                  {[order.item.brand, order.item.article].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+          </div>
+          <dl className="facts facts--rows">
+            {/* A visit for a service has no quantity (SCREENS M-ORD-01, TASK-039.B). */}
+            {!visit && (
+              <div>
+                <dt>{t("orders.quantity")}</dt>
+                <dd className="num">{order.quantity}</dd>
+              </div>
+            )}
+            <div>
+              <dt>{t("orders.priceByOrder")}</dt>
+              <dd>
+                <Money value={order.unitPrice} />
+                {priceChanged && <span className="facts__note">{t("orders.priceFixed")}</span>}
+              </dd>
+            </div>
+            {/* The sum only when it differs from the price (TASK-079). */}
+            {order.quantity > 1 && (
+              <div>
+                <dt>{t("orders.total")}</dt>
+                <dd className="ac-text-body-strong">
+                  <Money value={order.total} />
+                </dd>
+              </div>
+            )}
+            {visit ? (
+              <>
+                <div>
+                  <dt>{t("orders.car")}</dt>
+                  <dd>{visit.car}</dd>
+                </div>
+                <div>
+                  <dt>{t("orders.visitTime")}</dt>
+                  <dd>{visit.time}</dd>
+                </div>
+              </>
+            ) : (
+              <div>
+                <dt>{t("orders.receiving")}</dt>
+                <dd>
+                  <FulfillmentLabel fulfillment={order.fulfillment} />
+                  {/* Under order the term says the date; here it would be said twice. */}
+                  {order.receiptOn && !term && (
+                    <span className="facts__note">
+                      {t("orders.receiptOn", { date: formatDate(order.receiptOn, lang) })}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            )}
+            {term && (
+              <div>
+                <dt>{t("orders.term")}</dt>
+                <dd>
+                  {term.text}
+                  {term.note && (
+                    <span className="facts__note facts__note--warning">{term.note}</span>
+                  )}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {order.comment && (
+            <p className="ac-text-body-s">
+              <span className="ac-muted">{t("orders.comment")}: </span>
+              {order.comment}
+            </p>
+          )}
+          {order.decline && (order.decline.reason || order.decline.note) && (
+            <p className="ac-text-body-s">
+              <span className="ac-muted">{t("orders.declineReason")}: </span>
+              {[
+                order.decline.reason && t(declineReasonKey(order.decline.reason)),
+                order.decline.note,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+        </section>
+
+        {journal.length > 0 && (
+          <section className="card order-journal" aria-labelledby="order-journal">
+            <h2 id="order-journal" className="ac-text-heading">
+              {t("orders.journal")}
+            </h2>
+            {/* A timeline, not a numbered list (TASK-079). */}
+            <ul className="journal">
+              {journal.map((line) => (
+                <li key={line.id} className="ac-text-body-s">
+                  {line.text}
+                  {line.viaWhatsapp && (
+                    <span className="ac-muted"> {t("orders.journal.viaWhatsapp")}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
 
       <TermDialog
         target={proposing ? { id: order.id, number: order.number, version: order.version } : null}

@@ -12,7 +12,11 @@ export interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-export type InstallWay = "installed" | "prompt" | "ios" | "menu";
+/**
+ * `android` — Android without the browser's dialog (yet, or a browser that
+ * has none): «⋮ → Установить приложение» drawn as it looks (TASK-079).
+ */
+export type InstallWay = "installed" | "prompt" | "ios" | "android" | "menu";
 
 export interface InstallEnvironment {
   userAgent: string;
@@ -32,6 +36,7 @@ export function installWay(environment: InstallEnvironment): InstallWay {
   if (environment.standalone || environment.installedNow) return "installed";
   if (environment.hasPrompt) return "prompt";
   if (isIos(environment.userAgent, environment.maxTouchPoints)) return "ios";
+  if (/Android/.test(environment.userAgent)) return "android";
   return "menu";
 }
 

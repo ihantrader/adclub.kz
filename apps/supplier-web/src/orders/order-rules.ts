@@ -12,6 +12,7 @@ import type { Lang, SupplierTextKey } from "@adclub/i18n";
 import type { OrderStatusGroup } from "@adclub/ui-core";
 import { retryMinutes } from "../errors";
 import type { Translate } from "../i18n";
+import { keepTogether } from "../translate";
 
 /**
  * What the orders of the cabinet show (TASK-033, SCREENS S-ORD-01…03): the
@@ -125,21 +126,25 @@ export function formatAt(
 
 /** «6 октября» of a `YYYY-MM-DD` date (as the server gave it). */
 export function formatDate(date: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(localeOf(lang), {
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
+  return keepTogether(
+    new Intl.DateTimeFormat(localeOf(lang), {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    }).format(new Date(`${date}T12:00:00Z`)),
+  );
 }
 
 /** «пн, 13 окт.» — a date of the term to choose (S-ORD-04), as the server gave it. */
 export function formatTermDay(date: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(localeOf(lang), {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
+  return keepTogether(
+    new Intl.DateTimeFormat(localeOf(lang), {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    }).format(new Date(`${date}T12:00:00Z`)),
+  );
 }
 
 /** The start of today in `timeZone` (Kazakhstan has no daylight saving time). */
@@ -748,8 +753,8 @@ export function journalLines(
   formatDay: (date: string) => string = (date) => date,
   /** TASK-039: «Принял» of an order under order reads «Подтвердил срок». */
   kind?: OrderKind,
-): { id: string; text: string }[] {
-  const lines: { id: string; text: string }[] = [];
+): { id: string; text: string; viaWhatsapp: boolean }[] {
+  const lines: { id: string; text: string; viaWhatsapp: boolean }[] = [];
   for (const event of events) {
     const params = { who: actorName(event.actor, t), time: format(event.at) };
     let text: string | null;
@@ -856,8 +861,8 @@ export function journalLines(
         text = null;
     }
     if (text === null) continue;
-    if (event.channel === "whatsapp") text += ` ${t("orders.journal.viaWhatsapp")}`;
-    lines.push({ id: event.id, text });
+    // «(через WhatsApp)» is said apart, quieter (S-ORD-02, TASK-079).
+    lines.push({ id: event.id, text, viaWhatsapp: event.channel === "whatsapp" });
   }
   return lines;
 }

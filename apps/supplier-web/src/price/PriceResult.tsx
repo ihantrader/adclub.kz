@@ -1,5 +1,5 @@
 import type { PriceImport, PriceReviewRow, PriceRowNotAppliedReason } from "@adclub/contracts";
-import { Banner, Button, Icon } from "@adclub/ui";
+import { ActionBar, Banner, Button, Icon } from "@adclub/ui";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
@@ -9,7 +9,8 @@ import {
   fileText,
   notAppliedGroups,
   notAppliedText,
-  resultLines,
+  reasonParts,
+  resultRows,
   resultText,
 } from "./review-rules";
 
@@ -25,33 +26,37 @@ export function PriceResult({ entry }: { entry: PriceImport }) {
   const result = entry.result;
   if (!result) return null;
   const groups = notAppliedGroups(result);
+  const rows = resultRows(result, t);
   return (
     <div className="stack-m price-result">
       <section className="card">
-        <p className="ac-text-title-s price-result__done">
+        <p className="ac-text-heading price-result__done">
           <Icon name="circleCheck" size={24} />
           <span>{resultText(result, t)}</span>
         </p>
-        {resultLines(result, t).length > 0 && (
-          <ul className="price-result__lines">
-            {resultLines(result, t).map((line) => (
-              <li key={line} className="ac-text-body">
-                {line}
-              </li>
+        {rows.length > 0 && (
+          <dl className="facts facts--rows">
+            {rows.map((row) => (
+              <div key={row.label}>
+                <dt>{row.label}</dt>
+                <dd className="num">{row.count}</dd>
+              </div>
             ))}
-          </ul>
+          </dl>
         )}
         <p className="ac-text-body-s ac-muted">{t("result.ordersNote")}</p>
-        <div className="actions-row">
-          <Button onClick={() => navigate("offers")}>{t("result.toOffers")}</Button>
-          <Button variant="secondary" onClick={() => navigate("moderation")}>
-            {t("result.toModeration")}
-          </Button>
-        </div>
+        <ActionBar
+          main={<Button onClick={() => navigate("offers")}>{t("result.toOffers")}</Button>}
+          others={[
+            <Button key="moderation" variant="secondary" onClick={() => navigate("moderation")}>
+              {t("result.toModeration")}
+            </Button>,
+          ]}
+        />
       </section>
       {groups.length > 0 && (
         <section className="stack-s" aria-label={t("result.notApplied")}>
-          <h2 className="ac-text-title-s">{t("result.notApplied")}</h2>
+          <h2 className="ac-text-heading section-title">{t("result.notApplied")}</h2>
           <ul className="price-errors">
             {groups.map((group) => (
               <NotAppliedGroup
@@ -109,12 +114,21 @@ function NotAppliedGroup({
   return (
     <li className="price-result__reason">
       <div className="price-result__reason-head">
-        <span>
-          {notAppliedText(reason, t)} — {formatNumber(rows)}
+        {/* The number first, the reason's name, the explanation quieter under it (TASK-079). */}
+        <span className="price-result__reason-text">
+          <span>
+            <span className="ac-text-body-strong num">{formatNumber(rows)}</span>{" "}
+            {reasonParts(notAppliedText(reason, t)).name}
+          </span>
+          {reasonParts(notAppliedText(reason, t)).explanation && (
+            <span className="ac-text-caption ac-muted">
+              {reasonParts(notAppliedText(reason, t)).explanation}
+            </span>
+          )}
         </span>
-        <button type="button" className="text-link" aria-expanded={open} onClick={() => toggle()}>
+        <Button variant="text" size="s" aria-expanded={open} onClick={() => toggle()}>
           {t(open ? "result.hideRows" : "result.showRows")}
-        </button>
+        </Button>
       </div>
       {open && failed && <Banner tone="danger">{t("common.errorText")}</Banner>}
       {open && shown && (

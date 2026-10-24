@@ -13,6 +13,7 @@ import {
 import { pluralForm, type Lang, type SupplierTextKey } from "@adclub/i18n";
 import { retryMinutes } from "../errors";
 import type { Translate } from "../i18n";
+import { TENGE } from "../offers/offer-rules";
 import { formatAt } from "../orders/order-rules";
 import { formatNumber, rowsText } from "./price-rules";
 
@@ -57,6 +58,17 @@ export function tabCount(summary: PriceReviewSummary, tab: ReviewTab): number {
     case "missing":
       return summary.missing.offers;
   }
+}
+
+/** «Нужно проверить» — the name of a tab (under its number in the summary, TASK-079). */
+export function tabName(tab: ReviewTab, t: Translate): string {
+  return t(TAB_TEXT[tab]);
+}
+
+/** «1 240 строк» — all the rows of the file the review is about. */
+export function totalRowsText(summary: PriceReviewSummary, t: Translate, lang: Lang): string {
+  const { groups } = summary;
+  return rowsText(lang, groups.confident + groups.review + groups.notFound + groups.errors, t);
 }
 
 /** «Нужно проверить · 800». */
@@ -177,7 +189,7 @@ const AVAILABILITY_TEXT = {
 export function changeLines(row: PriceReviewRow, t: Translate): string[] {
   const parsed = row.parsed;
   if (!parsed || parsed.price === null) return [];
-  const price = (value: number) => `${formatNumber(value)} ₸`;
+  const price = (value: number) => `${formatNumber(value)}${TENGE}`;
   if (!row.offer) {
     const lines = [`${price(parsed.price)} · ${t("review.newOffer")}`];
     if (parsed.availability) lines.push(t(AVAILABILITY_TEXT[parsed.availability]));
@@ -354,7 +366,14 @@ export function resultText(result: PriceImportResult, t: Translate): string {
 }
 
 /** The other lines of the result, without the zero ones. */
-export function resultLines(result: PriceImportResult, t: Translate): string[] {
+/**
+ * The rest of the result as rows «подпись — число» (S-PRICE-04, TASK-079:
+ * not a bulleted list); only what happened.
+ */
+export function resultRows(
+  result: PriceImportResult,
+  t: Translate,
+): { label: string; count: string }[] {
   const lines: [SupplierTextKey, number][] = [
     ["result.created", result.created],
     ["result.returned", result.returned],
@@ -365,7 +384,18 @@ export function resultLines(result: PriceImportResult, t: Translate): string[] {
   ];
   return lines
     .filter(([, count]) => count > 0)
-    .map(([key, count]) => t(key, { n: formatNumber(count) }));
+    .map(([key, count]) => ({ label: t(key), count: formatNumber(count) }));
+}
+
+/**
+ * A reason of «Не применено» as its short name and the explanation after
+ * « — », said quieter under it (TASK-079).
+ */
+export function reasonParts(text: string): { name: string; explanation: string | null } {
+  const at = text.indexOf(" — ");
+  return at < 0
+    ? { name: text, explanation: null }
+    : { name: text.slice(0, at), explanation: text.slice(at + 3) };
 }
 
 const NOT_APPLIED_TEXT: Record<PriceRowNotAppliedReason, SupplierTextKey> = {

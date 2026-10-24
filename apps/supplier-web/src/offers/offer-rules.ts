@@ -312,8 +312,12 @@ export function parseAmount(text: string): number | null {
 }
 
 /** 13000 → «13 000» (a plain space: the field and the list show the same text). */
+/** « ₸» after a sum: a no-break space, so the sign never starts a line (C19). */
+export const TENGE = "\u00a0₸";
+
 export function formatAmount(value: number): string {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  // Groups apart with a no-break space: a sum never breaks over two lines (C19).
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
 }
 
 /** Keeps a field of whole numbers readable while typed: digits only, grouped. */

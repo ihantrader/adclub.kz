@@ -1,6 +1,7 @@
 import {
   Banner,
   BottomTabs,
+  cx,
   FadeSwap,
   Button,
   Icon,
@@ -11,6 +12,7 @@ import {
   type NavItem,
 } from "@adclub/ui";
 import { useEffect, useState, type ReactNode } from "react";
+import { PageHeaderProvider, type ChildHeader } from "./PageHeader";
 import { companyBanners } from "../cabinet/company-state";
 import type { CabinetState } from "../cabinet/cabinet-store";
 import { useOnline } from "@adclub/web-session";
@@ -20,9 +22,7 @@ import { refreshNewOrders, useNewOrders, useVisiblePoll } from "../orders/live";
 import { useInstallWay } from "../pwa/install";
 import { useAppUpdated } from "../pwa/service-worker";
 import {
-  goBackTo,
   menuOf,
-  morePages,
   navigate,
   routePaths,
   tabOf,
@@ -59,6 +59,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const updated = useAppUpdated();
   const installWay = useInstallWay();
   const [switching, setSwitching] = useState(false);
+  const [header, setHeader] = useState<ChildHeader | null>(null);
   const routeId = useRouteId();
 
   const supplierName = cabinet?.company.supplier.name ?? fallbackNames?.supplierName ?? "";
@@ -107,7 +108,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const tabs: NavItem<StaticRoute>[] = [
     ordersItem,
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
-    { key: "price", label: t("tabs.price"), icon: "fileSpreadsheet", href: routePaths.price },
+    { key: "price", label: t("tabs.price"), icon: "table", href: routePaths.price },
     {
       key: "more",
       label: t("tabs.more"),
@@ -119,12 +120,13 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
       }),
     },
   ];
-  // The desktop menu lists the sections of «Ещё» directly (design/mockups/supplier.html).
+  // The desktop menu lists the sections of «Ещё» directly (design/mockups/supplier.html),
+  // in the order of the tabs and of «Ещё» (TASK-079).
   const menu: NavItem<StaticRoute>[] = [
     ordersItem,
-    { key: "scan", label: t("tabs.scan"), icon: "scan", href: routePaths.scan },
     { key: "offers", label: t("tabs.offers"), icon: "tags", href: routePaths.offers },
-    { key: "price", label: t("tabs.price"), icon: "fileSpreadsheet", href: routePaths.price },
+    { key: "scan", label: t("tabs.scan"), icon: "scan", href: routePaths.scan },
+    { key: "price", label: t("tabs.price"), icon: "table", href: routePaths.price },
     {
       key: "moderation",
       label: t("nav.moderation"),
@@ -186,25 +188,46 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
             </div>
           }
           footer={
-            <span className="sidebar-member">
+            // The employee's name opens «Мои настройки» (it looked like an item and did nothing).
+            <a
+              className="sidebar-member"
+              href={routePaths.settings}
+              aria-current={route === "settings" ? "page" : undefined}
+              onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                navigate("settings");
+              }}
+            >
               <Icon name="user" size={20} />
               <span className="sidebar-member__name">{memberName}</span>
-            </span>
+            </a>
           }
         />
       </div>
 
       <div className="shell__main" {...toastArea}>
-        <header className="topbar">
-          {morePages.includes(route) && (
-            <IconButton
-              className="topbar__back"
-              icon="arrowLeft"
-              label={t("common.back")}
-              onClick={() => goBackTo("more")}
-            />
+        <header
+          className={cx(
+            "topbar",
+            // The company is in the side menu from 1024 (C14): the bar stays only for «назад».
+            (!header || header.deskRoot) && "topbar--phone",
           )}
-          {canSwitch ? (
+        >
+          {header ? (
+            <>
+              <IconButton
+                className="topbar__back"
+                icon="arrowLeft"
+                label={t("common.back")}
+                onClick={header.back}
+              />
+              <h1 className="ac-text-title topbar__title">{header.title}</h1>
+              <span className="topbar__company" title={supplierName}>
+                {supplierName}
+              </span>
+            </>
+          ) : canSwitch ? (
             <button
               type="button"
               className="company-chip company-chip--button"
@@ -251,14 +274,16 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
 
         {/* A page taking the place of another fades in (D-069); the header, the tabs
             and the side menu stay. Another company remounts the page entirely. */}
-        <FadeSwap
-          as="main"
-          className="page"
-          key={cabinet?.generation ?? "offline"}
-          fadeKey={routeId ? route + "/" + routeId : route}
-        >
-          {children}
-        </FadeSwap>
+        <PageHeaderProvider value={setHeader}>
+          <FadeSwap
+            as="main"
+            className="page"
+            key={cabinet?.generation ?? "offline"}
+            fadeKey={routeId ? route + "/" + routeId : route}
+          >
+            {children}
+          </FadeSwap>
+        </PageHeaderProvider>
       </div>
 
       <div className="shell__tabs">

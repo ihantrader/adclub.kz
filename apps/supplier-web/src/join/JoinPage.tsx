@@ -1,5 +1,5 @@
 import type { CityListResponse } from "@adclub/contracts";
-import { Banner, Button, Checkbox, Icon, Logo, Segments, TextField } from "@adclub/ui";
+import { Banner, Button, Checkbox, Icon, Logo, Segments, SelectField, TextField } from "@adclub/ui";
 import { typePhone, useOnline } from "@adclub/web-session";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { apiClient, setApiLanguage } from "../api";
@@ -144,29 +144,16 @@ export function JoinPage() {
               hint={binError ? undefined : t("join.binHint")}
               error={binError}
             />
-            <label className="field-block">
-              <span className="field-block__label">{t("join.city")}</span>
-              <span
-                className={`inline-field inline-field--select join-select${errors.cityId ? " inline-field--error" : ""}`}
-              >
-                <select
-                  className="inline-field__select"
-                  value={form.cityId}
-                  disabled={cities === null}
-                  aria-invalid={errors.cityId ? true : undefined}
-                  onChange={(event) => change("cityId", event.target.value)}
-                >
-                  <option value="">{t("join.cityChoose")}</option>
-                  {cities?.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.name.text}
-                    </option>
-                  ))}
-                </select>
-                <Icon name="chevronDown" size={16} />
-              </span>
-              {errors.cityId && <span className="ac-text-caption join-error">{errors.cityId}</span>}
-            </label>
+            {/* The shared select of the design system (TASK-079), not a page's own one. */}
+            <SelectField
+              label={t("join.city")}
+              value={form.cityId}
+              placeholder={t("join.cityChoose")}
+              disabled={cities === null}
+              error={errors.cityId}
+              onChange={(cityId) => change("cityId", cityId)}
+              options={(cities ?? []).map((city) => ({ value: city.id, label: city.name.text }))}
+            />
             {citiesFailed && (
               <Banner
                 tone="danger"

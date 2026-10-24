@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "sw/**/*.test.ts"],
+    // `screen-styling.test.ts` reads app.css as text (`?raw`); without this vitest hands CSS over empty.
+    css: { include: [/app\.css/] },
   },
 });

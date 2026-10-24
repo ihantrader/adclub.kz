@@ -9,6 +9,7 @@ import { servicePriceForCar, type ServicePricing } from "@adclub/domain";
 import { pluralForm, type Lang, type SupplierTextKey } from "@adclub/i18n";
 import {
   formatAmount,
+  TENGE,
   offerProblem,
   parseAmount,
   type OfferProblem,
@@ -294,7 +295,7 @@ export function servicePriceLine(
   lang: Lang,
   t: Translate,
 ): string {
-  if (offer.pricing.mode === "single") return `${formatAmount(offer.price)} ₸`;
+  if (offer.pricing.mode === "single") return `${formatAmount(offer.price)}${TENGE}`;
   const n = offer.pricing.models.length;
   const form = pluralForm(lang, n);
   const models = t(

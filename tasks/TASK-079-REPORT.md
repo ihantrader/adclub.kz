@@ -89,7 +89,7 @@ COMPLETED
 - `apps/supplier-web` `vitest run` — PASS, 16 файлов, в том числе `screen-styling.test.ts` (3)
 - тест токенов и контраста (`packages/ui-core`, `packages/ui` — `theme.css`) — PASS, файлы токенов не менялись
 - интеграционные тесты — NOT RUN: сервер не менялся
-- CI — не ждал (TASK-076). Прогон: `<CI_RUN>`
+- CI — не ждал (TASK-076). Прогон: [40081023132](https://github.com/ihantrader/adclub.kz/actions/runs/40081023132) (коммит 2685ceb; результат не ждал)
 
 ## UAT / E2E
 Все обходы — Playwright, Chromium 1248, вход сотрудником «Автомаркета» `+77055550101`, клиент — тестовый `+77010000379` (клубный доступ выдан до 31.12.2026), администратор — тестовый `+77010000380` (`admin:grant`). Настройки `login_code_resend_interval_seconds` и `login_code_requests_per_phone` не трогались.
@@ -170,7 +170,7 @@ COMPLETED
 - **AC-6 — PASS.** `packages/ui-core/src/tokens` не менялись (`git diff --stat` пуст), тесты токенов и контраста зелёные в `pnpm test`.
 - **AC-7 — PASS.** `ARCHITECTURE.md` 0.78, раздел 4.75 «Веб-компоненты»: таблица компонентов, правило «экран не стилизует сам» (I810) и его проверка.
 - **AC-8 — PASS.** `format:check`, `lint`, `typecheck`, `test`, `build` — после последней правки, см. Verification.
-- **AC-9 — PASS.** Этот отчёт, CI — `<CI_RUN>`.
+- **AC-9 — PASS.** Этот отчёт, CI — [40081023132](https://github.com/ihantrader/adclub.kz/actions/runs/40081023132) (коммит 2685ceb; результат не ждал).
 
 ### Пункты разбора — сквозные
 

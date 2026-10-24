@@ -5,6 +5,8 @@ import { WeekHoursEditor, type WeekHoursTexts } from "./schedule";
 import {
   copyToWeekdays,
   dayHoursText,
+  maskTimeText,
+  readTimeText,
   weekFormOf,
   weeklyHoursOf,
   type DayForm,
@@ -115,12 +117,40 @@ describe("WeekHoursEditor", () => {
 
   it("turns a day round the clock and back to a day off", () => {
     render(<Editor initial={weekFormOf(null)} />);
-    const mode = screen.getByLabelText("Среда: режим");
-    fireEvent.change(mode, { target: { value: "allDay" } });
+    // The mode is our list, not the browser's (TASK-080, X2): open it, choose an option.
+    const choose = (label: string) => {
+      fireEvent.click(screen.getByRole("combobox", { name: "Среда: режим" }));
+      fireEvent.click(screen.getByRole("option", { name: label }));
+    };
+    choose("Круглосуточно");
     expect(result().weeklyHours[2].intervals).toEqual([{ from: "00:00", to: "24:00" }]);
     expect(screen.queryByLabelText("Среда: с")).toBeNull();
-    fireEvent.change(mode, { target: { value: "off" } });
+    choose("Выходной");
     expect(result().weeklyHours[2].intervals).toEqual([]);
+    expect(document.querySelector("select, input[type=time]")).toBeNull();
+  });
+
+  it("takes a time by digits «ЧЧ:ММ» and hands only a whole one to the form (X23)", () => {
+    expect(maskTimeText("9")).toBe("9");
+    expect(maskTimeText("093")).toBe("09:3");
+    expect(maskTimeText("09:30")).toBe("09:30");
+    expect(maskTimeText("0930x5")).toBe("09:30");
+    expect(readTimeText("09:30")).toBe("09:30");
+    expect(readTimeText("24:00")).toBeNull();
+    expect(readTimeText("09:3")).toBeNull();
+    render(<Editor initial={weekFormOf(null)} />);
+    const from = screen.getByLabelText("Понедельник: с") as HTMLInputElement;
+    expect(from.getAttribute("inputmode")).toBe("numeric");
+    fireEvent.change(from, { target: { value: "8" } });
+    expect(from.value).toBe("8");
+    fireEvent.change(from, { target: { value: "0830" } });
+    expect(result().weeklyHours[0].intervals[0]).toEqual({ from: "08:30", to: "18:00" });
+    expect(from.value).toBe("08:30");
+    // Half a time is not sent, and leaving the field puts the form's time back.
+    fireEvent.change(from, { target: { value: "07" } });
+    expect(result().weeklyHours[0].intervals[0].from).toBe("08:30");
+    fireEvent.blur(from);
+    expect(from.value).toBe("08:30");
   });
 
   it("says a break that leaves the hours, or an end before the start, in the row itself", () => {

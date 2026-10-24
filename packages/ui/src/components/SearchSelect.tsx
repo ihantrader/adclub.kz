@@ -66,6 +66,8 @@ export interface SearchSelectProps {
   /** `name` of the field for the error a server names it by. */
   name?: string;
   texts?: SearchSelectTexts;
+  /** 40 instead of 48: a filter of a list (TASK-080, X3). */
+  compact?: boolean;
 }
 
 /**
@@ -94,6 +96,7 @@ export function SearchSelect({
   create,
   name,
   texts = RUSSIAN,
+  compact,
 }: SearchSelectProps) {
   const id = useId();
   const listId = `${id}-list`;
@@ -204,7 +207,10 @@ export function SearchSelect({
   const labelId = `${id}-label`;
   const helpId = `${id}-help`;
   return (
-    <div className="ac-field search-select" data-name={name}>
+    <div
+      className={compact ? "ac-field ac-field--compact search-select" : "ac-field search-select"}
+      data-name={name}
+    >
       <label className="ac-field__label" id={labelId} htmlFor={id}>
         {label}
       </label>

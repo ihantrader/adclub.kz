@@ -73,6 +73,18 @@ textarea {
   flex: none;
 }
 
+/* Links (TASK-080, X1): `accent`, no underline until hovered — never the
+   browser's blue. No specificity, so a button drawn as a link keeps its look. */
+:where(a) {
+  color: var(--ac-color-accent);
+  text-decoration: none;
+}
+
+:where(a:hover) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* ---------- button ---------- */
 .ac-button {
   position: relative;
@@ -88,6 +100,7 @@ textarea {
   line-height: 20px;
   font-weight: var(--ac-font-weight-label);
   text-align: center;
+  text-decoration: none;
   cursor: pointer;
   transition:
     filter var(--ac-motion-fast) var(--ac-motion-easing),
@@ -315,9 +328,12 @@ textarea {
   padding-block: var(--ac-space-3);
 }
 
+/* No browser resizer (TASK-080, X2): the field grows with its text, up to ten lines. */
 .ac-field__textarea {
   min-height: 66px;
-  resize: vertical;
+  max-height: 228px;
+  resize: none;
+  field-sizing: content;
 }
 
 /* «Выбор из списка»: the browser's select, its arrow replaced by a chevron. */
@@ -1933,10 +1949,10 @@ textarea {
 }
 
 .ac-menu__list {
-  position: absolute;
-  top: calc(100% + var(--ac-space-1));
-  right: 0;
-  z-index: 20;
+  /* Placed in the window by the component (under «⋯», to its right edge): a
+     table frame that scrolls sideways or a dialog does not cut it (TASK-080). */
+  position: fixed;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   min-width: 200px;
@@ -2103,4 +2119,436 @@ textarea {
 .ac-action-bar .ac-action-bar__measure .ac-button {
   display: inline-flex;
   width: auto;
+}
+
+/* ---------- compact fields (TASK-080, X3) ----------
+   Forms are 48 high; the filters of a list and the cells of a table are one
+   compact 40 — the field, the select, the search and the date alike. */
+.ac-field--compact .ac-field__control,
+.ac-search--compact {
+  min-height: 40px;
+}
+
+.ac-field--compact .ac-field__input,
+.ac-search--compact .ac-search__input {
+  min-height: 36px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* The buttons inside a compact field keep it 40 (the calendar, the clear). */
+.ac-field--compact .ac-date-field__toggle,
+.ac-search--compact .ac-icon-button {
+  width: 36px;
+  height: 36px;
+}
+
+.ac-field--compact.search-select .search-select__panel {
+  top: calc(40px + 26px + var(--ac-space-1));
+}
+
+.ac-icon-button--s {
+  width: 36px;
+  height: 36px;
+}
+
+/* A menu opened by words: «Администратор клуба ▾» (X15). */
+.ac-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  max-width: 280px;
+  min-height: var(--ac-button-s);
+  padding: 0 var(--ac-space-2);
+  border: 0;
+  border-radius: var(--ac-radius-s);
+  background: transparent;
+  color: var(--ac-color-text);
+  font-weight: var(--ac-font-weight-label);
+  cursor: pointer;
+}
+
+.ac-menu__trigger:hover,
+.ac-menu__trigger[aria-expanded="true"] {
+  background: var(--ac-color-fill);
+}
+
+.ac-menu__trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- «выбор из списка» (TASK-080, `Select`) ---------- */
+.ac-picker__control {
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ac-picker__control:focus-visible {
+  border-color: var(--ac-color-accent);
+}
+
+.ac-picker__control--open {
+  border-color: var(--ac-color-accent);
+}
+
+.ac-picker__control[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.ac-picker__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-field--compact .ac-picker__value {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-picker__value--empty {
+  color: var(--ac-color-text-muted);
+}
+
+.ac-field__control--disabled .ac-picker__value {
+  color: var(--ac-color-text-disabled);
+}
+
+.ac-picker__chevron {
+  color: var(--ac-color-text-muted);
+}
+
+/* The list is placed in the window by the component: over dialogs and table frames. */
+.ac-picker__list {
+  position: fixed;
+  z-index: 40;
+  max-width: min(480px, calc(100vw - 16px));
+  max-height: 320px;
+  margin: 0;
+  padding: var(--ac-space-1) 0;
+  overflow-y: auto;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  box-shadow: var(--ac-float-shadow);
+  list-style: none;
+}
+
+.ac-picker__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  min-height: 40px;
+  padding: 10px var(--ac-space-3) 10px var(--ac-space-2);
+  color: var(--ac-color-text);
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.ac-picker__option--active {
+  background: var(--ac-color-fill);
+}
+
+.ac-picker__option[aria-selected="true"] {
+  font-weight: var(--ac-font-weight-label);
+}
+
+.ac-picker__option--disabled {
+  color: var(--ac-color-text-disabled);
+  cursor: not-allowed;
+}
+
+.ac-picker__check {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 20px;
+  align-items: center;
+  color: var(--ac-color-accent);
+}
+
+/* ---------- the zone of a file (TASK-080, X2) ---------- */
+.ac-file-drop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--ac-space-2) var(--ac-space-3);
+  padding: var(--ac-space-4);
+  border: var(--ac-line) dashed var(--ac-color-border-field);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  transition:
+    border-color var(--ac-motion-fast) var(--ac-motion-easing),
+    background-color var(--ac-motion-fast) var(--ac-motion-easing);
+}
+
+.ac-file-drop--over {
+  border-color: var(--ac-color-accent);
+  background: var(--ac-color-accent-tint);
+}
+
+.ac-file-drop--error {
+  border-color: var(--ac-color-danger);
+}
+
+.ac-file-drop--disabled {
+  border-color: var(--ac-color-border);
+}
+
+.ac-file-drop__icon {
+  margin-top: 2px;
+  color: var(--ac-color-accent);
+}
+
+.ac-file-drop__text,
+.ac-file-drop__choose,
+.ac-file-drop__progress,
+.ac-file-drop__error {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.ac-file-drop__title {
+  margin: 0;
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+.ac-file-drop__hint {
+  margin: 2px 0 0;
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-file-drop__choose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-3);
+}
+
+.ac-file-drop__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+}
+
+.ac-file-drop__file {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 var(--ac-space-2);
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-file-drop__name {
+  overflow-wrap: anywhere;
+}
+
+.ac-file-drop__size,
+.ac-file-drop__file--none {
+  color: var(--ac-color-text-muted);
+}
+
+.ac-file-drop__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 0;
+  color: var(--ac-color-danger);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-file-drop__error > .ac-icon {
+  margin-top: 2px;
+}
+
+/* ---------- the head of a page (TASK-080, X11) ---------- */
+.ac-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}
+
+.ac-page-header__row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--ac-space-2) var(--ac-space-4);
+  min-height: 44px;
+}
+
+.ac-page-header__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-top: 4px;
+  margin: 0;
+  font-size: 28px;
+  line-height: 35px;
+  font-weight: var(--ac-font-weight-title-l);
+  overflow-wrap: break-word;
+}
+
+.ac-page-header__actions {
+  flex: none;
+  min-height: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.ac-page-header__subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1) var(--ac-space-3);
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 20px;
+  list-style: none;
+}
+
+.ac-crumbs li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.ac-crumbs li + li::before {
+  color: var(--ac-color-text-muted);
+  content: "›";
+}
+
+/* Wider than the page (nine tabs of an item at 1024): the bar scrolls, and
+   a soft edge at the side that hides more says so. */
+.ac-page-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0 var(--ac-space-1);
+  margin-top: var(--ac-space-4);
+  overflow-x: auto;
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+  background:
+    linear-gradient(to right, var(--ac-color-bg) 30%, transparent) left / 24px 100% no-repeat local,
+    linear-gradient(to left, var(--ac-color-bg) 30%, transparent) right / 24px 100% no-repeat local,
+    linear-gradient(
+        to right,
+        color-mix(in srgb, var(--ac-color-text) 12%, transparent),
+        transparent
+      )
+      left / 12px 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--ac-color-text) 12%, transparent), transparent)
+      right / 12px 100% no-repeat scroll;
+  scrollbar-width: thin;
+}
+
+.ac-page-tabs__tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-bottom: -1px;
+  padding: 0 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  font-weight: var(--ac-font-weight-label);
+  white-space: nowrap;
+}
+
+.ac-page-tabs__tab:hover {
+  color: var(--ac-color-text);
+  text-decoration: none;
+}
+
+.ac-page-tabs__tab:focus-visible {
+  outline-offset: -2px;
+}
+
+.ac-page-tabs__tab--on {
+  border-bottom-color: var(--ac-color-accent);
+  color: var(--ac-color-text);
+}
+
+.ac-page-tabs__count {
+  color: var(--ac-color-text-muted);
+  font-weight: var(--ac-font-weight-body);
+}
+
+/* ---------- the line over a table (TASK-080, X12) ---------- */
+.ac-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+  min-height: 36px;
+}
+
+.ac-table-toolbar__total {
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ac-table-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+}
+
+/* ---------- the empty state inside a block (TASK-080, X18) ---------- */
+.ac-empty--compact {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--ac-space-3);
+  padding: var(--ac-space-4);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  text-align: left;
+}
+
+.ac-empty--compact .ac-empty__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ac-empty__title--compact {
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+.ac-empty--compact .ac-empty__action {
+  flex: none;
+  margin-top: 0;
 }

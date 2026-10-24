@@ -10,6 +10,9 @@ export const ui = {
   alertTriangle: "warning",
   archive: "archive",
   arrowLeft: "arrow-left",
+  // Moving a row of a list down and up (the order of categories, TASK-080).
+  arrowDown: "arrow-down",
+  arrowUp: "arrow-up",
   backspace: "backspace",
   // The date field's calendar (TASK-079).
   calendar: "calendar-blank",
@@ -26,6 +29,8 @@ export const ui = {
   // The previous month of the calendar (TASK-079).
   chevronLeft: "caret-left",
   chevronRight: "caret-right",
+  // A folded block opened («Подробнее» of the journal, TASK-080).
+  chevronUp: "caret-up",
   circleCheck: "check-circle",
   circleX: "x-circle",
   // «Вставить» on the keypad of the manual code entry (S-SCAN-02, TASK-079).
@@ -37,11 +42,17 @@ export const ui = {
   dots: "dots-three",
   download: "download-simple",
   externalLink: "arrow-square-out",
+  // «Показать номер» of a hidden phone (TASK-080).
+  eye: "eye",
   fileSpreadsheet: "file-xls",
   filters: "sliders-horizontal",
   // The torch of the scanner, where the browser has one (TASK-033).
   flashlight: "flashlight",
   helpCircle: "question",
+  // The history of a setting or of an object (TASK-080).
+  history: "clock-counter-clockwise",
+  // An item without a photo (TASK-080, X17).
+  image: "image",
   info: "info",
   // «Ввести код вручную» (S-SCAN-02, TASK-033).
   keyboard: "keyboard",
@@ -53,10 +64,14 @@ export const ui = {
   moon: "moon",
   myLocation: "crosshair",
   package: "package",
+  // A supplier on pause (TASK-080).
+  pause: "pause",
   phone: "phone",
   plus: "plus",
   plusSquare: "plus-square",
   progressCheck: "seal-check",
+  // A blocked supplier (TASK-080).
+  prohibit: "prohibit",
   receipt: "receipt",
   refresh: "arrows-clockwise",
   route: "navigation-arrow",
@@ -74,6 +89,8 @@ export const ui = {
   trash: "trash",
   // Delivery of an offer (S-OFF-01, TASK-032); pickup is `store`.
   truck: "truck",
+  // The zone of a file: «Выбрать файл» (TASK-080).
+  upload: "upload-simple",
   user: "user",
   users: "users-three",
   // «Написать в WhatsApp» to the customer (S-ORD-02, TASK-033).

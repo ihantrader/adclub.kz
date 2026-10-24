@@ -10,6 +10,13 @@ import {
   partsOf,
   readDateText,
 } from "./date-field-core";
+import {
+  calendarDayOf,
+  dateLangOf,
+  formatFullDate,
+  formatMonthYear,
+  weekdayName,
+} from "@adclub/i18n";
 import { Icon } from "./Icon";
 import { cx } from "./cx";
 
@@ -54,6 +61,8 @@ export interface DateFieldProps {
   error?: string | null;
   disabled?: boolean;
   id?: string;
+  /** 40 instead of 48: a filter of a list (TASK-080, X3). */
+  compact?: boolean;
   texts?: DateFieldTexts;
 }
 
@@ -94,6 +103,7 @@ export function DateField({
   error,
   disabled,
   id,
+  compact,
   texts = RUSSIAN,
 }: DateFieldProps) {
   const autoId = useId();
@@ -192,29 +202,21 @@ export function DateField({
   };
 
   const { year, month } = partsOf(focusDay);
-  const monthTitle = capitalized(
-    new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(
-      new Date(Date.UTC(year, month - 1, 1)),
-    ),
-  );
-  const weekdayFormat = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
-  // 5 January 2026 is a Monday.
-  const weekdays = Array.from({ length: 7 }, (_, index) =>
-    weekdayFormat.format(new Date(Date.UTC(2026, 0, 5 + index))),
-  );
-  const dayFormat = new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    weekday: "long",
-    timeZone: "UTC",
-  });
+  // Names of months and weekdays are the dictionary's, never the browser's
+  // (TASK-080, requirement 7: a browser without Kazakh wrote «M10»).
+  const lang = dateLangOf(locale);
+  const monthTitle = capitalized(formatMonthYear(year, month, lang));
+  const weekdays = Array.from({ length: 7 }, (_, index) => weekdayName(index + 1, lang));
+  const dayLabel = (iso: string) => {
+    const day = calendarDayOf(iso);
+    return day ? formatFullDate(day, lang, "long") : iso;
+  };
   const hintId = `${inputId}-hint`;
   const errorId = `${inputId}-error`;
   const describedBy = [shownError ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ");
 
   return (
-    <div className="ac-field ac-date-field" ref={root}>
+    <div className={cx("ac-field", "ac-date-field", compact && "ac-field--compact")} ref={root}>
       <label className="ac-field__label" id={labelId} htmlFor={inputId}>
         {label}
       </label>
@@ -318,7 +320,7 @@ export function DateField({
                           data-day={day}
                           tabIndex={day === focusDay ? 0 : -1}
                           disabled={!dayAllowed(day, min, max)}
-                          aria-label={dayFormat.format(new Date(`${day}T00:00:00Z`))}
+                          aria-label={dayLabel(day)}
                           aria-pressed={day === value}
                           className={cx(
                             "ac-date-field__day",

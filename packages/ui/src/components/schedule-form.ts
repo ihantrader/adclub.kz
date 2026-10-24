@@ -149,6 +149,24 @@ export function dayHoursText(day: DayForm): string | null {
   return intervals.map((interval) => `${interval.from}–${interval.to}`).join(", ");
 }
 
+/**
+ * What is typed into a time field, as «ЧЧ:ММ» so far (TASK-080, X23): digits
+ * only, at most four, the colon after the hours; «9» stays «9», «093» —
+ * «09:3».
+ */
+export function maskTimeText(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+}
+
+/** A whole 24-hour time «ЧЧ:ММ» of the typed text, or `null` while it is not one. */
+export function readTimeText(text: string): string | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(text);
+  if (!match) return null;
+  const [hours, minutes] = [Number(match[1]), Number(match[2])];
+  return hours < 24 && minutes < 60 ? text : null;
+}
+
 export type WeekResult =
   | { ok: true; weeklyHours: DayHours[] }
   | { ok: false; invalidDays: number[]; noWorkingDay: boolean };

@@ -257,10 +257,28 @@ export interface EmptyStateProps {
   title: ReactNode;
   text?: ReactNode;
   action?: ReactNode;
+  /**
+   * Inside a block of a page (a tab of a card, a section): one line — icon
+   * 24, the title `bodyStrong`, the text, the action — instead of the big
+   * centered state of a whole page (TASK-080, X18).
+   */
+  compact?: boolean;
 }
 
 /** Icon 48, heading, muted text, a single button (SCREENS 2.2). */
-export function EmptyState({ icon, title, text, action }: EmptyStateProps) {
+export function EmptyState({ icon, title, text, action, compact }: EmptyStateProps) {
+  if (compact) {
+    return (
+      <div className="ac-empty ac-empty--compact">
+        <Icon name={icon} size={24} className="ac-empty__icon" />
+        <div className="ac-empty__body">
+          <p className="ac-empty__title ac-empty__title--compact">{title}</p>
+          {text && <p className="ac-empty__text ac-text-body-s">{text}</p>}
+        </div>
+        {action && <div className="ac-empty__action">{action}</div>}
+      </div>
+    );
+  }
   return (
     <div className="ac-empty">
       <Icon name={icon} size={48} className="ac-empty__icon" />

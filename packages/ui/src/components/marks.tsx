@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 import { cx } from "./cx";
+import { statusRole, type StatusKind } from "./status-roles";
 
 export interface BadgeProps {
   tone: Tone;
@@ -45,12 +46,35 @@ export function TypeMark({ icon, children }: TypeMarkProps) {
   );
 }
 
-/** Order status badge: group color + icon + text (DESIGN.md 7.8). */
-export function StatusBadge({ group, children }: { group: OrderStatusGroup; children: ReactNode }) {
-  const { tone, icon } = orderStatusGroups[group];
+export type StatusBadgeProps =
+  | {
+      /** An order's status group (DESIGN.md 7.8) — the cabinet's own grouping. */
+      group: OrderStatusGroup;
+      kind?: never;
+      status?: never;
+      children: ReactNode;
+    }
+  | {
+      /** A status of the contract, its role from the one map `statusRoles` (TASK-080, X7). */
+      kind: StatusKind;
+      status: string;
+      group?: never;
+      children: ReactNode;
+    };
+
+/**
+ * A status badge: `captionStrong`, the role's background, an icon 16 and
+ * the word (DESIGN.md 7.7, 7.8) — never color alone. The role comes from
+ * `statusRoles` by the contract's status, or from an order's group.
+ */
+export function StatusBadge(props: StatusBadgeProps) {
+  const { tone, icon } =
+    props.group !== undefined
+      ? orderStatusGroups[props.group]
+      : statusRole(props.kind, props.status);
   return (
     <Badge tone={tone} icon={icon}>
-      {children}
+      {props.children}
     </Badge>
   );
 }

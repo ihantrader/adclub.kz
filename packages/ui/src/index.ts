@@ -24,7 +24,45 @@ export {
 export { Spinner } from "./components/Spinner";
 export { cx } from "./components/cx";
 export { ActionBar, type ActionBarProps } from "./components/ActionBar";
-export { MenuButton, type MenuAction, type MenuButtonProps } from "./components/MenuButton";
+export {
+  MenuButton,
+  nextMenuIndex,
+  type MenuAction,
+  type MenuButtonProps,
+} from "./components/MenuButton";
+export { Select, type SelectProps } from "./components/Select";
+export {
+  isTypingKey,
+  moveHighlight,
+  moveOfKey,
+  typeahead,
+  TYPEAHEAD_RESET_MS,
+  type SelectChoice,
+  type SelectMove,
+} from "./components/select-core";
+export {
+  FileDrop,
+  fileProblem,
+  fileSizeText,
+  type FileDropProps,
+  type FileDropTexts,
+  type FileProblem,
+} from "./components/FileDrop";
+export {
+  PageHeader,
+  TableToolbar,
+  type Crumb,
+  type PageHeaderProps,
+  type PageTab,
+  type TableToolbarProps,
+} from "./components/PageHeader";
+export {
+  statusRole,
+  statusRoles,
+  type StatusKind,
+  type StatusOf,
+  type StatusRole,
+} from "./components/status-roles";
 export { DateField, type DateFieldProps, type DateFieldTexts } from "./components/DateField";
 export {
   addDays,
@@ -94,6 +132,7 @@ export {
   TypeMark,
   type BadgeProps,
   type RatingProps,
+  type StatusBadgeProps,
   type TypeMarkProps,
 } from "./components/marks";
 export {

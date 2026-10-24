@@ -1,13 +1,17 @@
+import { calendarDayOf, dateLangOf, formatFullDate } from "@adclub/i18n";
 import { useId, useState } from "react";
 import { Button, IconButton } from "./Button";
 import { DateField, type DateFieldTexts } from "./DateField";
 import { TextField } from "./fields";
+import { Select } from "./Select";
 import { Icon } from "./Icon";
 import { cx } from "./cx";
 import {
   closedDateProblem,
   copyToWeekdays,
   dayHoursText,
+  maskTimeText,
+  readTimeText,
   upcomingClosedDates,
   type ClosedDate,
   type DayForm,
@@ -166,21 +170,14 @@ function WeekDay({
         <span className="ac-week__name ac-week__name--row" aria-hidden="true">
           {shortName}
         </span>
-        <span className="ac-week__mode ac-field__control ac-select">
-          <select
-            className="ac-field__input ac-select__input"
-            aria-label={`${dayName}: ${texts.dayMode}`}
-            value={day.mode}
-            onChange={(event) => onChange({ mode: event.target.value as DayMode })}
-          >
-            {modes.map((mode) => (
-              <option key={mode} value={mode}>
-                {modeLabel(mode, texts)}
-              </option>
-            ))}
-          </select>
-          <Icon name="chevronDown" size={16} className="ac-select__chevron" />
-        </span>
+        <Select<DayMode>
+          hideLabel
+          className="ac-week__mode"
+          label={`${dayName}: ${texts.dayMode}`}
+          value={day.mode}
+          options={modes.map((mode) => ({ value: mode, label: modeLabel(mode, texts) }))}
+          onChange={(mode) => onChange({ mode })}
+        />
         {day.mode === "custom" && (
           <span className="ac-text-body-s ac-week__custom">{dayHoursText(day)}</span>
         )}
@@ -255,7 +252,13 @@ function WeekDay({
   );
 }
 
-/** A native time picker (the phone's own wheel), 24-hour `HH:MM`, in the 48 shell. */
+/**
+ * A time «ЧЧ:ММ» (TASK-080, X23): digits only, the colon comes by itself,
+ * 24-hour; the browser's own time field looked different in every browser.
+ * What is typed stays in the field until it is a whole time, and only a
+ * whole time goes to the form; leaving the field with half a time puts the
+ * form's time back.
+ */
 function TimeInput({
   label,
   value,
@@ -269,16 +272,31 @@ function TimeInput({
   errorId?: string;
   onChange: (value: string) => void;
 }) {
+  const [typed, setTyped] = useState<{ for: string; text: string } | null>(null);
+  const text = typed && typed.for === value ? typed.text : value;
   return (
     <input
-      type="time"
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="чч:мм"
+      maxLength={5}
       className={cx("ac-time-input__control", invalid && "ac-time-input__control--error")}
       aria-label={label}
       aria-invalid={invalid || undefined}
       aria-describedby={errorId}
-      value={value}
-      step={300}
-      onChange={(event) => onChange(event.target.value)}
+      value={text}
+      onChange={(event) => {
+        const masked = maskTimeText(event.target.value);
+        const time = readTimeText(masked);
+        if (time && time !== value) {
+          setTyped(null);
+          onChange(time);
+        } else {
+          setTyped({ for: value, text: masked });
+        }
+      }}
+      onBlur={() => setTyped(null)}
     />
   );
 }
@@ -320,12 +338,12 @@ export function ClosedDatesEditor({
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
-  const format = new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    weekday: "short",
-  });
+  // «вт, 16 декабря 2026 г.» from the dictionary, not the browser (TASK-080, requirement 7).
+  const lang = dateLangOf(locale);
+  const dateText = (iso: string) => {
+    const day = calendarDayOf(iso);
+    return day ? formatFullDate(day, lang) : iso;
+  };
 
   const add = () => {
     const reason = closedDateProblem(date, dates, today);
@@ -354,9 +372,7 @@ export function ClosedDatesEditor({
           {dates.map((item) => (
             <li key={item.date} className="ac-closed-dates__item">
               <span className="ac-closed-dates__text">
-                <span className="ac-text-body">
-                  {format.format(new Date(`${item.date}T12:00:00Z`))}
-                </span>
+                <span className="ac-text-body">{dateText(item.date)}</span>
                 {item.note && <span className="ac-text-body-s ac-muted">{item.note}</span>}
               </span>
               <IconButton

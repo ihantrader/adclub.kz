@@ -21,6 +21,10 @@ import {
   ChipRow,
   CodeBlock,
   DateField,
+  FileDrop,
+  PageHeader,
+  Select,
+  TableToolbar,
   FilterSelect,
   MenuButton,
   SearchSelect,
@@ -821,6 +825,7 @@ function ShowcaseContent({ app }: ShowcaseProps) {
           <TableSection t={t} />
           <CodeSection t={t} />
           <ScreenPartsSection t={t} lang={lang} key={`parts-${lang}`} />
+          <AdminPartsSection t={t} key={`admin-parts-${lang}`} />
           <p className="ac-text-caption ac-muted">{t.footer}</p>
         </div>
       </main>
@@ -1043,6 +1048,140 @@ function ScreenPartsSection({ t, lang }: { t: ShowcaseTexts; lang: ShowcaseLang 
         <Button variant="text" destructive>
           {p.textDanger}
         </Button>
+      </Row>
+    </Section>
+  );
+}
+
+/** TASK-080: the parts the admin panel's pages are built of. */
+function AdminPartsSection({ t }: { t: ShowcaseTexts }) {
+  const a = t.adminParts;
+  const options = a.options.map((label, index) => ({ value: String(index), label }));
+  const [chosen, setChosen] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [file, setFile] = useState<File | null>(null);
+  return (
+    <Section id="admin-parts" title={a.title} note={a.note}>
+      <Row label={a.select}>
+        <div className="sc-grid sc-wide">
+          <Select
+            label={a.selectLabel}
+            value={chosen}
+            placeholder={a.selectPlaceholder}
+            options={options}
+            onChange={setChosen}
+          />
+          <Select
+            compact
+            label={a.selectCompact}
+            value={filter}
+            options={[{ value: "all", label: a.all }, ...options]}
+            onChange={setFilter}
+          />
+          <Select
+            disabled
+            label={a.selectDisabled}
+            value="1"
+            options={options}
+            onChange={() => undefined}
+          />
+        </div>
+      </Row>
+      <Row label={a.file}>
+        <div className="sc-wide">
+          <FileDrop
+            title={a.fileTitle}
+            hint={a.fileHint}
+            accept={[".jpg", ".jpeg", ".png", ".webp", "image/jpeg", "image/png", "image/webp"]}
+            maxBytes={10 * 1024 * 1024}
+            file={file}
+            onFile={setFile}
+          />
+        </div>
+      </Row>
+      <Row label={a.statuses}>
+        <StatusBadge kind="catalogItem" status="active">
+          {a.statusWords.active}
+        </StatusBadge>
+        <StatusBadge kind="catalogItem" status="draft">
+          {a.statusWords.draft}
+        </StatusBadge>
+        <StatusBadge kind="catalogItem" status="archived">
+          {a.statusWords.archived}
+        </StatusBadge>
+        <StatusBadge kind="vehicleImport" status="failed">
+          {a.statusWords.failed}
+        </StatusBadge>
+        <StatusBadge kind="order" status="accepted">
+          {a.statusWords.accepted}
+        </StatusBadge>
+        <StatusBadge kind="order" status="term_proposed">
+          {a.statusWords.termProposed}
+        </StatusBadge>
+      </Row>
+      <Row label={a.header}>
+        <div className="sc-wide">
+          <PageHeader
+            crumbs={a.crumbs.map((label, index) => ({ label, href: `#crumb-${String(index)}` }))}
+            title={a.headerTitle}
+            subtitle={
+              <StatusBadge kind="catalogItem" status="active">
+                {a.statusWords.active}
+              </StatusBadge>
+            }
+            actions={<IconButton icon="refresh" label="Обновить" size={20} />}
+            tabs={{
+              label: a.header,
+              active: "0",
+              items: a.tabs.map((label, index) => ({
+                key: String(index),
+                label,
+                href: `#tab-${String(index)}`,
+                count: index === 2 ? 3 : undefined,
+              })),
+            }}
+            onNavigate={() => undefined}
+          />
+        </div>
+      </Row>
+      <Row label={a.toolbar}>
+        <div className="sc-wide">
+          <TableToolbar total={22} totalLabel={a.total}>
+            <Button variant="text" size="s">
+              {a.reset}
+            </Button>
+          </TableToolbar>
+        </div>
+      </Row>
+      <Row label={a.empty}>
+        <div className="sc-wide">
+          <EmptyState
+            compact
+            icon="search"
+            title={a.emptyTitle}
+            text={a.emptyText}
+            action={
+              <Button variant="secondary" size="s" icon="plus">
+                {a.add}
+              </Button>
+            }
+          />
+        </div>
+      </Row>
+      <Row label={a.menus}>
+        <MenuButton
+          size="s"
+          label={a.rowMenu}
+          actions={[
+            { key: "contact", label: a.contact, onSelect: () => undefined },
+            { key: "sessions", label: a.sessions, destructive: true, onSelect: () => undefined },
+          ]}
+        />
+        <MenuButton
+          text={a.account}
+          label={a.account}
+          actions={[{ key: "out", label: a.signOut, icon: "logout", onSelect: () => undefined }]}
+        />
       </Row>
     </Section>
   );

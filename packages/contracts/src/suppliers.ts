@@ -899,9 +899,26 @@ export const adminSupplierSessionSchema = z.object({
 
 export type AdminSupplierSession = z.infer<typeof adminSupplierSessionSchema>;
 
+/**
+ * The sessions of a company page by page (TASK-080, X22): an employee may
+ * have a hundred; without `limit` — all of them, as before.
+ */
+export const adminSupplierSessionListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  cursor: cursorSchema.optional(),
+  /** Only this employee's sessions. */
+  memberId: z.uuid().optional(),
+});
+
+export type AdminSupplierSessionListQuery = z.infer<typeof adminSupplierSessionListQuerySchema>;
+
 /** Most recently used first. */
 export const adminSupplierSessionListResponseSchema = z.object({
   sessions: z.array(adminSupplierSessionSchema),
+  /** Pass as `cursor` for the next page; `null` — this was the last one (TASK-080). */
+  nextCursor: z.string().nullable(),
+  /** How many active sessions match (all pages together). */
+  total: z.number().int(),
 });
 
 export type AdminSupplierSessionListResponse = z.infer<

@@ -416,6 +416,18 @@ export type AdminCatalogRequest = z.infer<typeof adminCatalogRequestSchema>;
 
 export const adminCatalogRequestListQuerySchema = catalogRequestListQuerySchema.extend({
   supplierId: z.uuid().optional(),
+  /**
+   * TASK-080: a part of the name, the article in any spelling or the brand
+   * of the row — 792 requests are searched, not scrolled.
+   */
+  q: z.string().trim().min(1).max(100).optional(),
+  /** TASK-080: the requests of one price list upload. */
+  importId: z.uuid().optional(),
+  /**
+   * TASK-080: only the requests whose article (in any spelling) is already
+   * an item of the catalog — «Есть похожая позиция».
+   */
+  similar: z.literal("true").optional(),
 });
 
 export type AdminCatalogRequestListQuery = z.infer<typeof adminCatalogRequestListQuerySchema>;

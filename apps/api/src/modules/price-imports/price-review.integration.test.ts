@@ -1206,6 +1206,19 @@ describe("price list matching, review and application (PostgreSQL + Redis + MinI
       (body) => body as { catalogRequests: number },
     );
     expect(home.catalogRequests).toBe(3);
+    // TASK-080: 792 requests are searched, not scrolled — a text, an article, an upload.
+    const found = async (query: string) =>
+      ok(asAdmin("get", `/admin/catalog-requests?${query}`), (body) =>
+        adminCatalogRequestPageSchema.parse(body),
+      );
+    const byText = await found(`q=${encodeURIComponent("ампанск")}`);
+    expect(byText.requests.map((r) => r.data.article)).toEqual(["QQ-1"]);
+    expect(byText.counts).toEqual({ new: 1, approved: 0, rejected: 0 });
+    const byArticle = await found(`q=${encodeURIComponent("bosch 0451")}`);
+    expect(byArticle.requests.map((r) => r.data.article)).toEqual(["BOSCH-0451"]);
+    expect((await found(`importId=${entry.id}`)).total).toBe(3);
+    expect((await found(`importId=${randomUUID()}`)).total).toBe(0);
+    expect((await found("similar=true")).total).toBe(0);
     const filter = page.requests.find((r) => r.data.article === "BOSCH-0451")!;
     expect(filter).toMatchObject({
       supplier: { id: shop.supplierId, name: "Автомир" },

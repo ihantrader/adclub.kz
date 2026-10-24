@@ -4,6 +4,7 @@ import {
   adminUserListQuerySchema,
   adminUserPathSchema,
   adminUserSessionPathSchema,
+  adminUserSessionListQuerySchema,
   apiRoutes,
   revealPhoneBodySchema,
   type AdminSearchQuery,
@@ -14,6 +15,7 @@ import {
   type AdminUserPath,
   type AdminUserResponse,
   type AdminUserSessionListResponse,
+  type AdminUserSessionListQuery,
   type AdminUserSessionPath,
   type AdminUserSessionsEndedResponse,
   type RevealPhoneBody,
@@ -70,8 +72,9 @@ export class AdminUsersController {
   @SessionRoute(apiRoutes.listAdminUserSessions)
   sessions(
     @Param(new ZodValidationPipe(adminUserPathSchema)) params: AdminUserPath,
+    @Query(new ZodValidationPipe(adminUserSessionListQuerySchema)) query: AdminUserSessionListQuery,
   ): Promise<AdminUserSessionListResponse> {
-    return this.users.sessionsOf(params.accountId);
+    return this.users.sessionsOf(params.accountId, query);
   }
 
   @SessionRoute(apiRoutes.endAdminUserSession)

@@ -85,6 +85,24 @@ function decodeCursor(cursor: string): { createdAt: string; id: string } {
   throw validationError("cursor", "Use the nextCursor of the previous page");
 }
 
+/** `%`, `_` and `\` of a typed text match themselves in LIKE. */
+function likeText(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/**
+ * A text of the admin's search (TASK-080): a part of the row's name or
+ * brand, any case; or a part of its article in any spelling (the article
+ * is compared normalized, as the catalog keeps it).
+ */
+function requestTextFilter(q: string): SQL {
+  const text = likeText(q.trim());
+  const article = normalizeArticle(q);
+  return sql`(${catalogRequest.payload}->>'name' ILIKE ${text} OR ${catalogRequest.payload}->>'brand' ILIKE ${text}${
+    article ? sql` OR ${catalogRequest.payload}->>'articleNorm' LIKE ${likeText(article)}` : sql``
+  })`;
+}
+
 /**
  * Requests to add an item to the catalog (TASK-047 requirement 5; SCREENS
  * A-MOD-01, S-MOD-01; ARCHITECTURE 4.67). A row of a price list the catalog
@@ -123,17 +141,29 @@ export class CatalogRequestsService {
     return row?.value ?? 0;
   }
 
+  /**
+   * The admin's list of requests (A-MOD-01): by status, company, upload, a
+   * text of the row (TASK-080 — the name or brand by a part, the article in
+   * any spelling) and «есть похожая позиция» (the article is an item already).
+   */
   async adminPage(
     query: AdminCatalogRequestListQuery,
     lang: CatalogLanguage,
   ): Promise<AdminCatalogRequestPage> {
     const db = this.database.db;
     const after = query.cursor ? decodeCursor(query.cursor) : null;
-    const bySupplier = query.supplierId
-      ? eq(catalogRequest.supplierId, query.supplierId)
-      : undefined;
+    // The filters but the status: the counts of the status chips follow them (TASK-080).
+    const others: (SQL | undefined)[] = [
+      query.supplierId ? eq(catalogRequest.supplierId, query.supplierId) : undefined,
+      query.importId ? eq(catalogRequest.importId, query.importId) : undefined,
+      query.q ? requestTextFilter(query.q) : undefined,
+      query.similar
+        ? sql`EXISTS (SELECT 1 FROM catalog_item ci WHERE ci.article_norm = ${catalogRequest.payload}->>'articleNorm' AND ci.status <> 'archived')`
+        : undefined,
+    ];
+    const bySupplier = and(...others);
     const filters: (SQL | undefined)[] = [
-      bySupplier,
+      ...others,
       query.status ? eq(catalogRequest.status, query.status) : undefined,
     ];
     const [rows, [total], statuses] = await Promise.all([

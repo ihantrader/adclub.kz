@@ -1116,6 +1116,44 @@ describe("employees of a supplier (PostgreSQL + Redis)", () => {
       expect(listed.sessions).toHaveLength(3);
       expect(JSON.stringify(response.body)).not.toMatch(/token|seed|refresh/i);
       expect(listed.sessions.filter((s) => s.member.id === added.member.id)).toHaveLength(2);
+      expect(listed.total).toBe(3);
+      expect(listed.nextCursor).toBeNull();
+
+      // TASK-080, X22: page by page and one employee's only — no gaps, no repeats.
+      const firstPage = adminSupplierSessionListResponseSchema.parse(
+        (await asAdmin("get", `/admin/suppliers/${supplierId}/sessions?limit=2`)).body,
+      );
+      expect(firstPage.sessions).toHaveLength(2);
+      expect(firstPage.total).toBe(3);
+      expect(firstPage.nextCursor).not.toBeNull();
+      const restPage = adminSupplierSessionListResponseSchema.parse(
+        (
+          await asAdmin(
+            "get",
+            `/admin/suppliers/${supplierId}/sessions?limit=2&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+          )
+        ).body,
+      );
+      expect(restPage.sessions).toHaveLength(1);
+      expect(restPage.nextCursor).toBeNull();
+      expect(
+        new Set([...firstPage.sessions, ...restPage.sessions].map((session) => session.id)).size,
+      ).toBe(3);
+      const theirs = adminSupplierSessionListResponseSchema.parse(
+        (
+          await asAdmin(
+            "get",
+            `/admin/suppliers/${supplierId}/sessions?limit=10&memberId=${added.member.id}`,
+          )
+        ).body,
+      );
+      expect(theirs.total).toBe(2);
+      expect(theirs.sessions.every((session) => session.member.id === added.member.id)).toBe(true);
+      expectError(
+        await asAdmin("get", `/admin/suppliers/${supplierId}/sessions?limit=2&cursor=nonsense`),
+        400,
+        "VALIDATION_ERROR",
+      );
 
       // End one.
       const { rows } = await db.query<{ id: string }>(

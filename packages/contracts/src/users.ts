@@ -153,9 +153,21 @@ export const adminUserSessionSchema = z.object({
 
 export type AdminUserSession = z.infer<typeof adminUserSessionSchema>;
 
+/** The sessions of a user page by page (TASK-080, X22); without `limit` — all of them, as before. */
+export const adminUserSessionListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  cursor: z.string().min(1).max(300).optional(),
+});
+
+export type AdminUserSessionListQuery = z.infer<typeof adminUserSessionListQuerySchema>;
+
 /** Most recently used first. */
 export const adminUserSessionListResponseSchema = z.object({
   sessions: z.array(adminUserSessionSchema),
+  /** Pass as `cursor` for the next page; `null` — this was the last one (TASK-080). */
+  nextCursor: z.string().nullable(),
+  /** How many active sessions the user has (all pages together). */
+  total: z.number().int(),
 });
 
 export type AdminUserSessionListResponse = z.infer<typeof adminUserSessionListResponseSchema>;

@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Param } from "@nestjs/common";
+import { Body, Controller, Inject, Param, Query } from "@nestjs/common";
 import {
   addSupplierMemberBodySchema,
   apiRoutes,
@@ -18,6 +18,8 @@ import {
   type EndSupplierSessionsBody,
   type RestoreSupplierMemberBody,
   type SupplierAdminPath,
+  adminSupplierSessionListQuerySchema,
+  type AdminSupplierSessionListQuery,
   type SupplierMemberAddedResponse,
   type SupplierMemberIdPath,
   type SupplierMemberListResponse,
@@ -135,10 +137,12 @@ export class SupplierMembersAdminController {
   }
 
   @SessionRoute(apiRoutes.listSupplierSessions)
-  async sessions(
+  sessions(
     @Param(new ZodValidationPipe(supplierAdminPathSchema)) params: SupplierAdminPath,
+    @Query(new ZodValidationPipe(adminSupplierSessionListQuerySchema))
+    query: AdminSupplierSessionListQuery,
   ): Promise<AdminSupplierSessionListResponse> {
-    return { sessions: await this.members.listSessions(params.supplierId) };
+    return this.members.listSessions(params.supplierId, query);
   }
 
   @SessionRoute(apiRoutes.endSupplierSession)

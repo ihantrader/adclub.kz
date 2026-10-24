@@ -260,6 +260,7 @@ import {
   adminUserPathSchema,
   adminUserResponseSchema,
   adminUserSessionListResponseSchema,
+  adminUserSessionListQuerySchema,
   adminUserSessionPathSchema,
   adminUserSessionsEndedResponseSchema,
   revealPhoneBodySchema,
@@ -367,6 +368,7 @@ import {
   adminSupplierMemberResponseSchema,
   adminSupplierMemberRestoredResponseSchema,
   adminSupplierSessionListResponseSchema,
+  adminSupplierSessionListQuerySchema,
   endSupplierSessionsBodySchema,
   restoreSupplierMemberBodySchema,
   supplierMemberAddedResponseSchema,
@@ -3439,6 +3441,7 @@ export const apiRoutes = {
     auth: "session",
     contexts: ["admin"],
     pathParams: supplierAdminPathSchema,
+    query: adminSupplierSessionListQuerySchema,
     responses: {
       200: { description: "The sessions", schema: adminSupplierSessionListResponseSchema },
     },
@@ -5072,6 +5075,7 @@ export const apiRoutes = {
     auth: "session",
     contexts: ["admin"],
     pathParams: adminUserPathSchema,
+    query: adminUserSessionListQuerySchema,
     responses: {
       200: { description: "The sessions", schema: adminUserSessionListResponseSchema },
     },

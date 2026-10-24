@@ -9,6 +9,8 @@ import {
   type AdminSupplierMemberResponse,
   type AdminSupplierMemberRestoredResponse,
   type AdminSupplierSession,
+  type AdminSupplierSessionListQuery,
+  type AdminSupplierSessionListResponse,
   type SupplierInvitation,
   type SupplierMemberAddedResponse,
   type SupplierMemberListResponse,
@@ -26,6 +28,7 @@ import {
   AccountStore,
   AdminUserStore,
   ipHint,
+  sessionPage,
   SessionStore,
   supplier,
   supplierMember,
@@ -470,20 +473,35 @@ export class SupplierMembersService {
     return this.adminOne(supplierId, memberId);
   }
 
-  async listSessions(supplierId: string): Promise<AdminSupplierSession[]> {
+  /**
+   * The active cabinet sessions of the company — of one employee with
+   * `memberId` — page by page (TASK-080, X22): without `limit`, all.
+   */
+  async listSessions(
+    supplierId: string,
+    query: AdminSupplierSessionListQuery = {},
+  ): Promise<AdminSupplierSessionListResponse> {
     await this.requireSupplier(this.database.db, supplierId);
-    const rows = await this.sessions.listSupplierSessions(supplierId, new Date());
-    return rows.map((row) => ({
-      id: row.id,
-      member: row.member,
-      deviceName: row.deviceName,
-      platform: row.clientPlatform,
-      clientVersion: row.clientVersion,
-      ipHint: ipHint(row.lastIp),
-      createdAt: row.createdAt.toISOString(),
-      lastUsedAt: row.lastUsedAt.toISOString(),
-      expiresAt: row.expiresAt.toISOString(),
-    }));
+    const all = await this.sessions.listSupplierSessions(supplierId, new Date());
+    const page = sessionPage(
+      query.memberId ? all.filter((row) => row.member.id === query.memberId) : all,
+      query,
+    );
+    return {
+      sessions: page.rows.map((row): AdminSupplierSession => ({
+        id: row.id,
+        member: row.member,
+        deviceName: row.deviceName,
+        platform: row.clientPlatform,
+        clientVersion: row.clientVersion,
+        ipHint: ipHint(row.lastIp),
+        createdAt: row.createdAt.toISOString(),
+        lastUsedAt: row.lastUsedAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+      })),
+      nextCursor: page.nextCursor,
+      total: page.total,
+    };
   }
 
   /**

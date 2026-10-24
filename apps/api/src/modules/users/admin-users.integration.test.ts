@@ -815,7 +815,28 @@ describe("admin panel: orders, users, numbers, search, journal (PostgreSQL + Red
         adminUserSessionListResponseSchema.parse(body),
       );
       expect(sessions.sessions).toHaveLength(1);
+      expect(sessions.total).toBe(1);
+      expect(sessions.nextCursor).toBeNull();
       expect(JSON.stringify(sessions)).not.toContain(appBearer);
+      // TASK-080, X22: a second session (past the resend interval), then the list page by page.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await sessionToken(shop.phone, IOS);
+      const firstPage = await ok(
+        asAdmin("get", `/admin/users/${accountId}/sessions?limit=1`),
+        (body) => adminUserSessionListResponseSchema.parse(body),
+      );
+      expect(firstPage.sessions).toHaveLength(1);
+      expect(firstPage.total).toBe(2);
+      const restPage = await ok(
+        asAdmin(
+          "get",
+          `/admin/users/${accountId}/sessions?limit=1&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+        ),
+        (body) => adminUserSessionListResponseSchema.parse(body),
+      );
+      expect(restPage.sessions).toHaveLength(1);
+      expect(restPage.nextCursor).toBeNull();
+      expect(restPage.sessions[0]!.id).not.toBe(firstPage.sessions[0]!.id);
       expectError(
         await asAdmin("post", `/admin/users/${accountId}/sessions/${randomUUID()}/end`),
         404,
@@ -825,12 +846,12 @@ describe("admin panel: orders, users, numbers, search, journal (PostgreSQL + Red
         asAdmin("post", `/admin/users/${accountId}/sessions/end`),
         (body) => body as { ended: number },
       );
-      expect(ended.ended).toBe(1);
+      expect(ended.ended).toBe(2);
       expectError(await call(appBearer, IOS, "get", "/auth/me"), 401, "SESSION_ENDED");
       // The cabinet is another role of the same person: untouched.
       expect((await shop.as("get", "/supplier/company")).status).toBe(200);
       const journal = await auditOf(`action=account.sessions_ended&entityId=${accountId}`);
-      expect(journal.entries[0]).toMatchObject({ after: { ended: 1 } });
+      expect(journal.entries[0]).toMatchObject({ after: { ended: 2 } });
       // The user's history finds it.
       const history = await auditOf(`accountId=${accountId}`);
       expect(history.entries.map((entry) => entry.action)).toContain("account.sessions_ended");

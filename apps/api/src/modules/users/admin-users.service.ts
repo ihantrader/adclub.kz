@@ -7,6 +7,7 @@ import {
   type AdminUserListQuery,
   type AdminUserPage,
   type AdminUserSessionListResponse,
+  type AdminUserSessionListQuery,
   type AdminUserSummary,
 } from "@adclub/contracts";
 import {
@@ -22,7 +23,7 @@ import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
 import { GarageService } from "../garage";
-import { account, ipHint, SessionStore } from "../identity";
+import { account, ipHint, SessionStore, sessionPage } from "../identity";
 import { city } from "../suppliers";
 
 /** An administrator acting in the admin panel. */
@@ -287,11 +288,17 @@ export class AdminUsersService {
     return this.garage.list(accountId);
   }
 
-  async sessionsOf(accountId: string): Promise<AdminUserSessionListResponse> {
+  /** The sessions of the user's app page by page (TASK-080, X22): without `limit`, all. */
+  async sessionsOf(
+    accountId: string,
+    query: AdminUserSessionListQuery = {},
+  ): Promise<AdminUserSessionListResponse> {
     await this.requireAccount(this.database.db, accountId);
-    const rows = await this.sessions.listAppSessions(accountId, new Date());
+    const page = sessionPage(await this.sessions.listAppSessions(accountId, new Date()), query);
     return {
-      sessions: rows.map((row) => ({
+      nextCursor: page.nextCursor,
+      total: page.total,
+      sessions: page.rows.map((row) => ({
         id: row.id,
         deviceName: row.deviceName,
         platform: row.clientPlatform,

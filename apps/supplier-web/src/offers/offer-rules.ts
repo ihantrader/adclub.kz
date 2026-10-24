@@ -7,7 +7,13 @@ import type {
   SupplierOffer,
   UpdateOfferBody,
 } from "@adclub/contracts";
-import { pluralForm, type Lang, type SupplierTextKey } from "@adclub/i18n";
+import {
+  calendarDayOf,
+  formatDayMonth,
+  pluralForm,
+  type Lang,
+  type SupplierTextKey,
+} from "@adclub/i18n";
 
 /**
  * What the cabinet makes of the server's answers about offers (TASK-032;
@@ -247,17 +253,13 @@ export function offerProblem(error: unknown): OfferProblem {
 
 // ------------------------------------------------------------- the receipt
 
-function localeOf(lang: Lang): string {
-  return lang === "kk" ? "kk-KZ" : lang;
-}
-
-/** «14 марта» of a `YYYY-MM-DD` date (the date as the server gave it, no time zone shift). */
+/**
+ * «14 марта» of a `YYYY-MM-DD` date (the date as the server gave it, no time
+ * zone shift); the month's name is the dictionary's (TASK-080, requirement 7).
+ */
 export function formatDay(date: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(localeOf(lang), {
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
+  const day = calendarDayOf(date);
+  return day ? formatDayMonth(day, lang, "long") : date;
 }
 
 function daysBetween(from: string, to: string): number {

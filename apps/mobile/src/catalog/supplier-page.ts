@@ -1,4 +1,5 @@
 import type { SupplierProfileResponse } from "@adclub/contracts";
+import { dateLangOf, formatMonthYear } from "@adclub/i18n";
 import { orderGate, type OrderGate } from "../orders/order-gate";
 
 /**
@@ -48,13 +49,13 @@ export function shareText(
   return percent === null ? words.fewOrders : words.share(percent);
 }
 
-/** «октябрь 2026»: the month a review was published in (`YYYY-MM`, the server's). */
+/**
+ * «октябрь 2026 г.», «2026 ж. қазан»: the month a review was published in
+ * (`YYYY-MM`, the server's) — the month's name from the dictionary of
+ * `@adclub/i18n`, not the phone's `Intl` (TASK-080, requirement 7).
+ */
 export function reviewMonthText(publishedMonth: string, locale: string): string {
-  const [year = 0, month = 1] = publishedMonth.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, 1));
-  try {
-    return date.toLocaleDateString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
-  } catch {
-    return publishedMonth;
-  }
+  const match = /^(\d{4})-(\d{2})$/.exec(publishedMonth);
+  if (!match) return publishedMonth;
+  return formatMonthYear(Number(match[1]), Number(match[2]), dateLangOf(locale));
 }

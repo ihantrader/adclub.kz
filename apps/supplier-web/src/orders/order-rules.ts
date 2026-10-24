@@ -8,7 +8,14 @@ import {
   type SupplierFinishedStatus,
   type SupplierOrderSummary,
 } from "@adclub/contracts";
-import type { Lang, SupplierTextKey } from "@adclub/i18n";
+import {
+  calendarDayOf,
+  formatDayMonth,
+  formatWeekdayDayMonth,
+  zonedMomentOf,
+  type Lang,
+  type SupplierTextKey,
+} from "@adclub/i18n";
 import type { OrderStatusGroup } from "@adclub/ui-core";
 import { retryMinutes } from "../errors";
 import type { Translate } from "../i18n";
@@ -28,10 +35,6 @@ export const URGENT_MINUTES = 15;
 const MINUTE = 60_000;
 
 // ------------------------------------------------------------------ time
-
-function localeOf(lang: Lang): string {
-  return lang === "kk" ? "kk-KZ" : lang;
-}
 
 /** The wall clock of `iso` in `timeZone`: «2026-10-06» and «14:02». */
 function wallClock(at: number, timeZone: string): { date: string; time: string } {
@@ -70,11 +73,8 @@ function momentOf(
   if (date === wallClock(now, timeZone).date) return { day: "today", time };
   if (date === wallClock(now - dayMs, timeZone).date) return { day: "yesterday", time };
   if (date === wallClock(now + dayMs, timeZone).date) return { day: "tomorrow", time };
-  const day = new Intl.DateTimeFormat(localeOf(lang), {
-    day: "numeric",
-    month,
-    timeZone,
-  }).format(new Date(at));
+  // The names are the dictionary's, not the browser's (TASK-080, requirement 7).
+  const day = formatDayMonth(zonedMomentOf(at, timeZone), lang, month);
   return { day: "date", date: day, time };
 }
 
@@ -133,13 +133,8 @@ export function formatAt(
 
 /** «6 октября» of a `YYYY-MM-DD` date (as the server gave it). */
 export function formatDate(date: string, lang: Lang): string {
-  return keepTogether(
-    new Intl.DateTimeFormat(localeOf(lang), {
-      day: "numeric",
-      month: "long",
-      timeZone: "UTC",
-    }).format(new Date(`${date}T12:00:00Z`)),
-  );
+  const day = calendarDayOf(date);
+  return day ? keepTogether(formatDayMonth(day, lang, "long")) : date;
 }
 
 /**
@@ -147,25 +142,14 @@ export function formatDate(date: string, lang: Lang): string {
  * with the long month it doesn't fit a 320 phone in one line (TASK-079.A).
  */
 export function formatShortDate(date: string, lang: Lang): string {
-  return keepTogether(
-    new Intl.DateTimeFormat(localeOf(lang), {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    }).format(new Date(`${date}T12:00:00Z`)),
-  );
+  const day = calendarDayOf(date);
+  return day ? keepTogether(formatDayMonth(day, lang, "short")) : date;
 }
 
 /** «пн, 13 окт.» — a date of the term to choose (S-ORD-04), as the server gave it. */
 export function formatTermDay(date: string, lang: Lang): string {
-  return keepTogether(
-    new Intl.DateTimeFormat(localeOf(lang), {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    }).format(new Date(`${date}T12:00:00Z`)),
-  );
+  const day = calendarDayOf(date);
+  return day ? keepTogether(formatWeekdayDayMonth(day, lang)) : date;
 }
 
 /** The start of today in `timeZone` (Kazakhstan has no daylight saving time). */

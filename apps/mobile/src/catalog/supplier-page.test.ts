@@ -72,5 +72,9 @@ describe("M-CAT-09", () => {
   it("names the month of a review", () => {
     expect(reviewMonthText("2026-10", "en")).toBe("October 2026");
     expect(reviewMonthText("2026-01", "ru")).toMatch(/январь 2026/);
+    // The dictionary's names, whatever the phone's Intl knows (TASK-080, requirement 7).
+    expect(reviewMonthText("2026-10", "kk")).toBe("2026 ж. қазан");
+    expect(reviewMonthText("2026-10", "kk-KZ")).toBe("2026 ж. қазан");
+    expect(reviewMonthText("2026", "ru")).toBe("2026");
   });
 });

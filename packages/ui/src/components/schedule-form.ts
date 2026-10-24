@@ -122,6 +122,33 @@ export function dayIntervals(day: DayForm): HoursInterval[] | null {
   }
 }
 
+/**
+ * «Скопировать на будни» (TASK-079): the hours of `from` (Monday by
+ * default) given to every other weekday, Monday to Friday; the weekend
+ * keeps its own. The change of each day, ready for `onDayChange`.
+ */
+export function copyToWeekdays(
+  week: readonly DayForm[],
+  from = 1,
+): { day: number; change: Partial<DayForm> }[] {
+  const source = week.find((day) => day.day === from);
+  if (!source) return [];
+  const { mode, from: start, to, withBreak, breakFrom, breakTo, custom } = source;
+  return week
+    .filter((day) => day.day <= 5 && day.day !== from)
+    .map((day) => ({
+      day: day.day,
+      change: { mode, from: start, to, withBreak, breakFrom, breakTo, custom: [...custom] },
+    }));
+}
+
+/** «09:00–13:00, 14:00–18:00» — the day as its row says it when folded on a phone. */
+export function dayHoursText(day: DayForm): string | null {
+  const intervals = dayIntervals(day);
+  if (intervals === null || intervals.length === 0) return null;
+  return intervals.map((interval) => `${interval.from}–${interval.to}`).join(", ");
+}
+
 export type WeekResult =
   | { ok: true; weeklyHours: DayHours[] }
   | { ok: false; invalidDays: number[]; noWorkingDay: boolean };

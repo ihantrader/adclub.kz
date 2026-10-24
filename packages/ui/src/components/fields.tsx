@@ -4,22 +4,43 @@ import {
   sanitizeOrderCode,
   splitOrderCode,
 } from "@adclub/ui-core";
-import { useId, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from "react";
 import { Icon } from "./Icon";
 import { AiBadge } from "./marks";
 import { cx } from "./cx";
 
-/** A press shortly before focus means the focus came from a pointer, not the keyboard. */
-const POINTER_FOCUS_WINDOW_MS = 1000;
+/** A press or a key shortly before focus tells where the focus came from. */
+const FOCUS_CAUSE_WINDOW_MS = 1000;
+
+/** When a key was last pressed anywhere on the page (Tab, Shift+Tab, arrows). */
+let keyPressedAt = -Infinity;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "keydown",
+    () => {
+      keyPressedAt = Date.now();
+    },
+    true,
+  );
+}
 
 /**
  * Whether the field was focused from the keyboard. A text input matches
  * `:focus-visible` after a click too, so CSS alone cannot tell the two apart:
  * a click or tap keeps the 1 px active border, the keyboard adds the 2 px ring
- * every element has (DESIGN.md 7.7, D-068). Handlers go on the wrapper —
- * React focus events bubble.
+ * every element has (DESIGN.md 7.7, D-068). Focus that came from neither —
+ * `autoFocus` of a page that just opened — keeps the border alone (C16): the
+ * ring needs a key pressed just before. Handlers go on the wrapper — React
+ * focus events bubble.
  */
-function useKeyboardFocus() {
+export function useKeyboardFocus() {
   const pressedAt = useRef(-Infinity);
   const [keyboard, setKeyboard] = useState(false);
   return {
@@ -29,7 +50,11 @@ function useKeyboardFocus() {
         pressedAt.current = Date.now();
       },
       onFocus: () => {
-        setKeyboard(Date.now() - pressedAt.current > POINTER_FOCUS_WINDOW_MS);
+        const now = Date.now();
+        setKeyboard(
+          now - pressedAt.current > FOCUS_CAUSE_WINDOW_MS &&
+            now - keyPressedAt <= FOCUS_CAUSE_WINDOW_MS,
+        );
         pressedAt.current = -Infinity;
       },
       onBlur: () => setKeyboard(false),
@@ -110,6 +135,177 @@ export function TextField({
           </span>
         )}
         {trailing}
+      </div>
+      {error && (
+        <p className="ac-field__help ac-field__help--error" id={errorId}>
+          <Icon name="alertTriangle" size={16} />
+          <span>{error}</span>
+        </p>
+      )}
+      {hint && (
+        <p className="ac-field__help" id={hintId}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export interface SelectOption<T extends string> {
+  value: T;
+  label: string;
+  disabled?: boolean;
+}
+
+export interface SelectFieldProps<T extends string> {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: readonly SelectOption<T>[];
+  /** Shown first when nothing is chosen yet (`value` is `""`), not a choice itself. */
+  placeholder?: string;
+  hint?: ReactNode;
+  error?: ReactNode;
+  disabled?: boolean;
+  id?: string;
+  name?: string;
+  className?: string;
+}
+
+/**
+ * «Выбор из списка» (TASK-079): the browser's own select — its list, the
+ * phone's wheel, the keyboard and screen readers come with it — in the
+ * shell of every field: 48 high, the label above (`bodyS`, `textMuted`),
+ * the help or the error under it, a chevron instead of the system arrow.
+ */
+export function SelectField<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  hint,
+  error,
+  disabled,
+  id,
+  name,
+  className,
+}: SelectFieldProps<T>) {
+  const autoId = useId();
+  const selectId = id ?? autoId;
+  const hintId = `${selectId}-hint`;
+  const errorId = `${selectId}-error`;
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ");
+  const focus = useKeyboardFocus();
+  return (
+    <div className={cx("ac-field", className)}>
+      <label className="ac-field__label" htmlFor={selectId}>
+        {label}
+      </label>
+      <div
+        {...focus.handlers}
+        className={cx(
+          "ac-field__control",
+          "ac-select",
+          error ? "ac-field__control--error" : null,
+          disabled && "ac-field__control--disabled",
+          focus.keyboard && "ac-field__control--keyboard",
+        )}
+      >
+        <select
+          id={selectId}
+          name={name}
+          className="ac-field__input ac-select__input"
+          value={value}
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy || undefined}
+          onChange={(event) => onChange(event.target.value as T)}
+        >
+          {placeholder !== undefined && (
+            <option value="" disabled>
+              {placeholder}
+            </option>
+          )}
+          {options.map((option) => (
+            <option key={option.value} value={option.value} disabled={option.disabled}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <Icon name="chevronDown" size={16} className="ac-select__chevron" />
+      </div>
+      {error && (
+        <p className="ac-field__help ac-field__help--error" id={errorId}>
+          <Icon name="alertTriangle" size={16} />
+          <span>{error}</span>
+        </p>
+      )}
+      {hint && (
+        <p className="ac-field__help" id={hintId}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export interface TextAreaFieldProps extends Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "onChange" | "value"
+> {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  hint?: ReactNode;
+  error?: ReactNode;
+}
+
+/** Several lines (a comment, a reason): the same shell, three lines high to start, grows by hand. */
+export function TextAreaField({
+  label,
+  value,
+  onChange,
+  hint,
+  error,
+  disabled,
+  className,
+  id,
+  rows = 3,
+  ...rest
+}: TextAreaFieldProps) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+  const hintId = `${inputId}-hint`;
+  const errorId = `${inputId}-error`;
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ");
+  const focus = useKeyboardFocus();
+  return (
+    <div className={cx("ac-field", className)}>
+      <label className="ac-field__label" htmlFor={inputId}>
+        {label}
+      </label>
+      <div
+        {...focus.handlers}
+        className={cx(
+          "ac-field__control",
+          "ac-field__control--multiline",
+          error ? "ac-field__control--error" : null,
+          disabled && "ac-field__control--disabled",
+          focus.keyboard && "ac-field__control--keyboard",
+        )}
+      >
+        <textarea
+          {...rest}
+          id={inputId}
+          rows={rows}
+          className="ac-field__input ac-field__textarea"
+          value={value}
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy || undefined}
+          onChange={(event) => onChange(event.target.value)}
+        />
       </div>
       {error && (
         <p className="ac-field__help ac-field__help--error" id={errorId}>
@@ -289,12 +485,17 @@ export interface KeypadProps {
   eraseLabel: string;
   /** Optional key in the bottom-left corner (e.g. "Найти"). */
   submit?: { label: string; onPress: () => void; disabled?: boolean };
+  /**
+   * «Вставить» in the bottom-left corner when there is no `submit` (S-SCAN-02,
+   * TASK-079): a code copied from a message goes in with one press.
+   */
+  paste?: { label: string; onPress: () => void };
   /** Every key waits (a search the keys started is going, TASK-033.A). */
   disabled?: boolean;
 }
 
 /** Digit keypad of the manual code entry: keys 64 high, digits `title` (DESIGN.md 7.10). */
-export function Keypad({ onDigit, onErase, eraseLabel, submit, disabled }: KeypadProps) {
+export function Keypad({ onDigit, onErase, eraseLabel, submit, paste, disabled }: KeypadProps) {
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
   return (
     <div className="ac-keypad">
@@ -318,6 +519,16 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit, disabled }: Keypa
         >
           {submit.label}
         </button>
+      ) : paste ? (
+        <button
+          type="button"
+          className="ac-keypad__key ac-keypad__key--paste"
+          disabled={disabled}
+          onClick={paste.onPress}
+        >
+          <Icon name="clipboard" size={20} />
+          <span className="ac-text-body-s">{paste.label}</span>
+        </button>
       ) : (
         <span />
       )}
@@ -331,7 +542,7 @@ export function Keypad({ onDigit, onErase, eraseLabel, submit, disabled }: Keypa
       </button>
       <button
         type="button"
-        className="ac-keypad__key ac-keypad__key--ghost"
+        className="ac-keypad__key"
         aria-label={eraseLabel}
         title={eraseLabel}
         disabled={disabled}

@@ -11,6 +11,8 @@ export const ui = {
   archive: "archive",
   arrowLeft: "arrow-left",
   backspace: "backspace",
+  // The date field's calendar (TASK-079).
+  calendar: "calendar-blank",
   calendarX: "calendar-x",
   // The scanner without a camera (S-SCAN-01, TASK-033).
   cameraSlash: "camera-slash",
@@ -21,9 +23,13 @@ export const ui = {
   check: "check",
   checklist: "list-checks",
   chevronDown: "caret-down",
+  // The previous month of the calendar (TASK-079).
+  chevronLeft: "caret-left",
   chevronRight: "caret-right",
   circleCheck: "check-circle",
   circleX: "x-circle",
+  // «Вставить» on the keypad of the manual code entry (S-SCAN-02, TASK-079).
+  clipboard: "clipboard-text",
   clock: "clock",
   contrast: "circle-half",
   copy: "copy",
@@ -62,6 +68,8 @@ export const ui = {
   star: "star",
   store: "storefront",
   sun: "sun",
+  // «Прайс»: a table without letters (TASK-079; «XLS» read as text).
+  table: "table",
   tags: "tag",
   trash: "trash",
   // Delivery of an offer (S-OFF-01, TASK-032); pickup is `store`.
@@ -71,6 +79,8 @@ export const ui = {
   // «Написать в WhatsApp» to the customer (S-ORD-02, TASK-033).
   whatsapp: "whatsapp-logo",
   wifiOff: "wifi-slash",
+  // A service (an order or an offer), not a box (TASK-079).
+  wrench: "wrench",
   x: "x",
 };
 

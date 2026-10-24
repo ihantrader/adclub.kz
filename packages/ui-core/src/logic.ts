@@ -211,6 +211,7 @@ export type IconName =
   | "archive"
   | "arrowLeft"
   | "backspace"
+  | "calendar"
   | "calendarX"
   | "cameraSlash"
   | "car"
@@ -218,9 +219,11 @@ export type IconName =
   | "check"
   | "checklist"
   | "chevronDown"
+  | "chevronLeft"
   | "chevronRight"
   | "circleCheck"
   | "circleX"
+  | "clipboard"
   | "clock"
   | "contrast"
   | "copy"
@@ -257,6 +260,7 @@ export type IconName =
   | "star"
   | "store"
   | "sun"
+  | "table"
   | "tags"
   | "trash"
   | "truck"
@@ -264,6 +268,7 @@ export type IconName =
   | "users"
   | "whatsapp"
   | "wifiOff"
+  | "wrench"
   | "x";
 
 // ---------------------------------------------------------------- QR

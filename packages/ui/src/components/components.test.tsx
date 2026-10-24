@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -55,6 +57,37 @@ describe("Button", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("a text button: no frame, no fill, no side padding, a 48 touch zone (C5, C6)", () => {
+    const onClick = vi.fn();
+    render(
+      <Button variant="text" icon="plus" onClick={onClick}>
+        Изменить колонки
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Изменить колонки" });
+    expect(button.classList.contains("ac-button--text")).toBe(true);
+    expect(button.getAttribute("type")).toBe("button");
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    const css = readFileSync(join(__dirname, "../styles/components.css"), "utf8");
+    const textRule = /\.ac-button--text \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(textRule).toContain("padding-inline: 0");
+    expect(textRule).toContain("background: transparent");
+    expect(textRule).not.toContain("box-shadow");
+    expect(css).toMatch(/\.ac-button--text::before,/);
+  });
+
+  it("a destructive text button says it in `danger`, still without a frame", () => {
+    render(
+      <Button variant="text" destructive>
+        Удалить
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Удалить" });
+    expect(button.className).toContain("ac-button--text");
+    expect(button.className).toContain("ac-button--destructive");
+  });
+
   it("gives icon-only buttons a screen reader name", () => {
     render(<IconButton icon="x" label="Закрыть" />);
     expect(screen.getByRole("button", { name: "Закрыть" })).toBeTruthy();
@@ -82,6 +115,7 @@ describe("fields", () => {
     const { container } = render(<TextField label="Имя" value="" onChange={() => undefined} />);
     const control = container.querySelector(".ac-field__control") as HTMLElement;
     const input = screen.getByLabelText("Имя");
+    fireEvent.keyDown(document.body, { key: "Tab" });
     fireEvent.focus(input);
     expect(control.classList.contains("ac-field__control--keyboard")).toBe(true);
     fireEvent.blur(input);
@@ -89,6 +123,21 @@ describe("fields", () => {
     fireEvent.pointerDown(input);
     fireEvent.focus(input);
     expect(control.classList.contains("ac-field__control--keyboard")).toBe(false);
+  });
+
+  it("keeps only the 1 px border when a page focuses the field itself (autofocus, C16)", () => {
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(5000); // no key pressed lately
+      const { container } = render(
+        <TextField label="Телефон" value="" onChange={() => undefined} />,
+      );
+      fireEvent.focus(screen.getByLabelText("Телефон"));
+      const control = container.querySelector(".ac-field__control") as HTMLElement;
+      expect(control.classList.contains("ac-field__control--keyboard")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("marks AI data with text, not only color", () => {

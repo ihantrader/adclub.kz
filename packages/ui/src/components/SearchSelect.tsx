@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { useKeyboardFocus } from "./fields";
 import { Icon } from "./Icon";
 import { useLoadingGate } from "./loading";
 import {
@@ -102,6 +103,7 @@ export function SearchSelect({
     searcher.current = search;
   });
   const gate = useLoadingGate();
+  const focus = useKeyboardFocus();
   const { begin, settle, cancel } = gate;
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -199,18 +201,33 @@ export function SearchSelect({
   const shown = open ? text : (value?.label ?? "");
   const waitingFirst = open && current === null;
   const stale = open && current !== null && current.query !== query;
+  const labelId = `${id}-label`;
+  const helpId = `${id}-help`;
   return (
-    <div className="search-select" data-name={name}>
-      <label className="search-select__label ac-text-caption ac-muted" htmlFor={id}>
+    <div className="ac-field search-select" data-name={name}>
+      <label className="ac-field__label" id={labelId} htmlFor={id}>
         {label}
       </label>
-      <div className="search-select__box">
+      <div
+        {...focus.handlers}
+        className={[
+          "ac-field__control search-select__box",
+          error && "ac-field__control--error",
+          disabled && "ac-field__control--disabled",
+          focus.keyboard && "ac-field__control--keyboard",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <input
           ref={input}
           id={id}
           type="text"
           role="combobox"
-          className="search-select__input"
+          // The name is the label («Модель»), never the placeholder «Любой» (TASK-079).
+          aria-labelledby={labelId}
+          aria-describedby={error || hint ? helpId : undefined}
+          className="ac-field__input search-select__input"
           autoComplete="off"
           spellCheck={false}
           aria-expanded={open}
@@ -231,11 +248,13 @@ export function SearchSelect({
           }}
           onKeyDown={onKeyDown}
         />
-        {open && (gate.indicator || stale) && (
-          <span className="search-select__busy" aria-hidden="true">
-            {gate.indicator && <Spinner size={16} />}
-          </span>
-        )}
+        <span className="search-select__busy" aria-hidden="true">
+          {open && gate.indicator ? (
+            <Spinner size={16} />
+          ) : (
+            !stale && <Icon name="chevronDown" size={16} />
+          )}
+        </span>
       </div>
       {open && (
         <div
@@ -298,9 +317,14 @@ export function SearchSelect({
         </div>
       )}
       {error ? (
-        <span className="search-select__error">{error}</span>
+        <p className="ac-field__help ac-field__help--error search-select__error" id={helpId}>
+          <Icon name="alertTriangle" size={16} />
+          <span>{error}</span>
+        </p>
       ) : hint ? (
-        <span className="ac-text-caption ac-muted">{hint}</span>
+        <p className="ac-field__help" id={helpId}>
+          {hint}
+        </p>
       ) : null}
     </div>
   );

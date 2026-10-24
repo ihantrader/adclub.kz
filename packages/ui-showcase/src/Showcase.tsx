@@ -11,13 +11,26 @@ import {
   type TypographyToken,
 } from "@adclub/ui-core";
 import {
+  ActionBar,
   AiBadge,
   Banner,
   BottomTabs,
   Button,
   Checkbox,
   Chip,
+  ChipRow,
   CodeBlock,
+  DateField,
+  FilterSelect,
+  MenuButton,
+  SearchSelect,
+  SelectField,
+  TextAreaField,
+  TypeMark,
+  WeekHoursEditor,
+  weekFormOf,
+  weeklyHoursOf,
+  type WeekForm,
   CodeCells,
   colorVar,
   CompatibilityMark,
@@ -807,6 +820,7 @@ function ShowcaseContent({ app }: ShowcaseProps) {
           <LoadingSection t={t} key={`loading-${lang}`} />
           <TableSection t={t} />
           <CodeSection t={t} />
+          <ScreenPartsSection t={t} lang={lang} key={`parts-${lang}`} />
           <p className="ac-text-caption ac-muted">{t.footer}</p>
         </div>
       </main>
@@ -824,6 +838,213 @@ function ShowcaseContent({ app }: ShowcaseProps) {
         )}
       </div>
     </div>
+  );
+}
+
+const SHOWCASE_DAYS = [
+  "Понедельник",
+  "Вторник",
+  "Среда",
+  "Четверг",
+  "Пятница",
+  "Суббота",
+  "Воскресенье",
+] as const;
+const SHOWCASE_SHORT_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] as const;
+
+/** The components of TASK-079 in their states: the action bar, the 48 shell, date, week, «⋯», marks. */
+function ScreenPartsSection({ t, lang }: { t: ShowcaseTexts; lang: ShowcaseLang }) {
+  const p = t.parts;
+  const [city, setCity] = useState("");
+  const [comment, setComment] = useState("");
+  const [date, setDate] = useState("2026-12-16");
+  const [model, setModel] = useState<{ id: string; label: string } | null>(null);
+  const [status, setStatus] = useState("all");
+  const [period, setPeriod] = useState("0");
+  const [week, setWeek] = useState<WeekForm>(() =>
+    weekFormOf([
+      { day: 1, intervals: [{ from: "09:00", to: "18:00" }] },
+      {
+        day: 2,
+        intervals: [
+          { from: "09:00", to: "13:00" },
+          { from: "14:00", to: "18:00" },
+        ],
+      },
+      { day: 3, intervals: [{ from: "00:00", to: "24:00" }] },
+      { day: 4, intervals: [{ from: "09:00", to: "18:00" }] },
+      { day: 5, intervals: [{ from: "18:00", to: "09:00" }] },
+      { day: 6, intervals: [{ from: "10:00", to: "16:00" }] },
+      { day: 7, intervals: [] },
+    ]),
+  );
+  const checked = weeklyHoursOf(week);
+  const ready = <Button size="l">{p.ready}</Button>;
+  const giveOut = (
+    <Button key="give" variant="secondary">
+      {p.giveOut}
+    </Button>
+  );
+  const decline = (
+    <Button key="decline" variant="secondary" destructive>
+      {p.decline}
+    </Button>
+  );
+  const call = (
+    <Button key="call" variant="secondary" icon="phone">
+      {p.call}
+    </Button>
+  );
+  return (
+    <Section id="screen-parts" title={p.title} note={p.note}>
+      <Row label={p.actionsOne}>
+        <div className="sc-wide">
+          <ActionBar main={ready} />
+        </div>
+      </Row>
+      <Row label={p.actionsThree}>
+        <div className="sc-wide">
+          <ActionBar main={ready} others={[giveOut, decline]} />
+        </div>
+      </Row>
+      <Row label={p.actionsFour}>
+        <div className="sc-wide">
+          <ActionBar main={ready} others={[giveOut, decline, call]} note={p.needNetwork} />
+        </div>
+      </Row>
+      <Row label={p.actionsCompact}>
+        <div className="sc-wide">
+          <ActionBar compact others={[call, decline]} />
+        </div>
+      </Row>
+      <Row label={p.fields}>
+        <div className="sc-grid sc-wide">
+          <SelectField
+            label={p.select}
+            value={city}
+            placeholder={p.selectPlaceholder}
+            onChange={setCity}
+            options={p.cities.map((name) => ({ value: name, label: name }))}
+          />
+          <SelectField
+            label={p.select}
+            value=""
+            placeholder={p.selectPlaceholder}
+            error={p.selectError}
+            onChange={() => undefined}
+            options={p.cities.map((name) => ({ value: name, label: name }))}
+          />
+          <SearchSelect
+            label={p.searchSelect}
+            value={model}
+            onChange={setModel}
+            empty={p.searchAny}
+            search={async (query) =>
+              ["Atlas", "Coolray", "Monjaro", "Tugella"]
+                .filter((name) => name.toLowerCase().includes(query.toLowerCase()))
+                .map((name) => ({ id: name, label: `Geely ${name}` }))
+            }
+          />
+          <DateField
+            label={p.date}
+            value={date}
+            onChange={setDate}
+            today="2026-10-21"
+            min="2026-10-21"
+            locale={lang === "kk" ? "kk-KZ" : "ru"}
+          />
+          <DateField
+            label={p.date}
+            value=""
+            onChange={() => undefined}
+            error={p.dateInvalid}
+            locale={lang === "kk" ? "kk-KZ" : "ru"}
+          />
+          <TextAreaField
+            label={p.comment}
+            value={comment}
+            hint={p.commentHint}
+            onChange={setComment}
+          />
+        </div>
+      </Row>
+      <Row label={p.week}>
+        <div className="sc-wide">
+          <WeekHoursEditor
+            week={week}
+            invalidDays={checked.ok ? [] : checked.invalidDays}
+            onDayChange={(day, change) =>
+              setWeek((current) =>
+                current.map((item) => (item.day === day ? { ...item, ...change } : item)),
+              )
+            }
+            texts={{
+              days: SHOWCASE_DAYS,
+              shortDays: SHOWCASE_SHORT_DAYS,
+              dayMode: "режим",
+              workDay: "Рабочий",
+              dayOff: "Выходной",
+              allDay: "Круглосуточно",
+              customHours: "Особый график",
+              from: "с",
+              to: "до",
+              breakLabel: "Перерыв",
+              removeBreak: "убрать перерыв",
+              breakFrom: "перерыв с",
+              breakTo: "перерыв до",
+              copyToWeekdays: "Скопировать понедельник на будни",
+              intervalInvalid: "Конец должен быть позже начала, перерыв — внутри рабочего времени",
+            }}
+          />
+        </div>
+      </Row>
+      <Row label={p.filters}>
+        <div className="sc-wide sc-stack">
+          <Segments
+            label={p.filters}
+            value={period}
+            onChange={setPeriod}
+            options={p.period.map((label, index) => ({ value: String(index), label }))}
+          />
+          <ChipRow label={p.filters}>
+            <FilterSelect
+              label={p.status}
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: p.statusAll },
+                { value: "done", label: p.statusDone },
+              ]}
+            />
+            <Chip selected>{p.onOrder}</Chip>
+            <Chip>{p.service}</Chip>
+            <Chip>{p.noPhoto}</Chip>
+          </ChipRow>
+        </div>
+      </Row>
+      <Row label={p.marks}>
+        <StatusBadge group="inProgress">{p.ready}</StatusBadge>
+        <TypeMark icon="clock">{p.onOrder}</TypeMark>
+        <TypeMark icon="wrench">{p.service}</TypeMark>
+        <TypeMark icon="info">{p.test}</TypeMark>
+        <MenuButton
+          label={p.menu}
+          actions={[
+            {
+              key: "withdraw",
+              label: p.withdraw,
+              icon: "archive",
+              destructive: true,
+              onSelect: () => undefined,
+            },
+          ]}
+        />
+        <Button variant="text">{p.textButton}</Button>
+        <Button variant="text" destructive>
+          {p.textDanger}
+        </Button>
+      </Row>
+    </Section>
   );
 }
 
@@ -859,6 +1080,8 @@ const showcaseCss = `
 .sc-row__items { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .sc-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .sc-narrow { width: 100%; max-width: 360px; }
+.sc-wide { width: 100%; }
+.sc-stack { display: flex; flex-direction: column; gap: 12px; }
 .sc-card { border: var(--ac-line-hairline) solid var(--ac-color-border); border-radius: var(--ac-radius-m); background: var(--ac-color-bg); }
 .sc-keypad { max-width: 320px; margin-top: 16px; }
 .sc-loading-demo { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; }

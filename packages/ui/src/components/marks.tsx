@@ -26,6 +26,25 @@ export function Badge({ tone, icon, children }: BadgeProps) {
   );
 }
 
+export interface TypeMarkProps {
+  icon: IconName;
+  children: ReactNode;
+}
+
+/**
+ * A kind or a property, not a state (TASK-079, C11): «Под заказ», «Услуга»,
+ * «Тестовый», «Без фото» — `caption` `textMuted` with its icon, no
+ * background, so it never reads as a status badge or a filter chip.
+ */
+export function TypeMark({ icon, children }: TypeMarkProps) {
+  return (
+    <span className="ac-type-mark">
+      <Icon name={icon} size={16} />
+      <span>{children}</span>
+    </span>
+  );
+}
+
 /** Order status badge: group color + icon + text (DESIGN.md 7.8). */
 export function StatusBadge({ group, children }: { group: OrderStatusGroup; children: ReactNode }) {
   const { tone, icon } = orderStatusGroups[group];

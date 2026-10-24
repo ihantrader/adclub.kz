@@ -111,6 +111,7 @@ textarea {
 /* 48 × 48 touch zone even for the 44 and 36 buttons. */
 .ac-button--m::before,
 .ac-button--s::before,
+.ac-button--text::before,
 .ac-icon-button::before,
 .ac-chip::before,
 .ac-quantity__button::before {
@@ -156,10 +157,19 @@ textarea {
   color: var(--ac-color-danger);
 }
 
+/* Text button (C5, C6): no frame, no fill and no side padding — its text
+   stands on the line of the content; the touch zone is 48 high by `::before`. */
 .ac-button--text {
+  justify-content: flex-start;
+  min-width: 0;
   background: transparent;
   color: var(--ac-color-accent);
-  padding-inline: var(--ac-space-2);
+  padding-inline: 0;
+  text-align: left;
+}
+
+.ac-button--text.ac-button--destructive {
+  color: var(--ac-color-danger);
 }
 
 .ac-button--danger {
@@ -173,7 +183,16 @@ textarea {
 
 .ac-button--text:not(:disabled, [aria-disabled="true"]):active {
   filter: none;
-  background: var(--ac-color-fill);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .ac-button--text:not(:disabled, [aria-disabled="true"]):hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 .ac-button:disabled {
@@ -285,9 +304,165 @@ textarea {
 
 .ac-field__control--keyboard,
 .ac-search--keyboard,
-.ac-code__cells--keyboard {
+.ac-code__cells--keyboard .ac-code__cell--active {
   outline: var(--ac-focus-width) solid var(--ac-color-accent);
   outline-offset: var(--ac-focus-offset);
+}
+
+/* Several lines: the same shell, the text from the top with the field's padding. */
+.ac-field__control--multiline {
+  align-items: stretch;
+  padding-block: var(--ac-space-3);
+}
+
+.ac-field__textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+
+/* «Выбор из списка»: the browser's select, its arrow replaced by a chevron. */
+.ac-select {
+  position: relative;
+  padding-right: 0;
+}
+
+.ac-select__input {
+  appearance: none;
+  width: 100%;
+  padding-right: var(--ac-space-8);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.ac-select__input:disabled {
+  cursor: not-allowed;
+}
+
+.ac-select__chevron {
+  position: absolute;
+  right: var(--ac-space-3);
+  color: var(--ac-color-text-muted);
+  pointer-events: none;
+}
+
+.ac-select option {
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+}
+
+/* ---------- date field (TASK-079) ---------- */
+.ac-date-field {
+  position: relative;
+}
+
+.ac-date-field .ac-field__control {
+  padding-right: 0;
+}
+
+.ac-date-field__input {
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-date-field__toggle {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--ac-touch-target);
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ac-radius-s);
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  cursor: pointer;
+}
+
+.ac-date-field__toggle[aria-expanded="true"] {
+  color: var(--ac-color-accent);
+}
+
+.ac-date-field__calendar {
+  position: absolute;
+  top: calc(100% + var(--ac-space-1));
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(336px, calc(100vw - 2 * var(--ac-space-4)));
+  padding: var(--ac-space-2) var(--ac-space-3) var(--ac-space-3);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  box-shadow: var(--ac-float-shadow);
+}
+
+/* The calendar opens over the field's help line, not under it. */
+.ac-date-field:has(.ac-field__help) .ac-date-field__calendar {
+  top: calc(var(--ac-field) + 26px + var(--ac-space-1));
+}
+
+.ac-date-field__month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+  margin-bottom: var(--ac-space-1);
+}
+
+.ac-date-field__grid {
+  border-collapse: collapse;
+}
+
+.ac-date-field__grid th {
+  height: 32px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: var(--ac-font-weight-caption);
+}
+
+.ac-date-field__grid td {
+  padding: 0;
+  text-align: center;
+}
+
+.ac-date-field__day {
+  /* 44 a day; a phone of 320 fits the week by narrowing them. */
+  width: min(44px, calc((100vw - 2 * var(--ac-space-4) - 2 * var(--ac-space-3)) / 7));
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ac-radius-s);
+  background: transparent;
+  color: var(--ac-color-text);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .ac-date-field__day:not(:disabled):hover {
+    background: var(--ac-color-fill);
+  }
+}
+
+.ac-date-field__day--today {
+  box-shadow: inset 0 0 0 var(--ac-line) var(--ac-color-border-field);
+}
+
+.ac-date-field__day--chosen,
+.ac-date-field__day--chosen:hover {
+  background: var(--ac-color-primary);
+  color: var(--ac-color-on-primary);
+}
+
+.ac-date-field__day:disabled {
+  color: var(--ac-color-text-disabled);
+  cursor: not-allowed;
+}
+
+.ac-date-field__day:focus-visible {
+  outline-offset: -2px;
 }
 
 .ac-field__control--ai {
@@ -454,6 +629,12 @@ textarea {
   background: transparent;
 }
 
+.ac-keypad__key--paste {
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ac-color-text-muted);
+}
+
 .ac-keypad__key--action {
   background: var(--ac-color-fill);
   border-color: transparent;
@@ -495,18 +676,60 @@ textarea {
   cursor: not-allowed;
 }
 
-.ac-segments {
+/* One line of chips; wider than the screen — it scrolls sideways (C10). */
+.ac-chip-row {
   display: flex;
-  min-height: var(--ac-segments);
-  padding: 2px;
-  border-radius: var(--ac-radius-s);
-  background: var(--ac-color-fill);
+  flex-wrap: nowrap;
+  gap: var(--ac-space-2);
+  max-width: 100%;
+  /* Room for the focus ring and the 48 touch zone inside the scrolling box. */
+  padding: 6px 4px;
+  margin: -6px -4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
+.ac-chip-row > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* «Статус: все ▾»: a chip with the browser's select over it. */
+.ac-filter-select {
+  cursor: pointer;
+}
+
+.ac-filter-select__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ac-filter-select:has(.ac-filter-select__input:focus-visible) {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: var(--ac-focus-offset);
+}
+
+.ac-segments {
+  display: flex;
+  align-self: flex-start;
+  min-height: var(--ac-segments);
+  max-width: 100%;
+  padding: 2px;
+  overflow-x: auto;
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-fill);
+  scrollbar-width: none;
+}
+
+/* Each option as wide as its label, in one line (DESIGN.md 7.7). */
 .ac-segments__item {
   position: relative;
   display: flex;
-  flex: 1 1 auto;
+  flex: none;
+  white-space: nowrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -591,6 +814,7 @@ textarea {
   inset: -9px -1px;
 }
 
+/* Off: a light `surface` knob framed in `borderField` on the `fill` track (DESIGN.md 7.7). */
 .ac-switch__thumb {
   position: absolute;
   top: 3px;
@@ -598,7 +822,8 @@ textarea {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--ac-color-text-muted);
+  background: var(--ac-color-surface);
+  box-shadow: inset 0 0 0 var(--ac-line) var(--ac-color-border-field);
   transition:
     transform var(--ac-motion-fast) var(--ac-motion-easing),
     background-color var(--ac-motion-fast) var(--ac-motion-easing);
@@ -612,6 +837,7 @@ textarea {
 .ac-switch--on .ac-switch__thumb {
   transform: translateX(20px);
   background: var(--ac-color-on-primary);
+  box-shadow: none;
 }
 
 .ac-switch:disabled {
@@ -621,7 +847,8 @@ textarea {
 }
 
 .ac-switch:disabled .ac-switch__thumb {
-  background: var(--ac-color-text-disabled);
+  background: var(--ac-color-fill);
+  box-shadow: inset 0 0 0 var(--ac-line) var(--ac-color-text-disabled);
 }
 
 .ac-check__box,
@@ -738,6 +965,22 @@ textarea {
 .ac-badge--ai {
   background: var(--ac-color-ai-tint);
   color: var(--ac-color-ai);
+}
+
+/* A kind, not a state (C11): caption, muted, an icon, nothing behind it. */
+.ac-type-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: var(--ac-font-weight-caption);
+  white-space: nowrap;
+}
+
+.ac-type-mark > .ac-icon {
+  flex: none;
 }
 
 .ac-compat {
@@ -1299,7 +1542,8 @@ textarea {
   white-space: nowrap;
 }
 
-.ac-tab--center {
+/* The label of the raised button is muted like any tab: only the active tab is `accent` (TASK-079). */
+.ac-tab--center.ac-tab--on {
   color: var(--ac-color-accent);
 }
 
@@ -1403,67 +1647,139 @@ textarea {
   list-style: none;
 }
 
+/* The week as seven rows (TASK-079): from 600 px each row is the day, its
+   mode, the hours and the break in one line of 48; on a phone the row is
+   folded to «Пн  09:00–18:00 ▾» and opens on a press. */
+.ac-week-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+}
+
 .ac-week {
-  gap: var(--ac-space-4);
+  align-self: stretch;
 }
 
 .ac-week__day {
   display: flex;
   flex-direction: column;
-  gap: var(--ac-space-2);
-  padding-bottom: var(--ac-space-4);
   border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
 }
 
 .ac-week__day:last-child {
-  padding-bottom: 0;
   border-bottom: 0;
 }
 
-/* Segments keep one line per option (DESIGN.md 7.7): too wide — they scroll sideways. */
-.ac-week__day .ac-segments {
-  align-self: flex-start;
-  max-width: 100%;
-  overflow-x: auto;
+.ac-week__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  width: 100%;
+  min-height: var(--ac-touch-target);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ac-color-text);
+  text-align: left;
+  cursor: pointer;
 }
 
-.ac-week__day .ac-segments__item {
+.ac-week__name {
   flex: none;
-  white-space: nowrap;
+  width: 32px;
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+.ac-week__summary-text {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-week__day--off .ac-week__summary-text {
+  color: var(--ac-color-text-muted);
+}
+
+.ac-week__chevron {
+  color: var(--ac-color-text-muted);
+  transition: transform var(--ac-motion-fast) var(--ac-motion-easing);
+}
+
+.ac-week__day--open .ac-week__chevron {
+  transform: rotate(180deg);
+}
+
+.ac-week__edit {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-3);
+  padding-bottom: var(--ac-space-3);
+}
+
+.ac-week__day--open .ac-week__edit {
+  display: flex;
+}
+
+.ac-week__name--row {
+  display: none;
+}
+
+.ac-week__mode {
+  flex: 1 1 100%;
+}
+
+.ac-week__range {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.ac-week__break {
+  flex-wrap: wrap;
 }
 
 .ac-week__custom {
   font-variant-numeric: tabular-nums;
 }
 
-.ac-week__hours {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-1);
+.ac-week__error {
+  margin: 0 0 var(--ac-space-3);
 }
 
-.ac-time-range {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ac-space-3);
-}
+@media (min-width: 600px) {
+  .ac-week__summary {
+    display: none;
+  }
 
-.ac-time-input {
-  display: flex;
-  flex: 1 1 120px;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
+  .ac-week__edit,
+  .ac-week__day--open .ac-week__edit {
+    display: flex;
+    flex-wrap: wrap;
+    min-height: calc(var(--ac-field) + 2 * var(--ac-space-2));
+    padding: var(--ac-space-2) 0;
+  }
 
-.ac-time-input__label {
-  color: var(--ac-color-text-muted);
-  font-size: 14px;
-  line-height: 20px;
+  .ac-week__name--row {
+    display: block;
+  }
+
+  .ac-week__mode {
+    flex: 0 0 auto;
+    width: 184px;
+  }
+
+  .ac-week__error {
+    margin-left: calc(32px + var(--ac-space-3));
+  }
 }
 
 .ac-time-input__control {
-  width: 100%;
+  width: 112px;
+  max-width: 100%;
   min-height: var(--ac-field);
   padding: 0 var(--ac-space-3);
   border: var(--ac-line) solid var(--ac-color-border-field);
@@ -1505,23 +1821,29 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* Phone: the date, the note and «Добавить» one under another; from 600 —
+   the two fields side by side, the button on their line. */
 .ac-closed-dates__add {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--ac-space-3);
+  align-items: start;
 }
 
-.ac-closed-dates__add > .ac-button {
-  align-self: flex-start;
+@media (min-width: 600px) {
+  .ac-closed-dates__add {
+    grid-template-columns: minmax(0, 200px) minmax(0, 1fr) auto;
+  }
+
+  .ac-closed-dates__add > .ac-button {
+    margin-top: 26px;
+  }
 }
 
 /* ---------- «выбор с поиском» (TASK-035.B; shared since TASK-019) ---------- */
+/* The shell of every field (C8): 48, the label `bodyS` above; the list under the box. */
 .search-select {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-1);
-  min-width: 0;
 }
 
 .search-select__box {
@@ -1529,44 +1851,19 @@ textarea {
 }
 
 .search-select__input {
-  width: 100%;
-  min-width: 180px;
-  height: 40px;
-  padding: 0 var(--ac-space-8) 0 var(--ac-space-3);
-  border: var(--ac-line) solid var(--ac-color-border-field);
-  border-radius: var(--ac-radius-s);
-  background: var(--ac-color-surface);
-  color: var(--ac-color-text);
-  font: inherit;
+  min-width: 120px;
   text-overflow: ellipsis;
 }
 
-.search-select__input:focus-visible {
-  outline: var(--ac-focus-width) solid var(--ac-color-accent);
-  outline-offset: var(--ac-focus-offset);
-}
-
-.search-select__input[aria-invalid="true"] {
-  border-color: var(--ac-color-danger);
-}
-
-.search-select__input:disabled {
-  color: var(--ac-color-text-muted);
-  background: var(--ac-color-fill);
-}
-
 .search-select__busy {
-  position: absolute;
-  top: 50%;
-  right: var(--ac-space-3);
   display: flex;
+  flex: none;
   color: var(--ac-color-text-muted);
-  transform: translateY(-50%);
 }
 
 .search-select__panel {
   position: absolute;
-  top: calc(100% + var(--ac-space-1));
+  top: calc(var(--ac-field) + 26px + var(--ac-space-1));
   /* As wide as the field: it never sticks out of a dialog or a table frame. */
   right: 0;
   left: 0;
@@ -1629,8 +1926,166 @@ textarea {
   gap: var(--ac-space-1);
 }
 
-.search-select__error {
+/* ---------- «⋯» menu (TASK-079) ---------- */
+.ac-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.ac-menu__list {
+  position: absolute;
+  top: calc(100% + var(--ac-space-1));
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 2 * var(--ac-space-4)));
+  padding: var(--ac-space-1) 0;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  box-shadow: var(--ac-float-shadow);
+}
+
+.ac-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: var(--ac-touch-target);
+  padding: var(--ac-space-2) var(--ac-space-4);
+  border: 0;
+  background: transparent;
+  color: var(--ac-color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ac-menu__item:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .ac-menu__item:not(:disabled):hover {
+    background: var(--ac-color-fill);
+  }
+}
+
+.ac-menu__item--danger {
   color: var(--ac-color-danger);
-  font-size: 14px;
-  line-height: 20px;
+}
+
+.ac-menu__item:disabled {
+  color: var(--ac-color-text-disabled);
+  cursor: not-allowed;
+}
+
+/* ---------- the actions of a screen (TASK-079, C1, C2) ---------- */
+.ac-action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.ac-action-bar__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+}
+
+.ac-action-bar__others {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ac-space-2);
+}
+
+/* Two secondary actions side by side, in halves; one, three and more — each across.
+   Halves narrower than 136 (a card at 320) would break «Позвонить» inside the
+   word — then the two go one under the other, each across. */
+.ac-action-bar--others-2 .ac-action-bar__others {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr));
+}
+
+/* On a phone every button of the bar is L and across its cell; long words wrap, never cut. */
+.ac-action-bar .ac-button {
+  display: flex;
+  width: 100%;
+  min-height: var(--ac-button-l);
+}
+
+.ac-action-bar--compact .ac-button {
+  min-height: var(--ac-button-m);
+}
+
+.ac-action-bar__note {
+  margin: 0;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Pinned under 1024 (there are tabs): stands above the tab bar, its own
+   bottom padding clear of the raised center button + 8 (C2). */
+.ac-action-bar--pinned {
+  position: sticky;
+  bottom: calc(var(--ac-tab-bar) + env(safe-area-inset-bottom));
+  z-index: 4;
+  margin-inline: calc(-1 * var(--ac-space-4));
+  padding: var(--ac-space-3) var(--ac-space-4) calc(var(--ac-center-tab-lift) + var(--ac-space-2));
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+  background: var(--ac-color-bar);
+}
+
+@media (min-width: 600px) {
+  .ac-action-bar__buttons {
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .ac-action-bar__others,
+  .ac-action-bar--others-2 .ac-action-bar__others {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ac-space-2);
+  }
+
+  .ac-action-bar .ac-button {
+    width: auto;
+    min-height: var(--ac-button-m);
+  }
+
+  .ac-action-bar__note {
+    text-align: right;
+  }
+
+  /* A column at any width: the main on top, every other under it, all across. */
+  .ac-action-bar--stacked .ac-action-bar__buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ac-action-bar--stacked .ac-action-bar__others {
+    display: grid;
+  }
+
+  .ac-action-bar--stacked .ac-button {
+    width: 100%;
+  }
+
+  .ac-action-bar--stacked .ac-action-bar__note {
+    text-align: left;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ac-action-bar--pinned {
+    position: static;
+    margin-inline: 0;
+    padding: 0;
+    border-top: 0;
+    background: transparent;
+  }
 }

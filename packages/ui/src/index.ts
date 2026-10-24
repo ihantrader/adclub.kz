@@ -22,6 +22,21 @@ export {
   type IconButtonProps,
 } from "./components/Button";
 export { Spinner } from "./components/Spinner";
+export { cx } from "./components/cx";
+export { ActionBar, type ActionBarProps } from "./components/ActionBar";
+export { MenuButton, type MenuAction, type MenuButtonProps } from "./components/MenuButton";
+export { DateField, type DateFieldProps, type DateFieldTexts } from "./components/DateField";
+export {
+  addDays,
+  addMonths,
+  dateTextOf,
+  maskAfterDelete,
+  maskDateText,
+  monthWeeks,
+  moveDay,
+  readDateText,
+  type DateTextReading,
+} from "./components/date-field-core";
 export { SearchSelect } from "./components/SearchSelect";
 export type { SearchSelectProps, SearchSelectTexts } from "./components/SearchSelect";
 export {
@@ -40,21 +55,30 @@ export {
   CodeCells,
   Keypad,
   SearchField,
+  SelectField,
+  TextAreaField,
   TextField,
+  useKeyboardFocus,
   type CodeCellsProps,
   type KeypadProps,
   type SearchFieldProps,
+  type SelectFieldProps,
+  type SelectOption,
+  type TextAreaFieldProps,
   type TextFieldProps,
 } from "./components/fields";
 export {
   Checkbox,
   Chip,
+  ChipRow,
+  FilterSelect,
   Quantity,
   Radio,
   Segments,
   Switch,
   type CheckboxProps,
   type ChipProps,
+  type FilterSelectProps,
   type QuantityProps,
   type RadioProps,
   type SegmentOption,
@@ -67,8 +91,10 @@ export {
   CompatibilityMark,
   Rating,
   StatusBadge,
+  TypeMark,
   type BadgeProps,
   type RatingProps,
+  type TypeMarkProps,
 } from "./components/marks";
 export {
   Banner,
@@ -121,6 +147,8 @@ export {
 } from "./components/schedule";
 export {
   closedDateProblem,
+  copyToWeekdays,
+  dayHoursText,
   dayIntervals,
   todayIn,
   upcomingClosedDates,

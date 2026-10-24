@@ -27,6 +27,7 @@ import { binProblem, mobilePhone, PHONE_HINT } from "./supplier-words";
 /** The hours editor's words (the cabinet gives the same in kk/ru/en). */
 const WEEK_TEXTS: WeekHoursTexts = {
   days: ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"],
+  shortDays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
   dayMode: "режим дня",
   workDay: "Рабочий",
   dayOff: "Выходной",
@@ -34,9 +35,11 @@ const WEEK_TEXTS: WeekHoursTexts = {
   customHours: "Особый график",
   from: "С",
   to: "До",
-  withBreak: "С перерывом",
+  breakLabel: "Перерыв",
+  removeBreak: "убрать перерыв",
   breakFrom: "Перерыв с",
   breakTo: "Перерыв до",
+  copyToWeekdays: "Скопировать понедельник на будни",
   intervalInvalid: "Проверьте время: конец позже начала, перерыв внутри рабочего дня",
 };
 
@@ -49,6 +52,16 @@ const CLOSED_TEXTS: ClosedDatesTexts = {
   empty: "Нерабочих дат нет",
   pastDate: "Дата уже прошла",
   duplicateDate: "Эта дата уже в списке",
+  dateRequired: "Укажите дату",
+  dateField: {
+    placeholder: "дд.мм.гггг",
+    openCalendar: "Открыть календарь",
+    previousMonth: "Предыдущий месяц",
+    nextMonth: "Следующий месяц",
+    invalid: "Такой даты нет",
+    beforeMin: "Дата уже прошла",
+    afterMax: "Эта дата позже допустимой",
+  },
 };
 
 interface Props {

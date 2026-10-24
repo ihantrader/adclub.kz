@@ -1,5 +1,6 @@
 import {
   PHOTO_CONTENT_TYPES,
+  PHOTO_MAX_UPLOAD_BYTES,
   type AdminCatalogItemCard,
   type AdminItemPhoto,
   type AdminItemPhotosResponse,
@@ -7,21 +8,31 @@ import {
   type ItemPhotoStatus,
 } from "@adclub/contracts";
 import {
+  ActionBar,
+  Badge,
   Banner,
   Button,
   Dialog,
   EmptyState,
-  IconButton,
+  FileDrop,
+  Icon,
   LoadingContent,
+  MenuButton,
+  Select,
   SkeletonList,
+  StatusBadge,
   TextField,
+  TypeMark,
   useToast,
+  type MenuAction,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { AppLink, Thumb } from "../layout/layout";
+import { routePaths } from "../router";
 import { useLoad } from "../use-load";
 import {
   PHOTO_SOURCES_WITH_URL,
@@ -40,13 +51,27 @@ function sizeText(bytes: number): string {
     : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
 }
 
+/** The host of a source page, for its short link («geely-motors.com»). */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+const UPLOAD_SOURCES = (Object.keys(PHOTO_SOURCE_TEXT) as ItemPhotoSourceType[]).filter(
+  (type) => type !== "supplier_photo",
+);
+
 /**
- * «Фото» of the card (A-CAT-05; TASK-013 on the server): a JPEG, PNG or
- * WebP file — its source and, for a picture found on the internet, the page
- * it comes from; the photos with their status, «Подтвердить», «Отклонить»
- * with a reason, «Убрать», the order of the approved ones (the first is
- * the primary). The server checks the file by its content and says why it
- * refuses; the same file twice is «уже есть», not a second photo.
+ * «Фото» of the card (A-CAT-05; TASK-013 on the server, TASK-080): a JPEG,
+ * PNG or WebP file dropped on the zone or chosen — its source and, for a
+ * picture found on the internet, the page it comes from; the photos as a
+ * grid of thumbnails 160 with their status, «Подтвердить», «Отклонить…»
+ * with a reason, «Убрать» in «⋯», the order of the approved ones by the
+ * arrows on them (the first is the primary). The server checks the file by
+ * its content and says why it refuses; the same file twice is «уже есть».
  */
 export function ItemPhotos({
   card,
@@ -62,28 +87,27 @@ export function ItemPhotos({
     () => apiClient.listItemPhotos({ itemId }),
     `photos:${itemId}`,
   );
-  const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [sourceType, setSourceType] = useState<ItemPhotoSourceType>("admin_upload");
   const [sourceUrl, setSourceUrl] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; conflict: boolean } | null>(null);
   const [rejecting, setRejecting] = useState<AdminItemPhoto | null>(null);
   const [reason, setReason] = useState("");
   const list = photos.data?.photos ?? [];
   const approved = list.filter((photo) => photo.status === "approved");
+  // The approved ones in their order first: the order the clients see.
+  const shown = [...approved, ...list.filter((photo) => photo.status !== "approved")];
   const needsUrl = PHOTO_SOURCES_WITH_URL.includes(sourceType);
 
   const upload = async () => {
     if (!file) return;
     setUploadError(null);
-    if (!(PHOTO_CONTENT_TYPES as readonly string[]).includes(file.type)) {
-      setUploadError("Формат не поддерживается — нужен JPEG, PNG или WebP");
-      return;
-    }
+    setUrlError(null);
     if (needsUrl && !sourceUrl.trim()) {
-      setUploadError("Для фото из интернета укажите ссылку на страницу-источник");
+      setUrlError("Для фото из интернета укажите ссылку на страницу-источник");
       return;
     }
     setUploading(true);
@@ -97,7 +121,6 @@ export function ItemPhotos({
       toast.show(isNew ? "Фото загружено и ждёт подтверждения" : "Это фото у позиции уже есть");
       setFile(null);
       setSourceUrl("");
-      if (fileInput.current) fileInput.current.value = "";
     } catch (thrown) {
       setUploadError(catalogErrorText(thrown));
     } finally {
@@ -118,8 +141,8 @@ export function ItemPhotos({
     } catch (thrown) {
       setError(
         isConflict(thrown)
-          ? conflictText(await whoChanged("catalog_item_photo", photo.id))
-          : catalogErrorText(thrown),
+          ? { text: conflictText(await whoChanged("catalog_item_photo", photo.id)), conflict: true }
+          : { text: catalogErrorText(thrown), conflict: false },
       );
       photos.reload();
     }
@@ -137,218 +160,273 @@ export function ItemPhotos({
       photos.replace(await apiClient.reorderItemPhotos({ itemId }, { photoIds: order.ids }));
       onChanged();
     } catch (thrown) {
-      setError(catalogErrorText(thrown));
+      setError({ text: catalogErrorText(thrown), conflict: false });
       photos.reload();
     }
   };
 
   return (
     <div className="detail-stack">
-      <div className="card-section upload-box">
-        <h3 className="ac-text-heading">Загрузить фото</h3>
-        <div className="filters">
-          <label className="select">
-            <span className="ac-text-caption ac-muted">Файл (JPEG, PNG или WebP)</span>
-            <input
-              ref={fileInput}
-              type="file"
-              accept={PHOTO_CONTENT_TYPES.join(",")}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            />
-          </label>
-          <label className="select">
-            <span className="ac-text-caption ac-muted">Источник</span>
-            <select
-              value={sourceType}
-              onChange={(event) => setSourceType(event.target.value as ItemPhotoSourceType)}
-            >
-              {(Object.keys(PHOTO_SOURCE_TEXT) as ItemPhotoSourceType[])
-                .filter((type) => type !== "supplier_photo")
-                .map((type) => (
-                  <option key={type} value={type}>
-                    {PHOTO_SOURCE_TEXT[type]}
-                  </option>
-                ))}
-            </select>
-          </label>
+      <section className="card cat-block">
+        <div className="section__head">
+          <h3 className="section__title">Загрузить фото</h3>
+        </div>
+        <FileDrop
+          title="Перетащите фото сюда или выберите файл"
+          hint="JPEG, PNG или WebP. Проверяется по содержимому файла"
+          icon="image"
+          accept={PHOTO_CONTENT_TYPES}
+          maxBytes={PHOTO_MAX_UPLOAD_BYTES}
+          file={file}
+          disabled={!online || uploading}
+          onFile={(chosen) => {
+            setFile(chosen);
+            setUploadError(null);
+          }}
+          onReject={() => setFile(null)}
+          error={uploadError}
+          texts={{
+            choose: "Выбрать файл",
+            none: "Файл не выбран",
+            wrongType: "Формат не поддерживается — нужен JPEG, PNG или WebP",
+            tooLarge: "Файл слишком большой",
+          }}
+        />
+        <div className="form-grid">
+          <Select<ItemPhotoSourceType>
+            label="Источник"
+            value={sourceType}
+            options={UPLOAD_SOURCES.map((type) => ({
+              value: type,
+              label: PHOTO_SOURCE_TEXT[type],
+            }))}
+            onChange={(next) => {
+              setSourceType(next);
+              setUrlError(null);
+            }}
+          />
           {needsUrl && (
             <TextField
               label="Ссылка на страницу-источник"
               value={sourceUrl}
               onChange={setSourceUrl}
-              hint="https://…"
+              placeholder="https://…"
+              error={urlError ?? undefined}
               autoComplete="off"
             />
           )}
-          <Button disabled={!online || !file} loading={uploading} onClick={upload}>
-            Загрузить
-          </Button>
         </div>
-        {uploadError && (
-          <p className="dialog-error" role="alert">
-            {uploadError}
-          </p>
-        )}
-        {photos.data && (
-          <p className="ac-text-caption ac-muted">
-            Клиентам фото показывается{" "}
-            {photos.data.displayMode === "copy"
-              ? "нашей копией"
-              : "ссылкой на источник (своя копия — у фото без источника)"}{" "}
-            — настройка photo_display_mode.
-          </p>
-        )}
-      </div>
+        <ActionBar
+          label="Загрузка фото"
+          main={
+            <Button disabled={!online || !file} loading={uploading} onClick={upload}>
+              Загрузить
+            </Button>
+          }
+          note={!file ? "Сначала выберите файл" : undefined}
+        />
+      </section>
 
-      {error && <Banner tone="warning">{error}</Banner>}
-      {photos.error !== undefined && <Banner tone="danger">{loadErrorText(photos.error)}</Banner>}
+      {error && (
+        <Banner
+          tone="warning"
+          action={
+            error.conflict ? (
+              <Button
+                variant="text"
+                size="s"
+                onClick={() => {
+                  setError(null);
+                  photos.reload();
+                }}
+              >
+                Обновить данные
+              </Button>
+            ) : undefined
+          }
+        >
+          {error.text}
+        </Banner>
+      )}
+      {photos.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={photos.reload}>
+              Повторить
+            </Button>
+          }
+        >
+          {loadErrorText(photos.error)}
+        </Banner>
+      )}
       <LoadingContent
         ready={photos.data !== undefined}
         indicator={photos.indicator}
         label="Загрузка"
         skeleton={<SkeletonList rows={3} label="Загрузка" />}
       >
-        {list.length === 0 ? (
-          <EmptyState icon="package" title="Фото нет" text="Клиенты видят заглушку вместо фото." />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table photos-table">
-              <thead>
-                <tr>
-                  <th scope="col">Фото</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col">Источник</th>
-                  <th scope="col">Файл</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((photo) => {
-                  const approvedIndex = approved.findIndex((entry) => entry.id === photo.id);
-                  const preview = photo.image?.thumbUrl ?? photo.originalUrl;
-                  return (
-                    <tr
-                      key={photo.id}
-                      className={photo.status === "approved" ? undefined : "row--muted"}
-                    >
-                      <td className="thumb-cell">
-                        {preview ? (
-                          <a
-                            href={photo.originalUrl ?? preview}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                          >
-                            <img className="thumb thumb--large" src={preview} alt="Фото позиции" />
-                          </a>
-                        ) : (
-                          <span
-                            className="thumb thumb--large thumb--empty"
-                            aria-label="Файл удалён"
-                          />
-                        )}
-                      </td>
-                      <td>
-                        <div className="cell-stack">
-                          <span
-                            className={`status status--${photo.status === "approved" ? "open" : photo.status === "proposed" ? "acknowledged" : "closed"}`}
-                          >
-                            {PHOTO_STATUS_TEXT[photo.status]}
-                          </span>
-                          {photo.isPrimary && <span className="ac-text-caption">основное</span>}
-                          {photo.rejectionReason && (
-                            <span className="ac-text-caption ac-muted">
-                              Причина: {photo.rejectionReason}
-                            </span>
-                          )}
-                          {photo.filesDeletedAt && (
-                            <span className="ac-text-caption warning-text">файлы удалены</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="ac-text-body-s">
-                        <div className="cell-stack">
-                          <span>{PHOTO_SOURCE_TEXT[photo.sourceType]}</span>
-                          {photo.sourceUrl && (
-                            <a
-                              className="clamp ac-text-caption"
-                              href={photo.sourceUrl}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              title={photo.sourceUrl}
-                            >
-                              {photo.sourceUrl}
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                      <td className="ac-text-caption ac-muted">
-                        {photo.width}×{photo.height}, {sizeText(photo.byteSize)}
-                        <br />
-                        {formatMoment(photo.uploadedAt)}
-                      </td>
-                      <td className="admin-table__actions">
-                        <div className="button-row button-row--end">
-                          {approvedIndex >= 0 && (
-                            <>
-                              <IconButton
-                                icon="arrowLeft"
-                                className="arrow-up"
-                                label="Выше"
-                                disabled={!online || approvedIndex === 0}
-                                onClick={() => move(approvedIndex, -1)}
-                              />
-                              <IconButton
-                                icon="arrowLeft"
-                                className="arrow-down"
-                                label="Ниже"
-                                disabled={!online || approvedIndex === approved.length - 1}
-                                onClick={() => move(approvedIndex, 1)}
-                              />
-                            </>
-                          )}
-                          {photo.status !== "approved" && !photo.filesDeletedAt && (
-                            <Button
-                              size="s"
-                              disabled={!online}
-                              onClick={() => setStatus(photo, "approved")}
-                            >
-                              Подтвердить
-                            </Button>
-                          )}
-                          {photo.status !== "rejected" && !photo.filesDeletedAt && (
-                            <Button
-                              variant="secondary"
-                              size="s"
-                              disabled={!online}
-                              onClick={() => {
+        <section className="section">
+          <div className="section__head">
+            <h3 className="section__title">Фото позиции</h3>
+          </div>
+          {photos.data && (
+            <p className="section__note">
+              Клиенты видят подтверждённые фото в этом порядке, первое — основное. Показываются{" "}
+              {photos.data.displayMode === "copy"
+                ? "нашей копией"
+                : "ссылкой на источник (своя копия — у фото без источника)"}
+              ; меняется в <AppLink href={routePaths.settings}>«Настройках»</AppLink>, группа
+              «Фото».
+            </p>
+          )}
+          {shown.length === 0 ? (
+            <EmptyState
+              compact
+              icon="image"
+              title="Фото нет"
+              text="Клиенты видят заглушку вместо фото."
+            />
+          ) : (
+            <ul className="cat-photos" aria-label="Фото позиции">
+              {shown.map((photo) => {
+                const approvedIndex = approved.findIndex((entry) => entry.id === photo.id);
+                const preview = photo.image?.thumbUrl ?? photo.originalUrl;
+                const alive = !photo.filesDeletedAt;
+                const menu: MenuAction[] = alive
+                  ? [
+                      ...(photo.status !== "rejected"
+                        ? [
+                            {
+                              key: "reject",
+                              label: "Отклонить…",
+                              icon: "prohibit" as const,
+                              disabled: !online,
+                              onSelect: () => {
                                 setReason("");
                                 setRejecting(photo);
-                              }}
-                            >
-                              Отклонить
-                            </Button>
-                          )}
-                          {photo.status !== "deleted" && !photo.filesDeletedAt && (
-                            <Button
-                              variant="text"
-                              size="s"
-                              disabled={!online}
-                              onClick={() => setStatus(photo, "deleted")}
-                            >
-                              Убрать
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(photo.status !== "deleted"
+                        ? [
+                            {
+                              key: "delete",
+                              label: "Убрать",
+                              icon: "trash" as const,
+                              destructive: true,
+                              disabled: !online,
+                              onSelect: () => void setStatus(photo, "deleted"),
+                            },
+                          ]
+                        : []),
+                    ]
+                  : [];
+                return (
+                  <li
+                    key={photo.id}
+                    className={
+                      photo.status === "approved" ? "cat-photo" : "cat-photo cat-photo--muted"
+                    }
+                  >
+                    <div className="cat-photo__picture">
+                      {preview ? (
+                        <a
+                          href={photo.originalUrl ?? preview}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          aria-label="Открыть фото полностью"
+                        >
+                          <Thumb src={preview} size={160} alt="Фото позиции" />
+                        </a>
+                      ) : (
+                        <Thumb size={160} />
+                      )}
+                      {approvedIndex >= 0 && approved.length > 1 && (
+                        <span className="cat-photo__order" role="group" aria-label="Порядок фото">
+                          <button
+                            type="button"
+                            className="cat-photo__move"
+                            aria-label="Раньше"
+                            title="Раньше"
+                            disabled={!online || approvedIndex === 0}
+                            onClick={() => void move(approvedIndex, -1)}
+                          >
+                            <Icon name="chevronLeft" size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="cat-photo__move"
+                            aria-label="Позже"
+                            title="Позже"
+                            disabled={!online || approvedIndex === approved.length - 1}
+                            onClick={() => void move(approvedIndex, 1)}
+                          >
+                            <Icon name="chevronRight" size={16} />
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                    <div className="badges">
+                      <StatusBadge kind="photo" status={photo.status}>
+                        {PHOTO_STATUS_TEXT[photo.status]}
+                      </StatusBadge>
+                      {photo.isPrimary && (
+                        <Badge tone="accent" icon="star">
+                          Основное
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="cat-photo__facts">
+                      <TypeMark icon={photo.sourceUrl ? "externalLink" : "upload"}>
+                        {PHOTO_SOURCE_TEXT[photo.sourceType]}
+                      </TypeMark>
+                      {photo.sourceUrl && (
+                        <a
+                          className="cat-photo__source"
+                          href={photo.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          title={photo.sourceUrl}
+                        >
+                          {hostOf(photo.sourceUrl)}
+                        </a>
+                      )}
+                      <span>
+                        {photo.width}×{photo.height}, {sizeText(photo.byteSize)}
+                      </span>
+                      <span>{formatMoment(photo.uploadedAt)}</span>
+                      {photo.rejectionReason && <span>Причина: {photo.rejectionReason}</span>}
+                      {photo.filesDeletedAt && (
+                        <Badge tone="warning" icon="alertTriangle">
+                          Файлы удалены
+                        </Badge>
+                      )}
+                    </div>
+                    {(menu.length > 0 || (alive && photo.status !== "approved")) && (
+                      <span className="row-actions cat-photo__actions">
+                        {alive && photo.status !== "approved" && (
+                          <Button
+                            variant="secondary"
+                            size="s"
+                            disabled={!online}
+                            onClick={() => void setStatus(photo, "approved")}
+                          >
+                            Подтвердить
+                          </Button>
+                        )}
+                        {menu.length > 0 && (
+                          <MenuButton size="s" label="Действия с фото" actions={menu} />
+                        )}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </LoadingContent>
 
       <Dialog

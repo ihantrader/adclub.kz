@@ -1,0 +1,58 @@
+/* ---------- «Сигналы» (TASK-034, TASK-080) ----------
+   A row: the kind, the object as the link, «Что делать» folded; the time in
+   one line; the status badge and who acted; one small button and «⋯». */
+
+/* The chips stand on the line of the select's field: centered on its 40, not on the label. */
+.signal-filters .ac-chip-row {
+  min-height: 40px;
+  align-items: center;
+}
+
+.signal-hint {
+  margin-top: 2px;
+}
+
+.signal-hint > .disclosure__summary {
+  min-height: 24px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.signal-hint[open] > .disclosure__summary {
+  margin-bottom: var(--ac-space-1);
+}
+
+.signal-hint__text {
+  max-width: 640px;
+  margin: 0;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.signal-line {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-line--caption {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.signal-comment {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+/* Rows of several lines read from the top. */
+.admin-table.signal-table td {
+  vertical-align: top;
+  padding-block: 10px;
+}

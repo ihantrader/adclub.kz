@@ -1,0 +1,89 @@
+/* «Пользователи» (A-USR-01…03; TASK-080). Only what the shared layout lacks. */
+
+/* A tab of the card: its sections 32 apart. */
+.user-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  min-width: 0;
+}
+
+.user-tab .section + .section {
+  margin-top: 0;
+}
+
+/* A tab of one list: its note close to it. */
+.user-tab--tight {
+  gap: var(--ac-space-3);
+}
+
+/* The profile: a card up to 720, «подпись — значение». */
+.user-profile {
+  max-width: 720px;
+}
+
+.user-profile .kv {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.user-memberships {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* «Сейчас» — the state of club access in the head of the tab. */
+.user-access-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-3);
+}
+
+.user-subscription {
+  max-width: 720px;
+}
+
+/* «Выдач не было» and «+ Выдать доступ…» in one line. */
+.user-none {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-4);
+}
+
+/* The garage: a card per car. */
+.user-garage {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--ac-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.user-car {
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-4);
+}
+
+.user-sessions-note {
+  margin: 0;
+}
+
+/* A-USR-01: the muted line under a name and «N дней» of the access filter. */
+.users-sub {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--ac-space-2);
+}
+
+.users-days {
+  flex: 0 0 96px;
+  width: 96px;
+}
+
+.filters .users-sort {
+  max-width: 280px;
+}

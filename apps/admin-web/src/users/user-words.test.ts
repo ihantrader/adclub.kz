@@ -1,6 +1,10 @@
 import { ApiError } from "@adclub/api-client";
 import { describe, expect, it } from "vitest";
 import {
+  accessMark,
+  consentText,
+  consentVersionText,
+  ipText,
   accessText,
   carDocumentText,
   carText,
@@ -101,5 +105,45 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
         }),
       ),
     ).toMatch(/Отзывать нечего/);
+  });
+});
+
+describe("the view of «Пользователи» (TASK-080)", () => {
+  const now = new Date("2026-10-24T12:00:00+05:00");
+
+  it("marks club access: until, ending within a week, none", () => {
+    expect(
+      accessMark(
+        { granted: true, source: "subscription", validUntil: "2026-11-17T18:59:59.000Z" },
+        now,
+      ),
+    ).toEqual({ tone: "success", icon: "circleCheck", text: "До 17.11 · подписка" });
+    expect(
+      accessMark({ granted: true, source: "manual", validUntil: "2026-10-27T18:59:59.000Z" }, now),
+    ).toEqual({ tone: "warning", icon: "clock", text: "Истекает 27.10" });
+    expect(
+      accessMark({ granted: true, source: "manual", validUntil: "2027-01-31T18:59:59.000Z" }, now)
+        .text,
+    ).toBe("До 31.01.2027");
+    expect(accessMark({ granted: false, source: null, validUntil: null }, now)).toEqual({
+      tone: "neutral",
+      icon: "minus",
+      text: "Нет",
+    });
+  });
+
+  it("says a consent and a network in words, never their codes", () => {
+    expect(consentVersionText("2026-09-mvp")).toBe("сент. 2026");
+    expect(consentVersionText("v3")).toBe("v3");
+    expect(
+      consentText(
+        { at: "2026-10-16T04:38:00.000Z", version: "2026-09-mvp" },
+        () => "16 окт., 09:38",
+      ),
+    ).toBe("дано 16 окт., версия сент. 2026");
+    expect(ipText("0:0::*")).toBe("IP скрыт");
+    expect(ipText(null)).toBe("IP скрыт");
+    expect(ipText("127.0.0.*")).toBe("IP скрыт");
+    expect(ipText("203.0.113.*")).toBe("203.0.113.*");
   });
 });

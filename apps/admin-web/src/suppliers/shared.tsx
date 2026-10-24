@@ -1,35 +1,27 @@
 import type { AdminCity, SupplierStateValue, SupplierType } from "@adclub/contracts";
-import { Button, Dialog, SearchField } from "@adclub/ui";
+import { Badge, Banner, Button, SearchField, Select, StatusBadge } from "@adclub/ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { apiClient } from "../api";
-import { follow } from "../catalog/shared";
+import { follow } from "../layout/layout";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
-import { useSaver } from "../vehicles/shared";
+import { useSaver, type Paged, type Saver } from "../vehicles/shared";
 import { STATE_TEXT, SUPPLIER_TYPE_TEXT, supplierErrorView } from "./supplier-words";
+
+type SectionTab = "suppliers" | "leads";
 
 const TABS = [
   { key: "suppliers", label: "Поставщики", href: routePaths.suppliers },
   { key: "leads", label: "Заявки на подключение", href: routePaths.supplierLeads },
 ] as const;
 
-/** The pages of «Поставщики» (A-SUP-01, A-SUP-02): real links with their own addresses. */
-export function SuppliersTabs({ active }: { active: (typeof TABS)[number]["key"] | null }) {
-  return (
-    <nav className="page-tabs" aria-label="Поставщики">
-      {TABS.map((tab) => (
-        <a
-          key={tab.key}
-          href={tab.href}
-          className={tab.key === active ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"}
-          aria-current={tab.key === active ? "page" : undefined}
-          onClick={(event) => follow(event, tab.href)}
-        >
-          {tab.label}
-        </a>
-      ))}
-    </nav>
-  );
+/** The two pages of «Поставщики» (A-SUP-01, A-SUP-02) — the one bar of the section's `Header` (X11). */
+export function suppliersTabs(active: SectionTab) {
+  return { label: "Поставщики", items: TABS, active };
 }
+
+/** The crumbs of a page inside the section: a card, a request, a new supplier (X11). */
+export const SUPPLIERS_CRUMB = { label: "Поставщики", href: routePaths.suppliers };
+export const LEADS_CRUMB = { label: "Заявки на подключение", href: routePaths.supplierLeads };
 
 /** The filters of a list, kept in the address: what is set, and a change of some of them. */
 export function useAddressFilters(): {
@@ -49,23 +41,109 @@ export function useAddressFilters(): {
   };
 }
 
-/** A search box that writes `q` to the address a moment after typing stops. */
-export function SearchBox({ label }: { label: string }) {
+/**
+ * The search of a list (X4): compact, its meaning in the placeholder, `q`
+ * written to the address a moment after typing stops (Enter — at once).
+ */
+export function SearchBox({ label, placeholder }: { label: string; placeholder?: string }) {
   const { query, set } = useAddressFilters();
   const q = query.get("q") ?? "";
   const [text, setText] = useState(q);
+  // «Сбросить фильтры» or a link changed the address: the box shows it.
+  const [seen, setSeen] = useState(q);
+  if (q !== seen) {
+    setSeen(q);
+    if (q !== text.trim()) setText(q);
+  }
   useEffect(() => {
     const trimmed = text.trim();
     if (trimmed === q) return;
     const timer = setTimeout(() => set({ q: trimmed || undefined }), 350);
     return () => clearTimeout(timer);
   });
-  return <SearchField label={label} value={text} onChange={setText} clearLabel="Очистить" />;
+  return (
+    <SearchField
+      className="ac-search--compact filters__search"
+      label={label}
+      placeholder={placeholder ?? label}
+      value={text}
+      onChange={setText}
+      clearLabel="Очистить поиск"
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          set({ q: text.trim() || undefined });
+        }
+      }}
+    />
+  );
 }
 
 /** Saving a change of a supplier or a request with the section's words (`useSaver`). */
 export function useSupplierSaver(entityType: "supplier" | "supplier_lead" | "supplier_member") {
   return useSaver(entityType, {}, supplierErrorView);
+}
+
+/**
+ * The refusal of a save that belongs to no field (those show it at
+ * themselves): a banner over the form; a colleague's change —
+ * «Эти данные только что изменил {кто}. Обновите страницу» with the text
+ * button «Обновить данные» (SCREENS 2), which keeps what was typed.
+ */
+export function SaverError({
+  saver,
+  fields = [],
+  onRefresh,
+}: {
+  saver: Saver;
+  fields?: readonly string[];
+  onRefresh?: () => void;
+}) {
+  const error = saver.error;
+  if (!error || (error.field && fields.includes(error.field))) return null;
+  return (
+    <Banner
+      tone="warning"
+      action={
+        error.currentVersion !== null ? (
+          <Button
+            variant="text"
+            size="s"
+            onClick={() => {
+              saver.takeCurrent();
+              onRefresh?.();
+            }}
+          >
+            Обновить данные
+          </Button>
+        ) : undefined
+      }
+    >
+      {error.text}
+      {error.link && (
+        <>
+          {" · "}
+          <a href={error.link.href} onClick={(event) => follow(event, error.link!.href)}>
+            {error.link.label}
+          </a>
+        </>
+      )}
+    </Banner>
+  );
+}
+
+/** «Показать ещё» of a paged list (S) and its error (X22). */
+export function MoreButton<T extends { id: string }>({ list }: { list: Paged<T> }) {
+  return (
+    <>
+      {list.moreError && <Banner tone="danger">{list.moreError}</Banner>}
+      {list.next && (
+        <Button variant="secondary" size="s" onClick={list.loadMore} loading={list.loadingMore}>
+          Показать ещё
+        </Button>
+      )}
+    </>
+  );
 }
 
 /** The cities of the directory for the selects — archived ones too, marked (a supplier may keep one). */
@@ -86,7 +164,14 @@ export function useCities(): AdminCity[] {
   return cities;
 }
 
-/** A city select: active cities, and the current one even when it is archived. */
+/** «Все» of a filter select: the value `all` stands for no filter. */
+const ANY = "all";
+
+/**
+ * A city select (our `Select`, X2): active cities, and the current one even
+ * when it is archived. With `any` it is a filter — compact 40 with «Все»
+ * first; without — a field of a form (48) with «Выберите город».
+ */
 export function CitySelect({
   label = "Город",
   value,
@@ -94,6 +179,7 @@ export function CitySelect({
   cities,
   any,
   error,
+  disabled,
 }: {
   label?: string;
   value: string;
@@ -102,160 +188,111 @@ export function CitySelect({
   /** «Все» for a filter. */
   any?: string;
   error?: ReactNode;
+  disabled?: boolean;
 }) {
-  const shown = cities.filter((city) => city.status === "active" || city.id === value);
+  const shown = cities
+    .filter((city) => city.status === "active" || city.id === value)
+    .map((city) => ({
+      value: city.id,
+      label: city.status === "archived" ? `${city.names.ru} (в архиве)` : city.names.ru,
+    }));
+  if (any !== undefined) {
+    return (
+      <Select<string>
+        compact
+        label={label}
+        value={value || ANY}
+        options={[{ value: ANY, label: any }, ...shown]}
+        onChange={(next) => onChange(next === ANY ? "" : next)}
+        disabled={disabled}
+        className="filters__select"
+      />
+    );
+  }
   return (
-    <label className="select">
-      <span className="ac-text-caption ac-muted">{label}</span>
-      <select
-        value={value}
-        aria-invalid={error ? true : undefined}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {any !== undefined ? (
-          <option value="">{any}</option>
-        ) : (
-          !value && <option value="">—</option>
-        )}
-        {shown.map((city) => (
-          <option key={city.id} value={city.id}>
-            {city.names.ru}
-            {city.status === "archived" ? " (в архиве)" : ""}
-          </option>
-        ))}
-      </select>
-      {error && <span className="ac-field__help ac-field__help--error">{error}</span>}
-    </label>
+    <Select<string>
+      label={label}
+      value={value || null}
+      placeholder="Выберите город"
+      options={shown}
+      onChange={onChange}
+      error={error}
+      disabled={disabled}
+    />
   );
 }
 
 const TYPES: SupplierType[] = ["goods", "services", "both"];
 
+/** «Что предлагает»: a field of a form, or a compact filter with «Все» (`any`). */
 export function TypeSelect({
   value,
   onChange,
   any,
+  disabled,
 }: {
   value: string;
   onChange: (type: string) => void;
   any?: string;
+  disabled?: boolean;
 }) {
+  const options = TYPES.map((type) => ({ value: type, label: SUPPLIER_TYPE_TEXT[type] }));
+  if (any !== undefined) {
+    return (
+      <Select<string>
+        compact
+        label="Что предлагает"
+        value={value || ANY}
+        options={[{ value: ANY, label: any }, ...options]}
+        onChange={(next) => onChange(next === ANY ? "" : next)}
+        disabled={disabled}
+        className="filters__select"
+      />
+    );
+  }
   return (
-    <label className="select">
-      <span className="ac-text-caption ac-muted">Что предлагает</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {any !== undefined && <option value="">{any}</option>}
-        {TYPES.map((type) => (
-          <option key={type} value={type}>
-            {SUPPLIER_TYPE_TEXT[type]}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-/** The state of a supplier as a mark: active, paused, blocked; and «проверенный». */
-export function StateMark({ state, verified }: { state: SupplierStateValue; verified?: boolean }) {
-  const tone =
-    state === "active"
-      ? "status--acknowledged"
-      : state === "blocked"
-        ? "status--danger"
-        : "status--open";
-  return (
-    <span className="cell-stack">
-      <span className={`status ${tone}`}>{STATE_TEXT[state]}</span>
-      {verified && <span className="ac-text-caption">проверенный партнёр</span>}
-    </span>
+    <Select<string>
+      label="Что предлагает"
+      value={value || null}
+      options={options}
+      onChange={onChange}
+      disabled={disabled}
+    />
   );
 }
 
 /**
- * A dangerous action with its reason (SCREENS 7.0): what will happen, the
- * reason (required — the server refuses an empty one too), the server's
- * refusal in words.
+ * The state of a supplier (X7): its badge from the one map of statuses and
+ * «Проверенный партнёр» as a mark beside it. `quiet` — a list: an active
+ * company has no badge, only what departs from the usual is marked.
  */
-export function ReasonDialog({
-  open,
-  title,
-  confirm,
-  onConfirm,
-  onClose,
-  busy,
-  error,
-  reasonLabel = "Причина (обязательно, попадёт в журнал)",
-  children,
+export function StateMark({
+  state,
+  verified,
+  quiet,
 }: {
-  open: boolean;
-  title: string;
-  confirm: string;
-  onConfirm: (reason: string) => void;
-  onClose: () => void;
-  busy: boolean;
-  error: ReactNode;
-  reasonLabel?: string;
-  children?: ReactNode;
+  state: SupplierStateValue;
+  verified?: boolean;
+  quiet?: boolean;
 }) {
-  const [reason, setReason] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const [shown, setShown] = useState(false);
-  if (open !== shown) {
-    setShown(open);
-    if (open) {
-      setReason("");
-      setProblem(null);
-    }
-  }
-  const submit = () => {
-    const text = reason.trim();
-    if (text.length < 3) {
-      setProblem("Укажите причину — не короче трёх знаков");
-      return;
-    }
-    if (text.length > 500) {
-      setProblem("Причина — не длиннее 500 знаков");
-      return;
-    }
-    onConfirm(text);
-  };
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={title}
-      actions={
-        <>
-          <Button onClick={submit} loading={busy}>
-            {confirm}
-          </Button>
-          <Button variant="secondary" onClick={onClose}>
-            Отмена
-          </Button>
-        </>
-      }
-    >
-      <div className="dialog-stack">
-        {children}
-        <label className="textarea">
-          <span className="ac-text-caption ac-muted">{reasonLabel}</span>
-          <textarea
-            value={reason}
-            rows={3}
-            maxLength={500}
-            onChange={(event) => {
-              setReason(event.target.value);
-              setProblem(null);
-            }}
-            aria-invalid={problem ? true : undefined}
-          />
-        </label>
-        {problem && <p className="dialog-error">{problem}</p>}
-        {error}
-      </div>
-    </Dialog>
+    <span className="badges">
+      {!(quiet && state === "active") && (
+        <StatusBadge kind="supplier" status={state}>
+          {STATE_TEXT[state]}
+        </StatusBadge>
+      )}
+      {verified && (
+        <Badge tone="success" icon="circleCheck">
+          Проверенный партнёр
+        </Badge>
+      )}
+    </span>
   );
 }
+
+/** A decision with a required reason — one dialog for the whole admin panel (TASK-080). */
+export { ReasonDialog } from "../layout/ReasonDialog";
 
 /** «было → стало» of a state change, two lines. */
 export function WasNow({ was, now }: { was: string; now: string }) {

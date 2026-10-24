@@ -1,23 +1,44 @@
 import type { AdminSupplierCard, SupplierOffer } from "@adclub/contracts";
-import { Banner, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
+import {
+  Badge,
+  Banner,
+  Button,
+  EmptyState,
+  LoadingContent,
+  SkeletonList,
+  TableToolbar,
+  TypeMark,
+} from "@adclub/ui";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
-import { offerPriceText, offerTermsText, showcaseReasonText } from "../catalog/catalog-words";
-import { formatMoment } from "../format";
-import { catalogItemPath, supplierPath } from "../router";
-import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
-import { useAddressFilters } from "./shared";
+import { offerTermsText, showcaseReasonText } from "../catalog/catalog-words";
+import { formatMoment, formatMoney } from "../format";
+import { StatusChips } from "../layout/filters";
+import { Muted, RowTitle, rowLink, Table } from "../layout/layout";
+import { catalogItemPath, navigateTo, supplierPath } from "../router";
+import { LoadError, usePaged } from "../vehicles/shared";
+import { MoreButton, useAddressFilters } from "./shared";
+import { offerModelsText, offerPriceLine } from "./supplier-words";
 
 type OfferTab = "on_sale" | "withdrawn";
 
 /** The reasons of the point's schedule (D-060): every offer of the point is hidden by them. */
 const SCHEDULE_REASONS = new Set(["hours_not_set", "no_working_day"]);
 
+const COLUMNS = [
+  { key: "item", header: "Позиция" },
+  { key: "price", header: "Цена", width: 140, numeric: true },
+  { key: "terms", header: "Наличие", width: 240 },
+  { key: "showcase", header: "Витрина", width: 200 },
+  { key: "updated", header: "Изменено", width: 140 },
+];
+
 /**
- * «Предложения» of A-SUP-03 (TASK-036), read only: «В продаже» and
- * «Снятые» with the server's counts, the item (a link to the catalog), the
- * price, the availability, whether clients see it and why not — the
- * showcase's reasons, all of them (a pause and no hours are both said).
+ * «Предложения» of A-SUP-03 (TASK-036, TASK-080), read only: «В продаже» and
+ * «Снятые» as chips with the server's counts; the whole row opens the
+ * item; the price on the right («от 8 000 ₸ · 2 модели» for a service with
+ * prices by model, the models in the hint); only an offer clients don't see
+ * is marked — «Не видно» with the showcase's reasons, all of them (a pause
+ * and no hours are both said).
  */
 export function SupplierOffers({ card }: { card: AdminSupplierCard }) {
   const { query, set } = useAddressFilters();
@@ -41,24 +62,16 @@ export function SupplierOffers({ card }: { card: AdminSupplierCard }) {
 
   return (
     <div className="detail-stack">
-      <nav className="chips funnel-tabs" aria-label="Предложения">
-        {(["on_sale", "withdrawn"] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={key === tab ? "funnel-tab funnel-tab--on" : "funnel-tab"}
-            aria-pressed={key === tab}
-            onClick={() => set({ offers: key === "on_sale" ? undefined : key })}
-          >
-            {key === "on_sale" ? "В продаже" : "Снятые"}
-            {counts && (
-              <span className="funnel-tab__count">
-                {key === "on_sale" ? counts.onSale : counts.withdrawn}
-              </span>
-            )}
-          </button>
-        ))}
-      </nav>
+      <StatusChips<OfferTab>
+        label="Предложения"
+        value={tab}
+        allLabel={null}
+        chips={[
+          { value: "on_sale", label: "В продаже", count: counts?.onSale ?? null },
+          { value: "withdrawn", label: "Снятые", count: counts?.withdrawn ?? null },
+        ]}
+        onChange={(next) => set({ offers: next === "withdrawn" ? next : undefined })}
+      />
       {card.state !== "active" && (
         <Banner tone="warning">
           {card.state === "blocked" ? "Компания заблокирована" : "Компания на паузе"} — её
@@ -66,9 +79,15 @@ export function SupplierOffers({ card }: { card: AdminSupplierCard }) {
         </Banner>
       )}
       {(scheduleHides || card.schedule.weeklyHours === null) && (
-        <Banner tone="warning">
-          Без часов работы предложения не показываются клиентам ·{" "}
-          <AppLink href={supplierPath(card.id)}>Профиль: часы работы</AppLink>
+        <Banner
+          tone="warning"
+          action={
+            <Button variant="text" size="s" onClick={() => navigateTo(supplierPath(card.id))}>
+              Профиль: часы работы
+            </Button>
+          }
+        >
+          Без часов работы предложения не показываются клиентам
         </Banner>
       )}
       <LoadError error={list.first.error} retry={list.first.reload} />
@@ -76,62 +95,81 @@ export function SupplierOffers({ card }: { card: AdminSupplierCard }) {
         ready={list.first.data !== undefined}
         indicator={list.first.indicator}
         label="Загрузка"
+        swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="store"
-            title={tab === "on_sale" ? "Предложений в продаже нет" : "Снятых предложений нет"}
-            text="Предложения выставляет сам поставщик в кабинете."
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Позиция</th>
-                  <th scope="col" className="num">
-                    Цена
-                  </th>
-                  <th scope="col">Наличие</th>
-                  <th scope="col">Видно клиентам</th>
-                  <th scope="col">Изменено</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((offer) => (
-                  <tr key={offer.id}>
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total} />
+          {list.items.length === 0 ? (
+            <EmptyState
+              compact
+              icon="store"
+              title={tab === "on_sale" ? "Предложений в продаже нет" : "Снятых предложений нет"}
+              text="Предложения выставляет сам поставщик в кабинете"
+            />
+          ) : (
+            <Table label="Предложения поставщика" columns={COLUMNS}>
+              {list.items.map((offer) => {
+                const href = catalogItemPath(offer.item.id);
+                const models = offerModelsText(offer);
+                return (
+                  <tr key={offer.id} {...rowLink(href)}>
                     <td>
-                      <div className="cell-stack">
-                        <span className="long-text" title={offer.item.name.text}>
-                          <AppLink href={catalogItemPath(offer.item.id)}>
-                            {offer.item.name.text}
-                          </AppLink>
+                      <RowTitle
+                        href={href}
+                        sub={
+                          offer.item.type === "service" ? (
+                            <TypeMark icon="wrench">Услуга</TypeMark>
+                          ) : (
+                            [offer.item.brand?.name, offer.item.article]
+                              .filter(Boolean)
+                              .join(" · ") || undefined
+                          )
+                        }
+                      >
+                        <span className="clamp" title={offer.item.name.text}>
+                          {offer.item.name.text}
                         </span>
-                        <span className="ac-text-caption ac-muted">
-                          {[offer.item.brand?.name, offer.item.article].filter(Boolean).join(" · ")}
-                        </span>
-                      </div>
+                      </RowTitle>
                     </td>
-                    <td className="num">{offerPriceText(offer)}</td>
+                    <td className="num">
+                      <span className="cell-stack">
+                        <span title={models ?? undefined}>
+                          {offer.pricing.mode === "single" ? "" : "от "}
+                          {formatMoney(offer.price)}
+                        </span>
+                        {offer.pricing.mode !== "single" && (
+                          <span className="row-title__sub" title={models ?? undefined}>
+                            {offerPriceLine(offer)}
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="ac-text-body-s">{offerTermsText(offer)}</td>
-                    <td className="ac-text-body-s">
+                    <td>
                       {offer.showcase.visible ? (
-                        "да"
+                        <Muted>—</Muted>
                       ) : (
-                        <span className="warning-text">
-                          нет: {offer.showcase.reasons.map(showcaseReasonText).join(", ")}
+                        <span className="cell-stack">
+                          <span className="badges">
+                            <Badge tone="warning" icon="eye">
+                              Не видно клиентам
+                            </Badge>
+                          </span>
+                          <span className="row-title__sub">
+                            {offer.showcase.reasons.map(showcaseReasonText).join(", ")}
+                          </span>
                         </span>
                       )}
                     </td>
-                    <td className="ac-text-body-s num">{formatMoment(offer.updatedAt)}</td>
+                    <td className="ac-text-body-s nowrap">{formatMoment(offer.updatedAt)}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <MoreButton list={list} />
+                );
+              })}
+            </Table>
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
     </div>
   );

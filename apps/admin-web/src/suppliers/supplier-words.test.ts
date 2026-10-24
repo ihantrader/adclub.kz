@@ -4,6 +4,12 @@ import { kzBinCheckDigit } from "@adclub/domain";
 import { describe, expect, it } from "vitest";
 import {
   binProblem,
+  consentVersionText,
+  ipText,
+  leadSearchOf,
+  offerPriceLine,
+  priceImportTypeText,
+  sessionGroups,
   hiddenPhone,
   leadMoves,
   PRICE_IMPORT_STATUS_TEXT,
@@ -150,5 +156,79 @@ describe("the words of «Прайс» of a supplier's card (TASK-046)", () => {
     expect(
       priceImportFailureText({ reason: "old_excel", detected: "xls", limit: null, line: null }),
     ).toBe("старый .xls");
+  });
+});
+
+describe("the section's words on screen (TASK-080)", () => {
+  it("reads «Название или БИН»: digits are a БИН, whole at 12", () => {
+    expect(leadSearchOf("  ")).toEqual({});
+    expect(leadSearchOf("Детали Юг")).toEqual({ q: "Детали Юг" });
+    expect(leadSearchOf("0807 4000")).toEqual({ bin: "08074000", complete: false });
+    expect(leadSearchOf("080740-000128")).toEqual({ bin: "080740000128", complete: true });
+    expect(leadSearchOf("Юг 24")).toEqual({ q: "Юг 24" });
+  });
+
+  it("says the version of a consent text without codes (X28)", () => {
+    expect(consentVersionText("2026-09-mvp")).toBe("версия текста от сент. 2026");
+    expect(consentVersionText("2026-05")).toBe("версия текста от мая 2026");
+    expect(consentVersionText("1")).toBe("версия текста 1");
+    expect(consentVersionText("2026-13-x")).toBe("версия текста 2026-13-x");
+  });
+
+  it("hides an address the server could not shorten (X28)", () => {
+    expect(ipText("0:0::*")).toBe("IP скрыт");
+    expect(ipText(null)).toBe("IP скрыт");
+    expect(ipText("203.0.113.*")).toBe("IP 203.0.113.*");
+  });
+
+  it("folds the sessions of one employee on one device in a row (X22)", () => {
+    const session = (id: string, member: string, deviceName: string | null) => ({
+      id,
+      member: { id: member },
+      deviceName,
+      platform: "supplier-web",
+      clientVersion: "0.1.0",
+    });
+    const groups = sessionGroups([
+      session("1", "a", "Chrome · Windows"),
+      session("2", "a", "Chrome · Windows"),
+      session("3", "a", "Chrome · Windows"),
+      session("4", "b", "Chrome · Windows"),
+      session("5", "a", "Chrome · Windows"),
+      session("6", "a", null),
+    ]);
+    expect(groups.map((group) => [group.first.id, group.rest.map((rest) => rest.id)])).toEqual([
+      ["1", ["2", "3"]],
+      ["4", []],
+      ["5", []],
+      ["6", []],
+    ]);
+  });
+
+  it("names a file's type by its content", () => {
+    expect(priceImportTypeText({ format: "xlsx", fileName: "price.xlsx" })).toBe("Excel");
+    expect(priceImportTypeText({ format: "csv", fileName: "price.CSV" })).toBe("CSV");
+    expect(priceImportTypeText({ format: "xlsx", fileName: "renamed.csv" })).toBe(
+      "Excel по содержимому",
+    );
+    expect(priceImportTypeText({ format: "csv", fileName: null })).toBe("CSV");
+  });
+
+  it("counts the models of a service priced by model", () => {
+    const model = (price: number) => ({
+      make: { id: "m", name: "Geely" },
+      model: { id: "x", name: "Atlas" },
+      price,
+      available: true,
+    });
+    const pricing = (count: number) =>
+      ({
+        mode: "by_model",
+        models: Array.from({ length: count }, (_, index) => model(index)),
+      }) as never;
+    expect(offerPriceLine({ pricing: { mode: "single" } as never })).toBe("");
+    expect(offerPriceLine({ pricing: pricing(1) })).toBe("1 модель");
+    expect(offerPriceLine({ pricing: pricing(2) })).toBe("2 модели");
+    expect(offerPriceLine({ pricing: pricing(5) })).toBe("5 моделей");
   });
 });

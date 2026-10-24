@@ -1,5 +1,6 @@
 import type { AdminSupplierCard, SupplierType, UpdateSupplierBody } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
   ClosedDatesEditor,
@@ -20,8 +21,7 @@ import {
 import { formatPhone, useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { FormError } from "../vehicles/shared";
-import { CitySelect, TypeSelect, useCities, useSupplierSaver } from "./shared";
+import { CitySelect, SaverError, TypeSelect, useCities, useSupplierSaver } from "./shared";
 import { binProblem, mobilePhone, PHONE_HINT } from "./supplier-words";
 
 /** The hours editor's words (the cabinet gives the same in kk/ru/en). */
@@ -79,7 +79,7 @@ interface Props {
  */
 export function SupplierProfile({ card, onChanged, onReload }: Props) {
   return (
-    <div className="detail-stack form-page">
+    <div className="detail-stack">
       <ProfileForm card={card} onChanged={onChanged} onReload={onReload} />
       <ScheduleForm card={card} onChanged={onChanged} onReload={onReload} />
     </div>
@@ -165,8 +165,8 @@ function ProfileForm({ card, onChanged, onReload }: Props) {
 
   const error = (field: string) => problems[field] ?? saver.fieldError(field);
   return (
-    <section className="card-section">
-      <h2 className="ac-text-heading">Компания и точка выдачи</h2>
+    <section className="card form-card">
+      <h2 className="card__title">Компания и точка выдачи</h2>
       <div className="form-grid">
         <TextField
           label="Название"
@@ -219,22 +219,27 @@ function ProfileForm({ card, onChanged, onReload }: Props) {
           hint="Покупатель увидит его после принятия заявки"
         />
       </div>
-      <Switch
-        label="Доставка по умолчанию для новых предложений"
-        description="Только начальное значение «Доставки» в форме нового предложения; выставленные предложения не меняются"
-        checked={form.deliveryByDefault}
-        onChange={(deliveryByDefault) => change({ deliveryByDefault })}
-      />
-      <FormError
+      <div className="supplier-switch">
+        <Switch
+          label="Доставка по умолчанию для новых предложений"
+          description="Только начальное значение «Доставки» в форме нового предложения; выставленные предложения не меняются"
+          checked={form.deliveryByDefault}
+          onChange={(deliveryByDefault) => change({ deliveryByDefault })}
+        />
+      </div>
+      <SaverError
         saver={saver}
         fields={["name", "bin", "cityId", "contactPhone"]}
         onRefresh={onReload}
       />
-      <div className="button-row">
-        <Button disabled={!online} loading={saver.saving} onClick={save}>
-          Сохранить
-        </Button>
-      </div>
+      <ActionBar
+        label="Сохранение данных компании"
+        main={
+          <Button variant="secondary" disabled={!online} loading={saver.saving} onClick={save}>
+            Сохранить
+          </Button>
+        }
+      />
     </section>
   );
 }
@@ -285,17 +290,19 @@ function ScheduleForm({ card, onChanged, onReload }: Props) {
   };
 
   return (
-    <section className="card-section">
-      <h2 className="ac-text-heading">Часы работы</h2>
-      {card.schedule.weeklyHours === null ? (
+    <section className="card form-card">
+      <div className="supplier-card-head">
+        <h2 className="card__title">Часы работы</h2>
+        {card.schedule.weeklyHours !== null && (
+          <p className="section__note">
+            Без часов работы предложения не показываются клиентам. Время — местное время точки.
+          </p>
+        )}
+      </div>
+      {card.schedule.weeklyHours === null && (
         <Banner tone="warning">
           Часы работы не заданы. Без часов работы предложения не показываются клиентам.
         </Banner>
-      ) : (
-        <p className="ac-text-body-s ac-muted">
-          Без часов работы предложения не показываются клиентам. Время — часовой пояс точки (
-          {card.timeZone}).
-        </p>
       )}
       <WeekHoursEditor
         week={week}
@@ -308,10 +315,12 @@ function ScheduleForm({ card, onChanged, onReload }: Props) {
           Нужен хотя бы один рабочий день — без него предложения не показываются клиентам.
         </Banner>
       )}
-      <h2 className="ac-text-heading">Нерабочие даты</h2>
-      <p className="ac-text-body-s ac-muted">
-        Праздники и выходные точки: в эти дни заявки не принимаются и не выдаются.
-      </p>
+      <div className="supplier-card-head supplier-card-head--part">
+        <h3 className="supplier-subtitle">Нерабочие даты</h3>
+        <p className="section__note">
+          Праздники и выходные точки: в эти дни заявки не принимаются и не выдаются.
+        </p>
+      </div>
       <ClosedDatesEditor
         dates={dates}
         today={today}
@@ -319,12 +328,15 @@ function ScheduleForm({ card, onChanged, onReload }: Props) {
         texts={CLOSED_TEXTS}
         locale="ru"
       />
-      <FormError saver={saver} onRefresh={onReload} />
-      <div className="button-row">
-        <Button disabled={!online} loading={saver.saving} onClick={save}>
-          Сохранить часы и даты
-        </Button>
-      </div>
+      <SaverError saver={saver} onRefresh={onReload} />
+      <ActionBar
+        label="Сохранение часов работы"
+        main={
+          <Button variant="secondary" disabled={!online} loading={saver.saving} onClick={save}>
+            Сохранить часы и даты
+          </Button>
+        }
+      />
     </section>
   );
 }

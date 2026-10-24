@@ -1,29 +1,64 @@
 import type { AdminVehicleMake, AdminVehicleModel } from "@adclub/contracts";
 import { auditEntities } from "@adclub/contracts";
-import { Button, EmptyState, LoadingContent, SkeletonList, useToast } from "@adclub/ui";
+import {
+  Banner,
+  Button,
+  EmptyState,
+  LoadingContent,
+  SkeletonList,
+  TableToolbar,
+  useToast,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
-import { routePaths, useLocation, vehicleMakePath, vehicleModelPath } from "../router";
+import { Header, RowTitle, rowLink, Table, type Column } from "../layout/layout";
+import { useLocation, vehicleMakePath, vehicleModelPath } from "../router";
 import { useLoad } from "../use-load";
 import { MakeDialog, ModelDialog } from "./dialogs";
 import {
-  Crumbs,
+  filteredBy,
   FormError,
   ListFilters,
   listFiltersOf,
   LoadError,
+  MarkedTitle,
+  MAKES_CRUMB,
   MoreButton,
+  ObjectActions,
+  RefreshButton,
+  resetFilters,
+  RowActions,
   StatusDialog,
   StatusMark,
   useStatusFlow,
   usePaged,
-  VehiclesTabs,
+  VEHICLES_CRUMB,
+  vehiclesTabs,
 } from "./shared";
-import { countText, GENERATIONS, MODELS } from "./vehicle-words";
+import { countText, MODELS } from "./vehicle-words";
+import "./vehicles.css";
 
 const PAGE = 50;
+
+const MAKE_COLUMNS: Column[] = [
+  { key: "name", header: "Марка" },
+  { key: "models", header: "Модели", width: 120, numeric: true },
+  { key: "actions", header: "Действия", width: 160, actions: true, hiddenHeader: true },
+];
+
+const MODEL_COLUMNS: Column[] = [
+  { key: "name", header: "Модель" },
+  { key: "generations", header: "Поколения", width: 120, numeric: true },
+  { key: "actions", header: "Действия", width: 160, actions: true, hiddenHeader: true },
+];
+
+/** «5», or «3 из 5» when some are in the archive. */
+function activeOfAll(active: number, all: number): string {
+  return active === all
+    ? all.toLocaleString("ru-RU")
+    : `${active.toLocaleString("ru-RU")} из ${all.toLocaleString("ru-RU")}`;
+}
 
 /** «Убрать марку в архив?» — what archiving it does in the app (TASK-035.B). */
 function makeArchiveText(make: AdminVehicleMake) {
@@ -37,16 +72,17 @@ function makeArchiveText(make: AdminVehicleMake) {
 }
 
 /**
- * A-CAR-01, the first level (SCREENS 7.2; TASK-035.B): makes with their
- * spellings and how many models each has; search by any spelling, the
- * status filter in the address, «всего N», pages; create, change, archive
- * and restore.
+ * A-CAR-01, the first level (SCREENS 7.2; TASK-035.B, TASK-080): makes with
+ * their spellings and how many models each has; search by any spelling,
+ * the status chips in the address, «Всего N», pages; the row opens the make;
+ * «Изменить» in the row, the archive and restore in its «⋯».
  */
 export function Makes() {
   const toast = useToast();
   const online = useOnline();
   const location = useLocation();
   const filters = listFiltersOf(location.query);
+  const filtered = filteredBy(location.query);
   const list = usePaged<AdminVehicleMake>(async (cursor) => {
     const page = await apiClient.listVehicleMakes({ query: { ...filters, limit: PAGE, cursor } });
     return { items: page.makes, total: page.total, nextCursor: page.nextCursor };
@@ -69,19 +105,19 @@ export function Makes() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Автомобили</h1>
-        <div className="page__tools">
-          <Button variant="secondary" size="s" icon="refresh" onClick={list.first.reload}>
-            Обновить
-          </Button>
-          <Button size="s" icon="plus" disabled={!online} onClick={() => setEditing("new")}>
-            Новая марка
-          </Button>
-        </div>
-      </div>
-      <VehiclesTabs active="makes" />
-      <ListFilters searchLabel="Марка или другое написание" />
+      <Header
+        title="Автомобили"
+        tabs={vehiclesTabs("makes")}
+        actions={
+          <>
+            <RefreshButton onClick={list.first.reload} />
+            <Button size="s" icon="plus" disabled={!online} onClick={() => setEditing("new")}>
+              Новая марка
+            </Button>
+          </>
+        }
+      />
+      <ListFilters searchLabel="Поиск марок" placeholder="Марка или другое написание" />
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent
         ready={list.first.data !== undefined}
@@ -90,84 +126,78 @@ export function Makes() {
         swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted" aria-live="polite">
-          Всего: {list.total.toLocaleString("ru-RU")}
-        </p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="car"
-            title={filters.q || filters.status ? "Ничего не нашлось" : "Марок пока нет"}
-            text={
-              filters.q || filters.status
-                ? "Измените поиск или отбор"
-                : "Добавьте марку или загрузите файл во вкладке «Импорт»"
-            }
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table vehicles-table">
-              <thead>
-                <tr>
-                  <th scope="col">Марка</th>
-                  <th scope="col">Модели</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((make) => (
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={resetFilters}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {list.items.length === 0 ? (
+            <EmptyState
+              icon="car"
+              title={filtered ? "Ничего не нашлось" : "Марок пока нет"}
+              text={
+                filtered
+                  ? "Измените поиск или отбор"
+                  : "Добавьте марку или загрузите файл во вкладке «Импорт»"
+              }
+              action={
+                filtered ? (
+                  <Button variant="secondary" onClick={resetFilters}>
+                    Сбросить фильтры
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Table label="Марки" columns={MAKE_COLUMNS}>
+              {list.items.map((make) => {
+                const link = rowLink(vehicleMakePath(make.id));
+                return (
                   <tr
                     key={make.id}
-                    className={make.status === "archived" ? "row--muted" : undefined}
+                    {...link}
+                    className={
+                      make.status === "archived" ? `${link.className} row--muted` : link.className
+                    }
                   >
                     <td>
-                      <div className="cell-stack">
-                        <AppLink href={vehicleMakePath(make.id)}>{make.name}</AppLink>
-                        {make.aliases.length > 0 && (
-                          <span className="ac-text-caption ac-muted">
-                            {make.aliases.join(", ")}
-                          </span>
-                        )}
-                      </div>
+                      <MarkedTitle mark={<StatusMark status={make.status} />}>
+                        <RowTitle
+                          href={vehicleMakePath(make.id)}
+                          sub={make.aliases.length > 0 ? make.aliases.join(", ") : undefined}
+                        >
+                          {make.name}
+                        </RowTitle>
+                      </MarkedTitle>
                     </td>
-                    <td className="ac-text-body-s">
-                      {countText(make.modelCount, MODELS)}
-                      {make.activeModelCount !== make.modelCount && (
-                        <span className="ac-muted"> · активных {make.activeModelCount}</span>
-                      )}
-                    </td>
-                    <td>
-                      <StatusMark status={make.status} />
+                    <td
+                      className="num"
+                      title={
+                        make.activeModelCount !== make.modelCount
+                          ? `Активных ${make.activeModelCount} из ${countText(make.modelCount, MODELS)}`
+                          : undefined
+                      }
+                    >
+                      {activeOfAll(make.activeModelCount, make.modelCount)}
                     </td>
                     <td className="admin-table__actions">
-                      <div className="button-row button-row--end">
-                        <Button
-                          variant="secondary"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => setEditing(make)}
-                        >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => status.open(make)}
-                        >
-                          {make.status === "active" ? "В архив" : "Восстановить"}
-                        </Button>
-                      </div>
+                      <RowActions
+                        name={make.name}
+                        status={make.status}
+                        onEdit={() => setEditing(make)}
+                        onStatus={() => status.open(make)}
+                      />
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <MoreButton list={list} />
+                );
+              })}
+            </Table>
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
 
       <MakeDialog
@@ -207,15 +237,18 @@ export function Makes() {
 }
 
 /**
- * A make with its models (A-CAR-01; TASK-035.B): the make's own card and
- * actions, then its models with their generations count; a model moves to
- * another make from its dialog.
+ * A make with its models (A-CAR-01; TASK-035.B, TASK-080): the crumbs of
+ * «Автомобили», the make's name with its status and spellings, «Изменить»
+ * and «⋯» in the head; then the section «Модели» with its filters, the
+ * models and their generations count; a model moves to another make from
+ * its dialog.
  */
 export function MakePage({ makeId }: { makeId: string }) {
   const toast = useToast();
   const online = useOnline();
   const location = useLocation();
   const filters = listFiltersOf(location.query);
+  const filtered = filteredBy(location.query);
   const make = useLoad<AdminVehicleMake>(
     async () => (await apiClient.getVehicleMake({ makeId })).make,
     makeId,
@@ -262,149 +295,140 @@ export function MakePage({ makeId }: { makeId: string }) {
     },
     (model) => ({ parents: { make: model.make } }),
   );
-  const current = make.data;
+  const current = make.data && make.data.id === makeId ? make.data : undefined;
 
   return (
     <>
-      <Crumbs
-        steps={[{ label: "Марки", href: routePaths.vehicles }, { label: current?.name ?? "…" }]}
+      <Header
+        crumbs={[VEHICLES_CRUMB, MAKES_CRUMB]}
+        title={current?.name ?? "Марка"}
+        subtitle={
+          current && (
+            <>
+              <StatusMark status={current.status} active="Активна" />
+              {current.aliases.length > 0 && (
+                <span>Другие написания: {current.aliases.join(", ")}</span>
+              )}
+              <span>{countText(current.modelCount, MODELS)}</span>
+            </>
+          )
+        }
+        actions={
+          current && (
+            <ObjectActions
+              name={current.name}
+              status={current.status}
+              onEdit={() => setEditingMake(current)}
+              onStatus={() => makeStatus.open(current)}
+              onReload={() => {
+                make.reload();
+                list.first.reload();
+              }}
+            />
+          )
+        }
       />
       <LoadError error={make.error} retry={make.reload} />
-      {current && (
-        <div className="page__head">
-          <div className="cell-stack">
-            <h1 className="ac-text-title-l page__title">{current.name}</h1>
-            <span className="ac-text-body-s ac-muted">
-              {current.aliases.length > 0
-                ? `Другие написания: ${current.aliases.join(", ")} · `
-                : ""}
-              {countText(current.modelCount, MODELS)}
-            </span>
-          </div>
-          <div className="page__tools">
-            <StatusMark status={current.status} />
-            <Button
-              variant="secondary"
-              size="s"
-              disabled={!online}
-              onClick={() => setEditingMake(current)}
-            >
-              Изменить
-            </Button>
-            <Button
-              variant="text"
-              size="s"
-              disabled={!online}
-              onClick={() => makeStatus.open(current)}
-            >
-              {current.status === "active" ? "В архив" : "Восстановить"}
-            </Button>
-          </div>
-        </div>
-      )}
       {current?.status === "archived" && (
-        <p className="ac-text-body-s warning-text">
+        <Banner tone="warning">
           Марка в архиве: её модели не видны в приложении. Новые модели появятся после
           восстановления марки.
-        </p>
+        </Banner>
       )}
-      <div className="page__head">
-        <h2 className="ac-text-heading">Модели</h2>
-        <Button
-          size="s"
-          icon="plus"
-          disabled={!online || !current || current.status === "archived"}
-          onClick={() => setEditing("new")}
+      <section className="section" aria-labelledby="make-models">
+        <div className="section__head">
+          <h2 id="make-models" className="section__title">
+            Модели
+          </h2>
+          <Button
+            size="s"
+            icon="plus"
+            disabled={!online || !current || current.status === "archived"}
+            onClick={() => setEditing("new")}
+          >
+            Новая модель
+          </Button>
+        </div>
+        <ListFilters searchLabel="Поиск моделей" placeholder="Модель или другое написание" />
+        <LoadError error={list.first.error} retry={list.first.reload} />
+        <LoadingContent
+          ready={list.first.data !== undefined}
+          indicator={list.first.indicator}
+          label="Загрузка"
+          swapKey={list.first.answerKey}
+          skeleton={<SkeletonList rows={5} label="Загрузка" />}
         >
-          Новая модель
-        </Button>
-      </div>
-      <ListFilters searchLabel="Модель или другое написание" />
-      <LoadError error={list.first.error} retry={list.first.reload} />
-      <LoadingContent
-        ready={list.first.data !== undefined}
-        indicator={list.first.indicator}
-        label="Загрузка"
-        swapKey={list.first.answerKey}
-        skeleton={<SkeletonList rows={5} label="Загрузка" />}
-      >
-        <p className="ac-text-body-s ac-muted" aria-live="polite">
-          Всего: {list.total.toLocaleString("ru-RU")}
-        </p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="car"
-            title={filters.q || filters.status ? "Ничего не нашлось" : "Моделей пока нет"}
-            text={
-              filters.q || filters.status ? "Измените поиск или отбор" : "Добавьте первую модель"
-            }
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table vehicles-table">
-              <thead>
-                <tr>
-                  <th scope="col">Модель</th>
-                  <th scope="col">Поколения</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((model) => (
-                  <tr
-                    key={model.id}
-                    className={model.status === "archived" ? "row--muted" : undefined}
-                  >
-                    <td>
-                      <div className="cell-stack">
-                        <AppLink href={vehicleModelPath(model.id)}>{model.name}</AppLink>
-                        {model.aliases.length > 0 && (
-                          <span className="ac-text-caption ac-muted">
-                            {model.aliases.join(", ")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="ac-text-body-s">
-                      {countText(model.generationCount, GENERATIONS)}
-                    </td>
-                    <td>
-                      <StatusMark
-                        status={model.status}
-                        hidden={model.status === "active" && !model.visibleToClients}
-                      />
-                    </td>
-                    <td className="admin-table__actions">
-                      <div className="button-row button-row--end">
-                        <Button
-                          variant="secondary"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => setEditing(model)}
+          <div className="list-block">
+            <TableToolbar total={list.items.length === 0 ? null : list.total}>
+              {filtered && (
+                <Button variant="text" size="s" onClick={resetFilters}>
+                  Сбросить фильтры
+                </Button>
+              )}
+            </TableToolbar>
+            {list.items.length === 0 ? (
+              <EmptyState
+                compact
+                icon="car"
+                title={filtered ? "Ничего не нашлось" : "Моделей пока нет"}
+                text={filtered ? "Измените поиск или отбор" : "Добавьте первую модель"}
+                action={
+                  filtered ? (
+                    <Button variant="secondary" size="s" onClick={resetFilters}>
+                      Сбросить фильтры
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <Table label="Модели марки" columns={MODEL_COLUMNS}>
+                {list.items.map((model) => {
+                  const link = rowLink(vehicleModelPath(model.id));
+                  return (
+                    <tr
+                      key={model.id}
+                      {...link}
+                      className={
+                        model.status === "archived"
+                          ? `${link.className} row--muted`
+                          : link.className
+                      }
+                    >
+                      <td>
+                        <MarkedTitle
+                          mark={
+                            <StatusMark
+                              status={model.status}
+                              hidden={model.status === "active" && !model.visibleToClients}
+                            />
+                          }
                         >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => modelStatus.open(model)}
-                        >
-                          {model.status === "active" ? "В архив" : "Восстановить"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <RowTitle
+                            href={vehicleModelPath(model.id)}
+                            sub={model.aliases.length > 0 ? model.aliases.join(", ") : undefined}
+                          >
+                            {model.name}
+                          </RowTitle>
+                        </MarkedTitle>
+                      </td>
+                      <td className="num">{model.generationCount.toLocaleString("ru-RU")}</td>
+                      <td className="admin-table__actions">
+                        <RowActions
+                          name={model.name}
+                          status={model.status}
+                          onEdit={() => setEditing(model)}
+                          onStatus={() => modelStatus.open(model)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Table>
+            )}
+            <MoreButton list={list} />
           </div>
-        )}
-        <MoreButton list={list} />
-      </LoadingContent>
+        </LoadingContent>
+      </section>
 
       <MakeDialog
         make={editingMake}

@@ -1,0 +1,136 @@
+/* «Заявки» (A-ORD-01…03; TASK-080). Only what the shared layout lacks. */
+
+/* The card of an order: its blocks 24 apart, one right edge (X14). */
+.order-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+  min-width: 0;
+}
+
+/* «Сводка»: what and when on the left, who on the right; one column when narrow. */
+.order-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--ac-space-4) var(--ac-space-8);
+}
+
+@media (max-width: 1100px) {
+  .order-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.order-summary .kv {
+  align-content: start;
+}
+
+/* A caption under a value stays in one line (X20), the whole of it on hover. */
+.order-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-actions-none {
+  margin: 0;
+  padding-top: var(--ac-space-3);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+/* The review and the complaints of an order: two sections side by side when wide. */
+.order-feedback {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ac-space-6);
+}
+
+@media (max-width: 1100px) {
+  .order-feedback {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.order-feedback .section + .section {
+  margin-top: 0;
+}
+
+.order-feedback__card {
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-4);
+}
+
+.order-feedback__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+}
+
+.order-feedback__text {
+  margin: 0;
+  overflow-wrap: break-word;
+  white-space: pre-line;
+}
+
+/* A-ORD-03: the start of the outage — a day and a time «ЧЧ:ММ» in one row. */
+.extensions-start {
+  align-self: flex-start;
+}
+
+.extensions-start__time {
+  flex: 0 0 96px;
+  width: 96px;
+}
+
+/* A-ORD-01: the filters fit one row at 1440 — narrower dates of the period. */
+.filters.orders-filters .period__fields .ac-date-field,
+.filters .orders-period .period__fields .ac-date-field {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+.filters.orders-filters {
+  column-gap: var(--ac-space-3);
+}
+
+.filters.orders-filters .filters__select,
+.filters.orders-filters .search-select {
+  flex: 1 1 120px;
+  min-width: 112px;
+  max-width: 220px;
+}
+
+.filters.orders-filters .ac-search {
+  flex: 1 1 200px;
+  min-width: 200px;
+}
+
+.filters.orders-filters .search-select__input,
+.filters.orders-filters .ac-search__input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The name of the item: one line, the whole of it on hover (rows 44, DESIGN 7.13). */
+.orders-item {
+  display: block;
+  align-self: stretch;
+}
+
+/* «Продлить на … · Продлить выбранные (N)» on the right of «Ждут ответа N». */
+.extensions-apply {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.extensions-apply .ac-picker {
+  width: 150px;
+}
+
+.extensions-start .period__fields .ac-date-field {
+  width: 150px;
+}

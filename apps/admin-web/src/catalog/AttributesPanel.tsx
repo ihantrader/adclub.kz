@@ -7,20 +7,26 @@ import type {
   AttributeValueType,
 } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
   Checkbox,
   Dialog,
-  IconButton,
+  EmptyState,
   LoadingContent,
+  MenuButton,
+  Select,
   SkeletonList,
+  StatusBadge,
   TextField,
+  TypeMark,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
+import { AppLink, Table } from "../layout/layout";
 import { catalogFillPath, navigateTo, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import {
@@ -33,7 +39,8 @@ import {
 import { suggestCode } from "./codes";
 import { itemsLink } from "./item-filters";
 import { attributeOrderBody, optionOrderBody } from "./order";
-import { AppLink, TextsLine, whoChanged } from "./shared";
+import { NamesLine, OrderArrows } from "./catalog-ui";
+import { whoChanged } from "./shared";
 import { numberHint, numberText, ruText } from "./values";
 
 type Names = { ru: string; kk: string; en: string };
@@ -69,7 +76,7 @@ export function AttributesPanel({
     () => apiClient.listAdminAttributes({ categoryId: category.id }),
     `attributes:${category.id}`,
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; conflict: boolean } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [editing, setEditing] = useState<{ attributeId: string | null } | null>(null);
   const [optionsOf, setOptionsOf] = useState<string | null>(
@@ -81,10 +88,10 @@ export function AttributesPanel({
 
   const fail = async (thrown: unknown, entityType: string, entityId: string) => {
     if (isConflict(thrown)) {
-      setError(conflictText(await whoChanged(entityType, entityId)));
+      setError({ text: conflictText(await whoChanged(entityType, entityId)), conflict: true });
       list.reload();
     } else {
-      setError(catalogErrorText(thrown));
+      setError({ text: catalogErrorText(thrown), conflict: false });
     }
   };
 
@@ -128,12 +135,13 @@ export function AttributesPanel({
   };
 
   return (
-    <div className="card-section">
-      <div className="page__head">
-        <h3 className="ac-text-heading">Характеристики</h3>
-        <div className="button-row">
+    <section className="card cat-block">
+      <div className="section__head">
+        <h3 className="section__title">Характеристики</h3>
+        <div className="row-actions">
           <AppLink href={catalogFillPath(category.id)}>Дозаполнение</AppLink>
           <Button
+            variant="secondary"
             size="s"
             icon="plus"
             disabled={!online}
@@ -186,22 +194,35 @@ export function AttributesPanel({
         <Banner
           tone="warning"
           action={
-            <Button
-              variant="text"
-              size="s"
-              onClick={() => {
-                setError(null);
-                list.reload();
-              }}
-            >
-              Обновить
+            error.conflict ? (
+              <Button
+                variant="text"
+                size="s"
+                onClick={() => {
+                  setError(null);
+                  list.reload();
+                }}
+              >
+                Обновить данные
+              </Button>
+            ) : undefined
+          }
+        >
+          {error.text}
+        </Banner>
+      )}
+      {list.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={list.reload}>
+              Повторить
             </Button>
           }
         >
-          {error}
+          {loadErrorText(list.error)}
         </Banner>
       )}
-      {list.error !== undefined && <Banner tone="danger">{loadErrorText(list.error)}</Banner>}
       <LoadingContent
         ready={list.data !== undefined}
         indicator={list.indicator}
@@ -209,130 +230,128 @@ export function AttributesPanel({
         skeleton={<SkeletonList rows={3} label="Загрузка" />}
       >
         {attributes.length === 0 ? (
-          <p className="ac-text-body-s ac-muted">
-            У подкатегории пока нет характеристик. Позиции в ней описываются названием, брендом и
-            артикулом; добавьте характеристику, чтобы появились формы и фильтры.
-          </p>
+          <EmptyState
+            compact
+            icon="checklist"
+            title="Характеристик пока нет"
+            text="Позиции описываются названием, брендом и артикулом; добавьте характеристику, чтобы появились формы и фильтры."
+          />
         ) : (
-          <div className="table-wrap">
-            <table className="admin-table attributes-table">
-              <thead>
-                <tr>
-                  <th scope="col">Порядок</th>
-                  <th scope="col">Характеристика</th>
-                  <th scope="col">Тип</th>
-                  <th scope="col">Фильтр · полнота</th>
-                  <th scope="col">Состояние</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {attributes.map((attribute, index) => (
-                  <tr
-                    key={attribute.id}
-                    className={[
-                      attribute.status === "archived" ? "row--muted" : "",
-                      attribute.id === highlightAttributeId ? "row--highlight" : "",
-                    ].join(" ")}
-                  >
-                    <td>
-                      <div className="button-row">
-                        <IconButton
-                          icon="arrowLeft"
-                          className="arrow-up"
-                          label={`Выше: ${ruText(attribute.names)}`}
-                          disabled={!online || index === 0}
-                          onClick={() => move(index, -1)}
-                        />
-                        <IconButton
-                          icon="arrowLeft"
-                          className="arrow-down"
-                          label={`Ниже: ${ruText(attribute.names)}`}
-                          disabled={!online || index === attributes.length - 1}
-                          onClick={() => move(index, 1)}
-                        />
-                      </div>
-                    </td>
-                    <td>
+          <Table label="Характеристики подкатегории" columns={ATTRIBUTE_COLUMNS}>
+            {attributes.map((attribute, index) => {
+              const name = ruText(attribute.names);
+              const activeOptions = attribute.options.filter(
+                (entry) => entry.status === "active",
+              ).length;
+              const hint = attribute.valueType === "number" ? numberHint(attribute) : null;
+              return (
+                <tr
+                  key={attribute.id}
+                  className={[
+                    attribute.status === "archived" ? "row--muted" : "",
+                    attribute.id === highlightAttributeId ? "row--highlight" : "",
+                  ].join(" ")}
+                >
+                  <td>
+                    <div className="cat-attr">
+                      <OrderArrows
+                        name={name}
+                        first={index === 0}
+                        last={index === attributes.length - 1}
+                        disabled={!online}
+                        onMove={(by) => move(index, by)}
+                      />
                       <div className="cell-stack">
-                        <span className="ac-text-body-strong">{ruText(attribute.names)}</span>
-                        <TextsLine texts={attribute.names} />
-                        <span className="ac-text-caption ac-muted">
-                          <code>{attribute.code}</code>
+                        <span className="cat-attr__name">
+                          <span className="ac-text-body-strong">{name}</span>
+                          <span className="code-text">{attribute.code}</span>
+                          {attribute.status === "archived" && (
+                            <StatusBadge kind="entry" status="archived">
+                              В архиве
+                            </StatusBadge>
+                          )}
                         </span>
+                        <NamesLine texts={attribute.names} />
                       </div>
-                    </td>
-                    <td className="ac-text-body-s attributes-table__type">
-                      {VALUE_TYPE_TEXT[attribute.valueType]}
-                      {attribute.valueType === "number" && numberHint(attribute)
-                        ? ` (${numberHint(attribute)})`
-                        : ""}
-                      {attribute.valueType === "enum"
-                        ? ` · вариантов: ${attribute.options.filter((entry) => entry.status === "active").length}`
-                        : ""}
-                    </td>
-                    <td className="ac-text-body-s nowrap">
-                      <div className="cell-stack">
-                        <span>{attribute.isFilterable ? "в фильтрах" : "не в фильтрах"}</span>
-                        <span>
-                          {attribute.isRequiredForComplete ? "в полноте" : "не в полноте"}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className={`status status--${attribute.status === "active" ? "open" : "closed"}`}
-                      >
-                        {attribute.status === "active" ? "Активна" : "В архиве"}
-                      </span>
-                    </td>
-                    <td className="admin-table__actions">
-                      <div className="button-row button-row--end">
+                    </div>
+                  </td>
+                  <td className="ac-text-body-s">
+                    <div className="cell-stack">
+                      <span>{VALUE_TYPE_TEXT[attribute.valueType]}</span>
+                      {hint && <span className="ac-text-caption ac-muted">{hint}</span>}
+                      {attribute.valueType === "enum" && (
                         <Button
-                          variant="secondary"
+                          variant="text"
                           size="s"
-                          disabled={!online}
-                          onClick={() => setEditing({ attributeId: attribute.id })}
+                          className="cat-attr__options"
+                          onClick={() => setOptionsOf(attribute.id)}
                         >
-                          Изменить
+                          {activeOptions === 0
+                            ? "Добавить варианты"
+                            : `${activeOptions} ${plural(activeOptions, "вариант", "варианта", "вариантов")}`}
                         </Button>
-                        {attribute.valueType === "enum" && (
-                          <Button
-                            variant="secondary"
-                            size="s"
-                            onClick={() => setOptionsOf(attribute.id)}
-                          >
-                            Варианты
-                          </Button>
-                        )}
-                        {attribute.status === "active" ? (
-                          <Button
-                            variant="text"
-                            size="s"
-                            disabled={!online}
-                            onClick={() => setArchiving(attribute)}
-                          >
-                            В архив
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="text"
-                            size="s"
-                            disabled={!online}
-                            onClick={() => setStatus(attribute, "active")}
-                          >
-                            Восстановить
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <span className="badges">
+                      {attribute.isFilterable && <TypeMark icon="filters">В фильтрах</TypeMark>}
+                      {attribute.isRequiredForComplete && (
+                        <TypeMark icon="checklist">В полноте</TypeMark>
+                      )}
+                      {!attribute.isFilterable && !attribute.isRequiredForComplete && (
+                        <span className="ac-muted">—</span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="admin-table__actions">
+                    <span className="row-actions">
+                      <Button
+                        variant="secondary"
+                        size="s"
+                        disabled={!online}
+                        onClick={() => setEditing({ attributeId: attribute.id })}
+                      >
+                        Изменить
+                      </Button>
+                      <MenuButton
+                        size="s"
+                        label={`Действия: ${name}`}
+                        actions={[
+                          ...(attribute.valueType === "enum"
+                            ? [
+                                {
+                                  key: "options",
+                                  label: "Варианты…",
+                                  icon: "tags" as const,
+                                  onSelect: () => setOptionsOf(attribute.id),
+                                },
+                              ]
+                            : []),
+                          attribute.status === "active"
+                            ? {
+                                key: "archive",
+                                label: "В архив…",
+                                icon: "archive" as const,
+                                destructive: true,
+                                disabled: !online,
+                                onSelect: () => setArchiving(attribute),
+                              }
+                            : {
+                                key: "restore",
+                                label: "Восстановить",
+                                icon: "circleCheck" as const,
+                                disabled: !online,
+                                onSelect: () => void setStatus(attribute, "active"),
+                              },
+                        ]}
+                      />
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </Table>
         )}
       </LoadingContent>
 
@@ -386,8 +405,23 @@ export function AttributesPanel({
           </div>
         )}
       </Dialog>
-    </div>
+    </section>
   );
+}
+
+const ATTRIBUTE_COLUMNS = [
+  { key: "name", header: "Характеристика" },
+  { key: "type", header: "Тип", width: 150 },
+  { key: "marks", header: "Фильтр и полнота", width: 140 },
+  { key: "actions", header: "Действия", actions: true, hiddenHeader: true, width: 176 },
+];
+
+function plural(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
 }
 
 interface AttributeForm {
@@ -607,19 +641,16 @@ function AttributeDialog({
               error={fieldError("code")}
               autoComplete="off"
             />
-            <label className="select">
-              <span className="ac-text-caption ac-muted">Тип (не меняется после создания)</span>
-              <select
-                value={form.valueType}
-                onChange={(event) => set({ valueType: event.target.value as AttributeValueType })}
-              >
-                {(Object.keys(VALUE_TYPE_TEXT) as AttributeValueType[]).map((type) => (
-                  <option key={type} value={type}>
-                    {VALUE_TYPE_TEXT[type]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select<AttributeValueType>
+              label="Тип"
+              hint="Не меняется после создания"
+              value={form.valueType}
+              options={(Object.keys(VALUE_TYPE_TEXT) as AttributeValueType[]).map((type) => ({
+                value: type,
+                label: VALUE_TYPE_TEXT[type],
+              }))}
+              onChange={(valueType) => set({ valueType })}
+            />
           </>
         )}
         {!creating && current && (
@@ -684,21 +715,25 @@ function AttributeDialog({
           </p>
         )}
         {error && !error.field && (
-          <p className="dialog-error" role="alert">
-            {error.text}{" "}
-            {error.conflict && (
-              <Button
-                variant="text"
-                size="s"
-                onClick={() => {
-                  setError(null);
-                  onReload();
-                }}
-              >
-                Обновить данные
-              </Button>
-            )}
-          </p>
+          <Banner
+            tone="warning"
+            action={
+              error.conflict ? (
+                <Button
+                  variant="text"
+                  size="s"
+                  onClick={() => {
+                    setError(null);
+                    onReload();
+                  }}
+                >
+                  Обновить данные
+                </Button>
+              ) : undefined
+            }
+          >
+            {error.text}
+          </Banner>
         )}
       </div>
     </Dialog>
@@ -828,58 +863,75 @@ function OptionsDialog({
       }
     >
       <div className="dialog-stack">
-        {options.length === 0 && <p className="ac-text-body-s ac-muted">Вариантов пока нет.</p>}
-        <ol className="option-list">
-          {options.map((option, index) => (
-            <li
-              key={option.id}
-              className={[
-                "option-row",
-                option.status === "archived" ? "row--muted" : "",
-                option.id === highlightOptionId ? "row--highlight" : "",
-              ].join(" ")}
-            >
-              <span className="button-row">
-                <IconButton
-                  icon="arrowLeft"
-                  className="arrow-up"
-                  label={`Выше: ${ruText(option.names)}`}
-                  disabled={!online || index === 0}
-                  onClick={() => move(index, -1)}
-                />
-                <IconButton
-                  icon="arrowLeft"
-                  className="arrow-down"
-                  label={`Ниже: ${ruText(option.names)}`}
-                  disabled={!online || index === options.length - 1}
-                  onClick={() => move(index, 1)}
-                />
-              </span>
-              <span className="cell-stack option-row__name">
-                <span className="ac-text-body-s">
-                  {ruText(option.names)}
-                  {option.status === "archived" ? " · в архиве" : ""}
-                </span>
-                <TextsLine texts={option.names} />
-              </span>
-              <span className="button-row">
-                <Button variant="text" size="s" disabled={!online} onClick={() => openEdit(option)}>
-                  Изменить
-                </Button>
-                <Button
-                  variant="text"
-                  size="s"
-                  disabled={!online}
-                  onClick={() =>
-                    setStatus(option, option.status === "active" ? "archived" : "active")
-                  }
+        {options.length === 0 && <EmptyState compact icon="tags" title="Вариантов пока нет" />}
+        {options.length > 0 && (
+          <ol className="cat-options">
+            {options.map((option, index) => {
+              const name = ruText(option.names);
+              return (
+                <li
+                  key={option.id}
+                  className={[
+                    "cat-options__row",
+                    option.status === "archived" ? "cat-options__row--muted" : "",
+                    option.id === highlightOptionId ? "cat-options__row--on" : "",
+                  ].join(" ")}
                 >
-                  {option.status === "active" ? "В архив" : "Восстановить"}
-                </Button>
-              </span>
-            </li>
-          ))}
-        </ol>
+                  <OrderArrows
+                    name={name}
+                    first={index === 0}
+                    last={index === options.length - 1}
+                    disabled={!online}
+                    onMove={(by) => move(index, by)}
+                  />
+                  <span className="cell-stack cat-options__name">
+                    <span className="cat-attr__name">
+                      <span className="ac-text-body-s">{name}</span>
+                      {option.status === "archived" && (
+                        <StatusBadge kind="entry" status="archived">
+                          В архиве
+                        </StatusBadge>
+                      )}
+                    </span>
+                    <NamesLine texts={option.names} />
+                  </span>
+                  <span className="row-actions">
+                    <Button
+                      variant="secondary"
+                      size="s"
+                      disabled={!online}
+                      onClick={() => openEdit(option)}
+                    >
+                      Изменить
+                    </Button>
+                    <MenuButton
+                      size="s"
+                      label={`Действия: ${name}`}
+                      actions={[
+                        option.status === "active"
+                          ? {
+                              key: "archive",
+                              label: "В архив",
+                              icon: "archive" as const,
+                              destructive: true,
+                              disabled: !online,
+                              onSelect: () => void setStatus(option, "archived"),
+                            }
+                          : {
+                              key: "restore",
+                              label: "Восстановить",
+                              icon: "circleCheck" as const,
+                              disabled: !online,
+                              onSelect: () => void setStatus(option, "active"),
+                            },
+                      ]}
+                    />
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
         {editing ? (
           <div className="localized-fields">
             <TextField
@@ -906,14 +958,20 @@ function OptionsDialog({
                 autoComplete="off"
               />
             )}
-            <div className="button-row">
-              <Button size="s" onClick={save}>
-                {editing === "new" ? "Добавить вариант" : "Сохранить вариант"}
-              </Button>
-              <Button variant="text" size="s" onClick={() => setEditing(null)}>
-                Отмена
-              </Button>
-            </div>
+            <ActionBar
+              compact
+              label="Вариант списка"
+              main={
+                <Button onClick={save}>
+                  {editing === "new" ? "Добавить вариант" : "Сохранить вариант"}
+                </Button>
+              }
+              others={[
+                <Button key="cancel" variant="text" onClick={() => setEditing(null)}>
+                  Отмена
+                </Button>,
+              ]}
+            />
           </div>
         ) : (
           <Button
@@ -926,11 +984,7 @@ function OptionsDialog({
             Добавить вариант
           </Button>
         )}
-        {error && (
-          <p className="dialog-error" role="alert">
-            {error}
-          </p>
-        )}
+        {error && <Banner tone="warning">{error}</Banner>}
       </div>
     </Dialog>
   );

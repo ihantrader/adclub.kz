@@ -1,48 +1,59 @@
 import type { AdminExtendOrdersResponse, AdminExtensionCandidatesPage } from "@adclub/contracts";
 import {
+  Badge,
   Banner,
   Button,
   Checkbox,
+  DateField,
   EmptyState,
   IconButton,
   LoadingContent,
+  Select,
   SkeletonList,
+  TableToolbar,
+  TextField,
+  TypeMark,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
 import { formatMoment } from "../format";
-import { goBack, navigateTo, orderExtensionsPath, orderPath, useLocation } from "../router";
+import { Header, RowTitle, rowLink, Table } from "../layout/layout";
+import { navigateTo, orderExtensionsPath, orderPath, useLocation } from "../router";
 import { ReasonDialog, WasNow } from "../suppliers/shared";
 import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
-import { orderErrorText, SKIP_REASON_TEXT } from "./order-words";
+import { ORDERS_CRUMB } from "./OrderCard";
+import {
+  almatyMoment,
+  almatyParts,
+  maskTime,
+  orderErrorText,
+  SKIP_REASON_TEXT,
+  windowText,
+} from "./order-words";
+import "./orders.css";
 
 const MINUTES = [15, 30, 60, 120, 240] as const;
 const HOUR_MS = 3_600_000;
 
-/** `2026-10-07T13:00` in Almaty for a `datetime-local` field, and back. */
-function localOf(iso: string): string {
-  const shifted = new Date(new Date(iso).getTime() + 5 * HOUR_MS);
-  return shifted.toISOString().slice(0, 16);
-}
-
-function isoOf(local: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return undefined;
-  return new Date(`${local}:00+05:00`).toISOString();
+function minutesText(minutes: number): string {
+  return minutes < 60 ? `${minutes} мин` : `${minutes / 60} ч`;
 }
 
 /**
- * A-ORD-03 «Массовое продление» (SCREENS 7.5; TASK-036.B): from the signal
- * of an outage («Продлить сроки» on the home page and in «Сигналы») — the
- * orders created since it began that still wait for the supplier's answer,
- * those whose notices reached nobody marked «уведомление не дошло»; the
- * administrator picks them, «Продлить на N минут» with a reason, and sees
- * what was extended and what was skipped and why. Extending the answer
- * deadline sends the notice of the order again (the queue delivers it once
- * the channel is back, ARCHITECTURE 4.36 I379).
+ * A-ORD-03 «Массовое продление» (SCREENS 7.5; TASK-036.B, TASK-080): from
+ * the signal of an outage («Продлить сроки» on the home page and in
+ * «Сигналы») — the orders created since it began that still wait for the
+ * supplier's answer, those whose notices reached nobody marked «уведомление
+ * не дошло»; the beginning of the outage is a day and a time of Almaty (our
+ * fields, no browser picker), the window in words («с 14:40 до 16:40
+ * сегодня»). The administrator picks the orders, «Продлить на N» with a
+ * reason, and sees what was extended and what was skipped and why. Nothing
+ * waits — no button at all. Extending the answer deadline sends the notice
+ * of the order again (the queue delivers it once the channel is back,
+ * ARCHITECTURE 4.36 I379).
  */
 export function Extensions() {
   const toast = useToast();
@@ -97,52 +108,26 @@ export function Extensions() {
 
   return (
     <>
-      <div className="page__head page__head--back">
-        <IconButton icon="arrowLeft" label="Назад" onClick={() => goBack("orders")} />
-        <h1 className="ac-text-title-l page__title">Продлить сроки после сбоя</h1>
-        <Button variant="secondary" size="s" icon="refresh" onClick={list.reload}>
-          Обновить
-        </Button>
-      </div>
-      <p className="ac-text-body-s ac-muted">
-        Заявки, оформленные с начала сбоя и всё ещё ждущие ответа поставщика. Продление срока ответа
-        заново отправляет поставщику уведомление о заявке — оно уйдёт, когда канал заработает.
-      </p>
-      <div className="filters">
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Заявки с (время Алматы)</span>
-          <input
-            type="datetime-local"
-            value={localOf(from)}
-            onChange={(event) => {
-              const next = isoOf(event.target.value);
-              if (next) navigateTo(orderExtensionsPath(next), { replace: true });
-            }}
-          />
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Продлить на</span>
-          <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}>
-            {MINUTES.map((value) => (
-              <option key={value} value={value}>
-                {value < 60 ? `${value} мин` : `${value / 60} ч`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button
-          disabled={!online || chosen.length === 0}
-          onClick={() => {
-            setError(null);
-            setAsking(true);
-          }}
-        >
-          Продлить выбранные ({chosen.length})
-        </Button>
-      </div>
+      <Header
+        crumbs={[ORDERS_CRUMB]}
+        title="Продлить сроки после сбоя"
+        subtitle={
+          <span>
+            Заявки, оформленные с начала сбоя и всё ещё ждущие ответа поставщика. Продление срока
+            ответа заново отправляет поставщику уведомление о заявке — оно уйдёт, когда канал
+            заработает.
+          </span>
+        }
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={list.reload} />}
+      />
+      <OutageStart
+        key={from}
+        from={from}
+        onChange={(next) => navigateTo(orderExtensionsPath(next), { replace: true })}
+      />
       {result && (
         <Banner tone={result.skipped.length > 0 ? "warning" : "neutral"}>
-          <div className="cell-stack">
+          <span className="cell-stack">
             <span>
               Продлено: {result.extended.length}
               {result.extended.length > 0
@@ -165,7 +150,7 @@ export function Extensions() {
                 </ul>
               </span>
             )}
-          </div>
+          </span>
         </Banner>
       )}
       <LoadError error={list.error} retry={list.reload} />
@@ -175,73 +160,105 @@ export function Extensions() {
         label="Загрузка"
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        {list.data && (
-          <p className="ac-text-body-s ac-muted">
-            Ждут ответа: {list.data.total}
-            {list.data.truncated ? ` (показаны первые ${orders.length})` : ""} · окно{" "}
-            {formatMoment(list.data.window.from)} — {formatMoment(list.data.window.to)}
-          </p>
-        )}
-        {orders.length === 0 ? (
-          <EmptyState
-            icon="circleCheck"
-            title="Ждущих ответа заявок нет"
-            text="Все заявки этого окна уже приняты, отклонены или истекли"
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <span className="ac-visually-hidden">Выбрать</span>
-                  </th>
-                  <th scope="col">Номер</th>
-                  <th scope="col">Поставщик</th>
-                  <th scope="col">Оформлена</th>
-                  <th scope="col">Срок ответа</th>
-                  <th scope="col">Уведомления</th>
-                </tr>
-              </thead>
-              <tbody>
+        <div className="list-block">
+          {list.data && (
+            <p className="ac-text-body-s ac-muted">
+              Окно сбоя: {windowText(list.data.window.from, list.data.window.to)}
+            </p>
+          )}
+          {orders.length === 0 ? (
+            <EmptyState
+              icon="circleCheck"
+              title="Ждущих ответа заявок нет"
+              text="Все заявки этого окна уже приняты, отклонены или истекли"
+            />
+          ) : (
+            <>
+              <TableToolbar total={list.data?.total ?? orders.length} totalLabel="Ждут ответа">
+                <div className="extensions-apply">
+                  <Select<string>
+                    compact
+                    label="Продлить на"
+                    hideLabel
+                    value={String(minutes)}
+                    options={MINUTES.map((value) => ({
+                      value: String(value),
+                      label: `на ${minutesText(value)}`,
+                    }))}
+                    onChange={(value) => setMinutes(Number(value))}
+                  />
+                  <Button
+                    size="s"
+                    disabled={!online || chosen.length === 0}
+                    onClick={() => {
+                      setError(null);
+                      setAsking(true);
+                    }}
+                  >
+                    Продлить выбранные ({chosen.length})
+                  </Button>
+                </div>
+              </TableToolbar>
+              {list.data?.truncated && (
+                <p className="ac-text-body-s ac-muted">Показаны первые {orders.length}</p>
+              )}
+              <Table
+                label="Заявки, ждущие ответа"
+                columns={[
+                  { key: "pick", header: "Выбрать", width: 56, hiddenHeader: true },
+                  { key: "number", header: "Номер", width: 132 },
+                  { key: "supplier", header: "Поставщик" },
+                  { key: "created", header: "Оформлена", width: 140 },
+                  { key: "respond", header: "Срок ответа", width: 140 },
+                  { key: "notice", header: "Уведомления", width: 220 },
+                ]}
+              >
                 {orders.map((order) => (
-                  <tr key={order.id}>
+                  <tr key={order.id} {...rowLink(orderPath(order.id))}>
                     <td>
                       <Checkbox
-                        label={`№ ${order.number}`}
+                        label={<span className="ac-visually-hidden">№ {order.number}</span>}
                         checked={!unchecked.has(order.id)}
                         onChange={(on) => toggle(order.id, on)}
                       />
                     </td>
-                    <td className="num nowrap">
-                      <AppLink href={orderPath(order.id)}>№ {order.number}</AppLink>
-                      {order.isTest && (
-                        <span className="ac-text-caption ac-muted"> · тестовая</span>
-                      )}
+                    <td>
+                      <RowTitle
+                        href={orderPath(order.id)}
+                        sub={order.isTest && <TypeMark icon="info">Тест</TypeMark>}
+                      >
+                        <span className="nowrap">№ {order.number}</span>
+                      </RowTitle>
                     </td>
-                    <td className="long-text">{order.supplier.name}</td>
-                    <td className="ac-text-body-s num">{formatMoment(order.createdAt)}</td>
-                    <td className="ac-text-body-s num">{formatMoment(order.respondBy)}</td>
+                    <td className="ac-text-body-s">
+                      <span className="clamp" title={order.supplier.name}>
+                        {order.supplier.name}
+                      </span>
+                    </td>
+                    <td className="ac-text-body-s nowrap">{formatMoment(order.createdAt)}</td>
+                    <td className="ac-text-body-s nowrap">{formatMoment(order.respondBy)}</td>
                     <td className="ac-text-body-s">
                       {order.unnotified ? (
-                        <span className="status status--danger">уведомление не дошло</span>
+                        <Badge tone="danger" icon="circleX">
+                          Уведомление не дошло
+                        </Badge>
                       ) : (
-                        <span className="ac-muted">
+                        <span className="ac-muted nowrap">
                           доставлено {order.notice.delivered} из {order.notice.recipients}
                         </span>
                       )}
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </Table>
+            </>
+          )}
+        </div>
       </LoadingContent>
       <ReasonDialog
         open={asking}
         title={`Продлить срок ответа: ${chosen.length} заявок`}
-        confirm={`Продлить на ${minutes < 60 ? `${minutes} мин` : `${minutes / 60} ч`}`}
+        confirm={`Продлить на ${minutesText(minutes)}`}
         onConfirm={extend}
         onClose={() => setAsking(false)}
         busy={busy}
@@ -249,7 +266,7 @@ export function Extensions() {
       >
         <WasNow
           was="срок ответа — как сейчас у каждой заявки"
-          now={`срок ответа + ${minutes < 60 ? `${minutes} мин` : `${minutes / 60} ч`}`}
+          now={`срок ответа + ${minutesText(minutes)}`}
         />
         <p className="ac-text-body-s">
           Заявку, которую за это время приняли, отклонили или которая истекла, сервер пропустит и
@@ -257,5 +274,55 @@ export function Extensions() {
         </p>
       </ReasonDialog>
     </>
+  );
+}
+
+/**
+ * «Начало сбоя»: a day (our date field) and a time «ЧЧ:ММ» of Almaty (X23);
+ * a whole date and time moves the address, so the list follows it.
+ */
+function OutageStart({ from, onChange }: { from: string; onChange: (iso: string) => void }) {
+  const start = almatyParts(from);
+  const [date, setDate] = useState(start.date);
+  const [time, setTime] = useState(start.time);
+  const apply = (nextDate: string, nextTime: string) => {
+    const moment = almatyMoment(nextDate, nextTime);
+    if (moment && moment !== from) onChange(moment);
+  };
+  const timeComplete = time.length === 5;
+  return (
+    <fieldset className="period orders-period extensions-start">
+      <legend className="ac-field__label">Начало сбоя (время Алматы)</legend>
+      <div className="period__fields">
+        <DateField
+          compact
+          label="День"
+          value={date}
+          locale="ru"
+          onChange={(next) => {
+            setDate(next);
+            if (next) apply(next, time);
+          }}
+        />
+        <TextField
+          className="ac-field--compact extensions-start__time"
+          label="Время"
+          value={time}
+          inputMode="numeric"
+          placeholder="ЧЧ:ММ"
+          maxLength={5}
+          error={
+            timeComplete && !almatyMoment(date || start.date, time)
+              ? "Такого времени нет"
+              : undefined
+          }
+          onChange={(text) => {
+            const masked = maskTime(text);
+            setTime(masked);
+            if (masked.length === 5) apply(date, masked);
+          }}
+        />
+      </div>
+    </fieldset>
   );
 }

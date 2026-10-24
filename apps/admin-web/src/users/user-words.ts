@@ -40,6 +40,105 @@ export function accessText(state: ClubAccessState): string {
   return state.granted && state.validUntil ? `до ${lastDayText(state.validUntil)}` : "нет";
 }
 
+/** «17.11» — the last day of an access; the year only when it is not the current one. */
+function shortDay(iso: string, now: Date): string {
+  const last = lastDayText(iso);
+  return last.slice(6) === dateText(now.toISOString()).slice(6) ? last.slice(0, 5) : last;
+}
+
+const ACCESS_EXPIRING_DAYS = 7;
+
+/**
+ * Club access as a mark of the list and the card (TASK-080, X7): «До 17.11 ·
+ * подписка» — success; «Истекает 27.10» within a week — warning; «Нет» —
+ * neutral. The words, not a dot of color.
+ */
+export function accessMark(
+  state: ClubAccessState,
+  now: Date = new Date(),
+): {
+  tone: "success" | "warning" | "neutral";
+  icon: "circleCheck" | "clock" | "minus";
+  text: string;
+} {
+  if (!state.granted || !state.validUntil) return { tone: "neutral", icon: "minus", text: "Нет" };
+  const source = state.source === "subscription" ? " · подписка" : "";
+  const left = Date.parse(state.validUntil) - now.getTime();
+  if (left <= ACCESS_EXPIRING_DAYS * 86_400_000) {
+    return {
+      tone: "warning",
+      icon: "clock",
+      text: `Истекает ${shortDay(state.validUntil, now)}${source}`,
+    };
+  }
+  return {
+    tone: "success",
+    icon: "circleCheck",
+    text: `До ${shortDay(state.validUntil, now)}${source}`,
+  };
+}
+
+const MONTHS_NOMINATIVE = [
+  "янв.",
+  "февр.",
+  "март",
+  "апр.",
+  "май",
+  "июнь",
+  "июль",
+  "авг.",
+  "сент.",
+  "окт.",
+  "нояб.",
+  "дек.",
+];
+
+/**
+ * The version of a consent's text in words (X28): «2026-09-mvp» — «сент.
+ * 2026»; a version of another form is shown as it is.
+ */
+export function consentVersionText(version: string): string {
+  const match = /^(\d{4})-(\d{2})(?:\b|-)/.exec(version);
+  const month = match ? MONTHS_NOMINATIVE[Number(match[2]) - 1] : undefined;
+  return match && month ? `${month} ${match[1]}` : version;
+}
+
+/** «дано 16 окт., версия сент. 2026» — when a consent was given and to which text. */
+export function consentText(
+  consent: { at: string; version: string },
+  moment: (iso: string) => string,
+): string {
+  const day = moment(consent.at);
+  const date = day.includes(",") ? day.slice(0, day.lastIndexOf(",")) : day;
+  return `дано ${date}, версия ${consentVersionText(consent.version)}`;
+}
+
+/**
+ * The network of a session in words (X28): a hint with nothing in it — a
+ * local address, «0:0::*», «127.0.0.*» — is «IP скрыт», never the mask.
+ */
+export function ipText(hint: string | null): string {
+  if (!hint) return "IP скрыт";
+  const meaningful = hint.replace(/[0:.*]/g, "");
+  if (meaningful === "" || hint.startsWith("127.") || hint === "::1") return "IP скрыт";
+  return hint;
+}
+
+/** «Geely Atlas 2023» — the head of a car's card. */
+export function carTitle(car: AccountCar): string {
+  return [car.make.label, car.model.label, car.year ? String(car.year) : null]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** «II (FX11) · Кроссовер · JLH-4G20TDB · Автомат · Полный» — the rest of its levels. */
+export function carParams(car: AccountCar): string {
+  return [car.generation, car.body, car.engine, car.transmission, car.drive]
+    .map((level) => level?.label)
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export const GRANT_STATUS_TEXT: Record<ClubAccessGrantStatus, string> = {
   active: "действует",
   expired: "истекла",

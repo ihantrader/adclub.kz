@@ -1,8 +1,15 @@
 import { ApiError } from "@adclub/api-client";
 import { orderStatusSchema, type AdminOrder, type OrderEvent } from "@adclub/contracts";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  almatyMoment,
+  almatyParts,
   eventText,
+  maskTime,
+  moneyText,
+  orderKindMark,
+  ordersFiltered,
+  windowText,
   ORDER_STATUS_TEXT,
   orderActions,
   orderActorText,
@@ -12,6 +19,18 @@ import {
   orderStatusText,
   orderTermLines,
 } from "./order-words";
+
+/** The no-break space inside a moment. */
+const NB = String.fromCharCode(160);
+
+// The year of a moment is left out when it is the current one (TASK-080, X19):
+// the tests read the journal as of 24 October 2026.
+beforeAll(() => {
+  vi.useFakeTimers({ now: new Date("2026-10-24T12:00:00+05:00"), toFake: ["Date"] });
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const deadlines = (reserveUntil: string | null = null): AdminOrder["deadlines"] => ({
   respondBy: "2026-10-10T10:00:00.000Z",
@@ -288,7 +307,7 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
           deadline: "2026-10-10T10:30:00.000Z",
         }),
       ),
-    ).toBe("Продлён срок ответа на 30 мин: 10 окт. 2026 г., 15:00 → 10 окт. 2026 г., 15:30");
+    ).toBe(`Продлён срок ответа на 30 мин: 10${NB}окт.,${NB}15:00 → 10${NB}окт.,${NB}15:30`);
   });
 
   it("says who acted first when the order moved under the administrator", () => {
@@ -306,7 +325,7 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
         new Map([["00000000-0000-4000-8000-000000000001", "Юрий"]]),
       ),
     ).toBe(
-      "Заявку уже закрыли без кода — Юрий (администратор), 10 окт. 2026 г., 15:00. Сейчас: Выдана",
+      `Заявку уже закрыли без кода — Юрий (администратор), 10${NB}окт.,${NB}15:00. Сейчас: Выдана`,
     );
     expect(
       orderErrorText(
@@ -321,7 +340,7 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
         }),
       ),
     ).toBe(
-      "Заявка истекла: поставщик не ответил, 10 окт. 2026 г., 15:00. Сейчас: Нет ответа вовремя",
+      `Заявка истекла: поставщик не ответил, 10${NB}окт.,${NB}15:00. Сейчас: Нет ответа вовремя`,
     );
   });
 
@@ -344,5 +363,42 @@ describe("the words of «Заявки» (TASK-036.B)", () => {
     expect(orderFiltersOf(new URLSearchParams("kind=service")).kind).toBe("service");
     expect(orderFiltersOf(new URLSearchParams("kind=nonsense")).kind).toBeUndefined();
     expect(orderFiltersOf(new URLSearchParams("")).test).toBe("exclude");
+    // Hidden tests are the default, not a filter: no «Сбросить фильтры» for them.
+    expect(ordersFiltered(orderFiltersOf(new URLSearchParams("")))).toBe(false);
+    expect(ordersFiltered(orderFiltersOf(new URLSearchParams("test=include")))).toBe(true);
+    expect(ordersFiltered(orderFiltersOf(new URLSearchParams("to=2026-10-07")))).toBe(true);
+  });
+});
+
+describe("the view of «Заявки» (TASK-080)", () => {
+  it("says a sum in one line and the kind as a quiet mark", () => {
+    expect(moneyText(10000)).toBe(`10${NB}000${NB}₸`);
+    expect(orderKindMark("stock")).toBeNull();
+    expect(orderKindMark("on_order")).toEqual({ icon: "clock", text: "Под заказ" });
+    expect(orderKindMark("service")).toEqual({ icon: "wrench", text: "Услуга" });
+  });
+
+  it("types a time «ЧЧ:ММ» and reads a day and a time of Almaty", () => {
+    expect(maskTime("1440")).toBe("14:40");
+    expect(maskTime("14:4")).toBe("14:4");
+    expect(maskTime("9")).toBe("9");
+    expect(maskTime("12345")).toBe("12:34");
+    expect(almatyParts("2026-10-24T09:40:00.000Z")).toEqual({ date: "2026-10-24", time: "14:40" });
+    expect(almatyMoment("2026-10-24", "14:40")).toBe("2026-10-24T09:40:00.000Z");
+    expect(almatyMoment("2026-10-24", "25:00")).toBeUndefined();
+    expect(almatyMoment("", "14:40")).toBeUndefined();
+  });
+
+  it("says the window of an outage in words", () => {
+    const now = new Date("2026-10-24T12:00:00+05:00");
+    expect(windowText("2026-10-24T09:40:00.000Z", "2026-10-24T11:40:00.000Z", now)).toBe(
+      "с 14:40 до 16:40 сегодня",
+    );
+    expect(windowText("2026-10-22T09:40:00.000Z", "2026-10-22T11:40:00.000Z", now)).toBe(
+      `с 14:40 до 16:40 22${NB}окт.`,
+    );
+    expect(windowText("2026-10-23T18:40:00.000Z", "2026-10-24T05:00:00.000Z", now)).toBe(
+      `с 23${NB}окт.,${NB}23:40 до 24${NB}окт.,${NB}10:00`,
+    );
   });
 });

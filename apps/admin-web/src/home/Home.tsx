@@ -1,21 +1,133 @@
 import { adminHomeCatalogFilters, type AdminHome } from "@adclub/contracts";
-import { Banner, Button, Icon, LoadingContent, Skeleton } from "@adclub/ui";
+import { ActionBar, Banner, Button, Icon, IconButton, LoadingContent, Skeleton } from "@adclub/ui";
 import type { IconName } from "@adclub/ui-core";
-import type { ReactNode } from "react";
 import { apiClient } from "../api";
+import { itemsLink } from "../catalog/item-filters";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
-import { itemsLink } from "../catalog/item-filters";
+import { AppLink, Header } from "../layout/layout";
 import { navigateTo, orderExtensionsPath, routePaths, withQuery } from "../router";
 import { count, KIND_HINTS, KIND_TITLES } from "../signals/signal-words";
 import { useLoad } from "../use-load";
 
+/** A card of the queue: what it counts, where it leads. */
+export interface HomeCard {
+  key: string;
+  icon: IconName;
+  title: string;
+  value: number;
+  note: string;
+  href: string;
+}
+
+const SIGNAL_KINDS = [
+  "supplier_unreachable",
+  "supply_overdue",
+  "visit_unresolved",
+  "low_rating",
+  "duplicate_after_late_close",
+  "frequent_admin_closes",
+] as const;
+
 /**
- * A-HOME — the queue of attention (SCREENS 7.1; TASK-034 requirement 3): the
- * cards in the order of importance, every counter from one answer of the
- * server (`GET /admin/home`). A card leads to its list; a list of the next
- * tasks opens its honest «появится», the number on the card is true all the
- * same. Reviews and complaints — TASK-049; moderation and payments come later.
+ * The cards of A-HOME in the order of importance of SCREENS 7.1 —
+ * signals, reviews on check, moderation, complaints, connection requests,
+ * the quality of the catalog — every counter from one answer of the server.
+ */
+export function homeCards(home: AdminHome): HomeCard[] {
+  const signal = (kind: (typeof SIGNAL_KINDS)[number]) => {
+    const row = home.signals.find((entry) => entry.kind === kind);
+    return (row?.open ?? 0) + (row?.acknowledged ?? 0);
+  };
+  const quality = home.catalog;
+  return [
+    ...SIGNAL_KINDS.map((kind) => ({
+      key: kind,
+      icon: "alertTriangle" as const,
+      title: KIND_TITLES[kind],
+      value: signal(kind),
+      note: KIND_HINTS[kind],
+      href: withQuery(routePaths.signals, { kind }),
+    })),
+    {
+      key: "reviews",
+      icon: "star",
+      title: "Отзывы на проверке",
+      value: home.reviewsHeld,
+      note: "Проверка задержала текст или не смогла его проверить: опубликовать или отклонить текст",
+      href: routePaths.reviews,
+    },
+    {
+      key: "requests",
+      icon: "checklist",
+      title: "Запросы на позиции",
+      value: home.catalogRequests,
+      note: "Строк прайсов нет в справочнике: создать позицию, указать существующую или отклонить",
+      href: withQuery(routePaths.catalogRequests, { status: "new" }),
+    },
+    {
+      key: "complaints",
+      icon: "alertTriangle",
+      title: "Новые жалобы",
+      value: home.complaintsNew,
+      note: "Жалобы пользователей по заявкам, ещё не взятые в работу",
+      href: withQuery(routePaths.complaints, { status: "new" }),
+    },
+    {
+      key: "leads",
+      icon: "store",
+      title: "Поставщики ждут ответа",
+      value: home.newSupplierLeads,
+      note: "Заявки на подключение на этапе «Новая» — с сайта и добавленные вручную",
+      href: withQuery(routePaths.supplierLeads, { status: "new" }),
+    },
+    {
+      key: "withoutPhoto",
+      icon: "image",
+      title: "Без фото",
+      value: quality.withoutPhoto,
+      note: "Активные позиции без подтверждённого фото",
+      href: itemsLink(adminHomeCatalogFilters.withoutPhoto),
+    },
+    {
+      key: "incomplete",
+      icon: "checklist",
+      title: "Неполные характеристики",
+      value: quality.incomplete,
+      note: "Не заполнены обязательные характеристики",
+      href: itemsLink(adminHomeCatalogFilters.incomplete),
+    },
+    {
+      key: "withoutCompatibility",
+      icon: "car",
+      title: "Без совместимости",
+      value: quality.withoutCompatibility,
+      note: "Категории с обязательной совместимостью: клиенты эти позиции не видят",
+      href: itemsLink(adminHomeCatalogFilters.withoutCompatibility),
+    },
+    {
+      key: "withoutTranslation",
+      icon: "language",
+      title: "Без перевода",
+      value: quality.itemsWithoutTranslation,
+      note: `Названия позиций без казахского или английского перевода; всего текстов справочника без перевода — ${quality.withoutTranslation.toLocaleString("ru-RU")}`,
+      href: itemsLink(adminHomeCatalogFilters.itemsWithoutTranslation),
+    },
+  ];
+}
+
+/** «$0,18» — dollars of the AI budget, as people read them. */
+function dollars(value: number): string {
+  return `$${value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * A-HOME — the queue of attention (SCREENS 7.1; TASK-034, TASK-080): the
+ * outage of the channel on top when there is one; then the cards that need
+ * someone — their number not zero — in the order of importance, equal in
+ * height, the number at one height; everything at zero in one line «Без
+ * внимания: …» with a check; the AI budget of today as «$0,18 из $100»
+ * with its bar and the setting it comes from.
  */
 export function Home() {
   const home = useLoad(() => apiClient.getAdminHome(), "home");
@@ -23,17 +135,13 @@ export function Home() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Очередь внимания</h1>
-        <div className="page__tools">
-          {data && (
-            <span className="ac-text-caption ac-muted">Данные на {formatMoment(data.at)}</span>
-          )}
-          <Button variant="secondary" size="s" icon="refresh" onClick={home.reload}>
-            Обновить
-          </Button>
-        </div>
-      </div>
+      <Header
+        title="Главная"
+        subtitle={
+          data ? `Очередь внимания · данные на ${formatMoment(data.at)}` : "Очередь внимания"
+        }
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={home.reload} />}
+      />
       <LoadingContent
         ready={data !== undefined}
         indicator={home.indicator}
@@ -54,7 +162,7 @@ export function Home() {
           ) : undefined
         }
       >
-        {data && <Cards home={data} />}
+        {data && <Queue home={data} />}
       </LoadingContent>
       {home.error !== undefined && data === undefined && (
         <Banner
@@ -75,10 +183,10 @@ export function Home() {
 function HomeSkeleton() {
   return (
     <div className="home-grid" aria-label="Загрузка">
-      {Array.from({ length: 6 }, (_, index) => (
+      {Array.from({ length: 4 }, (_, index) => (
         <div key={index} className="home-card">
           <Skeleton width="60%" />
-          <Skeleton width={64} height={32} />
+          <Skeleton width={64} height={34} />
           <Skeleton width="90%" height={12} />
         </div>
       ))}
@@ -86,213 +194,124 @@ function HomeSkeleton() {
   );
 }
 
-function Cards({ home }: { home: AdminHome }) {
-  const signal = (kind: AdminHome["signals"][number]["kind"]) =>
-    home.signals.find((row) => row.kind === kind) ?? { open: 0, acknowledged: 0 };
+function Queue({ home }: { home: AdminHome }) {
   const outage = home.channelOutage;
-  const quality = home.catalog;
+  const cards = homeCards(home);
+  const attention = cards.filter((card) => card.value > 0);
+  const calm = cards.filter((card) => card.value === 0);
+  const budget = home.aiBudget;
+  const share = budget.budgetUsd > 0 ? Math.min(1, budget.spentUsd / budget.budgetUsd) : 1;
 
   return (
     <div className="home-sections">
-      <section aria-labelledby="home-channel" className="home-section">
-        <h2 id="home-channel" className="ac-text-heading">
-          1. Канал уведомлений
-        </h2>
-        {outage ? (
-          <div className="home-outage" role="alert">
-            <div className="home-outage__head">
-              <Icon name="alertTriangle" size={24} />
-              <h3 className="ac-text-title">Сбой канала уведомлений</h3>
-            </div>
-            <p className="ac-text-body">
-              С {formatMoment(outage.since)}:{" "}
-              {count(outage.affectedOrders, "заявка", "заявки", "заявок")} без уведомления
-              поставщику, не дошло{" "}
-              {count(outage.failedMessages, "уведомление", "уведомления", "уведомлений")}.{" "}
-              {KIND_HINTS.whatsapp_outage}
-            </p>
-            <div className="button-row">
-              <Button
-                size="s"
-                onClick={() => navigateTo(orderExtensionsPath(outage.since ?? undefined))}
-              >
+      {outage && (
+        <section className="home-outage" role="alert" aria-labelledby="home-outage">
+          <div className="home-outage__head">
+            <Icon name="alertTriangle" size={24} />
+            <h2 id="home-outage" className="ac-text-title">
+              Сбой канала уведомлений
+            </h2>
+          </div>
+          <p className="ac-text-body">
+            С {formatMoment(outage.since)}:{" "}
+            {count(outage.affectedOrders, "заявка", "заявки", "заявок")} без уведомления поставщику,
+            не дошло {count(outage.failedMessages, "уведомление", "уведомления", "уведомлений")}.{" "}
+            {KIND_HINTS.whatsapp_outage}
+          </p>
+          <ActionBar
+            compact
+            label="Сбой канала"
+            main={
+              <Button onClick={() => navigateTo(orderExtensionsPath(outage.since ?? undefined))}>
                 Продлить сроки
               </Button>
+            }
+            others={[
               <Button
+                key="signal"
                 variant="secondary"
-                size="s"
                 onClick={() =>
                   navigateTo(withQuery(routePaths.signals, { kind: "whatsapp_outage" }))
                 }
               >
                 Открыть сигнал
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="home-calm ac-text-body-s">
-            <Icon name="circleCheck" size={20} /> Сбоя нет: уведомления поставщикам доходят.
-          </p>
-        )}
+              </Button>,
+            ]}
+          />
+        </section>
+      )}
+
+      {attention.length > 0 && (
+        <section aria-label="Требует внимания" className="home-grid">
+          {attention.map((card) => (
+            <a
+              key={card.key}
+              href={card.href}
+              className="home-card home-card--attention"
+              title={card.note}
+              onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                navigateTo(card.href);
+              }}
+            >
+              <span className="home-card__title">
+                <Icon name={card.icon} size={20} />
+                <span className="home-card__name">{card.title}</span>
+              </span>
+              <span className="home-card__value">{card.value.toLocaleString("ru-RU")}</span>
+              <span className="home-card__note">{card.note}</span>
+            </a>
+          ))}
+        </section>
+      )}
+
+      <section aria-labelledby="home-budget" className="home-budget">
+        <span className="home-budget__head">
+          <Icon name="sparkles" size={20} />
+          <h2 id="home-budget" className="home-card__name">
+            Бюджет ИИ на сегодня
+          </h2>
+          {budget.exhausted && <span className="warning-text">исчерпан</span>}
+        </span>
+        <span className="home-budget__value">
+          {dollars(budget.spentUsd)} из {dollars(budget.budgetUsd)}
+        </span>
+        <span
+          className={
+            budget.exhausted ? "home-budget__bar home-budget__bar--over" : "home-budget__bar"
+          }
+          role="meter"
+          aria-label="Потрачено из дневного предела"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(share * 100)}
+        >
+          <span style={{ width: `${String(Math.round(share * 100))}%` }} />
+        </span>
+        <span className="home-card__note">
+          Сутки по Алматы.{" "}
+          <AppLink href={withQuery(routePaths.settings, { group: "ai" })}>
+            Настройка предела
+          </AppLink>
+        </span>
       </section>
 
-      <section aria-labelledby="home-signals" className="home-section">
-        <h2 id="home-signals" className="ac-text-heading">
-          2. Сигналы
-        </h2>
-        <div className="home-grid">
-          {(
-            [
-              "supplier_unreachable",
-              "supply_overdue",
-              "visit_unresolved",
-              "low_rating",
-              "duplicate_after_late_close",
-              "frequent_admin_closes",
-            ] as const
-          ).map((kind) => {
-            const { open, acknowledged } = signal(kind);
-            return (
-              <Card
-                key={kind}
-                icon="alertTriangle"
-                title={KIND_TITLES[kind]}
-                value={open + acknowledged}
-                tone={open > 0 ? "attention" : "plain"}
-                note={
-                  acknowledged > 0 ? `новых ${open}, в работе ${acknowledged}` : KIND_HINTS[kind]
-                }
-                onOpen={() => navigateTo(withQuery(routePaths.signals, { kind }))}
-              />
-            );
-          })}
-          <Card
-            icon="sparkles"
-            title="Бюджет ИИ на сегодня"
-            value={home.aiBudget.exhausted ? "Исчерпан" : "В пределах"}
-            tone={home.aiBudget.exhausted ? "attention" : "plain"}
-            note={`Потрачено $${home.aiBudget.spentUsd.toFixed(2)} из $${home.aiBudget.budgetUsd.toFixed(2)} (сутки по Алматы). Предел — настройка ai_daily_budget_usd.`}
-            onOpen={() => navigateTo(withQuery(routePaths.settings, { q: "ai_daily_budget_usd" }))}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="home-reviews" className="home-section">
-        <h2 id="home-reviews" className="ac-text-heading">
-          3. Отзывы и жалобы
-        </h2>
-        <div className="home-grid">
-          <Card
-            icon="star"
-            title="Отзывы на проверке"
-            value={home.reviewsHeld}
-            tone={home.reviewsHeld > 0 ? "attention" : "plain"}
-            note="Проверка задержала текст или не смогла проверить его вовремя: опубликовать или отклонить текст"
-            onOpen={() => navigateTo(routePaths.reviews)}
-          />
-          <Card
-            icon="alertTriangle"
-            title="Жалобы · новых"
-            value={home.complaintsNew}
-            tone={home.complaintsNew > 0 ? "attention" : "plain"}
-            note="Жалобы пользователей по заявкам, ещё не взятые в работу"
-            onOpen={() => navigateTo(withQuery(routePaths.complaints, { status: "new" }))}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="home-leads" className="home-section">
-        <h2 id="home-leads" className="ac-text-heading">
-          4. Новые заявки на подключение
-        </h2>
-        <div className="home-grid">
-          <Card
-            icon="store"
-            title="Поставщики ждут ответа"
-            value={home.newSupplierLeads}
-            tone={home.newSupplierLeads > 0 ? "attention" : "plain"}
-            note="Заявки с формы на сайте и добавленные вручную на этапе «Новая»"
-            onOpen={() => navigateTo(withQuery(routePaths.supplierLeads, { status: "new" }))}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="home-catalog" className="home-section">
-        <h2 id="home-catalog" className="ac-text-heading">
-          5. Качество справочника
-        </h2>
-        <div className="home-grid">
-          <Card
-            icon="checklist"
-            title="Запросы на позиции"
-            value={home.catalogRequests}
-            tone={home.catalogRequests > 0 ? "attention" : "plain"}
-            note="Строки прайсов поставщиков, которых нет в справочнике: создать позицию, указать существующую или отклонить"
-            onOpen={() => navigateTo(routePaths.catalogRequests)}
-          />
-          <Card
-            icon="package"
-            title="Без фото"
-            value={quality.withoutPhoto}
-            note="Активные позиции без подтверждённого фото"
-            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.withoutPhoto))}
-          />
-          <Card
-            icon="checklist"
-            title="Неполные характеристики"
-            value={quality.incomplete}
-            note="Активные позиции, у которых не заполнены обязательные характеристики"
-            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.incomplete))}
-          />
-          <Card
-            icon="car"
-            title="Без совместимости"
-            value={quality.withoutCompatibility}
-            note="Позиции категорий с обязательной совместимостью: клиенты их не видят"
-            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.withoutCompatibility))}
-          />
-          <Card
-            icon="language"
-            title="Без перевода"
-            value={quality.itemsWithoutTranslation}
-            note={`Активные позиции, у которых название без казахского или английского перевода (нет или отказ). Всего текстов справочника без перевода, с категориями и характеристиками: ${quality.withoutTranslation.toLocaleString("ru-RU")}`}
-            onOpen={() => navigateTo(itemsLink(adminHomeCatalogFilters.itemsWithoutTranslation))}
-          />
-        </div>
-      </section>
+      {calm.length > 0 && (
+        <p className="home-calm">
+          <Icon name="circleCheck" size={20} />
+          <span>
+            <span className="home-calm__label">Без внимания:</span>{" "}
+            {!outage && "канал уведомлений работает, "}
+            {calm.map((card, index) => (
+              <span key={card.key}>
+                <AppLink href={card.href}>{card.title}</AppLink>
+                {index < calm.length - 1 ? ", " : ""}
+              </span>
+            ))}
+          </span>
+        </p>
+      )}
     </div>
-  );
-}
-
-function Card({
-  icon,
-  title,
-  value,
-  note,
-  tone = "plain",
-  onOpen,
-}: {
-  icon: IconName;
-  title: string;
-  value: number | string;
-  note: ReactNode;
-  tone?: "plain" | "attention";
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={tone === "attention" ? "home-card home-card--attention" : "home-card"}
-      onClick={onOpen}
-    >
-      <span className="home-card__title">
-        <Icon name={icon} size={20} />
-        <span className="ac-text-body-strong">{title}</span>
-      </span>
-      <span className="home-card__value num">
-        {typeof value === "number" ? value.toLocaleString("ru-RU") : value}
-      </span>
-      <span className="ac-text-caption ac-muted">{note}</span>
-    </button>
   );
 }

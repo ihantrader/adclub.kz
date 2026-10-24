@@ -10,19 +10,24 @@ import {
 import {
   Banner,
   Button,
-  Chip,
   Dialog,
   EmptyState,
+  IconButton,
   LoadingContent,
+  MenuButton,
   SkeletonList,
+  StatusBadge,
+  TableToolbar,
+  TextAreaField,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
 import { actionErrorText, loadErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { FilterSelect, StatusChips } from "../layout/filters";
+import { Header, RowTitle, rowLink, Table, type Column } from "../layout/layout";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { reasonProblem } from "../settings/setting-rules";
 import { useLoad } from "../use-load";
@@ -36,10 +41,13 @@ import {
   subjectLink,
   subjectText,
 } from "./signal-words";
+import "./signals.css";
 
 const PAGE = 30;
 
-const STATUS_FILTERS: { value: AdminSignalStatusFilter | "all"; label: string }[] = [
+type StatusFilter = AdminSignalStatusFilter | "all";
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "current", label: "Новые и в работе" },
   { value: "open", label: "Новые" },
   { value: "acknowledged", label: "В работе" },
@@ -47,23 +55,25 @@ const STATUS_FILTERS: { value: AdminSignalStatusFilter | "all"; label: string }[
   { value: "all", label: "Все" },
 ];
 
-function kindOf(value: string | null): AdminSignalKind | undefined {
+function kindOf(value: string | null | undefined): AdminSignalKind | undefined {
   const parsed = adminSignalKindSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
-function statusOf(value: string | null): AdminSignalStatusFilter | "all" {
+function statusOf(value: string | null): StatusFilter {
   return STATUS_FILTERS.some((filter) => filter.value === value)
-    ? (value as AdminSignalStatusFilter | "all")
+    ? (value as StatusFilter)
     : "current";
 }
 
 /**
- * A-SIG (SCREENS 7.1; TASK-034 requirement 3): the signals with filters by
- * kind and status (in the address), a row — kind, object, time, status and
- * who acted. «Взять в работу» and «Закрыть с комментарием» go to the server
- * with the version the row shows; another administrator's earlier move comes
- * back as «уже закрыт {кем}», and the row shows the signal as it is now.
+ * A-SIG (SCREENS 7.1; TASK-034 requirement 3, TASK-080): the kind and the
+ * status in one row (in the address), a row — the kind with its object as
+ * the link (the whole row opens it), «Что делать» folded, the time in one
+ * line, the status and who acted. «Взять в работу» — the one small button,
+ * «Закрыть…» with its comment — in «⋯»; both go to the server with the
+ * version the row shows; another administrator's earlier move comes back as
+ * «уже закрыт {кем}», and the row shows the signal as it is now.
  */
 export function Signals() {
   const location = useLocation();
@@ -84,10 +94,14 @@ export function Signals() {
     key,
   );
   const [edited, setEdited] = useState<Record<string, AdminSignal>>({});
-  const [notice, setNotice] = useState<{ tone: "warning" | "danger"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{
+    tone: "warning" | "danger";
+    text: string;
+    conflict: boolean;
+  } | null>(null);
   const [closing, setClosing] = useState<AdminSignal | null>(null);
 
-  const go = (next: { kind?: AdminSignalKind; status: string }) => {
+  const go = (next: { kind?: AdminSignalKind; status: StatusFilter }) => {
     setNotice(null);
     setEdited({});
     navigateTo(
@@ -95,7 +109,14 @@ export function Signals() {
         kind: next.kind,
         status: next.status === "current" ? null : next.status,
       }),
+      { replace: true },
     );
+  };
+
+  const reload = () => {
+    setNotice(null);
+    setEdited({});
+    list.reload();
   };
 
   const more = extra.key === key ? extra : { key, signals: [], next: null };
@@ -103,6 +124,8 @@ export function Signals() {
     ? [...list.data.signals, ...more.signals].map((signal) => edited[signal.id] ?? signal)
     : [];
   const nextOffset = more.signals.length > 0 ? more.next : (list.data?.nextOffset ?? null);
+  const filtered = kind !== undefined || status !== "current";
+  const withActions = rows.some((signal) => signal.status !== "closed");
 
   const loadMore = async () => {
     if (nextOffset === null) return;
@@ -118,7 +141,7 @@ export function Signals() {
       });
       setExtra({ key, signals: [...more.signals, ...page.signals], next: page.nextOffset });
     } catch (thrown) {
-      setNotice({ tone: "danger", text: loadErrorText(thrown) });
+      setNotice({ tone: "danger", text: loadErrorText(thrown), conflict: false });
     } finally {
       setLoadingMore(false);
     }
@@ -130,11 +153,11 @@ export function Signals() {
       const details = adminSignalConflictDetailsSchema.safeParse(thrown.details);
       if (details.success) {
         setEdited((now) => ({ ...now, [details.data.signal.id]: details.data.signal }));
-        setNotice({ tone: "warning", text: conflictText(details.data.signal) });
+        setNotice({ tone: "warning", text: conflictText(details.data.signal), conflict: true });
         return;
       }
     }
-    setNotice({ tone: "danger", text: actionErrorText(thrown) });
+    setNotice({ tone: "danger", text: actionErrorText(thrown), conflict: false });
   };
 
   const acknowledge = async (signal: AdminSignal) => {
@@ -150,44 +173,53 @@ export function Signals() {
     }
   };
 
+  const columns: Column[] = [
+    { key: "signal", header: "Сигнал" },
+    { key: "when", header: "Когда", width: 190 },
+    { key: "status", header: "Статус", width: 200 },
+    ...(withActions
+      ? [{ key: "actions", header: "Действия", width: 200, actions: true, hiddenHeader: true }]
+      : []),
+  ];
+
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Сигналы</h1>
-        <Button variant="secondary" size="s" icon="refresh" onClick={list.reload}>
-          Обновить
-        </Button>
+      <Header
+        title="Сигналы"
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={reload} />}
+      />
+
+      <div className="filters signal-filters">
+        <FilterSelect<AdminSignalKind>
+          label="Тип"
+          allLabel="Все типы"
+          value={kind}
+          options={KIND_ORDER.map((value) => ({ value, label: KIND_TITLES[value] }))}
+          onChange={(next) => go({ kind: next, status })}
+        />
+        <StatusChips<StatusFilter>
+          label="Статус сигнала"
+          value={status}
+          allLabel={null}
+          chips={STATUS_FILTERS}
+          onChange={(next) => go({ kind, status: next ?? "current" })}
+        />
       </div>
 
-      <div className="filters">
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Тип</span>
-          <select
-            value={kind ?? ""}
-            onChange={(event) => go({ kind: kindOf(event.target.value), status })}
-          >
-            <option value="">Все типы</option>
-            {KIND_ORDER.map((value) => (
-              <option key={value} value={value}>
-                {KIND_TITLES[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="chips" role="group" aria-label="Статус">
-          {STATUS_FILTERS.map((filter) => (
-            <Chip
-              key={filter.value}
-              selected={filter.value === status}
-              onClick={() => go({ kind, status: filter.value })}
-            >
-              {filter.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
-
-      {notice && <Banner tone={notice.tone}>{notice.text}</Banner>}
+      {notice && (
+        <Banner
+          tone={notice.tone}
+          action={
+            notice.conflict ? (
+              <Button variant="text" size="s" onClick={reload}>
+                Обновить данные
+              </Button>
+            ) : undefined
+          }
+        >
+          {notice.text}
+        </Banner>
+      )}
       {list.error !== undefined && (
         <Banner
           tone="danger"
@@ -209,47 +241,55 @@ export function Signals() {
         lock
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
-        {rows.length === 0 ? (
-          <EmptyState
-            icon="circleCheck"
-            title={status === "current" ? "Нет сигналов, ждущих внимания" : "Сигналов нет"}
-            text="Сервер сам замечает то, на что нужно посмотреть, и показывает это здесь и на главной."
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <caption className="ac-visually-hidden">Сигналы</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Тип и объект</th>
-                  <th scope="col">Когда</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((signal) => (
-                  <SignalRow
-                    key={signal.id}
-                    signal={signal}
-                    onAcknowledge={() => acknowledge(signal)}
-                    onClose={() => {
-                      setNotice(null);
-                      setClosing(signal);
-                    }}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {nextOffset !== null && (
-          <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
-            Показать ещё
-          </Button>
-        )}
+        <div className="list-block">
+          <TableToolbar total={rows.length === 0 ? null : (list.data?.total ?? null)}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={() => go({ status: "current" })}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {rows.length === 0 ? (
+            filtered ? (
+              <EmptyState
+                icon="search"
+                title="Сигналов нет"
+                text="По этим отборам ничего нет."
+                action={
+                  <Button variant="secondary" onClick={() => go({ status: "current" })}>
+                    Сбросить фильтры
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon="circleCheck"
+                title="Нет сигналов, ждущих внимания"
+                text="Сервер сам замечает то, на что нужно посмотреть, и показывает это здесь и на главной."
+              />
+            )
+          ) : (
+            <Table label="Сигналы" columns={columns} className="signal-table">
+              {rows.map((signal) => (
+                <SignalRow
+                  key={signal.id}
+                  signal={signal}
+                  withActions={withActions}
+                  onAcknowledge={() => acknowledge(signal)}
+                  onClose={() => {
+                    setNotice(null);
+                    setClosing(signal);
+                  }}
+                />
+              ))}
+            </Table>
+          )}
+          {nextOffset !== null && (
+            <Button variant="secondary" size="s" onClick={loadMore} loading={loadingMore}>
+              Показать ещё
+            </Button>
+          )}
+        </div>
       </LoadingContent>
 
       <CloseDialog
@@ -270,70 +310,98 @@ export function Signals() {
 
 function SignalRow({
   signal,
+  withActions,
   onAcknowledge,
   onClose,
 }: {
   signal: AdminSignal;
+  withActions: boolean;
   onAcknowledge: () => Promise<void>;
   onClose: () => void;
 }) {
   const online = useOnline();
   const subject = subjectText(signal);
   const link = subjectLink(signal);
+  const actor =
+    signal.status === "acknowledged"
+      ? actorName(signal.acknowledgedBy)
+      : signal.status === "closed"
+        ? `${actorName(signal.closedBy)}, ${formatMoment(signal.closedAt)}`
+        : "";
+  const repeats =
+    signal.times > 1
+      ? `повторов: ${signal.times.toLocaleString("ru-RU")}, впервые ${formatMoment(signal.firstSeenAt)}`
+      : null;
   return (
-    <tr>
+    <tr {...(link ? rowLink(link) : {})}>
       <td>
         <div className="cell-stack">
-          <span className="ac-text-body-strong">{KIND_TITLES[signal.kind]}</span>
-          {subject && <span className="ac-text-body-s">{subject}</span>}
-          {link && (
-            <span className="ac-text-body-s">
-              <AppLink href={link}>Открыть объект</AppLink>
+          {link ? (
+            <RowTitle href={link} sub={subject || undefined}>
+              {KIND_TITLES[signal.kind]}
+            </RowTitle>
+          ) : (
+            <span className="row-title">
+              <span className="ac-text-body-strong">{KIND_TITLES[signal.kind]}</span>
+              {subject && <span className="row-title__sub">{subject}</span>}
             </span>
           )}
-          <span className="ac-text-caption ac-muted">{KIND_HINTS[signal.kind]}</span>
           {signal.closeComment && (
-            <span className="ac-text-caption">Комментарий: {signal.closeComment}</span>
+            <span className="signal-comment">Комментарий: {signal.closeComment}</span>
           )}
-        </div>
-      </td>
-      <td className="num">
-        <div className="cell-stack">
-          <span className="ac-text-body-s">{formatMoment(signal.lastSeenAt)}</span>
-          {signal.times > 1 && (
-            <span className="ac-text-caption ac-muted">
-              впервые {formatMoment(signal.firstSeenAt)}, повторов: {signal.times}
-            </span>
-          )}
+          {/* A click on «Что делать» folds the hint; it does not open the object. */}
+          <details className="disclosure signal-hint" onClick={(event) => event.stopPropagation()}>
+            <summary className="disclosure__summary">Что делать</summary>
+            <p className="signal-hint__text">{KIND_HINTS[signal.kind]}</p>
+          </details>
         </div>
       </td>
       <td>
+        <span className="signal-line ac-text-body-s">{formatMoment(signal.lastSeenAt)}</span>
+        {repeats && (
+          <span className="signal-line signal-line--caption" title={repeats}>
+            {repeats}
+          </span>
+        )}
+      </td>
+      <td>
         <div className="cell-stack">
-          <span className={`status status--${signal.status}`}>{STATUS_TEXT[signal.status]}</span>
-          {signal.status === "acknowledged" && (
-            <span className="ac-text-caption ac-muted">{actorName(signal.acknowledgedBy)}</span>
-          )}
-          {signal.status === "closed" && (
-            <span className="ac-text-caption ac-muted">
-              {actorName(signal.closedBy)}, {formatMoment(signal.closedAt)}
+          <StatusBadge kind="signal" status={signal.status}>
+            {STATUS_TEXT[signal.status]}
+          </StatusBadge>
+          {actor && (
+            <span className="signal-line signal-line--caption" title={actor}>
+              {actor}
             </span>
           )}
         </div>
       </td>
-      <td className="admin-table__actions">
-        <div className="button-row button-row--end">
-          {signal.status === "open" && (
-            <Button variant="secondary" size="s" disabled={!online} onClick={onAcknowledge}>
-              Взять в работу
-            </Button>
-          )}
+      {withActions && (
+        <td className="admin-table__actions">
           {signal.status !== "closed" && (
-            <Button variant="secondary" size="s" disabled={!online} onClick={onClose}>
-              Закрыть…
-            </Button>
+            <div className="row-actions">
+              {signal.status === "open" && (
+                <Button variant="secondary" size="s" disabled={!online} onClick={onAcknowledge}>
+                  Взять в работу
+                </Button>
+              )}
+              <MenuButton
+                size="s"
+                label="Ещё действия с сигналом"
+                actions={[
+                  {
+                    key: "close",
+                    label: "Закрыть…",
+                    icon: "check",
+                    disabled: !online,
+                    onSelect: onClose,
+                  },
+                ]}
+              />
+            </div>
           )}
-        </div>
-      </td>
+        </td>
+      )}
     </tr>
   );
 }
@@ -400,17 +468,16 @@ function CloseDialog({
             {subjectText(signal) ? ` — ${subjectText(signal)}` : ""}. Статус станет «Закрыт»,
             комментарий попадёт в журнал действий.
           </p>
-          <label className="textarea">
-            <span className="ac-text-caption ac-muted">Комментарий (обязательно)</span>
-            <textarea
-              value={comment}
-              rows={3}
-              maxLength={1000}
-              onChange={(event) => setComment(event.target.value)}
-              aria-invalid={error ? true : undefined}
-            />
-          </label>
-          {error && <p className="dialog-error">{error}</p>}
+          <TextAreaField
+            label="Комментарий (обязательно)"
+            value={comment}
+            maxLength={1000}
+            onChange={(value) => {
+              setComment(value);
+              setError(null);
+            }}
+            error={error ?? undefined}
+          />
         </div>
       )}
     </Dialog>

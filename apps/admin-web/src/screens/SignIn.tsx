@@ -239,7 +239,7 @@ function CodeStep({
         {channel === "sms" ? "Введите код из SMS" : "Введите код из WhatsApp"}
       </h1>
       <div className="auth-phone-row">
-        <span className="ac-muted num">{formatPhone(step.phone)}</span>
+        <span className="ac-muted">{formatPhone(step.phone)}</span>
         <Button variant="text" onClick={onBack}>
           Изменить номер
         </Button>
@@ -260,6 +260,11 @@ function CodeStep({
         className="auth-code"
         aria-busy={pending || undefined}
         error={error ?? undefined}
+        hint={
+          error
+            ? undefined
+            : `Войдём, как только введёте ${String(step.codeLength)} ${step.codeLength < 5 ? "цифры" : "цифр"}`
+        }
       />
       {secondsLeft > 0 ? (
         <p className="ac-text-body-s ac-muted">Новый код можно запросить через {secondsLeft} с</p>
@@ -480,6 +485,7 @@ function TotpStep({
           className="auth-code"
           aria-busy={pending || undefined}
           error={error ?? undefined}
+          hint={error ? undefined : "Войдём, как только введёте 6 цифр"}
         />
       )}
       {backup && (

@@ -1,5 +1,15 @@
 import type { CatalogLanguage, SearchSynonymList } from "@adclub/contracts";
-import { Banner, Button, LoadingContent, SkeletonList, TextField, useToast } from "@adclub/ui";
+import {
+  Banner,
+  Button,
+  EmptyState,
+  LoadingContent,
+  Select,
+  SkeletonList,
+  TextField,
+  TypeMark,
+  useToast,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState, type FormEvent } from "react";
 import { apiClient } from "../api";
@@ -75,7 +85,7 @@ export function SearchSynonyms({ owner, intro }: { owner: SynonymOwner; intro: s
 
   return (
     <div className="detail-stack">
-      <p className="ac-text-body-s ac-muted">{intro}</p>
+      <p className="section__note">{intro}</p>
       {list.error !== undefined && (
         <Banner
           tone="danger"
@@ -96,21 +106,26 @@ export function SearchSynonyms({ owner, intro }: { owner: SynonymOwner; intro: s
         skeleton={<SkeletonList rows={2} label="Загрузка" />}
       >
         {list.data?.synonyms.length === 0 ? (
-          <p className="ac-text-body-s ac-muted">Синонимов нет.</p>
+          <EmptyState
+            compact
+            icon="search"
+            title="Синонимов пока нет"
+            text="Добавьте слова, по которым клиенты ищут эту позицию другими словами"
+          />
         ) : (
-          <ul className="synonym-list">
+          <ul className="cat-synonyms">
             {list.data?.synonyms.map((synonym) => (
-              <li key={synonym.id} className="synonym-list__item">
-                <span className="ac-text-body">{synonym.term}</span>
+              <li key={synonym.id} className="cat-synonyms__row">
+                <span className="cat-synonyms__term">{synonym.term}</span>
                 {synonym.lang && (
-                  <span className="ac-text-caption ac-muted">
-                    {SYNONYM_LANGUAGE_TEXT[synonym.lang]}
-                  </span>
+                  <TypeMark icon="language">{SYNONYM_LANGUAGE_TEXT[synonym.lang]}</TypeMark>
                 )}
                 <Button
-                  variant="text"
+                  variant="secondary"
                   size="s"
+                  destructive
                   disabled={!online}
+                  aria-label={`Убрать синоним «${synonym.term}»`}
                   onClick={() => remove(synonym.id)}
                 >
                   Убрать
@@ -120,26 +135,28 @@ export function SearchSynonyms({ owner, intro }: { owner: SynonymOwner; intro: s
           </ul>
         )}
       </LoadingContent>
-      <form className="synonym-form" onSubmit={add}>
+      <form className="cat-synonym-form" onSubmit={add}>
         <TextField
+          className="ac-field--compact cat-synonym-form__term"
           label="Новый синоним"
+          placeholder="колодки, brake pads, тежегіш қалыптары"
           value={term}
           onChange={setTerm}
-          hint="Например: «колодки», «brake pads», «тежегіш қалыптары»"
         />
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Язык (необязательно)</span>
-          <select
-            value={lang}
-            onChange={(event) => setLang(event.target.value as CatalogLanguage | "")}
-          >
-            <option value="">Не указан</option>
-            <option value="ru">{SYNONYM_LANGUAGE_TEXT.ru}</option>
-            <option value="kk">{SYNONYM_LANGUAGE_TEXT.kk}</option>
-            <option value="en">{SYNONYM_LANGUAGE_TEXT.en}</option>
-          </select>
-        </label>
-        <Button type="submit" variant="secondary" size="s" disabled={!online || busy}>
+        <Select<CatalogLanguage | "any">
+          compact
+          className="cat-synonym-form__lang"
+          label="Язык (необязательно)"
+          value={lang === "" ? "any" : lang}
+          options={[
+            { value: "any", label: "Не указан" },
+            { value: "ru", label: SYNONYM_LANGUAGE_TEXT.ru },
+            { value: "kk", label: SYNONYM_LANGUAGE_TEXT.kk },
+            { value: "en", label: SYNONYM_LANGUAGE_TEXT.en },
+          ]}
+          onChange={(next) => setLang(next === "any" ? "" : next)}
+        />
+        <Button type="submit" variant="secondary" size="s" icon="plus" disabled={!online || busy}>
           Добавить
         </Button>
       </form>

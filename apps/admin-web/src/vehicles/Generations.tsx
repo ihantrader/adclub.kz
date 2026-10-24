@@ -5,47 +5,90 @@ import type {
   AdminVehicleOptionListResponse,
 } from "@adclub/contracts";
 import { auditEntities } from "@adclub/contracts";
-import { Button, EmptyState, LoadingContent, SkeletonList, useToast } from "@adclub/ui";
+import {
+  Banner,
+  Button,
+  EmptyState,
+  LoadingContent,
+  SkeletonList,
+  TableToolbar,
+  TypeMark,
+  useToast,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
-import {
-  navigateTo,
-  routePaths,
-  useLocation,
-  vehicleGenerationPath,
-  vehicleMakePath,
-  vehicleModelPath,
-  withQuery,
-} from "../router";
-import { engineSpecs } from "../search-select/sources";
+import { Header, RowTitle, rowLink, Table, type Column } from "../layout/layout";
+import { useLocation, vehicleGenerationPath, vehicleMakePath, vehicleModelPath } from "../router";
 import { useLoad } from "../use-load";
 import { GenerationDialog, ModelDialog, ModificationDialog } from "./dialogs";
 import {
-  Crumbs,
+  filteredBy,
   FormError,
   ListFilters,
   listFiltersOf,
   LoadError,
+  MarkedTitle,
+  MAKES_CRUMB,
   MoreButton,
+  ObjectActions,
+  resetFilters,
+  RowActions,
   StatusDialog,
   StatusMark,
   useStatusFlow,
   usePaged,
+  VEHICLES_CRUMB,
 } from "./shared";
-import { countText, MODIFICATIONS, yearsText } from "./vehicle-words";
+import { countText, engineSpecsText, GENERATIONS, MODIFICATIONS, yearsText } from "./vehicle-words";
+
+const GENERATION_COLUMNS: Column[] = [
+  { key: "name", header: "Поколение" },
+  { key: "years", header: "Годы", width: 140 },
+  { key: "modifications", header: "Модификации", width: 140, numeric: true },
+  { key: "actions", header: "Действия", width: 160, actions: true, hiddenHeader: true },
+];
+
+const MODIFICATION_COLUMNS: Column[] = [
+  { key: "body", header: "Кузов", width: 140 },
+  { key: "engine", header: "Двигатель" },
+  { key: "transmission", header: "КПП", width: 160 },
+  { key: "drive", header: "Привод", width: 120 },
+  { key: "years", header: "Годы", width: 110 },
+  { key: "actions", header: "Действия", width: 160, actions: true, hiddenHeader: true },
+];
+
+/** The empty list of a section: nothing yet, or nothing by the filters (with their reset). */
+function EmptyList({ filtered, title, text }: { filtered: boolean; title: string; text: string }) {
+  return (
+    <EmptyState
+      compact
+      icon="car"
+      title={filtered ? "Ничего не нашлось" : title}
+      text={filtered ? "Измените поиск или отбор" : text}
+      action={
+        filtered ? (
+          <Button variant="secondary" size="s" onClick={resetFilters}>
+            Сбросить фильтры
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+}
 
 /**
- * A model with its generations (A-CAR-01; TASK-035.B): the model's card —
- * its make, spellings, moving to another make — and its generations with
- * their years and how many modifications each has.
+ * A model with its generations (A-CAR-01; TASK-035.B, TASK-080): the crumbs
+ * «Автомобили › Марки › Geely», the model's name with its status and
+ * spellings, «Изменить» (moving to another make too) and «⋯» in the head;
+ * then its generations with their years and how many modifications each has.
  */
 export function ModelPage({ modelId }: { modelId: string }) {
   const toast = useToast();
   const online = useOnline();
   const location = useLocation();
   const filters = listFiltersOf(location.query);
+  const filtered = filteredBy(location.query);
   const model = useLoad<AdminVehicleModel>(
     async () => (await apiClient.getVehicleModel({ modelId })).model,
     modelId,
@@ -94,160 +137,147 @@ export function ModelPage({ modelId }: { modelId: string }) {
     },
     (generation) => ({ parents: { make: generation.make, model: generation.model } }),
   );
-  const current = model.data;
+  const current = model.data && model.data.id === modelId ? model.data : undefined;
 
   return (
     <>
-      <Crumbs
-        steps={[
-          { label: "Марки", href: routePaths.vehicles },
-          {
-            label: current?.make.name ?? "…",
-            href: current ? vehicleMakePath(current.make.id) : undefined,
-          },
-          { label: current?.name ?? "…" },
+      <Header
+        crumbs={[
+          VEHICLES_CRUMB,
+          MAKES_CRUMB,
+          ...(current
+            ? [{ label: current.make.name, href: vehicleMakePath(current.make.id) }]
+            : []),
         ]}
+        title={current?.name ?? "Модель"}
+        subtitle={
+          current && (
+            <>
+              <StatusMark
+                status={current.status}
+                hidden={current.status === "active" && !current.visibleToClients}
+                active="Активна"
+              />
+              {current.aliases.length > 0 && (
+                <span>Другие написания: {current.aliases.join(", ")}</span>
+              )}
+              <span>{countText(current.generationCount, GENERATIONS)}</span>
+            </>
+          )
+        }
+        actions={
+          current && (
+            <ObjectActions
+              name={`${current.make.name} ${current.name}`}
+              status={current.status}
+              onEdit={() => setEditingModel(current)}
+              onStatus={() => modelStatus.open(current)}
+              onReload={() => {
+                model.reload();
+                list.first.reload();
+              }}
+            />
+          )
+        }
       />
       <LoadError error={model.error} retry={model.reload} />
-      {current && (
-        <div className="page__head">
-          <div className="cell-stack">
-            <h1 className="ac-text-title-l page__title">
-              {current.make.name} {current.name}
-            </h1>
-            <span className="ac-text-body-s ac-muted">
-              {current.aliases.length > 0 ? `Другие написания: ${current.aliases.join(", ")}` : ""}
-            </span>
-          </div>
-          <div className="page__tools">
-            <StatusMark
-              status={current.status}
-              hidden={current.status === "active" && !current.visibleToClients}
-            />
-            <Button
-              variant="secondary"
-              size="s"
-              disabled={!online}
-              onClick={() => setEditingModel(current)}
-            >
-              Изменить
-            </Button>
-            <Button
-              variant="text"
-              size="s"
-              disabled={!online}
-              onClick={() => modelStatus.open(current)}
-            >
-              {current.status === "active" ? "В архив" : "Восстановить"}
-            </Button>
-          </div>
-        </div>
-      )}
       {current && !current.visibleToClients && (
-        <p className="ac-text-body-s warning-text">
+        <Banner tone="warning">
           {current.make.status === "archived"
             ? `Марка ${current.make.name} в архиве — модель не видна в приложении.`
             : "Модель в архиве — она не видна в приложении."}
-        </p>
+        </Banner>
       )}
-      <div className="page__head">
-        <h2 className="ac-text-heading">Поколения</h2>
-        <Button
-          size="s"
-          icon="plus"
-          disabled={!online || !current || !current.visibleToClients}
-          onClick={() => setEditing("new")}
+      <section className="section" aria-labelledby="model-generations">
+        <div className="section__head">
+          <h2 id="model-generations" className="section__title">
+            Поколения
+          </h2>
+          <Button
+            size="s"
+            icon="plus"
+            disabled={!online || !current || !current.visibleToClients}
+            onClick={() => setEditing("new")}
+          >
+            Новое поколение
+          </Button>
+        </div>
+        <ListFilters searchLabel="Поиск поколений" placeholder="Название поколения" />
+        <LoadError error={list.first.error} retry={list.first.reload} />
+        <LoadingContent
+          ready={list.first.data !== undefined}
+          indicator={list.first.indicator}
+          label="Загрузка"
+          swapKey={list.first.answerKey}
+          skeleton={<SkeletonList rows={4} label="Загрузка" />}
         >
-          Новое поколение
-        </Button>
-      </div>
-      <ListFilters searchLabel="Название поколения" />
-      <LoadError error={list.first.error} retry={list.first.reload} />
-      <LoadingContent
-        ready={list.first.data !== undefined}
-        indicator={list.first.indicator}
-        label="Загрузка"
-        swapKey={list.first.answerKey}
-        skeleton={<SkeletonList rows={4} label="Загрузка" />}
-      >
-        <p className="ac-text-body-s ac-muted" aria-live="polite">
-          Всего: {list.total.toLocaleString("ru-RU")}
-        </p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="car"
-            title={filters.q || filters.status ? "Ничего не нашлось" : "Поколений пока нет"}
-            text={
-              filters.q || filters.status
-                ? "Измените поиск или отбор"
-                : "Добавьте поколение — без него модель нельзя выбрать в приложении"
-            }
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table vehicles-table">
-              <thead>
-                <tr>
-                  <th scope="col">Поколение</th>
-                  <th scope="col">Годы</th>
-                  <th scope="col">Модификации</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((generation) => (
-                  <tr
-                    key={generation.id}
-                    className={generation.status === "archived" ? "row--muted" : undefined}
-                  >
-                    <td>
-                      <AppLink href={vehicleGenerationPath(generation.id)}>
-                        {generation.name}
-                      </AppLink>
-                    </td>
-                    <td className="years ac-text-body-s">
-                      {yearsText(generation.yearFrom, generation.yearTo)}
-                    </td>
-                    <td className="ac-text-body-s">
-                      {countText(generation.modificationCount, MODIFICATIONS)}
-                    </td>
-                    <td>
-                      <StatusMark
-                        status={generation.status}
-                        hidden={generation.status === "active" && !generation.visibleToClients}
-                      />
-                    </td>
-                    <td className="admin-table__actions">
-                      <div className="button-row button-row--end">
-                        <Button
-                          variant="secondary"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => setEditing(generation)}
+          <div className="list-block">
+            <TableToolbar total={list.items.length === 0 ? null : list.total}>
+              {filtered && (
+                <Button variant="text" size="s" onClick={resetFilters}>
+                  Сбросить фильтры
+                </Button>
+              )}
+            </TableToolbar>
+            {list.items.length === 0 ? (
+              <EmptyList
+                filtered={filtered}
+                title="Поколений пока нет"
+                text="Добавьте поколение — без него модель нельзя выбрать в приложении"
+              />
+            ) : (
+              <Table label="Поколения модели" columns={GENERATION_COLUMNS}>
+                {list.items.map((generation) => {
+                  const link = rowLink(vehicleGenerationPath(generation.id));
+                  return (
+                    <tr
+                      key={generation.id}
+                      {...link}
+                      className={
+                        generation.status === "archived"
+                          ? `${link.className} row--muted`
+                          : link.className
+                      }
+                    >
+                      <td>
+                        <MarkedTitle
+                          mark={
+                            <StatusMark
+                              status={generation.status}
+                              hidden={
+                                generation.status === "active" && !generation.visibleToClients
+                              }
+                            />
+                          }
                         >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => generationStatus.open(generation)}
-                        >
-                          {generation.status === "active" ? "В архив" : "Восстановить"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <RowTitle href={vehicleGenerationPath(generation.id)}>
+                            {generation.name}
+                          </RowTitle>
+                        </MarkedTitle>
+                      </td>
+                      <td className="nowrap">
+                        {yearsText(generation.yearFrom, generation.yearTo)}
+                      </td>
+                      <td className="num">
+                        {generation.modificationCount.toLocaleString("ru-RU")}
+                      </td>
+                      <td className="admin-table__actions">
+                        <RowActions
+                          name={generation.name}
+                          status={generation.status}
+                          onEdit={() => setEditing(generation)}
+                          onStatus={() => generationStatus.open(generation)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Table>
+            )}
+            <MoreButton list={list} />
           </div>
-        )}
-        <MoreButton list={list} />
-      </LoadingContent>
+        </LoadingContent>
+      </section>
 
       {current && (
         <ModelDialog
@@ -333,19 +363,21 @@ export function ModelPage({ modelId }: { modelId: string }) {
 }
 
 /**
- * A generation with its modifications (A-CAR-01; TASK-035.B): body,
- * engine, gearbox, drive, years within the generation's (the market is the
- * server's and the import file's — not shown, TASK-035.C). Dozens of
- * modifications fit a 1024 px table without scrolling sideways; an
- * archived engine or option is shown marked and is never lost by an edit.
+ * A generation with its modifications (A-CAR-01; TASK-035.B, TASK-080):
+ * the crumbs «Автомобили › Марки › Geely › Coolray», the generation's name
+ * with its years and status; then the section «Модификации» — its status
+ * chips under its title — body, engine, gearbox, drive, years within the
+ * generation's (the market is the server's and the import file's — not
+ * shown, TASK-035.C). An archived engine or option is shown marked and is
+ * never lost by an edit.
  */
 export function GenerationPage({ generationId }: { generationId: string }) {
   const toast = useToast();
   const online = useOnline();
   const location = useLocation();
-  const status = location.query.get("status");
+  const statusFilter = listFiltersOf(location.query).status;
+  const filtered = statusFilter !== undefined;
   const highlight = location.query.get("highlight");
-  const statusFilter = status === "active" || status === "archived" ? status : undefined;
   const generation = useLoad<AdminVehicleGeneration>(
     async () => (await apiClient.getVehicleGeneration({ generationId })).generation,
     generationId,
@@ -362,7 +394,8 @@ export function GenerationPage({ generationId }: { generationId: string }) {
   }, JSON.stringify({ generationId, statusFilter }));
   const [editingGeneration, setEditingGeneration] = useState<AdminVehicleGeneration | null>(null);
   const [editing, setEditing] = useState<AdminVehicleModification | "new" | null>(null);
-  const current = generation.data;
+  const current =
+    generation.data && generation.data.id === generationId ? generation.data : undefined;
   const generationStatus = useStatusFlow<AdminVehicleGeneration>(
     auditEntities.vehicleGeneration,
     async (entry, to, version) =>
@@ -414,79 +447,60 @@ export function GenerationPage({ generationId }: { generationId: string }) {
 
   return (
     <>
-      <Crumbs
-        steps={[
-          { label: "Марки", href: routePaths.vehicles },
-          {
-            label: current?.make.name ?? "…",
-            href: current ? vehicleMakePath(current.make.id) : undefined,
-          },
-          {
-            label: current?.model.name ?? "…",
-            href: current ? vehicleModelPath(current.model.id) : undefined,
-          },
-          {
-            label: current
-              ? `${current.name} (${yearsText(current.yearFrom, current.yearTo)})`
-              : "…",
-          },
+      <Header
+        crumbs={[
+          VEHICLES_CRUMB,
+          MAKES_CRUMB,
+          ...(current
+            ? [
+                { label: current.make.name, href: vehicleMakePath(current.make.id) },
+                { label: current.model.name, href: vehicleModelPath(current.model.id) },
+              ]
+            : []),
         ]}
+        title={current?.name ?? "Поколение"}
+        subtitle={
+          current && (
+            <>
+              <StatusMark
+                status={current.status}
+                hidden={current.status === "active" && !current.visibleToClients}
+                active="Активно"
+              />
+              <span>{yearsText(current.yearFrom, current.yearTo)}</span>
+              <span>{countText(current.modificationCount, MODIFICATIONS)}</span>
+            </>
+          )
+        }
+        actions={
+          current && (
+            <ObjectActions
+              name={`${current.make.name} ${current.model.name} ${current.name}`}
+              status={current.status}
+              onEdit={() => setEditingGeneration(current)}
+              onStatus={() => generationStatus.open(current)}
+              onReload={() => {
+                generation.reload();
+                list.first.reload();
+              }}
+            />
+          )
+        }
       />
       <LoadError error={generation.error} retry={generation.reload} />
-      {current && (
-        <div className="page__head">
-          <div className="cell-stack">
-            <h1 className="ac-text-title-l page__title">
-              {current.make.name} {current.model.name} · {current.name}
-            </h1>
-            <span className="ac-text-body-s ac-muted">
-              {yearsText(current.yearFrom, current.yearTo)} ·{" "}
-              {countText(current.modificationCount, MODIFICATIONS)}
-            </span>
-          </div>
-          <div className="page__tools">
-            <StatusMark
-              status={current.status}
-              hidden={current.status === "active" && !current.visibleToClients}
-            />
-            <Button
-              variant="secondary"
-              size="s"
-              disabled={!online}
-              onClick={() => setEditingGeneration(current)}
-            >
-              Изменить
-            </Button>
-            <Button
-              variant="text"
-              size="s"
-              disabled={!online}
-              onClick={() => generationStatus.open(current)}
-            >
-              {current.status === "active" ? "В архив" : "Восстановить"}
-            </Button>
-          </div>
-        </div>
-      )}
       {current && !current.visibleToClients && (
-        <p className="ac-text-body-s warning-text">
+        <Banner tone="warning">
           Поколение не видно в приложении: в архиве оно само или то, что выше (модель, марка).
-        </p>
+        </Banner>
       )}
-      <div className="page__head">
-        <h2 className="ac-text-heading">Модификации</h2>
-        <div className="page__tools">
-          <label className="select">
-            <span className="ac-visually-hidden">Статус</span>
-            <select
-              value={statusFilter ?? ""}
-              onChange={(event) => navigateStatus(event.target.value || undefined, generationId)}
-            >
-              <option value="">Все</option>
-              <option value="active">Активные</option>
-              <option value="archived">В архиве</option>
-            </select>
-          </label>
+      <section className="section" aria-labelledby="generation-modifications">
+        <div className="section__head">
+          <div className="cell-stack">
+            <h2 id="generation-modifications" className="section__title">
+              Модификации
+            </h2>
+            <p className="section__note">Изменения видны в приложении не позже чем через минуту.</p>
+          </div>
           <Button
             size="s"
             icon="plus"
@@ -496,45 +510,31 @@ export function GenerationPage({ generationId }: { generationId: string }) {
             Новая модификация
           </Button>
         </div>
-      </div>
-      <LoadError error={list.first.error} retry={list.first.reload} />
-      <LoadingContent
-        ready={list.first.data !== undefined}
-        indicator={list.first.indicator}
-        label="Загрузка"
-        swapKey={list.first.answerKey}
-        skeleton={<SkeletonList rows={4} label="Загрузка" />}
-      >
-        <p className="ac-text-body-s ac-muted" aria-live="polite">
-          Всего: {list.total.toLocaleString("ru-RU")}
-        </p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="car"
-            title={statusFilter ? "Ничего не нашлось" : "Модификаций пока нет"}
-            text={
-              statusFilter
-                ? "Измените отбор"
-                : "Без модификаций поколение выбирается в приложении только «Сохранить так»"
-            }
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table vehicles-table">
-              <thead>
-                <tr>
-                  <th scope="col">Кузов</th>
-                  <th scope="col">Двигатель</th>
-                  <th scope="col">КПП</th>
-                  <th scope="col">Привод</th>
-                  <th scope="col">Годы</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+        <ListFilters searchLabel="Поиск модификаций" withSearch={false} />
+        <LoadError error={list.first.error} retry={list.first.reload} />
+        <LoadingContent
+          ready={list.first.data !== undefined}
+          indicator={list.first.indicator}
+          label="Загрузка"
+          swapKey={list.first.answerKey}
+          skeleton={<SkeletonList rows={4} label="Загрузка" />}
+        >
+          <div className="list-block">
+            <TableToolbar total={list.items.length === 0 ? null : list.total}>
+              {filtered && (
+                <Button variant="text" size="s" onClick={resetFilters}>
+                  Сбросить фильтры
+                </Button>
+              )}
+            </TableToolbar>
+            {list.items.length === 0 ? (
+              <EmptyList
+                filtered={filtered}
+                title="Модификаций пока нет"
+                text="Без модификаций поколение выбирается в приложении только «Сохранить так»"
+              />
+            ) : (
+              <Table label="Модификации поколения" columns={MODIFICATION_COLUMNS}>
                 {list.items.map((modification) => (
                   <tr
                     key={modification.id}
@@ -546,75 +546,63 @@ export function GenerationPage({ generationId }: { generationId: string }) {
                           : undefined
                     }
                   >
-                    <td className="ac-text-body-s">
-                      <OptionName option={modification.bodyType} />
+                    <td>
+                      <span className="cell-stack">
+                        <OptionName option={modification.bodyType} />
+                        <StatusMark
+                          status={modification.status}
+                          hidden={
+                            modification.status === "active" && !modification.visibleToClients
+                          }
+                        />
+                      </span>
                     </td>
                     <td>
-                      <div className="cell-stack">
-                        <span className="ac-text-body-s">
+                      <span className="row-title">
+                        <span className="vehicles-engine">
                           {modification.engine.code}
                           {modification.engine.status === "archived" && (
-                            <span className="warning-text"> · в архиве</span>
+                            <StatusMark status="archived" />
                           )}
                         </span>
-                        <span className="ac-text-caption ac-muted">
-                          {[engineSpecs(modification.engine), modification.engine.fuel.names.ru]
+                        <span className="row-title__sub">
+                          {[engineSpecsText(modification.engine), modification.engine.fuel.names.ru]
                             .filter(Boolean)
                             .join(" · ")}
                         </span>
-                      </div>
-                    </td>
-                    <td className="ac-text-body-s">
-                      <OptionName option={modification.transmissionType} />
-                    </td>
-                    <td className="ac-text-body-s">
-                      <OptionName option={modification.driveType} />
-                    </td>
-                    <td className="years ac-text-body-s">
-                      {yearsText(modification.yearFrom, modification.yearTo)}
-                      {modification.source === "import" && (
-                        <span className="ac-text-caption ac-muted"> · импорт</span>
-                      )}
+                      </span>
                     </td>
                     <td>
-                      <StatusMark
-                        status={modification.status}
-                        hidden={modification.status === "active" && !modification.visibleToClients}
-                      />
+                      <OptionName option={modification.transmissionType} />
+                    </td>
+                    <td>
+                      <OptionName option={modification.driveType} />
+                    </td>
+                    <td className="nowrap">
+                      <span className="cell-stack">
+                        <span>{yearsText(modification.yearFrom, modification.yearTo)}</span>
+                        {modification.source === "import" && (
+                          <TypeMark icon="upload">импорт</TypeMark>
+                        )}
+                      </span>
                     </td>
                     <td className="admin-table__actions">
-                      <div className="button-row button-row--end">
-                        <Button
-                          variant="secondary"
-                          size="s"
-                          disabled={!online || !options.data}
-                          onClick={() => setEditing(modification)}
-                        >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => modificationStatus.open(modification)}
-                        >
-                          {modification.status === "active" ? "В архив" : "Восстановить"}
-                        </Button>
-                      </div>
+                      <RowActions
+                        name={describe(modification)}
+                        status={modification.status}
+                        editDisabled={!options.data}
+                        onEdit={() => setEditing(modification)}
+                        onStatus={() => modificationStatus.open(modification)}
+                      />
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+              </Table>
+            )}
+            <MoreButton list={list} />
           </div>
-        )}
-        <MoreButton list={list} />
-      </LoadingContent>
-      <p className="ac-text-caption ac-muted">
-        Изменения видны в приложении не позже чем через минуту.{" "}
-        <AppLink href={routePaths.vehicleEngines}>Двигатели</AppLink> ·{" "}
-        <AppLink href={routePaths.vehicleOptions}>Справочные списки</AppLink>
-      </p>
+        </LoadingContent>
+      </section>
 
       {current && (
         <GenerationDialog
@@ -704,13 +692,9 @@ function OptionName({
   option: { names: { ru: string }; status: "active" | "archived" };
 }) {
   return (
-    <>
-      {option.names.ru}
-      {option.status === "archived" && <span className="warning-text"> · в архиве</span>}
-    </>
+    <span className="cell-stack">
+      <span>{option.names.ru}</span>
+      {option.status === "archived" && <StatusMark status="archived" />}
+    </span>
   );
-}
-
-function navigateStatus(status: string | undefined, generationId: string): void {
-  navigateTo(withQuery(`/vehicles/generations/${generationId}`, { status }), { replace: true });
 }

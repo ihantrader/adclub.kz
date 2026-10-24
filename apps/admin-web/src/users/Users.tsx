@@ -1,53 +1,78 @@
 import type { AdminUserSummary } from "@adclub/contracts";
-import { Checkbox, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  IconButton,
+  LoadingContent,
+  SkeletonList,
+  TableToolbar,
+  TextField,
+  TypeMark,
+} from "@adclub/ui";
+import { useEffect, useState } from "react";
 import { apiClient } from "../api";
-import { AppLink, follow } from "../catalog/shared";
 import { formatMoment } from "../format";
-import { routePaths, userPath } from "../router";
-import { SearchBox, useAddressFilters } from "../suppliers/shared";
-import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
-import { accessText, userFiltersOf } from "./user-words";
+import { FilterSearch, FilterSelect, FlagChips } from "../layout/filters";
+import { Header, RowTitle, rowLink, Table } from "../layout/layout";
+import { MoreOrders } from "../orders/Orders";
+import { navigateTo, routePaths, userPath } from "../router";
+import { useAddressFilters } from "../suppliers/shared";
+import { LoadError, usePaged } from "../vehicles/shared";
+import { accessMark, userFiltersOf } from "./user-words";
+import "./users.css";
 
 const ACCESS = [
-  { value: "", label: "Все" },
   { value: "active", label: "Есть" },
   { value: "none", label: "Нет" },
   { value: "expiring", label: "Истекает в ближайшие N дней" },
 ] as const;
 
-const TABS = [
-  { key: "users", label: "Пользователи", href: routePaths.users },
-  { key: "noShows", label: "Неявки", href: routePaths.userNoShows },
+const FLAGS = [
+  { key: "noShows", label: "Есть неявки" },
+  { key: "unconfirmedCar", label: "Есть автомобиль без подтверждённого документа" },
 ] as const;
 
-/** The pages of «Пользователи» (A-USR-01, A-USR-03): real links with their own addresses. */
-export function UsersTabs({ active }: { active: (typeof TABS)[number]["key"] | null }) {
+type FlagKey = (typeof FLAGS)[number]["key"];
+
+type UsersPage = "users" | "noShows";
+
+/** The pages of «Пользователи» (A-USR-01, A-USR-03): one bar of the section's tabs (X11). */
+export function usersTabs(active: UsersPage) {
+  return {
+    label: "Пользователи",
+    active,
+    items: [
+      { key: "users" as const, label: "Все", href: routePaths.users },
+      { key: "noShows" as const, label: "Неявки", href: routePaths.userNoShows },
+    ],
+  };
+}
+
+export const USERS_CRUMB = { label: "Пользователи", href: routePaths.users };
+
+/**
+ * Club access as a mark (X7): «До 17.11 · подписка», «Истекает 27.10»,
+ * «Нет» — the same in the list and on the card.
+ */
+export function AccessMark({ state }: { state: AdminUserSummary["clubAccess"] }) {
+  const mark = accessMark(state);
   return (
-    <nav className="page-tabs" aria-label="Пользователи">
-      {TABS.map((tab) => (
-        <a
-          key={tab.key}
-          href={tab.href}
-          className={tab.key === active ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"}
-          aria-current={tab.key === active ? "page" : undefined}
-          onClick={(event) => follow(event, tab.href)}
-        >
-          {tab.label}
-        </a>
-      ))}
-    </nav>
+    <Badge tone={mark.tone} icon={mark.icon}>
+      {mark.text}
+    </Badge>
   );
 }
 
 /**
- * A-USR-01 «Пользователи» (SCREENS 7.6; TASK-036.B): the users of the app,
- * newest first; the search by the phone (any spelling, a part of it — the
- * server matches the full number and answers it partly hidden) and the
- * name; club access (until TASK-040 — in place of the subscription's
- * status): now, none, ending within N days; «есть неявки». A user who
- * never finished the registration is listed by the number alone. «Нет
- * WhatsApp» is not offered: the server knows nothing of it about users'
- * numbers.
+ * A-USR-01 «Пользователи» (SCREENS 7.6; TASK-036.B, TASK-080): the users of
+ * the app, newest first; the search by the phone (any spelling, a part of
+ * it — the server matches the full number and answers it partly hidden)
+ * and the name; club access now, none, ending within N days; the flags
+ * «есть неявки» and «автомобиль без подтверждённого документа» as chips in
+ * one row. A user who never finished the registration is listed by the
+ * number. The row opens the user (X1). «Нет WhatsApp» is not offered: the
+ * server knows nothing of it about users' numbers.
  */
 export function Users() {
   const { query, set } = useAddressFilters();
@@ -60,49 +85,70 @@ export function Users() {
       nextCursor: page.nextCursor,
     };
   }, JSON.stringify(filters));
+  const [search, setSearch] = useState(query.get("q") ?? "");
+  const [days, setDays] = useState(query.get("expiringDays") ?? String(filters.expiringDays));
+  const filtered = Boolean(
+    filters.q || filters.clubAccess || filters.noShows || filters.unconfirmedCar,
+  );
+
+  // The search goes to the address a moment after typing stops.
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === (query.get("q") ?? "")) return;
+    const timer = setTimeout(() => set({ q: trimmed || undefined }), 350);
+    return () => clearTimeout(timer);
+  });
+
+  const reset = () => {
+    setSearch("");
+    navigateTo(routePaths.users, { replace: true });
+  };
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Пользователи</h1>
-      </div>
-      <UsersTabs active="users" />
-      <div className="filters">
-        <SearchBox label="Телефон (можно часть) или имя" />
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Клубный доступ</span>
-          <select
-            value={filters.clubAccess ?? ""}
-            onChange={(event) => set({ clubAccess: event.target.value || undefined })}
-          >
-            {ACCESS.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {filters.clubAccess === "expiring" && (
-          <label className="select select--narrow">
-            <span className="ac-text-caption ac-muted">N дней</span>
-            <input
-              type="number"
-              min={1}
-              max={366}
-              value={filters.expiringDays}
-              onChange={(event) => set({ expiringDays: event.target.value || undefined })}
+      <Header
+        title="Пользователи"
+        tabs={usersTabs("users")}
+        actions={
+          <IconButton icon="refresh" label="Обновить" size={20} onClick={list.first.reload} />
+        }
+      />
+      <div className="filters__group">
+        <div className="filters">
+          <FilterSearch
+            label="Поиск пользователей"
+            placeholder="Телефон (можно часть) или имя"
+            value={search}
+            onChange={setSearch}
+            onSubmit={() => set({ q: search.trim() || undefined })}
+          />
+          <FilterSelect
+            label="Клубный доступ"
+            value={filters.clubAccess}
+            options={ACCESS}
+            onChange={(clubAccess) => set({ clubAccess })}
+          />
+          {filters.clubAccess === "expiring" && (
+            <TextField
+              className="ac-field--compact users-days"
+              label="N дней"
+              value={days}
+              inputMode="numeric"
+              maxLength={3}
+              onChange={(text) => {
+                const digits = text.replace(/\D/g, "");
+                setDays(digits);
+                const value = Number(digits);
+                if (value >= 1 && value <= 366) set({ expiringDays: digits });
+              }}
             />
-          </label>
-        )}
-        <Checkbox
-          label="Есть неявки"
-          checked={filters.noShows === "true"}
-          onChange={(on) => set({ noShows: on ? "true" : undefined })}
-        />
-        <Checkbox
-          label="Есть автомобиль без подтверждённого документа"
-          checked={filters.unconfirmedCar === "true"}
-          onChange={(on) => set({ unconfirmedCar: on ? "true" : undefined })}
+          )}
+        </div>
+        <FlagChips<FlagKey>
+          label="Отборы пользователей"
+          flags={FLAGS}
+          isOn={(key) => filters[key] === "true"}
+          onToggle={(key, on) => set({ [key]: on ? "true" : undefined })}
         />
       </div>
       <LoadError error={list.first.error} retry={list.first.reload} />
@@ -110,68 +156,87 @@ export function Users() {
         ready={list.first.data !== undefined}
         indicator={list.first.indicator}
         label="Загрузка"
+        swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted">Всего: {list.total.toLocaleString("ru-RU")}</p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="users"
-            title="Пользователей не найдено"
-            text="Измените поиск или отборы"
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Пользователь</th>
-                  <th scope="col">Город</th>
-                  <th scope="col">Клубный доступ</th>
-                  <th scope="col" className="num">
-                    Неявки
-                  </th>
-                  <th scope="col">Появился</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((user) => (
-                  <tr key={user.accountId}>
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={reset}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {list.items.length === 0 ? (
+            <EmptyState
+              icon="users"
+              title={filtered ? "Пользователей не найдено" : "Пользователей пока нет"}
+              text={filtered ? "Измените поиск или отборы" : undefined}
+              action={
+                filtered ? (
+                  <Button variant="secondary" onClick={reset}>
+                    Сбросить фильтры
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Table
+              label="Пользователи"
+              columns={[
+                { key: "user", header: "Пользователь" },
+                { key: "city", header: "Город", width: 180 },
+                { key: "access", header: "Клубный доступ", width: 220 },
+                { key: "noShows", header: "Неявки", width: 104, numeric: true },
+                { key: "created", header: "Появился", width: 140 },
+              ]}
+            >
+              {list.items.map((user) => {
+                const href = userPath(user.accountId);
+                const notes = [
+                  user.name ? user.phone : "Без имени",
+                  user.registrationCompleted ? null : "регистрация не завершена",
+                ].filter(Boolean);
+                return (
+                  <tr key={user.accountId} {...rowLink(href)}>
                     <td>
-                      <div className="cell-stack">
-                        <AppLink href={userPath(user.accountId)}>
-                          {user.name ?? "Без имени"}
-                        </AppLink>
-                        <span className="ac-text-caption ac-muted num">
-                          {user.phone}
-                          {!user.registrationCompleted ? " · регистрация не завершена" : ""}
-                          {user.supplierMember ? " · сотрудник поставщика" : ""}
-                        </span>
-                      </div>
-                    </td>
-                    <td>{user.cityName ?? <span className="ac-muted">—</span>}</td>
-                    <td>
-                      <span
-                        className={
-                          user.clubAccess.granted
-                            ? "status status--acknowledged"
-                            : "status status--closed"
+                      <RowTitle
+                        href={href}
+                        sub={
+                          <span className="users-sub">
+                            <span className="nowrap">{notes.join(" · ")}</span>
+                            {user.supplierMember && (
+                              <TypeMark icon="store">Сотрудник поставщика</TypeMark>
+                            )}
+                          </span>
                         }
                       >
-                        {accessText(user.clubAccess)}
-                      </span>
-                      {user.clubAccess.source === "subscription" && (
-                        <span className="ac-text-caption ac-muted"> по подписке</span>
+                        <span className={user.name ? undefined : "nowrap"}>
+                          {user.name ?? user.phone}
+                        </span>
+                      </RowTitle>
+                    </td>
+                    <td className="ac-text-body-s">
+                      {user.cityName ?? <span className="ac-muted">—</span>}
+                    </td>
+                    <td>
+                      <AccessMark state={user.clubAccess} />
+                    </td>
+                    <td className="num">
+                      {user.noShows > 0 && (
+                        <Badge tone="warning" icon="alertTriangle">
+                          {user.noShows.toLocaleString("ru-RU")}
+                        </Badge>
                       )}
                     </td>
-                    <td className="num">{user.noShows}</td>
-                    <td className="ac-text-body-s num">{formatMoment(user.createdAt)}</td>
+                    <td className="ac-text-body-s nowrap">{formatMoment(user.createdAt)}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <MoreButton list={list} />
+                );
+              })}
+            </Table>
+          )}
+          <MoreOrders list={list} />
+        </div>
       </LoadingContent>
     </>
   );

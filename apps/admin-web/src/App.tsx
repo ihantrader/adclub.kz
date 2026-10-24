@@ -21,7 +21,14 @@ import { useLocation, useRoute, type RouteKey } from "./router";
 
 import { Shell } from "./screens/Shell";
 import { SignIn } from "./screens/SignIn";
-import { NarrowNotice, Starting, Throttled, Unreachable, UpdateRequired } from "./screens/Starting";
+import {
+  ConnectionBanner,
+  NarrowNotice,
+  Starting,
+  Throttled,
+  Unreachable,
+  UpdateRequired,
+} from "./screens/Starting";
 import { Security } from "./security/Security";
 import { Cities } from "./settings/Cities";
 import { ClientPolicy } from "./settings/ClientPolicy";
@@ -98,6 +105,12 @@ export function App() {
     };
   }, []);
 
+  // Once the admin panel was on screen, a lost connection keeps it there
+  // under a banner (X29); the whole-page error is only for a page without data yet.
+  const [wasIn, setWasIn] = useState(false);
+  if (state.status === "signed_in" && !wasIn) setWasIn(true);
+  if (state.status === "signed_out" && wasIn) setWasIn(false);
+
   const [kind, screen] = view();
   return (
     <div className="admin-root">
@@ -117,8 +130,37 @@ export function App() {
       case "signed_out":
         return ["sign-in", <SignIn reason={state.reason} />];
       case "unreachable":
+        if (wasIn) {
+          return [
+            "admin",
+            <Shell
+              route={route}
+              me={me}
+              connection={<ConnectionBanner onRetry={() => session.start()} />}
+            >
+              <Page route={route} me={me} />
+            </Shell>,
+          ];
+        }
         return ["unreachable", <Unreachable onRetry={() => session.start()} />];
       case "throttled":
+        if (wasIn) {
+          return [
+            "admin",
+            <Shell
+              route={route}
+              me={me}
+              connection={
+                <ConnectionBanner
+                  retryAfterSeconds={state.retryAfterSeconds}
+                  onRetry={() => session.start()}
+                />
+              }
+            >
+              <Page route={route} me={me} />
+            </Shell>,
+          ];
+        }
         return [
           "throttled",
           <Throttled retryAfterSeconds={state.retryAfterSeconds} onRetry={session.start} />,

@@ -1,37 +1,64 @@
 import type { AdminVehicleEngine, AdminVehicleOptionListResponse } from "@adclub/contracts";
 import { auditEntities } from "@adclub/contracts";
-import { Button, EmptyState, LoadingContent, SkeletonList, useToast } from "@adclub/ui";
+import {
+  Button,
+  EmptyState,
+  LoadingContent,
+  SkeletonList,
+  TableToolbar,
+  useToast,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { navigateTo, useLocation, withQuery } from "../router";
+import { FilterSelect } from "../layout/filters";
+import { Header, Table, type Column } from "../layout/layout";
+import { useLocation } from "../router";
 import { useLoad } from "../use-load";
 import { EngineDialog } from "./dialogs";
 import {
+  filteredBy,
   FormError,
   ListFilters,
   listFiltersOf,
   LoadError,
+  MarkedTitle,
   MoreButton,
+  RefreshButton,
+  resetFilters,
+  RowActions,
   StatusDialog,
   StatusMark,
+  useFilterSetter,
   useStatusFlow,
   usePaged,
-  VehiclesTabs,
+  vehiclesTabs,
 } from "./shared";
-import { countText, MODIFICATIONS } from "./vehicle-words";
+import { displacementText } from "./vehicle-words";
+
+const COLUMNS: Column[] = [
+  { key: "code", header: "Код" },
+  { key: "fuel", header: "Топливо", width: 130 },
+  { key: "displacement", header: "Объём, л", width: 100, numeric: true },
+  { key: "power", header: "Мощность, л.с.", width: 130, numeric: true },
+  { key: "used", header: "В модификациях", width: 140, numeric: true },
+  { key: "actions", header: "Действия", width: 160, actions: true, hiddenHeader: true },
+];
 
 /**
- * A-CAR-01, engines (TASK-035.B): a list of their own — code and other
- * spellings, fuel, displacement, power and where each is used (how many
- * modifications have it); search by any spelling, fuel and status filters.
+ * A-CAR-01, engines (TASK-035.B, TASK-080): a list of their own — code and
+ * other spellings, fuel, displacement, power and where each is used (how
+ * many modifications have it, «—» — nowhere yet); search by any spelling,
+ * the fuel and the status chips.
  */
 export function Engines() {
   const toast = useToast();
   const online = useOnline();
   const location = useLocation();
+  const setFilter = useFilterSetter();
   const filters = listFiltersOf(location.query);
   const fuelId = location.query.get("fuelId") ?? "";
+  const filtered = filteredBy(location.query, ["fuelId"]);
   const options = useLoad<AdminVehicleOptionListResponse>(
     () => apiClient.listVehicleOptions(),
     "options",
@@ -64,46 +91,31 @@ export function Engines() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Автомобили</h1>
-        <div className="page__tools">
-          <Button variant="secondary" size="s" icon="refresh" onClick={list.first.reload}>
-            Обновить
-          </Button>
-          <Button
-            size="s"
-            icon="plus"
-            disabled={!online || !options.data}
-            onClick={() => setEditing("new")}
-          >
-            Новый двигатель
-          </Button>
-        </div>
-      </div>
-      <VehiclesTabs active="engines" />
-      <ListFilters searchLabel="Код двигателя или другое написание">
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Топливо</span>
-          <select
-            value={fuelId}
-            onChange={(event) =>
-              navigateTo(
-                withQuery("/vehicles/engines", {
-                  ...Object.fromEntries(location.query),
-                  fuelId: event.target.value || undefined,
-                }),
-                { replace: true },
-              )
-            }
-          >
-            <option value="">Любое</option>
-            {fuels.map((fuel) => (
-              <option key={fuel.id} value={fuel.id}>
-                {fuel.names.ru}
-              </option>
-            ))}
-          </select>
-        </label>
+      <Header
+        title="Автомобили"
+        tabs={vehiclesTabs("engines")}
+        actions={
+          <>
+            <RefreshButton onClick={list.first.reload} />
+            <Button
+              size="s"
+              icon="plus"
+              disabled={!online || !options.data}
+              onClick={() => setEditing("new")}
+            >
+              Новый двигатель
+            </Button>
+          </>
+        }
+      />
+      <ListFilters searchLabel="Поиск двигателей" placeholder="Код двигателя или другое написание">
+        <FilterSelect
+          label="Топливо"
+          allLabel="Любое"
+          value={fuelId}
+          options={fuels.map((fuel) => ({ value: fuel.id, label: fuel.names.ru }))}
+          onChange={(next) => setFilter({ fuelId: next })}
+        />
       </ListFilters>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent
@@ -113,104 +125,79 @@ export function Engines() {
         swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted" aria-live="polite">
-          Всего: {list.total.toLocaleString("ru-RU")}
-        </p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="car"
-            title={
-              filters.q || filters.status || fuelId ? "Ничего не нашлось" : "Двигателей пока нет"
-            }
-            text={
-              filters.q || filters.status || fuelId
-                ? "Измените поиск или отборы"
-                : "Добавьте двигатель"
-            }
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table vehicles-table">
-              <thead>
-                <tr>
-                  <th scope="col">Код</th>
-                  <th scope="col">Топливо</th>
-                  <th scope="col" className="num">
-                    Объём, л
-                  </th>
-                  <th scope="col" className="num">
-                    Мощность, л.с.
-                  </th>
-                  <th scope="col">Где используется (модификации)</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((engine) => (
-                  <tr
-                    key={engine.id}
-                    className={engine.status === "archived" ? "row--muted" : undefined}
-                  >
-                    <td>
-                      <div className="cell-stack">
-                        <span className="ac-text-body-strong">{engine.code}</span>
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={resetFilters}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {list.items.length === 0 ? (
+            <EmptyState
+              icon="car"
+              title={filtered ? "Ничего не нашлось" : "Двигателей пока нет"}
+              text={filtered ? "Измените поиск или отборы" : "Добавьте двигатель"}
+              action={
+                filtered ? (
+                  <Button variant="secondary" onClick={resetFilters}>
+                    Сбросить фильтры
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Table label="Двигатели" columns={COLUMNS}>
+              {list.items.map((engine) => (
+                <tr
+                  key={engine.id}
+                  className={engine.status === "archived" ? "row--muted" : undefined}
+                >
+                  <td>
+                    <MarkedTitle mark={<StatusMark status={engine.status} />}>
+                      <span className="row-title">
+                        <span className="vehicles-name">{engine.code}</span>
                         {engine.aliases.length > 0 && (
-                          <span className="ac-text-caption ac-muted">
-                            {engine.aliases.join(", ")}
-                          </span>
+                          <span className="row-title__sub">{engine.aliases.join(", ")}</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="ac-text-body-s">
-                      {engine.fuel.names.ru}
-                      {engine.fuel.status === "archived" && (
-                        <span className="warning-text"> · в архиве</span>
-                      )}
-                    </td>
-                    <td className="num">
-                      {engine.displacementL === null
-                        ? "—"
-                        : String(engine.displacementL).replace(".", ",")}
-                    </td>
-                    <td className="num">{engine.powerHp ?? "—"}</td>
-                    <td className="ac-text-body-s">
-                      {engine.modificationCount === 0
-                        ? "нигде"
-                        : countText(engine.modificationCount, MODIFICATIONS)}
-                    </td>
-                    <td>
-                      <StatusMark status={engine.status} />
-                    </td>
-                    <td className="admin-table__actions">
-                      <div className="button-row button-row--end">
-                        <Button
-                          variant="secondary"
-                          size="s"
-                          disabled={!online || !options.data}
-                          onClick={() => setEditing(engine)}
-                        >
-                          Изменить
-                        </Button>
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => status.open(engine)}
-                        >
-                          {engine.status === "active" ? "В архив" : "Восстановить"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <MoreButton list={list} />
+                      </span>
+                    </MarkedTitle>
+                  </td>
+                  <td>
+                    <span className="cell-stack">
+                      <span>{engine.fuel.names.ru}</span>
+                      {engine.fuel.status === "archived" && <StatusMark status="archived" />}
+                    </span>
+                  </td>
+                  <td className="num">{displacementText(engine.displacementL)}</td>
+                  <td className="num">{engine.powerHp?.toLocaleString("ru-RU") ?? "—"}</td>
+                  <td
+                    className="num"
+                    title={
+                      engine.modificationCount === 0
+                        ? "Не выбран ни в одной модификации"
+                        : undefined
+                    }
+                  >
+                    {engine.modificationCount === 0
+                      ? "—"
+                      : engine.modificationCount.toLocaleString("ru-RU")}
+                  </td>
+                  <td className="admin-table__actions">
+                    <RowActions
+                      name={engine.code}
+                      status={engine.status}
+                      editDisabled={!options.data}
+                      onEdit={() => setEditing(engine)}
+                      onStatus={() => status.open(engine)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
 
       {options.data && (

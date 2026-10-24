@@ -6,7 +6,9 @@ import {
   Dialog,
   IconButton,
   LoadingContent,
+  MenuButton,
   SkeletonList,
+  StatusBadge,
   TextField,
   useToast,
 } from "@adclub/ui";
@@ -15,7 +17,15 @@ import { useState } from "react";
 import { apiClient } from "../api";
 import { actionErrorText, loadErrorText } from "../errors";
 import { useLoad } from "../use-load";
-import { SettingsTabs } from "./SettingsTabs";
+import { Header, Table } from "../layout/layout";
+import { settingsTabs } from "./SettingsTabs";
+
+const COLUMNS = [
+  { key: "city", header: "Город" },
+  { key: "names", header: "Казахский · английский", width: 300 },
+  { key: "state", header: "Состояние", width: 140 },
+  { key: "actions", header: "Действия", width: 168, actions: true, hiddenHeader: true },
+];
 
 type Names = { ru: string; kk: string; en: string };
 
@@ -79,13 +89,18 @@ export function Cities() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Настройки</h1>
-        <Button size="s" icon="plus" disabled={!online} onClick={() => setEditing("new")}>
-          Добавить город
-        </Button>
-      </div>
-      <SettingsTabs active="cities" />
+      <Header
+        title="Настройки"
+        tabs={settingsTabs("cities")}
+        actions={
+          <>
+            <IconButton icon="refresh" label="Обновить" size={20} onClick={list.reload} />
+            <Button size="s" icon="plus" disabled={!online} onClick={() => setEditing("new")}>
+              Добавить город
+            </Button>
+          </>
+        }
+      />
       {error && (
         <Banner
           tone="warning"
@@ -98,7 +113,7 @@ export function Cities() {
                 list.reload();
               }}
             >
-              Обновить
+              Обновить данные
             </Button>
           }
         >
@@ -113,96 +128,89 @@ export function Cities() {
         lock
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        <div className="table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th scope="col">Порядок</th>
-                <th scope="col">Город</th>
-                <th scope="col">Казахский · английский</th>
-                <th scope="col">Состояние</th>
-                <th scope="col" className="admin-table__actions">
-                  Действия
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {cities.map((city, index) => (
-                <tr key={city.id} className={city.status === "archived" ? "row--muted" : undefined}>
-                  <td>
-                    <div className="button-row">
-                      <IconButton
-                        icon="arrowLeft"
-                        className="arrow-up"
-                        label={`Выше: ${city.names.ru}`}
-                        disabled={!online || index === 0}
-                        onClick={() => move(index, -1)}
-                      />
-                      <IconButton
-                        icon="arrowLeft"
-                        className="arrow-down"
-                        label={`Ниже: ${city.names.ru}`}
-                        disabled={!online || index === cities.length - 1}
-                        onClick={() => move(index, 1)}
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    <div className="cell-stack">
-                      <span className="ac-text-body-strong">{city.names.ru}</span>
-                      <span className="ac-text-caption ac-muted">
-                        <code>{city.code}</code>
-                        {city.isDefault ? " · город по умолчанию" : ""}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="ac-text-body-s">
-                    {city.names.kk ?? <span className="warning-text">нет казахского</span>} ·{" "}
-                    {city.names.en ?? <span className="warning-text">нет английского</span>}
-                  </td>
-                  <td>
-                    <span
-                      className={`status status--${city.status === "active" ? "open" : "closed"}`}
-                    >
-                      {city.status === "active" ? "Активен" : "В архиве"}
+        <Table label="Города" columns={COLUMNS}>
+          {cities.map((city, index) => (
+            <tr key={city.id} className={city.status === "archived" ? "row--muted" : undefined}>
+              <td>
+                <span className="order-name">
+                  <span className="order-arrows">
+                    <IconButton
+                      icon="arrowUp"
+                      size={20}
+                      className="ac-icon-button--s"
+                      label={`Выше: ${city.names.ru}`}
+                      disabled={!online || index === 0}
+                      onClick={() => move(index, -1)}
+                    />
+                    <IconButton
+                      icon="arrowDown"
+                      size={20}
+                      className="ac-icon-button--s"
+                      label={`Ниже: ${city.names.ru}`}
+                      disabled={!online || index === cities.length - 1}
+                      onClick={() => move(index, 1)}
+                    />
+                  </span>
+                  <span className="cell-stack">
+                    <span className="ac-text-body-strong">{city.names.ru}</span>
+                    <span className="row-title__sub">
+                      <span className="code-text">{city.code}</span>
+                      {city.isDefault ? " · город по умолчанию" : ""}
                     </span>
-                  </td>
-                  <td className="admin-table__actions">
-                    <div className="button-row button-row--end">
-                      <Button
-                        variant="secondary"
-                        size="s"
-                        disabled={!online}
-                        onClick={() => setEditing(city)}
-                      >
-                        Изменить
-                      </Button>
-                      {city.status === "active" ? (
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => setArchiving(city)}
-                        >
-                          В архив
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="text"
-                          size="s"
-                          disabled={!online}
-                          onClick={() => setStatus(city, "active")}
-                        >
-                          Восстановить
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </span>
+                </span>
+              </td>
+              <td className="ac-text-body-s">
+                <span className="cell-stack">
+                  <span>
+                    {city.names.kk ?? <span className="warning-text">нет казахского</span>}
+                  </span>
+                  <span>
+                    {city.names.en ?? <span className="warning-text">нет английского</span>}
+                  </span>
+                </span>
+              </td>
+              <td>
+                <StatusBadge kind="entry" status={city.status}>
+                  {city.status === "active" ? "Активен" : "В архиве"}
+                </StatusBadge>
+              </td>
+              <td className="admin-table__actions">
+                <span className="row-actions">
+                  <Button
+                    variant="secondary"
+                    size="s"
+                    disabled={!online}
+                    onClick={() => setEditing(city)}
+                  >
+                    Изменить
+                  </Button>
+                  <MenuButton
+                    size="s"
+                    label={`Действия: ${city.names.ru}`}
+                    disabled={!online}
+                    actions={[
+                      city.status === "active"
+                        ? {
+                            key: "archive",
+                            label: "В архив…",
+                            icon: "archive",
+                            destructive: true,
+                            onSelect: () => setArchiving(city),
+                          }
+                        : {
+                            key: "restore",
+                            label: "Восстановить",
+                            icon: "circleCheck",
+                            onSelect: () => void setStatus(city, "active"),
+                          },
+                    ]}
+                  />
+                </span>
+              </td>
+            </tr>
+          ))}
+        </Table>
       </LoadingContent>
 
       <CityDialog
@@ -329,7 +337,7 @@ function CityDialog({
           value={names.en}
           onChange={(en) => setNames({ ...names, en })}
         />
-        {error && <p className="dialog-error">{error}</p>}
+        {error && <Banner tone="danger">{error}</Banner>}
       </div>
     </Dialog>
   );

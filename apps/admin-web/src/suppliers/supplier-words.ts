@@ -5,6 +5,7 @@ import type {
   PriceImportFailure,
   SupplierInvitationStatus,
   SupplierLeadStatusValue,
+  SupplierOffer,
   SupplierLeadSource,
   SupplierStateValue,
   SupplierType,
@@ -78,6 +79,47 @@ export function hiddenPhone(phone: string | null | undefined): string {
   return `+${digits[0]} ${digits.slice(1, 4)} *** ** ${digits.slice(9)}`;
 }
 
+/**
+ * «Название или БИН» of the funnel (X4): digits (spaces and dashes aside)
+ * are a БИН — the server finds it whole, so it is `complete` at 12 digits;
+ * anything else is a part of the name.
+ */
+export function leadSearchOf(text: string): { q?: string; bin?: string; complete?: boolean } {
+  const trimmed = text.trim();
+  if (!trimmed) return {};
+  const digits = trimmed.replace(/[\s-]/g, "");
+  if (/^\d+$/.test(digits)) return { bin: digits, complete: digits.length === 12 };
+  return { q: trimmed };
+}
+
+const MONTH_TEXT = [
+  "янв.",
+  "февр.",
+  "марта",
+  "апр.",
+  "мая",
+  "июня",
+  "июля",
+  "авг.",
+  "сент.",
+  "окт.",
+  "нояб.",
+  "дек.",
+];
+
+/**
+ * The version of a consent text in words (X28): «2026-09-mvp» — «версия
+ * текста от сент. 2026», any other — «версия текста 1».
+ */
+export function consentVersionText(version: string): string {
+  const dated = /^(\d{4})-(\d{2})(?:\b|-)/.exec(version);
+  const month = dated ? Number(dated[2]) : 0;
+  if (dated && month >= 1 && month <= 12) {
+    return `версия текста от ${MONTH_TEXT[month - 1]} ${dated[1]}`;
+  }
+  return `версия текста ${version}`;
+}
+
 /** Where a request may go by hand from its status, and whether a reason is asked (the domain's rule). */
 export function leadMoves(
   status: SupplierLeadStatusValue,
@@ -104,6 +146,52 @@ export function mobilePhone(text: string): string | null {
 }
 
 export const PHONE_HINT = "Нужен казахстанский мобильный номер, например +7 701 123 45 67";
+
+/**
+ * Where a session was last used, without technical marks (X28): an
+ * address the server could not shorten to a network («0:0::*», empty) is
+ * «IP скрыт».
+ */
+export function ipText(hint: string | null): string {
+  if (!hint || /^[0:.*]+$/.test(hint)) return "IP скрыт";
+  return `IP ${hint}`;
+}
+
+/** Sessions alike in a row: the same employee on the same device. */
+export interface SessionGroup<T> {
+  first: T;
+  rest: T[];
+}
+
+/**
+ * Folds the sessions of one employee on one device that follow each other
+ * (X22: «Chrome · Windows» ten times is one row with «ещё 9 таких»).
+ */
+export function sessionGroups<
+  T extends {
+    member: { id: string };
+    deviceName: string | null;
+    platform: string | null;
+    clientVersion: string | null;
+  },
+>(sessions: readonly T[]): SessionGroup<T>[] {
+  const groups: SessionGroup<T>[] = [];
+  for (const session of sessions) {
+    const last = groups.at(-1)?.first;
+    if (
+      last &&
+      last.member.id === session.member.id &&
+      last.deviceName === session.deviceName &&
+      last.platform === session.platform &&
+      last.clientVersion === session.clientVersion
+    ) {
+      groups.at(-1)!.rest.push(session);
+    } else {
+      groups.push({ first: session, rest: [] });
+    }
+  }
+  return groups;
+}
 
 /** Who added an employee, in a word. */
 export function addedByText(member: AdminSupplierMember): string {
@@ -251,6 +339,34 @@ export function supplierErrorView(error: unknown): VehicleErrorView {
   }
 }
 
+/** «2 модели» under the price of a service priced by model (A-SUP-03 «Предложения»). */
+export function offerPriceLine(offer: Pick<SupplierOffer, "pricing">): string {
+  if (offer.pricing.mode === "single") return "";
+  const count = offer.pricing.models.length;
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const word =
+    mod10 === 1 && mod100 !== 11
+      ? "модель"
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? "модели"
+        : "моделей";
+  return `${count} ${word}`;
+}
+
+/** The prices by model in the hint: «Geely Atlas — 10 000 ₸; Geely Coolray — 8 000 ₸». */
+export function offerModelsText(offer: Pick<SupplierOffer, "pricing">): string | null {
+  if (offer.pricing.mode === "single") return null;
+  return offer.pricing.models
+    .map(
+      (row) =>
+        `${row.make.name} ${row.model.name} — ${row.price.toLocaleString("ru-RU")} ₸${
+          row.available ? "" : " (в архиве)"
+        }`,
+    )
+    .join("; ");
+}
+
 /** The state of a price list upload (A-SUP-03 «Прайс», TASK-046). */
 export const PRICE_IMPORT_STATUS_TEXT: Record<PriceImport["status"], string> = {
   parsing: "Файл читается",
@@ -281,6 +397,131 @@ const PRICE_FAILURE_TEXT: Record<PriceImportFailure["reason"], string> = {
 /** Why an upload was not read, in a few words. */
 export function priceImportFailureText(failure: PriceImportFailure): string {
   return PRICE_FAILURE_TEXT[failure.reason] ?? failure.reason;
+}
+
+/**
+ * The type of an uploaded file by its content — as the server read it, the
+ * same for the cabinet: «Excel», «CSV»; a name that says otherwise
+ * («renamed.csv» holding a workbook) gets «по содержимому».
+ */
+export function priceImportTypeText(entry: Pick<PriceImport, "format" | "fileName">): string {
+  const type = entry.format === "xlsx" ? "Excel" : "CSV";
+  const extension = /\.([a-z0-9]+)$/i.exec(entry.fileName ?? "")?.[1]?.toLowerCase();
+  if (!extension) return type;
+  const named = ["xlsx", "xlsm", "xls"].includes(extension) ? "xlsx" : "csv";
+  return named === entry.format ? type : `${type} по содержимому`;
+}
+
+const ENCODING_TEXT: Record<string, string> = {
+  "utf-8": "UTF-8",
+  "windows-1251": "Windows-1251",
+  "utf-16le": "UTF-16",
+};
+
+const DELIMITER_TEXT: Record<string, string> = {
+  ",": "запятая",
+  ";": "точка с запятой",
+  "\t": "табуляция",
+  "|": "вертикальная черта",
+};
+
+/** «1 240». */
+function n(value: number): string {
+  return value.toLocaleString("ru-RU");
+}
+
+/**
+ * What the server knows of one upload, «подпись — значение» (A-SUP-03
+ * «Прайс», «Подробнее»): the sheet or the encoding, the rows, the matching,
+ * what applying did, who applied it, the file kept or not. Only what there
+ * is; nothing technical.
+ */
+export function priceImportFacts(
+  entry: PriceImport,
+  moment: (iso: string) => string,
+): { label: string; value: string }[] {
+  const facts: { label: string; value: string }[] = [];
+  const add = (label: string, value: string | null | false | undefined) => {
+    if (value) facts.push({ label, value });
+  };
+  add("Загрузил", `${entry.uploadedBy.name ?? "сотрудник"}, ${moment(entry.createdAt)}`);
+  add("Лист", entry.sheetName);
+  if (entry.format === "csv") {
+    add(
+      "Кодировка",
+      [
+        entry.encoding ? (ENCODING_TEXT[entry.encoding] ?? entry.encoding) : null,
+        entry.delimiter
+          ? `разделитель — ${DELIMITER_TEXT[entry.delimiter] ?? `«${entry.delimiter}»`}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    );
+  }
+  add("Строка заголовка", entry.headerRowNo !== null ? n(entry.headerRowNo) : null);
+  if (entry.stats) {
+    const stats = entry.stats;
+    add(
+      "Строки",
+      [
+        `всего ${n(stats.rows)}`,
+        `с товарами ${n(stats.dataRows)}`,
+        stats.serviceRows > 0 ? `служебных ${n(stats.serviceRows)}` : null,
+        stats.parsedRows !== null ? `разобрано ${n(stats.parsedRows)}` : null,
+        stats.errorRows !== null ? `с ошибками ${n(stats.errorRows)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
+  }
+  if (entry.match) {
+    const match = entry.match;
+    add(
+      "Сверка",
+      `уверенно ${n(match.confident)} · проверить ${n(match.review)} · не найдено ${n(match.notFound)} · ошибки ${n(match.errors)}` +
+        (match.done < match.total ? ` (сопоставлено ${n(match.done)} из ${n(match.total)})` : ""),
+    );
+  }
+  add(
+    "Сверка до",
+    entry.status === "review" && entry.reviewUntil ? moment(entry.reviewUntil) : null,
+  );
+  if (entry.result) {
+    const result = entry.result;
+    const withdrawn = result.withdrawnOutOfStock + result.withdrawnMissing;
+    const notApplied = result.notApplied.reduce((sum, row) => sum + row.rows, 0);
+    add(
+      "Применение",
+      [
+        `обновлено ${n(result.updated)}`,
+        `создано ${n(result.created)}`,
+        `без изменений ${n(result.unchanged)}`,
+        result.returned > 0 ? `вернулось в продажу ${n(result.returned)}` : null,
+        withdrawn > 0 ? `снято ${n(withdrawn)}` : null,
+        result.requested > 0 ? `на добавление ${n(result.requested)}` : null,
+        notApplied > 0 ? `не применено ${n(notApplied)}` : null,
+        result.skipped > 0 ? `пропущено ${n(result.skipped)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
+  }
+  add(
+    "Применил",
+    entry.appliedBy && entry.appliedAt
+      ? `${entry.appliedBy.name ?? "сотрудник"}, ${moment(entry.appliedAt)}`
+      : null,
+  );
+  add(
+    "Причина",
+    entry.failure
+      ? `${priceImportFailureText(entry.failure)}${entry.failure.line !== null ? `, строка ${n(entry.failure.line)}` : ""}`
+      : null,
+  );
+  add("Файл", entry.fileKept ? "хранится" : "удалён по сроку хранения");
+  add("Тот же файл", entry.sameFileAsImportId ? "уже загружали раньше" : null);
+  return facts;
 }
 
 /** «Строк с товарами: 1 240, с ошибками: 12» — what is known of the rows so far. */

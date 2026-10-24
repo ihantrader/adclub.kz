@@ -1,0 +1,358 @@
+/* «Поставщики» of the admin panel (A-SUP-01…04; TASK-080): what the shared
+   parts of the page (layout, cards, tables) don't say — the stages of a
+   request, the state rows of a company, the figures of the rating. Tokens
+   only. */
+
+/* ---------- the list ---------- */
+.supplier-rating {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ac-space-1);
+  white-space: nowrap;
+}
+
+.supplier-rating__low {
+  display: inline-flex;
+  color: var(--ac-color-warning);
+}
+
+/* A number with its note under it, right-aligned with its header (X8). */
+.admin-table td.num .cell-stack {
+  align-items: flex-end;
+}
+
+/* ---------- a request ---------- */
+.supplier-kv {
+  max-width: 760px;
+}
+
+.supplier-related {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  padding-top: var(--ac-space-4);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.supplier-related__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.supplier-related__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2) var(--ac-space-3);
+}
+
+/* The stages of the funnel in their order, the current one marked. */
+.lead-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: lead-step;
+}
+
+.lead-steps__step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: 36px;
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  counter-increment: lead-step;
+}
+
+.lead-steps__step::before {
+  color: var(--ac-color-text-muted);
+  content: counter(lead-step);
+}
+
+.lead-steps__step--done {
+  color: var(--ac-color-text);
+}
+
+.lead-steps__step--now {
+  border-color: var(--ac-color-accent);
+  background: var(--ac-color-accent-tint);
+  color: var(--ac-color-accent-on-tint);
+  font-weight: var(--ac-font-weight-label);
+}
+
+.lead-steps__step--now::before {
+  color: inherit;
+}
+
+.supplier-notes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.supplier-notes li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  padding: var(--ac-space-3) 0;
+  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.supplier-notes li:first-child {
+  padding-top: 0;
+}
+
+.supplier-notes__text {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* ---------- forms in cards ---------- */
+.supplier-field-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--ac-space-3);
+}
+
+.supplier-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+}
+
+/* «Нерабочие даты» after the week: a part of the same card, set apart. */
+.supplier-card-head--part {
+  margin-top: var(--ac-space-2);
+  padding-top: var(--ac-space-5);
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.supplier-subtitle {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: var(--ac-font-weight-heading);
+}
+
+/* The switch next to its words, not at the far edge of the card. */
+.supplier-switch .ac-toggle {
+  justify-content: flex-start;
+  max-width: 540px;
+}
+
+.supplier-switch .ac-toggle__text {
+  flex: 0 1 auto;
+}
+
+.supplier-readonly {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-1);
+}
+
+.supplier-readonly > .ac-field {
+  align-self: stretch;
+}
+
+/* ---------- the states of a company: three row-cards ---------- */
+.status-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+}
+
+.card.status-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 200px;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ac-space-3) var(--ac-space-6);
+}
+
+.status-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}
+
+.status-row__title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: var(--ac-font-weight-heading);
+}
+
+.status-row__note {
+  overflow-wrap: anywhere;
+}
+
+.status-row__state {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.status-row__action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status-row__action .ac-button {
+  white-space: nowrap;
+}
+
+/* ---------- employees ---------- */
+.member-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1) var(--ac-space-2);
+  min-width: 0;
+}
+
+/* The language of the notifications: «KK», «RU». */
+.lang-mark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 var(--ac-space-1);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  font-weight: var(--ac-font-weight-label);
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+.members-table .badges {
+  flex-wrap: nowrap;
+}
+
+.members-table .ac-button--text {
+  margin-left: calc(-1 * var(--ac-space-2));
+  white-space: nowrap;
+}
+
+/* ---------- the price list uploads ---------- */
+.price-row--open td {
+  border-bottom-color: transparent;
+}
+
+.price-detail td {
+  background: var(--ac-color-surface-raised);
+}
+
+.admin-table--fixed .price-detail td:first-child {
+  position: static;
+  background: var(--ac-color-surface-raised);
+}
+
+/* ---------- orders of the company ---------- */
+.supplier-orders__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: var(--ac-font-weight-label);
+  white-space: nowrap;
+}
+
+/* ---------- the rating ---------- */
+.rating-figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ac-space-3);
+}
+
+.rating-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+  padding: var(--ac-space-4) var(--ac-space-5);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.rating-figure__label {
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.rating-figure__value {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: var(--ac-font-weight-heading);
+  white-space: nowrap;
+}
+
+.rating-figure__star {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+}
+
+.rating-figure__star .ac-icon {
+  color: var(--ac-color-accent);
+}
+
+.rating-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rating-line .ac-icon {
+  flex: none;
+  color: var(--ac-color-accent);
+}
+
+.rating-figure__note {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.card.rating-formula {
+  gap: 0;
+  padding-block: var(--ac-space-2);
+}
+
+.card.rating-formula[open] {
+  gap: var(--ac-space-2);
+  padding-bottom: var(--ac-space-5);
+}
+
+@media (max-width: 1199px) {
+  .rating-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .card.status-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .status-row__state {
+    grid-row: 2;
+  }
+}

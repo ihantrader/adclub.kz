@@ -5,9 +5,9 @@ import type {
   SupplierType,
 } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
-  IconButton,
   LoadingContent,
   SkeletonList,
   TextField,
@@ -16,11 +16,19 @@ import {
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
+import { AppLink, Header } from "../layout/layout";
 import { goBack, navigateTo, supplierLeadPath, supplierPath, useLocation } from "../router";
 import { useLoad } from "../use-load";
-import { FormError, LoadError } from "../vehicles/shared";
-import { CitySelect, SuppliersTabs, TypeSelect, useCities, useSupplierSaver } from "./shared";
+import { LoadError } from "../vehicles/shared";
+import {
+  CitySelect,
+  LEADS_CRUMB,
+  SaverError,
+  SUPPLIERS_CRUMB,
+  TypeSelect,
+  useCities,
+  useSupplierSaver,
+} from "./shared";
 import {
   binProblem,
   hiddenPhone,
@@ -28,18 +36,44 @@ import {
   mobilePhone,
   PHONE_HINT,
 } from "./supplier-words";
+import "./suppliers.css";
 
 /**
- * A-SUP-04 «Заведение поставщика» (SCREENS 7.4; TASK-036): from a request
- * with a signed contract — the form filled with its data (`?leadId=`) — or
- * by hand. «Создать и отправить приглашение» creates the company, its point,
- * the first employee and the invitation W-08 in one step on the server
- * (ARCHITECTURE 4.26 I251); then the supplier's card.
+ * A-SUP-04 «Заведение поставщика» (SCREENS 7.4; TASK-036, TASK-080): from a
+ * request with a signed contract — the form filled with its data
+ * (`?leadId=`) — or by hand; the crumbs of «Поставщики», three cards of
+ * fields with one right edge. «Создать и отправить приглашение» creates the
+ * company, its point, the first employee and the invitation W-08 in one step
+ * on the server (ARCHITECTURE 4.26 I251); then the supplier's card.
  */
 export function SupplierNew() {
   const { query } = useLocation();
   const leadId = query.get("leadId");
   return leadId ? <FromLead key={leadId} leadId={leadId} /> : <OnboardForm lead={null} />;
+}
+
+function NewHeader({ lead }: { lead: AdminSupplierLead | null }) {
+  return (
+    <Header
+      crumbs={
+        lead
+          ? [
+              SUPPLIERS_CRUMB,
+              LEADS_CRUMB,
+              { label: lead.companyName, href: supplierLeadPath(lead.id) },
+            ]
+          : [SUPPLIERS_CRUMB]
+      }
+      title="Новый поставщик"
+      subtitle={
+        lead && (
+          <span>
+            Из заявки <AppLink href={supplierLeadPath(lead.id)}>{lead.companyName}</AppLink>
+          </span>
+        )
+      }
+    />
+  );
 }
 
 function FromLead({ leadId }: { leadId: string }) {
@@ -50,6 +84,7 @@ function FromLead({ leadId }: { leadId: string }) {
   const lead = card.data?.lead.lead;
   return (
     <>
+      {!lead && <NewHeader lead={null} />}
       <LoadError error={card.error} retry={card.reload} />
       <LoadingContent
         ready={lead !== undefined}
@@ -156,31 +191,16 @@ function OnboardForm({
   const error = (field: string, server = field) => problems[field] ?? saver.fieldError(server);
   return (
     <>
-      <div className="page__head page__head--back">
-        <IconButton
-          icon="arrowLeft"
-          label="Назад"
-          onClick={() => goBack(lead ? "supplierLeads" : "suppliers")}
-        />
-        <div className="cell-stack">
-          <h1 className="ac-text-title-l page__title">Новый поставщик</h1>
-          {lead && (
-            <span className="ac-text-body-s ac-muted">
-              Из заявки <AppLink href={supplierLeadPath(lead.id)}>{lead.companyName}</AppLink>
-            </span>
-          )}
-        </div>
-      </div>
-      <SuppliersTabs active={null} />
+      <NewHeader lead={lead} />
       {!signed && lead && (
         <Banner tone="warning">
           Заявка на этапе «{LEAD_STATUS_TEXT[lead.status]}». Завести поставщика можно только из
           заявки «Договор подписан».
         </Banner>
       )}
-      <div className="detail-stack form-page">
-        <section className="card-section">
-          <h2 className="ac-text-heading">Компания</h2>
+      <div className="detail-stack">
+        <section className="card form-card">
+          <h2 className="card__title">Компания</h2>
           <div className="form-grid">
             <TextField
               label="Название"
@@ -209,8 +229,8 @@ function OnboardForm({
             />
           </div>
         </section>
-        <section className="card-section">
-          <h2 className="ac-text-heading">Точка выдачи</h2>
+        <section className="card form-card">
+          <h2 className="card__title">Точка выдачи</h2>
           <div className="form-grid">
             <TextField
               label="Адрес (улица, дом)"
@@ -227,10 +247,14 @@ function OnboardForm({
               hint="Виден подписчикам до оформления"
             />
             {lead ? (
-              <p className="ac-text-body-s ac-muted">
-                Телефон компании — номер из заявки ({hiddenPhone(lead.phone)}); изменить можно в
-                профиле поставщика.
-              </p>
+              <TextField
+                label="Телефон компании"
+                value={`${hiddenPhone(lead.phone)} — из заявки`}
+                onChange={() => undefined}
+                readOnly
+                disabled
+                hint="Изменить можно в профиле поставщика"
+              />
             ) : (
               <TextField
                 label="Телефон компании (необязательно)"
@@ -243,11 +267,13 @@ function OnboardForm({
             )}
           </div>
         </section>
-        <section className="card-section">
-          <h2 className="ac-text-heading">Первый сотрудник</h2>
-          <p className="ac-text-body-s ac-muted">
-            Он станет контактным лицом и получит приглашение в кабинет в WhatsApp.
-          </p>
+        <section className="card form-card">
+          <div className="supplier-card-head">
+            <h2 className="card__title">Первый сотрудник</h2>
+            <p className="section__note">
+              Он станет контактным лицом и получит приглашение в кабинет в WhatsApp.
+            </p>
+          </div>
           <div className="form-grid">
             <TextField
               label="Имя"
@@ -266,9 +292,14 @@ function OnboardForm({
                 error={error("memberPhone", "firstMember.phone")}
               />
             ) : (
-              <div className="cell-stack">
-                <span className="ac-text-caption ac-muted">Телефон (WhatsApp)</span>
-                <span className="num">{lead ? hiddenPhone(lead.phone) : ""} — из заявки</span>
+              <div className="supplier-readonly">
+                <TextField
+                  label="Телефон (WhatsApp)"
+                  value={`${lead ? hiddenPhone(lead.phone) : ""} — из заявки`}
+                  onChange={() => undefined}
+                  readOnly
+                  disabled
+                />
                 <Button variant="text" size="s" onClick={() => setOtherNumber(true)}>
                   Указать другой номер
                 </Button>
@@ -276,7 +307,7 @@ function OnboardForm({
             )}
           </div>
         </section>
-        <FormError
+        <SaverError
           saver={saver}
           fields={[
             "name",
@@ -288,12 +319,24 @@ function OnboardForm({
           ]}
           onRefresh={onReload}
         />
-        <div className="button-row">
-          <Button disabled={!online || !signed} loading={saver.saving} onClick={submit}>
-            Создать и отправить приглашение
-          </Button>
-          {!online && <span className="ac-text-caption ac-muted">Нужна сеть</span>}
-        </div>
+        <ActionBar
+          label="Заведение поставщика"
+          main={
+            <Button disabled={!online || !signed} loading={saver.saving} onClick={submit}>
+              Создать и отправить приглашение
+            </Button>
+          }
+          others={[
+            <Button
+              key="cancel"
+              variant="secondary"
+              onClick={() => goBack(lead ? "supplierLeads" : "suppliers")}
+            >
+              Отмена
+            </Button>,
+          ]}
+          note={!online ? "Нужна сеть" : undefined}
+        />
       </div>
     </>
   );

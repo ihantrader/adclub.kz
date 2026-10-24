@@ -40,6 +40,53 @@ export function yearsText(yearFrom: number, yearTo: number | null): string {
   return `${yearFrom}–${yearTo ?? "н.в."}`;
 }
 
+/** A displacement as figures of a table (X8): «2,0», «1,5» — always one decimal, never «2». */
+export function displacementText(litres: number | null): string {
+  if (litres === null) return "—";
+  return litres.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+}
+
+/** «2,0 л · 148 л.с.» — what an engine is, under its code. */
+export function engineSpecsText(engine: {
+  displacementL: number | null;
+  powerHp: number | null;
+}): string {
+  return [
+    engine.displacementL ? `${displacementText(engine.displacementL)} л` : null,
+    engine.powerHp ? `${engine.powerHp.toLocaleString("ru-RU")} л.с.` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * An option of a reference list as a row of an import file names it (by
+ * its code or any of its names, any case) — shown by its Russian name
+ * (A-CAR-02: «Кроссовер», not «crossover»); a value the list doesn't know
+ * stays as it was read.
+ */
+export function optionNameOf(
+  options: readonly {
+    kind: VehicleOptionKind;
+    code: string;
+    names: { ru: string; kk: string | null; en: string | null };
+  }[],
+  kind: VehicleOptionKind,
+  value: string | undefined,
+): string {
+  const read = value?.trim() ?? "";
+  if (!read) return "";
+  const key = read.toLocaleLowerCase("ru-RU");
+  const found = options.find(
+    (option) =>
+      option.kind === kind &&
+      [option.code, option.names.ru, option.names.kk, option.names.en].some(
+        (name) => name !== null && name.toLocaleLowerCase("ru-RU") === key,
+      ),
+  );
+  return found ? found.names.ru : read;
+}
+
 /** «моделей: 6» and the like, in the right form of the word. */
 export function countText(count: number, forms: readonly [string, string, string]): string {
   const tens = count % 100;
@@ -346,6 +393,13 @@ const DETECTED_TEXT: Record<string, string> = {
   "utf-16": "UTF-16",
 };
 
+/** A spreadsheet of Excel instead of its CSV (SCREENS A-CAR-02). */
+export const NOT_CSV_TEXT =
+  "Это не CSV — сохраните таблицу как CSV UTF-8 (в Excel: «Файл → Сохранить как → CSV UTF-8»)";
+
+/** Any other file that is not a CSV table. */
+export const NOT_TABLE_TEXT = "Это не таблица CSV — нужен файл CSV UTF-8";
+
 /** A file the server didn't take at all, in words (SCREENS A-CAR-02). */
 export function importFileErrorText(error: unknown): string {
   if (!isApiError(error)) return actionErrorText(error);
@@ -361,7 +415,7 @@ export function importFileErrorText(error: unknown): string {
   switch (details.reason) {
     case "unsupported_format":
       return details.detected === "xlsx" || details.detected === "xls"
-        ? "Это не CSV — сохраните таблицу как CSV UTF-8 (в Excel: «Файл → Сохранить как → CSV UTF-8»)"
+        ? NOT_CSV_TEXT
         : `Это не таблица CSV${details.detected && DETECTED_TEXT[details.detected] ? ` (${DETECTED_TEXT[details.detected]})` : ""} — нужен файл CSV UTF-8`;
     case "encoding":
       return "Файл не в кодировке UTF-8 — сохраните таблицу как «CSV UTF-8»";

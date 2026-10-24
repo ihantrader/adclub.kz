@@ -68,6 +68,42 @@ export function Throttled({
 }
 
 /**
+ * The connection lost while the admin panel is on screen (X29, SCREENS
+ * 2.4): a banner under the header, over the last content — the menu, the
+ * header and the page stay. Too many exchanges — the wait instead, and a
+ * new try by itself once it has passed.
+ */
+export function ConnectionBanner({
+  retryAfterSeconds,
+  onRetry,
+}: {
+  retryAfterSeconds?: number;
+  onRetry: () => unknown;
+}) {
+  useEffect(() => {
+    if (retryAfterSeconds === undefined) return;
+    const timer = setTimeout(onRetry, retryAfterSeconds * 1000 + 1000);
+    return () => clearTimeout(timer);
+  }, [retryAfterSeconds, onRetry]);
+  return (
+    <Banner
+      tone="warning"
+      icon={retryAfterSeconds === undefined ? "wifiOff" : "clock"}
+      placement="flush"
+      action={
+        <Button variant="text" size="s" icon="refresh" onClick={onRetry}>
+          Повторить
+        </Button>
+      }
+    >
+      {retryAfterSeconds === undefined
+        ? "Нет связи с сервером. Показаны последние загруженные данные; изменения сейчас не сохранятся."
+        : `Слишком много обновлений страницы. Попробуйте через ${String(Math.max(1, Math.ceil(retryAfterSeconds / 60)))} мин`}
+    </Banner>
+  );
+}
+
+/**
  * «Нужно обновить» (SCREENS 2.6): this build is below
  * `client_min_version_admin_web`. A web page updates by reloading.
  */

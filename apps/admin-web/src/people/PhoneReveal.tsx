@@ -1,5 +1,5 @@
 import type { PhoneRevealSubject } from "@adclub/contracts";
-import { Button } from "@adclub/ui";
+import { IconButton, Spinner } from "@adclub/ui";
 import { formatPhone, useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
@@ -44,16 +44,28 @@ export function PhoneReveal({
 
   return (
     <span className="phone-reveal">
-      <span className="num phone-reveal__number">{full ? formatPhone(full) : phone}</span>
-      {full ? (
-        <a className="ac-text-body-s" href={`tel:${full}`}>
-          Позвонить
-        </a>
-      ) : (
-        <Button variant="text" size="s" onClick={reveal} loading={busy} disabled={!online}>
-          Показать номер
-        </Button>
-      )}
+      <span className="phone-reveal__line">
+        {full ? (
+          <a className="phone-reveal__number" href={`tel:${full}`} title="Позвонить">
+            {formatPhone(full)}
+          </a>
+        ) : (
+          <span className="phone-reveal__number">{phone}</span>
+        )}
+        {!full &&
+          (busy ? (
+            <Spinner size={16} />
+          ) : (
+            <IconButton
+              icon="eye"
+              size={20}
+              label="Показать номер"
+              className="ac-icon-button--s phone-reveal__eye"
+              disabled={!online}
+              onClick={() => void reveal()}
+            />
+          ))}
+      </span>
       {error && (
         <span className="ac-text-caption phone-reveal__error" role="alert">
           {error}

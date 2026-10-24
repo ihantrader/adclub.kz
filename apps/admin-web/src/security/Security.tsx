@@ -1,11 +1,15 @@
 import { isApiError } from "@adclub/api-client";
 import type { AdministratorListResponse, AdministratorSummary } from "@adclub/contracts";
 import {
+  ActionBar,
+  Badge,
   Banner,
   Button,
   Dialog,
   LoadingContent,
+  MenuButton,
   SkeletonList,
+  TextAreaField,
   TextField,
   useToast,
 } from "@adclub/ui";
@@ -14,17 +18,31 @@ import { useState } from "react";
 import { apiClient } from "../api";
 import { actionErrorText, loadErrorText, signInErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { Header, Table, type Column } from "../layout/layout";
 import { BackupCodes } from "../screens/BackupCodes";
 import { reasonProblem } from "../settings/setting-rules";
 import { useLoad } from "../use-load";
-import { setBackupCodesRemaining } from "./backup-reminder";
+import {
+  BACKUP_CODES_LOW,
+  setBackupCodesRemaining,
+  useBackupCodesRemaining,
+} from "./backup-reminder";
+import "./security.css";
+
+const COLUMNS: Column[] = [
+  { key: "admin", header: "Администратор" },
+  { key: "factor", header: "Второй фактор", width: 220 },
+  { key: "signIn", header: "Последний вход", width: 180 },
+  { key: "actions", header: "Действия", width: 72, actions: true, hiddenHeader: true },
+];
 
 /**
- * «Безопасность» (SCREENS 7.0; TASK-034 requirement 6): one's own new backup
- * codes (the current code of the authenticator confirms it is really them;
- * shown once), and the administrators — all equal — with «Сбросить второй
- * фактор» for another one, with the reason. Administrators are appointed and
- * removed only by the server operator: there are no buttons for that.
+ * «Безопасность» (SCREENS 7.0; TASK-034 requirement 6, TASK-080): one's own
+ * new backup codes (the current code of the authenticator confirms it is
+ * really them; shown once), and the administrators — all equal — with
+ * «Сбросить второй фактор…» for another one in «⋯», with the reason.
+ * Administrators are appointed and removed only by the server operator:
+ * there are no buttons for that.
  */
 export function Security({ currentAdminId }: { currentAdminId: string | null }) {
   const admins = useLoad<AdministratorListResponse>(
@@ -35,90 +53,104 @@ export function Security({ currentAdminId }: { currentAdminId: string | null }) 
 
   return (
     <>
-      <h1 className="ac-text-title-l page__title">Безопасность</h1>
-      <MySecondFactor />
+      <Header title="Безопасность" />
+      <div className="detail-stack">
+        <MySecondFactor />
 
-      <section className="card-section" aria-labelledby="admins-title">
-        <h2 id="admins-title" className="ac-text-heading">
-          Администраторы
-        </h2>
-        <p className="ac-text-body-s ac-muted">
-          Все администраторы равноправны. Назначает и снимает администраторов только оператор
-          сервера (команды <code>admin:grant</code> и <code>admin:revoke</code>).
-        </p>
-        {admins.error !== undefined && (
-          <Banner
-            tone="danger"
-            action={
-              <Button variant="text" size="s" onClick={admins.reload}>
-                Повторить
-              </Button>
-            }
-          >
-            {loadErrorText(admins.error)}
-          </Banner>
-        )}
-        <LoadingContent
-          ready={admins.data !== undefined}
-          indicator={admins.indicator}
-          label="Загрузка"
-          skeleton={<SkeletonList rows={2} label="Загрузка" />}
-        >
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Администратор</th>
-                  <th scope="col">Второй фактор</th>
-                  <th scope="col">Последний вход</th>
-                  <th scope="col" className="admin-table__actions">
-                    Действия
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(admins.data?.administrators ?? []).map((admin) => {
-                  const self = admin.current || admin.id === currentAdminId;
-                  return (
-                    <tr key={admin.id}>
-                      <td>
-                        <div className="cell-stack">
-                          <span className="ac-text-body-strong">
-                            {admin.name ?? admin.phoneMasked}
-                            {self ? " (вы)" : ""}
-                          </span>
-                          {admin.name && (
-                            <span className="ac-text-caption ac-muted num">
-                              {admin.phoneMasked}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        {admin.totpConfigured ? (
-                          "Настроен"
-                        ) : (
-                          <span className="warning-text">Не настроен — настроит при входе</span>
-                        )}
-                      </td>
-                      <td className="num">
-                        {admin.lastSignInAt ? formatMoment(admin.lastSignInAt) : "Не входил"}
-                      </td>
-                      <td className="admin-table__actions">
-                        {!self && admin.totpConfigured && (
-                          <Button variant="secondary" size="s" onClick={() => setResetting(admin)}>
-                            Сбросить второй фактор…
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <section className="section" aria-labelledby="admins-title">
+          <div className="section__head">
+            <h2 id="admins-title" className="section__title">
+              Администраторы
+            </h2>
           </div>
-        </LoadingContent>
-      </section>
+          <p className="section__note">
+            Все администраторы равноправны. Назначает и снимает администраторов только оператор
+            сервера.
+          </p>
+          {admins.error !== undefined && (
+            <Banner
+              tone="danger"
+              action={
+                <Button variant="text" size="s" onClick={admins.reload}>
+                  Повторить
+                </Button>
+              }
+            >
+              {loadErrorText(admins.error)}
+            </Banner>
+          )}
+          <LoadingContent
+            ready={admins.data !== undefined}
+            indicator={admins.indicator}
+            label="Загрузка"
+            skeleton={<SkeletonList rows={2} label="Загрузка" />}
+          >
+            <Table label="Администраторы" columns={COLUMNS}>
+              {(admins.data?.administrators ?? []).map((admin) => {
+                const self = admin.current || admin.id === currentAdminId;
+                return (
+                  <tr key={admin.id}>
+                    <td>
+                      <span className="row-title">
+                        {admin.name ? (
+                          <span className="ac-text-body-strong security-name">
+                            {admin.name}
+                            {self && <span className="ac-muted"> (вы)</span>}
+                          </span>
+                        ) : (
+                          <span className="ac-text-body-s ac-muted security-name">
+                            Имя не указано
+                            {self && " (вы)"}
+                          </span>
+                        )}
+                        <span className="ac-text-body-s ac-muted">{admin.phoneMasked}</span>
+                      </span>
+                    </td>
+                    <td>
+                      {admin.totpConfigured ? (
+                        <span className="ac-text-body-s">Настроен</span>
+                      ) : (
+                        <span className="cell-stack">
+                          <Badge tone="warning" icon="alertTriangle">
+                            Не настроен
+                          </Badge>
+                          <span className="ac-text-caption ac-muted">настроит при входе</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="ac-text-body-s nowrap">
+                      {admin.lastSignInAt ? (
+                        formatMoment(admin.lastSignInAt)
+                      ) : (
+                        <span className="ac-muted">Не входил</span>
+                      )}
+                    </td>
+                    <td className="admin-table__actions">
+                      {!self && admin.totpConfigured && (
+                        <div className="row-actions">
+                          <MenuButton
+                            size="s"
+                            label={`Действия с администратором ${admin.name ?? admin.phoneMasked}`}
+                            actions={[
+                              {
+                                key: "reset",
+                                label: "Сбросить второй фактор…",
+                                icon: "lock",
+                                destructive: true,
+                                onSelect: () => setResetting(admin),
+                              },
+                            ]}
+                          />
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+          </LoadingContent>
+        </section>
+      </div>
 
       <ResetDialog
         admin={resetting}
@@ -132,8 +164,15 @@ export function Security({ currentAdminId }: { currentAdminId: string | null }) 
   );
 }
 
+/**
+ * «Мой второй фактор»: new backup codes. How many are left is shown only
+ * when the server said it — the answer of the sign-in in this page (after a
+ * reload it is not known); the server gives no date of the set, so there is
+ * none here.
+ */
 function MySecondFactor() {
   const online = useOnline();
+  const remaining = useBackupCodesRemaining();
   const [asking, setAsking] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -157,9 +196,15 @@ function MySecondFactor() {
     }
   };
 
+  const close = () => {
+    setAsking(false);
+    setCode("");
+    setError(null);
+  };
+
   return (
-    <section className="card-section" aria-labelledby="my-factor-title">
-      <h2 id="my-factor-title" className="ac-text-heading">
+    <section className="card" aria-labelledby="my-factor-title">
+      <h2 id="my-factor-title" className="card__title">
         Мой второй фактор
       </h2>
       {codes ? (
@@ -168,39 +213,48 @@ function MySecondFactor() {
         </div>
       ) : (
         <>
-          <p className="ac-text-body-s ac-muted">
+          <p className="ac-text-body-s ac-muted security-text">
             Резервные коды нужны, если телефона с приложением-аутентификатором нет под рукой. Новые
             коды отменяют все прежние.
           </p>
-          <div className="button-row">
-            <Button
-              variant="secondary"
-              icon="refresh"
-              disabled={!online}
-              onClick={() => setAsking(true)}
-            >
-              Новые резервные коды
-            </Button>
-          </div>
+          {remaining !== null && (
+            <span className="badges">
+              {remaining <= BACKUP_CODES_LOW ? (
+                <Badge tone="warning" icon="alertTriangle">
+                  {remaining === 0
+                    ? "Резервные коды закончились"
+                    : `Осталось резервных кодов: ${remaining.toLocaleString("ru-RU")}`}
+                </Badge>
+              ) : (
+                <span className="ac-text-body-s">
+                  Осталось резервных кодов: {remaining.toLocaleString("ru-RU")}
+                </span>
+              )}
+            </span>
+          )}
+          <ActionBar
+            compact
+            label="Резервные коды"
+            others={[
+              <Button
+                key="codes"
+                variant="secondary"
+                icon="refresh"
+                disabled={!online}
+                onClick={() => setAsking(true)}
+              >
+                Новые резервные коды
+              </Button>,
+            ]}
+          />
         </>
       )}
       <Dialog
         open={asking}
-        onClose={() => {
-          setAsking(false);
-          setCode("");
-          setError(null);
-        }}
+        onClose={close}
         title="Новые резервные коды"
         actions={
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setAsking(false);
-              setCode("");
-              setError(null);
-            }}
-          >
+          <Button variant="secondary" onClick={close}>
             Отмена
           </Button>
         }
@@ -295,18 +349,17 @@ function ResetDialog({
             админке сразу завершатся, приложение-аутентификатор и резервные коды перестанут
             действовать, при следующем входе он настроит второй фактор заново.
           </p>
-          <label className="textarea">
-            <span className="ac-text-caption ac-muted">
-              Причина (обязательно, попадёт в журнал)
-            </span>
-            <textarea
-              value={reason}
-              rows={2}
-              maxLength={500}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </label>
-          {error && <p className="dialog-error">{error}</p>}
+          <TextAreaField
+            label="Причина (обязательно, попадёт в журнал)"
+            value={reason}
+            rows={2}
+            maxLength={500}
+            onChange={(value) => {
+              setReason(value);
+              setError(null);
+            }}
+            error={error ?? undefined}
+          />
         </div>
       )}
     </Dialog>

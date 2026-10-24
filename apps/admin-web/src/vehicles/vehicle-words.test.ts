@@ -4,8 +4,11 @@ import {
   archivedParent,
   conflictText,
   countText,
+  displacementText,
+  engineSpecsText,
   importFileErrorText,
   MODELS,
+  optionNameOf,
   reasonText,
   rowNumbersText,
   templateFileText,
@@ -212,5 +215,36 @@ describe("the import file and its rows, in words (TASK-035.B)", () => {
   it("gives the template a byte order mark once, so Excel reads it as UTF-8", () => {
     expect(templateFileText("make,model").charCodeAt(0)).toBe(0xfeff);
     expect(templateFileText(templateFileText("make")).length).toBe("make".length + 1);
+  });
+});
+
+describe("figures and list values of «Автомобили» (TASK-080)", () => {
+  it("shows a displacement with one decimal: «2,0», never «2» (X8)", () => {
+    expect(displacementText(2)).toBe("2,0");
+    expect(displacementText(1.5)).toBe("1,5");
+    expect(displacementText(null)).toBe("—");
+    expect(engineSpecsText({ displacementL: 2, powerHp: 148 })).toBe("2,0 л · 148 л.с.");
+    expect(engineSpecsText({ displacementL: null, powerHp: null })).toBe("");
+  });
+
+  it("names a list value of an import row by its Russian name, whatever spelling the file used", () => {
+    const options = [
+      {
+        kind: "body" as const,
+        code: "crossover",
+        names: { ru: "Кроссовер", kk: "Кроссовер", en: "Crossover" },
+      },
+      {
+        kind: "drive" as const,
+        code: "fwd",
+        names: { ru: "Передний", kk: null, en: "Front-wheel" },
+      },
+    ];
+    expect(optionNameOf(options, "body", "crossover")).toBe("Кроссовер");
+    expect(optionNameOf(options, "body", "CROSSOVER")).toBe("Кроссовер");
+    expect(optionNameOf(options, "drive", "Front-wheel")).toBe("Передний");
+    // Another list with the same code is not it; an unknown value stays as read.
+    expect(optionNameOf(options, "drive", "crossover")).toBe("crossover");
+    expect(optionNameOf(options, "body", undefined)).toBe("");
   });
 });

@@ -13,7 +13,7 @@ import type {
   VehicleParentRef,
 } from "@adclub/contracts";
 import { auditEntities } from "@adclub/contracts";
-import { Button, Dialog, TextField } from "@adclub/ui";
+import { Button, Dialog, Select, TextField } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
@@ -105,26 +105,17 @@ function YearSelect({
   error?: ReactNode;
 }) {
   return (
-    <label className="select">
-      <span className="ac-text-caption ac-muted">{label}</span>
-      <select
-        value={yearValue(value)}
-        aria-invalid={error ? true : undefined}
-        onChange={(event) => onChange(yearFromValue(event.target.value))}
-      >
-        <option value="">{none}</option>
-        {years.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
-      {error ? (
-        <span className="dialog-error">{error}</span>
-      ) : hint ? (
-        <span className="ac-text-caption ac-muted">{hint}</span>
-      ) : null}
-    </label>
+    <Select<string>
+      label={label}
+      value={yearValue(value)}
+      options={[
+        { value: "", label: none },
+        ...years.map((year) => ({ value: String(year), label: String(year) })),
+      ]}
+      onChange={(next) => onChange(yearFromValue(next))}
+      hint={hint}
+      error={error}
+    />
   );
 }
 
@@ -437,28 +428,24 @@ function OptionSelect({
   const active = options.filter((option) => option.kind === kind && option.status === "active");
   const extra = current && !active.some((option) => option.id === current.id) ? current : null;
   return (
-    <label className="select">
-      <span className="ac-text-caption ac-muted">{label}</span>
-      <select
-        value={value}
-        aria-invalid={error ? true : undefined}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Выберите</option>
-        {extra && (
-          <option value={extra.id}>
-            {extra.names.ru}
-            {extra.status === "archived" ? " (в архиве)" : ""}
-          </option>
-        )}
-        {active.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.names.ru}
-          </option>
-        ))}
-      </select>
-      {error && <span className="dialog-error">{error}</span>}
-    </label>
+    <Select<string>
+      label={label}
+      value={value}
+      placeholder="Выберите"
+      options={[
+        ...(extra
+          ? [
+              {
+                value: extra.id,
+                label: `${extra.names.ru}${extra.status === "archived" ? " (в архиве)" : ""}`,
+              },
+            ]
+          : []),
+        ...active.map((option) => ({ value: option.id, label: option.names.ru })),
+      ]}
+      onChange={onChange}
+      error={error}
+    />
   );
 }
 

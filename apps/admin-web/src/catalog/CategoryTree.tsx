@@ -8,26 +8,34 @@ import {
   type CategoryStatus,
 } from "@adclub/contracts";
 import {
+  Badge,
   Banner,
   Button,
   Checkbox,
   Dialog,
   EmptyState,
+  Icon,
   IconButton,
   LoadingContent,
+  MenuButton,
   Segments,
+  Select,
   SkeletonList,
+  StatusBadge,
   TextField,
+  TypeMark,
   useToast,
+  type MenuAction,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
+import { AppLink, Header } from "../layout/layout";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import { AttributesPanel } from "./AttributesPanel";
-import { SearchSynonyms } from "./SearchSynonyms";
+import { NamesLine, OrderArrows } from "./catalog-ui";
 import {
   CATEGORY_STATUS_TEXT,
   catalogErrorText,
@@ -35,10 +43,12 @@ import {
   errorField,
   isConflict,
 } from "./catalog-words";
+import "./catalog.css";
 import { suggestCode } from "./codes";
 import { itemsLink } from "./item-filters";
 import { categoryOrderBody } from "./order";
-import { AppLink, CatalogTabs, CategoryGlyph, TextsLine, whoChanged } from "./shared";
+import { SearchSynonyms } from "./SearchSynonyms";
+import { catalogTabs, CategoryGlyph, whoChanged } from "./shared";
 import { ruText } from "./values";
 
 const KINDS = [
@@ -50,14 +60,20 @@ type Editing =
   | { mode: "create"; kind: CategoryKind; parent: AdminCategoryNode | null }
   | { mode: "edit"; categoryId: string };
 
+/** A refusal over the tree; a colleague's change offers «Обновить данные». */
+interface TreeError {
+  text: string;
+  conflict: boolean;
+}
+
 /**
- * A-CAT-01 «Категории» and A-CAT-02 «Характеристики» (SCREENS 7.2; TASK-035):
- * the tree of two levels — goods and services apart — with names in three
- * languages and where each came from, the icon, «Совместимость обязательна»
- * and the status; on a subcategory, its attributes and their options. Every
- * order goes with the order it was made from (I151), every change with the
- * version; a colleague's change meanwhile comes back as «Эти данные только
- * что изменил {кто}», and what was typed stays.
+ * A-CAT-01 «Категории» and A-CAT-02 «Характеристики» (SCREENS 7.2; TASK-035,
+ * TASK-080): the tree of two levels — goods and services apart — with names
+ * in three languages and where each came from, the icon, «Совместимость
+ * обязательна» and the status; on a subcategory, its attributes and their
+ * options. Every order goes with the order it was made from (I151), every
+ * change with the version; a colleague's change meanwhile comes back as
+ * «Эти данные только что изменил {кто}», and what was typed stays.
  */
 export function CategoryTree() {
   const toast = useToast();
@@ -69,7 +85,7 @@ export function CategoryTree() {
   const attributeId = query.get("attribute");
   const optionId = query.get("option");
   const tree = useLoad<AdminCategoryTreeResponse>(() => apiClient.listAdminCategories(), "tree");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<TreeError | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [changing, setChanging] = useState<{ category: AdminCategory; to: CategoryStatus } | null>(
     null,
@@ -96,7 +112,12 @@ export function CategoryTree() {
           );
         },
         () => {
-          if (!cancelled) setError("Характеристика не найдена — возможно, ссылка устарела");
+          if (!cancelled) {
+            setError({
+              text: "Характеристика не найдена — возможно, ссылка устарела",
+              conflict: false,
+            });
+          }
         },
       );
     return () => {
@@ -122,17 +143,15 @@ export function CategoryTree() {
   const select = (id: string | null, nextKind: CategoryKind = shownKind) =>
     navigateTo(
       withQuery(routePaths.catalog, { kind: nextKind === "goods" ? null : nextKind, node: id }),
-      {
-        replace: true,
-      },
+      { replace: true },
     );
 
   const fail = async (thrown: unknown, entityType: string, entityId: string) => {
     if (isConflict(thrown)) {
-      setError(conflictText(await whoChanged(entityType, entityId)));
+      setError({ text: conflictText(await whoChanged(entityType, entityId)), conflict: true });
       tree.reload();
     } else {
-      setError(catalogErrorText(thrown));
+      setError({ text: catalogErrorText(thrown), conflict: false });
     }
   };
 
@@ -166,43 +185,56 @@ export function CategoryTree() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Справочник</h1>
-        <div className="page__tools">
-          <Button variant="secondary" size="s" icon="refresh" onClick={tree.reload}>
-            Обновить
-          </Button>
-          <Button
-            size="s"
-            icon="plus"
-            disabled={!online}
-            onClick={() => setEditing({ mode: "create", kind: shownKind, parent: null })}
-          >
-            Добавить узел
-          </Button>
-        </div>
-      </div>
-      <CatalogTabs active="tree" />
+      <Header
+        title="Справочник"
+        tabs={catalogTabs("tree")}
+        actions={
+          <>
+            <IconButton icon="refresh" label="Обновить" size={20} onClick={tree.reload} />
+            <Button
+              size="s"
+              icon="plus"
+              disabled={!online}
+              onClick={() => setEditing({ mode: "create", kind: shownKind, parent: null })}
+            >
+              Добавить узел
+            </Button>
+          </>
+        }
+      />
       {error && (
         <Banner
           tone="warning"
           action={
-            <Button
-              variant="text"
-              size="s"
-              onClick={() => {
-                setError(null);
-                tree.reload();
-              }}
-            >
-              Обновить
+            error.conflict ? (
+              <Button
+                variant="text"
+                size="s"
+                onClick={() => {
+                  setError(null);
+                  tree.reload();
+                }}
+              >
+                Обновить данные
+              </Button>
+            ) : undefined
+          }
+        >
+          {error.text}
+        </Banner>
+      )}
+      {tree.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={tree.reload}>
+              Повторить
             </Button>
           }
         >
-          {error}
+          {loadErrorText(tree.error)}
         </Banner>
       )}
-      {tree.error !== undefined && <Banner tone="danger">{loadErrorText(tree.error)}</Banner>}
 
       <LoadingContent
         ready={tree.data !== undefined}
@@ -211,7 +243,7 @@ export function CategoryTree() {
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
         <div className="catalog-layout">
-          <aside className="catalog-tree" aria-label="Дерево категорий">
+          <aside className="catalog-tree cat-tree" aria-label="Дерево категорий">
             <Segments<CategoryKind>
               label="Вид"
               options={KINDS}
@@ -219,7 +251,12 @@ export function CategoryTree() {
               onChange={(next) => select(null, next)}
             />
             {nodes.length === 0 ? (
-              <p className="ac-text-body-s ac-muted">Узлов пока нет</p>
+              <EmptyState
+                compact
+                icon="category"
+                title="Узлов пока нет"
+                text="Добавьте первый узел кнопкой «Добавить узел»"
+              />
             ) : (
               <ol className="tree-list">
                 {nodes.map((node, index) => (
@@ -272,11 +309,13 @@ export function CategoryTree() {
                 onStatus={(to) => setChanging({ category: selected.category, to })}
               />
             ) : (
-              <EmptyState
-                icon="category"
-                title="Выберите узел или подкатегорию"
-                text="Слева — дерево. У подкатегории здесь появятся её характеристики, варианты и позиции."
-              />
+              <div className="card">
+                <EmptyState
+                  icon="category"
+                  title="Выберите узел или подкатегорию"
+                  text="Слева — дерево. У подкатегории здесь появятся её характеристики, варианты и позиции."
+                />
+              </div>
             )}
           </section>
         </div>
@@ -372,6 +411,7 @@ function TreeRow({
     <div
       className={[
         "tree-row",
+        "cat-tree-row",
         selected ? "tree-row--on" : "",
         category.status !== "active" ? "tree-row--muted" : "",
       ].join(" ")}
@@ -386,25 +426,14 @@ function TreeRow({
         <CategoryGlyph icon={category.icon} />
         <span className="clamp">{name}</span>
         {category.status !== "active" && (
-          <span className="origin-tag">{CATEGORY_STATUS_TEXT[category.status].toLowerCase()}</span>
+          <StatusBadge kind="category" status={category.status}>
+            {CATEGORY_STATUS_TEXT[category.status]}
+          </StatusBadge>
         )}
       </button>
-      <span className="tree-row__order">
-        <IconButton
-          icon="arrowLeft"
-          className="arrow-up"
-          label={`Выше: ${name}`}
-          disabled={!online || first}
-          onClick={() => onMove(-1)}
-        />
-        <IconButton
-          icon="arrowLeft"
-          className="arrow-down"
-          label={`Ниже: ${name}`}
-          disabled={!online || last}
-          onClick={() => onMove(1)}
-        />
-      </span>
+      {selected && (
+        <OrderArrows name={name} first={first} last={last} disabled={!online} onMove={onMove} />
+      )}
     </div>
   );
 }
@@ -429,62 +458,109 @@ function CategoryDetail({
   onStatus: (to: CategoryStatus) => void;
 }) {
   const isNode = category.level === 1;
+  const name = ruText(category.names);
+  const statusActions: MenuAction[] = [
+    ...(category.status === "active"
+      ? [
+          {
+            key: "hide",
+            label: "Скрыть…",
+            icon: "lock" as const,
+            disabled: !online,
+            onSelect: () => onStatus("hidden"),
+          },
+        ]
+      : []),
+    ...(category.status === "hidden"
+      ? [
+          {
+            key: "show",
+            label: "Показать…",
+            icon: "eye" as const,
+            disabled: !online,
+            onSelect: () => onStatus("active"),
+          },
+        ]
+      : []),
+    category.status !== "archived"
+      ? {
+          key: "archive",
+          label: "В архив…",
+          icon: "archive" as const,
+          destructive: true,
+          disabled: !online,
+          onSelect: () => onStatus("archived"),
+        }
+      : {
+          key: "restore",
+          label: "Восстановить…",
+          icon: "circleCheck" as const,
+          disabled: !online,
+          onSelect: () => onStatus("active"),
+        },
+  ];
   return (
-    <div className="detail-stack">
-      <div className="detail-head">
-        <span className="detail-head__glyph">
-          <CategoryGlyph icon={category.icon} size={28} />
-        </span>
-        <div className="cell-stack">
-          <h2 className="ac-text-title page__title">{ruText(category.names)}</h2>
-          <TextsLine texts={category.names} />
-          <span className="ac-text-caption ac-muted">
-            <code>{category.code}</code> ·{" "}
-            {isNode ? "узел" : `подкатегория узла «${ruText(node.names)}»`} ·{" "}
+    <div className="detail-stack cat-detail">
+      <div className="card cat-detail__head">
+        <div className="cat-detail__title-row">
+          <span className="cat-detail__glyph" aria-hidden="true">
+            {category.icon ? (
+              <CategoryGlyph icon={category.icon} size={28} />
+            ) : (
+              <Icon name="category" size={24} />
+            )}
+          </span>
+          <div className="cat-detail__title">
+            <h2 className="cat-detail__name">{name}</h2>
+            <NamesLine texts={category.names} />
+          </div>
+          <div className="cat-detail__actions">
+            <Button variant="secondary" size="s" disabled={!online} onClick={onEdit}>
+              Изменить
+            </Button>
+            {isNode && (
+              <Button
+                variant="secondary"
+                size="s"
+                icon="plus"
+                disabled={!online}
+                onClick={onAddChild}
+              >
+                Подкатегория
+              </Button>
+            )}
+            <MenuButton size="s" label={`Статус: ${name}`} actions={statusActions} />
+          </div>
+        </div>
+        <div className="badges cat-detail__marks">
+          <StatusBadge kind="category" status={category.status}>
             {CATEGORY_STATUS_TEXT[category.status]}
-            {category.visibleToClients ? " · видна клиентам" : " · клиенты не видят"}
-            {!isNode && category.kind === "goods"
-              ? category.compatibilityRequired
-                ? " · совместимость обязательна"
-                : " · совместимость не обязательна"
-              : ""}
+          </StatusBadge>
+          {!category.visibleToClients && (
+            <Badge tone="warning" icon="lock">
+              Клиенты не видят
+            </Badge>
+          )}
+          <TypeMark icon="category">
+            {isNode ? "Узел" : `Подкатегория узла «${ruText(node.names)}»`}
+          </TypeMark>
+          {!isNode && category.kind === "goods" && category.compatibilityRequired && (
+            <TypeMark icon="car">Совместимость обязательна</TypeMark>
+          )}
+          <span className="code-text" title="Код категории">
+            {category.code}
           </span>
         </div>
-      </div>
-      <div className="button-row">
-        <Button variant="secondary" size="s" disabled={!online} onClick={onEdit}>
-          Изменить
-        </Button>
-        {isNode && (
-          <Button variant="secondary" size="s" icon="plus" disabled={!online} onClick={onAddChild}>
-            Добавить подкатегорию
-          </Button>
-        )}
-        {category.status === "active" && (
-          <Button variant="text" size="s" disabled={!online} onClick={() => onStatus("hidden")}>
-            Скрыть
-          </Button>
-        )}
-        {category.status === "hidden" && (
-          <Button variant="text" size="s" disabled={!online} onClick={() => onStatus("active")}>
-            Показать
-          </Button>
-        )}
-        {category.status !== "archived" ? (
-          <Button variant="text" size="s" disabled={!online} onClick={() => onStatus("archived")}>
-            В архив
-          </Button>
-        ) : (
-          <Button variant="text" size="s" disabled={!online} onClick={() => onStatus("active")}>
-            Восстановить
-          </Button>
-        )}
         {!isNode && (
-          <AppLink href={itemsLink({ categoryId: category.id })}>Позиции подкатегории</AppLink>
+          <AppLink href={itemsLink({ categoryId: category.id })} className="cat-detail__items">
+            Позиции подкатегории →
+          </AppLink>
         )}
       </div>
-      <div className="card-section">
-        <h3 className="ac-text-heading">Синонимы для поиска</h3>
+      <section className="card cat-block">
+        <div className="section__head">
+          <h3 className="section__title">Синонимы для поиска</h3>
+        </div>
         <SearchSynonyms
           key={category.id}
           owner={{ kind: "category", id: category.id }}
@@ -494,7 +570,7 @@ function CategoryDetail({
               : "По ним в приложении найдутся все позиции этой подкатегории: «колодки», «brake pads», «тежегіш қалыптары»."
           }
         />
-      </div>
+      </section>
       {isNode ? (
         <p className="ac-text-body-s ac-muted">
           Характеристики и позиции бывают только у подкатегорий. Выберите подкатегорию в дереве.
@@ -695,7 +771,7 @@ function CategoryDialog({
           }
         />
         <fieldset className="icon-picker">
-          <legend className="ac-text-caption ac-muted">Значок</legend>
+          <legend className="ac-field__label">Значок</legend>
           <div className="icon-picker__grid">
             <button
               type="button"
@@ -730,33 +806,34 @@ function CategoryDialog({
           />
         )}
         {editing?.mode === "edit" && isSubcategory && (
-          <label className="select">
-            <span className="ac-text-caption ac-muted">Узел (перенос)</span>
-            <select value={parentId ?? ""} onChange={(event) => setParentId(event.target.value)}>
-              {nodesOfKind.map((node) => (
-                <option key={node.id} value={node.id}>
-                  {ruText(node.names)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Узел (перенос)"
+            value={parentId ?? ""}
+            options={nodesOfKind.map((node) => ({ value: node.id, label: ruText(node.names) }))}
+            onChange={setParentId}
+            error={fieldError("parentId")}
+          />
         )}
         {error && !error.field && (
-          <p className="dialog-error" role="alert">
-            {error.text}{" "}
-            {error.conflict && (
-              <Button
-                variant="text"
-                size="s"
-                onClick={() => {
-                  setError(null);
-                  onReload();
-                }}
-              >
-                Обновить данные
-              </Button>
-            )}
-          </p>
+          <Banner
+            tone="warning"
+            action={
+              error.conflict ? (
+                <Button
+                  variant="text"
+                  size="s"
+                  onClick={() => {
+                    setError(null);
+                    onReload();
+                  }}
+                >
+                  Обновить данные
+                </Button>
+              ) : undefined
+            }
+          >
+            {error.text}
+          </Banner>
         )}
       </div>
     </Dialog>

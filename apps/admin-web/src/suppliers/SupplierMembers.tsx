@@ -6,45 +6,97 @@ import type {
   AdminSupplierSessionListResponse,
 } from "@adclub/contracts";
 import {
+  Badge,
   Banner,
   Button,
   Dialog,
   EmptyState,
   LoadingContent,
+  MenuButton,
   SkeletonList,
+  StatusBadge,
   TextField,
   useToast,
+  type MenuAction,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
-import { PhoneReveal } from "../people/PhoneReveal";
 import { formatMoment } from "../format";
+import { FilterSelect } from "../layout/filters";
+import { AppLink, Table } from "../layout/layout";
+import { PhoneReveal } from "../people/PhoneReveal";
+import { routePaths, withQuery } from "../router";
 import { useLoad } from "../use-load";
-import { FormError, LoadError } from "../vehicles/shared";
-import { ReasonDialog, useSupplierSaver } from "./shared";
+import { LoadError } from "../vehicles/shared";
+import { ReasonDialog, SaverError, useSupplierSaver } from "./shared";
 import {
   addedByText,
   hiddenPhone,
   INVITATION_TEXT,
+  ipText,
   mobilePhone,
   PHONE_HINT,
+  sessionGroups,
   supplierErrorView,
 } from "./supplier-words";
+
+/** Sessions shown before «Показать все (N)» (X22). */
+const FIRST_SESSIONS = 10;
 
 type Confirm =
   | { kind: "session"; session: AdminSupplierSession }
   | { kind: "member-sessions"; member: AdminSupplierMember; count: number };
 
+const MEMBER_COLUMNS = [
+  { key: "member", header: "Сотрудник" },
+  { key: "notifications", header: "Уведомления", width: 170 },
+  { key: "invitation", header: "Приглашение", width: 250 },
+  { key: "actions", header: "Действия", width: 64, actions: true, hiddenHeader: true },
+];
+
+const REMOVED_COLUMNS = [
+  { key: "member", header: "Сотрудник" },
+  { key: "removed", header: "Удалён", width: 240 },
+  { key: "actions", header: "Действия", width: 200, actions: true, hiddenHeader: true },
+];
+
+const SESSION_COLUMNS = [
+  { key: "device", header: "Устройство и сотрудник" },
+  { key: "used", header: "Последний раз", width: 160 },
+  { key: "expires", header: "Истекает", width: 140 },
+  { key: "actions", header: "Действия", width: 120, actions: true, hiddenHeader: true },
+];
+
+/** «Отправлено» on a badge from «отправлено» of the words. */
+function capitalized(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The language of an employee's notifications as a small mark: «KK», «RU». */
+function LanguageMark({ language }: { language: string }) {
+  const code = language === "kk" ? "KK" : "RU";
+  return (
+    <span
+      className="lang-mark"
+      title={language === "kk" ? "Уведомления на казахском" : "Уведомления на русском"}
+    >
+      {code}
+    </span>
+  );
+}
+
 /**
- * «Сотрудники» of A-SUP-03 (SCREENS 7.4; TASK-036): the current employees
- * (the number partly hidden, SCREENS 7.0) with who receives the order
- * notifications and the limit, the invitation, «Назначить контактным
- * лицом», «Отправить приглашение повторно» (its limits are the server's);
- * the removed ones — who removed them and when — with «Восстановить
- * доступ» and its reason; the cabinet sessions with «Завершить». A blocked
- * company adds no employees and sends no invitations (D-070): the button
- * is not offered, and the server refuses anyway.
+ * «Сотрудники» of A-SUP-03 (SCREENS 7.4; TASK-036, TASK-080): the head of the
+ * section with «+ Добавить», who receives the order notifications and the
+ * limit (a link to the setting); each employee in one row — the name, the
+ * number partly hidden with the eye (SCREENS 7.0), the notifications and
+ * their language, the invitation with «Приглашение повторно», the rarer
+ * actions in «⋯». The removed ones — who removed them and when — with
+ * «Восстановить доступ» and its reason. The cabinet sessions: the first
+ * ten, a filter by employee, alike ones in a row folded, «Показать все (N)».
+ * A blocked company adds no employees and sends no invitations (D-070): the
+ * buttons are not offered, and the server refuses anyway.
  */
 export function SupplierMembers({
   card,
@@ -59,10 +111,7 @@ export function SupplierMembers({
     () => apiClient.listAdminSupplierMembers({ supplierId: card.id }),
     `members:${card.id}`,
   );
-  const sessions = useLoad<AdminSupplierSessionListResponse>(
-    () => apiClient.listSupplierSessions({ supplierId: card.id }),
-    `sessions:${card.id}`,
-  );
+  const [sessionsKey, setSessionsKey] = useState(0);
   const [adding, setAdding] = useState(false);
   const [restoring, setRestoring] = useState<AdminSupplierMember | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
@@ -71,9 +120,32 @@ export function SupplierMembers({
   const restoreSaver = useSupplierSaver("supplier_member");
   const blocked = card.state === "blocked";
 
+  const list = members.data?.members ?? [];
+  const current = list.filter((member) => member.status === "active");
+  const removed = list.filter((member) => member.status === "removed");
+  const summary = members.data?.notifications;
+
+  // How many sessions each employee has: «Завершить все сессии (N)».
+  const counts = useLoad<Record<string, number>>(
+    async () => {
+      const entries = await Promise.all(
+        current.map(async (member) => {
+          const page = await apiClient.listSupplierSessions(
+            { supplierId: card.id },
+            { query: { limit: 1, memberId: member.id } },
+          );
+          // Before the server pages them, every session comes back: count them.
+          return [member.id, page.total ?? page.sessions.length] as const;
+        }),
+      );
+      return Object.fromEntries(entries);
+    },
+    `session-counts:${card.id}:${current.map((member) => member.id).join(",")}:${sessionsKey}`,
+  );
+
   const reload = () => {
     members.reload();
-    sessions.reload();
+    setSessionsKey((key) => key + 1);
   };
 
   /** One action of a row: the server's refusal in words above the list. */
@@ -91,328 +163,253 @@ export function SupplierMembers({
     }
   };
 
-  const list = members.data?.members ?? [];
-  const current = list.filter((member) => member.status === "active");
-  const removed = list.filter((member) => member.status === "removed");
-  const summary = members.data?.notifications;
-  const sessionList = sessions.data?.sessions ?? [];
-  const sessionsOf = (memberId: string) =>
-    sessionList.filter((session) => session.member.id === memberId).length;
+  const resend = (member: AdminSupplierMember) =>
+    void act(`invite:${member.id}`, async () => {
+      await apiClient.resendSupplierInvitation({ supplierId: card.id, memberId: member.id });
+      return `Приглашение отправлено в WhatsApp: ${member.displayName}`;
+    });
+
+  const menuOf = (member: AdminSupplierMember): MenuAction[] => {
+    const count = counts.data?.[member.id] ?? 0;
+    return [
+      ...(!member.isContactPerson
+        ? [
+            {
+              key: "contact",
+              label: "Сделать контактным лицом",
+              icon: "user" as const,
+              disabled: !online || busy !== null,
+              onSelect: () =>
+                void act(`contact:${member.id}`, async () => {
+                  await apiClient.setSupplierContactPerson({
+                    supplierId: card.id,
+                    memberId: member.id,
+                  });
+                  return `Контактное лицо: ${member.displayName}`;
+                }),
+            },
+          ]
+        : []),
+      ...(count > 0
+        ? [
+            {
+              key: "sessions",
+              label: `Завершить все сессии (${count})`,
+              icon: "logout" as const,
+              destructive: true,
+              disabled: !online,
+              onSelect: () => setConfirm({ kind: "member-sessions", member, count }),
+            },
+          ]
+        : []),
+    ];
+  };
 
   return (
     <div className="detail-stack">
-      <div className="page__tools">
-        {blocked ? (
-          <Banner tone="warning">
-            Компания заблокирована: добавлять сотрудников и отправлять приглашения нельзя, пока
-            блокировка не снята. Настройки сотрудников, контактное лицо, восстановление и сессии —
-            доступны.
-          </Banner>
-        ) : (
-          <Button icon="plus" disabled={!online} onClick={() => setAdding(true)}>
-            Добавить сотрудника
-          </Button>
-        )}
-      </div>
       {problem && <Banner tone="danger">{problem}</Banner>}
       <LoadError error={members.error} retry={members.reload} />
-      <LoadingContent
-        ready={members.data !== undefined}
-        indicator={members.indicator}
-        label="Загрузка"
-        skeleton={<SkeletonList rows={4} label="Загрузка" />}
-      >
+      <section className="section">
+        <div className="section__head">
+          <h2 className="section__title">Сотрудники</h2>
+          {!blocked && (
+            <Button
+              variant="secondary"
+              size="s"
+              icon="plus"
+              disabled={!online}
+              onClick={() => setAdding(true)}
+            >
+              Добавить
+            </Button>
+          )}
+        </div>
         {summary && (
-          <p className="ac-text-body-s">
-            Уведомления о заявках получают {summary.recipients} из {summary.limit} возможных
-            {summary.full ? ` · достигнут предел — ${summary.limit}` : ""}
+          <p className="section__note">
+            Уведомления о заявках получают {summary.recipients} из {summary.limit}
             {summary.enabled > summary.recipients
-              ? ` · ещё ${summary.enabled - summary.recipients} ждут места (включили позже)`
-              : ""}
-            . Предел — настройка max_notified_members.
+              ? ` · ещё ${summary.enabled - summary.recipients} ждут места`
+              : ""}{" "}
+            ·{" "}
+            <AppLink href={withQuery(routePaths.settings, { q: "max_notified_members" })}>
+              Предел — в настройках
+            </AppLink>
           </p>
         )}
-        <section className="card-section">
-          <h2 className="ac-text-heading">Сотрудники</h2>
-          {current.length === 0 ? (
-            <EmptyState icon="users" title="Сотрудников нет" />
-          ) : (
-            <div className="table-wrap">
-              <table className="admin-table members-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Сотрудник</th>
-                    <th scope="col">Уведомления</th>
-                    <th scope="col">Добавлен</th>
-                    <th scope="col">Приглашение</th>
-                    <th scope="col" className="admin-table__actions">
-                      <span className="ac-visually-hidden">Действия</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {current.map((member) => {
-                    const count = sessionsOf(member.id);
-                    return (
-                      <tr key={member.id}>
-                        <td>
-                          <div className="cell-stack">
-                            <span className="long-text" title={member.displayName}>
-                              {member.displayName}
-                            </span>
-                            <span className="ac-text-caption ac-muted">
-                              <PhoneReveal
-                                phone={hiddenPhone(member.phone)}
-                                subject="supplier_member"
-                                id={member.id}
-                              />
-                            </span>
-                            {member.isContactPerson && (
-                              <span className="ac-text-caption">контактное лицо</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="ac-text-body-s">
-                          {member.receivesNotifications
-                            ? "получает"
-                            : member.notificationsEnabled
-                              ? "включены, ждут места"
-                              : "выключены"}
-                          <span className="ac-text-caption ac-muted">
-                            {" "}
-                            · {member.notificationLanguage === "kk" ? "kk" : "ru"}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="cell-stack">
-                            <span className="ac-text-body-s">{addedByText(member)}</span>
-                            <span className="ac-text-caption ac-muted">
-                              {formatMoment(member.createdAt)}
-                            </span>
-                            {member.restore && (
-                              <span className="ac-text-caption ac-muted">
-                                восстановлен {formatMoment(member.restore.at)}:{" "}
-                                {member.restore.reason}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          {member.lastInvitation ? (
-                            <div className="cell-stack">
-                              <span className="ac-text-body-s">
-                                {INVITATION_TEXT[member.lastInvitation.status]}
-                              </span>
-                              <span className="ac-text-caption ac-muted">
-                                {formatMoment(
-                                  member.lastInvitation.sentAt ?? member.lastInvitation.createdAt,
-                                )}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="ac-text-body-s ac-muted">—</span>
-                          )}
-                        </td>
-                        <td className="admin-table__actions">
-                          <div className="button-row button-row--end member-actions">
-                            {!blocked && (
-                              <Button
-                                variant="secondary"
-                                size="s"
-                                disabled={!online}
-                                loading={busy === `invite:${member.id}`}
-                                onClick={() =>
-                                  void act(`invite:${member.id}`, async () => {
-                                    await apiClient.resendSupplierInvitation({
-                                      supplierId: card.id,
-                                      memberId: member.id,
-                                    });
-                                    return `Приглашение отправлено в WhatsApp: ${member.displayName}`;
-                                  })
-                                }
-                              >
-                                Приглашение повторно
-                              </Button>
-                            )}
-                            {!member.isContactPerson && (
-                              <Button
-                                variant="secondary"
-                                size="s"
-                                disabled={!online}
-                                loading={busy === `contact:${member.id}`}
-                                onClick={() =>
-                                  void act(`contact:${member.id}`, async () => {
-                                    await apiClient.setSupplierContactPerson({
-                                      supplierId: card.id,
-                                      memberId: member.id,
-                                    });
-                                    return `Контактное лицо: ${member.displayName}`;
-                                  })
-                                }
-                              >
-                                Сделать контактным лицом
-                              </Button>
-                            )}
-                            {count > 0 && (
-                              <Button
-                                variant="secondary"
-                                size="s"
-                                disabled={!online}
-                                onClick={() =>
-                                  setConfirm({ kind: "member-sessions", member, count })
-                                }
-                              >
-                                Завершить все сессии ({count})
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="card-section">
-          <h2 className="ac-text-heading">Удалённые</h2>
-          {removed.length === 0 ? (
-            <p className="ac-text-body-s ac-muted">Удалённых сотрудников нет.</p>
-          ) : (
-            <div className="table-wrap">
-              <table className="admin-table members-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Сотрудник</th>
-                    <th scope="col">Удалён</th>
-                    <th scope="col">Добавлен</th>
-                    <th scope="col" className="admin-table__actions">
-                      <span className="ac-visually-hidden">Действия</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {removed.map((member) => (
-                    <tr key={member.id} className="row--muted">
-                      <td>
-                        <div className="cell-stack">
-                          <span className="long-text">{member.displayName}</span>
-                          <span className="ac-text-caption ac-muted num">
-                            {hiddenPhone(member.phone)}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="cell-stack">
-                          <span className="ac-text-body-s">{formatMoment(member.removedAt)}</span>
-                          <span className="ac-text-caption ac-muted">
-                            {member.removedByMember
-                              ? `удалил(а) ${member.removedByMember.displayName}`
-                              : "удалён командой оператора"}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="cell-stack">
-                          <span className="ac-text-body-s">{addedByText(member)}</span>
-                          <span className="ac-text-caption ac-muted">
-                            {formatMoment(member.createdAt)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="admin-table__actions">
-                        <div className="button-row button-row--end">
-                          <Button
-                            variant="secondary"
-                            size="s"
-                            disabled={!online}
-                            onClick={() => {
-                              restoreSaver.reset();
-                              setRestoring(member);
-                            }}
-                          >
-                            Восстановить доступ…
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </LoadingContent>
-
-      <section className="card-section">
-        <h2 className="ac-text-heading">Сессии кабинета</h2>
-        <LoadError error={sessions.error} retry={sessions.reload} />
+        {blocked && (
+          <Banner tone="warning">
+            Компания заблокирована: добавлять сотрудников и отправлять приглашения нельзя, пока
+            блокировка не снята. Контактное лицо, восстановление и сессии — доступны.
+          </Banner>
+        )}
         <LoadingContent
-          ready={sessions.data !== undefined}
-          indicator={sessions.indicator}
+          ready={members.data !== undefined}
+          indicator={members.indicator}
           label="Загрузка"
-          skeleton={<SkeletonList rows={2} label="Загрузка" />}
+          skeleton={<SkeletonList rows={4} label="Загрузка" />}
         >
-          {sessionList.length === 0 ? (
-            <p className="ac-text-body-s ac-muted">
-              Сейчас никто из сотрудников не вошёл в кабинет.
-            </p>
+          {current.length === 0 ? (
+            <EmptyState compact icon="users" title="Сотрудников нет" />
           ) : (
-            <div className="table-wrap">
-              <table className="admin-table sessions-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Сотрудник</th>
-                    <th scope="col">Устройство</th>
-                    <th scope="col">Вход</th>
-                    <th scope="col">Последний раз</th>
-                    <th scope="col">Истекает</th>
-                    <th scope="col" className="admin-table__actions">
-                      <span className="ac-visually-hidden">Действия</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessionList.map((session) => (
-                    <tr key={session.id}>
-                      <td className="long-text">{session.member.displayName}</td>
-                      <td>
-                        <div className="cell-stack">
-                          <span className="ac-text-body-s">
-                            {session.deviceName ?? "Устройство не названо"}
-                          </span>
-                          <span className="ac-text-caption ac-muted">
-                            {[session.platform, session.clientVersion, session.ipHint]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="ac-text-body-s num">{formatMoment(session.createdAt)}</td>
-                      <td className="ac-text-body-s num">{formatMoment(session.lastUsedAt)}</td>
-                      <td className="ac-text-body-s num">{formatMoment(session.expiresAt)}</td>
-                      <td className="admin-table__actions">
-                        <div className="button-row button-row--end">
-                          <Button
-                            variant="secondary"
-                            size="s"
-                            disabled={!online}
-                            onClick={() => setConfirm({ kind: "session", session })}
+            <Table label="Сотрудники" columns={MEMBER_COLUMNS} className="members-table">
+              {current.map((member) => {
+                const actions = menuOf(member);
+                return (
+                  <tr key={member.id}>
+                    <td>
+                      <span className="cell-stack">
+                        <span className="member-name">
+                          <span
+                            className="ac-text-body-strong cell-one-line"
+                            title={member.displayName}
                           >
-                            Завершить
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                            {member.displayName}
+                          </span>
+                          {member.isContactPerson && (
+                            <Badge tone="neutral" icon="user">
+                              Контактное лицо
+                            </Badge>
+                          )}
+                        </span>
+                        <span className="ac-text-body-s">
+                          <PhoneReveal
+                            phone={hiddenPhone(member.phone)}
+                            subject="supplier_member"
+                            id={member.id}
+                          />
+                        </span>
+                        <span className="row-title__sub">
+                          Добавил {addedByText(member)} · {formatMoment(member.createdAt)}
+                          {member.restore &&
+                            ` · восстановлен ${formatMoment(member.restore.at)}: ${member.restore.reason}`}
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badges nowrap">
+                        {member.receivesNotifications ? (
+                          <Badge tone="success" icon="circleCheck">
+                            Получает
+                          </Badge>
+                        ) : member.notificationsEnabled ? (
+                          <Badge tone="warning" icon="clock">
+                            Ждёт места
+                          </Badge>
+                        ) : (
+                          <Badge tone="neutral" icon="minus">
+                            Выключены
+                          </Badge>
+                        )}
+                        <LanguageMark language={member.notificationLanguage} />
+                      </span>
+                    </td>
+                    <td>
+                      <span className="cell-stack">
+                        {member.lastInvitation ? (
+                          <span className="badges nowrap">
+                            <StatusBadge kind="invitation" status={member.lastInvitation.status}>
+                              {capitalized(INVITATION_TEXT[member.lastInvitation.status])}
+                            </StatusBadge>
+                            <span className="row-title__sub">
+                              {formatMoment(
+                                member.lastInvitation.sentAt ?? member.lastInvitation.createdAt,
+                              )}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="ac-muted ac-text-body-s">Не отправлялось</span>
+                        )}
+                        {!blocked && (
+                          <span>
+                            <Button
+                              variant="text"
+                              size="s"
+                              disabled={!online}
+                              loading={busy === `invite:${member.id}`}
+                              onClick={() => resend(member)}
+                            >
+                              Приглашение повторно
+                            </Button>
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="admin-table__actions">
+                      {actions.length > 0 && (
+                        <MenuButton
+                          size="s"
+                          label={`Действия: ${member.displayName}`}
+                          actions={actions}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
           )}
         </LoadingContent>
       </section>
+
+      <section className="section">
+        <div className="section__head">
+          <h2 className="section__title">Удалённые</h2>
+        </div>
+        {members.data !== undefined &&
+          (removed.length === 0 ? (
+            <EmptyState compact icon="users" title="Удалённых сотрудников нет" />
+          ) : (
+            <Table label="Удалённые сотрудники" columns={REMOVED_COLUMNS}>
+              {removed.map((member) => (
+                <tr key={member.id} className="row--muted">
+                  <td>
+                    <span className="cell-stack">
+                      <span
+                        className="ac-text-body-strong cell-one-line"
+                        title={member.displayName}
+                      >
+                        {member.displayName}
+                      </span>
+                      <span className="row-title__sub nowrap">{hiddenPhone(member.phone)}</span>
+                    </span>
+                  </td>
+                  <td>
+                    <span className="cell-stack">
+                      <span className="ac-text-body-s nowrap">
+                        {formatMoment(member.removedAt)}
+                      </span>
+                      <span className="row-title__sub">
+                        {member.removedByMember
+                          ? `удалил(а) ${member.removedByMember.displayName}`
+                          : "удалён командой оператора"}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="admin-table__actions">
+                    <Button
+                      variant="secondary"
+                      size="s"
+                      disabled={!online}
+                      onClick={() => {
+                        restoreSaver.reset();
+                        setRestoring(member);
+                      }}
+                    >
+                      Восстановить доступ…
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          ))}
+      </section>
+
+      <Sessions
+        key={sessionsKey}
+        supplierId={card.id}
+        members={current}
+        onEnd={(session) => setConfirm({ kind: "session", session })}
+      />
 
       <AddMemberDialog
         open={adding}
@@ -455,7 +452,7 @@ export function SupplierMembers({
               }
             });
         }}
-        error={<FormError saver={restoreSaver} onRefresh={reload} />}
+        error={<SaverError saver={restoreSaver} onRefresh={reload} />}
       >
         {restoring && (
           <p className="ac-text-body-s">
@@ -510,6 +507,160 @@ export function SupplierMembers({
         )}
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * The cabinet sessions (X22): the first ten, most recently used first, a
+ * filter by employee, the same employee on the same device in a row folded
+ * into one row with «ещё N таких»; «Показать все (N)» reads the rest.
+ */
+function Sessions({
+  supplierId,
+  members,
+  onEnd,
+}: {
+  supplierId: string;
+  members: readonly AdminSupplierMember[];
+  onEnd: (session: AdminSupplierSession) => void;
+}) {
+  const online = useOnline();
+  const [memberId, setMemberId] = useState<string | undefined>(undefined);
+  const [all, setAll] = useState(false);
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
+  const sessions = useLoad<AdminSupplierSessionListResponse>(
+    () =>
+      apiClient.listSupplierSessions(
+        { supplierId },
+        {
+          query: {
+            ...(all ? {} : { limit: FIRST_SESSIONS }),
+            ...(memberId ? { memberId } : {}),
+          },
+        },
+      ),
+    `sessions:${supplierId}:${memberId ?? ""}:${all ? "all" : "first"}`,
+  );
+  const loaded = sessions.data?.sessions ?? [];
+  // Before the server pages them, every session comes back: the first ten are cut here.
+  const shown = all ? loaded : loaded.slice(0, FIRST_SESSIONS);
+  const total = sessions.data?.total ?? loaded.length;
+  const groups = sessionGroups(shown);
+
+  return (
+    <section className="section">
+      <div className="section__head">
+        <h2 className="section__title">Сессии кабинета</h2>
+      </div>
+      {members.length > 1 && (
+        <div className="filters">
+          <FilterSelect<string>
+            label="Сотрудник"
+            value={memberId}
+            options={members.map((member) => ({ value: member.id, label: member.displayName }))}
+            onChange={(next) => {
+              setMemberId(next);
+              setAll(false);
+            }}
+          />
+        </div>
+      )}
+      <LoadError error={sessions.error} retry={sessions.reload} />
+      <LoadingContent
+        ready={sessions.data !== undefined}
+        indicator={sessions.indicator}
+        label="Загрузка"
+        swapKey={sessions.answerKey}
+        skeleton={<SkeletonList rows={3} label="Загрузка" />}
+      >
+        <div className="list-block">
+          {shown.length === 0 ? (
+            <EmptyState
+              compact
+              icon="devices"
+              title={
+                memberId
+                  ? "Этот сотрудник сейчас не вошёл в кабинет"
+                  : "Сейчас никто из сотрудников не вошёл в кабинет"
+              }
+            />
+          ) : (
+            <Table label="Сессии кабинета" columns={SESSION_COLUMNS}>
+              {groups.flatMap((group) => {
+                const open = unfolded.has(group.first.id);
+                const rows = open ? [group.first, ...group.rest] : [group.first];
+                return rows.map((session, index) => (
+                  <tr key={session.id}>
+                    <td>
+                      <span className="cell-stack">
+                        <span className="ac-text-body-s cell-one-line">
+                          {session.deviceName ?? "Устройство не названо"}
+                        </span>
+                        <span className="row-title__sub">
+                          {[
+                            session.member.displayName,
+                            ipText(session.ipHint),
+                            session.clientVersion ? `версия ${session.clientVersion}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        {index === 0 && group.rest.length > 0 && (
+                          <span>
+                            <Button
+                              variant="text"
+                              size="s"
+                              aria-expanded={open}
+                              onClick={() =>
+                                setUnfolded((now) => {
+                                  const next = new Set(now);
+                                  if (open) next.delete(group.first.id);
+                                  else next.add(group.first.id);
+                                  return next;
+                                })
+                              }
+                            >
+                              {open ? "Свернуть" : `Ещё ${group.rest.length} таких`}
+                            </Button>
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="cell-stack">
+                        <span className="ac-text-body-s nowrap">
+                          {formatMoment(session.lastUsedAt)}
+                        </span>
+                        <span className="row-title__sub nowrap">
+                          вход {formatMoment(session.createdAt)}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="ac-text-body-s nowrap">{formatMoment(session.expiresAt)}</td>
+                    <td className="admin-table__actions">
+                      <Button
+                        variant="text"
+                        size="s"
+                        destructive
+                        disabled={!online}
+                        onClick={() => onEnd(session)}
+                      >
+                        Завершить
+                      </Button>
+                    </td>
+                  </tr>
+                ));
+              })}
+            </Table>
+          )}
+          {!all && total > shown.length && (
+            <Button variant="secondary" size="s" onClick={() => setAll(true)}>
+              Показать все ({total.toLocaleString("ru-RU")})
+            </Button>
+          )}
+        </div>
+      </LoadingContent>
+    </section>
   );
 }
 
@@ -600,7 +751,7 @@ function AddMemberDialog({
           inputMode="tel"
           error={problems.phone ?? saver.fieldError("phone")}
         />
-        <FormError saver={saver} fields={["name", "phone"]} />
+        <SaverError saver={saver} fields={["name", "phone"]} />
       </div>
     </Dialog>
   );

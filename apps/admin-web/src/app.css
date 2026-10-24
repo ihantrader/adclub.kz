@@ -4,8 +4,28 @@
    40–48. A computer only: narrower than 1024 px the page says so (SCREENS 7.0).
    Nothing has a fixed height that text could overflow. */
 
+/* Figures of one width: numeric columns, prices and codes only — never a
+   date or a phone inside text (X9). */
 .num {
   font-variant-numeric: tabular-nums;
+}
+
+/* The width of the column of the page and of the header above it (X14):
+   centered together; the wide pages (the tree, the fill) set their own. */
+.shell__main {
+  --admin-column: var(--ac-content-max-width);
+  --admin-gutter: var(--ac-space-8);
+}
+
+.shell__main:has(.catalog-layout, .fill-table) {
+  --admin-column: 1600px;
+}
+
+/* A computer of 1024–1279: narrower fields around the column, more room for the tables and tabs. */
+@media (max-width: 1279px) {
+  .shell__main {
+    --admin-gutter: var(--ac-space-6);
+  }
 }
 
 h1,
@@ -19,10 +39,22 @@ ul {
   margin: 0;
 }
 
-code,
-.mono {
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 0.92em;
+/* Codes, BINs, articles: Onest with figures of one width, not a monospace
+   that reads like debugging (X10); a short code never breaks. */
+code {
+  font-family: inherit;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A system code shown next to its name («axle», «sedan»): small and muted. */
+.code-text {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Dialogs of a computer screen hold a field, «было → стало» and the reason. */
@@ -51,11 +83,14 @@ code,
 }
 
 /* ---------- sign-in and the screens before the admin panel ---------- */
+/* A card in the middle of the window (A-LOGIN): the sign-in, the errors before
+   the admin panel and «нужно обновить» share it. */
 .auth-page {
   display: flex;
+  align-items: center;
   justify-content: center;
   min-height: 100dvh;
-  padding: var(--ac-space-12) var(--ac-space-4);
+  padding: var(--ac-space-8) var(--ac-space-4);
 }
 
 .auth-card {
@@ -64,6 +99,10 @@ code,
   gap: var(--ac-space-6);
   width: 100%;
   max-width: 420px;
+  padding: var(--ac-space-8);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
 }
 
 .auth-card--wide {
@@ -99,9 +138,15 @@ code,
   gap: var(--ac-space-2);
 }
 
+/* The code of the sign-in (A-LOGIN): `code` 32/300, as wide as six digits. */
+.auth-code .ac-field__control {
+  max-width: 240px;
+}
+
 .auth-code .ac-field__input {
-  font-size: 24px;
-  line-height: 30px;
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: var(--ac-font-weight-title-l);
   font-variant-numeric: tabular-nums;
 }
 
@@ -136,7 +181,7 @@ code,
 }
 
 .totp-setup__secret {
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 16px;
   line-height: 24px;
   overflow-wrap: anywhere;
@@ -154,7 +199,7 @@ code,
 }
 
 .backup-codes__code {
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 16px;
   line-height: 24px;
 }
@@ -210,45 +255,26 @@ code,
   min-width: 0;
 }
 
+/* The header (X15): the search on the left, the administrator's menu on the
+   right, in the column of the page. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ac-space-4);
-  min-height: var(--ac-top-bar);
-  padding: var(--ac-space-1) var(--ac-space-6);
   border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
   background: var(--ac-color-bar);
 }
 
-.topbar__who {
+.topbar__inner {
   display: flex;
   align-items: center;
-  gap: var(--ac-space-2);
-  min-width: 0;
-  color: var(--ac-color-text);
-}
-
-.topbar__who > .ac-icon {
-  flex: none;
-  color: var(--ac-color-text-muted);
-}
-
-.topbar__name {
-  overflow: hidden;
-  font-weight: var(--ac-font-weight-body-strong);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.topbar__actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--ac-space-3);
+  justify-content: space-between;
+  gap: var(--ac-space-4);
+  width: 100%;
+  max-width: calc(var(--admin-column) + 2 * var(--admin-gutter));
+  min-height: var(--ac-top-bar);
+  margin-inline: auto;
+  padding: var(--ac-space-1) var(--admin-gutter);
 }
 
 .shell__banners {
@@ -272,56 +298,157 @@ code,
   flex-direction: column;
   gap: var(--ac-space-6);
   width: 100%;
-  max-width: var(--ac-content-max-width);
-  padding: var(--ac-space-6) var(--ac-space-6) var(--ac-space-12);
+  max-width: calc(var(--admin-column) + 2 * var(--admin-gutter));
+  margin-inline: auto;
+  padding: var(--ac-space-6) var(--admin-gutter) var(--ac-space-12);
 }
 
-.page__head {
+/* A list: «Всего N» and the reset over the table, 12 from it — the count
+   belongs to the table, not to the filters (X12); «Показать ещё» under it. */
+.list-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+.list-block > .ac-button {
+  align-self: flex-start;
+}
+
+/* Badges side by side in a cell or a line. */
+.badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1);
+}
+
+/* A section of a page: its title (`heading`) with its actions on the right. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+.section + .section {
+  margin-top: var(--ac-space-2);
+}
+
+.section__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ac-space-3);
+  gap: var(--ac-space-2) var(--ac-space-4);
+  min-height: 36px;
 }
 
-.page__head--back {
-  justify-content: flex-start;
-  flex-wrap: nowrap;
+.section__title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: var(--ac-font-weight-heading);
 }
 
-.page__title {
-  overflow-wrap: anywhere;
-}
-
-.page__tools {
-  display: flex;
-  align-items: center;
-  gap: var(--ac-space-3);
-}
-
-.page-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--ac-space-1);
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-}
-
-.page-tabs__tab {
-  padding: var(--ac-space-2) var(--ac-space-3);
-  margin-bottom: -1px;
-  border-bottom: 2px solid transparent;
+.section__note {
   color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* A card of a form or of facts: one right edge for every block of a page (X14). */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+  min-width: 0;
+  padding: var(--ac-space-5);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.card__title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: var(--ac-font-weight-heading);
+}
+
+/* A folded part of a block: «Подробнее», «Перевод вручную», «Как считается». */
+.disclosure {
+  min-width: 0;
+}
+
+.disclosure__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: 36px;
+  color: var(--ac-color-accent);
+  font-size: 14px;
   font-weight: var(--ac-font-weight-label);
-  text-decoration: none;
+  list-style: none;
+  cursor: pointer;
 }
 
-.page-tabs__tab:hover {
-  color: var(--ac-color-text);
+.disclosure__summary::-webkit-details-marker {
+  display: none;
 }
 
-.page-tabs__tab--on {
-  border-bottom-color: var(--ac-color-accent);
-  color: var(--ac-color-text);
+.disclosure__summary::after {
+  width: 7px;
+  height: 7px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--ac-motion-fast) var(--ac-motion-easing);
+  content: "";
+}
+
+.disclosure[open] > .disclosure__summary::after {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+
+.disclosure[open] > .disclosure__summary {
+  margin-bottom: var(--ac-space-3);
+}
+
+/* A form in its card: two columns of fields, the actions under them. */
+.form-card > .form-grid {
+  max-width: none;
+}
+
+/* «подпись — значение» in two columns (A-USR-02, the order's summary). */
+.kv {
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) minmax(0, 1fr);
+  gap: var(--ac-space-2) var(--ac-space-6);
+  margin: 0;
+}
+
+.kv dt {
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.kv__note {
+  display: block;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .button-row {
@@ -329,10 +456,6 @@ code,
   flex-wrap: wrap;
   align-items: center;
   gap: var(--ac-space-2);
-}
-
-.button-row--end {
-  justify-content: flex-end;
 }
 
 /* ---------- filters ---------- */
@@ -344,8 +467,36 @@ code,
 }
 
 .filters .ac-search {
-  flex: 1 1 360px;
-  max-width: 520px;
+  flex: 2 1 240px;
+  max-width: 440px;
+}
+
+/* A select of a filter: wide enough for its longest word, never squeezed. */
+.filters .filters__select,
+.filters .search-select {
+  flex: 1 1 160px;
+  min-width: 150px;
+  max-width: 260px;
+}
+
+.filters .ac-date-field {
+  flex: 0 0 168px;
+}
+
+.filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+}
+
+/* The count inside a chip (X5). */
+.chip-count {
+  margin-left: 6px;
+  color: var(--ac-color-text-muted);
+}
+
+.ac-chip--selected .chip-count {
+  color: var(--ac-color-accent-on-tint);
 }
 
 .chips {
@@ -426,10 +577,10 @@ code,
 
 .admin-table td {
   height: 44px;
-  padding: var(--ac-space-2) var(--ac-space-3);
+  padding: 6px var(--ac-space-3);
   border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-  vertical-align: top;
-  overflow-wrap: anywhere;
+  vertical-align: middle;
+  overflow-wrap: break-word;
 }
 
 .admin-table tbody tr:last-child td {
@@ -444,6 +595,120 @@ code,
 
 .admin-table td.admin-table__actions {
   overflow-wrap: normal;
+}
+
+.admin-table__actions > .button-row,
+.admin-table__actions > .row-actions {
+  justify-content: flex-end;
+}
+
+/* X20: fixed columns — the same widths on every tab of a list; sums, dates,
+   numbers, phones and statuses in one line; only the name or the text wraps.
+   Narrower than its columns, the table scrolls inside its frame and its first
+   column stays in place. */
+.admin-table--fixed {
+  table-layout: fixed;
+}
+
+.admin-table--fixed th:first-child,
+.admin-table--fixed td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--ac-color-surface);
+}
+
+.admin-table th.num,
+.admin-table td.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-table .nowrap,
+.admin-table .ac-badge {
+  white-space: nowrap;
+}
+
+/* The row is the link (X1): the whole row leads to its object. */
+.row--link {
+  cursor: pointer;
+}
+
+.row--link:hover td,
+.row--link:hover td:first-child {
+  background: var(--ac-color-surface-raised);
+}
+
+.row-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row-title__link {
+  color: var(--ac-color-text);
+  font-weight: var(--ac-font-weight-body-strong);
+  overflow-wrap: break-word;
+}
+
+.row-title__link:hover,
+.row--link:hover .row-title__link {
+  color: var(--ac-color-accent);
+  text-decoration: none;
+}
+
+.row-title__sub {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The actions of a row: one small button and «⋯» (X6, X27). */
+.row-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ac-space-2);
+}
+
+/* The photo of an item or its placeholder (X17). */
+.thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ac-radius-s);
+  object-fit: cover;
+}
+
+.thumb--40 {
+  width: 40px;
+  height: 40px;
+}
+
+.thumb--48 {
+  width: 48px;
+  height: 48px;
+}
+
+.thumb--72 {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--ac-radius-m);
+}
+
+.thumb--160 {
+  width: 160px;
+  height: 160px;
+  border-radius: var(--ac-radius-m);
+}
+
+.thumb--empty {
+  background: var(--ac-color-surface-raised);
+  color: var(--ac-color-text-muted);
 }
 
 .row--muted td {
@@ -462,46 +727,89 @@ code,
   width: 46%;
 }
 
-.value-text {
-  max-width: 320px;
-  overflow-wrap: anywhere;
-}
-
-.readonly-note {
-  white-space: normal;
-  max-width: 160px;
-  text-align: right;
-}
-
 .warning-text {
   color: var(--ac-color-warning);
 }
 
-.entity-id {
-  overflow-wrap: anywhere;
-}
-
+/* «было → стало» of the journal (X16): no backgrounds — the old value
+   `textMuted`, the new one `text`; a long file name breaks only where it must. */
 .change-lines {
-  max-width: 360px;
+  min-width: 0;
 }
 
 .change-line {
-  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: break-word;
 }
 
-.change-line__value {
-  padding: 0 2px;
-  border-radius: var(--ac-radius-xs);
-  background: var(--ac-color-fill);
+.change-line__field,
+.change-line__old,
+.change-line__arrow {
+  color: var(--ac-color-text-muted);
 }
 
-.change-line__value--new {
-  background: var(--ac-color-accent-tint);
-  color: var(--ac-color-accent-on-tint);
+.change-line__new {
+  color: var(--ac-color-text);
 }
 
-.reason-cell {
-  max-width: 260px;
+.change-lines__details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: var(--ac-space-2);
+  border-left: 2px solid var(--ac-color-border);
+}
+
+.change-lines .ac-button--text {
+  align-self: flex-start;
+  min-height: 24px;
+}
+
+/* A name that should stay on one line: cut, the whole of it on hover. */
+.cell-one-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-table td {
+  vertical-align: top;
+  padding-block: 10px;
+}
+
+/* «Период»: two dates of one filter, «с — по». */
+.period {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.period__fields {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ac-space-2);
+}
+
+.period__fields .ac-field__label {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.period__fields .ac-date-field {
+  width: 148px;
+}
+
+.period__dash {
+  align-self: center;
+  color: var(--ac-color-text-muted);
 }
 
 /* A status mark: a dot and the word (not color alone, DESIGN 7.12). */
@@ -527,34 +835,108 @@ code,
   content: "";
 }
 
-.status--open {
-  color: var(--ac-color-warning);
+/* «Настройки» (X22): the groups in a sticky list on the left, one on the right. */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--ac-space-6);
 }
 
-.status--acknowledged {
-  color: var(--ac-color-accent);
-}
-
-.status--closed {
-  color: var(--ac-color-text-muted);
-}
-
-.arrow-up .ac-icon {
-  transform: rotate(90deg);
-}
-
-.arrow-down .ac-icon {
-  transform: rotate(-90deg);
-}
-
-.settings-group {
+.settings-nav {
+  position: sticky;
+  top: calc(var(--ac-top-bar) + var(--ac-space-4));
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-3);
+  max-height: calc(100dvh - var(--ac-top-bar) - 2 * var(--ac-space-4));
+  overflow-y: auto;
 }
 
-.settings-group + .settings-group {
-  margin-top: var(--ac-space-6);
+.settings-nav .ac-search {
+  max-width: none;
+}
+
+.settings-nav__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-nav__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+  min-height: 36px;
+  padding: 6px var(--ac-space-3);
+  border-radius: var(--ac-radius-s);
+  color: var(--ac-color-text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.settings-nav__item:hover {
+  background: var(--ac-color-surface-raised);
+  text-decoration: none;
+}
+
+.settings-nav__item--on {
+  background: var(--ac-color-accent-tint);
+  color: var(--ac-color-accent-on-tint);
+  font-weight: var(--ac-font-weight-label);
+}
+
+.settings-nav__item--empty {
+  color: var(--ac-color-text-disabled);
+}
+
+.settings-nav__count {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+}
+
+.settings-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  min-width: 0;
+}
+
+/* A name with its order arrows next to it (not a column of 120, X6). */
+.order-name {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.order-arrows {
+  display: inline-flex;
+  flex: none;
+}
+
+/* A composite setting: a field per part, or a check box per kind. */
+.composite-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.composite-field--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ac-space-3);
+}
+
+.composite-field--grid > legend {
+  grid-column: 1 / -1;
 }
 
 /* ---------- dialogs ---------- */
@@ -567,11 +949,6 @@ code,
 
 .dialog-stack > .ac-button--text {
   align-self: flex-start;
-}
-
-/* TASK-050: a rating below the threshold of the signal. */
-.rating-low {
-  color: var(--ac-color-danger);
 }
 
 .dialog-error {
@@ -612,58 +989,53 @@ code,
   font-weight: var(--ac-font-weight-body-strong);
 }
 
-/* ---------- home ---------- */
+/* ---------- home (A-HOME, TASK-080) ----------
+   Cards of one height: the title in one line, the number at one height,
+   the note at most two lines; a warning stripe on the left — they need
+   someone. Zeros are one line under the cards. */
 .home-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--ac-space-8);
-}
-
-.home-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-3);
+  gap: var(--ac-space-6);
 }
 
 .home-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-rows: 1fr;
   gap: var(--ac-space-3);
 }
 
 .home-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
   gap: var(--ac-space-2);
   min-width: 0;
-  padding: var(--ac-space-4);
+  padding: var(--ac-space-4) var(--ac-space-4) var(--ac-space-4) var(--ac-space-5);
   border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-left: 3px solid var(--ac-color-border);
   border-radius: var(--ac-radius-m);
   background: var(--ac-color-surface);
   color: var(--ac-color-text);
-  font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
-.home-card:hover {
+a.home-card:hover {
   border-color: var(--ac-color-border-field);
+  text-decoration: none;
 }
 
-.home-card:focus-visible {
-  outline: var(--ac-focus-width) solid var(--ac-color-accent);
-  outline-offset: var(--ac-focus-offset);
-}
-
-.home-card--attention {
-  border-color: var(--ac-color-warning);
+.home-card--attention,
+a.home-card--attention:hover {
+  border-left-color: var(--ac-color-warning);
 }
 
 .home-card__title {
   display: flex;
   align-items: center;
   gap: var(--ac-space-2);
+  min-width: 0;
 }
 
 .home-card__title > .ac-icon {
@@ -671,10 +1043,91 @@ code,
   color: var(--ac-color-text-muted);
 }
 
+.home-card__name {
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+/* A card's title keeps two lines of room: the numbers of a row stand at one height. */
+.home-card .home-card__title {
+  align-items: flex-start;
+  min-height: 44px;
+}
+
+.home-card .home-card__title > .ac-icon {
+  margin-top: 1px;
+}
+
+.home-card .home-card__name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
 .home-card__value {
   font-size: 28px;
   font-weight: var(--ac-font-weight-title-l);
-  line-height: 34px;
+  line-height: 35px;
+}
+
+.home-card__note {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.home-budget {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ac-space-2);
+  max-width: 460px;
+  padding: var(--ac-space-4);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.home-budget__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.home-budget__head > .ac-icon {
+  color: var(--ac-color-ai);
+}
+
+.home-budget__value {
+  font-size: 20px;
+  line-height: 26px;
+}
+
+.home-budget__bar {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--ac-color-fill);
+}
+
+.home-budget__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ac-color-accent);
+}
+
+.home-budget__bar--over > span {
+  background: var(--ac-color-warning);
 }
 
 .home-outage {
@@ -694,30 +1147,21 @@ code,
   color: var(--ac-color-danger);
 }
 
-.home-outage code {
-  overflow-wrap: anywhere;
-}
-
 .home-calm {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--ac-space-2);
   color: var(--ac-color-text-muted);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .home-calm > .ac-icon {
   color: var(--ac-color-success);
 }
 
-/* ---------- security ---------- */
-.card-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-3);
-}
-
-.card-section + .card-section {
-  margin-top: var(--ac-space-4);
+.home-calm__label {
+  color: var(--ac-color-text);
 }
 
 /* ---------- the catalog (TASK-035) ----------
@@ -854,28 +1298,12 @@ code,
   border-radius: var(--ac-radius-s);
 }
 
-/* The order arrows of the selected node only: choose a node, then move it. */
-.tree-row__order {
-  display: none;
-  flex: none;
-}
-
-.tree-row--on .tree-row__order {
-  display: flex;
-  margin-left: auto;
-}
-
 .tree-row--on {
   flex-wrap: wrap;
 }
 
 .tree-row--on .tree-row__name {
   flex: 1 1 140px;
-}
-
-.tree-row__order .ac-icon-button {
-  width: 32px;
-  height: 32px;
 }
 
 .catalog-detail {
@@ -886,42 +1314,11 @@ code,
   white-space: nowrap;
 }
 
-.attributes-table td:nth-child(2) {
-  min-width: 180px;
-}
-
-.attributes-table td:first-child .button-row,
-.photos-table .button-row {
-  flex-wrap: nowrap;
-}
-
-.attributes-table__type {
-  min-width: 120px;
-}
-
 .detail-stack {
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-4);
   min-width: 0;
-}
-
-.detail-head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--ac-space-3);
-  min-width: 0;
-}
-
-.detail-head__glyph {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--ac-radius-m);
-  background: var(--ac-color-fill);
 }
 
 .row--highlight td {
@@ -973,119 +1370,14 @@ code,
   gap: var(--ac-space-3);
 }
 
-.option-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.option-row {
-  display: flex;
-  align-items: center;
-  gap: var(--ac-space-2);
-  padding: var(--ac-space-1) 0;
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-}
-
-.option-row.row--muted {
-  color: var(--ac-color-text-muted);
-}
-
-.option-row.row--highlight {
-  background: var(--ac-color-accent-tint);
-}
-
-.option-row__name {
-  flex: 1 1 auto;
-}
-
-.filters--flags {
-  gap: var(--ac-space-2) var(--ac-space-6);
-}
-
-.thumb-cell {
-  width: 56px;
-}
-
-.thumb {
-  display: block;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--ac-radius-s);
-  background: var(--ac-color-fill);
-  object-fit: cover;
-}
-
-.thumb--large {
-  width: 72px;
-  height: 72px;
-}
-
-.items-table td:nth-child(3) {
-  max-width: 280px;
-}
-
 /* The fill table: a computer's width, scrolled sideways inside its frame. */
 .fill-table th,
 .fill-table td {
   min-width: 140px;
 }
 
-.fill-table__item {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  min-width: 220px;
-  max-width: 280px;
-  background: var(--ac-color-surface);
-}
-
 .fill-table__col--on {
   color: var(--ac-color-accent);
-}
-
-.fill-cell--changed {
-  background: var(--ac-color-accent-tint);
-}
-
-.fill-cell--error {
-  background: var(--ac-color-danger-tint);
-}
-
-.fill-cell__error {
-  display: block;
-  margin-top: 2px;
-  color: var(--ac-color-danger);
-}
-
-.cell-input {
-  width: 100%;
-  min-width: 0;
-  height: 32px;
-  padding: 0 var(--ac-space-2);
-  border: var(--ac-line) solid var(--ac-color-border-field);
-  border-radius: var(--ac-radius-s);
-  background: var(--ac-color-surface);
-  color: var(--ac-color-text);
-  font: inherit;
-  font-size: 14px;
-}
-
-.cell-input[aria-invalid="true"] {
-  border-color: var(--ac-color-danger);
-}
-
-.cell-input:focus-visible {
-  outline: var(--ac-focus-width) solid var(--ac-color-accent);
-  outline-offset: var(--ac-focus-offset);
-}
-
-.cell-number {
-  display: flex;
-  align-items: center;
-  gap: var(--ac-space-1);
 }
 
 .save-bar {
@@ -1103,14 +1395,6 @@ code,
   background: var(--ac-color-surface-raised);
 }
 
-.values-table td:first-child {
-  width: 34%;
-}
-
-.values-table td:nth-child(2) {
-  width: 34%;
-}
-
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1124,34 +1408,6 @@ code,
   flex-direction: column;
   gap: var(--ac-space-2);
   min-width: 0;
-}
-
-/* Search synonyms of an item or a category (TASK-044): a plain list and one form. */
-.synonym-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: var(--ac-line-hairline) solid var(--ac-color-border);
-  border-radius: var(--ac-radius-s);
-}
-
-.synonym-list__item {
-  display: flex;
-  align-items: center;
-  gap: var(--ac-space-3);
-  padding: var(--ac-space-1) var(--ac-space-1) var(--ac-space-1) var(--ac-space-3);
-}
-
-.synonym-list__item > :first-child {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.synonym-list__item + .synonym-list__item {
-  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
 }
 
 .synonym-form {
@@ -1202,18 +1458,6 @@ code,
   cursor: default;
 }
 
-.upload-box,
-.check-box {
-  padding: var(--ac-space-4);
-  border: var(--ac-line-hairline) solid var(--ac-color-border);
-  border-radius: var(--ac-radius-m);
-}
-
-.upload-box input[type="file"] {
-  height: auto;
-  padding: var(--ac-space-2);
-}
-
 .vehicle-fields {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1233,18 +1477,6 @@ code,
   border-left: 3px solid var(--ac-color-text-muted);
   border-radius: var(--ac-radius-s);
   background: var(--ac-color-fill);
-}
-
-.check-result--fits {
-  border-left-color: var(--ac-color-success);
-}
-
-.check-result--needs_details {
-  border-left-color: var(--ac-color-warning);
-}
-
-.check-result--does_not_fit {
-  border-left-color: var(--ac-color-danger);
 }
 
 .tab-body {
@@ -1283,15 +1515,6 @@ code,
   font-weight: var(--ac-font-weight-label);
 }
 
-.vehicles-table td,
-.vehicles-table th {
-  white-space: normal;
-}
-
-.vehicles-table .years {
-  white-space: nowrap;
-}
-
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1300,18 +1523,6 @@ code,
 
 .form-grid--full {
   grid-column: 1 / -1;
-}
-
-.counts-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ac-space-2) var(--ac-space-6);
-  margin: 0;
-}
-
-.counts-line > div {
-  display: flex;
-  flex-direction: column;
 }
 
 .progress {
@@ -1328,13 +1539,6 @@ code,
   transition: width var(--ac-motion-fast) linear;
 }
 
-.import-columns {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--ac-space-4);
-  align-items: start;
-}
-
 .reason-list {
   display: flex;
   flex-direction: column;
@@ -1344,59 +1548,8 @@ code,
   list-style: none;
 }
 
-.panel-box {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-3);
-  padding: var(--ac-space-4);
-  border: var(--ac-line-hairline) solid var(--ac-color-border);
-  border-radius: var(--ac-radius-m);
-  background: var(--ac-color-surface);
-}
-
 .row--highlight td {
   background: var(--ac-color-fill);
-}
-
-/* ---------- suppliers (TASK-036) ----------
-   Long Kazakh company names wrap; nothing has a fixed width text could break at 1024. */
-.status--danger {
-  color: var(--ac-color-danger);
-}
-
-.funnel-tabs {
-  align-items: center;
-}
-
-.funnel-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ac-space-2);
-  min-height: 32px;
-  padding: 0 var(--ac-space-3);
-  border: var(--ac-line-hairline) solid var(--ac-color-border);
-  border-radius: var(--ac-radius-full);
-  background: var(--ac-color-surface);
-  color: var(--ac-color-text);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.funnel-tab:focus-visible {
-  outline: var(--ac-focus-width) solid var(--ac-color-accent);
-  outline-offset: var(--ac-focus-offset);
-}
-
-.funnel-tab--on {
-  border-color: var(--ac-color-accent);
-  background: var(--ac-color-fill);
-  font-weight: var(--ac-font-weight-body-strong);
-}
-
-.funnel-tab__count {
-  color: var(--ac-color-text-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .facts {
@@ -1431,50 +1584,6 @@ code,
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.notes-list li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 960px;
-  padding-bottom: var(--ac-space-2);
-  border-bottom: var(--ac-line-hairline) solid var(--ac-color-border);
-}
-
-.notes-list p {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.form-page {
-  max-width: 960px;
-}
-
-.supplier-head {
-  min-width: 0;
-}
-
-.supplier-head__line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--ac-space-2) var(--ac-space-4);
-}
-
-.supplier-head__line .cell-stack {
-  flex-direction: row;
-  gap: var(--ac-space-2);
-}
-
-.member-actions {
-  flex-wrap: wrap;
-  max-width: 360px;
-}
-
-/* ---------- orders, users, the header's search (TASK-036.B) ---------- */
-.status--done {
-  color: var(--ac-color-success);
 }
 
 /* The search of the header: grows into the free space between the name and the actions. */
@@ -1553,46 +1662,29 @@ code,
 /* A person's number partly hidden and «Показать номер». */
 .phone-reveal {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The mask and the eye on one line: a number never breaks (X20). */
+.phone-reveal__line {
+  display: inline-flex;
   align-items: center;
-  gap: var(--ac-space-2);
+  gap: var(--ac-space-1);
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.phone-reveal__eye {
+  color: var(--ac-color-text-muted);
+}
+
+.phone-reveal__eye:hover {
+  color: var(--ac-color-accent);
 }
 
 .phone-reveal__error {
   flex-basis: 100%;
   color: var(--ac-color-danger);
-}
-
-.select--narrow input {
-  min-width: 0;
-  width: 96px;
-}
-
-.filters__select-search {
-  min-width: 240px;
-}
-
-.orders-table td {
-  vertical-align: top;
-}
-
-/* ---------- reviews and complaints (TASK-049) ----------
-   A review's text keeps its lines and wraps inside its cell; the stars are text. */
-.review-text {
-  max-width: 520px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.review-score {
-  color: var(--ac-color-warning);
-  letter-spacing: 1px;
-}
-
-.review-reasons {
-  color: var(--ac-color-danger);
-}
-
-.page-tabs--inner {
-  margin-top: 4px;
 }

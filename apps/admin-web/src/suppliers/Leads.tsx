@@ -8,23 +8,30 @@ import {
   Button,
   Dialog,
   EmptyState,
+  IconButton,
   LoadingContent,
+  SearchField,
   SkeletonList,
+  StatusBadge,
+  TableToolbar,
+  TextAreaField,
   TextField,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
 import { formatMoment } from "../format";
+import { StatusChips } from "../layout/filters";
+import { AppLink, Header, RowTitle, rowLink, Table } from "../layout/layout";
 import { navigateTo, routePaths, supplierLeadPath, supplierPath, withQuery } from "../router";
 import { count } from "../signals/signal-words";
-import { FormError, LoadError, MoreButton, usePaged } from "../vehicles/shared";
+import { LoadError, usePaged } from "../vehicles/shared";
 import {
   CitySelect,
-  SearchBox,
-  SuppliersTabs,
+  MoreButton,
+  SaverError,
+  suppliersTabs,
   TypeSelect,
   useAddressFilters,
   useCities,
@@ -36,19 +43,31 @@ import {
   LEAD_SOURCE_TEXT,
   LEAD_STATUS_TEXT,
   LEAD_STATUSES,
+  leadSearchOf,
   mobilePhone,
   PHONE_HINT,
   SUPPLIER_TYPE_TEXT,
 } from "./supplier-words";
+import "./suppliers.css";
 
 type TypeFilter = NonNullable<SupplierLeadListQuery["type"]>;
 
+const COLUMNS = [
+  { key: "company", header: "Компания" },
+  { key: "city", header: "Город", width: 180 },
+  { key: "contact", header: "Контакт", width: 200 },
+  { key: "stage", header: "Этап", width: 210 },
+  { key: "at", header: "Пришла", width: 150 },
+];
+
 /**
- * A-SUP-01 «Воронка» (SCREENS 7.4; TASK-036): the requests by status — a
- * tab per column with the server's count under the other filters (city,
- * type, БИН, name), newest first; requests of one БИН are marked, and so
- * is a БИН a supplier already has. The home page's «Новые заявки на
- * подключение» opens it on «Новая».
+ * A-SUP-01 «Воронка» (SCREENS 7.4; TASK-036, TASK-080): the second page of
+ * «Поставщики». The stages as chips with the server's counts under the
+ * other filters; one search — a part of the name, or the БИН by its digits
+ * (Enter — at once); the city and the type; newest first, the whole row
+ * opens the request. Requests of one БИН are marked, and so is a БИН a
+ * supplier already has. The home page's «Новые заявки на подключение»
+ * opens it on «Новая».
  */
 export function Leads() {
   const { query, set } = useAddressFilters();
@@ -62,10 +81,10 @@ export function Leads() {
     bin: query.get("bin")?.trim() || undefined,
     q: query.get("q")?.trim() || undefined,
   };
-  const [binText, setBinText] = useState(filters.bin ?? "");
+  const filtered = Boolean(filters.cityId || filters.type || filters.bin || filters.q);
   const list = usePaged<AdminSupplierLead>(async (cursor) => {
     const page = await apiClient.listSupplierLeads({ query: { ...filters, limit: 50, cursor } });
-    // The columns' counts ride along with the first page.
+    // The stages' counts ride along with the first page.
     return {
       items: page.leads,
       total: page.total,
@@ -75,102 +94,98 @@ export function Leads() {
   }, JSON.stringify(filters));
   const counts = (list.first.data as { counts?: Counts } | undefined)?.counts ?? null;
   const all = counts ? LEAD_STATUSES.reduce((sum, key) => sum + (counts[key] ?? 0), 0) : null;
+  const reset = () =>
+    navigateTo(withQuery(routePaths.supplierLeads, { status: filters.status }), { replace: true });
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Заявки на подключение</h1>
-        <Button icon="plus" onClick={() => setAdding(true)}>
-          Добавить заявку вручную
-        </Button>
-      </div>
-      <SuppliersTabs active="leads" />
-      <nav className="chips funnel-tabs" aria-label="Этапы воронки">
-        <FunnelTab
-          label="Все"
-          count={all}
-          on={!filters.status}
-          onClick={() => set({ status: undefined })}
-        />
-        {LEAD_STATUSES.map((key) => (
-          <FunnelTab
-            key={key}
-            label={LEAD_STATUS_TEXT[key]}
-            count={counts ? (counts[key] ?? 0) : null}
-            on={filters.status === key}
-            onClick={() => set({ status: key })}
+      <Header
+        title="Поставщики"
+        tabs={suppliersTabs("leads")}
+        actions={
+          <>
+            <IconButton icon="refresh" label="Обновить" size={20} onClick={list.first.reload} />
+            <Button size="s" icon="plus" onClick={() => setAdding(true)}>
+              Добавить заявку вручную
+            </Button>
+          </>
+        }
+      />
+      <div className="filters__group">
+        <div className="filters">
+          <LeadSearch
+            q={filters.q}
+            bin={filters.bin}
+            onSearch={(found) => set({ q: found.q, bin: found.bin })}
           />
-        ))}
-      </nav>
-      <div className="filters">
-        <SearchBox label="Название компании" />
-        <CitySelect
-          value={filters.cityId ?? ""}
-          onChange={(cityId) => set({ cityId: cityId || undefined })}
-          cities={cities}
-          any="Все"
-        />
-        <TypeSelect
-          value={filters.type ?? ""}
-          onChange={(type) => set({ type: type || undefined })}
-          any="Все"
-        />
-        <form
-          className="select"
-          onSubmit={(event) => {
-            event.preventDefault();
-            set({ bin: binText.trim() || undefined });
-          }}
-        >
-          <span className="ac-text-caption ac-muted">БИН (Enter — найти)</span>
-          <input
-            value={binText}
-            inputMode="numeric"
-            maxLength={32}
-            onChange={(event) => setBinText(event.target.value)}
-            onBlur={() => set({ bin: binText.trim() || undefined })}
+          <CitySelect
+            value={filters.cityId ?? ""}
+            onChange={(cityId) => set({ cityId: cityId || undefined })}
+            cities={cities}
+            any="Все"
           />
-        </form>
+          <TypeSelect
+            value={filters.type ?? ""}
+            onChange={(type) => set({ type: type || undefined })}
+            any="Все"
+          />
+        </div>
+        <StatusChips<SupplierLeadStatusValue>
+          label="Этапы воронки"
+          value={filters.status}
+          allCount={all}
+          chips={LEAD_STATUSES.map((key) => ({
+            value: key,
+            label: LEAD_STATUS_TEXT[key],
+            count: counts ? counts[key] || null : null,
+          }))}
+          onChange={(next) => set({ status: next })}
+        />
       </div>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent
         ready={list.first.data !== undefined}
         indicator={list.first.indicator}
         label="Загрузка"
+        swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted">Всего: {list.total.toLocaleString("ru-RU")}</p>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon="store"
-            title="Заявок нет"
-            text={
-              filters.status
-                ? `На этапе «${LEAD_STATUS_TEXT[filters.status]}» заявок с такими отборами нет.`
-                : "Заявки приходят с публичной формы; после звонка заявку можно добавить вручную."
-            }
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table leads-table">
-              <thead>
-                <tr>
-                  <th scope="col">Компания</th>
-                  <th scope="col">Город и что предлагает</th>
-                  <th scope="col">Контакт</th>
-                  <th scope="col">Этап</th>
-                  <th scope="col">Пришла</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((lead) => (
-                  <LeadRow key={lead.id} lead={lead} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <MoreButton list={list} />
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={reset}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {list.items.length === 0 ? (
+            <EmptyState
+              icon="store"
+              title={filtered ? "Ничего не нашлось" : "Заявок нет"}
+              text={
+                filtered
+                  ? "Измените поиск или отборы"
+                  : filters.status
+                    ? `На этапе «${LEAD_STATUS_TEXT[filters.status]}» заявок нет`
+                    : "Заявки приходят с публичной формы; после звонка заявку можно добавить вручную"
+              }
+              action={
+                filtered ? (
+                  <Button variant="secondary" onClick={reset}>
+                    Сбросить фильтры
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Table label="Заявки на подключение" columns={COLUMNS}>
+              {list.items.map((lead) => (
+                <LeadRow key={lead.id} lead={lead} />
+              ))}
+            </Table>
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
       <CreateLeadDialog
         open={adding}
@@ -184,89 +199,119 @@ export function Leads() {
   );
 }
 
-/** The columns of the funnel under the other filters. */
+/** The stages' counts under the other filters. */
 type Counts = Partial<Record<SupplierLeadStatusValue, number>>;
 
-function FunnelTab({
-  label,
-  count,
-  on,
-  onClick,
+/**
+ * «Название или БИН» (X4): letters search the name a moment after typing
+ * stops; digits are a БИН — searched when all 12 are typed, or on Enter.
+ */
+function LeadSearch({
+  q,
+  bin,
+  onSearch,
 }: {
-  label: string;
-  count: number | null;
-  on: boolean;
-  onClick: () => void;
+  q: string | undefined;
+  bin: string | undefined;
+  onSearch: (found: { q?: string; bin?: string }) => void;
 }) {
+  const current = bin ?? q ?? "";
+  const [text, setText] = useState(current);
+  const [seen, setSeen] = useState(current);
+  if (current !== seen) {
+    setSeen(current);
+    setText(current);
+  }
+  useEffect(() => {
+    const found = leadSearchOf(text);
+    if ((found.q ?? "") === (q ?? "") && (found.bin ?? "") === (bin ?? "")) return;
+    // A БИН being typed waits for its twelfth digit or for Enter.
+    if (found.bin !== undefined && !found.complete) return;
+    const timer = setTimeout(() => onSearch({ q: found.q, bin: found.bin }), 350);
+    return () => clearTimeout(timer);
+  });
   return (
-    <button
-      type="button"
-      className={on ? "funnel-tab funnel-tab--on" : "funnel-tab"}
-      aria-pressed={on}
-      onClick={onClick}
-    >
-      {label}
-      {count !== null && <span className="funnel-tab__count">{count}</span>}
-    </button>
+    <SearchField
+      className="ac-search--compact filters__search"
+      label="Поиск заявок"
+      placeholder="Название или БИН"
+      value={text}
+      onChange={setText}
+      clearLabel="Очистить поиск"
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const found = leadSearchOf(text);
+        onSearch({ q: found.q, bin: found.bin });
+      }}
+    />
   );
 }
 
 function LeadRow({ lead }: { lead: AdminSupplierLead }) {
+  const href = supplierLeadPath(lead.id);
   return (
-    <tr>
+    <tr {...rowLink(href)}>
       <td>
-        <div className="cell-stack">
-          <span className="long-text" title={lead.companyName}>
-            <AppLink href={supplierLeadPath(lead.id)}>{lead.companyName}</AppLink>
-          </span>
-          <span className="ac-text-caption ac-muted mono">БИН {lead.bin}</span>
+        <span className="cell-stack">
+          <RowTitle href={href} sub={`БИН ${lead.bin}`}>
+            <span className="clamp" title={lead.companyName}>
+              {lead.companyName}
+            </span>
+          </RowTitle>
           {lead.sameBinLeads > 0 && (
-            <span className="ac-text-caption">
+            <span className="row-title__sub">
               <AppLink href={withQuery(routePaths.supplierLeads, { bin: lead.bin })}>
                 ещё {count(lead.sameBinLeads, "заявка", "заявки", "заявок")} этого БИН
               </AppLink>
             </span>
           )}
           {lead.existingSupplierId && lead.status !== "onboarded" && (
-            <span className="ac-text-caption warning-text">
+            <span className="row-title__sub">
               Этот БИН уже у поставщика ·{" "}
               <AppLink href={supplierPath(lead.existingSupplierId)}>Открыть</AppLink>
             </span>
           )}
-        </div>
+        </span>
       </td>
       <td>
-        <div className="cell-stack">
-          <span>{lead.city.names.ru}</span>
-          <span className="ac-text-caption ac-muted">{SUPPLIER_TYPE_TEXT[lead.type]}</span>
-        </div>
+        <span className="cell-stack">
+          <span className="ac-text-body-s cell-one-line">{lead.city.names.ru}</span>
+          <span className="row-title__sub">{SUPPLIER_TYPE_TEXT[lead.type]}</span>
+        </span>
       </td>
       <td>
-        <div className="cell-stack">
-          <span className="long-text">{lead.contactName}</span>
-          <span className="ac-text-caption ac-muted num">{hiddenPhone(lead.phone)}</span>
-        </div>
+        <span className="cell-stack">
+          <span className="ac-text-body-s cell-one-line" title={lead.contactName}>
+            {lead.contactName}
+          </span>
+          <span className="row-title__sub nowrap">{hiddenPhone(lead.phone)}</span>
+        </span>
       </td>
       <td>
-        <div className="cell-stack">
-          <span>{LEAD_STATUS_TEXT[lead.status]}</span>
+        <span className="cell-stack">
+          <span className="badges">
+            <StatusBadge kind="supplierLead" status={lead.status}>
+              {LEAD_STATUS_TEXT[lead.status]}
+            </StatusBadge>
+          </span>
           {lead.status === "rejected" && lead.rejectReason && (
-            <span className="ac-text-caption ac-muted clamp" title={lead.rejectReason}>
+            <span className="row-title__sub cell-one-line" title={lead.rejectReason}>
               {lead.rejectReason}
             </span>
           )}
           {lead.supplierId && (
-            <span className="ac-text-caption">
+            <span className="row-title__sub">
               <AppLink href={supplierPath(lead.supplierId)}>Карточка поставщика</AppLink>
             </span>
           )}
-        </div>
+        </span>
       </td>
-      <td className="num">
-        <div className="cell-stack">
-          <span className="ac-text-body-s">{formatMoment(lead.createdAt)}</span>
-          <span className="ac-text-caption ac-muted">{LEAD_SOURCE_TEXT[lead.source]}</span>
-        </div>
+      <td>
+        <span className="cell-stack">
+          <span className="ac-text-body-s nowrap">{formatMoment(lead.createdAt)}</span>
+          <span className="row-title__sub">{LEAD_SOURCE_TEXT[lead.source]}</span>
+        </span>
       </td>
     </tr>
   );
@@ -377,7 +422,7 @@ function CreateLeadDialog({
           maxLength={32}
           error={fieldError("bin")}
         />
-        <div className="field-row">
+        <div className="supplier-field-pair">
           <CitySelect
             value={form.cityId}
             onChange={(cityId) => change({ cityId })}
@@ -404,16 +449,14 @@ function CreateLeadDialog({
           inputMode="tel"
           error={fieldError("phone")}
         />
-        <label className="textarea">
-          <span className="ac-text-caption ac-muted">Заметка (необязательно)</span>
-          <textarea
-            value={form.note}
-            rows={2}
-            maxLength={2000}
-            onChange={(event) => change({ note: event.target.value })}
-          />
-        </label>
-        <FormError
+        <TextAreaField
+          label="Заметка (необязательно)"
+          value={form.note}
+          rows={2}
+          maxLength={2000}
+          onChange={(note) => change({ note })}
+        />
+        <SaverError
           saver={saver}
           fields={["companyName", "bin", "cityId", "contactName", "phone"]}
         />

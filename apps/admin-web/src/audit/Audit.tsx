@@ -3,44 +3,115 @@ import {
   type AuditActorRole,
   type AuditLogEntry,
   type AuditLogPage,
+  type AuditLogQuery,
 } from "@adclub/contracts";
-import { Banner, Button, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
-import { useState, type MouseEvent } from "react";
+import {
+  Banner,
+  Button,
+  DateField,
+  EmptyState,
+  IconButton,
+  LoadingContent,
+  SearchSelect,
+  SkeletonList,
+  TableToolbar,
+  type Choice,
+} from "@adclub/ui";
+import { useMemo, useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
-import { CLUB_TIME_ZONE, formatMoment } from "../format";
+import { FilterSelect } from "../layout/filters";
+import { Header } from "../layout/layout";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import {
   actionText,
-  reasonText,
-  actorText,
   almatyDayStart,
-  changeLines,
-  hiddenFieldsOf,
-  entityLink,
   entityText,
   knownActions,
   knownEntities,
   ROLE_TEXT,
 } from "./audit-words";
+import { JournalTable } from "./JournalTable";
 
 const PAGE = 50;
-/** «было → стало» lines shown before «Подробнее». */
-const SHORT_LINES = 2;
+
 function roleOf(value: string | null): AuditActorRole | undefined {
   const parsed = auditActorRoleSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
+/** The kinds of objects the header's search finds, and the filter of the journal each one is. */
+type ObjectKind = "order" | "user" | "member" | "supplier" | "lead" | "item";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `object=<kind>:<id>` of the address → the filter of the journal. */
+export function objectFilter(value: string | null): Partial<AuditLogQuery> {
+  const [kind, id] = (value ?? "").split(":");
+  if (!id || !UUID.test(id)) return {};
+  switch (kind as ObjectKind) {
+    case "order":
+      return { entityType: "order", entityId: id };
+    case "user":
+      return { accountId: id };
+    case "member":
+      return { entityType: "supplier_member", entityId: id };
+    case "supplier":
+      return { supplierId: id };
+    case "lead":
+      return { entityType: "supplier_lead", entityId: id };
+    case "item":
+      return { itemId: id };
+    default:
+      return {};
+  }
+}
+
+/** The objects of the header's search as choices of «Объект». */
+async function findObjects(query: string): Promise<Choice[]> {
+  if (query.trim().length < 2) return [];
+  const answer = await apiClient.searchAdmin({ query: { q: query.trim() } });
+  return [
+    ...answer.orders.map((order) => ({
+      id: `order:${order.id}`,
+      label: `Заявка № ${String(order.number)}`,
+      note: order.supplierName,
+    })),
+    ...answer.users.map((user) => ({
+      id: `user:${user.accountId}`,
+      label: user.name ?? "Пользователь без имени",
+      note: user.phone,
+    })),
+    ...answer.members.map((member) => ({
+      id: `member:${member.memberId}`,
+      label: member.displayName,
+      note: `Сотрудник · ${member.supplierName}`,
+    })),
+    ...answer.suppliers.map((supplier) => ({
+      id: `supplier:${supplier.id}`,
+      label: supplier.name,
+      note: "Поставщик",
+    })),
+    ...answer.leads.map((lead) => ({
+      id: `lead:${lead.id}`,
+      label: lead.companyName,
+      note: "Заявка на подключение",
+    })),
+    ...answer.items.map((item) => ({
+      id: `item:${item.id}`,
+      label: item.name,
+      note: [item.brand, item.article].filter(Boolean).join(" · ") || "Позиция",
+    })),
+  ];
+}
+
 /**
- * A-AUD (SCREENS 7.9; TASK-034 requirement 5): the action journal with
+ * A-AUD (SCREENS 7.9; TASK-034, TASK-080): the action journal. One row of
  * filters — who acted, the kind of object, the action, the period (days of
- * Almaty) — in the address, and the next page by the server's cursor. A
- * row: the time, who (the name or the number partly hidden), the action in
- * words, the object (a link when its section exists), «было → стало»
- * compactly with «Подробнее», the reason. The server never writes order
- * codes or secrets into the journal; the page shows only what it says.
+ * Almaty, «с — по»), and an object found by the header's search (a number,
+ * «№ 1028», a name, a БИН, an article) — in the address; the next page by
+ * the server's cursor. The rows are those of every card's «История» (X16).
  */
 export function Audit() {
   const location = useLocation();
@@ -51,8 +122,10 @@ export function Audit() {
     action: query.get("action") ?? undefined,
     from: query.get("from") ?? "",
     to: query.get("to") ?? "",
+    object: query.get("object") ?? undefined,
   };
   const key = JSON.stringify(filters);
+  const object = objectFilter(filters.object ?? null);
   const request = (cursor?: string) =>
     apiClient.listAuditLog({
       query: {
@@ -61,6 +134,7 @@ export function Audit() {
         action: filters.action || undefined,
         from: almatyDayStart(filters.from),
         to: almatyDayStart(filters.to, 1),
+        ...object,
         limit: PAGE,
         cursor,
       },
@@ -73,18 +147,29 @@ export function Audit() {
   }>({ key: "", entries: [], next: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
+  const [objectChoice, setObjectChoice] = useState<Choice | null>(null);
   const extra = older.key === key ? older : { key, entries: [], next: null };
   const entries = [...(first.data?.entries ?? []), ...extra.entries];
   const next = extra.entries.length > 0 ? extra.next : (first.data?.nextCursor ?? null);
+  const shownObject: Choice | null = !filters.object
+    ? null
+    : objectChoice?.id === filters.object
+      ? objectChoice
+      : { id: filters.object, label: entries[0]?.entityName ?? "Выбранный объект" };
 
-  const set = (name: string, value: string | undefined) => {
+  const set = (
+    patch: Partial<
+      Record<"actor" | "entity" | "action" | "from" | "to" | "object", string | undefined>
+    >,
+  ) => {
     const values = {
       actor: filters.actorRole,
       entity: filters.entityType,
       action: filters.action,
       from: filters.from,
       to: filters.to,
-      [name]: value,
+      object: filters.object,
+      ...patch,
     };
     navigateTo(withQuery(routePaths.audit, values), { replace: true });
   };
@@ -104,84 +189,81 @@ export function Audit() {
   };
 
   const filtered = Object.values(filters).some(Boolean);
+  const reset = () => {
+    setObjectChoice(null);
+    navigateTo(routePaths.audit, { replace: true });
+  };
+  const actions = useMemo(
+    () => knownActions.map((action) => ({ value: action, label: actionText(action) })),
+    [],
+  );
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Журнал действий</h1>
-        <Button variant="secondary" size="s" icon="refresh" onClick={first.reload}>
-          Обновить
-        </Button>
-      </div>
+      <Header
+        title="Журнал"
+        subtitle="Значимые действия администраторов, поставщиков, пользователей и системы; время — Алматы"
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={first.reload} />}
+      />
 
-      <div className="filters filters--grid">
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Кто</span>
-          <select
-            value={filters.actorRole ?? ""}
-            onChange={(event) => set("actor", event.target.value)}
-          >
-            <option value="">Все</option>
-            {auditActorRoleSchema.options.map((role) => (
-              <option key={role} value={role}>
-                {ROLE_TEXT[role]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Объект</span>
-          <select
-            value={filters.entityType ?? ""}
-            onChange={(event) => set("entity", event.target.value)}
-          >
-            <option value="">Все</option>
-            {knownEntities.map((entity) => (
-              <option key={entity} value={entity}>
-                {entityText(entity)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Действие</span>
-          <select
-            value={filters.action ?? ""}
-            onChange={(event) => set("action", event.target.value)}
-          >
-            <option value="">Все</option>
-            {knownActions.map((action) => (
-              <option key={action} value={action}>
-                {actionText(action)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">С (время Алматы)</span>
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(event) => set("from", event.target.value)}
-          />
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">По</span>
-          <input
-            type="date"
-            value={filters.to}
-            onChange={(event) => set("to", event.target.value)}
-          />
-        </label>
-        {filtered && (
-          <Button
-            variant="text"
-            size="s"
-            onClick={() => navigateTo(routePaths.audit, { replace: true })}
-          >
-            Сбросить
-          </Button>
-        )}
+      <div className="filters">
+        <SearchSelect
+          compact
+          label="Объект"
+          value={shownObject}
+          empty="Любой"
+          placeholder="№ заявки, имя, БИН, артикул"
+          search={findObjects}
+          onChange={(choice) => {
+            setObjectChoice(choice);
+            set({ object: choice?.id });
+          }}
+        />
+        <FilterSelect
+          label="Кто"
+          value={filters.actorRole}
+          options={auditActorRoleSchema.options.map((role) => ({
+            value: role,
+            label: ROLE_TEXT[role],
+          }))}
+          onChange={(actor) => set({ actor })}
+        />
+        <FilterSelect
+          label="Вид объекта"
+          value={filters.entityType}
+          options={knownEntities.map((entity) => ({ value: entity, label: entityText(entity) }))}
+          onChange={(entity) => set({ entity })}
+        />
+        <FilterSelect
+          label="Действие"
+          value={filters.action}
+          options={actions}
+          onChange={(action) => set({ action })}
+        />
+        <fieldset className="period">
+          <legend className="ac-field__label">Период</legend>
+          <div className="period__fields">
+            <DateField
+              compact
+              label="с"
+              value={filters.from}
+              locale="ru"
+              max={filters.to || undefined}
+              onChange={(from) => set({ from: from || undefined })}
+            />
+            <span className="period__dash" aria-hidden="true">
+              —
+            </span>
+            <DateField
+              compact
+              label="по"
+              value={filters.to}
+              locale="ru"
+              min={filters.from || undefined}
+              onChange={(to) => set({ to: to || undefined })}
+            />
+          </div>
+        </fieldset>
       </div>
 
       {first.error !== undefined && (
@@ -204,118 +286,38 @@ export function Audit() {
         swapKey={first.answerKey}
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        {entries.length === 0 ? (
-          <EmptyState
-            icon="clock"
-            title={filtered ? "Ничего не нашлось" : "Журнал пуст"}
-            text={filtered ? "Измените отборы" : "Здесь появятся значимые действия людей"}
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table audit-table">
-              <caption className="ac-visually-hidden">
-                Журнал действий, время — Алматы ({CLUB_TIME_ZONE})
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Время</th>
-                  <th scope="col">Кто</th>
-                  <th scope="col">Действие и объект</th>
-                  <th scope="col">Было → стало</th>
-                  <th scope="col">Причина</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <AuditRow key={entry.id} entry={entry} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {moreError && <Banner tone="danger">{moreError}</Banner>}
-        {next && (
-          <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
-            Показать ещё
-          </Button>
-        )}
+        <div className="list-block">
+          <TableToolbar total={null}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={reset}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {entries.length === 0 ? (
+            <EmptyState
+              icon="history"
+              title={filtered ? "Ничего не нашлось" : "Журнал пуст"}
+              text={filtered ? "Измените отборы" : "Здесь появятся значимые действия людей"}
+              action={
+                filtered ? (
+                  <Button variant="secondary" onClick={reset}>
+                    Сбросить фильтры
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <JournalTable entries={entries} caption="Журнал действий" />
+          )}
+          {moreError && <Banner tone="danger">{moreError}</Banner>}
+          {next && (
+            <Button variant="secondary" size="s" onClick={loadMore} loading={loadingMore}>
+              Показать ещё
+            </Button>
+          )}
+        </div>
       </LoadingContent>
     </>
-  );
-}
-
-/** One entry of the journal; the item card's «История» shows the same rows (TASK-035). */
-export function AuditRow({ entry }: { entry: AuditLogEntry }) {
-  const [open, setOpen] = useState(false);
-  const all = changeLines(entry.before, entry.after, hiddenFieldsOf(entry.entityType), {
-    entityType: entry.entityType,
-    names: entry.names,
-  });
-  // Ids, versions and service marks only under «Подробнее» (TASK-036.B), with the object's id.
-  const lines = all.filter((line) => !line.technical);
-  const shown = open ? all : lines.slice(0, SHORT_LINES);
-  const hiddenCount = all.length - Math.min(lines.length, SHORT_LINES);
-  const link = entityLink(entry.entityType, entry.entityId, entry);
-  const follow = (event: MouseEvent) => {
-    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
-    event.preventDefault();
-    navigateTo(link);
-  };
-  return (
-    <tr>
-      <td className="num ac-text-body-s">{formatMoment(entry.at)}</td>
-      <td>
-        <div className="cell-stack">
-          <span className="ac-text-body-s">{actorText(entry.actor)}</span>
-          {actorText(entry.actor) !== ROLE_TEXT[entry.actor.role] && (
-            <span className="ac-text-caption ac-muted">{ROLE_TEXT[entry.actor.role]}</span>
-          )}
-        </div>
-      </td>
-      <td>
-        <div className="cell-stack">
-          <span className="ac-text-body-strong">{actionText(entry.action)}</span>
-          <span className="ac-text-caption ac-muted">
-            {entityText(entry.entityType)}
-            {": "}
-            {link ? (
-              <a href={link} onClick={follow}>
-                {entry.entityName ?? "открыть"}
-              </a>
-            ) : (
-              <span>{entry.entityName ?? "не найден"}</span>
-            )}
-          </span>
-        </div>
-      </td>
-      <td>
-        <div className="cell-stack change-lines">
-          {shown.length === 0 && !open && <span className="ac-text-caption ac-muted">—</span>}
-          {shown.map((line, index) => (
-            <span key={index} className="ac-text-caption change-line">
-              {line.field && <span className="ac-muted">{line.field}: </span>}
-              <span className="change-line__value">{line.before}</span>
-              {" → "}
-              <span className="change-line__value change-line__value--new">{line.after}</span>
-            </span>
-          ))}
-          {open && (
-            <span className="ac-text-caption ac-muted entity-id">
-              Идентификатор: {entry.entityId}
-            </span>
-          )}
-          <Button variant="text" size="s" onClick={() => setOpen(!open)}>
-            {open ? "Свернуть" : hiddenCount > 0 ? `Подробнее (${hiddenCount})` : "Подробнее"}
-          </Button>
-        </div>
-      </td>
-      <td className="ac-text-body-s reason-cell">
-        {entry.reason ? (
-          reasonText(entry.action, entry.reason)
-        ) : (
-          <span className="ac-muted">—</span>
-        )}
-      </td>
-    </tr>
   );
 }

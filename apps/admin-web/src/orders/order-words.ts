@@ -10,7 +10,7 @@ import {
 } from "@adclub/contracts";
 import { orderTransition } from "@adclub/domain";
 import { actionErrorText, validationText } from "../errors";
-import { formatMoment } from "../format";
+import { formatMoment, formatMoney } from "../format";
 
 /**
  * The words of «Заявки» (TASK-036.B; SCREENS A-ORD-01…03, 7.0): what the
@@ -161,20 +161,80 @@ function formatDay(date: string): string {
 /** The statuses the filter offers, in the order of an order's life. */
 export const ORDER_STATUSES = Object.keys(ORDER_STATUS_TEXT) as OrderStatusValue[];
 
-/** The colour of a status mark (DESIGN 7.8): waiting, going on, done well, done otherwise. */
-export function statusTone(status: OrderStatusValue): string {
-  switch (status) {
-    case "created":
-    case "term_proposed":
-      return "status--open";
-    case "accepted":
-    case "ready":
-      return "status--acknowledged";
-    case "completed":
-      return "status--done";
-    default:
-      return "status--closed";
+/**
+ * The quiet mark of an order's kind next to its number (TASK-080, X7: a
+ * kind is not a state): «Под заказ», «Услуга»; an item in stock — none.
+ * The icons are those of the supplier cabinet.
+ */
+export function orderKindMark(
+  kind: AdminOrder["kind"],
+): { icon: "clock" | "wrench"; text: string } | null {
+  if (kind === "on_order") return { icon: "clock", text: "Под заказ" };
+  if (kind === "service") return { icon: "wrench", text: "Услуга" };
+  return null;
+}
+
+/** Whether a filter of A-ORD-01 is set (the tests are not: they are hidden by default). */
+export function ordersFiltered(filters: Omit<AdminOrderListQuery, "limit">): boolean {
+  return Boolean(
+    filters.q ||
+    filters.status ||
+    filters.kind ||
+    filters.supplierId ||
+    filters.cityId ||
+    filters.from ||
+    filters.to ||
+    filters.closedLate ||
+    filters.closedByAdmin ||
+    filters.hasComplaint ||
+    filters.test === "include",
+  );
+}
+
+const ALMATY_OFFSET_MS = 5 * 3_600_000;
+
+/** The day `YYYY-MM-DD` and the time `HH:MM` of a moment in Almaty (UTC+5). */
+export function almatyParts(iso: string): { date: string; time: string } {
+  const shifted = new Date(new Date(iso).getTime() + ALMATY_OFFSET_MS).toISOString();
+  return { date: shifted.slice(0, 10), time: shifted.slice(11, 16) };
+}
+
+/** The moment of a day and a time of Almaty; `undefined` — not a whole date and time. */
+export function almatyMoment(date: string, time: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+    return undefined;
   }
+  const moment = new Date(`${date}T${time}:00+05:00`);
+  return Number.isNaN(moment.getTime()) ? undefined : moment.toISOString();
+}
+
+/**
+ * «ЧЧ:ММ» as it is typed (X23: no browser time picker): digits only, the
+ * colon comes by itself — «1440» → «14:40», «9» → «9».
+ */
+export function maskTime(text: string): string {
+  const digits = text.replace(/\D/g, "").slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+}
+
+/**
+ * The window of an outage in words (A-ORD-03): «с 14:40 до 16:40 сегодня»,
+ * «с 23 окт., 14:40 до 16:40 24 окт.» — in Almaty time.
+ */
+export function windowText(from: string, to: string, now: Date = new Date()): string {
+  const start = almatyParts(from);
+  const end = almatyParts(to);
+  const today = almatyParts(now.toISOString()).date;
+  if (start.date === end.date) {
+    const day = start.date === today ? "сегодня" : formatDayOf(from, now);
+    return `с ${start.time} до ${end.time} ${day}`;
+  }
+  return `с ${formatMoment(from, now)} до ${formatMoment(to, now)}`;
+}
+
+function formatDayOf(iso: string, now: Date): string {
+  const moment = formatMoment(iso, now);
+  return moment.slice(0, moment.lastIndexOf(","));
 }
 
 export const FULFILLMENT_TEXT = { pickup: "Самовывоз", delivery: "Доставка" } as const;
@@ -423,7 +483,7 @@ function almatyStart(date: string | undefined, plusDays = 0): string | undefined
   return start.toISOString();
 }
 
-/** «12 500 ₸». */
+/** «12 500 ₸», never split between the number and the tenge (X20). */
 export function moneyText(amount: number): string {
-  return `${amount.toLocaleString("ru-RU")} ₸`;
+  return formatMoney(amount);
 }

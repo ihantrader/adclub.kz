@@ -1,6 +1,15 @@
 import { isApiError } from "@adclub/api-client";
 import type { Setting, SettingChangedResponse } from "@adclub/contracts";
-import { Banner, Button, Checkbox, Dialog, TextField, useToast } from "@adclub/ui";
+import {
+  Banner,
+  Button,
+  Checkbox,
+  Dialog,
+  Select,
+  TextAreaField,
+  TextField,
+  useToast,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
@@ -10,6 +19,7 @@ import {
   formatValue,
   inputOf,
   parseInput,
+  partText,
   rangeText,
   reasonProblem,
   sameValue,
@@ -143,9 +153,8 @@ export function SettingDialog({
       {current && (
         <div className="dialog-stack">
           <p className="ac-text-body">{current.description}</p>
-          <p className="ac-text-caption ac-muted">
-            <code>{current.key}</code>
-            {rangeText(current) ? ` · ${rangeText(current)}` : ""} · по умолчанию{" "}
+          <p className="ac-text-body-s ac-muted">
+            {rangeText(current) ? `${rangeText(current)} · ` : ""}по умолчанию{" "}
             {formatValue(current, current.defaultValue)}
           </p>
 
@@ -186,20 +195,15 @@ export function SettingDialog({
             {unchanged && <span className="ac-text-caption ac-muted">Значение не меняется</span>}
           </div>
 
-          <label className="textarea">
-            <span className="ac-text-caption ac-muted">
-              Причина (обязательно, попадёт в журнал)
-            </span>
-            <textarea
-              value={reason}
-              rows={2}
-              maxLength={500}
-              onChange={(event) => setReason(event.target.value)}
-              aria-invalid={touched && reasonError ? true : undefined}
-            />
-          </label>
-          {touched && reasonError && <p className="dialog-error">{reasonError}</p>}
-          {error && <p className="dialog-error">{error}</p>}
+          <TextAreaField
+            label="Причина (обязательно, попадёт в журнал)"
+            value={reason}
+            rows={2}
+            maxLength={500}
+            onChange={setReason}
+            error={touched && reasonError ? reasonError : undefined}
+          />
+          {error && <Banner tone="danger">{error}</Banner>}
 
           {mode === "edit" && !current.isDefault && (
             <Button
@@ -221,6 +225,108 @@ export function SettingDialog({
         </div>
       )}
     </Dialog>
+  );
+}
+
+function parsedJson(input: string): unknown {
+  try {
+    return JSON.parse(input) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The enumeration of the items of an array schema, if the schema gives one. */
+function itemChoices(schema: Record<string, unknown> | undefined): string[] | null {
+  const items = schema?.items;
+  if (typeof items !== "object" || items === null) return null;
+  const values = (items as { enum?: unknown }).enum;
+  return Array.isArray(values) && values.every((value) => typeof value === "string")
+    ? (values as string[])
+    : null;
+}
+
+/**
+ * A composite setting (TASK-080: never JSON before a person): an object of
+ * numbers — a field per part, named in words («Распознавания фото»); a set
+ * of kinds — a check box per kind. Anything else — the text of the value as
+ * the server checks it. What is typed is kept as the JSON the server takes.
+ */
+function CompositeField({
+  setting,
+  input,
+  onChange,
+  error,
+}: {
+  setting: Setting;
+  input: string;
+  onChange: (next: SettingInput) => void;
+  error: string | null;
+}) {
+  const value = parsedJson(input);
+  const choices = itemChoices(setting.constraints.schema);
+  if (choices && Array.isArray(value)) {
+    const chosen = new Set(value.map(String));
+    return (
+      <fieldset className="composite-field">
+        <legend className="ac-field__label">Значение</legend>
+        {choices.map((choice) => (
+          <Checkbox
+            key={choice}
+            label={partText(choice)}
+            checked={chosen.has(choice)}
+            onChange={(checked) =>
+              onChange(
+                JSON.stringify(
+                  choices.filter((entry) => (entry === choice ? checked : chosen.has(entry))),
+                ),
+              )
+            }
+          />
+        ))}
+        {error && <Banner tone="danger">{error}</Banner>}
+      </fieldset>
+    );
+  }
+  const record =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  if (record && Object.values(record).every((part) => typeof part === "number")) {
+    return (
+      <fieldset className="composite-field composite-field--grid">
+        <legend className="ac-field__label">Значение</legend>
+        {Object.entries(record).map(([key, part]) => (
+          <TextField
+            key={key}
+            label={partText(key)}
+            value={String(part)}
+            inputMode="decimal"
+            onChange={(typed) => {
+              const number = Number(typed.replace(",", "."));
+              onChange(
+                JSON.stringify({
+                  ...record,
+                  [key]: typed.trim() === "" || Number.isNaN(number) ? typed : number,
+                }),
+              );
+            }}
+          />
+        ))}
+        {error && <Banner tone="danger">{error}</Banner>}
+      </fieldset>
+    );
+  }
+  return (
+    <TextAreaField
+      label="Значение"
+      value={input}
+      rows={6}
+      spellCheck={false}
+      onChange={onChange}
+      error={error ?? undefined}
+      hint="Как в описании настройки; сервер проверит значение целиком"
+    />
   );
 }
 
@@ -246,51 +352,36 @@ function Field({
       );
     case "enum":
       return (
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Значение</span>
-          <select value={String(input)} onChange={(event) => onChange(event.target.value)}>
-            {(setting.constraints.allowedValues ?? []).map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Значение"
+          value={String(input)}
+          options={(setting.constraints.allowedValues ?? []).map((value) => ({
+            value,
+            label: value,
+          }))}
+          onChange={(value) => onChange(value)}
+        />
       );
     case "localized": {
       const text = input as LocalizedInput;
       return (
         <div className="localized-fields">
           {(["ru", "kk", "en"] as const).map((lang) => (
-            <label key={lang} className="textarea">
-              <span className="ac-text-caption ac-muted">
-                {lang === "ru" ? "Русский" : lang === "kk" ? "Казахский" : "Английский"}
-              </span>
-              <textarea
-                value={text[lang]}
-                rows={3}
-                onChange={(event) => onChange({ ...text, [lang]: event.target.value })}
-              />
-            </label>
+            <TextAreaField
+              key={lang}
+              label={lang === "ru" ? "Русский" : lang === "kk" ? "Казахский" : "Английский"}
+              value={text[lang]}
+              rows={3}
+              onChange={(value) => onChange({ ...text, [lang]: value })}
+            />
           ))}
-          {error && <p className="dialog-error">{error}</p>}
+          {error && <Banner tone="danger">{error}</Banner>}
         </div>
       );
     }
     case "json":
       return (
-        <label className="textarea">
-          <span className="ac-text-caption ac-muted">Значение (JSON)</span>
-          <textarea
-            className="mono"
-            value={String(input)}
-            rows={8}
-            spellCheck={false}
-            onChange={(event) => onChange(event.target.value)}
-            aria-invalid={error ? true : undefined}
-          />
-          {error && <span className="dialog-error">{error}</span>}
-        </label>
+        <CompositeField setting={setting} input={String(input)} onChange={onChange} error={error} />
       );
     default:
       return (

@@ -1,18 +1,32 @@
 import type { AdminOrder, AdminOrderResponse, DisciplineMark } from "@adclub/contracts";
-import { Banner, Button, IconButton, LoadingContent, SkeletonList, useToast } from "@adclub/ui";
+import {
+  ActionBar,
+  Badge,
+  Banner,
+  Button,
+  IconButton,
+  LoadingContent,
+  Segments,
+  Select,
+  SkeletonList,
+  StatusBadge,
+  TypeMark,
+  useToast,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { JournalHistory } from "../audit/JournalHistory";
-import { AppLink } from "../catalog/shared";
 import { formatMoment } from "../format";
+import { AppLink, Header, RowTitle, rowLink, Table } from "../layout/layout";
 import { PhoneReveal } from "../people/PhoneReveal";
-import { OrderFeedbackBlock } from "../reviews/Blocks";
 import { useAdminNames } from "../people/use-admin-names";
-import { goBack, orderPath, supplierPath, userPath } from "../router";
+import { orderPath, routePaths, supplierPath, userPath } from "../router";
 import { ReasonDialog, WasNow } from "../suppliers/shared";
 import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
+import { OrderMarks } from "./Orders";
+import { OrderFeedback } from "./OrderFeedback";
 import {
   CANCEL_TEXT,
   channelText,
@@ -25,16 +39,18 @@ import {
   orderActions,
   orderActorText,
   orderErrorText,
-  orderKindText,
+  orderKindMark,
   orderStatusText,
   orderTermLines,
-  statusTone,
 } from "./order-words";
+import "./orders.css";
 
 type Action = "extendResponse" | "extendReserve" | "extendTerm" | "close" | "cancel";
 
 /** The steps an extension offers, minutes (the server caps one at `deadline_extension_max_hours`). */
 const MINUTES = [15, 30, 60, 120, 240, 480, 1440] as const;
+
+export const ORDERS_CRUMB = { label: "Заявки", href: routePaths.orders };
 
 function minutesText(minutes: number): string {
   if (minutes < 60) return `${minutes} мин`;
@@ -43,15 +59,18 @@ function minutesText(minutes: number): string {
 }
 
 /**
- * A-ORD-02 «Карточка заявки» (SCREENS 7.5; TASK-036.B): the item, the
- * quantity and the sum, the customer (the number partly hidden, «Показать
- * номер» with a trace), the supplier, the way it is received, the
- * deadlines, the journal of the order with who did what — an employee, an
- * administrator, the system, «через WhatsApp» — and when. The manual
- * actions, each with a reason and «было → стало»: extend the answer
- * deadline or the reserve, close without a code, cancel, lift a discipline
- * mark — offered only where the one table of moves allows them; the server
- * decides again. Never the code or the QR.
+ * A-ORD-02 «Карточка заявки» (SCREENS 7.5; TASK-036.B, TASK-080): the
+ * crumbs of «Заявки», the number, its status and kind under it; the card
+ * «Сводка» — the item, the quantity and the sum, the way it is received, the
+ * deadlines on the left, the customer (the number partly hidden, «Показать
+ * номер» with a trace) and the supplier on the right — and under it the
+ * manual actions, each with a reason and «было → стало»: extend the answer
+ * deadline or the reserve, close without a code, cancel — offered only where
+ * the one table of moves allows them (none — «Действий нет: заявка
+ * завершена»); the server decides again. Then the discipline mark with
+ * «Снять…», the review and the complaints, the course of the order with who
+ * did what (all or only the administrators) and, folded, the action journal.
+ * Never the code or the QR.
  */
 export function OrderCard({ orderId }: { orderId: string }) {
   const toast = useToast();
@@ -145,7 +164,6 @@ export function OrderCard({ orderId }: { orderId: string }) {
     }
   };
 
-  const actions = order ? orderActions(order) : null;
   const current =
     order && action === "extendResponse"
       ? order.deadlines.respondBy
@@ -162,30 +180,27 @@ export function OrderCard({ orderId }: { orderId: string }) {
     close: { title: "Закрыть заявку без кода", confirm: "Закрыть без кода" },
     cancel: { title: "Отменить заявку", confirm: "Отменить заявку" },
   };
+  const kind = order ? orderKindMark(order.kind) : null;
 
   return (
     <>
-      <div className="page__head page__head--back">
-        <IconButton icon="arrowLeft" label="Назад к заявкам" onClick={() => goBack("orders")} />
-        <div className="cell-stack">
-          <h1 className="ac-text-title-l page__title">
-            {order ? `Заявка № ${order.number}` : "Заявка"}
-          </h1>
-          {order && (
-            <span className="ac-text-body-s ac-muted supplier-head__line">
-              <span className={`status ${statusTone(order.status)}`}>{orderStatusText(order)}</span>
-              <span>
-                {orderKindText(order.kind) ? `${orderKindText(order.kind)} · ` : ""}
-                оформлена {formatMoment(order.createdAt)}
-                {order.isTest ? " · тестовая" : ""}
-              </span>
-            </span>
-          )}
-        </div>
-        <Button variant="secondary" size="s" icon="refresh" onClick={card.reload}>
-          Обновить
-        </Button>
-      </div>
+      <Header
+        crumbs={[ORDERS_CRUMB]}
+        title={order ? `№ ${order.number}` : "Заявка"}
+        subtitle={
+          order && (
+            <>
+              <StatusBadge kind="order" status={order.status}>
+                {orderStatusText(order)}
+              </StatusBadge>
+              {kind && <TypeMark icon={kind.icon}>{kind.text}</TypeMark>}
+              <OrderMarks order={order} />
+              <span>оформлена {formatMoment(order.createdAt)}</span>
+            </>
+          )
+        }
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={card.reload} />}
+      />
       <LoadError error={card.error} retry={card.reload} />
       <LoadingContent
         ready={order !== undefined}
@@ -193,116 +208,38 @@ export function OrderCard({ orderId }: { orderId: string }) {
         label="Загрузка"
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        {order && actions && (
-          <div className="detail-stack">
-            <div className="button-row">
-              {actions.extendResponse && (
-                <Button
-                  variant="secondary"
-                  disabled={!online}
-                  onClick={() => open("extendResponse")}
-                >
-                  Продлить срок ответа…
-                </Button>
-              )}
-              {actions.extendTerm && (
-                <Button variant="secondary" disabled={!online} onClick={() => open("extendTerm")}>
-                  Продлить ответ клиента…
-                </Button>
-              )}
-              {actions.extendReserve && (
-                <Button
-                  variant="secondary"
-                  disabled={!online}
-                  onClick={() => open("extendReserve")}
-                >
-                  Продлить резерв…
-                </Button>
-              )}
-              {actions.closeWithoutCode && (
-                <Button variant="secondary" disabled={!online} onClick={() => open("close")}>
-                  Закрыть без кода…
-                </Button>
-              )}
-              {actions.cancel && (
-                <Button variant="secondary" disabled={!online} onClick={() => open("cancel")}>
-                  Отменить заявку…
-                </Button>
-              )}
-            </div>
-            {order.cancellation && (
-              <Banner tone="neutral">
-                Отменена администратором {order.cancellation.adminName ?? ""}{" "}
-                {formatMoment(order.cancellation.at)}: {order.cancellation.reason}
-              </Banner>
+        {order && (
+          <div className="order-page">
+            <Outcome order={order} />
+            <section className="card" aria-labelledby="order-summary-title">
+              <h2 className="card__title" id="order-summary-title">
+                Сводка
+              </h2>
+              <OrderSummary order={order} />
+              <OrderActions order={order} online={online} onOpen={open} />
+            </section>
+            {order.discipline.length > 0 && (
+              <section className="section" aria-labelledby="order-discipline-title">
+                <div className="section__head">
+                  <h2 className="section__title" id="order-discipline-title">
+                    Дисциплинарная отметка
+                  </h2>
+                </div>
+                <Discipline
+                  marks={order.discipline}
+                  admins={admins}
+                  onRevoke={(next) => {
+                    setError(null);
+                    setMark(next);
+                  }}
+                />
+              </section>
             )}
-            {order.closure?.method === "admin" && (
-              <Banner tone="neutral">
-                Закрыта администратором без кода {formatMoment(order.closure.at)}
-                {order.closure.reason ? `: ${order.closure.reason}` : ""}
-              </Banner>
-            )}
-            {order.decline && (
-              <Banner tone="neutral">
-                Поставщик отказал
-                {order.decline.reason ? `: ${DECLINE_REASON_TEXT[order.decline.reason]}` : ""}
-                {order.decline.note ? ` («${order.decline.note}»)` : ""}
-              </Banner>
-            )}
-            <OrderFacts order={order} />
-            <Discipline
-              marks={order.discipline}
-              admins={admins}
-              onRevoke={(next) => {
-                setError(null);
-                setMark(next);
-              }}
-            />
-            <OrderFeedbackBlock
+            <OrderFeedback
               order={order}
               onReviewChanged={(review) => card.replace({ order: { ...order, review } })}
             />
-            <section className="card-section">
-              <h2 className="ac-text-heading">Журнал заявки</h2>
-              <div className="table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Время</th>
-                      <th scope="col">Кто</th>
-                      <th scope="col">Что</th>
-                      <th scope="col">Причина администратора</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {order.events.map((event) => (
-                      <tr key={event.id}>
-                        <td className="ac-text-body-s num nowrap">{formatMoment(event.at)}</td>
-                        <td className="ac-text-body-s">
-                          {orderActorText(event.actor, admins)}
-                          {channelText(event) && (
-                            <span className="ac-muted"> {channelText(event)}</span>
-                          )}
-                        </td>
-                        <td className="ac-text-body-s">{eventText(event, order.kind)}</td>
-                        <td className="ac-text-body-s reason-cell">
-                          {event.details.adminNote ?? <span className="ac-muted">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section className="card-section">
-              <h2 className="ac-text-heading">Журнал действий по заявке</h2>
-              <JournalHistory
-                filter={{ entityType: "order", entityId: orderId }}
-                loadKey={`order-history:${orderId}:${historyKey}`}
-                caption="Журнал действий по заявке"
-                empty="Ручных действий и раскрытий номера пока не было"
-              />
-            </section>
+            <OrderCourse order={order} admins={admins} historyKey={historyKey} />
           </div>
         )}
       </LoadingContent>
@@ -321,19 +258,15 @@ export function OrderCard({ orderId }: { orderId: string }) {
             action === "extendReserve" ||
             action === "extendTerm") && (
             <>
-              <label className="select">
-                <span className="ac-text-caption ac-muted">На сколько продлить</span>
-                <select
-                  value={minutes}
-                  onChange={(event) => setMinutes(Number(event.target.value))}
-                >
-                  {MINUTES.map((value) => (
-                    <option key={value} value={value}>
-                      {minutesText(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Select<string>
+                label="На сколько продлить"
+                value={String(minutes)}
+                options={MINUTES.map((value) => ({
+                  value: String(value),
+                  label: minutesText(value),
+                }))}
+                onChange={(value) => setMinutes(Number(value))}
+              />
               <WasNow
                 was={`до ${formatMoment(current)}`}
                 now={`до ${formatMoment(extended?.toISOString())}`}
@@ -384,108 +317,275 @@ export function OrderCard({ orderId }: { orderId: string }) {
   );
 }
 
-function OrderFacts({ order }: { order: AdminOrder }) {
+/** How the order ended by someone's decision: the administrator's reason, the supplier's refusal. */
+function Outcome({ order }: { order: AdminOrder }) {
   return (
-    <section className="card-section">
-      <dl className="facts">
-        <div>
-          <dt>Позиция</dt>
-          <dd className="long-text">
-            {order.item.name.text}
-            <span className="ac-text-caption ac-muted">
-              {" "}
-              {[order.item.brand, order.item.article].filter(Boolean).join(" · ")}
-            </span>
-          </dd>
-        </div>
+    <>
+      {order.cancellation && (
+        <Banner tone="neutral">
+          Отменена администратором {order.cancellation.adminName ?? ""}{" "}
+          {formatMoment(order.cancellation.at)}: {order.cancellation.reason}
+        </Banner>
+      )}
+      {order.closure?.method === "admin" && (
+        <Banner tone="neutral">
+          Закрыта администратором без кода {formatMoment(order.closure.at)}
+          {order.closure.reason ? `: ${order.closure.reason}` : ""}
+        </Banner>
+      )}
+      {order.decline && (
+        <Banner tone="neutral">
+          Поставщик отказал
+          {order.decline.reason ? `: ${DECLINE_REASON_TEXT[order.decline.reason]}` : ""}
+          {order.decline.note ? ` («${order.decline.note}»)` : ""}
+        </Banner>
+      )}
+    </>
+  );
+}
+
+/**
+ * The manual actions of the order (requirement 6: one `ActionBar`): an
+ * extension — the usual one — is the main action; closing without a code
+ * and cancelling are secondary with `danger` text; none — said in words.
+ */
+function OrderActions({
+  order,
+  online,
+  onOpen,
+}: {
+  order: AdminOrder;
+  online: boolean;
+  onOpen: (action: Action) => void;
+}) {
+  const actions = orderActions(order);
+  const extend: { action: Action; label: string } | null = actions.extendResponse
+    ? { action: "extendResponse", label: "Продлить срок ответа…" }
+    : actions.extendTerm
+      ? { action: "extendTerm", label: "Продлить ответ клиента…" }
+      : actions.extendReserve
+        ? { action: "extendReserve", label: "Продлить резерв…" }
+        : null;
+  const others = [
+    actions.closeWithoutCode && (
+      <Button
+        key="close"
+        variant="secondary"
+        destructive
+        disabled={!online}
+        onClick={() => onOpen("close")}
+      >
+        Закрыть без кода…
+      </Button>
+    ),
+    actions.cancel && (
+      <Button
+        key="cancel"
+        variant="secondary"
+        destructive
+        disabled={!online}
+        onClick={() => onOpen("cancel")}
+      >
+        Отменить заявку…
+      </Button>
+    ),
+  ].filter(Boolean);
+  if (!extend && others.length === 0) {
+    return (
+      <p className="ac-text-body-s ac-muted order-actions-none">Действий нет: заявка завершена</p>
+    );
+  }
+  return (
+    <ActionBar
+      label="Действия с заявкой"
+      main={
+        extend ? (
+          <Button disabled={!online} onClick={() => onOpen(extend.action)}>
+            {extend.label}
+          </Button>
+        ) : undefined
+      }
+      others={others}
+      note={online ? undefined : "Нужна сеть"}
+    />
+  );
+}
+
+function Fact({ label, children, note }: { label: string; children: ReactNode; note?: ReactNode }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>
+        {children}
+        {note && <span className="kv__note order-note">{note}</span>}
+      </dd>
+    </>
+  );
+}
+
+/** «Сводка» in two columns: what and when on the left, who on the right (X20: one-line notes). */
+function OrderSummary({ order }: { order: AdminOrder }) {
+  const reserveShown =
+    order.deadlines.reserveUntil &&
+    (order.status === "accepted" || order.status === "ready" || order.status === "reserve_expired");
+  return (
+    <div className="order-summary">
+      <dl className="kv">
+        <Fact
+          label="Позиция"
+          note={[order.item.brand, order.item.article].filter(Boolean).join(" · ") || undefined}
+        >
+          {order.item.name.text}
+        </Fact>
         {/* A visit for a service has no quantity (SCREENS M-ORD-01, TASK-039.B). */}
         {order.kind === "service" ? (
-          <div>
-            <dt>Сумма</dt>
-            <dd className="num">{moneyText(order.total)}</dd>
-          </div>
+          <Fact label="Сумма">
+            <span className="nowrap">{moneyText(order.total)}</span>
+          </Fact>
         ) : (
-          <div>
-            <dt>Количество и сумма</dt>
-            <dd className="num">
-              {order.quantity} шт. × {moneyText(order.unitPrice)} = {moneyText(order.total)}
-            </dd>
-          </div>
+          <Fact
+            label="Количество и сумма"
+            note={order.quantity > 1 ? `по ${moneyText(order.unitPrice)} за шт.` : undefined}
+          >
+            <span className="nowrap">
+              {order.quantity} шт. · {moneyText(order.total)}
+            </span>
+          </Fact>
         )}
-        <div>
-          <dt>Клиент</dt>
-          <dd>
+        <Fact
+          label="Получение"
+          note={
+            order.receiptOn
+              ? `дата получения ${order.receiptOn.split("-").reverse().join(".")}`
+              : undefined
+          }
+        >
+          {order.kind === "service" ? "Визит в точку" : FULFILLMENT_TEXT[order.fulfillment]}
+        </Fact>
+        <Fact label="Срок ответа поставщика">
+          <span className="nowrap">до {formatMoment(order.deadlines.respondBy)}</span>
+        </Fact>
+        {orderTermLines(order).map((line) => (
+          <Fact key={line.label} label={line.label}>
+            {line.text}
+          </Fact>
+        ))}
+        {reserveShown && (
+          <Fact label="Резерв">
+            <span className="nowrap">до {formatMoment(order.deadlines.reserveUntil)}</span>
+          </Fact>
+        )}
+        {order.deadlines.lateCloseUntil && (
+          <Fact label="Позднее закрытие">
+            поставщик может закрыть до{" "}
+            <span className="nowrap">{formatMoment(order.deadlines.lateCloseUntil)}</span>
+          </Fact>
+        )}
+        {order.handledBy && (
+          <Fact label="Обработал" note={formatMoment(order.handledAt)}>
+            {orderActorText(order.handledBy)}
+          </Fact>
+        )}
+        {order.comment && <Fact label="Комментарий клиента">{order.comment}</Fact>}
+      </dl>
+      <dl className="kv">
+        <Fact
+          label="Клиент"
+          note={
+            order.phoneRevealedAt
+              ? `Поставщику номер открыт ${formatMoment(order.phoneRevealedAt)}`
+              : undefined
+          }
+        >
+          <span className="cell-stack">
             <AppLink href={userPath(order.customer.accountId)}>
               {order.customer.name ?? "Без имени"}
             </AppLink>
-            <br />
             <PhoneReveal phone={order.customer.phone} subject="order" id={order.id} />
-            {order.phoneRevealedAt && (
-              <span className="ac-text-caption ac-muted">
-                {" "}
-                Поставщику номер открыт {formatMoment(order.phoneRevealedAt)}
-              </span>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Поставщик</dt>
-          <dd className="long-text">
-            <AppLink href={supplierPath(order.supplier.id)}>{order.supplier.name}</AppLink>
-            <span className="ac-text-caption ac-muted"> · {order.cityName}</span>
-          </dd>
-        </div>
-        <div>
-          <dt>Получение</dt>
-          <dd>
-            {order.kind === "service" ? "Визит в точку" : FULFILLMENT_TEXT[order.fulfillment]}
-            {order.receiptOn
-              ? `, дата получения ${order.receiptOn.split("-").reverse().join(".")}`
-              : ""}
-          </dd>
-        </div>
-        <div>
-          <dt>Срок ответа поставщика</dt>
-          <dd className="num">до {formatMoment(order.deadlines.respondBy)}</dd>
-        </div>
-        {orderTermLines(order).map((line) => (
-          <div key={line.label}>
-            <dt>{line.label}</dt>
-            <dd>{line.text}</dd>
-          </div>
-        ))}
-        {order.deadlines.reserveUntil &&
-          (order.status === "accepted" ||
-            order.status === "ready" ||
-            order.status === "reserve_expired") && (
-            <div>
-              <dt>Резерв</dt>
-              <dd className="num">до {formatMoment(order.deadlines.reserveUntil)}</dd>
-            </div>
-          )}
-        {order.deadlines.lateCloseUntil && (
-          <div>
-            <dt>Позднее закрытие</dt>
-            <dd className="num">
-              поставщик может закрыть до {formatMoment(order.deadlines.lateCloseUntil)}
-            </dd>
-          </div>
-        )}
-        {order.handledBy && (
-          <div>
-            <dt>Обработал</dt>
-            <dd>
-              {orderActorText(order.handledBy)} · {formatMoment(order.handledAt)}
-            </dd>
-          </div>
-        )}
-        {order.comment && (
-          <div>
-            <dt>Комментарий клиента</dt>
-            <dd className="long-text">{order.comment}</dd>
-          </div>
-        )}
+          </span>
+        </Fact>
+        <Fact label="Поставщик" note={order.cityName}>
+          <AppLink href={supplierPath(order.supplier.id)}>{order.supplier.name}</AppLink>
+        </Fact>
       </dl>
+    </div>
+  );
+}
+
+type CourseFilter = "all" | "admin";
+
+/**
+ * The course of the order (A-ORD-02 «журнал с актором»): one chronology —
+ * when, who («через WhatsApp»), what, the administrator's reason — with the
+ * filter «Все / Только администраторы»; the action journal (manual actions
+ * and revealed numbers) folded under it.
+ */
+function OrderCourse({
+  order,
+  admins,
+  historyKey,
+}: {
+  order: AdminOrder;
+  admins: Map<string, string | null>;
+  historyKey: number;
+}) {
+  const [filter, setFilter] = useState<CourseFilter>("all");
+  const events =
+    filter === "admin"
+      ? order.events.filter((event) => event.actor.kind === "admin")
+      : order.events;
+  return (
+    <section className="section" aria-labelledby="order-course-title">
+      <div className="section__head">
+        <h2 className="section__title" id="order-course-title">
+          Ход заявки
+        </h2>
+        <Segments<CourseFilter>
+          label="Чьи действия"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "all", label: "Все" },
+            { value: "admin", label: "Только администраторы" },
+          ]}
+        />
+      </div>
+      {events.length === 0 ? (
+        <p className="ac-text-body-s ac-muted">Администраторы с заявкой ничего не делали</p>
+      ) : (
+        <Table
+          label="Ход заявки"
+          columns={[
+            { key: "at", header: "Время", width: 140 },
+            { key: "who", header: "Кто", width: 220 },
+            { key: "what", header: "Что" },
+            { key: "reason", header: "Причина администратора", width: 260 },
+          ]}
+        >
+          {events.map((event) => (
+            <tr key={event.id}>
+              <td className="ac-text-body-s nowrap">{formatMoment(event.at)}</td>
+              <td className="ac-text-body-s">
+                {orderActorText(event.actor, admins)}
+                {channelText(event) && <span className="ac-muted"> {channelText(event)}</span>}
+              </td>
+              <td className="ac-text-body-s">{eventText(event, order.kind)}</td>
+              <td className="ac-text-body-s">
+                {event.details.adminNote ?? <span className="ac-muted">—</span>}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+      <details className="disclosure">
+        <summary className="disclosure__summary">Журнал действий по заявке</summary>
+        <JournalHistory
+          filter={{ entityType: "order", entityId: order.id }}
+          loadKey={`order-history:${order.id}:${historyKey}`}
+          caption="Журнал действий по заявке"
+          empty="Ручных действий и раскрытий номера пока не было"
+        />
+      </details>
     </section>
   );
 }
@@ -493,10 +593,14 @@ function OrderFacts({ order }: { order: AdminOrder }) {
 const REVOKED_BY_TEXT = {
   late_close: "поставщик выдал заказ в окне позднего закрытия",
   admin_close: "заявку закрыл администратор",
-  admin: "снята администратором",
+  admin: "вручную",
 } as const;
 
-/** The discipline marks of the order, lifted ones too, with «Снять…» (A-ORD-02). */
+/**
+ * The discipline marks — of the order, or of a user with their orders
+ * (`showOrder`): when, the order and its supplier, standing or lifted (how,
+ * by whom, why), «Снять…» on a standing one.
+ */
 export function Discipline({
   marks,
   admins,
@@ -511,40 +615,67 @@ export function Discipline({
 }) {
   if (marks.length === 0) return null;
   return (
-    <section className="card-section">
-      <h2 className="ac-text-heading">{showOrder ? "Неявки" : "Дисциплинарная отметка"}</h2>
-      <ul className="plain-list">
-        {marks.map((mark) => (
-          <li key={mark.id} className="ac-text-body-s">
-            Неявка {formatMoment(mark.at)}
+    <Table
+      label={showOrder ? "Неявки" : "Дисциплинарная отметка"}
+      columns={[
+        ...(showOrder ? [{ key: "order", header: "Заявка", width: 120 }] : []),
+        { key: "at", header: "Неявка", width: 140 },
+        ...(showOrder ? [{ key: "supplier", header: "Поставщик", width: 200 }] : []),
+        { key: "state", header: "Состояние" },
+        { key: "actions", header: "Действия", actions: true, hiddenHeader: true, width: 120 },
+      ]}
+    >
+      {marks.map((mark) => {
+        const revokedBy =
+          mark.revocation?.adminId && admins.get(mark.revocation.adminId)
+            ? ` (${admins.get(mark.revocation.adminId) ?? ""})`
+            : "";
+        const link = showOrder ? rowLink(orderPath(mark.order.id)) : {};
+        return (
+          <tr key={mark.id} {...link}>
             {showOrder && (
-              <>
-                {" "}
-                по <AppLink href={orderPath(mark.order.id)}>
-                  заявке № {mark.order.number}
-                </AppLink> · {mark.supplier.name}
-              </>
+              <td>
+                <RowTitle href={orderPath(mark.order.id)}>
+                  <span className="nowrap">№ {mark.order.number}</span>
+                </RowTitle>
+              </td>
             )}
-            {mark.revocation ? (
-              <span className="ac-muted">
-                {" "}
-                · снята {formatMoment(mark.revocation.at)}: {REVOKED_BY_TEXT[mark.revocation.by]}
-                {mark.revocation.adminId && admins.get(mark.revocation.adminId)
-                  ? ` (${admins.get(mark.revocation.adminId)})`
-                  : ""}
-                {mark.revocation.note ? ` — «${mark.revocation.note}»` : ""}
-              </span>
-            ) : (
-              <>
-                {" "}
-                <Button variant="text" size="s" onClick={() => onRevoke(mark)}>
+            <td className="ac-text-body-s nowrap">{formatMoment(mark.at)}</td>
+            {showOrder && (
+              <td className="ac-text-body-s">
+                <span className="clamp" title={mark.supplier.name}>
+                  {mark.supplier.name}
+                </span>
+              </td>
+            )}
+            <td className="ac-text-body-s">
+              {mark.revocation ? (
+                <span className="cell-stack">
+                  <span>
+                    Снята {REVOKED_BY_TEXT[mark.revocation.by]}
+                    {revokedBy}
+                  </span>
+                  <span className="ac-text-caption ac-muted">
+                    {formatMoment(mark.revocation.at)}
+                    {mark.revocation.note ? ` · «${mark.revocation.note}»` : ""}
+                  </span>
+                </span>
+              ) : (
+                <Badge tone="warning" icon="alertTriangle">
+                  Учитывается
+                </Badge>
+              )}
+            </td>
+            <td className="admin-table__actions">
+              {!mark.revocation && (
+                <Button variant="secondary" size="s" onClick={() => onRevoke(mark)}>
                   Снять…
                 </Button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
+              )}
+            </td>
+          </tr>
+        );
+      })}
+    </Table>
   );
 }

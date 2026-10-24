@@ -7,37 +7,44 @@ import {
   type ComplaintReasonValue,
 } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
-  Chip,
   EmptyState,
   IconButton,
   LoadingContent,
+  SearchSelect,
   SkeletonList,
+  StatusBadge,
+  TableToolbar,
+  TypeMark,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { JournalHistory } from "../audit/JournalHistory";
-import { AppLink } from "../catalog/shared";
+import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { FilterSelect, StatusChips } from "../layout/filters";
+import { AppLink, Header, RowTitle, rowLink, Table, type Column } from "../layout/layout";
 import { useSupplierChoice } from "../orders/Orders";
 import { PhoneReveal } from "../people/PhoneReveal";
-import { complaintPath, goBack, orderPath, supplierPath, userPath } from "../router";
-import { SearchSelect } from "../search-select/SearchSelect";
+import { complaintPath, orderPath, routePaths, supplierPath, userPath } from "../router";
 import { createChoiceSources } from "../search-select/sources";
-import { ReasonDialog, WasNow, useAddressFilters } from "../suppliers/shared";
+import { useAddressFilters, WasNow } from "../suppliers/shared";
 import { useLoad } from "../use-load";
-import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
-import { ReviewSectionTabs } from "./Reviews";
+import { MoreButton, usePaged } from "../vehicles/shared";
+import { ReasonDialog } from "../layout/ReasonDialog";
+import { ReviewSectionHeader } from "./Reviews";
 import {
   COMPLAINT_REASON_TEXT,
   COMPLAINT_STATUS_FILTERS,
   COMPLAINT_STATUS_TEXT,
+  complaintChipCount,
   complaintErrorText,
-  complaintTone,
 } from "./review-words";
+import "./reviews.css";
 
 const supplierSearch = createChoiceSources(apiClient).suppliers();
 
@@ -54,73 +61,63 @@ function reasonOf(value: string | null): ComplaintReasonValue | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/** A list of complaints by the filters given (offset pages). */
+/** «Имя, 14 окт., 18:41» of an administrator's step — one line, never split. */
+function byAt(name: string | null | undefined, at: string | null | undefined): string {
+  return `${name ?? "администратор"}, ${formatMoment(at)}`;
+}
+
+/** A list of complaints by the filters given (offset pages), with the counts by status. */
 export function useComplaintList(filter: Omit<AdminComplaintListQuery, "limit" | "offset">) {
-  return usePaged<AdminComplaint>(async (cursor) => {
+  const [counts, setCounts] = useState<AdminComplaintPage["counts"] | null>(null);
+  const list = usePaged<AdminComplaint>(async (cursor) => {
     const page: AdminComplaintPage = await apiClient.listAdminComplaints({
       query: { ...filter, limit: 30, offset: cursor ? Number(cursor) : 0 },
     });
+    setCounts(page.counts);
     return {
       items: page.complaints,
       total: page.total,
       nextCursor: page.nextOffset === null ? null : String(page.nextOffset),
     };
   }, JSON.stringify(filter));
+  return { list, counts };
 }
 
 /**
- * A-REV-02 «Жалобы» (SCREENS 7.7; TASK-049): the status (new and in work by
- * default), the reason and the supplier in the address; a row — the reason,
- * the order, the user, the supplier, the status — opens the card.
+ * A-REV-02 «Жалобы» (SCREENS 7.7; TASK-049, TASK-080): the status as chips
+ * with their counts (new and in work by default), the reason and the
+ * supplier in one row, all in the address; a row opens the complaint.
  */
 export function Complaints() {
   const { query, set } = useAddressFilters();
   const status = statusOf(query.get("status"));
   const reason = reasonOf(query.get("reason"));
   const supplierId = query.get("supplierId") ?? undefined;
-  const list = useComplaintList({
+  const { list, counts } = useComplaintList({
     status: status === "all" ? undefined : status,
     reason,
     supplierId,
   });
   const supplier = useSupplierChoice(supplierId ?? null, list.items);
+  const filtered = reason !== undefined || supplierId !== undefined || status !== "open";
+  const reset = () => set({ status: undefined, reason: undefined, supplierId: undefined });
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Отзывы и жалобы</h1>
-      </div>
-      <ReviewSectionTabs active="complaints" />
-      <div className="filters">
-        <div className="chips" role="group" aria-label="Статус">
-          {COMPLAINT_STATUS_FILTERS.map((filter) => (
-            <Chip
-              key={filter.value}
-              selected={filter.value === status}
-              onClick={() => set({ status: filter.value === "open" ? undefined : filter.value })}
-            >
-              {filter.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
-      <div className="filters filters--grid">
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Причина</span>
-          <select
-            value={reason ?? ""}
-            onChange={(event) => set({ reason: event.target.value || undefined })}
-          >
-            <option value="">Все</option>
-            {complaintReasonSchema.options.map((value) => (
-              <option key={value} value={value}>
-                {COMPLAINT_REASON_TEXT[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="filters__select-search">
+      <ReviewSectionHeader active="complaints" onRefresh={list.first.reload} />
+      <div className="filters__group review-filters">
+        <div className="filters">
+          <FilterSelect<ComplaintReasonValue>
+            label="Причина"
+            value={reason}
+            options={complaintReasonSchema.options.map((value) => ({
+              value,
+              label: COMPLAINT_REASON_TEXT[value],
+            }))}
+            onChange={(next) => set({ reason: next })}
+          />
           <SearchSelect
+            compact
             label="Поставщик"
             value={supplier.value}
             onChange={(choice) => {
@@ -131,27 +128,80 @@ export function Complaints() {
             empty="Все"
           />
         </div>
+        <StatusChips<StatusFilter>
+          label="Статус жалобы"
+          value={status}
+          allLabel={null}
+          chips={COMPLAINT_STATUS_FILTERS.map((filter) => ({
+            value: filter.value,
+            label: filter.label,
+            count: complaintChipCount(filter.value, counts),
+          }))}
+          onChange={(next) => set({ status: next === "open" ? undefined : next })}
+        />
       </div>
-      <LoadError error={list.first.error} retry={list.first.reload} />
+      {list.first.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={list.first.reload}>
+              Повторить
+            </Button>
+          }
+        >
+          {loadErrorText(list.first.error)}
+        </Banner>
+      )}
       <LoadingContent
         ready={list.first.data !== undefined}
         indicator={list.first.indicator}
         label="Загрузка"
+        swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted">Всего: {list.total.toLocaleString("ru-RU")}</p>
-        {list.items.length === 0 ? (
-          <EmptyState icon="circleCheck" title="Жалоб нет" text="Измените отборы" />
-        ) : (
-          <ComplaintRows complaints={list.items} />
-        )}
-        <MoreButton list={list} />
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={reset}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {list.items.length === 0 ? (
+            filtered ? (
+              <EmptyState
+                icon="search"
+                title="Ничего не нашлось"
+                text="Измените отборы"
+                action={
+                  <Button variant="secondary" onClick={reset}>
+                    Сбросить фильтры
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon="circleCheck"
+                title="Новых жалоб нет"
+                text="Жалобы пользователей на заявки появятся здесь."
+              />
+            )
+          ) : (
+            <ComplaintRows complaints={list.items} />
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
     </>
   );
 }
 
-/** The rows of complaints — the list, a user's tab, an order's card. */
+/**
+ * The rows of complaints (TASK-080) — the list, a user's tab, an order's
+ * card: the reason (the name of the row, the text muted under it), the
+ * order, the user, the supplier, the status, when. The row opens the
+ * complaint; nothing else in it is a link (X1).
+ */
 export function ComplaintRows({
   complaints,
   hide = [],
@@ -159,75 +209,75 @@ export function ComplaintRows({
   complaints: readonly AdminComplaint[];
   hide?: readonly ("user" | "supplier" | "order")[];
 }) {
+  const columns: Column[] = [
+    { key: "complaint", header: "Жалоба" },
+    ...(hide.includes("order") ? [] : [{ key: "order", header: "Заявка", width: 130 }]),
+    ...(hide.includes("user") ? [] : [{ key: "user", header: "Пользователь", width: 200 }]),
+    ...(hide.includes("supplier") ? [] : [{ key: "supplier", header: "Поставщик", width: 200 }]),
+    { key: "status", header: "Статус", width: 140 },
+    { key: "created", header: "Подана", width: 140 },
+  ];
   return (
-    <div className="table-wrap">
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th scope="col">Причина</th>
-            {!hide.includes("order") && <th scope="col">Заявка</th>}
-            {!hide.includes("user") && <th scope="col">Пользователь</th>}
-            {!hide.includes("supplier") && <th scope="col">Поставщик</th>}
-            <th scope="col">Статус</th>
-            <th scope="col">Подана</th>
-          </tr>
-        </thead>
-        <tbody>
-          {complaints.map((complaint) => (
-            <tr key={complaint.id}>
-              <td>
-                <div className="cell-stack">
-                  <AppLink href={complaintPath(complaint.id)}>
-                    {COMPLAINT_REASON_TEXT[complaint.reason]}
-                  </AppLink>
-                  {complaint.text && (
-                    <span className="ac-text-caption ac-muted long-text">{complaint.text}</span>
-                  )}
-                </div>
-              </td>
-              {!hide.includes("order") && (
-                <td className="num nowrap">
-                  <AppLink href={orderPath(complaint.order.id)}>№ {complaint.order.number}</AppLink>
-                  {complaint.order.isTest && (
-                    <span className="ac-text-caption ac-muted"> · тестовая</span>
-                  )}
-                </td>
-              )}
-              {!hide.includes("user") && (
-                <td>
-                  <AppLink href={userPath(complaint.user.accountId)}>
-                    {complaint.user.name ?? "Без имени"}
-                  </AppLink>
-                  <span className="ac-text-caption ac-muted num"> {complaint.user.phone}</span>
-                </td>
-              )}
-              {!hide.includes("supplier") && (
-                <td className="long-text">
-                  <AppLink href={supplierPath(complaint.supplier.id)}>
-                    {complaint.supplier.name}
-                  </AppLink>
-                </td>
-              )}
-              <td>
-                <span className={`status ${complaintTone(complaint.status)}`}>
-                  {COMPLAINT_STATUS_TEXT[complaint.status]}
-                </span>
-              </td>
-              <td className="ac-text-body-s num nowrap">{formatMoment(complaint.createdAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table label="Жалобы" columns={columns}>
+      {complaints.map((complaint) => (
+        <tr key={complaint.id} {...rowLink(complaintPath(complaint.id))}>
+          <td>
+            <RowTitle
+              href={complaintPath(complaint.id)}
+              sub={
+                complaint.text ? (
+                  <span className="clamp" title={complaint.text}>
+                    {complaint.text}
+                  </span>
+                ) : undefined
+              }
+            >
+              {COMPLAINT_REASON_TEXT[complaint.reason]}
+            </RowTitle>
+          </td>
+          {!hide.includes("order") && (
+            <td className="ac-text-body-s">
+              <span className="badges">
+                <span className="nowrap">№ {complaint.order.number}</span>
+                {complaint.order.isTest && <TypeMark icon="info">Тест</TypeMark>}
+              </span>
+            </td>
+          )}
+          {!hide.includes("user") && (
+            <td>
+              <span className="review-line ac-text-body-s" title={complaint.user.name ?? undefined}>
+                {complaint.user.name ?? <span className="ac-muted">Имя не указано</span>}
+              </span>
+              <span className="review-line review-line--caption">{complaint.user.phone}</span>
+            </td>
+          )}
+          {!hide.includes("supplier") && (
+            <td className="ac-text-body-s">
+              <span className="clamp" title={complaint.supplier.name}>
+                {complaint.supplier.name}
+              </span>
+            </td>
+          )}
+          <td>
+            <StatusBadge kind="complaint" status={complaint.status}>
+              {COMPLAINT_STATUS_TEXT[complaint.status]}
+            </StatusBadge>
+          </td>
+          <td className="ac-text-body-s nowrap">{formatMoment(complaint.createdAt)}</td>
+        </tr>
+      ))}
+    </Table>
   );
 }
 
 /**
- * A-REV-02 «Карточка жалобы»: the reason and the text, the order, the user
- * (the number partly hidden, «Показать номер» with a trace), the supplier;
- * «Взять в работу» and «Решить…» with the internal comment (the user only
- * learns «Жалоба рассмотрена»), each with the version shown; a colleague's
- * earlier action comes back in words.
+ * A-REV-02 «Карточка жалобы» (TASK-049, TASK-080): the crumbs of the
+ * section, the status under the title; the card of the complaint — the
+ * reason and the text (when there is one), the order, the user (the number
+ * hidden, «Показать номер» with a trace), the supplier, who took it — and
+ * its actions: «Взять в работу» and «Решить…» with the internal comment
+ * (the user only learns «Жалоба рассмотрена»), each with the version shown;
+ * a resolved one says «Действий нет». The decision is its own card.
  */
 export function ComplaintCard({ complaintId }: { complaintId: string }) {
   const toast = useToast();
@@ -254,34 +304,75 @@ export function ComplaintCard({ complaintId }: { complaintId: string }) {
       toast.show(done);
     } catch (thrown) {
       setError(complaintErrorText(thrown));
+      // A colleague acted first: the card shows the complaint as it is now.
       card.reload();
     } finally {
       setBusy(false);
     }
   };
 
+  const take = complaint?.status === "new" && (
+    <Button
+      size="m"
+      disabled={!online}
+      loading={busy && !resolving}
+      onClick={() =>
+        act(
+          () =>
+            apiClient.takeAdminComplaint({ complaintId }, { expectedVersion: complaint.version }),
+          "Жалоба взята в работу",
+        )
+      }
+    >
+      Взять в работу
+    </Button>
+  );
+  const resolve = complaint && complaint.status !== "resolved" && (
+    <Button
+      size="m"
+      variant={complaint.status === "new" ? "secondary" : "primary"}
+      disabled={!online}
+      onClick={() => {
+        setError(null);
+        setResolving(true);
+      }}
+    >
+      Решить…
+    </Button>
+  );
+
   return (
     <>
-      <div className="page__head page__head--back">
-        <IconButton icon="arrowLeft" label="Назад к жалобам" onClick={() => goBack("complaints")} />
-        <div className="cell-stack">
-          <h1 className="ac-text-title-l page__title">
-            {complaint ? `Жалоба по заявке № ${complaint.order.number}` : "Жалоба"}
-          </h1>
-          {complaint && (
-            <span className="ac-text-body-s ac-muted supplier-head__line">
-              <span className={`status ${complaintTone(complaint.status)}`}>
+      <Header
+        crumbs={[
+          { label: "Отзывы и жалобы", href: routePaths.reviews },
+          { label: "Жалобы", href: routePaths.complaints },
+        ]}
+        title={complaint ? `Жалоба по заявке № ${String(complaint.order.number)}` : "Жалоба"}
+        subtitle={
+          complaint && (
+            <>
+              <StatusBadge kind="complaint" status={complaint.status}>
                 {COMPLAINT_STATUS_TEXT[complaint.status]}
-              </span>
-              <span>подана {formatMoment(complaint.createdAt)}</span>
-            </span>
-          )}
-        </div>
-        <Button variant="secondary" size="s" icon="refresh" onClick={card.reload}>
-          Обновить
-        </Button>
-      </div>
-      <LoadError error={card.error} retry={card.reload} />
+              </StatusBadge>
+              <span className="nowrap">подана {formatMoment(complaint.createdAt)}</span>
+            </>
+          )
+        }
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={card.reload} />}
+      />
+      {card.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={card.reload}>
+              Повторить
+            </Button>
+          }
+        >
+          {loadErrorText(card.error)}
+        </Banner>
+      )}
       {error && !resolving && <Banner tone="warning">{error}</Banner>}
       <LoadingContent
         ready={complaint !== undefined}
@@ -291,112 +382,100 @@ export function ComplaintCard({ complaintId }: { complaintId: string }) {
       >
         {complaint && (
           <div className="detail-stack">
-            <div className="button-row">
-              {complaint.status === "new" && (
-                <Button
-                  disabled={!online}
-                  loading={busy && !resolving}
-                  onClick={() =>
-                    act(
-                      () =>
-                        apiClient.takeAdminComplaint(
-                          { complaintId },
-                          { expectedVersion: complaint.version },
-                        ),
-                      "Жалоба взята в работу",
-                    )
-                  }
-                >
-                  Взять в работу
-                </Button>
-              )}
-              {complaint.status !== "resolved" && (
-                <Button
-                  variant="secondary"
-                  disabled={!online}
-                  onClick={() => {
-                    setError(null);
-                    setResolving(true);
-                  }}
-                >
-                  Решить…
-                </Button>
-              )}
-            </div>
-            <section className="card-section">
-              <dl className="facts">
-                <div>
-                  <dt>Причина</dt>
-                  <dd>{COMPLAINT_REASON_TEXT[complaint.reason]}</dd>
-                </div>
-                <div>
-                  <dt>Текст</dt>
-                  <dd className="long-text">
-                    {complaint.text ?? <span className="ac-muted">без текста</span>}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Заявка</dt>
-                  <dd>
+            <section className="card complaint-card" aria-labelledby="complaint-title">
+              <h2 id="complaint-title" className="card__title">
+                Жалоба
+              </h2>
+              <dl className="kv">
+                <dt>Причина</dt>
+                <dd>{COMPLAINT_REASON_TEXT[complaint.reason]}</dd>
+                {complaint.text && (
+                  <>
+                    <dt>Текст</dt>
+                    <dd className="complaint-text">{complaint.text}</dd>
+                  </>
+                )}
+                <dt>Заявка</dt>
+                <dd>
+                  <span className="badges">
                     <AppLink href={orderPath(complaint.order.id)}>
                       № {complaint.order.number}
                     </AppLink>
-                    {complaint.order.isTest && <span className="ac-muted"> · тестовая</span>}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Пользователь</dt>
-                  <dd>
+                    {complaint.order.isTest && <TypeMark icon="info">Тест</TypeMark>}
+                  </span>
+                </dd>
+                <dt>Пользователь</dt>
+                <dd>
+                  <span className="cell-stack">
                     <AppLink href={userPath(complaint.user.accountId)}>
-                      {complaint.user.name ?? "Без имени"}
+                      {complaint.user.name ?? "Имя не указано"}
                     </AppLink>
-                    <br />
                     <PhoneReveal
                       phone={complaint.user.phone}
                       subject="order"
                       id={complaint.order.id}
                     />
-                  </dd>
-                </div>
-                <div>
-                  <dt>Поставщик</dt>
-                  <dd className="long-text">
-                    <AppLink href={supplierPath(complaint.supplier.id)}>
-                      {complaint.supplier.name}
-                    </AppLink>
-                  </dd>
-                </div>
+                  </span>
+                </dd>
+                <dt>Поставщик</dt>
+                <dd>
+                  <AppLink href={supplierPath(complaint.supplier.id)}>
+                    {complaint.supplier.name}
+                  </AppLink>
+                </dd>
                 {complaint.takenBy && (
-                  <div>
-                    <dt>В работе</dt>
-                    <dd>
-                      {complaint.takenBy.name ?? "администратор"} ·{" "}
-                      {formatMoment(complaint.takenAt)}
-                    </dd>
-                  </div>
-                )}
-                {complaint.resolvedBy && (
-                  <div>
-                    <dt>Решена</dt>
-                    <dd>
-                      {complaint.resolvedBy.name ?? "администратор"} ·{" "}
-                      {formatMoment(complaint.resolvedAt)}
-                    </dd>
-                  </div>
-                )}
-                {complaint.comment && (
-                  <div>
-                    <dt>Внутренний комментарий</dt>
-                    <dd className="long-text">{complaint.comment}</dd>
-                  </div>
+                  <>
+                    <dt>Взял в работу</dt>
+                    <dd className="nowrap">{byAt(complaint.takenBy.name, complaint.takenAt)}</dd>
+                  </>
                 )}
               </dl>
+              {complaint.status === "resolved" ? (
+                <p className="complaint-none">Действий нет: жалоба решена</p>
+              ) : (
+                <ActionBar
+                  compact
+                  label="Действия с жалобой"
+                  main={take || resolve}
+                  others={take ? [resolve] : []}
+                />
+              )}
             </section>
-            <section className="card-section">
-              <h2 className="ac-text-heading">История</h2>
+            {(complaint.resolvedBy || complaint.comment) && (
+              <section className="card complaint-card" aria-labelledby="decision-title">
+                <h2 id="decision-title" className="card__title">
+                  Решение
+                </h2>
+                <dl className="kv">
+                  {complaint.resolvedBy && (
+                    <>
+                      <dt>Решил</dt>
+                      <dd className="nowrap">
+                        {byAt(complaint.resolvedBy.name, complaint.resolvedAt)}
+                      </dd>
+                    </>
+                  )}
+                  {complaint.comment && (
+                    <>
+                      <dt>Внутренний комментарий</dt>
+                      <dd className="complaint-text">
+                        {complaint.comment}
+                        <span className="kv__note">Пользователь его не видит</span>
+                      </dd>
+                    </>
+                  )}
+                </dl>
+              </section>
+            )}
+            <section className="section" aria-labelledby="complaint-history">
+              <div className="section__head">
+                <h2 id="complaint-history" className="section__title">
+                  История
+                </h2>
+              </div>
               <JournalHistory
                 filter={{ entityType: "complaint", entityId: complaintId }}
-                loadKey={`complaint-history:${complaintId}:${historyKey}`}
+                loadKey={`complaint-history:${complaintId}:${String(historyKey)}`}
                 caption="История жалобы"
               />
             </section>
@@ -409,6 +488,7 @@ export function ComplaintCard({ complaintId }: { complaintId: string }) {
           title="Решить жалобу"
           confirm="Решить"
           reasonLabel="Внутренний комментарий (обязательно, пользователь его не видит)"
+          maxLength={1000}
           busy={busy}
           error={error && <p className="dialog-error">{error}</p>}
           onClose={() => setResolving(false)}

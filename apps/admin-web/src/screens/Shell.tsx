@@ -5,7 +5,7 @@ import {
   Button,
   Dialog,
   FadeSwap,
-  Icon,
+  MenuButton,
   Logo,
   Sidebar,
   toastArea,
@@ -49,10 +49,13 @@ const MENU: NavItem<StaticRoute>[] = [
 export function Shell({
   route,
   me,
+  connection,
   children,
 }: {
   route: RouteKey;
   me: CurrentAccountResponse | null;
+  /** The connection lost after the page was shown (X29): a banner over the last content. */
+  connection?: ReactNode;
   children: ReactNode;
 }) {
   const online = useOnline();
@@ -99,26 +102,32 @@ export function Shell({
 
       <div className="shell__main" {...toastArea}>
         <header className="topbar">
-          <div className="topbar__who">
-            <Icon name="user" size={20} />
-            <span className="topbar__name">{who}</span>
-            {phone && <span className="ac-text-body-s ac-muted num">{phone}</span>}
-          </div>
-          <HeaderSearch />
-          <div className="topbar__actions">
-            <Button
-              variant="secondary"
-              size="s"
-              icon="logout"
-              disabled={!online}
-              onClick={() => setLeaving(true)}
-            >
-              Выйти
-            </Button>
+          <div className="topbar__inner">
+            <HeaderSearch />
+            <MenuButton
+              text={who || "Администратор клуба"}
+              label={`Администратор клуба${who ? `: ${who}` : ""}${phone ? `, ${phone}` : ""}`}
+              actions={[
+                {
+                  key: "security",
+                  label: "Безопасность и резервные коды",
+                  icon: "lock",
+                  onSelect: () => navigate("security"),
+                },
+                {
+                  key: "logout",
+                  label: "Выйти",
+                  icon: "logout",
+                  disabled: !online,
+                  onSelect: () => setLeaving(true),
+                },
+              ]}
+            />
           </div>
         </header>
 
         <div className="shell__banners">
+          {connection}
           {!online && (
             <Banner icon="wifiOff" placement="flush">
               Нет сети. Изменения сохранить нельзя — повторите, когда связь вернётся.

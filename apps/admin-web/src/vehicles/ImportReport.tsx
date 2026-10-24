@@ -1,27 +1,45 @@
 import { isApiError } from "@adclub/api-client";
-import type { AdminVehicleImport, VehicleImportPlan, VehicleImportRow } from "@adclub/contracts";
+import type {
+  AdminVehicleImport,
+  AdminVehicleOptionListResponse,
+  VehicleImportPlan,
+  VehicleImportRow,
+} from "@adclub/contracts";
+import type { IconName, Tone } from "@adclub/ui-core";
 import {
+  ActionBar,
+  Badge,
   Banner,
   Button,
-  Chip,
   Dialog,
   EmptyState,
   LoadingContent,
   SkeletonList,
+  StatusBadge,
+  TableToolbar,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api";
-import { AppLink } from "../catalog/shared";
 import { formatMoment } from "../format";
-import { routePaths, vehicleImportPath } from "../router";
+import { StatusChips } from "../layout/filters";
+import { AppLink, Header, Muted, Table, type Column } from "../layout/layout";
+import { navigateTo, routePaths, vehicleImportPath } from "../router";
 import { useLoad } from "../use-load";
-import { Crumbs, LoadError, MoreButton, usePaged } from "./shared";
+import {
+  IMPORTS_CRUMB,
+  LoadError,
+  MoreButton,
+  RefreshButton,
+  usePaged,
+  VEHICLES_CRUMB,
+} from "./shared";
 import {
   countText,
   IMPORT_STATUS_TEXT,
   OUTCOME_TEXT,
+  optionNameOf,
   personText,
   PLAN_TEXT,
   reasonText,
@@ -33,16 +51,52 @@ import {
 /** How often a working import is asked again: the page follows it by itself. */
 const POLL_MS = 1500;
 
+type Options = AdminVehicleOptionListResponse["options"];
+
 const working = (entry: AdminVehicleImport | undefined) =>
   entry?.status === "parsing" || entry?.status === "applying";
+
+/** The mark of a row's plan and of its outcome (X7): a badge, never colored text. */
+const PLAN_ROLE: Record<VehicleImportPlan, { tone: Tone; icon: IconName }> = {
+  create: { tone: "accent", icon: "plus" },
+  update: { tone: "accent", icon: "refresh" },
+  unchanged: { tone: "neutral", icon: "check" },
+  rejected: { tone: "danger", icon: "circleX" },
+};
+
+const OUTCOME_ROLE: Record<keyof typeof OUTCOME_TEXT, { tone: Tone; icon: IconName }> = {
+  created: { tone: "success", icon: "plus" },
+  updated: { tone: "success", icon: "refresh" },
+  unchanged: { tone: "neutral", icon: "check" },
+  rejected: { tone: "danger", icon: "circleX" },
+};
+
+const ROW_COLUMNS: Column[] = [
+  { key: "row", header: "Строка", width: 76, numeric: true },
+  { key: "car", header: "Автомобиль" },
+  { key: "years", header: "Годы", width: 104 },
+  { key: "market", header: "Рынок", width: 80 },
+  { key: "plan", header: "План", width: 240 },
+];
+
+const REJECTED_COLUMNS: Column[] = [
+  { key: "row", header: "Строка", width: 76, numeric: true },
+  { key: "reasons", header: "Что не так" },
+];
 
 /** «Geely Coolray I (SX11)» and the rest of a row as read. */
 function rowCar(values: Record<string, string>): string {
   return [values.make, values.model, values.generation].filter(Boolean).join(" ") || "—";
 }
 
-function rowSpecs(values: Record<string, string>): string {
-  return [values.body, values.engine_code, values.transmission, values.drive]
+/** The lists' values of a row by their names («Кроссовер · JLH-3G15TD · Робот (DCT) · Передний»). */
+function rowSpecs(values: Record<string, string>, options: Options): string {
+  return [
+    optionNameOf(options, "body", values.body),
+    values.engine_code,
+    optionNameOf(options, "transmission", values.transmission),
+    optionNameOf(options, "drive", values.drive),
+  ]
     .filter(Boolean)
     .join(" · ");
 }
@@ -52,15 +106,32 @@ function rowYears(values: Record<string, string>): string {
   return `${values.year_from}–${values.year_to || "н.в."}`;
 }
 
+/** The four numbers of a report or a result: big figures with their words. */
+function Numbers({ entries }: { entries: { label: string; value: number; warn?: boolean }[] }) {
+  return (
+    <dl className="vehicles-numbers">
+      {entries.map((entry) => (
+        <div key={entry.label} className="vehicles-numbers__item">
+          <dt>{entry.label}</dt>
+          <dd className={entry.warn && entry.value > 0 ? "num vehicles-numbers--warn" : "num"}>
+            {entry.value.toLocaleString("ru-RU")}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /**
- * A-CAR-02, one import (SCREENS 7.2; TASK-035.B): while the server checks
- * the rows — the waiting and how far it has got, the page asks again by
- * itself; then the report before anything changes — the four numbers, the
- * rejected rows with their row numbers and reasons, the makes, models,
- * generations and engines the file would create, every row by its plan;
- * «Применить» once, with the numbers; then the result and the rows that
- * went otherwise than the report said (the catalog was changed by hand
- * meanwhile).
+ * A-CAR-02, one import (SCREENS 7.2; TASK-035.B, TASK-080): the crumbs
+ * «Автомобили › Импорт», the file's name with its status; while the server
+ * checks the rows — the waiting and how far it has got, the page asks again
+ * by itself; then the report before anything changes — the four numbers,
+ * the rejected rows with their row numbers and reasons, the makes, models,
+ * generations and engines the file would create, every row by its plan (the
+ * values of the lists by their names); «Применить» once, with the numbers —
+ * or, with nothing to apply, one «Закрыть»; then the result and the rows
+ * that went otherwise than the report said.
  */
 export function ImportReport({ importId }: { importId: string }) {
   const toast = useToast();
@@ -69,8 +140,12 @@ export function ImportReport({ importId }: { importId: string }) {
     async () => (await apiClient.getVehicleImport({ importId })).import,
     importId,
   );
-  const current = entry.data;
-  const [plan, setPlan] = useState<VehicleImportPlan | null>(null);
+  const options = useLoad<AdminVehicleOptionListResponse>(
+    () => apiClient.listVehicleOptions(),
+    "options",
+  );
+  const current = entry.data && entry.data.id === importId ? entry.data : undefined;
+  const [plan, setPlan] = useState<VehicleImportPlan | undefined>(undefined);
   const [confirming, setConfirming] = useState<"apply" | "cancel" | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -121,7 +196,8 @@ export function ImportReport({ importId }: { importId: string }) {
     };
   }, JSON.stringify({ importId, applied }));
 
-  const act = async (what: "apply" | "cancel") => {
+  /** «Применить», «Отменить импорт», and «Закрыть» of a report with nothing to apply. */
+  const act = async (what: "apply" | "cancel" | "close") => {
     setBusy(true);
     setActionError(null);
     try {
@@ -129,8 +205,13 @@ export function ImportReport({ importId }: { importId: string }) {
         what === "apply"
           ? await apiClient.applyVehicleImport({ importId })
           : await apiClient.cancelVehicleImport({ importId });
-      entry.replace(answer.import);
       setConfirming(null);
+      if (what === "close") {
+        toast.show("Импорт закрыт");
+        navigateTo(routePaths.vehicleImports);
+        return;
+      }
+      entry.replace(answer.import);
       toast.show(what === "apply" ? "Импорт применяется" : "Импорт отменён");
     } catch (thrown) {
       if (isApiError(thrown) && thrown.code === "VEHICLE_IMPORT_STATE") {
@@ -155,13 +236,29 @@ export function ImportReport({ importId }: { importId: string }) {
 
   const report = current?.report ?? null;
   const progress = current?.progress ?? null;
+  const nothingToApply = report !== null && report.create + report.update === 0;
+  const optionList = options.data?.options ?? [];
   return (
     <>
-      <Crumbs
-        steps={[
-          { label: "Импорт", href: routePaths.vehicleImports },
-          { label: current?.fileName ?? "Файл" },
-        ]}
+      <Header
+        crumbs={[VEHICLES_CRUMB, IMPORTS_CRUMB]}
+        title={current ? (current.fileName ?? "Импорт") : "Импорт"}
+        subtitle={
+          current && (
+            <>
+              <span aria-live="polite">
+                <StatusBadge kind="vehicleImport" status={current.status}>
+                  {IMPORT_STATUS_TEXT[current.status]}
+                </StatusBadge>
+              </span>
+              <span>{countText(current.rowCount, ROWS)}</span>
+              <span>
+                загрузил {personText(current.uploadedBy)}, {formatMoment(current.createdAt)}
+              </span>
+            </>
+          )
+        }
+        actions={<RefreshButton onClick={entry.reload} />}
       />
       <LoadError error={entry.error} retry={entry.reload} />
       <LoadingContent
@@ -171,20 +268,7 @@ export function ImportReport({ importId }: { importId: string }) {
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
         {current && (
-          <>
-            <div className="page__head">
-              <div className="cell-stack">
-                <h1 className="ac-text-title-l page__title">{current.fileName ?? "Импорт"}</h1>
-                <span className="ac-text-body-s ac-muted">
-                  {countText(current.rowCount, ROWS)} · загрузил {personText(current.uploadedBy)},{" "}
-                  {formatMoment(current.createdAt)}
-                </span>
-              </div>
-              <span className="status status--open" aria-live="polite">
-                {IMPORT_STATUS_TEXT[current.status]}
-              </span>
-            </div>
-
+          <div className="vehicles-stack vehicles-stack--page">
             {same.data && (
               <Banner tone="warning">
                 Этот файл уже загружали {formatMoment(same.data.createdAt)} ·{" "}
@@ -194,14 +278,14 @@ export function ImportReport({ importId }: { importId: string }) {
             {actionError && <Banner tone="warning">{actionError}</Banner>}
 
             {working(current) && (
-              <section className="panel-box" aria-live="polite">
+              <section className="card" aria-live="polite">
                 <p className="ac-text-body-strong">
                   {current.status === "parsing"
                     ? "Проверяем строки файла…"
                     : "Применяем строки к справочнику…"}
                 </p>
                 {progress && progress.total > 0 && (
-                  <>
+                  <div className="cell-stack vehicles-progress">
                     <div
                       className="progress"
                       role="progressbar"
@@ -214,43 +298,31 @@ export function ImportReport({ importId }: { importId: string }) {
                         style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
                       />
                     </div>
-                    <p className="ac-text-caption ac-muted">
+                    <p className="section__note">
                       {progress.done.toLocaleString("ru-RU")} из{" "}
                       {progress.total.toLocaleString("ru-RU")} — страница обновится сама
                     </p>
-                  </>
+                  </div>
                 )}
                 {current.status === "parsing" && (
-                  <p className="ac-text-caption ac-muted">В справочнике пока ничего не меняется.</p>
+                  <p className="section__note">В справочнике пока ничего не меняется.</p>
                 )}
               </section>
             )}
 
             {report && !applied && (
-              <section className="panel-box" aria-labelledby="report-numbers">
-                <h2 id="report-numbers" className="ac-text-heading">
+              <section className="card" aria-labelledby="report-numbers">
+                <h2 id="report-numbers" className="card__title">
                   Отчёт до применения
                 </h2>
-                <dl className="counts-line">
-                  <div>
-                    <dt className="ac-text-caption ac-muted">Добавится</dt>
-                    <dd className="ac-text-title">{report.create}</dd>
-                  </div>
-                  <div>
-                    <dt className="ac-text-caption ac-muted">Обновится</dt>
-                    <dd className="ac-text-title">{report.update}</dd>
-                  </div>
-                  <div>
-                    <dt className="ac-text-caption ac-muted">Без изменений</dt>
-                    <dd className="ac-text-title">{report.unchanged}</dd>
-                  </div>
-                  <div>
-                    <dt className="ac-text-caption ac-muted">Ошибок</dt>
-                    <dd className={`ac-text-title${report.rejected > 0 ? " warning-text" : ""}`}>
-                      {report.rejected}
-                    </dd>
-                  </div>
-                </dl>
+                <Numbers
+                  entries={[
+                    { label: PLAN_TEXT.create, value: report.create },
+                    { label: PLAN_TEXT.update, value: report.update },
+                    { label: PLAN_TEXT.unchanged, value: report.unchanged },
+                    { label: "Ошибок", value: report.rejected, warn: true },
+                  ]}
+                />
                 {report.rejected > 0 && (
                   <p className="ac-text-body-s">
                     Строки с ошибками: {rowNumbersText(report.rejectedRows.map((row) => row.row))}
@@ -258,75 +330,85 @@ export function ImportReport({ importId }: { importId: string }) {
                     {ready ? " Они не применятся; остальные — да." : ""}
                   </p>
                 )}
-                {ready && (
-                  <>
-                    <Banner tone="neutral">
-                      До «Применить» в справочнике ничего не меняется. «Обновится» меняет только
-                      рынок модификации.
-                    </Banner>
-                    <div className="button-row">
-                      <Button
-                        disabled={!online || report.create + report.update === 0}
-                        onClick={() => setConfirming("apply")}
-                      >
-                        Применить
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={!online}
-                        onClick={() => setConfirming("cancel")}
-                      >
-                        Отменить импорт
-                      </Button>
-                    </div>
-                    {report.create + report.update === 0 && (
-                      <p className="ac-text-caption ac-muted">
-                        Применять нечего: все строки уже есть в справочнике или с ошибками.
-                      </p>
-                    )}
-                  </>
-                )}
+                {ready &&
+                  (nothingToApply ? (
+                    <ActionBar
+                      label="Действия с импортом"
+                      main={
+                        <Button disabled={!online} loading={busy} onClick={() => void act("close")}>
+                          Закрыть
+                        </Button>
+                      }
+                      note="Применять нечего: все строки уже есть в справочнике или с ошибками. «Закрыть» завершит импорт, справочник не изменится."
+                    />
+                  ) : (
+                    <>
+                      <Banner tone="neutral">
+                        До «Применить» в справочнике ничего не меняется. «Обновится» меняет только
+                        рынок модификации.
+                      </Banner>
+                      <ActionBar
+                        label="Действия с импортом"
+                        main={
+                          <Button disabled={!online} onClick={() => setConfirming("apply")}>
+                            Применить
+                          </Button>
+                        }
+                        others={[
+                          <Button
+                            key="cancel"
+                            variant="secondary"
+                            disabled={!online}
+                            onClick={() => setConfirming("cancel")}
+                          >
+                            Отменить импорт
+                          </Button>,
+                        ]}
+                      />
+                    </>
+                  ))}
               </section>
             )}
 
             {applied && current.result && (
-              <section className="panel-box" aria-labelledby="result-numbers">
-                <h2 id="result-numbers" className="ac-text-heading">
-                  Итог
-                </h2>
-                <p className="ac-text-body-s ac-muted">
-                  Применил {personText(current.appliedBy)}, {formatMoment(current.appliedAt)}.
-                  Изменения видны в приложении не позже чем через минуту.
-                </p>
-                <dl className="counts-line">
-                  {(["created", "updated", "unchanged", "rejected"] as const).map((key) => (
-                    <div key={key}>
-                      <dt className="ac-text-caption ac-muted">{OUTCOME_TEXT[key]}</dt>
-                      <dd className="ac-text-title">{current.result![key]}</dd>
-                    </div>
-                  ))}
-                  <div>
-                    <dt className="ac-text-caption ac-muted">Решено иначе, чем в отчёте</dt>
-                    <dd
-                      className={`ac-text-title${current.result.differsFromReport > 0 ? " warning-text" : ""}`}
-                    >
-                      {current.result.differsFromReport}
-                    </dd>
-                  </div>
-                </dl>
+              <section className="card" aria-labelledby="result-numbers">
+                <div className="cell-stack">
+                  <h2 id="result-numbers" className="card__title">
+                    Итог
+                  </h2>
+                  <p className="section__note">
+                    Применил {personText(current.appliedBy)}, {formatMoment(current.appliedAt)}.
+                    Изменения видны в приложении не позже чем через минуту.
+                  </p>
+                </div>
+                <Numbers
+                  entries={[
+                    ...(["created", "updated", "unchanged", "rejected"] as const).map((key) => ({
+                      label: OUTCOME_TEXT[key],
+                      value: current.result![key],
+                    })),
+                    {
+                      label: "Решено иначе, чем в отчёте",
+                      value: current.result.differsFromReport,
+                      warn: true,
+                    },
+                  ]}
+                />
               </section>
             )}
 
             {applied && current.result && current.result.differsFromReport > 0 && (
-              <section className="dialog-stack" aria-labelledby="differs">
-                <h2 id="differs" className="ac-text-heading">
-                  Решено иначе, чем в отчёте
-                </h2>
-                <p className="ac-text-body-s ac-muted">
-                  Справочник изменили вручную после отчёта, и при применении эти строки проверены
-                  заново.
-                </p>
-                <RowsTable list={differing} mode="differs" />
+              <section className="section" aria-labelledby="differs">
+                <div className="cell-stack">
+                  <h2 id="differs" className="section__title">
+                    Решено иначе, чем в отчёте
+                  </h2>
+                  <p className="section__note">
+                    Справочник изменили вручную после отчёта, и при применении эти строки проверены
+                    заново.
+                  </p>
+                </div>
+                <RowsTable list={differing} mode="differs" options={optionList} />
               </section>
             )}
 
@@ -350,14 +432,16 @@ export function ImportReport({ importId }: { importId: string }) {
                 report.newModels.length > 0 ||
                 report.newGenerations.length > 0 ||
                 report.newEngines.length > 0) && (
-                <section className="dialog-stack" aria-labelledby="report-new">
-                  <h2 id="report-new" className="ac-text-heading">
-                    {applied ? "Что файл создавал" : "Что файл создаст"}
-                  </h2>
-                  <p className="ac-text-body-s ac-muted">
-                    Проверьте написание: опечатка в марке станет новой маркой.
-                  </p>
-                  <div className="import-columns">
+                <section className="section" aria-labelledby="report-new">
+                  <div className="cell-stack">
+                    <h2 id="report-new" className="section__title">
+                      {applied ? "Что файл создавал" : "Что файл создаст"}
+                    </h2>
+                    <p className="section__note">
+                      Проверьте написание: опечатка в марке станет новой маркой.
+                    </p>
+                  </div>
+                  <div className="vehicles-new">
                     <NewList
                       title="Марки"
                       entries={report.newMakes.map((item) => ({ row: item.row, text: item.name }))}
@@ -388,38 +472,26 @@ export function ImportReport({ importId }: { importId: string }) {
               )}
 
             {report && report.rejectedRows.length > 0 && !applied && (
-              <section className="dialog-stack" aria-labelledby="report-rejected">
-                <h2 id="report-rejected" className="ac-text-heading">
+              <section className="section" aria-labelledby="report-rejected">
+                <h2 id="report-rejected" className="section__title">
                   Строки с ошибками
                 </h2>
-                <div className="table-wrap">
-                  <table className="admin-table vehicles-table">
-                    <thead>
-                      <tr>
-                        <th scope="col" className="num">
-                          Строка
-                        </th>
-                        <th scope="col">Что не так</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.rejectedRows.map((row) => (
-                        <tr key={row.row}>
-                          <td className="num">{row.row}</td>
-                          <td>
-                            <ul className="reason-list ac-text-body-s">
-                              {row.reasons.map((reason, index) => (
-                                <li key={index}>{reasonText(reason)}</li>
-                              ))}
-                            </ul>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Table label="Строки с ошибками" columns={REJECTED_COLUMNS}>
+                  {report.rejectedRows.map((row) => (
+                    <tr key={row.row}>
+                      <td className="num">{row.row}</td>
+                      <td>
+                        <ul className="reason-list ac-text-body-s">
+                          {row.reasons.map((reason, index) => (
+                            <li key={index}>{reasonText(reason)}</li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
                 {report.rejected > report.rejectedRows.length && (
-                  <p className="ac-text-caption ac-muted">
+                  <p className="section__note">
                     Показаны первые {report.rejectedRows.length}; все — в таблице строк ниже с
                     отбором «Ошибка».
                   </p>
@@ -428,24 +500,25 @@ export function ImportReport({ importId }: { importId: string }) {
             )}
 
             {current.status !== "parsing" && (
-              <section className="dialog-stack" aria-labelledby="report-rows">
-                <h2 id="report-rows" className="ac-text-heading">
+              <section className="section" aria-labelledby="report-rows">
+                <h2 id="report-rows" className="section__title">
                   Все строки
                 </h2>
-                <div className="chips" role="group" aria-label="Отбор по плану">
-                  <Chip selected={plan === null} onClick={() => setPlan(null)}>
-                    Все
-                  </Chip>
-                  {(Object.keys(PLAN_TEXT) as VehicleImportPlan[]).map((key) => (
-                    <Chip key={key} selected={plan === key} onClick={() => setPlan(key)}>
-                      {PLAN_TEXT[key]}
-                    </Chip>
-                  ))}
-                </div>
-                <RowsTable list={rows} mode={applied ? "applied" : "report"} />
+                <StatusChips<VehicleImportPlan>
+                  label="Отбор по плану"
+                  value={plan}
+                  allCount={report ? current.rowCount : undefined}
+                  chips={(Object.keys(PLAN_TEXT) as VehicleImportPlan[]).map((key) => ({
+                    value: key,
+                    label: PLAN_TEXT[key],
+                    count: report ? report[key] : undefined,
+                  }))}
+                  onChange={setPlan}
+                />
+                <RowsTable list={rows} mode={applied ? "applied" : "report"} options={optionList} />
               </section>
             )}
-          </>
+          </div>
         )}
       </LoadingContent>
 
@@ -502,14 +575,14 @@ export function ImportReport({ importId }: { importId: string }) {
 function NewList({ title, entries }: { title: string; entries: { row: number; text: string }[] }) {
   if (entries.length === 0) return null;
   return (
-    <div className="panel-box">
+    <div className="card vehicles-new__card">
       <h3 className="ac-text-body-strong">
-        {title}: {entries.length}
+        {title}: <span className="num">{entries.length}</span>
       </h3>
       <ul className="reason-list ac-text-body-s">
         {entries.map((entry, index) => (
           <li key={index}>
-            {entry.text} <span className="ac-muted">· строка {entry.row}</span>
+            {entry.text} <span className="ac-muted nowrap">· строка {entry.row}</span>
           </li>
         ))}
       </ul>
@@ -520,10 +593,15 @@ function NewList({ title, entries }: { title: string; entries: { row: number; te
 function RowsTable({
   list,
   mode,
+  options,
 }: {
   list: ReturnType<typeof usePaged<VehicleImportRow & { id: string }>>;
   mode: "report" | "applied" | "differs";
+  options: Options;
 }) {
+  const columns = ROW_COLUMNS.map((column) =>
+    column.key === "plan" ? { ...column, header: mode === "report" ? "План" : "Итог" } : column,
+  );
   return (
     <>
       <LoadError error={list.first.error} retry={list.first.reload} />
@@ -534,85 +612,84 @@ function RowsTable({
         swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted">Всего: {list.total.toLocaleString("ru-RU")}</p>
-        {list.items.length === 0 ? (
-          <EmptyState icon="search" title="Строк нет" text="Выберите другой отбор" />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table vehicles-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="num">
-                    Строка
-                  </th>
-                  <th scope="col">Автомобиль</th>
-                  <th scope="col">Кузов · двигатель · КПП · привод</th>
-                  <th scope="col">Годы</th>
-                  <th scope="col">Рынок</th>
-                  <th scope="col">{mode === "report" ? "План" : "Итог"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.items.map((row) => {
-                  const reasons =
-                    mode === "report"
-                      ? row.reasons
-                      : row.outcomeReasons.length > 0
-                        ? row.outcomeReasons
-                        : row.reasons;
-                  return (
-                    <tr key={row.row}>
-                      <td className="num">{row.row}</td>
-                      <td className="ac-text-body-s">{rowCar(row.values)}</td>
-                      <td className="ac-text-body-s">{rowSpecs(row.values) || "—"}</td>
-                      <td className="years ac-text-body-s">{rowYears(row.values)}</td>
-                      <td className="ac-text-body-s">{row.values.market || "—"}</td>
-                      <td>
-                        <div className="cell-stack ac-text-body-s">
-                          <span
-                            className={
-                              (mode === "report" ? row.planned : row.outcome) === "rejected"
-                                ? "warning-text"
-                                : undefined
-                            }
-                          >
-                            {mode === "report"
-                              ? row.planned
-                                ? PLAN_TEXT[row.planned]
-                                : "—"
-                              : row.outcome
-                                ? OUTCOME_TEXT[row.outcome]
-                                : "—"}
-                            {mode === "differs" && row.planned && (
-                              <span className="ac-muted">
-                                {" "}
-                                (в отчёте: {PLAN_TEXT[row.planned].toLowerCase()})
-                              </span>
-                            )}
-                          </span>
-                          {mode === "differs" &&
-                            row.planned === "create" &&
-                            row.outcome === "unchanged" && (
-                              <span className="ac-text-caption ac-muted">
-                                Такая модификация уже появилась в справочнике
-                              </span>
-                            )}
-                          {reasons.map((reason, index) => (
-                            <span key={index} className="ac-text-caption ac-muted">
-                              {reasonText(reason, row.values)}
+        <div className="list-block">
+          <TableToolbar total={list.items.length === 0 ? null : list.total} />
+          {list.items.length === 0 ? (
+            <EmptyState compact icon="search" title="Строк нет" text="Выберите другой отбор" />
+          ) : (
+            <Table label="Строки файла" columns={columns}>
+              {list.items.map((row) => {
+                const reasons =
+                  mode === "report"
+                    ? row.reasons
+                    : row.outcomeReasons.length > 0
+                      ? row.outcomeReasons
+                      : row.reasons;
+                return (
+                  <tr key={row.row}>
+                    <td className="num">{row.row}</td>
+                    <td>
+                      <span className="row-title">
+                        <span>{rowCar(row.values)}</span>
+                        <span className="row-title__sub">
+                          {rowSpecs(row.values, options) || "—"}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="nowrap">{rowYears(row.values)}</td>
+                    <td className="nowrap">{row.values.market || <Muted>—</Muted>}</td>
+                    <td>
+                      <div className="cell-stack">
+                        <RowMark row={row} mode={mode} />
+                        {mode === "differs" &&
+                          row.planned === "create" &&
+                          row.outcome === "unchanged" && (
+                            <span className="row-title__sub">
+                              Такая модификация уже появилась в справочнике
                             </span>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <MoreButton list={list} />
+                          )}
+                        {reasons.map((reason, index) => (
+                          <span key={index} className="row-title__sub">
+                            {reasonText(reason, row.values)}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
     </>
+  );
+}
+
+/** The plan of a row (the report) or its outcome (the result), «в отчёте: …» where they differ. */
+function RowMark({ row, mode }: { row: VehicleImportRow; mode: "report" | "applied" | "differs" }) {
+  if (mode === "report") {
+    if (!row.planned) return <Muted>—</Muted>;
+    const role = PLAN_ROLE[row.planned];
+    return (
+      <Badge tone={role.tone} icon={role.icon}>
+        {PLAN_TEXT[row.planned]}
+      </Badge>
+    );
+  }
+  if (!row.outcome) return <Muted>—</Muted>;
+  const role = OUTCOME_ROLE[row.outcome];
+  return (
+    <span className="badges">
+      <Badge tone={role.tone} icon={role.icon}>
+        {OUTCOME_TEXT[row.outcome]}
+      </Badge>
+      {mode === "differs" && row.planned && (
+        <span className="row-title__sub nowrap">
+          в отчёте: {PLAN_TEXT[row.planned].toLowerCase()}
+        </span>
+      )}
+    </span>
   );
 }

@@ -1,7 +1,11 @@
 import { auditActions, type AuditActor } from "@adclub/contracts";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   actionText,
+  actorLines,
+  groupJournal,
+  objectsText,
+  visibleChangeText,
   actorText,
   almatyDayStart,
   changeLines,
@@ -16,6 +20,17 @@ import {
 
 /** The thousands separator of ru-RU (a no-break space). */
 const GAP = (1000).toLocaleString("ru-RU").charAt(1);
+/** The no-break space inside a moment. */
+const NB = String.fromCharCode(160);
+
+// The year of a moment is left out when it is the current one (TASK-080, X19):
+// the tests read the journal as of 24 October 2026.
+beforeAll(() => {
+  vi.useFakeTimers({ now: new Date("2026-10-24T12:00:00+05:00"), toFake: ["Date"] });
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const actor = (overrides: Partial<AuditActor>): AuditActor => ({
   role: "admin",
@@ -100,7 +115,7 @@ describe("the words of the journal", () => {
       ],
     );
     expect(changeLines(null, { orderNumber: 10421, version: 1203, price: 12500 })).toEqual([
-      { field: "orderNumber", before: "—", after: "10421" },
+      { field: "Номер заявки", before: "—", after: "10421" },
       { field: "Версия", before: "—", after: "1203", technical: true },
       { field: "Цена", before: "—", after: `12${GAP}500` },
     ]);
@@ -222,7 +237,7 @@ describe("the words of the journal", () => {
           .map((line) => [line.field, line.before, line.after]),
       ).toEqual([
         ["Статус", "Удалён", "Активен"],
-        ["Удалён", "9 окт. 2026 г., 19:52", "—"],
+        ["Удалён", `9${NB}окт.,${NB}19:52`, "—"],
         ["Получает уведомления", "—", "да"],
       ]);
       // The company the employee belonged to and who removed them — under «Подробнее».
@@ -371,5 +386,210 @@ describe("the words of the journal", () => {
     // The reorder of a kind's nodes names the kind, not a category.
     expect(entityLink("catalog_category", "goods")).toBeNull();
     expect(entityLink("catalog_item_photo", id)).toBeNull();
+  });
+});
+
+describe("the rows of the journal (TASK-080, X16)", () => {
+  const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const JSON_LIKE = /[{}[\]"]/;
+  const photo = "089fd017-0601-4d59-be11-23378782b2f5";
+  const item = "11111111-2222-4333-8444-555555555555";
+
+  /** Real shapes of entries the before-shots of the audit showed with ids and JSON. */
+  const samples: { before: unknown; after: unknown; entityType: string }[] = [
+    {
+      entityType: "catalog_item",
+      before: { values: { material: "organicheskie" } },
+      after: { values: { material: "keramika" }, via: "fill" },
+    },
+    {
+      entityType: "catalog_item",
+      before: { values: { material: null } },
+      after: { values: { material: "organicheskie" }, via: "item" },
+    },
+    {
+      entityType: "catalog_item_photo",
+      before: { status: "proposed", primaryPhotoId: null },
+      after: { status: "approved", primaryPhotoId: photo },
+    },
+    {
+      entityType: "catalog_item_photo",
+      before: null,
+      after: { itemId: item, width: 800, height: 800, sha256: "ab12", sourceType: "manual" },
+    },
+    {
+      entityType: "item_compatibility",
+      before: null,
+      after: { itemId: item, source: "supplier", conditions: { makeId: item, yearFrom: 2023 } },
+    },
+    {
+      entityType: "catalog_item",
+      before: null,
+      after: { status: "approved", analogItemId: item },
+    },
+  ];
+
+  it("shows no id and no JSON in a row: they are only under «Подробнее»", () => {
+    for (const sample of samples) {
+      const lines = changeLines(sample.before, sample.after, [], { entityType: sample.entityType });
+      for (const line of lines.filter((entry) => !entry.technical)) {
+        const shown = `${line.field ?? ""} ${line.text ?? ""} ${line.before} ${line.after}`;
+        expect(shown, JSON.stringify(sample)).not.toMatch(UUID_ANYWHERE);
+        expect(shown, JSON.stringify(sample)).not.toMatch(JSON_LIKE);
+      }
+    }
+  });
+
+  it("says how many values of an item changed and puts each code under «Подробнее»", () => {
+    const lines = changeLines(
+      { values: { material: "organicheskie", wear: null } },
+      { values: { material: "keramika", wear: true }, via: "fill" },
+      [],
+      { entityType: "catalog_item" },
+    );
+    expect(lines.filter((line) => !line.technical)).toEqual([
+      { field: "Характеристики", before: "", after: "", text: "изменено значений: 2" },
+    ]);
+    const technical = lines.filter((line) => line.technical).map((line) => line.field);
+    expect(technical).toEqual(["Характеристики · material", "Характеристики · wear", "via"]);
+  });
+
+  it("names the source of a compatibility and the status of an analog in words", () => {
+    const compatibility = changeLines(null, { source: "supplier" }, [], {
+      entityType: "item_compatibility",
+    });
+    expect(compatibility[0]?.after).toBe("предложение поставщика");
+    const analog = changeLines(null, { status: "approved" }, [], { entityType: "catalog_item" });
+    expect(analog[0]?.after).toBe("Подтверждено");
+  });
+
+  it("an unnamed id, a measurement and a service mark are technical; a named id is shown by its name", () => {
+    const lines = changeLines(
+      { primaryPhotoId: null, itemId: null },
+      { primaryPhotoId: photo, itemId: item, width: 800 },
+      [],
+      { entityType: "catalog_item_photo", names: { [item]: "Колодки тормозные передние" } },
+    );
+    expect(lines.filter((line) => !line.technical)).toEqual([
+      { field: "Позиция", before: "пусто", after: "Колодки тормозные передние" },
+    ]);
+    expect(lines.filter((line) => line.technical).map((line) => line.field)).toEqual([
+      "primaryPhotoId",
+      "width",
+    ]);
+  });
+
+  it("groups alike entries in a row, and only neighbours", () => {
+    const admin = actor({ role: "admin", accountId: "a1", name: "Юрий" });
+    const entry = (id: string, at: string, overrides: Partial<Entry> = {}): Entry => ({
+      id,
+      action: "order.closed_by_admin",
+      actor: admin,
+      entityType: "order",
+      entityId: "o1",
+      reason: null,
+      at,
+      before: null,
+      after: { subject: "order" },
+      ...overrides,
+    });
+    type Entry = {
+      id: string;
+      action: string;
+      actor: AuditActor;
+      entityType: string;
+      entityId: string;
+      reason: string | null;
+      at: string;
+      before: unknown;
+      after: unknown;
+    };
+    const entries = [
+      entry("1", "2026-10-16T10:05:00Z"),
+      entry("2", "2026-10-16T10:04:00Z"),
+      entry("3", "2026-10-16T10:03:00Z"),
+      entry("4", "2026-10-16T10:02:00Z", { action: "order.deadline_extended" }),
+      entry("5", "2026-10-16T10:01:00Z"),
+      entry("6", "2026-10-16T10:00:00Z", { entityId: "o2" }),
+    ];
+    const groups = groupJournal(entries, visibleChangeText);
+    expect(groups.map((group) => [group.entry.id, group.count, group.firstAt])).toEqual([
+      ["1", 3, "2026-10-16T10:03:00Z"],
+      ["4", 1, "2026-10-16T10:02:00Z"],
+      ["5", 1, "2026-10-16T10:01:00Z"],
+      ["6", 1, "2026-10-16T10:00:00Z"],
+    ]);
+    // Another person, or another visible change, is never folded in.
+    const other = groupJournal(
+      [
+        entry("1", "2026-10-16T10:05:00Z"),
+        entry("2", "2026-10-16T10:04:00Z", { actor: actor({ accountId: "a2" }) }),
+      ],
+      visibleChangeText,
+    );
+    expect(other).toHaveLength(2);
+    const changed = groupJournal(
+      [
+        entry("1", "2026-10-16T10:05:00Z", { after: { status: "accepted" } }),
+        entry("2", "2026-10-16T10:04:00Z", { after: { status: "ready" } }),
+      ],
+      visibleChangeText,
+    );
+    expect(changed).toHaveLength(2);
+    // A repeated event over several objects (the buyer's phone of order after
+    // order) is one row with its objects, newest first, each once.
+    const phones = groupJournal(
+      [
+        {
+          ...entry("1", "2026-10-16T10:05:00Z"),
+          action: "order.phone_revealed",
+          entityId: "o3",
+          entityName: "№ 1117",
+          after: { orderNumber: 1117 },
+        },
+        {
+          ...entry("2", "2026-10-16T10:04:00Z"),
+          action: "order.phone_revealed",
+          entityId: "o2",
+          entityName: "№ 1112",
+          after: { orderNumber: 1112 },
+        },
+        {
+          ...entry("3", "2026-10-16T10:03:00Z"),
+          action: "order.phone_revealed",
+          entityId: "o2",
+          entityName: "№ 1112",
+          after: { orderNumber: 1112 },
+        },
+        {
+          ...entry("4", "2026-10-16T10:02:00Z"),
+          action: "order.phone_revealed",
+          entityId: "o1",
+          entityName: "№ 1108",
+          after: { orderNumber: 1108 },
+        },
+      ],
+      visibleChangeText,
+    );
+    expect(phones).toHaveLength(1);
+    expect(phones[0]).toMatchObject({ count: 4, objects: ["№ 1117", "№ 1112", "№ 1108"] });
+    expect(objectsText(["№ 1", "№ 2", "№ 3", "№ 4", "№ 5"])).toBe("№ 1, № 2, № 3 и ещё 2");
+  });
+
+  it("names who acted by name, the role under it; without a name — the role, the mask under it", () => {
+    expect(actorLines(actor({ name: "Юрий", phoneMasked: "+7***0034" }))).toEqual({
+      name: "Юрий",
+      note: "Администратор",
+    });
+    expect(actorLines(actor({ phoneMasked: "+7***0034" }))).toEqual({
+      name: "Администратор",
+      note: "+7***0034",
+    });
+    expect(actorLines(actor({ role: "system" }))).toEqual({ name: "Система", note: null });
+  });
+
+  it("a moment is one line, without the current year", () => {
+    expect(valueText("2026-10-16T10:32:00Z")).toBe(`16${NB}окт.,${NB}15:32`);
+    expect(valueText("2025-10-16T10:32:00Z")).toBe(`16${NB}окт.${NB}2025,${NB}15:32`);
   });
 });

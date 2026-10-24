@@ -1,9 +1,9 @@
-import type { CatalogText, CatalogTexts, CategoryIcon } from "@adclub/contracts";
+import type { CategoryIcon } from "@adclub/contracts";
 import { glyphGrid } from "@adclub/ui-core";
-import type { MouseEvent, ReactNode } from "react";
+
 import { apiClient } from "../api";
 import { actorText } from "../audit/audit-words";
-import { navigateTo, routePaths } from "../router";
+import { routePaths } from "../router";
 import { categoryGlyphs } from "./category-glyphs";
 
 const TABS = [
@@ -13,40 +13,19 @@ const TABS = [
   { key: "requests", label: "Запросы на позиции", href: routePaths.catalogRequests },
 ] as const;
 
-/** The pages of «Справочник» (A-CAT-01…05): real links with their own addresses. */
-export function CatalogTabs({ active }: { active: (typeof TABS)[number]["key"] | null }) {
-  return (
-    <nav className="page-tabs" aria-label="Справочник">
-      {TABS.map((tab) => (
-        <a
-          key={tab.key}
-          href={tab.href}
-          className={tab.key === active ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"}
-          aria-current={tab.key === active ? "page" : undefined}
-          onClick={(event) => follow(event, tab.href)}
-        >
-          {tab.label}
-        </a>
-      ))}
-    </nav>
-  );
+export type CatalogTab = (typeof TABS)[number]["key"];
+
+/** The pages of «Справочник» (A-CAT-01…05) — the one bar of tabs of its `Header`. */
+export function catalogTabs(active: CatalogTab) {
+  return { label: "Справочник", items: TABS, active };
 }
 
-/** A plain left click on a link goes through the admin panel's router; the rest is the browser's. */
-export function follow(event: MouseEvent, href: string): void {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
-  event.preventDefault();
-  navigateTo(href);
-}
+/** The way back from a page of an object of «Справочник» (X11: crumbs, not the section's tabs). */
+export const CATALOG_CRUMB = { label: "Справочник", href: routePaths.catalog };
+export const ITEMS_CRUMB = { label: "Позиции", href: routePaths.catalogItems };
+export const REQUESTS_CRUMB = { label: "Запросы на позиции", href: routePaths.catalogRequests };
 
-/** A link inside the admin panel. */
-export function AppLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} onClick={(event) => follow(event, href)}>
-      {children}
-    </a>
-  );
-}
+export { AppLink, follow } from "../layout/layout";
 
 /** The glyph of a category code (the same map the app draws from, design/icons/icons.mjs). */
 export function CategoryGlyph({ icon, size = 20 }: { icon: CategoryIcon | null; size?: number }) {
@@ -77,37 +56,6 @@ export function CategoryGlyph({ icon, size = 20 }: { icon: CategoryIcon | null; 
         ),
       )}
     </svg>
-  );
-}
-
-/** Where a text came from: the source, an AI translation or a hand-written one. */
-export function originText(text: CatalogText | null): string {
-  if (!text) return "нет";
-  if (text.origin === "source") return "исходный";
-  if (text.origin === "manual") return "вручную";
-  return "ИИ";
-}
-
-/** One name in three languages, the Kazakh and English with where they came from. */
-export function TextsLine({ texts }: { texts: CatalogTexts }) {
-  const lang = (code: "kk" | "en", text: CatalogText | null) => (
-    <span className="texts-line__lang" title={text?.text}>
-      <span className="ac-muted">{code}:</span>{" "}
-      {text ? (
-        <>
-          <span className="clamp">{text.text}</span>{" "}
-          <span className="origin-tag">{originText(text)}</span>
-        </>
-      ) : (
-        <span className="warning-text">нет перевода</span>
-      )}
-    </span>
-  );
-  return (
-    <span className="texts-line ac-text-caption">
-      {lang("kk", texts.kk)}
-      {lang("en", texts.en)}
-    </span>
   );
 }
 

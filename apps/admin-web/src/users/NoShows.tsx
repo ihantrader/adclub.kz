@@ -1,28 +1,42 @@
 import type { AdminDisciplineUser, AdminDisciplineUsersPage } from "@adclub/contracts";
-import { Banner, Button, EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
+import {
+  Banner,
+  Button,
+  EmptyState,
+  IconButton,
+  LoadingContent,
+  Select,
+  SkeletonList,
+  TableToolbar,
+} from "@adclub/ui";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { almatyDayStart } from "../audit/audit-words";
-import { AppLink } from "../catalog/shared";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { Header, RowTitle, rowLink, Table } from "../layout/layout";
+import { Period } from "../orders/Orders";
 import { userPath } from "../router";
 import { useAddressFilters } from "../suppliers/shared";
 import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
-import { UsersTabs } from "./Users";
+import { usersTabs } from "./Users";
+import "./users.css";
 
 const PAGE = 50;
 
+type Sort = "count" | "last";
+
 /**
- * A-USR-03 «Неявки» (SCREENS 7.6; TASK-036.B): who did not come for an
- * item put aside for them — how many no-shows in the period (lifted ones
- * apart), the last one; most first or the latest first; the period in
- * days of Almaty. The marks themselves — on the user's card.
+ * A-USR-03 «Неявки» (SCREENS 7.6; TASK-036.B, TASK-080): a page of
+ * «Пользователи» (the title stays the section's, X11) — who did not come
+ * for an item put aside for them: how many no-shows in the period, how many
+ * were lifted, the last one; most first or the latest first; the period in
+ * days of Almaty. The row opens the user's «Дисциплина».
  */
 export function NoShows() {
   const { query, set } = useAddressFilters();
-  const sort = query.get("sort") === "last" ? "last" : "count";
+  const sort: Sort = query.get("sort") === "last" ? "last" : "count";
   const from = query.get("from") ?? "";
   const to = query.get("to") ?? "";
   const key = JSON.stringify({ sort, from, to });
@@ -41,6 +55,7 @@ export function NoShows() {
   const extra = more.key === key ? more : { key, users: [], next: null };
   const users = [...(first.data?.users ?? []), ...extra.users];
   const next = extra.users.length > 0 ? extra.next : (first.data?.nextOffset ?? null);
+  const filtered = Boolean(from || to);
 
   const loadMore = async () => {
     if (next === null) return;
@@ -58,95 +73,93 @@ export function NoShows() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Неявки</h1>
-      </div>
-      <UsersTabs active="noShows" />
+      <Header
+        title="Пользователи"
+        tabs={usersTabs("noShows")}
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={first.reload} />}
+      />
       <div className="filters">
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Сортировка</span>
-          <select
-            value={sort}
-            onChange={(event) => set({ sort: event.target.value === "last" ? "last" : undefined })}
-          >
-            <option value="count">Больше неявок — выше</option>
-            <option value="last">Недавняя неявка — выше</option>
-          </select>
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">С (время Алматы)</span>
-          <input
-            type="date"
-            value={from}
-            onChange={(event) => set({ from: event.target.value || undefined })}
-          />
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">По</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(event) => set({ to: event.target.value || undefined })}
-          />
-        </label>
+        <Select<Sort>
+          compact
+          label="Сортировка"
+          value={sort}
+          className="filters__select users-sort"
+          options={[
+            { value: "count", label: "Больше неявок — выше" },
+            { value: "last", label: "Недавняя неявка — выше" },
+          ]}
+          onChange={(next) => set({ sort: next === "last" ? "last" : undefined })}
+        />
+        <Period from={from} to={to} onChange={(patch) => set(patch)} />
       </div>
       <LoadError error={first.error} retry={first.reload} />
       <LoadingContent
         ready={first.data !== undefined}
         indicator={first.indicator}
         label="Загрузка"
+        swapKey={first.answerKey}
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted">
-          Всего: {(first.data?.total ?? 0).toLocaleString("ru-RU")}
-        </p>
-        {users.length === 0 ? (
-          <EmptyState
-            icon="circleCheck"
-            title="Неявок нет"
-            text="За этот период все приходили за отложенным"
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Пользователь</th>
-                  <th scope="col" className="num">
-                    Неявок за период
-                  </th>
-                  <th scope="col" className="num">
-                    Снято
-                  </th>
-                  <th scope="col">Последняя неявка</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.accountId}>
+        <div className="list-block">
+          <TableToolbar total={users.length === 0 ? null : (first.data?.total ?? 0)}>
+            {filtered && (
+              <Button
+                variant="text"
+                size="s"
+                onClick={() => set({ from: undefined, to: undefined })}
+              >
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {users.length === 0 ? (
+            <EmptyState
+              icon="circleCheck"
+              title="Неявок нет"
+              text="За этот период все приходили за отложенным"
+            />
+          ) : (
+            <Table
+              label="Неявки"
+              columns={[
+                { key: "user", header: "Пользователь" },
+                { key: "count", header: "Неявок за период", width: 160, numeric: true },
+                { key: "revoked", header: "Снято", width: 104, numeric: true },
+                { key: "last", header: "Последняя неявка", width: 160 },
+              ]}
+            >
+              {users.map((user) => {
+                const href = userPath(user.accountId, "discipline");
+                return (
+                  <tr key={user.accountId} {...rowLink(href)}>
                     <td>
-                      <div className="cell-stack">
-                        <AppLink href={userPath(user.accountId, "discipline")}>
-                          {user.name ?? "Без имени"}
-                        </AppLink>
-                        <span className="ac-text-caption ac-muted num">{user.phone}</span>
-                      </div>
+                      <RowTitle href={href} sub={user.name ? user.phone : "Без имени"}>
+                        <span className={user.name ? undefined : "nowrap"}>
+                          {user.name ?? user.phone}
+                        </span>
+                      </RowTitle>
                     </td>
-                    <td className="num">{user.count}</td>
-                    <td className="num">{user.revokedCount}</td>
-                    <td className="ac-text-body-s num">{formatMoment(user.lastAt)}</td>
+                    <td className="num">{user.count.toLocaleString("ru-RU")}</td>
+                    <td className="num">
+                      {user.revokedCount > 0 ? (
+                        user.revokedCount.toLocaleString("ru-RU")
+                      ) : (
+                        <span className="ac-muted">—</span>
+                      )}
+                    </td>
+                    <td className="ac-text-body-s nowrap">{formatMoment(user.lastAt)}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {moreError && <Banner tone="danger">{moreError}</Banner>}
-        {next !== null && (
-          <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
-            Показать ещё
-          </Button>
-        )}
+                );
+              })}
+            </Table>
+          )}
+          {moreError && <Banner tone="danger">{moreError}</Banner>}
+          {next !== null && (
+            <Button variant="secondary" size="s" onClick={loadMore} loading={loadingMore}>
+              Показать ещё
+            </Button>
+          )}
+        </div>
       </LoadingContent>
     </>
   );

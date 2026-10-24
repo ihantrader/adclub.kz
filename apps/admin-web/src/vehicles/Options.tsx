@@ -6,32 +6,46 @@ import type {
 } from "@adclub/contracts";
 import { auditActions, auditEntities, vehicleOptionKindSchema } from "@adclub/contracts";
 import {
+  Badge,
   Banner,
   Button,
-  Chip,
+  EmptyState,
   IconButton,
   LoadingContent,
   SkeletonList,
+  TableToolbar,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
 import { actorText } from "../audit/audit-words";
-import { navigateTo, useLocation, withQuery } from "../router";
+import { StatusChips } from "../layout/filters";
+import { Header, Table, type Column } from "../layout/layout";
+import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import { OptionDialog } from "./dialogs";
 import {
   FormError,
   LoadError,
+  MarkedTitle,
+  RefreshButton,
+  RowActions,
   StatusDialog,
   StatusMark,
   useStatusFlow,
-  VehiclesTabs,
+  vehiclesTabs,
 } from "./shared";
 import { conflictText, OPTION_KIND_TEXT, vehicleErrorView } from "./vehicle-words";
 
 const KINDS = vehicleOptionKindSchema.options;
+
+const COLUMNS: Column[] = [
+  { key: "name", header: "Русский" },
+  { key: "kk", header: "Казахский", width: 150 },
+  { key: "en", header: "Английский", width: 150 },
+  { key: "actions", header: "Действия", width: 160, actions: true, hiddenHeader: true },
+];
 
 /** Who put a list in another order last — or added an option to it (the journal decides). */
 async function whoReordered(): Promise<string | null> {
@@ -49,12 +63,24 @@ async function whoReordered(): Promise<string | null> {
   }
 }
 
+/** A name a translator hasn't written: «нет» as a warning mark, not a blank. */
+function NameOrMissing({ name }: { name: string | null }) {
+  if (name) return <span>{name}</span>;
+  return (
+    <Badge tone="warning" icon="alertTriangle">
+      Нет названия
+    </Badge>
+  );
+}
+
 /**
- * A-CAR-01, the reference lists — body, gearbox, drive, fuel (TASK-035.B;
- * ARCHITECTURE 4.24 I215): code, names in kk/ru/en written by hand (these
- * lists are never translated automatically), the order by arrows (sent
- * with the order it was made from), archive and restore. An option is
- * named in an import file by its code or any of its names.
+ * A-CAR-01, the reference lists — body, gearbox, drive, fuel (TASK-035.B,
+ * TASK-080; ARCHITECTURE 4.24 I215): the list chosen by chips, then its
+ * values — the Russian name with its code under it and the arrows of the
+ * order next to it (sent with the order they were made from), names in
+ * kk/en written by hand (these lists are never translated automatically),
+ * «Изменить» and «⋯» with the archive and restore. An option is named in an
+ * import file by its code or any of its names.
  */
 export function Options() {
   const toast = useToast();
@@ -114,32 +140,35 @@ export function Options() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Автомобили</h1>
-        <div className="page__tools">
-          <Button size="s" icon="plus" disabled={!online} onClick={() => setEditing("new")}>
-            Новое значение
-          </Button>
-        </div>
+      <Header
+        title="Автомобили"
+        tabs={vehiclesTabs("options")}
+        actions={
+          <>
+            <RefreshButton onClick={list.reload} />
+            <Button size="s" icon="plus" disabled={!online} onClick={() => setEditing("new")}>
+              Новое значение
+            </Button>
+          </>
+        }
+      />
+      <div className="filters__group">
+        <StatusChips<VehicleOptionKind>
+          label="Список"
+          allLabel={null}
+          value={kind}
+          chips={KINDS.map((entry) => ({ value: entry, label: OPTION_KIND_TEXT[entry] }))}
+          onChange={(entry) =>
+            navigateTo(withQuery(routePaths.vehicleOptions, { kind: entry ?? kind }), {
+              replace: true,
+            })
+          }
+        />
+        <p className="section__note">
+          Названия на казахском и английском вводятся вручную — автоперевода у этих списков нет.
+          Файл импорта называет значение кодом или любым названием.
+        </p>
       </div>
-      <VehiclesTabs active="options" />
-      <div className="chips" role="group" aria-label="Список">
-        {KINDS.map((entry) => (
-          <Chip
-            key={entry}
-            selected={entry === kind}
-            onClick={() =>
-              navigateTo(withQuery("/vehicles/options", { kind: entry }), { replace: true })
-            }
-          >
-            {OPTION_KIND_TEXT[entry]}
-          </Chip>
-        ))}
-      </div>
-      <p className="ac-text-body-s ac-muted">
-        Названия на казахском и английском вводятся вручную — автоперевода у этих списков нет. Файл
-        импорта называет значение кодом или любым названием.
-      </p>
       {orderError && (
         <Banner
           tone="warning"
@@ -152,7 +181,7 @@ export function Options() {
                 list.reload();
               }}
             >
-              Обновить
+              Обновить данные
             </Button>
           }
         >
@@ -167,21 +196,16 @@ export function Options() {
         swapKey={list.answerKey}
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        <div className="table-wrap">
-          <table className="admin-table vehicles-table">
-            <thead>
-              <tr>
-                <th scope="col">Порядок</th>
-                <th scope="col">Русский</th>
-                <th scope="col">Казахский</th>
-                <th scope="col">Английский</th>
-                <th scope="col">Статус</th>
-                <th scope="col" className="admin-table__actions">
-                  Действия
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="list-block">
+          <TableToolbar total={options.length === 0 ? null : options.length} />
+          {options.length === 0 ? (
+            <EmptyState
+              icon="car"
+              title={`Список «${OPTION_KIND_TEXT[kind]}» пуст`}
+              text="Добавьте первое значение"
+            />
+          ) : (
+            <Table label={`Список «${OPTION_KIND_TEXT[kind]}»`} columns={COLUMNS}>
               {options.map((option, index) => (
                 <tr
                   key={option.id}
@@ -194,62 +218,49 @@ export function Options() {
                   }
                 >
                   <td>
-                    <div className="button-row">
-                      <IconButton
-                        icon="arrowLeft"
-                        className="arrow-up"
-                        label={`Выше: ${option.names.ru}`}
-                        disabled={!online || index === 0}
-                        onClick={() => move(index, -1)}
-                      />
-                      <IconButton
-                        icon="arrowLeft"
-                        className="arrow-down"
-                        label={`Ниже: ${option.names.ru}`}
-                        disabled={!online || index === options.length - 1}
-                        onClick={() => move(index, 1)}
-                      />
-                    </div>
+                    <span className="vehicles-ordered">
+                      <span className="vehicles-order" role="group" aria-label="Порядок">
+                        <IconButton
+                          icon="arrowUp"
+                          size={20}
+                          label={`Выше: ${option.names.ru}`}
+                          disabled={!online || index === 0}
+                          onClick={() => move(index, -1)}
+                        />
+                        <IconButton
+                          icon="arrowDown"
+                          size={20}
+                          label={`Ниже: ${option.names.ru}`}
+                          disabled={!online || index === options.length - 1}
+                          onClick={() => move(index, 1)}
+                        />
+                      </span>
+                      <MarkedTitle mark={<StatusMark status={option.status} />}>
+                        <span className="row-title">
+                          <span className="vehicles-name">{option.names.ru}</span>
+                          <span className="code-text">{option.code}</span>
+                        </span>
+                      </MarkedTitle>
+                    </span>
                   </td>
                   <td>
-                    <div className="cell-stack">
-                      <span className="ac-text-body-strong">{option.names.ru}</span>
-                      <code className="ac-text-caption ac-muted">{option.code}</code>
-                    </div>
-                  </td>
-                  <td className="ac-text-body-s">
-                    {option.names.kk ?? <span className="warning-text">нет</span>}
-                  </td>
-                  <td className="ac-text-body-s">
-                    {option.names.en ?? <span className="warning-text">нет</span>}
+                    <NameOrMissing name={option.names.kk} />
                   </td>
                   <td>
-                    <StatusMark status={option.status} />
+                    <NameOrMissing name={option.names.en} />
                   </td>
                   <td className="admin-table__actions">
-                    <div className="button-row button-row--end">
-                      <Button
-                        variant="secondary"
-                        size="s"
-                        disabled={!online}
-                        onClick={() => setEditing(option)}
-                      >
-                        Изменить
-                      </Button>
-                      <Button
-                        variant="text"
-                        size="s"
-                        disabled={!online}
-                        onClick={() => status.open(option)}
-                      >
-                        {option.status === "active" ? "В архив" : "Восстановить"}
-                      </Button>
-                    </div>
+                    <RowActions
+                      name={option.names.ru}
+                      status={option.status}
+                      onEdit={() => setEditing(option)}
+                      onStatus={() => status.open(option)}
+                    />
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </Table>
+          )}
         </div>
       </LoadingContent>
 

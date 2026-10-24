@@ -1,0 +1,154 @@
+/* «Автомобили» of the admin panel (TASK-035.B, TASK-080): only what the
+   common layout (app.css, src/layout) doesn't already give — the order
+   arrows next to a name, the numbers of an import's report, the values of
+   the reference lists in the template's help. Tokens only. */
+
+/* Blocks of one page 32 apart (an import's report, the template's help). */
+.vehicles-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-6);
+  min-width: 0;
+}
+
+.vehicles-stack--page {
+  gap: var(--ac-space-8);
+}
+
+/* The name in the first cell of a row that leads nowhere (an engine, an option). */
+.vehicles-name {
+  color: var(--ac-color-text);
+  font-weight: var(--ac-font-weight-body-strong);
+  overflow-wrap: break-word;
+}
+
+/* The name and, beside it, its status mark where it departs from the usual. */
+.vehicles-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1) var(--ac-space-3);
+  min-width: 0;
+}
+
+.vehicles-engine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+/* X6: no column «Порядок» — the arrows stand next to the name, 32 each. */
+.vehicles-ordered {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.vehicles-order {
+  display: inline-flex;
+  flex: none;
+}
+
+.vehicles-order .ac-icon-button {
+  width: 32px;
+  height: 32px;
+  color: var(--ac-color-text-muted);
+}
+
+.vehicles-order .ac-icon-button:hover:not(:disabled) {
+  color: var(--ac-color-text);
+}
+
+.vehicles-order .ac-icon-button:disabled {
+  opacity: 0.35;
+}
+
+/* The four numbers of a report or a result: big figures, their words under them. */
+.vehicles-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-3) var(--ac-space-8);
+  margin: 0;
+}
+
+.vehicles-numbers__item {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+}
+
+.vehicles-numbers__item dt {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.vehicles-numbers__item dd {
+  margin: 0;
+  color: var(--ac-color-text);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: var(--ac-font-weight-heading);
+}
+
+.vehicles-numbers__item .vehicles-numbers--warn {
+  color: var(--ac-color-warning);
+}
+
+.vehicles-progress {
+  align-items: stretch;
+  gap: var(--ac-space-2);
+}
+
+/* What the file creates: four small cards side by side. */
+.vehicles-new {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--ac-space-4);
+  align-items: start;
+}
+
+.vehicles-new__card {
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-4);
+}
+
+/* The template's columns: a name like «engine_displacement_l» never breaks (X10, X20). */
+.template-table td:first-child .vehicles-name {
+  white-space: nowrap;
+}
+
+/* The values of the reference lists: the kind on the left, its values in a line. */
+.vehicles-values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  margin: 0;
+}
+
+.vehicles-values__row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--ac-space-4);
+}
+
+.vehicles-values__row dd {
+  margin: 0;
+}
+
+.vehicles-values__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-1) var(--ac-space-4);
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 20px;
+  list-style: none;
+}
+
+.vehicles-values__list li {
+  white-space: nowrap;
+}

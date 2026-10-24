@@ -73,6 +73,70 @@ function isLocalized(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** The parts of composite settings in words (TASK-080: never JSON on screen). */
+const PART_TEXT: Record<string, string> = {
+  // guest_limits
+  photo_recognitions: "Распознавания фото",
+  voice_requests: "Голосовые",
+  assistant_dialogs: "Диалоги",
+  // rating_weights
+  reviews: "Оценки",
+  response_rate: "Доля ответов",
+  deadline_rate: "Соблюдение сроков",
+  // catalog_recommended_weights
+  price: "Цена",
+  receipt: "Дата получения",
+  city: "Свой город",
+  verified: "Проверенный партнёр",
+  rating: "Рейтинг",
+  // critical_notification_kinds
+  order_accepted: "Заявка принята",
+  order_ready: "Готово к выдаче",
+  order_confirmed: "Срок подтверждён",
+  order_declined: "Отказ поставщика",
+  order_expired_no_response: "Поставщик не ответил",
+  term_proposed: "Предложен срок",
+  time_proposed: "Предложено время",
+  reserve_expiring: "Резерв истекает",
+  order_closed: "Заявка закрыта",
+  maintenance_reminder: "Напоминание о ТО",
+  payment_failed: "Проблема с оплатой",
+};
+
+/** A part of a composite value by its word, or its key when this list has no word for it. */
+export function partText(key: string): string {
+  return PART_TEXT[key] ?? key;
+}
+
+/**
+ * «Распознавания фото: 3 · Голосовые: 5 · Диалоги: 3», «Заявка принята,
+ * Резерв истекает» — a composite value in words.
+ */
+export function compositeText(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "ничего";
+    return value
+      .map((entry) => (typeof entry === "string" ? partText(entry) : String(entry)))
+      .join(", ");
+  }
+  if (isLocalized(value)) {
+    return Object.entries(value)
+      .map(([key, part]) => {
+        const text =
+          typeof part === "number"
+            ? numberText(part)
+            : typeof part === "boolean"
+              ? part
+                ? "да"
+                : "нет"
+              : String(part);
+        return `${partText(key)}: ${text}`;
+      })
+      .join(" · ");
+  }
+  return String(value);
+}
+
 /** How a value reads in the list and in «было → стало». */
 export function formatValue(setting: Setting, value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -89,7 +153,10 @@ export function formatValue(setting: Setting, value: unknown): string {
     case "localized":
       return isLocalized(value) && typeof value.ru === "string" ? value.ru : JSON.stringify(value);
     case "json":
-      return JSON.stringify(value);
+      return compositeText(value);
+    case "version":
+      // «0.0.0» is no minimum at all (X: «Без ограничения»).
+      return value === "0.0.0" ? "Без ограничения" : String(value);
     default:
       return String(value);
   }
@@ -248,8 +315,13 @@ export function reasonProblem(reason: string): string | null {
 }
 
 /** Who changed a setting: the number partly hidden, or the server's operator. */
-export function settingActorText(actor: SettingActor): string {
-  return actor.kind === "operator" ? "оператор сервера" : (actor.phoneMasked ?? "администратор");
+export function settingActorText(
+  actor: SettingActor,
+  names?: ReadonlyMap<string, string | null>,
+): string {
+  if (actor.kind === "operator") return "оператор сервера";
+  // The administrator's name when the list of administrators knows it (TASK-080, X16).
+  return names?.get(actor.adminId) ?? actor.phoneMasked ?? "администратор";
 }
 
 /**

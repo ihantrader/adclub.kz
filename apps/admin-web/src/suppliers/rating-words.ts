@@ -29,6 +29,20 @@ export function listRatingText(rating: AdminSupplierListRating | null): string {
   return `★ ${ratingNumber(rating.value)} (${rating.count})`;
 }
 
+/** «оценка», «оценки», «оценок» for a count. */
+export function scoresWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "оценка";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "оценки";
+  return "оценок";
+}
+
+/** The rating for a screen reader: «Рейтинг 4,1 из 5, 9 оценок». */
+export function ratingLabel(value: number, count: number): string {
+  return `Рейтинг ${ratingNumber(value)} из 5, ${count.toLocaleString("ru-RU")} ${scoresWord(count)}`;
+}
+
 export const RATING_FILTER_TEXT: Record<SupplierRatingFilter, string> = {
   low: "Ниже порога сигнала",
   new: "Новые (без рейтинга)",

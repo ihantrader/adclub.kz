@@ -1,4 +1,5 @@
 import type { AuditActor, AuditActorRole } from "@adclub/contracts";
+import { monthName } from "@adclub/i18n";
 import { formatMoment } from "../format";
 import { ORDER_STATUS_TEXT } from "../orders/order-words";
 import { COMPLAINT_REASON_TEXT, HOLD_KIND_TEXT, REJECT_REASON_TEXT } from "../reviews/review-words";
@@ -248,6 +249,111 @@ export function actorText(actor: AuditActor): string {
   return who || ROLE_TEXT[actor.role];
 }
 
+/**
+ * Who acted, for a row of the journal (X16): the name in one line — or the
+ * role, when the person gave none — and under it the role or the number
+ * partly hidden, never a number in place of a name.
+ */
+export function actorLines(actor: AuditActor): { name: string; note: string | null } {
+  if (actor.role === "operator" || actor.role === "system") {
+    return { name: ROLE_TEXT[actor.role], note: null };
+  }
+  if (actor.name) return { name: actor.name, note: ROLE_TEXT[actor.role] };
+  return { name: ROLE_TEXT[actor.role], note: actor.phoneMasked };
+}
+
+/** Entries of the journal side by side, one shown for several alike (X16). */
+export interface JournalGroup<E> {
+  entry: E;
+  /** How many alike entries follow each other here (1 — alone). */
+  count: number;
+  /** The earliest of them (the entries come newest first). */
+  firstAt: string;
+  /**
+   * The objects of a group of a repeated event over several objects («№ 1117,
+   * № 1112»), newest first, each once; empty when the group is of one object.
+   */
+  objects: string[];
+}
+
+/**
+ * Events a person repeats object after object, which say nothing new each
+ * time: a supplier opening the buyer's phone of order after order. Their
+ * neighbours group whatever the object (X16: «~70 одинаковых подряд»).
+ */
+const REPEATED_EVENTS: ReadonlySet<string> = new Set(["order.phone_revealed", "phone.revealed"]);
+
+/**
+ * Alike entries in a row — one person doing the same to the same object
+ * with the same visible change and reason, «открыт телефон» twelve times —
+ * shown once: «· 12 раз» (X16). Only neighbours group: the order of time
+ * stays as the server gave it.
+ */
+export function groupJournal<
+  E extends {
+    action: string;
+    actor: AuditActor;
+    entityType: string;
+    entityId: string;
+    entityName?: string | null;
+    reason: string | null;
+    at: string;
+  },
+>(entries: readonly E[], visible: (entry: E) => string): JournalGroup<E>[] {
+  const groups: JournalGroup<E>[] = [];
+  let lastKey: string | null = null;
+  for (const entry of entries) {
+    const repeated = REPEATED_EVENTS.has(entry.action);
+    const key = [
+      entry.action,
+      entry.actor.role,
+      entry.actor.accountId ?? "",
+      entry.actor.supplierMemberId ?? "",
+      entry.entityType,
+      repeated ? "" : entry.entityId,
+      entry.reason ?? "",
+      repeated ? "" : visible(entry),
+    ].join("\u0001");
+    const last = groups[groups.length - 1];
+    if (last && key === lastKey) {
+      last.count += 1;
+      last.firstAt = entry.at;
+      if (entry.entityId !== last.entry.entityId || last.objects.length > 0) {
+        if (last.objects.length === 0) last.objects.push(last.entry.entityName ?? "не найден");
+        const name = entry.entityName ?? "не найден";
+        if (!last.objects.includes(name)) last.objects.push(name);
+      }
+    } else {
+      groups.push({ entry, count: 1, firstAt: entry.at, objects: [] });
+    }
+    lastKey = key;
+  }
+  return groups;
+}
+
+/** «№ 1117, № 1112, № 1108 и ещё 9» — the objects of a group, the first few by name. */
+export function objectsText(objects: readonly string[], shown = 3): string {
+  const head = objects.slice(0, shown).join(", ");
+  const rest = objects.length - shown;
+  return rest > 0 ? `${head} и ещё ${String(rest)}` : head;
+}
+
+/** The visible lines of an entry as one text: what decides whether two entries are alike. */
+export function visibleChangeText(entry: {
+  before: unknown;
+  after: unknown;
+  entityType: string;
+  names?: Record<string, string> | null;
+}): string {
+  return changeLines(entry.before, entry.after, hiddenFieldsOf(entry.entityType), {
+    entityType: entry.entityType,
+    names: entry.names ?? undefined,
+  })
+    .filter((line) => !line.technical)
+    .map((line) => `${line.field ?? ""}:${line.text ?? `${line.before}>${line.after}`}`)
+    .join("|");
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A field of `before`/`after` of an entry, if it is a string. */
@@ -409,6 +515,8 @@ export interface ChangeLine {
   before: string;
   after: string;
   technical?: true;
+  /** A line that says what changed in words, without «было → стало» («изменено значений: 2»). */
+  text?: string;
 }
 
 /** What a line needs besides the two values: whose entry it is and the names of the ids. */
@@ -518,6 +626,7 @@ const FIELD_TEXT: Record<string, string> = {
   validUntil: "До",
   endedAt: "Завершена",
   number: "Номер",
+  orderNumber: "Номер заявки",
   deadline: "Срок",
   until: "До",
   minutes: "Минут",
@@ -581,6 +690,20 @@ const TECHNICAL_FIELDS = new Set([
   "entityType",
   "field",
   "lang",
+  // TASK-080, X16: service marks of an entry — how a change came, a file's
+  // measurements and checksum — only under «Подробнее».
+  "via",
+  "width",
+  "height",
+  "bytes",
+  "size",
+  "sizeBytes",
+  "sha256",
+  "checksum",
+  "contentType",
+  "format",
+  "storageKey",
+  "primaryPhotoId",
 ]);
 
 const ACTIVE_ARCHIVED: Record<string, string> = {
@@ -588,6 +711,11 @@ const ACTIVE_ARCHIVED: Record<string, string> = {
   hidden: "Скрыта",
   archived: "В архиве",
   draft: "Черновик",
+  // A link of analogs, a proposal: the status of a thing that is decided.
+  proposed: "Предложено",
+  pending: "Ждёт решения",
+  approved: "Подтверждено",
+  rejected: "Отклонено",
 };
 
 /** The values of a status by the kind of object. */
@@ -625,7 +753,14 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
 const VALUE_WORDS: Record<string, Record<string, string>> = {
   state: { draft: "Черновик", active: "Активен", paused: "Пауза", blocked: "Блокировка" },
   type: { ...SUPPLIER_TYPE_TEXT, part: "Запчасть", generic: "Товар", service: "Услуга" },
-  source: { ...LEAD_SOURCE_TEXT, manual: "вручную", price_import: "из прайса" },
+  source: {
+    ...LEAD_SOURCE_TEXT,
+    manual: "вручную",
+    price_import: "из прайса",
+    supplier: "предложение поставщика",
+    ai: "предложено ИИ",
+    copy: "скопирована с аналога",
+  },
   how: { created: "создана новая позиция", existing: "существующая позиция" },
   deadline: { response: "срок ответа", reserve: "резерв" },
   subject: {
@@ -734,6 +869,11 @@ export function valueText(
           ? VALUE_WORDS[field]
           : undefined;
     if (words?.[value]) return words[value]!;
+    // «2026-09-mvp» — a version of a consent text by its month (X28): «от сент. 2026».
+    if (field && /consentversion$/i.test(field)) {
+      const version = /^(\d{4})-(\d{2})/.exec(value);
+      if (version) return `от ${monthName(Number(version[2]), "ru", "short")} ${version[1]}`;
+    }
     if (field === "status" && ACTIVE_ARCHIVED[value]) return ACTIVE_ARCHIVED[value]!;
     if (ISO_MOMENT.test(value) && !Number.isNaN(Date.parse(value))) return formatMoment(value);
     if (ISO_DATE.test(value)) return value.split("-").reverse().join(".");
@@ -756,8 +896,14 @@ export function valueText(
     const text = value.ru ?? value.text ?? value.kk ?? value.en;
     if (typeof text === "string") return text;
     if (isRecord(text) && typeof text.text === "string") return text.text;
+    // Never JSON (X16): «ключ: значение; …» — read under «Подробнее».
+    const entries = Object.entries(value);
+    if (entries.length === 0) return "пусто";
+    return entries
+      .map(([key, entry]) => `${FIELD_TEXT[key] ?? key}: ${valueText(entry, key, context)}`)
+      .join("; ");
   }
-  return JSON.stringify(value);
+  return String(value);
 }
 
 /**
@@ -780,6 +926,16 @@ const ENTITY_FIELD_TEXT: Record<string, Record<string, string>> = {
   admin_user: { name: "Имя" },
 };
 
+/** An id the server gave no name for: it says nothing to an administrator. */
+function unnamedId(value: unknown, context: ChangeContext): boolean {
+  return typeof value === "string" && UUID.test(value) && !context.names?.[value];
+}
+
+/** A field this journal has no word for: a code of the server, read only under «Подробнее». */
+const FIELD_NAMES_OF_RECORDS: Record<string, string> = {
+  values: "Характеристики",
+};
+
 function line(key: string, before: unknown, after: unknown, context: ChangeContext): ChangeLine {
   const entry: ChangeLine = {
     field:
@@ -789,8 +945,47 @@ function line(key: string, before: unknown, after: unknown, context: ChangeConte
     before: valueText(before, key, context),
     after: valueText(after, key, context),
   };
-  if (TECHNICAL_FIELDS.has(key)) entry.technical = true;
+  if (
+    TECHNICAL_FIELDS.has(key) ||
+    unnamedId(before, context) ||
+    unnamedId(after, context) ||
+    !(key in FIELD_TEXT || (context.entityType && ENTITY_FIELD_TEXT[context.entityType]?.[key]))
+  ) {
+    entry.technical = true;
+  }
   return entry;
+}
+
+/**
+ * A field whose value is a set of codes (the values of an item by attribute
+ * code): one line in words — how many changed — and each code under
+ * «Подробнее» (X16: no JSON, no codes in the row).
+ */
+function recordLines(
+  key: string,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  context: ChangeContext,
+): ChangeLine[] {
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+    (name) => JSON.stringify(before[name]) !== JSON.stringify(after[name]),
+  );
+  if (keys.length === 0) return [];
+  const field = FIELD_TEXT[key] ?? FIELD_NAMES_OF_RECORDS[key] ?? key;
+  return [
+    {
+      field,
+      before: "",
+      after: "",
+      text: `изменено значений: ${String(keys.length)}`,
+    },
+    ...keys.map((name): ChangeLine => ({
+      field: `${field} · ${name}`,
+      before: valueText(before[name], name, context),
+      after: valueText(after[name], name, context),
+      technical: true,
+    })),
+  ];
 }
 
 /**
@@ -811,7 +1006,19 @@ export function changeLines(
     return keys
       .filter((key) => !hidden.includes(key))
       .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-      .map((key) => {
+      .flatMap((key) => {
+        const was = before[key];
+        const now = after[key];
+        const nameless = (value: unknown) =>
+          isRecord(value) && !["ru", "text", "kk", "en"].some((name) => name in value);
+        if ((nameless(was) || was === undefined || was === null) && nameless(now)) {
+          return recordLines(
+            key,
+            isRecord(was) ? was : {},
+            now as Record<string, unknown>,
+            context,
+          );
+        }
         const entry = line(key, before[key], after[key], context);
         // An id only «before» names what the object belonged to (an employee's
         // company on its removal), not a change: under «Подробнее».

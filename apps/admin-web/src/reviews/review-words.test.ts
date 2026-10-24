@@ -1,8 +1,10 @@
 import type { AdminComplaint, AdminReview } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  complaintChipCount,
   complaintConflictText,
   holdReasonText,
+  holdReasonWords,
   reviewActions,
   reviewConflictText,
   scoreText,
@@ -104,5 +106,24 @@ describe("the words of reviews (TASK-049)", () => {
   it("draws the score in stars", () => {
     expect(scoreText(4)).toBe("★★★★☆ 4");
     expect(scoreText(1)).toBe("★☆☆☆☆ 1");
+  });
+
+  it("says a reason without its source — the row marks AI with its badge (X26)", () => {
+    expect(
+      holdReasonWords({ kind: "profanity", source: "ai", explanation: "Оскорбление продавца" }),
+    ).toBe("мат или оскорбления (Оскорбление продавца)");
+    expect(holdReasonWords({ kind: "supplier_name", source: "rule", explanation: null })).toBe(
+      "название поставщика",
+    );
+  });
+
+  it("counts the status chips of complaints from the server's counts", () => {
+    const counts = { new: 2, in_progress: 3, resolved: 7 };
+    expect(complaintChipCount("open", counts)).toBe(5);
+    expect(complaintChipCount("new", counts)).toBe(2);
+    expect(complaintChipCount("resolved", counts)).toBe(7);
+    expect(complaintChipCount("all", counts)).toBe(12);
+    expect(complaintChipCount("all", { new: 1 })).toBe(1);
+    expect(complaintChipCount("open", null)).toBeNull();
   });
 });

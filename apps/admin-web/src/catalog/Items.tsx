@@ -4,17 +4,21 @@ import type {
   AdminCatalogItemPage,
 } from "@adclub/contracts";
 import {
+  Badge,
   Banner,
   Button,
-  Checkbox,
   EmptyState,
+  IconButton,
   LoadingContent,
-  SearchField,
   SkeletonList,
+  StatusBadge,
+  TableToolbar,
 } from "@adclub/ui";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
+import { FilterSearch, FilterSelect, FlagChips } from "../layout/filters";
+import { Header, RowTitle, rowLink, Table, Thumb } from "../layout/layout";
 import { catalogItemPath, navigateTo, routePaths, useLocation } from "../router";
 import { SearchSelect } from "../search-select/SearchSelect";
 import type { Choice } from "../search-select/search-select-core";
@@ -29,7 +33,7 @@ import {
   type ItemFilterKey,
   type ItemFilters,
 } from "./item-filters";
-import { AppLink, CatalogTabs } from "./shared";
+import { catalogTabs } from "./shared";
 import { ruText } from "./values";
 
 const PAGE = 50;
@@ -37,7 +41,7 @@ const PAGE = 50;
 /** Brands of every status: an archived brand's items are found too. */
 const brandSearch = createChoiceSources(apiClient).brands();
 
-/** The checkbox filters of A-CAT-04, each the rule of a home card where there is one. */
+/** The flags of A-CAT-04 as chips, each the rule of a home card where there is one. */
 const FLAGS: { key: ItemFilterKey; value: string; label: string }[] = [
   { key: "hasOffers", value: "true", label: "Есть предложения" },
   { key: "withoutPhoto", value: "true", label: "Без фото" },
@@ -45,6 +49,14 @@ const FLAGS: { key: ItemFilterKey; value: string; label: string }[] = [
   { key: "withoutCompatibility", value: "true", label: "Без совместимости" },
   { key: "withoutTranslation", value: "true", label: "Без перевода" },
   { key: "sameProduct", value: "matching", label: "Совпадают с другим товаром" },
+];
+
+const COLUMNS = [
+  { key: "photo", header: "Фото", width: 64, hiddenHeader: true },
+  { key: "item", header: "Позиция" },
+  { key: "category", header: "Категория", width: 260 },
+  { key: "state", header: "Состояние", width: 200 },
+  { key: "offers", header: "Предложений", width: 130, numeric: true },
 ];
 
 /** Subcategories of the tree as «Узел · Подкатегория», for the filter and the rows. */
@@ -59,10 +71,13 @@ export function subcategoryNames(tree: AdminCategoryTreeResponse | undefined): M
 }
 
 /**
- * A-CAT-04 «Позиции» (SCREENS 7.2; TASK-035): search by the article in any
- * spelling and the name in any language, filters in the address under the
- * server's own names — a card of the home screen opens this list with the
- * very filters it counted — pages by the server's cursor and «всего N».
+ * A-CAT-04 «Позиции» (SCREENS 7.2; TASK-035, TASK-080): search by the
+ * article in any spelling and the name in any language; one row of selects
+ * and one row of flag chips, in the address under the server's own names —
+ * a card of the home screen opens this list with the very filters it
+ * counted; «Всего N» over the table; pages by the server's cursor. Only
+ * what departs from the usual is marked: a draft, the archive, the
+ * incomplete — an active, complete item has no mark.
  */
 export function Items() {
   const location = useLocation();
@@ -101,6 +116,11 @@ export function Items() {
     navigateTo(itemsLink(values), { replace: true });
   };
 
+  const reset = () => {
+    setSearch("");
+    navigateTo(routePaths.catalogItems, { replace: true });
+  };
+
   // The search goes to the address a moment after typing stops.
   useEffect(() => {
     const trimmed = search.trim();
@@ -123,112 +143,78 @@ export function Items() {
     }
   };
 
+  const total = first.data?.total ?? 0;
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Справочник</h1>
-        <div className="page__tools">
-          <Button variant="secondary" size="s" icon="refresh" onClick={first.reload}>
-            Обновить
-          </Button>
-          <Button
-            size="s"
-            icon="plus"
-            onClick={() =>
-              navigateTo(
-                filters.categoryId
-                  ? `${routePaths.catalogItemNew}?categoryId=${filters.categoryId}`
-                  : routePaths.catalogItemNew,
-              )
-            }
-          >
-            Новая позиция
-          </Button>
-        </div>
-      </div>
-      <CatalogTabs active="items" />
+      <Header
+        title="Справочник"
+        tabs={catalogTabs("items")}
+        actions={
+          <>
+            <IconButton icon="refresh" label="Обновить" size={20} onClick={first.reload} />
+            <Button
+              size="s"
+              icon="plus"
+              onClick={() =>
+                navigateTo(
+                  filters.categoryId
+                    ? `${routePaths.catalogItemNew}?categoryId=${filters.categoryId}`
+                    : routePaths.catalogItemNew,
+                )
+              }
+            >
+              Новая позиция
+            </Button>
+          </>
+        }
+      />
 
-      <div className="filters">
-        <SearchField
-          label="Артикул или название"
-          value={search}
-          onChange={setSearch}
-          clearLabel="Очистить"
-        />
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Категория</span>
-          <select
-            value={filters.categoryId ?? ""}
-            onChange={(event) => set({ categoryId: event.target.value || undefined })}
-          >
-            <option value="">Все</option>
-            {[...categories].map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <SearchSelect
-          label="Бренд"
-          value={brand}
-          empty="Все"
-          search={brandSearch}
-          onChange={(choice) => {
-            setBrandLabel(choice);
-            set({ brandId: choice?.id });
-          }}
-        />
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Тип</span>
-          <select
-            value={filters.type ?? ""}
-            onChange={(event) => set({ type: event.target.value || undefined })}
-          >
-            <option value="">Все</option>
-            {Object.entries(ITEM_TYPE_TEXT).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Статус</span>
-          <select
-            value={filters.status ?? ""}
-            onChange={(event) => set({ status: event.target.value || undefined })}
-          >
-            <option value="">Все</option>
-            {Object.entries(ITEM_STATUS_TEXT).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="filters filters--flags">
-        {FLAGS.map((flag) => (
-          <Checkbox
-            key={flag.key}
-            label={flag.label}
-            checked={filters[flag.key] === flag.value}
-            onChange={(checked) => set({ [flag.key]: checked ? flag.value : undefined })}
+      <div className="filters__group">
+        <div className="filters">
+          <FilterSearch
+            label="Поиск позиций"
+            placeholder="Артикул или название"
+            value={search}
+            onChange={setSearch}
           />
-        ))}
-        {filtered(filters) && (
-          <Button
-            variant="text"
-            size="s"
-            onClick={() => {
-              setSearch("");
-              navigateTo(routePaths.catalogItems, { replace: true });
+          <FilterSelect
+            label="Категория"
+            value={filters.categoryId}
+            options={[...categories].map(([id, name]) => ({ value: id, label: name }))}
+            onChange={(categoryId) => set({ categoryId })}
+          />
+          <SearchSelect
+            compact
+            label="Бренд"
+            value={brand}
+            empty="Все"
+            search={brandSearch}
+            onChange={(choice) => {
+              setBrandLabel(choice);
+              set({ brandId: choice?.id });
             }}
-          >
-            Сбросить
-          </Button>
-        )}
+          />
+          <FilterSelect
+            label="Тип"
+            value={filters.type}
+            options={Object.entries(ITEM_TYPE_TEXT).map(([value, label]) => ({ value, label }))}
+            onChange={(type) => set({ type })}
+          />
+          <FilterSelect
+            label="Статус"
+            value={filters.status}
+            options={Object.entries(ITEM_STATUS_TEXT).map(([value, label]) => ({ value, label }))}
+            onChange={(status) => set({ status })}
+          />
+        </div>
+        <FlagChips
+          label="Отборы позиций"
+          flags={FLAGS}
+          isOn={(flag) => filters[flag] === FLAGS.find((entry) => entry.key === flag)?.value}
+          onToggle={(flag, on) =>
+            set({ [flag]: on ? FLAGS.find((entry) => entry.key === flag)?.value : undefined })
+          }
+        />
       </div>
 
       {first.error !== undefined && (
@@ -250,94 +236,92 @@ export function Items() {
         swapKey={first.answerKey}
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted" aria-live="polite">
-          Всего: {(first.data?.total ?? 0).toLocaleString("ru-RU")}
-        </p>
-        {items.length === 0 ? (
-          <EmptyState
-            icon="package"
-            title={filtered(filters) ? "Ничего не нашлось" : "Позиций пока нет"}
-            text={filtered(filters) ? "Измените поиск или отборы" : "Создайте первую позицию"}
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table items-table">
-              <thead>
-                <tr>
-                  <th scope="col" aria-label="Фото" />
-                  <th scope="col">Позиция</th>
-                  <th scope="col">Категория</th>
-                  <th scope="col">Полнота</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="num">
-                    Предложений
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
+        <div className="list-block">
+          <TableToolbar total={items.length === 0 ? null : total}>
+            {filtered(filters) && (
+              <Button variant="text" size="s" onClick={reset}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {items.length === 0 ? (
+            <EmptyState
+              icon="package"
+              title={filtered(filters) ? "Ничего не нашлось" : "Позиций пока нет"}
+              text={filtered(filters) ? "Измените поиск или отборы" : "Создайте первую позицию"}
+              action={
+                filtered(filters) ? (
+                  <Button variant="secondary" onClick={reset}>
+                    Сбросить фильтры
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Table label="Позиции справочника" columns={COLUMNS}>
+              {items.map((item) => {
+                const name = ruText(item.names) || "Без названия";
+                const link = rowLink(catalogItemPath(item.id));
+                return (
                   <tr
                     key={item.id}
-                    className={item.status === "archived" ? "row--muted" : undefined}
+                    {...link}
+                    className={
+                      item.status === "archived" ? `${link.className} row--muted` : link.className
+                    }
                   >
-                    <td className="thumb-cell">
-                      {item.photo ? (
-                        <img className="thumb" src={item.photo.thumbUrl} alt="" loading="lazy" />
-                      ) : (
-                        <span className="thumb thumb--empty" aria-label="Без фото" />
-                      )}
+                    <td>
+                      <Thumb src={item.photo?.thumbUrl} />
                     </td>
                     <td>
-                      <div className="cell-stack">
-                        <AppLink href={catalogItemPath(item.id)}>
-                          <span className="clamp" title={ruText(item.names)}>
-                            {ruText(item.names) || "Без названия"}
-                          </span>
-                        </AppLink>
-                        <span className="ac-text-caption ac-muted">
-                          {item.type === "service"
+                      <RowTitle
+                        href={catalogItemPath(item.id)}
+                        sub={
+                          item.type === "service"
                             ? "Услуга"
-                            : [item.brand?.name, item.article].filter(Boolean).join(" · ") || "—"}
+                            : [item.brand?.name, item.article].filter(Boolean).join(" · ") || "—"
+                        }
+                      >
+                        <span className="clamp" title={name}>
+                          {name}
                         </span>
-                      </div>
+                      </RowTitle>
                     </td>
                     <td className="ac-text-body-s">
                       <span className="clamp" title={categories.get(item.categoryId)}>
                         {categories.get(item.categoryId) ?? "—"}
                       </span>
                     </td>
-                    <td className="ac-text-body-s">
-                      {item.completeness === "complete" ? (
-                        "Полная"
-                      ) : (
-                        <span className="warning-text">Неполная</span>
-                      )}
-                    </td>
                     <td>
-                      <span
-                        className={`status status--${item.status === "active" ? "open" : item.status === "draft" ? "acknowledged" : "closed"}`}
-                      >
-                        {ITEM_STATUS_TEXT[item.status]}
+                      <span className="badges">
+                        {item.status !== "active" && (
+                          <StatusBadge kind="catalogItem" status={item.status}>
+                            {ITEM_STATUS_TEXT[item.status]}
+                          </StatusBadge>
+                        )}
+                        {item.completeness === "incomplete" && (
+                          <Badge tone="warning" icon="alertTriangle">
+                            Неполная
+                          </Badge>
+                        )}
                       </span>
                     </td>
-                    <td className="num">{item.offersOnSale}</td>
+                    <td className="num">
+                      {item.offersOnSale > 0 ? item.offersOnSale.toLocaleString("ru-RU") : "—"}
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {moreError && <Banner tone="danger">{moreError}</Banner>}
-        {next && (
-          <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
-            Показать ещё
-          </Button>
-        )}
+                );
+              })}
+            </Table>
+          )}
+          {moreError && <Banner tone="danger">{moreError}</Banner>}
+          {next && (
+            <Button variant="secondary" size="s" onClick={loadMore} loading={loadingMore}>
+              Показать ещё
+            </Button>
+          )}
+        </div>
       </LoadingContent>
-      <p className="ac-text-caption ac-muted">
-        Нужен бренд, которого нет в списке, — добавьте его в карточке позиции («Новый бренд»).{" "}
-        <AppLink href={routePaths.catalog}>Категории и характеристики</AppLink>
-      </p>
     </>
   );
 }

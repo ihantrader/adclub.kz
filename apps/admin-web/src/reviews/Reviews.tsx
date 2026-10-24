@@ -4,42 +4,53 @@ import {
   type AdminReviewPage,
   type ReviewStatusValue,
 } from "@adclub/contracts";
-import { EmptyState, LoadingContent, SkeletonList } from "@adclub/ui";
-import { useState } from "react";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  LoadingContent,
+  SearchSelect,
+  SkeletonList,
+  TableToolbar,
+} from "@adclub/ui";
+import { useEffect, useState } from "react";
 import { apiClient } from "../api";
-import { follow } from "../catalog/shared";
+import { FilterSearch, StatusChips } from "../layout/filters";
+import { Header } from "../layout/layout";
 import { useSupplierChoice } from "../orders/Orders";
-import { routePaths, withQuery } from "../router";
-import { SearchSelect } from "../search-select/SearchSelect";
+import { routePaths } from "../router";
 import { createChoiceSources } from "../search-select/sources";
-import { SearchBox, useAddressFilters } from "../suppliers/shared";
+import { useAddressFilters } from "../suppliers/shared";
 import { LoadError, MoreButton, usePaged } from "../vehicles/shared";
 import { ReviewRows } from "./ReviewList";
 import { REVIEW_TABS } from "./review-words";
+import "./reviews.css";
 
 const supplierSearch = createChoiceSources(apiClient).suppliers();
 
-const SECTION_TABS = [
-  { key: "reviews", label: "Отзывы", href: routePaths.reviews },
-  { key: "complaints", label: "Жалобы", href: routePaths.complaints },
-] as const;
+type SectionTab = "reviews" | "complaints";
 
-/** «Отзывы» and «Жалобы» of the section (SCREENS 7.7). */
-export function ReviewSectionTabs({ active }: { active: "reviews" | "complaints" }) {
+/** The head of «Отзывы и жалобы»: the section's name, its two pages as tabs (X11), «Обновить». */
+export function ReviewSectionHeader({
+  active,
+  onRefresh,
+}: {
+  active: SectionTab;
+  onRefresh: () => void;
+}) {
   return (
-    <nav className="page-tabs" aria-label="Отзывы и жалобы">
-      {SECTION_TABS.map((tab) => (
-        <a
-          key={tab.key}
-          href={tab.href}
-          className={tab.key === active ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"}
-          aria-current={tab.key === active ? "page" : undefined}
-          onClick={(event) => follow(event, tab.href)}
-        >
-          {tab.label}
-        </a>
-      ))}
-    </nav>
+    <Header<SectionTab>
+      title="Отзывы и жалобы"
+      actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={onRefresh} />}
+      tabs={{
+        label: "Отзывы и жалобы",
+        active,
+        items: [
+          { key: "reviews", label: "Отзывы", href: routePaths.reviews },
+          { key: "complaints", label: "Жалобы", href: routePaths.complaints },
+        ],
+      }}
+    />
   );
 }
 
@@ -77,11 +88,12 @@ export function useReviewList(filter: {
 }
 
 /**
- * A-REV-01 «Отзывы» (SCREENS 7.7; TASK-049): tabs by status — «На проверке»
- * (the queue, oldest first; a text that waited longer than the threshold is
- * here already), «Опубликованные», «Скрытые», «Отклонённые» and those still
- * being checked — the filters by supplier and a part of the text in the
- * address, and the decisions in the rows.
+ * A-REV-01 «Отзывы» (SCREENS 7.7; TASK-049, TASK-080): the status as chips
+ * with the server's counts — «На проверке» (the queue, oldest first; a text
+ * that waited longer than the threshold is here already), «Опубликованные»,
+ * «Скрытые», «Отклонённые» and those still being checked — the words of the
+ * text and the supplier in one row, all in the address; the decisions in the
+ * rows, «Опубликовать» primary only in the queue.
  */
 export function Reviews() {
   const { query, set } = useAddressFilters();
@@ -90,40 +102,36 @@ export function Reviews() {
   const q = query.get("q")?.trim() || undefined;
   const { list, rows, changed, counts } = useReviewList({ status, supplierId, q });
   const supplier = useSupplierChoice(supplierId ?? null, rows);
+  const [search, setSearch] = useState(q ?? "");
+  const filtered = q !== undefined || supplierId !== undefined;
+
+  // The words go to the address a moment after typing stops.
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === (q ?? "")) return;
+    const timer = setTimeout(() => set({ q: trimmed || undefined }), 350);
+    return () => clearTimeout(timer);
+  });
+
+  const reset = () => {
+    setSearch("");
+    set({ q: undefined, supplierId: undefined });
+  };
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Отзывы и жалобы</h1>
-      </div>
-      <ReviewSectionTabs active="reviews" />
-      <nav className="page-tabs page-tabs--inner" aria-label="Состояние отзыва">
-        {REVIEW_TABS.map((tab) => {
-          const href = withQuery(routePaths.reviews, {
-            status: tab.status === "held" ? undefined : tab.status,
-            supplierId,
-            q,
-          });
-          return (
-            <a
-              key={tab.status}
-              href={href}
-              className={
-                tab.status === status ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"
-              }
-              aria-current={tab.status === status ? "page" : undefined}
-              onClick={(event) => follow(event, href)}
-            >
-              {tab.label}
-              {counts ? ` · ${counts[tab.status].toLocaleString("ru-RU")}` : ""}
-            </a>
-          );
-        })}
-      </nav>
-      <div className="filters filters--grid">
-        <SearchBox label="Слова из текста отзыва" />
-        <div className="filters__select-search">
+      <ReviewSectionHeader active="reviews" onRefresh={list.first.reload} />
+      <div className="filters__group review-filters">
+        <div className="filters">
+          <FilterSearch
+            label="Слова из текста отзыва"
+            placeholder="Слова из текста отзыва"
+            value={search}
+            onChange={setSearch}
+            onSubmit={() => set({ q: search.trim() || undefined })}
+          />
           <SearchSelect
+            compact
             label="Поставщик"
             value={supplier.value}
             onChange={(choice) => {
@@ -134,29 +142,62 @@ export function Reviews() {
             empty="Все"
           />
         </div>
+        <StatusChips<ReviewStatusValue>
+          label="Состояние отзыва"
+          value={status}
+          allLabel={null}
+          chips={REVIEW_TABS.map((tab) => ({
+            value: tab.status,
+            label: tab.label,
+            count: counts ? counts[tab.status] : null,
+          }))}
+          onChange={(next) => set({ status: next === "held" ? undefined : next })}
+        />
       </div>
       <LoadError error={list.first.error} retry={list.first.reload} />
       <LoadingContent
         ready={list.first.data !== undefined}
         indicator={list.first.indicator}
         label="Загрузка"
+        swapKey={list.first.answerKey}
         skeleton={<SkeletonList rows={5} label="Загрузка" />}
       >
-        <p className="ac-text-body-s ac-muted">Всего: {list.total.toLocaleString("ru-RU")}</p>
-        {rows.length === 0 ? (
-          <EmptyState
-            icon="star"
-            title={status === "held" ? "Очередь пуста" : "Отзывов нет"}
-            text={
-              status === "held"
-                ? "Отзывы, которые проверка задержала или не смогла проверить вовремя, появятся здесь."
-                : "Измените отборы"
-            }
-          />
-        ) : (
-          <ReviewRows reviews={rows} onChanged={changed} />
-        )}
-        <MoreButton list={list} />
+        <div className="list-block">
+          <TableToolbar total={rows.length === 0 ? null : list.total}>
+            {filtered && (
+              <Button variant="text" size="s" onClick={reset}>
+                Сбросить фильтры
+              </Button>
+            )}
+          </TableToolbar>
+          {rows.length === 0 ? (
+            filtered ? (
+              <EmptyState
+                icon="search"
+                title="Ничего не нашлось"
+                text="Измените слова или поставщика"
+                action={
+                  <Button variant="secondary" onClick={reset}>
+                    Сбросить фильтры
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon="star"
+                title={status === "held" ? "Очередь пуста" : "Отзывов нет"}
+                text={
+                  status === "held"
+                    ? "Отзывы, которые проверка задержала или не смогла проверить вовремя, появятся здесь."
+                    : "Здесь появятся отзывы в этом состоянии."
+                }
+              />
+            )
+          ) : (
+            <ReviewRows reviews={rows} onChanged={changed} queue={status === "held"} />
+          )}
+          <MoreButton list={list} />
+        </div>
       </LoadingContent>
     </>
   );

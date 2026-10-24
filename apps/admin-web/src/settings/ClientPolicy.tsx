@@ -5,7 +5,9 @@ import { APP_VERSION } from "../api";
 import { loadErrorText } from "../errors";
 import { SettingDialog } from "./SettingDialog";
 import { CLIENT_POLICY_KEYS, CLIENT_POLICY_LABELS } from "./setting-rules";
-import { SettingsTabs } from "./SettingsTabs";
+import { Header } from "../layout/layout";
+import { useAdminNames } from "../people/use-admin-names";
+import { settingsTabs } from "./SettingsTabs";
 import { SettingsTable, useSettings } from "./Thresholds";
 
 /**
@@ -17,6 +19,7 @@ import { SettingsTable, useSettings } from "./Thresholds";
  */
 export function ClientPolicy() {
   const settings = useSettings();
+  const names = useAdminNames();
   const [editing, setEditing] = useState<Setting | null>(null);
   const all = settings.data?.groups.flatMap((group) => group.settings) ?? [];
   const rows = Object.values(CLIENT_POLICY_KEYS)
@@ -25,14 +28,11 @@ export function ClientPolicy() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Настройки</h1>
-      </div>
-      <SettingsTabs active="clientPolicy" />
-      <p className="ac-text-body-s ac-muted">
-        Версия, ниже которой приложение, кабинет или админка перестают работать и просят обновиться.
-        Действует не позже чем через 30 секунд. Эта админка — версии {APP_VERSION}.
-      </p>
+      <Header
+        title="Настройки"
+        tabs={settingsTabs("clientPolicy")}
+        subtitle={`Версия, ниже которой приложение, кабинет или админка перестают работать и просят обновиться; действует не позже чем через 30 секунд. Эта админка — версии ${APP_VERSION}.`}
+      />
       {settings.error !== undefined && (
         <Banner
           tone="danger"
@@ -54,6 +54,8 @@ export function ClientPolicy() {
         <SettingsTable
           settings={rows}
           onEdit={setEditing}
+          names={names}
+          caption="Политика клиента"
           label={(setting) => CLIENT_POLICY_LABELS[setting.key] ?? setting.description}
         />
       </LoadingContent>

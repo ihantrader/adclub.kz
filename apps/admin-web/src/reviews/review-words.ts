@@ -61,9 +61,14 @@ export const REJECT_REASON_TEXT: Record<ReviewRejectReason, string> = {
  * what the model found (A-REV-01).
  */
 export function holdReasonText(reason: ReviewHoldReason): string {
-  const words = HOLD_KIND_TEXT[reason.kind];
+  const words = holdReasonWords(reason);
+  return reason.source === "ai" ? `[AI] ${words}` : words;
+}
+
+/** One reason of a hold without its source: the words and the explanation (the row marks AI itself). */
+export function holdReasonWords(reason: ReviewHoldReason): string {
   const explanation = reason.explanation ? ` (${reason.explanation})` : "";
-  return reason.source === "ai" ? `[AI] ${words}${explanation}` : `${words}${explanation}`;
+  return `${HOLD_KIND_TEXT[reason.kind]}${explanation}`;
 }
 
 /** The reason from the list the queue suggests for «Отклонить текст»: the first one found. */
@@ -88,30 +93,6 @@ export function suggestedRejectReason(
     }
   }
   return "personal_data";
-}
-
-/** The mark of a status: the queue — attention, published — done, refused — danger. */
-export function reviewTone(status: ReviewStatusValue): string {
-  switch (status) {
-    case "held":
-      return "status--open";
-    case "checking":
-      return "status--acknowledged";
-    case "published":
-      return "status--done";
-    case "hidden":
-      return "status--closed";
-    case "text_rejected":
-      return "status--danger";
-  }
-}
-
-export function complaintTone(status: ComplaintStatusValue): string {
-  return status === "new"
-    ? "status--open"
-    : status === "in_progress"
-      ? "status--acknowledged"
-      : "status--done";
 }
 
 /** «★★★★☆ 4». */
@@ -202,6 +183,23 @@ export const COMPLAINT_STATUS_FILTERS: readonly {
   { value: "resolved", label: "Решённые" },
   { value: "all", label: "Все" },
 ];
+
+/** The count of a status chip from the server's counts by status (`open` — new and in work). */
+export function complaintChipCount(
+  value: (typeof COMPLAINT_STATUS_FILTERS)[number]["value"],
+  counts: Partial<Record<ComplaintStatusValue, number>> | null | undefined,
+): number | null {
+  if (!counts) return null;
+  const of = (status: ComplaintStatusValue) => counts[status] ?? 0;
+  switch (value) {
+    case "open":
+      return of("new") + of("in_progress");
+    case "all":
+      return of("new") + of("in_progress") + of("resolved");
+    default:
+      return of(value);
+  }
+}
 
 /** Why «Взять в работу» or «Решить» was refused: who acted first. */
 export function complaintConflictText(complaint: AdminComplaint): string {

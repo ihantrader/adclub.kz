@@ -1,0 +1,545 @@
+/* «Справочник» of the admin panel (TASK-080): what its screens add to the
+   common layout of app.css — tokens only, nothing with a fixed height that
+   text could overflow. */
+
+/* ---------- the order arrows of a row (X6: next to the name, no column) ---------- */
+.cat-order {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+
+.cat-order__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ac-radius-s);
+  background: transparent;
+  color: var(--ac-color-text-muted);
+  cursor: pointer;
+}
+
+.cat-order__button:hover:not(:disabled) {
+  background: var(--ac-color-fill);
+  color: var(--ac-color-text);
+}
+
+.cat-order__button:disabled {
+  color: var(--ac-color-text-disabled);
+  cursor: default;
+}
+
+.cat-order__button:focus-visible {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: 0;
+}
+
+/* ---------- names in three languages ---------- */
+.cat-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--ac-space-4);
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.cat-names__lang {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--ac-space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cat-names__code {
+  color: var(--ac-color-text-muted);
+  text-transform: uppercase;
+}
+
+.cat-names__text {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- the tree: the end of a long list is seen to scroll ---------- */
+.catalog-tree.cat-tree {
+  background:
+    linear-gradient(var(--ac-color-surface) 30%, transparent) top / 100% 32px no-repeat local,
+    linear-gradient(transparent, var(--ac-color-surface) 70%) bottom / 100% 32px no-repeat local,
+    linear-gradient(var(--ac-color-border), transparent) top / 100% 12px no-repeat scroll,
+    linear-gradient(transparent, var(--ac-color-border)) bottom / 100% 12px no-repeat scroll,
+    var(--ac-color-surface);
+}
+
+.cat-tree-row .tree-row__name .ac-badge {
+  margin-left: auto;
+}
+
+/* A long name wraps between words, not inside one («Моторны / е масла»). */
+.cat-tree-row .tree-row__name .clamp {
+  overflow-wrap: break-word;
+}
+
+.cat-tree-row.tree-row--on {
+  flex-wrap: nowrap;
+}
+
+.cat-tree-row .cat-order {
+  margin-right: var(--ac-space-1);
+}
+
+/* ---------- the chosen node ---------- */
+.cat-detail__head {
+  gap: var(--ac-space-3);
+}
+
+.cat-detail__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--ac-space-3) var(--ac-space-4);
+}
+
+.cat-detail__glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface-raised);
+  color: var(--ac-color-text-muted);
+}
+
+.cat-detail__glyph .category-glyph {
+  color: var(--ac-color-text);
+}
+
+.cat-detail__title {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}
+
+.cat-detail__name {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: var(--ac-font-weight-heading);
+  overflow-wrap: anywhere;
+}
+
+.cat-detail__actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.cat-detail__marks {
+  gap: var(--ac-space-2) var(--ac-space-3);
+}
+
+.cat-detail__items {
+  align-self: flex-start;
+  font-size: 14px;
+  font-weight: var(--ac-font-weight-label);
+}
+
+/* A block of the detail: a card with its head. */
+.cat-block {
+  gap: var(--ac-space-4);
+}
+
+/* ---------- attributes ---------- */
+.cat-attr {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  min-width: 0;
+}
+
+.cat-attr > .cell-stack {
+  flex: 1 1 auto;
+  padding-top: 4px;
+}
+
+.cat-attr__name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--ac-space-2);
+  min-width: 0;
+}
+
+.cat-attr__options.ac-button {
+  min-height: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* ---------- options of a list (in its dialog) ---------- */
+.cat-options {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  list-style: none;
+}
+
+.cat-options__row {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  min-height: 48px;
+  padding: var(--ac-space-1) var(--ac-space-2);
+}
+
+.cat-options__row + .cat-options__row {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.cat-options__row--muted .cat-options__name {
+  color: var(--ac-color-text-muted);
+}
+
+.cat-options__row--on {
+  background: var(--ac-color-accent-tint);
+}
+
+.cat-options__name {
+  flex: 1 1 auto;
+}
+
+/* ---------- search synonyms ---------- */
+.cat-synonyms {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  list-style: none;
+}
+
+.cat-synonyms__row {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  min-height: 48px;
+  padding: var(--ac-space-1) var(--ac-space-2) var(--ac-space-1) var(--ac-space-3);
+}
+
+.cat-synonyms__row + .cat-synonyms__row {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.cat-synonyms__term {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* «синоним + язык + Добавить» — one row of 40, aligned by the bottom. */
+.cat-synonym-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--ac-space-3);
+}
+
+.cat-synonym-form__term {
+  flex: 1 1 240px;
+}
+
+.cat-synonym-form__lang {
+  flex: 0 1 200px;
+}
+
+/* The S button (36) stands centred against the 40 fields. */
+.cat-synonym-form > .ac-button {
+  margin-bottom: 2px;
+}
+
+/* ---------- requests: the head of the rows of one upload ---------- */
+.admin-table tr.cat-group th {
+  position: static;
+  padding: var(--ac-space-2) var(--ac-space-3);
+  background: var(--ac-color-surface-raised);
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  font-weight: var(--ac-font-weight-caption);
+  text-align: left;
+  white-space: normal;
+}
+
+.cat-group__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1) var(--ac-space-3);
+}
+
+.cat-group__title {
+  color: var(--ac-color-text);
+  font-size: 14px;
+  font-weight: var(--ac-font-weight-label);
+  overflow-wrap: anywhere;
+}
+
+.cat-group__line .ac-button {
+  min-height: 0;
+  padding-block: 0;
+}
+
+/* Blocks of a tab one under another, 32 apart. */
+.cat-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  min-width: 0;
+}
+
+/* «Скопировать с аналога ▾» in the head of a block: the size of its neighbours. */
+.cat-copy .ac-menu__trigger {
+  min-height: 36px;
+  padding: 0 var(--ac-space-3);
+  border: var(--ac-line) solid var(--ac-color-border-field);
+  font-size: 14px;
+}
+
+/* A found item to add (analogs): its name, its line and «Добавить» on the right. */
+.cat-pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+}
+
+.cat-pick__add {
+  flex: none;
+  color: var(--ac-color-accent);
+  font-size: 14px;
+  font-weight: var(--ac-font-weight-label);
+}
+
+/* A badge with a reason in a narrow column wraps (a status never does). */
+.admin-table .cat-badge-wrap .ac-badge {
+  white-space: normal;
+}
+
+/* ---------- photos: a grid of thumbnails 160 ---------- */
+.cat-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
+  gap: var(--ac-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cat-photo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  min-width: 0;
+  padding: var(--ac-space-3);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.cat-photo--muted .cat-photo__picture {
+  opacity: 0.6;
+}
+
+.cat-photo__picture {
+  position: relative;
+  align-self: flex-start;
+}
+
+.cat-photo__picture > a {
+  display: block;
+  border-radius: var(--ac-radius-m);
+}
+
+.cat-photo__picture > a:focus-visible {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: var(--ac-focus-offset);
+}
+
+.cat-photo__order {
+  position: absolute;
+  right: var(--ac-space-1);
+  bottom: var(--ac-space-1);
+  display: inline-flex;
+  gap: 2px;
+}
+
+.cat-photo__move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-s);
+  background: var(--ac-color-surface);
+  color: var(--ac-color-text);
+  cursor: pointer;
+}
+
+.cat-photo__move:hover:not(:disabled) {
+  background: var(--ac-color-fill);
+}
+
+.cat-photo__move:disabled {
+  color: var(--ac-color-text-disabled);
+  cursor: default;
+}
+
+.cat-photo__move:focus-visible {
+  outline: var(--ac-focus-width) solid var(--ac-color-accent);
+  outline-offset: 0;
+}
+
+.cat-photo__facts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.cat-photo__source {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-photo__actions {
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: var(--ac-space-1);
+}
+
+/* ---------- editors of values in a table cell (compact 40) ---------- */
+.cat-cell {
+  width: 100%;
+  min-width: 0;
+}
+
+.cat-cell > .ac-field__label:not(.ac-visually-hidden) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.cat-cell__unit {
+  flex: none;
+  padding-right: var(--ac-space-3);
+  color: var(--ac-color-text-muted);
+  font-size: 14px;
+}
+
+.cat-cell .ac-field__help {
+  white-space: normal;
+}
+
+.cat-value {
+  align-items: stretch;
+}
+
+/* «было: …» under a changed value (A-CAT-05 «Характеристики»). */
+.cat-was {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.cat-row--changed td,
+.cat-cell--changed {
+  background: var(--ac-color-accent-tint);
+}
+
+.admin-table--fixed tr.cat-row--changed td:first-child {
+  background: var(--ac-color-accent-tint);
+}
+
+/* ---------- the fill ---------- */
+.cat-fill-flag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-1) var(--ac-space-3);
+  min-height: 40px;
+}
+
+.cat-fill-flag__hint {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.cat-fill-table td {
+  vertical-align: top;
+}
+
+.cat-fill-table__col--on {
+  color: var(--ac-color-accent);
+}
+
+.cat-fill-table__head {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-required {
+  color: var(--ac-color-text-muted);
+}
+
+/* The panel of unsaved edits: stays at the bottom of the window. */
+.cat-save-bar {
+  position: sticky;
+  bottom: var(--ac-space-4);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-3) var(--ac-space-6);
+  padding: var(--ac-space-3) var(--ac-space-4);
+  border: var(--ac-line-hairline) solid var(--ac-color-border-field);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.cat-save-bar__note {
+  font-weight: var(--ac-font-weight-label);
+}
+
+.cat-save-bar > .ac-action-bar {
+  flex: 0 1 auto;
+}

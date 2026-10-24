@@ -1,7 +1,19 @@
-import { Banner, Button, Dialog, SearchField } from "@adclub/ui";
+import {
+  Badge,
+  Banner,
+  Button,
+  Dialog,
+  IconButton,
+  MenuButton,
+  StatusBadge,
+  type MenuAction,
+} from "@adclub/ui";
+import { useOnline } from "@adclub/web-session";
 import { useEffect, useState, type ReactNode } from "react";
-import { whoChanged, follow } from "../catalog/shared";
+import { whoChanged } from "../catalog/shared";
 import { loadErrorText } from "../errors";
+import { FilterSearch, StatusChips } from "../layout/filters";
+import { AppLink } from "../layout/layout";
 import { navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad, type Loaded } from "../use-load";
 import { conflictText, vehicleErrorView, type VehicleErrorView } from "./vehicle-words";
@@ -15,91 +27,113 @@ const TABS = [
 
 export type VehiclesTab = (typeof TABS)[number]["key"];
 
-/** The pages of «Автомобили» (A-CAR-01, A-CAR-02): real links with their own addresses. */
-export function VehiclesTabs({ active }: { active: VehiclesTab }) {
-  return (
-    <nav className="page-tabs" aria-label="Автомобили">
-      {TABS.map((tab) => (
-        <a
-          key={tab.key}
-          href={tab.href}
-          className={tab.key === active ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"}
-          aria-current={tab.key === active ? "page" : undefined}
-          onClick={(event) => follow(event, tab.href)}
-        >
-          {tab.label}
-        </a>
-      ))}
-    </nav>
-  );
+/** The pages of «Автомобили» (A-CAR-01, A-CAR-02) — the one bar of tabs of its `Header`. */
+export function vehiclesTabs(active: VehiclesTab) {
+  return { label: "Автомобили", items: TABS, active };
 }
 
-/** «Марки › Geely › Coolray › I (SX11)»: every step but the last is a link. */
-export function Crumbs({ steps }: { steps: { label: string; href?: string }[] }) {
-  return (
-    <nav aria-label="Где вы">
-      <ol className="crumbs ac-text-body-s">
-        {steps.map((step, index) => (
-          <li key={index}>
-            {step.href && index < steps.length - 1 ? (
-              <a href={step.href} onClick={(event) => follow(event, step.href!)}>
-                {step.label}
-              </a>
-            ) : (
-              <span aria-current="page">{step.label}</span>
-            )}
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
+/**
+ * The way back from a page of an object of «Автомобили» (X11: crumbs, not
+ * the section's tabs): «Автомобили › Марки › Geely › Coolray». The list of
+ * makes is the section's first page, so «Марки» opens it by the same path
+ * with a closing slash — the crumbs are told apart by their addresses.
+ */
+export const VEHICLES_CRUMB = { label: "Автомобили", href: routePaths.vehicles };
+export const MAKES_CRUMB = { label: "Марки", href: `${routePaths.vehicles}/` };
+export const IMPORTS_CRUMB = { label: "Импорт", href: routePaths.vehicleImports };
+
+const STATUS_CHIPS = [
+  { value: "active", label: "Активные" },
+  { value: "archived", label: "В архиве" },
+] as const;
+
+/** Changes values of this page's address (the filters of its list) in place. */
+function setQuery(query: URLSearchParams, patch: Record<string, string | undefined>): void {
+  const values: Record<string, string | undefined> = {};
+  query.forEach((value, key) => {
+    values[key] = value;
+  });
+  navigateTo(withQuery(window.location.pathname, { ...values, ...patch, highlight: undefined }), {
+    replace: true,
+  });
 }
 
-/** The search of a list and its status filter, kept in the address. */
+/** Whether the list is narrowed by the address: the search, the status, `extra` (the fuel). */
+export function filteredBy(query: URLSearchParams, extra: readonly string[] = []): boolean {
+  return ["q", "status", ...extra].some((key) => (query.get(key) ?? "") !== "");
+}
+
+/** «Сбросить фильтры»: this page without its query. */
+export function resetFilters(): void {
+  navigateTo(window.location.pathname, { replace: true });
+}
+
+/**
+ * The filters of a list (X3–X5), kept in the address: one row — the search
+ * (its meaning in the placeholder) and the list's own selects (`children`),
+ * aligned by the bottom — and under it the status as chips.
+ */
 export function ListFilters({
   searchLabel,
+  placeholder,
+  withSearch = true,
   children,
 }: {
   searchLabel: string;
+  placeholder?: string;
+  /** A list the server doesn't search (the modifications of a generation): the chips only. */
+  withSearch?: boolean;
   children?: ReactNode;
 }) {
   const location = useLocation();
   const q = location.query.get("q") ?? "";
-  const status = location.query.get("status") ?? "";
+  const asked = location.query.get("status");
+  const status = asked === "active" || asked === "archived" ? asked : undefined;
   const [search, setSearch] = useState(q);
-  const set = (patch: Record<string, string | undefined>) => {
-    const values: Record<string, string | undefined> = {};
-    location.query.forEach((value, key) => {
-      values[key] = value;
-    });
-    navigateTo(withQuery(window.location.pathname, { ...values, ...patch, highlight: undefined }), {
-      replace: true,
-    });
-  };
+  // «Сбросить фильтры» empties the address: the field follows it.
+  const [shownQ, setShownQ] = useState(q);
+  if (q !== shownQ) {
+    setShownQ(q);
+    setSearch(q);
+  }
   // The search goes to the address a moment after typing stops.
   useEffect(() => {
+    if (!withSearch) return;
     const trimmed = search.trim();
     if (trimmed === q) return;
-    const timer = setTimeout(() => set({ q: trimmed || undefined }), 350);
+    const timer = setTimeout(() => setQuery(location.query, { q: trimmed || undefined }), 350);
     return () => clearTimeout(timer);
   });
   return (
-    <div className="filters">
-      <SearchField label={searchLabel} value={search} onChange={setSearch} clearLabel="Очистить" />
-      <label className="select">
-        <span className="ac-text-caption ac-muted">Статус</span>
-        <select
-          value={status}
-          onChange={(event) => set({ status: event.target.value || undefined })}
-        >
-          <option value="">Все</option>
-          <option value="active">Активные</option>
-          <option value="archived">В архиве</option>
-        </select>
-      </label>
-      {children}
+    <div className="filters__group">
+      {(withSearch || children) && (
+        <div className="filters">
+          {withSearch && (
+            <FilterSearch
+              label={searchLabel}
+              placeholder={placeholder ?? searchLabel}
+              value={search}
+              onChange={setSearch}
+              onSubmit={() => setQuery(location.query, { q: search.trim() || undefined })}
+            />
+          )}
+          {children}
+        </div>
+      )}
+      <StatusChips
+        label="Статус"
+        value={status}
+        chips={STATUS_CHIPS}
+        onChange={(next) => setQuery(location.query, { status: next })}
+      />
     </div>
   );
+}
+
+/** A select of the filters row changes its key of the address. */
+export function useFilterSetter(): (patch: Record<string, string | undefined>) => void {
+  const location = useLocation();
+  return (patch) => setQuery(location.query, patch);
 }
 
 /** `q` and `status` of the address, for the server. */
@@ -113,6 +147,91 @@ export function listFiltersOf(query: URLSearchParams): {
     ...(q ? { q } : {}),
     ...(status === "active" || status === "archived" ? { status } : {}),
   };
+}
+
+/** «В архив…» or «Восстановить…» of a record — in «⋯» of its row or of its page (X6). */
+export function statusAction(
+  status: "active" | "archived",
+  onSelect: () => void,
+  disabled: boolean,
+): MenuAction {
+  return status === "active"
+    ? {
+        key: "archive",
+        label: "В архив…",
+        icon: "archive",
+        destructive: true,
+        disabled,
+        onSelect,
+      }
+    : { key: "restore", label: "Восстановить…", icon: "circleCheck", disabled, onSelect };
+}
+
+/**
+ * The actions of a row (X6, X27): «Изменить» — one small button — and the
+ * rarer archive or restore in «⋯»; never two outlined buttons in a row.
+ */
+export function RowActions({
+  name,
+  status,
+  onEdit,
+  onStatus,
+  editDisabled,
+}: {
+  /** What the row is, for the screen reader name of «⋯». */
+  name: string;
+  status: "active" | "archived";
+  onEdit: () => void;
+  onStatus: () => void;
+  editDisabled?: boolean;
+}) {
+  const online = useOnline();
+  return (
+    <span className="row-actions">
+      <Button variant="secondary" size="s" disabled={!online || editDisabled} onClick={onEdit}>
+        Изменить
+      </Button>
+      <MenuButton
+        size="s"
+        label={`Действия: ${name}`}
+        actions={[statusAction(status, onStatus, !online)]}
+      />
+    </span>
+  );
+}
+
+/**
+ * The actions of the head of an object's page: «Изменить» and «⋯» with the
+ * archive or restore (X11, X13: reversible, so never a red fill).
+ */
+export function ObjectActions({
+  name,
+  status,
+  onEdit,
+  onStatus,
+  onReload,
+}: {
+  name: string;
+  status: "active" | "archived";
+  onEdit: () => void;
+  onStatus: () => void;
+  onReload: () => void;
+}) {
+  const online = useOnline();
+  return (
+    <>
+      <RefreshButton onClick={onReload} />
+      <Button variant="secondary" size="s" disabled={!online} onClick={onEdit}>
+        Изменить
+      </Button>
+      <MenuButton label={`Действия: ${name}`} actions={[statusAction(status, onStatus, !online)]} />
+    </>
+  );
+}
+
+/** «Обновить» of a page head: an icon, the same on every page of the section (X11, X13). */
+export function RefreshButton({ onClick }: { onClick: () => void }) {
+  return <IconButton icon="refresh" label="Обновить" size={20} onClick={onClick} />;
 }
 
 export interface Page<T> {
@@ -186,7 +305,7 @@ export function MoreButton<T extends { id: string }>({ list }: { list: Paged<T> 
     <>
       {list.moreError && <Banner tone="danger">{list.moreError}</Banner>}
       {list.next && (
-        <Button variant="secondary" onClick={list.loadMore} loading={list.loadingMore}>
+        <Button variant="secondary" size="s" onClick={list.loadMore} loading={list.loadingMore}>
           Показать ещё
         </Button>
       )}
@@ -257,9 +376,7 @@ function ErrorWords({ error }: { error: VehicleErrorView }) {
       {error.link && (
         <>
           {" · "}
-          <a href={error.link.href} onClick={(event) => follow(event, error.link!.href)}>
-            {error.link.label}
-          </a>
+          <AppLink href={error.link.href}>{error.link.label}</AppLink>
         </>
       )}
     </>
@@ -389,18 +506,57 @@ export function useStatusFlow<T extends StatusRecord>(
   };
 }
 
-/** A status mark of a table row. */
+/**
+ * The status of a record (X7): a table row marks only what departs from the
+ * usual — «В архиве», «Скрыта выше»; an active one has no mark there. The
+ * head of an object's page names it always (`active` — the word in the
+ * object's gender: «Активна», «Активно»).
+ */
 export function StatusMark({
   status,
   hidden,
+  active,
 }: {
   status: "active" | "archived";
   /** Active, but a parent above is archived: clients don't see it. */
   hidden?: boolean;
+  /** Shown for an active record too (the head of a page). */
+  active?: string;
 }) {
-  if (status === "archived") return <span className="status status--closed">В архиве</span>;
-  if (hidden) return <span className="status status--acknowledged">Скрыта выше</span>;
-  return <span className="status status--open">Активна</span>;
+  if (status === "archived") {
+    return (
+      <StatusBadge kind="entry" status="archived">
+        В архиве
+      </StatusBadge>
+    );
+  }
+  if (hidden) {
+    return (
+      <Badge tone="warning" icon="alertTriangle">
+        Скрыта выше
+      </Badge>
+    );
+  }
+  if (!active) return null;
+  return (
+    <StatusBadge kind="entry" status="active">
+      {active}
+    </StatusBadge>
+  );
+}
+
+/**
+ * The name in the first cell with its status mark beside it (X7, X20): a
+ * table has no column of statuses that would stand empty in nearly every
+ * row — «В архиве» or «Скрыта выше» follows the name where it applies.
+ */
+export function MarkedTitle({ mark, children }: { mark: ReactNode; children: ReactNode }) {
+  return (
+    <span className="vehicles-title">
+      {children}
+      {mark}
+    </span>
+  );
 }
 
 /** A loading error of a page with «Повторить». */

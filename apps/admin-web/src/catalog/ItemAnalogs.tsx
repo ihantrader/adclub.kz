@@ -1,19 +1,26 @@
 import type { AdminCatalogItem, AdminCatalogItemCard } from "@adclub/contracts";
-import { Banner, Button, SearchField, useToast } from "@adclub/ui";
+import { Banner, Button, EmptyState, SearchField, StatusBadge, useToast } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api";
+import { RowTitle, rowLink, Table, Thumb } from "../layout/layout";
 import { catalogItemPath } from "../router";
 import { catalogErrorText } from "./catalog-words";
-import { AppLink } from "./shared";
 import { ruText } from "./values";
 
 function itemLine(item: AdminCatalogItem): string {
   return [item.brand?.name, item.article].filter(Boolean).join(" · ");
 }
 
+const COLUMNS = [
+  { key: "photo", header: "Фото", width: 64, hiddenHeader: true },
+  { key: "analog", header: "Аналог" },
+  { key: "link", header: "Связь", width: 160 },
+  { key: "actions", header: "Действия", actions: true, hiddenHeader: true, width: 120 },
+];
+
 /**
- * «Аналоги» of the card (A-CAT-05; TASK-011): parts of the same
+ * «Аналоги» of the card (A-CAT-05; TASK-011, TASK-080): parts of the same
  * subcategory linked as analogs — added by a search, removed. Which pairs
  * may be linked the server decides (`CATALOG_ANALOG_INVALID` in words).
  */
@@ -34,7 +41,8 @@ export function ItemAnalogs({
   const [error, setError] = useState<string | null>(null);
   const linked = new Set(card.analogs.map((analog) => analog.item.id));
   // Only the answer to what is typed now is shown.
-  const found = results.q && results.q === query.trim() ? results.items : [];
+  const answered = results.q !== "" && results.q === query.trim();
+  const found = answered ? results.items.filter((item) => item.id !== card.item.id) : [];
 
   useEffect(() => {
     const q = query.trim();
@@ -80,88 +88,95 @@ export function ItemAnalogs({
   return (
     <div className="detail-stack">
       {error && <Banner tone="warning">{error}</Banner>}
-      {card.analogs.length === 0 ? (
-        <p className="ac-text-body-s ac-muted">Аналогов нет.</p>
-      ) : (
-        <div className="table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th scope="col">Аналог</th>
-                <th scope="col">Связь</th>
-                <th scope="col" className="admin-table__actions">
-                  Действия
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {card.analogs.map((analog) => (
-                <tr key={analog.item.id}>
+      <section className="section">
+        <div className="section__head">
+          <h3 className="section__title">Аналоги</h3>
+        </div>
+        {card.analogs.length === 0 ? (
+          <EmptyState
+            compact
+            icon="package"
+            title="Аналогов нет"
+            text="Найдите запчасть той же подкатегории ниже и добавьте её как аналог"
+          />
+        ) : (
+          <Table label="Аналоги позиции" columns={COLUMNS}>
+            {card.analogs.map((analog) => {
+              const href = catalogItemPath(analog.item.id);
+              const name = ruText(analog.item.names) || "Без названия";
+              return (
+                <tr key={analog.item.id} {...rowLink(href)}>
                   <td>
-                    <div className="cell-stack">
-                      <AppLink href={catalogItemPath(analog.item.id)}>
-                        <span className="clamp">{ruText(analog.item.names)}</span>
-                      </AppLink>
-                      <span className="ac-text-caption ac-muted">{itemLine(analog.item)}</span>
-                    </div>
+                    <Thumb src={analog.item.photo?.thumbUrl} />
                   </td>
-                  <td className="ac-text-body-s">
-                    {analog.status === "approved" ? "подтверждена" : "предложена"}
+                  <td>
+                    <RowTitle href={href} sub={itemLine(analog.item) || undefined}>
+                      <span className="clamp" title={name}>
+                        {name}
+                      </span>
+                    </RowTitle>
+                  </td>
+                  <td>
+                    <StatusBadge kind="analog" status={analog.status}>
+                      {analog.status === "approved" ? "Подтверждена" : "Предложена"}
+                    </StatusBadge>
                   </td>
                   <td className="admin-table__actions">
                     <Button
-                      variant="text"
+                      variant="secondary"
                       size="s"
+                      destructive
                       disabled={!online}
-                      onClick={() => unlink(analog.item.id)}
+                      aria-label={`Убрать аналог «${name}»`}
+                      onClick={() => void unlink(analog.item.id)}
                     >
                       Убрать
                     </Button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              );
+            })}
+          </Table>
+        )}
+      </section>
+      <section className="card cat-block">
+        <div className="section__head">
+          <h3 className="section__title">Добавить аналог</h3>
         </div>
-      )}
-      <div className="card-section">
-        <h3 className="ac-text-heading">Добавить аналог</h3>
-        <p className="ac-text-body-s ac-muted">
-          Запчасти той же подкатегории, по артикулу или названию.
-        </p>
         <SearchField
-          label="Артикул или название"
+          label="Поиск запчасти той же подкатегории"
+          placeholder="Артикул или название"
           value={query}
           onChange={setQuery}
           clearLabel="Очистить"
         />
         {found.length > 0 && (
           <ul className="pick-list">
-            {found
-              .filter((item) => item.id !== card.item.id)
-              .map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className="pick-list__item"
-                    disabled={!online || linked.has(item.id)}
-                    onClick={() => link(item.id)}
-                  >
+            {found.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="pick-list__item cat-pick"
+                  disabled={!online || linked.has(item.id)}
+                  onClick={() => void link(item.id)}
+                >
+                  <span className="cell-stack">
                     <span className="ac-text-body-strong">{ruText(item.names)}</span>
                     <span className="ac-text-caption ac-muted">
-                      {" "}
-                      · {itemLine(item)}
+                      {itemLine(item) || "—"}
                       {linked.has(item.id) ? " · уже аналог" : ""}
                     </span>
-                  </button>
-                </li>
-              ))}
+                  </span>
+                  {!linked.has(item.id) && <span className="cat-pick__add">Добавить</span>}
+                </button>
+              </li>
+            ))}
           </ul>
         )}
-        {query.trim() && found.length === 0 && (
-          <span className="ac-text-caption ac-muted">Ничего не нашлось</span>
+        {answered && found.length === 0 && (
+          <EmptyState compact icon="search" title="Ничего не нашлось" text="Измените запрос" />
         )}
-      </div>
+      </section>
     </div>
   );
 }

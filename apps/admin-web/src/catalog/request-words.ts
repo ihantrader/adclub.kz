@@ -102,3 +102,43 @@ export function requestErrorText(error: unknown): string {
   }
   return actionErrorText(error);
 }
+
+/** Rows of one price list upload (or the hand-made requests of one supplier) side by side. */
+export interface RequestGroup {
+  key: string;
+  rows: AdminCatalogRequest[];
+}
+
+/**
+ * Consecutive rows of the same upload form a group (TASK-080): newest
+ * first, as the server orders them; hand-made requests group by supplier.
+ */
+export function groupByUpload(rows: readonly AdminCatalogRequest[]): RequestGroup[] {
+  const groups: RequestGroup[] = [];
+  for (const row of rows) {
+    const key = row.import ? `import:${row.import.id}` : `manual:${row.supplier.id}`;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.rows.push(row);
+    else groups.push({ key, rows: [row] });
+  }
+  return groups;
+}
+
+/** The head of a group: «Прайс 1c-export.xlsx» / «Вручную из кабинета». */
+export function groupTitle(row: AdminCatalogRequest): string {
+  if (!row.import) return "Вручную из кабинета";
+  return row.import.fileName ? `Прайс ${row.import.fileName}` : "Прайс";
+}
+
+/** «1 запрос», «3 запроса», «12 запросов». */
+export function requestsText(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const word =
+    mod10 === 1 && mod100 !== 11
+      ? "запрос"
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? "запроса"
+        : "запросов";
+  return `${count.toLocaleString("ru-RU")} ${word}`;
+}

@@ -1,22 +1,23 @@
 import type { AdminSupplierCard, AuditLogEntry } from "@adclub/contracts";
 import {
-  Banner,
+  Badge,
   Button,
+  DateField,
   Dialog,
   EmptyState,
   LoadingContent,
   SkeletonList,
+  StatusBadge,
   todayIn,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
-import { AuditRow } from "../audit/Audit";
-import { CLUB_TIME_ZONE, formatMoment } from "../format";
+import { JournalTable } from "../audit/JournalTable";
+import { formatDay, formatMoment } from "../format";
 import { useLoad } from "../use-load";
-import { FormError } from "../vehicles/shared";
-import { ReasonDialog, useSupplierSaver, WasNow } from "./shared";
+import { ReasonDialog, SaverError, useSupplierSaver, WasNow } from "./shared";
 import { STATE_TEXT } from "./supplier-words";
 
 type Action = "verify" | "unverify" | "pause" | "unpause" | "block" | "unblock";
@@ -39,7 +40,7 @@ function dateText(date: string): string {
 }
 
 /**
- * «Статусы» of A-SUP-03 (SCREENS 7.0, 7.4; TASK-036): «проверенный
+ * «Статусы» of A-SUP-03 (SCREENS 7.0, 7.4; TASK-036, TASK-080): three row-cards — «проверенный
  * партнёр» with the date of the contract, the pause and the blocking — each
  * with a reason (the server refuses an empty one) and a confirmation that
  * says «было → стало» and what will happen; lifting — the same. Below, the
@@ -59,6 +60,7 @@ export function SupplierStatuses({
   const saver = useSupplierSaver("supplier");
   const [action, setAction] = useState<Action | null>(null);
   const [contractDate, setContractDate] = useState("");
+  const [dateProblem, setDateProblem] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
   const today = todayIn(card.timeZone);
   const paused = card.pause !== null;
@@ -198,107 +200,125 @@ export function SupplierStatuses({
 
   return (
     <div className="detail-stack">
-      {action === null && <FormError saver={saver} onRefresh={onReload} />}
-      <section className="card-section">
-        <h2 className="ac-text-heading">Проверенный партнёр</h2>
-        {card.verification ? (
-          <>
-            <p className="ac-text-body">
-              Договор подписан {dateText(card.verification.contractSignedOn)} · отмечен{" "}
-              {formatMoment(card.verification.verifiedAt)}
-            </p>
-            <div className="button-row">
-              <Button variant="secondary" disabled={!online} onClick={() => open("unverify")}>
-                Снять отметку…
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="ac-text-body-s ac-muted">
-              Отметка «Проверенный партнёр» ставится после подписания договора и видна клиентам у
-              предложений компании.
-            </p>
-            <div className="filters">
-              <label className="select">
-                <span className="ac-text-caption ac-muted">Дата договора</span>
-                <input
-                  type="date"
-                  value={contractDate}
-                  max={today}
-                  onChange={(event) => setContractDate(event.target.value)}
-                />
-              </label>
+      {action === null && <SaverError saver={saver} onRefresh={onReload} />}
+      <div className="status-rows">
+        <StatusRow
+          title="Проверенный партнёр"
+          text="Отметка ставится после подписания договора и видна клиентам у предложений компании."
+          badge={
+            card.verification ? (
+              <Badge tone="success" icon="circleCheck">
+                Да, договор от {card.verification.contractSignedOn.split("-").reverse().join(".")}
+              </Badge>
+            ) : (
+              <Badge tone="neutral" icon="minus">
+                Нет
+              </Badge>
+            )
+          }
+          note={
+            card.verification ? `Отмечен ${formatMoment(card.verification.verifiedAt)}` : undefined
+          }
+          action={
+            card.verification ? (
               <Button
                 variant="secondary"
-                disabled={!online || !contractDate || contractDate > today}
-                onClick={() => open("verify")}
+                size="s"
+                disabled={!online}
+                onClick={() => open("unverify")}
+              >
+                Снять отметку…
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="s"
+                disabled={!online}
+                onClick={() => {
+                  setContractDate("");
+                  setDateProblem(null);
+                  open("verify");
+                }}
               >
                 Отметить проверенным…
               </Button>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="card-section">
-        <h2 className="ac-text-heading">Пауза</h2>
-        {card.pause ? (
-          <>
-            <Banner tone="warning">
-              На паузе с {formatMoment(card.pause.since)} — {PAUSE_REASON_TEXT[card.pause.reason]}
-              {card.pause.note ? `: ${card.pause.note}` : ""}. Предложения не видны клиентам.
-            </Banner>
-            <div className="button-row">
-              <Button variant="secondary" disabled={!online} onClick={() => open("unpause")}>
-                Снять паузу…
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="ac-text-body-s ac-muted">
-              Пауза снимает предложения с витрины; кабинет и текущие заявки работают как обычно.
-            </p>
-            <div className="button-row">
-              <Button variant="secondary" disabled={!online} onClick={() => open("pause")}>
-                Поставить на паузу…
-              </Button>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="card-section">
-        <h2 className="ac-text-heading">Блокировка</h2>
-        {card.block ? (
-          <>
-            <Banner tone="danger">
-              Заблокирована с {formatMoment(card.block.since)}: {card.block.reason}. {BLOCK_EFFECT}
-            </Banner>
-            <div className="button-row">
-              <Button variant="secondary" disabled={!online} onClick={() => open("unblock")}>
+            )
+          }
+        />
+        <StatusRow
+          title="Пауза"
+          text="Пауза снимает предложения с витрины; кабинет и текущие заявки работают как обычно."
+          badge={
+            card.pause ? (
+              <StatusBadge kind="supplier" status="paused">
+                На паузе с {formatDay(card.pause.since)}
+              </StatusBadge>
+            ) : (
+              <Badge tone="neutral" icon="minus">
+                Нет
+              </Badge>
+            )
+          }
+          note={
+            card.pause
+              ? `${PAUSE_REASON_TEXT[card.pause.reason]}${card.pause.note ? `: ${card.pause.note}` : ""}. Предложения не видны клиентам.`
+              : undefined
+          }
+          action={
+            <Button
+              variant="secondary"
+              size="s"
+              disabled={!online}
+              onClick={() => open(card.pause ? "unpause" : "pause")}
+            >
+              {card.pause ? "Снять паузу…" : "Поставить на паузу…"}
+            </Button>
+          }
+        />
+        <StatusRow
+          title="Блокировка"
+          text="Блокировка снимает предложения с витрины и закрывает работу с заявками, кроме выдачи по коду; сотрудников и приглашений добавлять нельзя."
+          badge={
+            card.block ? (
+              <StatusBadge kind="supplier" status="blocked">
+                Заблокирована с {formatDay(card.block.since)}
+              </StatusBadge>
+            ) : (
+              <Badge tone="neutral" icon="minus">
+                Нет
+              </Badge>
+            )
+          }
+          note={card.block ? `${card.block.reason}. ${BLOCK_EFFECT}` : undefined}
+          action={
+            card.block ? (
+              <Button
+                variant="secondary"
+                size="s"
+                disabled={!online}
+                onClick={() => open("unblock")}
+              >
                 Снять блокировку…
               </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="ac-text-body-s ac-muted">
-              Блокировка снимает предложения с витрины и закрывает работу с заявками, кроме выдачи
-              по коду; сотрудников и приглашений добавлять нельзя.
-            </p>
-            <div className="button-row">
-              <Button variant="danger" disabled={!online} onClick={() => open("block")}>
+            ) : (
+              <Button
+                variant="secondary"
+                size="s"
+                destructive
+                disabled={!online}
+                onClick={() => open("block")}
+              >
                 Заблокировать…
               </Button>
-            </div>
-          </>
-        )}
-      </section>
+            )
+          }
+        />
+      </div>
 
-      <section className="card-section">
-        <h2 className="ac-text-heading">История статусов</h2>
+      <section className="section">
+        <div className="section__head">
+          <h2 className="section__title">История статусов</h2>
+        </div>
         <StatusHistory key={historyKey} supplierId={card.id} />
       </section>
 
@@ -309,7 +329,7 @@ export function SupplierStatuses({
         busy={saver.saving}
         onClose={() => setAction(null)}
         onConfirm={(reason) => void apply(reason)}
-        error={<FormError saver={saver} onRefresh={onReload} />}
+        error={<SaverError saver={saver} onRefresh={onReload} />}
       >
         {action && wasNow[action] && <WasNow was={wasNow[action][0]} now={wasNow[action][1]} />}
         {asking && <p className="ac-text-body-s">{asking.text}</p>}
@@ -321,7 +341,16 @@ export function SupplierStatuses({
         title="Отметить «Проверенный партнёр»"
         actions={
           <>
-            <Button onClick={() => void apply()} loading={saver.saving}>
+            <Button
+              onClick={() => {
+                if (!contractDate) {
+                  setDateProblem("Укажите дату договора");
+                  return;
+                }
+                void apply();
+              }}
+              loading={saver.saving}
+            >
               Отметить
             </Button>
             <Button variant="secondary" onClick={() => setAction(null)}>
@@ -331,17 +360,63 @@ export function SupplierStatuses({
         }
       >
         <div className="dialog-stack">
+          <DateField
+            label="Дата договора"
+            value={contractDate}
+            max={today}
+            today={today}
+            locale="ru"
+            error={
+              dateProblem ?? (saver.error?.field === "contractSignedOn" ? saver.error.text : null)
+            }
+            onChange={(date) => {
+              setContractDate(date);
+              setDateProblem(null);
+            }}
+          />
           <WasNow
             was="без отметки"
-            now={contractDate ? `Договор подписан ${dateText(contractDate)}` : ""}
+            now={
+              contractDate ? `Договор подписан ${dateText(contractDate)}` : "проверенный партнёр"
+            }
           />
           <p className="ac-text-body-s">
             Клиенты увидят отметку у предложений компании. На витрину и заявки это не влияет.
           </p>
-          <FormError saver={saver} onRefresh={onReload} />
+          <SaverError saver={saver} fields={["contractSignedOn"]} onRefresh={onReload} />
         </div>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * One state of the company as a row-card (TASK-080): its name and what it
+ * does, the state now as a badge, one button on the right.
+ */
+function StatusRow({
+  title,
+  text,
+  badge,
+  note,
+  action,
+}: {
+  title: string;
+  text: string;
+  badge: ReactNode;
+  note?: string;
+  action: ReactNode;
+}) {
+  return (
+    <section className="card status-row">
+      <div className="status-row__main">
+        <h2 className="status-row__title">{title}</h2>
+        <p className="section__note">{text}</p>
+        {note && <p className="ac-text-body-s status-row__note">{note}</p>}
+      </div>
+      <div className="status-row__state">{badge}</div>
+      <div className="status-row__action">{action}</div>
+    </section>
   );
 }
 
@@ -372,29 +447,9 @@ function StatusHistory({ supplierId }: { supplierId: string }) {
       skeleton={<SkeletonList rows={3} label="Загрузка" />}
     >
       {entries.length === 0 ? (
-        <EmptyState icon="clock" title="Статусы не менялись" />
+        <EmptyState compact icon="history" title="Статусы не менялись" />
       ) : (
-        <div className="table-wrap">
-          <table className="admin-table audit-table">
-            <caption className="ac-visually-hidden">
-              История статусов, время — Алматы ({CLUB_TIME_ZONE})
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Время</th>
-                <th scope="col">Кто</th>
-                <th scope="col">Действие и объект</th>
-                <th scope="col">Было → стало</th>
-                <th scope="col">Причина</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <AuditRow key={entry.id} entry={entry} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <JournalTable entries={entries} caption="История статусов" selfId={supplierId} />
       )}
     </LoadingContent>
   );

@@ -1,13 +1,13 @@
 import type { AdminSupplierCard, AdminSupplierResponse } from "@adclub/contracts";
-import { Button, IconButton, LoadingContent, SkeletonList } from "@adclub/ui";
+import { IconButton, LoadingContent, SkeletonList } from "@adclub/ui";
 import type { ReactNode } from "react";
 import { apiClient } from "../api";
-import { JournalHistory } from "../audit/JournalHistory";
-import { follow } from "../catalog/shared";
-import { goBack, supplierPath, useLocation, type SupplierTab } from "../router";
+import { Header } from "../layout/layout";
+import { supplierPath, useLocation, type SupplierTab } from "../router";
 import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
-import { StateMark, SuppliersTabs } from "./shared";
+import { StateMark, SUPPLIERS_CRUMB } from "./shared";
+import { SupplierHistory } from "./SupplierHistory";
 import { SupplierMembers } from "./SupplierMembers";
 import { SupplierOffers } from "./SupplierOffers";
 import { SupplierOrders } from "./SupplierOrders";
@@ -16,6 +16,7 @@ import { SupplierProfile } from "./SupplierProfile";
 import { SupplierStatuses } from "./SupplierStatuses";
 import { SUPPLIER_TYPE_TEXT } from "./supplier-words";
 import { SupplierRating } from "./SupplierRating";
+import "./suppliers.css";
 
 const TAB_TEXT: Record<SupplierTab, string> = {
   profile: "Профиль",
@@ -31,10 +32,12 @@ const TAB_TEXT: Record<SupplierTab, string> = {
 const TABS = Object.keys(TAB_TEXT) as SupplierTab[];
 
 /**
- * A-SUP-03 «Карточка поставщика» (SCREENS 7.4; TASK-036): the tabs in the
- * address (`?tab=`), so the journal, the home page and a signal open the
- * right one. «Рейтинг и отзывы» — TASK-049, TASK-050 (`?tab=reviews` of before opens it
- * too); «Подписка», «Модерация» come later.
+ * A-SUP-03 «Карточка поставщика» (SCREENS 7.4; TASK-036, TASK-080): the
+ * crumbs of «Поставщики», the company as the title, its state and facts
+ * under it, one bar of the card's tabs in the address (`?tab=`), so the
+ * journal, the home page and a signal open the right one. «Рейтинг и
+ * отзывы» — TASK-049, TASK-050 (`?tab=reviews` of before opens it too);
+ * «Подписка», «Модерация» come later.
  */
 export function SupplierCard({ supplierId }: { supplierId: string }) {
   const { query } = useLocation();
@@ -73,44 +76,42 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
         body = <SupplierPriceImports supplierId={supplierId} />;
         break;
       case "history":
-        body = (
-          <JournalHistory
-            filter={{ supplierId }}
-            loadKey={`supplier-history:${supplierId}`}
-            caption="История поставщика"
-          />
-        );
+        body = <SupplierHistory supplierId={supplierId} />;
         break;
     }
   }
 
   return (
     <>
-      <div className="page__head page__head--back">
-        <IconButton
-          icon="arrowLeft"
-          label="Назад к поставщикам"
-          onClick={() => goBack("suppliers")}
-        />
-        <div className="cell-stack supplier-head">
-          <h1 className="ac-text-title-l page__title long-text" title={data?.name}>
-            {data ? data.name : "Поставщик"}
-          </h1>
-          {data && (
-            <span className="supplier-head__line ac-text-body-s ac-muted">
+      <Header<SupplierTab>
+        crumbs={[SUPPLIERS_CRUMB]}
+        title={data ? data.name : "Поставщик"}
+        subtitle={
+          data && (
+            <>
               <StateMark state={data.state} verified={data.verification !== null} />
               <span>
                 {data.city.names.ru} · {SUPPLIER_TYPE_TEXT[data.type]}
-                {data.bin ? ` · БИН ${data.bin}` : ""}
               </span>
-            </span>
-          )}
-        </div>
-        <Button variant="secondary" size="s" icon="refresh" onClick={card.reload}>
-          Обновить
-        </Button>
-      </div>
-      <SuppliersTabs active={null} />
+              {data.bin && <span>БИН {data.bin}</span>}
+            </>
+          )
+        }
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={card.reload} />}
+        tabs={
+          data
+            ? {
+                label: "Карточка поставщика",
+                active: tab,
+                items: TABS.map((entry) => ({
+                  key: entry,
+                  label: TAB_TEXT[entry],
+                  href: supplierPath(supplierId, entry),
+                })),
+              }
+            : undefined
+        }
+      />
       <LoadError error={card.error} retry={card.reload} />
       <LoadingContent
         ready={data !== undefined}
@@ -118,22 +119,6 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
         label="Загрузка"
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        <nav className="page-tabs" aria-label="Карточка поставщика">
-          {TABS.map((entry) => {
-            const href = supplierPath(supplierId, entry);
-            return (
-              <a
-                key={entry}
-                href={href}
-                className={entry === tab ? "page-tabs__tab page-tabs__tab--on" : "page-tabs__tab"}
-                aria-current={entry === tab ? "page" : undefined}
-                onClick={(event) => follow(event, href)}
-              >
-                {TAB_TEXT[entry]}
-              </a>
-            );
-          })}
-        </nav>
         <div className="tab-body">{body}</div>
       </LoadingContent>
     </>

@@ -2,16 +2,18 @@ import type {
   AdminCatalogItemCard,
   EntityTranslationsResponse,
   TranslationField,
-  TranslationLanguage,
   TranslationTargetLanguage,
 } from "@adclub/contracts";
 import {
+  Badge,
   Banner,
   Button,
   Dialog,
   LoadingContent,
+  MenuButton,
   SkeletonList,
   TextField,
+  TypeMark,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
@@ -19,7 +21,9 @@ import { useState } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
+import { Table } from "../layout/layout";
 import { useLoad } from "../use-load";
+import { OriginMark } from "./catalog-ui";
 import { TRANSLATION_FAILURE_TEXT, catalogErrorText } from "./catalog-words";
 
 const LANGUAGES = [
@@ -30,15 +34,12 @@ const LANGUAGES = [
 
 const FIELD_TEXT: Record<TranslationField, string> = { name: "Название", unit: "Единица" };
 
-/** Where a text came from, in words (SCREENS A-CAT-05 «Переводы»). */
-export function sourceText(language: TranslationLanguage, isSource: boolean): string {
-  const text = language.translation;
-  if (isSource) return "исходный текст";
-  if (!text) return "нет перевода";
-  if (text.origin === "manual") return "вручную — ИИ его не затрёт";
-  if (text.origin === "ai") return text.aiModel ? `ИИ · ${text.aiModel}` : "ИИ";
-  return "исходный";
-}
+const COLUMNS = [
+  { key: "lang", header: "Язык", width: 110 },
+  { key: "text", header: "Текст" },
+  { key: "origin", header: "Источник", width: 170 },
+  { key: "actions", header: "Действия", actions: true, hiddenHeader: true, width: 180 },
+];
 
 /**
  * «Переводы» of the card (A-CAT-05; TASK-012 on the server): every field in
@@ -108,7 +109,18 @@ export function ItemTranslations({
   return (
     <div className="detail-stack">
       {error && <Banner tone="warning">{error}</Banner>}
-      {data.error !== undefined && <Banner tone="danger">{loadErrorText(data.error)}</Banner>}
+      {data.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={data.reload}>
+              Повторить
+            </Button>
+          }
+        >
+          {loadErrorText(data.error)}
+        </Banner>
+      )}
       <LoadingContent
         ready={data.data !== undefined}
         indicator={data.indicator}
@@ -116,126 +128,117 @@ export function ItemTranslations({
         skeleton={<SkeletonList rows={3} label="Загрузка" />}
       >
         {(data.data?.fields ?? []).map((view) => (
-          <div key={view.field} className="card-section">
-            <h3 className="ac-text-heading">{FIELD_TEXT[view.field]}</h3>
-            <div className="table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Язык</th>
-                    <th scope="col">Текст</th>
-                    <th scope="col">Источник</th>
-                    <th scope="col" className="admin-table__actions">
-                      Действия
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {LANGUAGES.map(({ code, label }) => {
-                    const language = view.texts[code];
-                    const text = language.translation;
-                    const isSource = code === "ru";
-                    const task = language.task;
-                    const manual = text?.origin === "manual";
-                    return (
-                      <tr key={code}>
-                        <td className="ac-text-body-s nowrap">{label}</td>
-                        <td>
-                          <div className="cell-stack">
-                            <span className="long-text">
-                              {text?.text ?? <span className="ac-muted">—</span>}
-                            </span>
-                            {text?.isSourceChanged && (
-                              <span className="warning-text ac-text-caption">
-                                Русский текст изменился после этого перевода
-                              </span>
-                            )}
-                            {task?.state === "queued" && (
-                              <span className="ac-text-caption ac-muted">
-                                Ждёт автоперевода
-                                {task.attempts > 0 ? ` (неудачных попыток: ${task.attempts})` : ""}
-                              </span>
-                            )}
-                            {task?.state === "failed" && (
-                              <span className="warning-text ac-text-caption">
-                                Автоперевод отказан:{" "}
-                                {task.failure
-                                  ? TRANSLATION_FAILURE_TEXT[task.failure]
-                                  : "без причины"}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="ac-text-body-s">
-                          <div className="cell-stack">
-                            <span>{sourceText(language, isSource)}</span>
-                            {text && (
-                              <span className="ac-text-caption ac-muted">
-                                {formatMoment(text.updatedAt)}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="admin-table__actions">
-                          {isSource ? (
-                            <span className="ac-text-caption ac-muted">во вкладке «Основное»</span>
-                          ) : (
-                            <div className="button-row button-row--end">
-                              <Button
-                                variant="secondary"
-                                size="s"
-                                disabled={!online}
-                                onClick={() => {
-                                  setDialogError(null);
-                                  setEditing({
-                                    field: view.field,
-                                    lang: code,
-                                    text: text?.text ?? "",
-                                  });
-                                }}
-                              >
-                                Исправить
-                              </Button>
-                              {!manual && (
-                                <Button
-                                  variant="text"
-                                  size="s"
-                                  disabled={!online}
-                                  onClick={() =>
-                                    act(
-                                      () => apiClient.retranslate(target(view.field, code)),
-                                      "Перевод поставлен в очередь",
-                                    )
-                                  }
-                                >
-                                  Перевести заново
-                                </Button>
-                              )}
-                              {manual && (
-                                <Button
-                                  variant="text"
-                                  size="s"
-                                  disabled={!online}
-                                  onClick={() =>
-                                    act(
-                                      () => apiClient.releaseTranslation(target(view.field, code)),
-                                      "Ручная правка снята, язык снова переводит ИИ",
-                                    )
-                                  }
-                                >
-                                  Снять ручную правку
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <section key={view.field} className="section">
+            <div className="section__head">
+              <h3 className="section__title">{FIELD_TEXT[view.field]}</h3>
             </div>
-          </div>
+            <Table label={`Переводы: ${FIELD_TEXT[view.field]}`} columns={COLUMNS}>
+              {LANGUAGES.map(({ code, label }) => {
+                const language = view.texts[code];
+                const text = language.translation;
+                const isSource = code === "ru";
+                const task = language.task;
+                const manual = text?.origin === "manual";
+                return (
+                  <tr key={code}>
+                    <td className="nowrap">{label}</td>
+                    <td>
+                      <div className="cell-stack">
+                        <span className="long-text">
+                          {text?.text ?? <span className="ac-muted">Нет текста</span>}
+                        </span>
+                        {text?.isSourceChanged && (
+                          <Badge tone="warning" icon="alertTriangle">
+                            Русский текст изменился после этого перевода
+                          </Badge>
+                        )}
+                        {task?.state === "queued" && (
+                          <TypeMark icon="clock">
+                            Ждёт автоперевода
+                            {task.attempts > 0 ? ` (неудачных попыток: ${task.attempts})` : ""}
+                          </TypeMark>
+                        )}
+                        {task?.state === "failed" && (
+                          <Badge tone="warning" icon="alertTriangle">
+                            Автоперевод отказан:{" "}
+                            {task.failure ? TRANSLATION_FAILURE_TEXT[task.failure] : "без причины"}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="cell-stack">
+                        <OriginMark text={text} source={isSource} />
+                        {text?.origin === "ai" && text.aiModel && (
+                          <span className="code-text" title="Модель ИИ">
+                            {text.aiModel}
+                          </span>
+                        )}
+                        {text && (
+                          <span className="ac-text-caption ac-muted nowrap">
+                            {formatMoment(text.updatedAt)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="admin-table__actions">
+                      {isSource ? (
+                        <span className="ac-text-caption ac-muted">Правится в «Основном»</span>
+                      ) : (
+                        <span className="row-actions">
+                          <Button
+                            variant="secondary"
+                            size="s"
+                            disabled={!online}
+                            onClick={() => {
+                              setDialogError(null);
+                              setEditing({
+                                field: view.field,
+                                lang: code,
+                                text: text?.text ?? "",
+                              });
+                            }}
+                          >
+                            Исправить
+                          </Button>
+                          <MenuButton
+                            size="s"
+                            label={`Перевод: ${label}`}
+                            actions={[
+                              manual
+                                ? {
+                                    key: "release",
+                                    label: "Снять ручную правку",
+                                    icon: "sparkles" as const,
+                                    disabled: !online,
+                                    onSelect: () =>
+                                      void act(
+                                        () =>
+                                          apiClient.releaseTranslation(target(view.field, code)),
+                                        "Ручная правка снята, язык снова переводит ИИ",
+                                      ),
+                                  }
+                                : {
+                                    key: "retranslate",
+                                    label: "Перевести заново",
+                                    icon: "refresh" as const,
+                                    disabled: !online,
+                                    onSelect: () =>
+                                      void act(
+                                        () => apiClient.retranslate(target(view.field, code)),
+                                        "Перевод поставлен в очередь",
+                                      ),
+                                  },
+                            ]}
+                          />
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+          </section>
         ))}
       </LoadingContent>
       <Dialog

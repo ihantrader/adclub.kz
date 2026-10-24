@@ -7,18 +7,25 @@ import {
   type CategoryFillRow,
 } from "@adclub/contracts";
 import {
+  ActionBar,
   Banner,
   Button,
-  Checkbox,
+  Chip,
   EmptyState,
+  IconButton,
   LoadingContent,
+  Select,
   SkeletonList,
+  TableToolbar,
+  TextField,
   useToast,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { loadErrorText } from "../errors";
+import { FilterSelect } from "../layout/filters";
+import { Header, RowTitle } from "../layout/layout";
 import { catalogItemPath, navigateTo, routePaths, useLocation, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import { catalogErrorText } from "./catalog-words";
@@ -32,7 +39,7 @@ import {
   type CellError,
   type CellKey,
 } from "./fill-state";
-import { AppLink, CatalogTabs } from "./shared";
+import { CATALOG_CRUMB } from "./shared";
 import { numberHint, parseValue, ruText, valueInput, valueText } from "./values";
 
 const PAGE = 50;
@@ -44,12 +51,13 @@ interface Draft {
 }
 
 /**
- * A-CAT-03 «Дозаполнение» (SCREENS 7.2; TASK-035): the items of a
+ * A-CAT-03 «Дозаполнение» (SCREENS 7.2; TASK-035, TASK-080): the items of a
  * subcategory × its active characteristics, a page at a time (thousands of
  * items never load at once), «Только пустые» by the chosen characteristic,
- * an editor in the cell by type. Saving is one request, all or nothing:
- * refused cells show why, a colleague's change shows the value stored now,
- * and every typed value stays.
+ * an editor in the cell by type, an empty one «Не заполнено». The edits wait
+ * in a panel that stays at the bottom («Изменено N · Сохранить»); saving is
+ * one request, all or nothing: refused cells show why, a colleague's change
+ * shows the value stored now, and every typed value stays.
  */
 export function Fill({ categoryId }: { categoryId: string }) {
   const toast = useToast();
@@ -79,6 +87,7 @@ export function Fill({ categoryId }: { categoryId: string }) {
   const [drafts, setDrafts] = useState<Map<CellKey, Draft>>(new Map());
   const [errors, setErrors] = useState<Map<CellKey, CellError>>(new Map());
   const [banner, setBanner] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const extra = more.key === key ? more : { key, rows: [], next: null };
   const page = first.data;
@@ -144,7 +153,14 @@ export function Fill({ categoryId }: { categoryId: string }) {
     }
     return { edits, invalid };
   };
-  const { edits: currentEdits } = pending();
+  const { edits: currentEdits, invalid: currentInvalid } = pending();
+  const changedCount = currentEdits.size + currentInvalid.size;
+
+  const discard = () => {
+    setDrafts(new Map());
+    setErrors(new Map());
+    setBanner(null);
+  };
 
   const save = async () => {
     const { edits, invalid } = pending();
@@ -156,6 +172,7 @@ export function Fill({ categoryId }: { categoryId: string }) {
     const cells = fillCells(edits);
     if (cells.length === 0) return;
     setBanner(null);
+    setSaving(true);
     try {
       const response = await apiClient.fillCategory({ categoryId }, { cells });
       const nextSaved = new Map(saved);
@@ -186,49 +203,63 @@ export function Fill({ categoryId }: { categoryId: string }) {
       } else {
         setBanner(catalogErrorText(thrown));
       }
+    } finally {
+      setSaving(false);
     }
   };
 
   const category = page?.category;
+  const categoryName = category ? ruText(category.names) : null;
+  const total = page?.total ?? 0;
   return (
     <>
-      <div className="page__head page__head--back">
-        <h1 className="ac-text-title-l page__title">
-          Дозаполнение{category ? ` · ${ruText(category.names)}` : ""}
-        </h1>
-      </div>
-      <CatalogTabs active={null} />
+      <Header
+        crumbs={[
+          CATALOG_CRUMB,
+          {
+            label: categoryName ?? "Подкатегория",
+            href: withQuery(routePaths.catalog, { node: categoryId }),
+          },
+        ]}
+        title="Дозаполнение"
+        actions={<IconButton icon="refresh" label="Обновить" size={20} onClick={first.reload} />}
+      />
       <div className="filters">
-        <AppLink href={withQuery(routePaths.catalog, { node: categoryId })}>
-          ← К характеристикам
-        </AppLink>
-        <label className="select">
-          <span className="ac-text-caption ac-muted">Характеристика</span>
-          <select
-            value={attributeId ?? ""}
-            onChange={(event) => setFilter({ attribute: event.target.value || null })}
-          >
-            <option value="">Все</option>
-            {attributes.map((attribute) => (
-              <option key={attribute.id} value={attribute.id}>
-                {ruText(attribute.names)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Checkbox
-          label="Только пустые"
-          description={attributeId ? undefined : "Выберите характеристику"}
-          checked={onlyEmpty}
-          disabled={!attributeId}
-          onChange={(empty) => setFilter({ empty })}
+        <FilterSelect
+          label="Характеристика"
+          value={attributeId}
+          options={attributes.map((attribute) => ({
+            value: attribute.id,
+            label: ruText(attribute.names),
+          }))}
+          onChange={(attribute) => setFilter({ attribute: attribute ?? null, empty: false })}
         />
-        <span className="ac-text-body-s ac-muted">
-          {page ? `Позиций: ${page.total.toLocaleString("ru-RU")}` : ""}
-        </span>
+        <div className="cat-fill-flag">
+          <Chip
+            selected={onlyEmpty}
+            disabled={!attributeId}
+            onClick={() => setFilter({ empty: !onlyEmpty })}
+          >
+            Только пустые
+          </Chip>
+          {!attributeId && (
+            <span className="cat-fill-flag__hint">Сначала выберите характеристику</span>
+          )}
+        </div>
       </div>
       {banner && <Banner tone="warning">{banner}</Banner>}
-      {first.error !== undefined && <Banner tone="danger">{loadErrorText(first.error)}</Banner>}
+      {first.error !== undefined && (
+        <Banner
+          tone="danger"
+          action={
+            <Button variant="text" size="s" onClick={first.reload}>
+              Повторить
+            </Button>
+          }
+        >
+          {loadErrorText(first.error)}
+        </Banner>
+      )}
       <LoadingContent
         ready={page !== undefined}
         indicator={first.indicator}
@@ -236,201 +267,259 @@ export function Fill({ categoryId }: { categoryId: string }) {
         swapKey={first.answerKey}
         skeleton={<SkeletonList rows={6} label="Загрузка" />}
       >
-        {attributes.length === 0 ? (
-          <EmptyState
-            icon="checklist"
-            title="У подкатегории нет активных характеристик"
-            text="Добавьте характеристику в разделе «Категории» — тогда здесь появится таблица."
-          />
-        ) : rows.length === 0 ? (
-          <EmptyState
-            icon="circleCheck"
-            title={onlyEmpty ? "Пустых значений нет" : "В подкатегории нет позиций"}
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table fill-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="fill-table__item">
-                    Позиция
-                  </th>
+        <div className="list-block">
+          {attributes.length > 0 && rows.length > 0 && (
+            <TableToolbar total={total}>
+              {onlyEmpty && (
+                <Button variant="text" size="s" onClick={() => setFilter({ empty: false })}>
+                  Сбросить фильтры
+                </Button>
+              )}
+            </TableToolbar>
+          )}
+          {attributes.length === 0 ? (
+            <EmptyState
+              icon="checklist"
+              title="У подкатегории нет активных характеристик"
+              text="Добавьте характеристику в разделе «Категории» — тогда здесь появится таблица."
+            />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon="circleCheck"
+              title={onlyEmpty ? "Пустых значений нет" : "В подкатегории нет позиций"}
+              text={onlyEmpty ? "У всех позиций эта характеристика заполнена" : undefined}
+            />
+          ) : (
+            <div className="table-wrap">
+              <table
+                className="admin-table admin-table--fixed cat-fill-table"
+                style={{ minWidth: 280 + attributes.length * 200 }}
+              >
+                <caption className="ac-visually-hidden">Значения характеристик позиций</caption>
+                <colgroup>
+                  <col style={{ width: 280 }} />
                   {attributes.map((attribute) => (
-                    <th
-                      key={attribute.id}
-                      scope="col"
-                      className={attribute.id === attributeId ? "fill-table__col--on" : undefined}
-                      title={numberHint(attribute) ?? undefined}
-                    >
-                      {ruText(attribute.names)}
-                      {attribute.isRequiredForComplete ? " *" : ""}
-                    </th>
+                    <col key={attribute.id} style={{ width: 200 }} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.item.id}>
-                    <td className="fill-table__item">
-                      <div className="cell-stack">
-                        <AppLink href={catalogItemPath(row.item.id)}>
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col">Позиция</th>
+                    {attributes.map((attribute) => (
+                      <th
+                        key={attribute.id}
+                        scope="col"
+                        className={
+                          attribute.id === attributeId ? "cat-fill-table__col--on" : undefined
+                        }
+                        title={numberHint(attribute) ?? undefined}
+                      >
+                        <span className="cat-fill-table__head">
+                          {ruText(attribute.names)}
+                          {attribute.isRequiredForComplete && (
+                            <span className="cat-required" title="Участвует в полноте">
+                              {" "}
+                              *
+                            </span>
+                          )}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.item.id}>
+                      <td>
+                        <RowTitle
+                          href={catalogItemPath(row.item.id)}
+                          sub={
+                            [row.item.brand?.name, row.item.article].filter(Boolean).join(" · ") ||
+                            undefined
+                          }
+                        >
                           <span className="clamp" title={ruText(row.item.names)}>
                             {ruText(row.item.names)}
                           </span>
-                        </AppLink>
-                        <span className="ac-text-caption ac-muted">
-                          {[row.item.brand?.name, row.item.article].filter(Boolean).join(" · ")}
-                        </span>
-                      </div>
-                    </td>
-                    {attributes.map((attribute) => {
-                      const cell = cellKey(row.item.id, attribute.id);
-                      const draft = drafts.get(cell);
-                      const error = errors.get(cell);
-                      const stored = rowValue(row, attribute.id);
-                      return (
-                        <td
-                          key={attribute.id}
-                          className={[
-                            "fill-cell",
-                            currentEdits.has(cell) ? "fill-cell--changed" : "",
-                            error ? "fill-cell--error" : "",
-                          ].join(" ")}
-                        >
-                          <CellEditor
-                            attribute={attribute}
-                            raw={draft ? draft.raw : valueInput(stored)}
-                            label={`${ruText(attribute.names)}: ${ruText(row.item.names)}`}
-                            disabled={!online}
-                            invalid={error !== undefined}
-                            onChange={(raw) => edit(row, attribute, raw)}
-                          />
-                          {error && (
-                            <span className="fill-cell__error ac-text-caption" role="alert">
-                              {error.message}
-                              {error.current !== undefined &&
-                                `. Сейчас: ${valueText(attribute, error.current)}`}
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {next && (
-          <Button variant="secondary" onClick={loadMore} loading={loadingMore}>
-            Показать ещё
-          </Button>
-        )}
+                        </RowTitle>
+                      </td>
+                      {attributes.map((attribute) => {
+                        const cell = cellKey(row.item.id, attribute.id);
+                        const draft = drafts.get(cell);
+                        const error = errors.get(cell);
+                        const stored = rowValue(row, attribute.id);
+                        return (
+                          <td
+                            key={attribute.id}
+                            className={currentEdits.has(cell) ? "cat-cell--changed" : undefined}
+                          >
+                            <CellEditor
+                              attribute={attribute}
+                              raw={draft ? draft.raw : valueInput(stored)}
+                              label={`${ruText(attribute.names)}: ${ruText(row.item.names)}`}
+                              disabled={!online}
+                              error={
+                                error
+                                  ? `${error.message}${
+                                      error.current !== undefined
+                                        ? `. Сейчас: ${valueText(attribute, error.current)}`
+                                        : ""
+                                    }`
+                                  : undefined
+                              }
+                              onChange={(raw) => edit(row, attribute, raw)}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {next && (
+            <Button variant="secondary" size="s" onClick={loadMore} loading={loadingMore}>
+              Показать ещё
+            </Button>
+          )}
+          {attributes.some((attribute) => attribute.isRequiredForComplete) && rows.length > 0 && (
+            <p className="ac-text-caption ac-muted">* — участвует в полноте позиции</p>
+          )}
+        </div>
       </LoadingContent>
 
-      {drafts.size > 0 && (
-        <div className="save-bar" role="region" aria-label="Несохранённые правки">
-          <span className="ac-text-body-s">Изменено ячеек: {currentEdits.size}</span>
-          <div className="button-row">
-            <Button
-              variant="secondary"
-              size="s"
-              onClick={() => {
-                setDrafts(new Map());
-                setErrors(new Map());
-              }}
-            >
-              Отменить правки
-            </Button>
-            <Button size="s" disabled={!online || currentEdits.size === 0} onClick={save}>
-              Сохранить
-            </Button>
-          </div>
-        </div>
+      {changedCount > 0 && (
+        <SaveBar
+          note={`Изменено ячеек: ${String(changedCount)}`}
+          saving={saving}
+          disabled={!online}
+          onSave={save}
+          onDiscard={discard}
+        />
       )}
     </>
   );
 }
 
-/** An editor of one value by its type (shared with the item's characteristics). */
+/**
+ * The panel of unsaved edits that stays at the bottom of the window while
+ * the table scrolls (TASK-080): what is changed, «Сохранить» and «Отменить
+ * правки» — the actions laid out by `ActionBar`.
+ */
+export function SaveBar({
+  note,
+  saving,
+  disabled,
+  onSave,
+  onDiscard,
+}: {
+  note: ReactNode;
+  saving: boolean;
+  disabled?: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+}) {
+  return (
+    <div className="cat-save-bar" role="region" aria-label="Несохранённые правки">
+      <span className="cat-save-bar__note">{note}</span>
+      <ActionBar
+        compact
+        label="Сохранение правок"
+        main={
+          <Button disabled={disabled} loading={saving} onClick={onSave}>
+            Сохранить
+          </Button>
+        }
+        others={[
+          <Button key="discard" variant="text" disabled={saving} onClick={onDiscard}>
+            Отменить правки
+          </Button>,
+        ]}
+      />
+    </div>
+  );
+}
+
+/** «Не заполнено»: the empty entry of a list — chosen, it clears the value. */
+const EMPTY_CHOICE = "__empty";
+
+/**
+ * An editor of one value by its type (shared with the item's
+ * characteristics): our compact 40 select for a list and «Да / нет», a
+ * compact field for a number (with its unit) and a text; an empty value
+ * reads «Не заполнено», muted. The label is for screen readers: the column
+ * names the field.
+ */
 export function CellEditor({
   attribute,
   raw,
   label,
   disabled,
-  invalid,
+  error,
   onChange,
 }: {
   attribute: AdminAttribute;
   raw: string;
   label: string;
   disabled?: boolean;
-  invalid?: boolean;
+  error?: ReactNode;
   onChange: (raw: string) => void;
 }) {
   switch (attribute.valueType) {
     case "enum":
+    case "bool": {
+      const options =
+        attribute.valueType === "bool"
+          ? [
+              { value: "true", label: "Да" },
+              { value: "false", label: "Нет" },
+            ]
+          : attribute.options
+              .filter((option) => option.status === "active" || option.id === raw)
+              .map((option) => ({ value: option.id, label: ruText(option.names) }));
       return (
-        <select
-          className="cell-input"
-          aria-label={label}
-          aria-invalid={invalid || undefined}
+        <Select<string>
+          compact
+          hideLabel
+          className="cat-cell"
+          label={label}
           value={raw}
+          placeholder="Не заполнено"
           disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">—</option>
-          {attribute.options
-            .filter((option) => option.status === "active" || option.id === raw)
-            .map((option) => (
-              <option key={option.id} value={option.id}>
-                {ruText(option.names)}
-              </option>
-            ))}
-        </select>
+          error={error}
+          options={raw ? [{ value: EMPTY_CHOICE, label: "Не заполнено" }, ...options] : options}
+          onChange={(next) => onChange(next === EMPTY_CHOICE ? "" : next)}
+        />
       );
-    case "bool":
-      return (
-        <select
-          className="cell-input"
-          aria-label={label}
-          aria-invalid={invalid || undefined}
-          value={raw}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">—</option>
-          <option value="true">Да</option>
-          <option value="false">Нет</option>
-        </select>
-      );
+    }
     case "number": {
       const unit = ruText(attribute.unit);
       return (
-        <span className="cell-number">
-          <input
-            className="cell-input"
-            inputMode="decimal"
-            aria-label={label}
-            aria-invalid={invalid || undefined}
-            value={raw}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
-          />
-          {unit && <span className="ac-text-caption ac-muted">{unit}</span>}
-        </span>
+        <TextField
+          className="ac-field--compact cat-cell"
+          label={label}
+          value={raw}
+          placeholder="Не заполнено"
+          inputMode="decimal"
+          disabled={disabled}
+          error={error}
+          onChange={onChange}
+          trailing={unit ? <span className="cat-cell__unit">{unit}</span> : undefined}
+        />
       );
     }
     case "text":
       return (
-        <input
-          className="cell-input"
-          aria-label={label}
-          aria-invalid={invalid || undefined}
+        <TextField
+          className="ac-field--compact cat-cell"
+          label={label}
           value={raw}
+          placeholder="Не заполнено"
           disabled={disabled}
+          error={error}
           maxLength={200}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={onChange}
         />
       );
   }

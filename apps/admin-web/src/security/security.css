@@ -1,0 +1,10 @@
+/* ---------- «Безопасность» (TASK-034, TASK-080) ---------- */
+
+.security-name {
+  overflow-wrap: anywhere;
+}
+
+.security-text {
+  margin: 0;
+  max-width: 720px;
+}

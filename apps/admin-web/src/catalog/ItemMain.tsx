@@ -12,11 +12,13 @@ import {
 } from "@adclub/contracts";
 import { normalizeArticle } from "@adclub/domain";
 import {
+  ActionBar,
   Banner,
   Button,
   Dialog,
   LoadingContent,
   Segments,
+  Select,
   SkeletonList,
   TextField,
   useToast,
@@ -50,8 +52,8 @@ import {
   isConflict,
 } from "./catalog-words";
 import { subcategoryNames } from "./Items";
-import { AppLink, CatalogTabs, whoChanged } from "./shared";
-import { ruText } from "./values";
+import { Header } from "../layout/layout";
+import { AppLink, CATALOG_CRUMB, ITEMS_CRUMB, REQUESTS_CRUMB, whoChanged } from "./shared";
 
 interface Form {
   type: CatalogItemType;
@@ -118,7 +120,6 @@ export function ItemMain({
   const [base, setBase] = useState<Form>(() => formOf(card));
   const [form, setForm] = useState<Form>(base);
   const [error, setError] = useState<FormError | null>(null);
-  const [statusTo, setStatusTo] = useState<CatalogItemStatus | null>(null);
   const item = card.item;
   const fresh = formOf(card);
   if (!sameForm(fresh, base) && sameForm(form, base)) {
@@ -164,41 +165,9 @@ export function ItemMain({
     }
   };
 
-  const setStatus = async (status: CatalogItemStatus) => {
-    setError(null);
-    try {
-      onChanged(
-        await apiClient.setCatalogItemStatus(
-          { itemId: item.id },
-          { status, expectedVersion: item.version },
-        ),
-      );
-      toast.show(`Статус: ${ITEM_STATUS_TEXT[status].toLowerCase()}`);
-    } catch (thrown) {
-      if (isConflict(thrown)) {
-        setError({
-          text: conflictText(await whoChanged("catalog_item", item.id)),
-          field: null,
-          conflict: true,
-        });
-      } else {
-        setError({
-          text: catalogErrorText(thrown),
-          field: null,
-          existingItemId: duplicateOf(thrown),
-        });
-      }
-    } finally {
-      setStatusTo(null);
-    }
-  };
-
   return (
-    <div className="detail-stack">
+    <div className="card form-card">
       <ItemFields form={form} onChange={setForm} creating={false} error={error} online={online} />
-      <p className="ac-text-caption ac-muted">
-        Казахское и английское названия правятся во вкладке «Переводы».
-      </p>
       {error && !error.field && (
         <Banner
           tone="warning"
@@ -212,7 +181,7 @@ export function ItemMain({
                   onReload();
                 }}
               >
-                Обновить
+                Обновить данные
               </Button>
             ) : undefined
           }
@@ -226,32 +195,18 @@ export function ItemMain({
           )}
         </Banner>
       )}
-      <div className="button-row">
-        <Button disabled={!online} onClick={save}>
-          Сохранить
-        </Button>
-        {item.status !== "active" && (
-          <Button variant="secondary" disabled={!online} onClick={() => setStatus("active")}>
-            {item.status === "archived" ? "Восстановить" : "Сделать активной"}
+      <ActionBar
+        label="Сохранение позиции"
+        main={
+          <Button disabled={!online} onClick={save}>
+            Сохранить
           </Button>
-        )}
-        {item.status === "active" && (
-          <Button variant="secondary" disabled={!online} onClick={() => setStatus("draft")}>
-            В черновик
-          </Button>
-        )}
-        {item.status !== "archived" && (
-          <Button variant="text" disabled={!online} onClick={() => setStatusTo("archived")}>
-            В архив
-          </Button>
-        )}
-      </div>
-      <ArchiveDialog
-        itemId={statusTo === "archived" ? item.id : null}
-        name={ruText(item.names)}
-        status={item.status}
-        onConfirm={() => setStatus("archived")}
-        onCancel={() => setStatusTo(null)}
+        }
+        note={
+          sameForm(form, base)
+            ? "Казахское и английское названия правятся во вкладке «Переводы»"
+            : undefined
+        }
       />
     </div>
   );
@@ -261,7 +216,7 @@ export function ItemMain({
  * Archiving with offers (SCREENS A-CAT-05): «У позиции N предложений и M
  * активных заявок…» — both numbers are the server's, read when the dialog opens.
  */
-function ArchiveDialog({
+export function ArchiveDialog({
   itemId,
   name,
   status,
@@ -376,45 +331,43 @@ function ItemFields({
   return (
     <div className="form-grid">
       {creating ? (
-        <Segments<CatalogItemType>
-          label="Тип"
-          options={(Object.keys(ITEM_TYPE_TEXT) as CatalogItemType[]).map((type) => ({
-            value: type,
-            label: ITEM_TYPE_TEXT[type],
-          }))}
-          value={form.type}
-          onChange={(type) =>
-            set({
-              type,
-              categoryId: "",
-              ...(type === "service" ? { brand: null, article: "" } : {}),
-            })
-          }
-        />
+        <div className="ac-field form-grid--full">
+          <span className="ac-field__label">Тип</span>
+          <Segments<CatalogItemType>
+            label="Тип"
+            options={(Object.keys(ITEM_TYPE_TEXT) as CatalogItemType[]).map((type) => ({
+              value: type,
+              label: ITEM_TYPE_TEXT[type],
+            }))}
+            value={form.type}
+            onChange={(type) =>
+              set({
+                type,
+                categoryId: "",
+                ...(type === "service" ? { brand: null, article: "" } : {}),
+              })
+            }
+          />
+        </div>
       ) : (
-        <p className="ac-text-body-s">
-          <span className="ac-muted">Тип:</span> {ITEM_TYPE_TEXT[form.type]} (не меняется)
-        </p>
+        <TextField
+          label="Тип"
+          value={ITEM_TYPE_TEXT[form.type]}
+          onChange={() => undefined}
+          readOnly
+          disabled
+          hint="Тип позиции не меняется"
+        />
       )}
-      <label className="select">
-        <span className="ac-text-caption ac-muted">Подкатегория</span>
-        <select
-          value={form.categoryId}
-          disabled={!online}
-          aria-invalid={error?.field === "categoryId" || undefined}
-          onChange={(event) => set({ categoryId: event.target.value })}
-        >
-          <option value="">Выберите</option>
-          {subcategories.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-        {fieldError("categoryId") && (
-          <span className="dialog-error">{fieldError("categoryId")}</span>
-        )}
-      </label>
+      <Select
+        label="Подкатегория"
+        value={form.categoryId}
+        placeholder="Выберите подкатегорию"
+        disabled={!online}
+        options={subcategories.map(([id, name]) => ({ value: id, label: name }))}
+        error={fieldError("categoryId")}
+        onChange={(categoryId) => set({ categoryId })}
+      />
       {form.type !== "service" && (
         <>
           <BrandPicker
@@ -443,22 +396,28 @@ function ItemFields({
         error={fieldError("names.ru")}
       />
       {creating && (
-        <>
-          <TextField
-            label="Название (каз.)"
-            value={form.kk}
-            onChange={(kk) => set({ kk })}
-            error={fieldError("names.kk")}
-            hint="Пусто — переведёт ИИ"
-          />
-          <TextField
-            label="Название (англ.)"
-            value={form.en}
-            onChange={(en) => set({ en })}
-            error={fieldError("names.en")}
-            hint="Пусто — переведёт ИИ"
-          />
-        </>
+        <details
+          className="disclosure form-grid--full"
+          open={Boolean(form.kk || form.en || fieldError("names.kk") || fieldError("names.en"))}
+        >
+          <summary className="disclosure__summary">Перевод вручную (необязательно)</summary>
+          <div className="form-grid">
+            <TextField
+              label="Название (каз.)"
+              value={form.kk}
+              onChange={(kk) => set({ kk })}
+              error={fieldError("names.kk")}
+              hint="Пусто — переведёт ИИ"
+            />
+            <TextField
+              label="Название (англ.)"
+              value={form.en}
+              onChange={(en) => set({ en })}
+              error={fieldError("names.en")}
+              hint="Пусто — переведёт ИИ"
+            />
+          </div>
+        </details>
       )}
     </div>
   );
@@ -520,6 +479,7 @@ function BrandPicker({
   return (
     <div className="brand-picker">
       <SearchSelect
+        error={error}
         label="Бренд"
         value={
           brand
@@ -560,18 +520,21 @@ function BrandPicker({
             onChange={setNewAliases}
             hint="GEELY Auto, Джили"
           />
-          {createError && <p className="dialog-error">{createError}</p>}
-          <div className="button-row">
-            <Button size="s" onClick={create} disabled={!newName.trim()}>
-              Создать бренд
-            </Button>
-            <Button variant="text" size="s" onClick={() => setCreating(false)}>
-              Отмена
-            </Button>
-          </div>
+          {createError && <Banner tone="danger">{createError}</Banner>}
+          <ActionBar
+            compact
+            label="Новый бренд"
+            others={[
+              <Button key="create" variant="secondary" onClick={create} disabled={!newName.trim()}>
+                Создать бренд
+              </Button>,
+              <Button key="cancel" variant="text" onClick={() => setCreating(false)}>
+                Отмена
+              </Button>,
+            ]}
+          />
         </div>
       )}
-      {error && <span className="dialog-error">{error}</span>}
     </div>
   );
 }
@@ -658,17 +621,25 @@ export function ItemCreate() {
 
   return (
     <>
-      <div className="page__head">
-        <h1 className="ac-text-title-l page__title">Новая позиция</h1>
-      </div>
-      <CatalogTabs active={null} />
+      <Header
+        crumbs={
+          asked
+            ? [
+                CATALOG_CRUMB,
+                REQUESTS_CRUMB,
+                { label: "Запрос", href: catalogRequestPath(asked.id) },
+              ]
+            : [CATALOG_CRUMB, ITEMS_CRUMB]
+        }
+        title="Новая позиция"
+      />
       <LoadingContent
         ready={tree.data !== undefined}
         indicator={tree.indicator}
         label="Загрузка"
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
-        <div className="detail-stack">
+        <div className="card form-card">
           {asked && (
             <Banner tone="neutral">
               Запрос поставщика «{asked.supplier.name}»: {requestTitle(asked.data)}.{" "}
@@ -695,25 +666,34 @@ export function ItemCreate() {
               )}
             </Banner>
           )}
-          <p className="ac-text-caption ac-muted">
-            После создания откроются характеристики позиции. Фото, переводы и совместимость — в
-            соседних вкладках.
-          </p>
-          <div className="button-row">
-            <Button disabled={!online} loading={saving} onClick={() => create("active")}>
-              Создать
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={!online || saving}
-              onClick={() => create("draft")}
-            >
-              Сохранить черновиком
-            </Button>
-            <AppLink href={asked ? catalogRequestPath(asked.id) : routePaths.catalogItems}>
-              Отмена
-            </AppLink>
-          </div>
+          <ActionBar
+            label="Создание позиции"
+            main={
+              <Button disabled={!online} loading={saving} onClick={() => create("active")}>
+                Создать
+              </Button>
+            }
+            others={[
+              <Button
+                key="draft"
+                variant="secondary"
+                disabled={!online || saving}
+                onClick={() => create("draft")}
+              >
+                Сохранить черновиком
+              </Button>,
+              <Button
+                key="cancel"
+                variant="text"
+                onClick={() =>
+                  navigateTo(asked ? catalogRequestPath(asked.id) : routePaths.catalogItems)
+                }
+              >
+                Отмена
+              </Button>,
+            ]}
+            note="После создания откроются характеристики позиции; фото, переводы и совместимость — в соседних вкладках"
+          />
         </div>
       </LoadingContent>
     </>

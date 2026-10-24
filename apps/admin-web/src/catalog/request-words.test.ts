@@ -3,9 +3,12 @@ import type { AdminCatalogRequest } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
 import { catalogRequestPath, itemFromRequestPath, locationOf, menuOf } from "../router";
 import {
+  groupByUpload,
+  groupTitle,
   itemFormFromRequest,
   requestErrorText,
   requestSourceText,
+  requestsText,
   requestTermsText,
   requestTitle,
 } from "./request-words";
@@ -87,6 +90,29 @@ describe("a request to add an item", () => {
       retryable: false,
     });
     expect(requestErrorText(decided)).toMatch(/^Запрос уже рассмотрел Айгерим, .*: отклонено\./);
+  });
+
+  it("groups consecutive rows of one upload, hand-made ones by supplier (TASK-080)", () => {
+    const B = "0b6f1c2a-2222-4c2a-9a1b-123456789abc";
+    const other = { ...request, id: B, import: { ...request.import!, id: B, fileName: null } };
+    const manual: AdminCatalogRequest = { ...request, id: B, source: "manual", import: null };
+    const groups = groupByUpload([request, request, other, manual, manual, request]);
+    expect(groups.map((group) => group.rows.length)).toEqual([2, 1, 2, 1]);
+    expect(groups.map((group) => groupTitle(group.rows[0]!))).toEqual([
+      "Прайс 1c-export.xlsx",
+      "Прайс",
+      "Вручную из кабинета",
+      "Прайс 1c-export.xlsx",
+    ]);
+    expect(groupByUpload([])).toEqual([]);
+  });
+
+  it("counts requests in words", () => {
+    expect(requestsText(1)).toBe("1 запрос");
+    expect(requestsText(3)).toBe("3 запроса");
+    expect(requestsText(12)).toBe("12 запросов");
+    expect(requestsText(21)).toBe("21 запрос");
+    expect(requestsText(50)).toBe("50 запросов");
   });
 
   it("has its addresses in the catalog", () => {

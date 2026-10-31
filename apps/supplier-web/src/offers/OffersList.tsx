@@ -19,7 +19,7 @@ import { useT } from "../i18n";
 import { navigate, replaceRouteState, useRouteState } from "../router";
 import { PageHeader } from "../screens/PageHeader";
 import { OfferCardRow, OfferTableRow } from "./OfferRow";
-import { cardMissing, scheduleProblem } from "./offer-rules";
+import { scheduleProblem } from "./offer-rules";
 import { useWide } from "./use-wide";
 
 /** What the list is asked for; kept with the page's history entry (a reload keeps it). */
@@ -226,7 +226,6 @@ export function OffersList() {
   const tabLabel = (key: "offers.tabOnSale" | "offers.tabWithdrawn", n: number | undefined) =>
     n === undefined ? t(key) : `${t(key)} · ${n}`;
   const schedule = shown ? scheduleProblem(shown.offers) : null;
-  const noCard = shown ? cardMissing(shown.offers) : false;
   const retry = { label: t("common.retry"), onRetry: () => load(query) };
 
   // A secondary button (C15): on a phone across under the title, from 600 beside it.
@@ -311,8 +310,7 @@ export function OffersList() {
         )}
       </div>
 
-      {noCard && <Banner tone="warning">{t("offers.cardBanner")}</Banner>}
-
+      {/* «Карта не привязана» (T-SUP-02) is a banner of every page now — the frame shows it. */}
       {schedule && (
         <Banner
           tone="warning"

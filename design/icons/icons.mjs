@@ -38,6 +38,8 @@ export const ui = {
   clock: "clock",
   contrast: "circle-half",
   copy: "copy",
+  // «Подписка» of the cabinet and the admin's supplier card: the card of a supplier (TASK-042).
+  creditCard: "credit-card",
   devices: "devices",
   dots: "dots-three",
   download: "download-simple",

@@ -47,6 +47,7 @@ import {
 import { DevSupplierSeed, DevSupplierSeedError, SuppliersModule } from "./modules/suppliers";
 import { ClubAccessGrants, ClubAccessModule } from "./modules/club-access";
 import { BillingModule, BillingOperator, Plans, SupplierCards } from "./modules/billing";
+import { SignalsModule } from "./modules/signals";
 import { SearchEval, ShowcaseModule } from "./modules/showcase";
 import {
   SearchIndexUnavailableError,
@@ -182,6 +183,12 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                signed with the configured app secret, to its own
  *                                address: the signature check, the receipt, the
  *                                queue and the applying, without Meta
+ *   dev:payments:webhook [--key <charge key>] [--status succeeded|declined]
+ *                        [--reason <decline reason>] [--twice] [--bad-signature]
+ *                                send this deployment a webhook of the test
+ *                                payment provider (TASK-042), signed with the
+ *                                configured secret, to its own address; without
+ *                                --key it names the latest charge waiting
  *   dev:jobs:fail [--note <text>] [--on-query]
  *                                put a job that always fails on the queue;
  *                                with --on-query it fails on a real SQL query
@@ -217,7 +224,11 @@ class OperatorModule {
         compatibility,
         SuppliersModule.forRoot({ http: false }),
         clubAccess,
-        BillingModule.forRoot({ http: false, clubAccess }),
+        BillingModule.forRoot(config, {
+          http: false,
+          clubAccess,
+          signals: SignalsModule.forRoot({ http: false }),
+        }),
         ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess }),
         JobsModule.forRoot({
           role: "producer",
@@ -284,7 +295,8 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:messages:webhook --message <id> [--status <status>] [--button confirm|decline|<payload>] [--from <phone>] [--twice] [--bad-signature]
   dev:jobs:fail [--note <text>] [--on-query]
   dev:subscription:event <phone> <started|renewed|grace_started|suspended|cancelled|cancel_withdrawn|expired|refunded|revoked> [--until <YYYY-MM-DD | ISO time | +<n>d>] [--grace-until <…>] [--at <ISO time>] [--event-id <id>] [--ref <purchase>]
-  dev:supplier:card <supplierId> --linked | --unlinked`;
+  dev:supplier:card <supplierId> --linked | --unlinked
+  dev:payments:webhook [--key <idempotency key of the charge>] [--status succeeded|declined] [--reason <decline reason>] [--twice] [--bad-signature]`;
 
 function required(value: string | undefined, what: string): string {
   if (!value) {
@@ -456,6 +468,7 @@ async function run(
       to: { type: "string" },
       "announce-days": { type: "string" },
       "grace-until": { type: "string" },
+      key: { type: "string" },
       at: { type: "string" },
       "event-id": { type: "string" },
       ref: { type: "string" },
@@ -768,6 +781,20 @@ async function run(
         ...(values.at !== undefined && { at: termEnd(values.at, "--at") }),
         ...(values["event-id"] !== undefined && { eventId: values["event-id"] }),
         ...(values.ref !== undefined && { ref: values.ref }),
+      });
+    }
+    case "dev:payments:webhook": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "dev:payments:webhook is available in development and tests only",
+        );
+      }
+      return billing.paymentWebhook({
+        ...(values.key === undefined ? {} : { key: values.key }),
+        ...(values.status === undefined ? {} : { status: values.status }),
+        ...(values.reason === undefined ? {} : { reason: values.reason }),
+        twice: values.twice === true,
+        badSignature: values["bad-signature"] === true,
       });
     }
     case "dev:supplier:card": {

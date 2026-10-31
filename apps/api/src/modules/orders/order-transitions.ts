@@ -363,12 +363,17 @@ export class OrderTransitions {
     }
     const channel = request.channel === "whatsapp" ? "whatsapp" : "supplier_web";
     const [company] = await tx
-      .select({ pauseReason: supplier.pauseReason, blockedAt: supplier.blockedAt })
+      .select({
+        adminPausedAt: supplier.adminPausedAt,
+        billingPausedAt: supplier.billingPausedAt,
+        blockedAt: supplier.blockedAt,
+      })
       .from(supplier)
       .where(eq(supplier.id, request.actor.supplierId))
       .for("share");
     const state = supplierState({
-      pauseReason: company?.pauseReason ?? null,
+      adminPaused: company?.adminPausedAt != null,
+      billingPaused: company?.billingPausedAt != null,
       blocked: company?.blockedAt != null,
     });
     // `close` may turn into `close_late` (`orElse`): both are judged.

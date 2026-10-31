@@ -4,9 +4,9 @@ import {
   RECEIPT_DATE_HORIZON_DAYS,
   scheduleFact,
   supplierOffers,
+  supplierPauseReasons,
   type OfferItemType,
   type SupplierOfferType,
-  type SupplierPauseReason,
 } from "@adclub/domain";
 import { inArray, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
@@ -69,7 +69,8 @@ interface FactsRow extends Record<string, unknown> {
   id: string;
   location_id: string;
   offer_status: "active" | "withdrawn" | "suspended";
-  pause_reason: SupplierPauseReason | null;
+  admin_paused: boolean;
+  billing_paused: boolean;
   blocked: boolean;
   card_linked: boolean;
   card_required: boolean;
@@ -94,7 +95,8 @@ export async function offerShowcase(
     SELECT o.id,
       o.location_id,
       o.status AS offer_status,
-      s.pause_reason,
+      s.admin_paused_at IS NOT NULL AS admin_paused,
+      s.billing_paused_at IS NOT NULL AS billing_paused,
       s.blocked_at IS NOT NULL AS blocked,
       s.card_linked_at IS NOT NULL AS card_linked,
       ${cardRequired()} AS card_required,
@@ -121,7 +123,10 @@ export async function offerShowcase(
       row.id,
       offerVisibility({
         offerStatus: row.offer_status,
-        supplierPauseReason: row.pause_reason,
+        supplierPauses: supplierPauseReasons({
+          adminPaused: row.admin_paused,
+          billingPaused: row.billing_paused,
+        }),
         supplierBlocked: row.blocked,
         cardRequired: row.card_required,
         cardLinked: row.card_linked,

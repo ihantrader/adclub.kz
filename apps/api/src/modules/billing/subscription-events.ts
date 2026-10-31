@@ -12,16 +12,19 @@ import {
   type SubscriptionStatus,
   type TimeEventKind,
 } from "@adclub/domain";
-import { and, asc, eq, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import { afterCommit, DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue, type Sweeper } from "../../jobs";
 import { AuditLog, type AuditActorRecord } from "../audit";
-import { account } from "../identity";
+import { account, supplier } from "../identity";
 import { AppSettings } from "../settings";
 import { applyBillingEventsJob } from "./billing-jobs";
 import { Plans } from "./plans.service";
+import { SupplierBillingEffects } from "./supplier-billing-effects";
 import {
   billingEvent,
+  openAttemptStatuses,
+  paymentAttempt,
   subscription,
   type BillingEventOutcome,
   type BillingEventRow,
@@ -106,15 +109,27 @@ export class SubscriptionEvents {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(Plans) private readonly plans: Plans,
+    @Inject(SupplierBillingEffects) private readonly effects: SupplierBillingEffects,
   ) {}
+
+  /** What a company's status change does to the platform (the pause, the signal); a user's — nothing. */
+  async changed(
+    tx: DbExecutor,
+    before: SubscriptionRow | null,
+    after: SubscriptionRow,
+  ): Promise<void> {
+    await this.effects.afterChange(tx, before, after);
+  }
 
   /** Keeps a provider's event and puts its purchase on the queue; a duplicate changes nothing. */
   async receive(
     provider: SubscriptionProviderName,
     event: NormalizedProviderEvent,
     source: Exclude<BillingEventSource, "system">,
+    /** Inside the transaction of what caused the event (a charge's result), or its own. */
+    outer?: DbExecutor,
   ): Promise<{ eventId: string; duplicate: boolean }> {
-    return this.database.db.transaction(async (tx) => {
+    const run = async (tx: DbExecutor) => {
       const [inserted] = await tx
         .insert(billingEvent)
         .values({
@@ -124,6 +139,7 @@ export class SubscriptionEvents {
           kind: event.kind,
           providerRef: event.providerRef,
           accountId: event.accountId,
+          supplierId: event.supplierId ?? null,
           eventAt: event.eventAt,
           payload: {
             ...(event.periodEnd && { periodEnd: event.periodEnd.toISOString() }),
@@ -147,7 +163,8 @@ export class SubscriptionEvents {
       }
       await this.enqueue(tx, provider, event.providerRef);
       return { eventId: inserted.id, duplicate: false };
-    });
+    };
+    return outer ? run(outer) : this.database.db.transaction(run);
   }
 
   private async enqueue(tx: DbExecutor | undefined, provider: string, providerRef: string) {
@@ -225,6 +242,45 @@ export class SubscriptionEvents {
     if (!current) {
       const initial = initialSubscriptionState(event);
       if (!initial) return refused("no_subscription");
+      if (row.supplierId) {
+        // A company's card subscription (TASK-042): decided one company at a time.
+        await tx
+          .select({ id: supplier.id })
+          .from(supplier)
+          .where(eq(supplier.id, row.supplierId))
+          .for("update");
+        const [other] = await tx
+          .select({ id: subscription.id })
+          .from(subscription)
+          .where(
+            and(eq(subscription.supplierId, row.supplierId), ne(subscription.status, "expired")),
+          );
+        if (other) return refused("already_active");
+        const plan = await this.plans.inEffect("supplier", row.eventAt, tx);
+        const [created] = await tx
+          .insert(subscription)
+          .values({
+            audience: "supplier",
+            supplierId: row.supplierId,
+            planId: plan?.id ?? null,
+            provider: row.provider as SubscriptionProviderName,
+            purchasePlatform: null,
+            providerRef: row.providerRef!,
+            status: initial.status,
+            currentPeriodEnd: initial.periodEnd,
+            lastProviderEventAt: row.eventAt,
+          })
+          .returning();
+        await this.journal(tx, null, created!, changedBy, row.kind, row.id);
+        await this.effects.afterChange(tx, null, created!);
+        return {
+          outcome: "applied",
+          detail: null,
+          subscriptionId: created!.id,
+          fromStatus: null,
+          toStatus: created!.status,
+        };
+      }
       if (!row.accountId) return refused("no_account");
       const room = await this.makeRoom(tx, row.accountId, null, now, toleranceMs, changedBy, row);
       if (room === "already_active") return refused("already_active");
@@ -312,6 +368,7 @@ export class SubscriptionEvents {
     }
     const updated = await this.write(tx, current, next, { lastProviderEventAt: row.eventAt });
     await this.journal(tx, current, updated, changedBy, row.kind, row.id);
+    await this.effects.afterChange(tx, current, updated);
     return {
       outcome: "applied",
       detail: null,
@@ -497,6 +554,21 @@ export class SubscriptionExpiry implements Sweeper<ExpiryContext> {
             and(
               or(eq(subscription.status, "grace"), eq(subscription.status, "past_due")),
               sql`${subscription.graceUntil} <= now()`,
+              // A company is not paused while the processor owes an answer
+              // about its charge (unavailable, or its answer lost): the
+              // pause is for a bank that refused, not for a provider that
+              // couldn't be reached (TASK-042).
+              or(
+                eq(subscription.audience, "user"),
+                sql`NOT EXISTS (
+                  SELECT 1 FROM payment_attempt a
+                  WHERE a.subscription_id = ${subscription.id}
+                    AND a.status IN (${sql.join(
+                      openAttemptStatuses.map((status) => sql`${status}`),
+                      sql`, `,
+                    )})
+                )`,
+              ),
             ),
             and(
               eq(subscription.status, "expired_unconfirmed"),
@@ -523,6 +595,19 @@ export class SubscriptionExpiry implements Sweeper<ExpiryContext> {
       context.toleranceMs,
     );
     if (!kind) return;
+    if (row.audience === "supplier" && kind === "grace_lapsed") {
+      const [open] = await tx
+        .select({ id: paymentAttempt.id })
+        .from(paymentAttempt)
+        .where(
+          and(
+            eq(paymentAttempt.subscriptionId, row.id),
+            inArray(paymentAttempt.status, [...openAttemptStatuses]),
+          ),
+        )
+        .limit(1);
+      if (open) return;
+    }
     const transition = subscriptionTransition(
       row.audience,
       stateOf(row),
@@ -563,6 +648,7 @@ export class SubscriptionExpiry implements Sweeper<ExpiryContext> {
       .onConflictDoNothing({ target: [billingEvent.provider, billingEvent.providerEventId] })
       .returning({ id: billingEvent.id });
     await this.events.journal(tx, row, updated!, "system", kind, kept?.id ?? "-");
+    await this.events.changed(tx, row, updated!);
   }
 
   summary(result: { processed: number; failed: number }): void {

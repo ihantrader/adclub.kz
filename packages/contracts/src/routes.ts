@@ -185,10 +185,20 @@ import {
   revokeClubAccessBodySchema,
 } from "./club-access";
 import {
+  adminSupplierBillingResponseSchema,
   adminUserSubscriptionResponseSchema,
   mySubscriptionResponseSchema,
   supplierSubscriptionResponseSchema,
 } from "./subscriptions";
+import {
+  cardBindingPathSchema,
+  cardBindingResponseSchema,
+  payNowResponseSchema,
+  startCardBindingBodySchema,
+  startCardBindingResponseSchema,
+  supplierChargePageSchema,
+  supplierChargesQuerySchema,
+} from "./supplier-billing";
 import {
   garageCarIdPathSchema,
   garageCarRemovedResponseSchema,
@@ -1137,7 +1147,7 @@ export const apiRoutes = {
     method: "GET",
     path: "/supplier/subscription",
     summary:
-      "The company's card and the switch D-041 (offers on the showcase only after a card is linked), the suppliers' tariff and its announced change",
+      "S-BILL-01: the company's subscription, its card, both pauses and what can be done now, the switch D-041 (offers on the showcase only after a card is linked), the suppliers' tariff and its announced change",
     tag: "supplier",
     clientVersionCheck: "enforced",
     auth: "session",
@@ -1147,6 +1157,90 @@ export const apiRoutes = {
         description: "The company's subscription",
         schema: supplierSubscriptionResponseSchema,
       },
+    },
+  }),
+  startSupplierCardBinding: defineRoute({
+    operationId: "startSupplierCardBinding",
+    method: "POST",
+    path: "/supplier/billing/card-bindings",
+    summary:
+      "«Привязать карту» / «Сменить карту»: opens a trip to the payment provider's page (its address is in the answer; the card's number never reaches our server). An employee of an active company; one trip at a time — an open one is returned again. Without a subscription the first charge follows the card; a company that has one just changes its card",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "billing_actions_per_member", whenUnavailable: "allow" },
+    requestBody: {
+      description: "Where the provider sends the browser back to — an address of the cabinet",
+      schema: startCardBindingBodySchema,
+    },
+    responses: {
+      201: {
+        description: "The trip and the provider's page",
+        schema: startCardBindingResponseSchema,
+      },
+    },
+  }),
+  getSupplierCardBinding: defineRoute({
+    operationId: "getSupplierCardBinding",
+    method: "GET",
+    path: "/supplier/billing/card-bindings/{bindingId}",
+    summary:
+      "How a trip to the payment provider's page stands (the cabinet asks when the person comes back): pending, the card received, the first charge on its way, linked, refused by the bank, failed or abandoned",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: cardBindingPathSchema,
+    responses: {
+      200: { description: "The binding", schema: cardBindingResponseSchema },
+    },
+  }),
+  payNowSupplierSubscription: defineRoute({
+    operationId: "payNowSupplierSubscription",
+    method: "POST",
+    path: "/supplier/billing/pay",
+    summary:
+      "«Оплатить сейчас»: charges the linked card for the term the subscription owes (after a refusal, on a pause). Two employees pressing it together get the same charge back; the result comes by the history of charges",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    rateLimit: { perMember: "billing_actions_per_member", whenUnavailable: "allow" },
+    responses: {
+      202: {
+        description: "The charge, finished or waiting for the provider",
+        schema: payNowResponseSchema,
+      },
+    },
+  }),
+  listSupplierCharges: defineRoute({
+    operationId: "listSupplierCharges",
+    method: "GET",
+    path: "/supplier/billing/charges",
+    summary: "The history of the company's charges (S-BILL-01), newest first, by pages",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierChargesQuerySchema,
+    responses: {
+      200: { description: "A page of charges", schema: supplierChargePageSchema },
+    },
+  }),
+  getAdminSupplierBilling: defineRoute({
+    operationId: "getAdminSupplierBilling",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}/billing",
+    summary:
+      "A-SUP-03 «Подписка»: the subscription in words, paid until, the card (mask only), the latest charges and the events, and both pauses side by side",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    responses: {
+      200: { description: "The supplier's billing", schema: adminSupplierBillingResponseSchema },
     },
   }),
   getSupplierCompany: defineRoute({

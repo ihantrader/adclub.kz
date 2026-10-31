@@ -153,6 +153,23 @@ export class Metrics {
     this.aiBudget.set({}, usd);
   }
 
+  private readonly paymentAttempts = this.registry.gauge(
+    "adclub_payment_attempts",
+    "Charges of suppliers' cards by state and kind, all of them on record (from payment_attempt)",
+  );
+  private readonly paymentRetryQueue = this.registry.gauge(
+    "adclub_payment_retry_queue",
+    "Charges the payment provider could not take or whose answer was lost, waiting for another try (unavailable, unknown)",
+  );
+
+  setPaymentAttempts(status: string, kind: string, count: number): void {
+    this.paymentAttempts.set({ status, kind }, count);
+  }
+
+  setPaymentRetryQueue(state: string, count: number): void {
+    this.paymentRetryQueue.set({ state }, count);
+  }
+
   setAiCalls(kind: string, status: string, count: number): void {
     this.aiCalls.set({ kind, status }, count);
   }
@@ -256,6 +273,11 @@ export class Metrics {
       this.messagesByTemplate,
       this.webhookEventKinds,
     ]);
+  }
+
+  /** The charges of suppliers' cards, sampled from the database (the worker charges, the API serves). */
+  collectPayments(collector: MetricCollector): void {
+    this.registry.collect("payments", collector, [this.paymentAttempts, this.paymentRetryQueue]);
   }
 
   render(): Promise<string> {

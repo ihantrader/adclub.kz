@@ -285,3 +285,95 @@ describe("a subscription's beginning and its current statuses", () => {
     ]);
   });
 });
+
+/**
+ * A supplier's card subscription day by day (TASK-042; PRODUCT 14.3;
+ * ARCHITECTURE 18.5): the first refusal opens the window of the retries,
+ * the next refusals of the same term do not stretch it, a payment at any
+ * moment — even on a pause — restores the subscription, and the window's end
+ * is what pauses it.
+ */
+describe("a supplier's subscription, refusal by refusal", () => {
+  const supplier = (state: SubscriptionState, e: SubscriptionEvent, at = now) =>
+    subscriptionTransition("supplier", state, e, at, TOLERANCE);
+  const active: SubscriptionState = {
+    status: "active",
+    periodEnd: ahead(-HOUR),
+    graceUntil: null,
+    unconfirmedSince: null,
+  };
+  const window = ahead(3 * DAY);
+
+  it("passes into past due at the first refusal, with the window of three days", () => {
+    const moved = supplier(active, { kind: "payment_failed", graceUntil: window });
+    expect(moved).toEqual({
+      kind: "move",
+      next: {
+        status: "past_due",
+        periodEnd: active.periodEnd,
+        graceUntil: window,
+        unconfirmedSince: null,
+      },
+    });
+  });
+
+  it("does not stretch the window at the refusals that follow: the same end is no change", () => {
+    const pastDue = { ...active, status: "past_due" as const, graceUntil: window };
+    expect(supplier(pastDue, { kind: "payment_failed", graceUntil: window })).toEqual({
+      kind: "stay",
+    });
+    // An end earlier than the known one (the term's first refusal, counted again) changes nothing either.
+    expect(supplier(pastDue, { kind: "payment_failed", graceUntil: ahead(2 * DAY) })).toEqual({
+      kind: "stay",
+    });
+  });
+
+  it("does not pause before the window ends, and pauses once it has", () => {
+    const pastDue = { ...active, status: "past_due" as const, graceUntil: window };
+    expect(supplier(pastDue, { kind: "grace_lapsed" }, ahead(3 * DAY - 1))).toEqual({
+      kind: "stay",
+    });
+    expect(dueTimeEvent("supplier", pastDue, ahead(3 * DAY - 1), TOLERANCE)).toBeNull();
+    const paused = supplier(pastDue, { kind: "grace_lapsed" }, ahead(3 * DAY));
+    expect(paused).toMatchObject({ kind: "move", next: { status: "suspended" } });
+    expect(dueTimeEvent("supplier", pastDue, ahead(3 * DAY), TOLERANCE)).toBe("grace_lapsed");
+  });
+
+  it("restores the subscription from a payment in any status, on the old date and without a window", () => {
+    const next = ahead(30 * DAY);
+    for (const status of ["active", "past_due", "suspended", "cancelled", "expired"] as const) {
+      const state: SubscriptionState = {
+        status,
+        periodEnd: ahead(-2 * DAY),
+        graceUntil: status === "past_due" ? ahead(DAY) : null,
+        unconfirmedSince: null,
+      };
+      expect(supplier(state, { kind: "renewed", periodEnd: next }), status).toEqual({
+        kind: "move",
+        next: { status: "active", periodEnd: next, graceUntil: null, unconfirmedSince: null },
+      });
+    }
+  });
+
+  it("takes a payment that pays nothing new as no change: a duplicate, or the same term twice", () => {
+    const suspended = { ...active, status: "suspended" as const, periodEnd: ahead(30 * DAY) };
+    expect(supplier(suspended, { kind: "renewed", periodEnd: ahead(30 * DAY) })).toEqual({
+      kind: "stay",
+    });
+    expect(supplier(suspended, { kind: "renewed", periodEnd: ahead(20 * DAY) })).toEqual({
+      kind: "stay",
+    });
+  });
+
+  it("ignores a refusal that arrives after the pause or the end, and time alone never ends an active term", () => {
+    for (const status of ["suspended", "cancelled", "expired"] as const) {
+      const state = { ...active, status };
+      expect(supplier(state, { kind: "payment_failed", graceUntil: window }), status).toEqual({
+        kind: "stay",
+      });
+    }
+    // A term passed without a charge is the processor's to charge, not time's to end.
+    expect(supplier(active, { kind: "period_lapsed" })).toEqual({ kind: "stay" });
+    expect(dueTimeEvent("supplier", active, ahead(DAY), TOLERANCE)).toBeNull();
+  });
+});

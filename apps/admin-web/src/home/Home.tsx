@@ -22,6 +22,10 @@ export interface HomeCard {
 
 const SIGNAL_KINDS = [
   "supplier_unreachable",
+  // TASK-042: the payment provider's silence and the missing tariff (a failed payment
+  // of a supplier has its own card below, item 6 of SCREENS 7.1).
+  "payment_system_down",
+  "billing_plan_missing",
   "supply_overdue",
   "visit_unresolved",
   "low_rating",
@@ -35,7 +39,7 @@ const SIGNAL_KINDS = [
  * the quality of the catalog — every counter from one answer of the server.
  */
 export function homeCards(home: AdminHome): HomeCard[] {
-  const signal = (kind: (typeof SIGNAL_KINDS)[number]) => {
+  const signal = (kind: (typeof SIGNAL_KINDS)[number] | "payment_failed") => {
     const row = home.signals.find((entry) => entry.kind === kind);
     return (row?.open ?? 0) + (row?.acknowledged ?? 0);
   };
@@ -72,6 +76,14 @@ export function homeCards(home: AdminHome): HomeCard[] {
       value: home.complaintsNew,
       note: "Жалобы пользователей по заявкам, ещё не взятые в работу",
       href: withQuery(routePaths.complaints, { status: "new" }),
+    },
+    {
+      key: "payments",
+      icon: "creditCard",
+      title: KIND_TITLES.payment_failed,
+      value: signal("payment_failed"),
+      note: KIND_HINTS.payment_failed,
+      href: withQuery(routePaths.signals, { kind: "payment_failed" }),
     },
     {
       key: "leads",

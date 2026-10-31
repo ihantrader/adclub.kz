@@ -114,7 +114,15 @@ export function userPath(accountId: string, tab?: UserTab): string {
 
 /** The tabs of a supplier's card (A-SUP-03). */
 export type SupplierTab =
-  "profile" | "statuses" | "members" | "offers" | "orders" | "rating" | "price" | "history";
+  | "profile"
+  | "statuses"
+  | "members"
+  | "offers"
+  | "orders"
+  | "rating"
+  | "billing"
+  | "price"
+  | "history";
 
 /** A supplier's card, on a tab (`profile` when left out). */
 export function supplierPath(supplierId: string, tab?: SupplierTab): string {

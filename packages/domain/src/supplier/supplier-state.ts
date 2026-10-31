@@ -1,10 +1,10 @@
 /**
  * The state of a supplier (PRODUCT 13, 14; SCREENS A-SUP-03, 6.0;
- * ARCHITECTURE 4.26). Pause (for an unpaid subscription or by an
- * administrator) and blocking are independent: a blocked supplier may be
- * paused too, and lifting one leaves the other. Neither closes the
- * cabinet nor touches current orders; both take the supplier off the
- * showcase.
+ * ARCHITECTURE 4.26, 4.77). Two pauses and blocking are independent: a
+ * company the administrator paused may also be paused for an unpaid
+ * subscription (and the other way round), and lifting one leaves the other.
+ * Neither closes the cabinet nor touches current orders; all of them take
+ * the supplier off the showcase.
  */
 
 export type SupplierPauseReason = "billing" | "admin";
@@ -13,15 +13,28 @@ export type SupplierPauseReason = "billing" | "admin";
 export type SupplierState = "active" | "paused" | "blocked";
 
 export interface SupplierStateFacts {
-  pauseReason: SupplierPauseReason | null;
+  /** The administrator paused the company (`supplier.admin_paused_at`). */
+  adminPaused: boolean;
+  /** The subscription is unpaid and the retries are over (`supplier.billing_paused_at`, TASK-042). */
+  billingPaused: boolean;
   blocked: boolean;
+}
+
+/** The pauses that hold, the administrator's first. */
+export function supplierPauseReasons(
+  facts: Pick<SupplierStateFacts, "adminPaused" | "billingPaused">,
+): SupplierPauseReason[] {
+  const reasons: SupplierPauseReason[] = [];
+  if (facts.adminPaused) reasons.push("admin");
+  if (facts.billingPaused) reasons.push("billing");
+  return reasons;
 }
 
 export function supplierState(facts: SupplierStateFacts): SupplierState {
   if (facts.blocked) {
     return "blocked";
   }
-  return facts.pauseReason === null ? "active" : "paused";
+  return facts.adminPaused || facts.billingPaused ? "paused" : "active";
 }
 
 /**

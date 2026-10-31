@@ -29,6 +29,7 @@ import * as supplierContract from "./suppliers";
 import * as offerContract from "./offers";
 import * as clubAccessContract from "./club-access";
 import * as subscriptionContract from "./subscriptions";
+import * as supplierBillingContract from "./supplier-billing";
 import * as orderContract from "./orders";
 import * as signalContract from "./signals";
 import * as userContract from "./users";
@@ -264,6 +265,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(offerContract),
   ...moduleComponentSchemas(clubAccessContract),
   ...moduleComponentSchemas(subscriptionContract),
+  ...moduleComponentSchemas(supplierBillingContract),
   ...moduleComponentSchemas(orderContract),
   ...moduleComponentSchemas(signalContract),
   ...moduleComponentSchemas(userContract),

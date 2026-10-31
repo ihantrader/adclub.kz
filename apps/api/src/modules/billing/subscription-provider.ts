@@ -21,6 +21,11 @@ export interface NormalizedProviderEvent {
    * doesn't say (a later notification names only the purchase).
    */
   accountId: string | null;
+  /**
+   * The company the processor says the purchase is for (TASK-042: a card
+   * subscription is a company's, not an account's); `null` for a user's.
+   */
+  supplierId?: string | null;
   /** When it happened at the provider: the order events are applied in. */
   eventAt: Date;
   periodEnd: Date | null;

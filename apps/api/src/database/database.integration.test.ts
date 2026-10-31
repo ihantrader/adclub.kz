@@ -98,6 +98,161 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keeps the two pauses of a company apart, one open charge and one success per term, and rolls back keeping every company's pause (supplier billing)", async () => {
+    const { rows: city } = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru, source) VALUES ('billing-test', 'Тест', 'migrated') RETURNING id",
+    );
+    const company = async (
+      name: string,
+      pauses: { admin?: boolean; billing?: boolean; blocked?: boolean },
+    ) => {
+      const status = pauses.blocked
+        ? "blocked"
+        : pauses.admin || pauses.billing
+          ? "paused"
+          : "active";
+      const { rows } = await client.query<{ id: string }>(
+        `INSERT INTO supplier (name, city_id, status, admin_paused_at, admin_pause_note, billing_paused_at, block_reason, blocked_at)
+         VALUES ($1, $2, $3,
+           CASE WHEN $4::boolean THEN now() END, CASE WHEN $4::boolean THEN 'Проверка' END,
+           CASE WHEN $5::boolean THEN now() END,
+           CASE WHEN $6::boolean THEN 'x' END, CASE WHEN $6::boolean THEN now() END) RETURNING id`,
+        [
+          name,
+          city[0]!.id,
+          status,
+          pauses.admin ?? false,
+          pauses.billing ?? false,
+          pauses.blocked ?? false,
+        ],
+      );
+      return rows[0]!.id;
+    };
+    const active = await company("Свободная", {});
+    await company("Админом", { admin: true });
+    const byBilling = await company("Оплатой", { billing: true });
+    const both = await company("Обе", { admin: true, billing: true });
+
+    // The status is what the pauses and the blocking make it — the database keeps it so.
+    await expect(
+      client.query("UPDATE supplier SET billing_paused_at = NULL WHERE id = $1", [byBilling]),
+    ).rejects.toThrow(/supplier_status_check/);
+    await expect(
+      client.query("UPDATE supplier SET status = 'active' WHERE id = $1", [both]),
+    ).rejects.toThrow(/supplier_status_check/);
+
+    // One success per term and one attempt in flight: not twice, whoever asks.
+    const { rows: bindingRows } = await client.query<{ id: string }>(
+      `INSERT INTO card_binding (supplier_id, provider, provider_ref, return_url, expires_at)
+       VALUES ($1, 'test', 'ref-1', 'http://localhost:5175/billing', now() + interval '1 hour') RETURNING id`,
+      [active],
+    );
+    await expect(
+      client.query(
+        `INSERT INTO card_binding (supplier_id, provider, provider_ref, return_url, expires_at)
+         VALUES ($1, 'test', 'ref-2', 'http://localhost:5175/billing', now() + interval '1 hour')`,
+        [active],
+      ),
+    ).rejects.toThrow(/card_binding_open_key/);
+    const attempt = (no: number, status: string, key: string) =>
+      client.query(
+        `INSERT INTO payment_attempt (supplier_id, binding_id, kind, period_key, attempt_no, idempotency_key, amount, period_from, period_to, anchor_day, status, provider, resolved_at, decline_reason)
+         VALUES ($1, $2, 'first', 'bind:one', $3, $4, 1000, now(), now() + interval '1 month', 5, $5, 'test',
+           CASE WHEN $5 IN ('succeeded', 'declined') THEN now() END, CASE WHEN $5 = 'declined' THEN 'insufficient_funds' END)`,
+        [active, bindingRows[0]!.id, no, key, status],
+      );
+    await attempt(1, "declined", "key-1");
+    await attempt(2, "unknown", "key-2");
+    await expect(attempt(3, "created", "key-3")).rejects.toThrow(/payment_attempt_open_key/);
+    await expect(attempt(2, "declined", "key-4")).rejects.toThrow(/payment_attempt_number_key/);
+    await expect(attempt(4, "declined", "key-1")).rejects.toThrow(/payment_attempt_key_key/);
+    await client.query(
+      "UPDATE payment_attempt SET status = 'succeeded', resolved_at = now(), decline_reason = NULL WHERE idempotency_key = 'key-2'",
+    );
+    await expect(attempt(5, "succeeded", "key-5")).rejects.toThrow(/payment_attempt_succeeded_key/);
+    // A second card is refused, a replaced one is not a card.
+    await expect(
+      client.query(
+        "INSERT INTO payment_method (supplier_id, provider, token_sealed, mask, brand, exp_month, exp_year) VALUES ($1, 'test', 'x', '12', 'visa', 12, 2030)",
+        [active],
+      ),
+    ).rejects.toThrow(/payment_method_mask_check/);
+    const method = (mask: string) =>
+      client.query(
+        "INSERT INTO payment_method (supplier_id, provider, token_sealed, mask, brand, exp_month, exp_year) VALUES ($1, 'test', 'x', $2, 'visa', 12, 2030)",
+        [active, mask],
+      );
+    await method("4242");
+    await expect(method("1111")).rejects.toThrow(/payment_method_active_key/);
+
+    // Back: the tables go, every company keeps its pause (a company paused for both keeps the administrator's).
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    for (const table of [
+      "payment_method",
+      "card_binding",
+      "payment_attempt",
+      "payment_webhook_event",
+    ]) {
+      expect(await tableExists(client, table), table).toBe(false);
+    }
+    expect(await columnExists(client, "supplier", "admin_paused_at")).toBe(false);
+    const { rows: back } = await client.query<{
+      name: string;
+      status: string;
+      pause_reason: string | null;
+      pause_note: string | null;
+      paused: boolean;
+    }>(
+      "SELECT name, status, pause_reason, pause_note, paused_at IS NOT NULL AS paused FROM supplier WHERE city_id = $1 ORDER BY name",
+      [city[0]!.id],
+    );
+    expect(back).toEqual([
+      {
+        name: "Админом",
+        status: "paused",
+        pause_reason: "admin",
+        pause_note: "Проверка",
+        paused: true,
+      },
+      {
+        name: "Обе",
+        status: "paused",
+        pause_reason: "admin",
+        pause_note: "Проверка",
+        paused: true,
+      },
+      {
+        name: "Оплатой",
+        status: "paused",
+        pause_reason: "billing",
+        pause_note: null,
+        paused: true,
+      },
+      { name: "Свободная", status: "active", pause_reason: null, pause_note: null, paused: false },
+    ]);
+
+    // Forward again: the pauses return to their own columns.
+    expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
+    const { rows: forward } = await client.query<{
+      name: string;
+      admin: boolean;
+      billing: boolean;
+    }>(
+      "SELECT name, admin_paused_at IS NOT NULL AS admin, billing_paused_at IS NOT NULL AS billing FROM supplier WHERE city_id = $1 ORDER BY name",
+      [city[0]!.id],
+    );
+    expect(forward).toEqual([
+      { name: "Админом", admin: true, billing: false },
+      { name: "Обе", admin: true, billing: false },
+      { name: "Оплатой", admin: false, billing: true },
+      { name: "Свободная", admin: false, billing: false },
+    ]);
+    await client.query("DELETE FROM supplier WHERE city_id = $1", [city[0]!.id]);
+    await client.query("DELETE FROM city WHERE id = $1", [city[0]!.id]);
+    // The chain below walks down from the migration before this one.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+  });
+
   it("holds the sign-in for store review with its rules, and rolls back keeping the codes (review login)", async () => {
     const insert = (values: Record<string, unknown>) => {
       const row = {
@@ -2812,7 +2967,8 @@ describe("PostgreSQL: migrations and readiness", () => {
       },
     ]);
     const { rows: suppliers } = await client.query(
-      `SELECT s.name, c.code, s.status, s.pause_reason, s.block_reason IS NOT NULL AS blocked, s.type,
+      `SELECT s.name, c.code, s.status, s.admin_paused_at IS NOT NULL AS admin_paused,
+              s.billing_paused_at IS NOT NULL AS billing_paused, s.block_reason IS NOT NULL AS blocked, s.type,
               (SELECT count(*)::int FROM supplier_location l WHERE l.supplier_id = s.id AND l.city_id = s.city_id) AS points
        FROM supplier s JOIN city c ON c.id = s.city_id ORDER BY s.name`,
     );
@@ -2821,7 +2977,8 @@ describe("PostgreSQL: migrations and readiness", () => {
         name: "Альфа",
         code: "almaty",
         status: "active",
-        pause_reason: null,
+        admin_paused: false,
+        billing_paused: false,
         blocked: false,
         type: "both",
         points: 1,
@@ -2830,7 +2987,8 @@ describe("PostgreSQL: migrations and readiness", () => {
         name: "Бета",
         code: "almaty",
         status: "paused",
-        pause_reason: "admin",
+        admin_paused: true,
+        billing_paused: false,
         blocked: false,
         type: "both",
         points: 1,
@@ -2839,7 +2997,8 @@ describe("PostgreSQL: migrations and readiness", () => {
         name: "Гамма",
         code: "migrated-1",
         status: "active",
-        pause_reason: null,
+        admin_paused: false,
+        billing_paused: false,
         blocked: false,
         type: "both",
         points: 1,
@@ -2848,7 +3007,8 @@ describe("PostgreSQL: migrations and readiness", () => {
         name: "Дельта",
         code: "migrated-1",
         status: "active",
-        pause_reason: null,
+        admin_paused: false,
+        billing_paused: false,
         blocked: false,
         type: "both",
         points: 1,
@@ -2857,7 +3017,8 @@ describe("PostgreSQL: migrations and readiness", () => {
         name: "Эпсилон",
         code: "ust-kamenogorsk",
         status: "blocked",
-        pause_reason: null,
+        admin_paused: false,
+        billing_paused: false,
         blocked: true,
         type: "both",
         points: 1,

@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { clubAccessStateSchema } from "./club-access";
+import {
+  adminSupplierPausesSchema,
+  supplierChargeSchema,
+  supplierPaymentActionsSchema,
+  supplierPaymentCardSchema,
+  supplierPausesFlagsSchema,
+  supplierSubscriptionSummarySchema,
+} from "./supplier-billing";
 
 /**
  * Subscriptions (EPIC-14, TASK-040; PRODUCT 14; ARCHITECTURE 5.10, 9.4.1,
@@ -96,8 +104,12 @@ export const mySubscriptionResponseSchema = z.object({
 export type MySubscriptionResponse = z.infer<typeof mySubscriptionResponseSchema>;
 
 /**
- * `GET /supplier/subscription` — the company's side of D-041 and its
- * tariff (the screen S-BILL-01 comes with TASK-042).
+ * `GET /supplier/subscription` — S-BILL-01 (TASK-042) and the company's side
+ * of D-041: the subscription, the card, both pauses, what can be done now,
+ * the tariff and its announced change. The five states of the screen are
+ * read from it: no card («Карта не привязана»), `active`, `past_due`
+ * («Неуспешное списание»), a billing pause («Пауза»), and `announcedPlan`
+ * («Изменение тарифа»).
  */
 export const supplierSubscriptionResponseSchema = z.object({
   /** The company has linked a card. */
@@ -110,6 +122,13 @@ export const supplierSubscriptionResponseSchema = z.object({
   plan: subscriptionPlanSchema.nullable(),
   /** A change of the tariff announced ahead; `null` — none. */
   announcedPlan: announcedPlanSchema.nullable(),
+  /** The current subscription; `null` — none yet (or only an ended one). */
+  subscription: supplierSubscriptionSummarySchema.nullable(),
+  /** The linked card; `null` — none. */
+  card: supplierPaymentCardSchema.nullable(),
+  /** The two pauses of the company (T-SUP-01 shows the billing one). */
+  pauses: supplierPausesFlagsSchema,
+  actions: supplierPaymentActionsSchema,
 });
 
 export type SupplierSubscriptionResponse = z.infer<typeof supplierSubscriptionResponseSchema>;
@@ -169,3 +188,24 @@ export const adminUserSubscriptionResponseSchema = z.object({
 });
 
 export type AdminUserSubscriptionResponse = z.infer<typeof adminUserSubscriptionResponseSchema>;
+
+/**
+ * `GET /admin/suppliers/{supplierId}/billing` — the «Подписка» block of the
+ * supplier card (A-SUP-03, TASK-042): the status in words, paid until, the
+ * card (the mask), the history of charges and of the subscription, and the
+ * two pauses side by side (the billing reason is visible beside the
+ * administrator's). Full billing of the admin panel is TASK-043.
+ */
+export const adminSupplierBillingResponseSchema = z.object({
+  subscription: supplierSubscriptionSummarySchema.nullable(),
+  card: supplierPaymentCardSchema.nullable(),
+  pauses: adminSupplierPausesSchema,
+  /** The latest charges, newest first (up to 50). */
+  charges: z.array(supplierChargeSchema),
+  /** The events of the subscription with their outcome (up to 100). */
+  history: z.array(subscriptionHistoryEntrySchema),
+  plan: subscriptionPlanSchema.nullable(),
+  announcedPlan: announcedPlanSchema.nullable(),
+});
+
+export type AdminSupplierBillingResponse = z.infer<typeof adminSupplierBillingResponseSchema>;

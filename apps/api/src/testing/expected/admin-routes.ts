@@ -44,6 +44,7 @@ export const ADMIN_ROUTES: readonly string[] = [
   "GET /admin/supplier-leads/{leadId}",
   "GET /admin/suppliers",
   "GET /admin/suppliers/{supplierId}",
+  "GET /admin/suppliers/{supplierId}/billing",
   "GET /admin/suppliers/{supplierId}/members",
   "GET /admin/suppliers/{supplierId}/offers",
   "GET /admin/suppliers/{supplierId}/price-imports",

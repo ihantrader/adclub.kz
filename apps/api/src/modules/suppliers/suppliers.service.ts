@@ -81,13 +81,19 @@ export interface CreatedSupplier {
   invitation: ReturnType<typeof describeInvitation>;
 }
 
-function stateFacts(row: SupplierRow) {
-  return { pauseReason: row.pauseReason ?? null, blocked: row.blockedAt !== null };
+type PauseColumns = Pick<SupplierRow, "adminPausedAt" | "billingPausedAt" | "blockedAt">;
+
+function stateFacts(row: PauseColumns) {
+  return {
+    adminPaused: row.adminPausedAt !== null,
+    billingPaused: row.billingPausedAt !== null,
+    blocked: row.blockedAt !== null,
+  };
 }
 
-/** What the pause and the blocking make `status` (the database checks the same). */
-function statusOf(row: Pick<SupplierRow, "pauseReason" | "blockedAt">): SupplierStatus {
-  return supplierState({ pauseReason: row.pauseReason ?? null, blocked: row.blockedAt !== null });
+/** What the pauses and the blocking make `status` (the database checks the same). */
+function statusOf(row: PauseColumns): SupplierStatus {
+  return supplierState(stateFacts(row));
 }
 
 /**
@@ -583,22 +589,38 @@ export class SuppliersService {
   ): Promise<AdminSupplierCard> {
     await this.database.db.transaction(async (tx) => {
       const row = await this.lock(tx, supplierId, input.expectedVersion);
-      if (input.paused && !input.reason) {
-        throw validationError("reason", "Say what the pause is for: billing or admin");
+      // The administrator's pause only (TASK-042, ARCHITECTURE 4.77): the
+      // billing one is put and lifted by the subscription, never by hand —
+      // and lifting this one leaves it where it is.
+      if (input.paused && input.reason !== "admin") {
+        throw validationError(
+          "reason",
+          input.reason === "billing"
+            ? "The billing pause is put and lifted by the subscription itself"
+            : "Say what the pause is for: admin",
+        );
       }
-      if (!input.paused && row.pausedAt === null) {
+      if (!input.paused && row.adminPausedAt === null) {
         throw supplierStateConflict("not_paused");
       }
       const now = new Date();
       const note = normalizeText(input.note);
       const next = input.paused
-        ? { pauseReason: input.reason!, pauseNote: note, pausedAt: row.pausedAt ?? now }
-        : { pauseReason: null, pauseNote: null, pausedAt: null };
+        ? { adminPauseNote: note, adminPausedAt: row.adminPausedAt ?? now }
+        : { adminPauseNote: null, adminPausedAt: null };
       await this.writeState(tx, row, next, now, {
         action: auditActions.supplierPauseChanged,
         actor,
-        before: { paused: row.pausedAt !== null, reason: row.pauseReason },
-        after: { paused: input.paused, reason: next.pauseReason },
+        before: {
+          paused: row.adminPausedAt !== null,
+          reason: "admin",
+          billingPaused: row.billingPausedAt !== null,
+        },
+        after: {
+          paused: input.paused,
+          reason: "admin",
+          billingPaused: row.billingPausedAt !== null,
+        },
         reason: note,
       });
     });
@@ -751,10 +773,19 @@ export class SuppliersService {
         row.verifiedAt && row.contractSignedOn
           ? { contractSignedOn: row.contractSignedOn, verifiedAt: row.verifiedAt.toISOString() }
           : null,
-      pause:
-        row.pauseReason && row.pausedAt
-          ? { reason: row.pauseReason, note: row.pauseNote, since: row.pausedAt.toISOString() }
+      // The one a reader that knows a single pause sees: the administrator's
+      // when it holds, else the billing one. `pauses` tells both.
+      pause: row.adminPausedAt
+        ? { reason: "admin", note: row.adminPauseNote, since: row.adminPausedAt.toISOString() }
+        : row.billingPausedAt
+          ? { reason: "billing", note: null, since: row.billingPausedAt.toISOString() }
           : null,
+      pauses: {
+        admin: row.adminPausedAt
+          ? { note: row.adminPauseNote, since: row.adminPausedAt.toISOString() }
+          : null,
+        billing: row.billingPausedAt ? { since: row.billingPausedAt.toISOString() } : null,
+      },
       block:
         row.blockReason && row.blockedAt
           ? { reason: row.blockReason, since: row.blockedAt.toISOString() }

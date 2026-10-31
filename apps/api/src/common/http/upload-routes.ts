@@ -1,5 +1,10 @@
 import { apiRoutes, isUploadRoute, type ApiRouteDefinition } from "@adclub/contracts";
-import { WHATSAPP_WEBHOOK_BODY, WHATSAPP_WEBHOOK_PATH } from "./raw-body-routes";
+import {
+  PAYMENT_WEBHOOK_BODY,
+  PAYMENT_WEBHOOK_PATH,
+  WHATSAPP_WEBHOOK_BODY,
+  WHATSAPP_WEBHOOK_PATH,
+} from "./raw-body-routes";
 
 /**
  * Which requests bring a body the server reads as bytes rather than
@@ -34,6 +39,10 @@ const matchers: readonly UploadMatcher[] = [
   {
     route: { method: "POST" as const, upload: WHATSAPP_WEBHOOK_BODY },
     pattern: patternOf(WHATSAPP_WEBHOOK_PATH),
+  },
+  {
+    route: { method: "POST" as const, upload: PAYMENT_WEBHOOK_BODY },
+    pattern: patternOf(PAYMENT_WEBHOOK_PATH),
   },
 ];
 

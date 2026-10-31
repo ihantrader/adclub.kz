@@ -1078,7 +1078,9 @@ describe("subscriptions (PostgreSQL + Redis + worker)", () => {
       const { rows } = await db.query<{ after: unknown }>(
         "SELECT after FROM audit_log WHERE action = 'supplier.card_changed'",
       );
-      expect(rows).toEqual([{ after: { cardLinked: true } }]);
+      expect(rows).toEqual([
+        { after: expect.objectContaining({ cardLinked: true, change: "linked", mask: "4242" }) },
+      ]);
 
       // The switch off again: a supplier without a card is shown.
       await app.get(SupplierCards).mark(shop.supplierId, false);

@@ -725,7 +725,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
       await employ(supplierId, PHONE);
       // Pause and blocking are set the way the admin routes set them (TASK-016).
       const states = {
-        paused: "pause_reason = 'admin', paused_at = now()",
+        paused: "admin_paused_at = now()",
         blocked: "block_reason = 'test', blocked_at = now()",
       } as const;
       for (const status of ["paused", "blocked"] as const) {

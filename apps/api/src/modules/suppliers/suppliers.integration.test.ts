@@ -1450,13 +1450,20 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
       expect(verified.verification?.contractSignedOn).toBe(almatyDate(-3));
       expect(verified.visibleOnShowcase).toBe(true);
 
+      // The pause for an unpaid subscription is put by the subscription alone (TASK-042).
+      expectError(
+        await post("pause", { paused: true, reason: "billing", note: "Вручную" }),
+        400,
+        "VALIDATION_ERROR",
+      );
       const paused = adminSupplierResponseSchema.parse(
-        (await post("pause", { paused: true, reason: "billing", note: "Не прошла оплата" })).body,
+        (await post("pause", { paused: true, reason: "admin", note: "Не прошла оплата" })).body,
       ).supplier;
       expect(paused).toMatchObject({
         state: "paused",
         visibleOnShowcase: false,
-        pause: { reason: "billing", note: "Не прошла оплата" },
+        pause: { reason: "admin", note: "Не прошла оплата" },
+        pauses: { admin: { note: "Не прошла оплата" }, billing: null },
       });
       // The employee keeps working in the cabinet: the session and a new sign-in.
       expect((await asSupplier(cabinet, "get", "/supplier/company")).body.company.state).toBe(

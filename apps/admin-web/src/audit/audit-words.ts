@@ -51,6 +51,7 @@ const ACTIONS: Record<string, string> = {
   "supplier.changed": "Изменены данные компании",
   "supplier.schedule_changed": "Изменены часы работы",
   "supplier.verification_changed": "Изменён статус «проверенный партнёр»",
+  // TASK-042: the administrator's pause or the one for an unpaid subscription (the «Причина» line says which).
   "supplier.pause_changed": "Пауза компании",
   "supplier.block_changed": "Блокировка компании",
   "supplier_member.added": "Добавлен сотрудник",
@@ -596,6 +597,14 @@ const FIELD_TEXT: Record<string, string> = {
   blocked: "Блокировка",
   paused: "Пауза",
   pauseReason: "Причина паузы",
+  // TASK-042: two pauses that live apart; a card of a supplier.
+  adminPaused: "Пауза администратора",
+  billingPaused: "Пауза по оплате",
+  change: "Что с картой",
+  mask: "Карта",
+  brand: "Тип карты",
+  expMonth: "Месяц срока карты",
+  expYear: "Год срока карты",
   verified: "Проверенный партнёр",
   visibleOnShowcase: "Видно клиентам",
   contractSignedOn: "Договор подписан",
@@ -704,6 +713,9 @@ const TECHNICAL_FIELDS = new Set([
   "format",
   "storageKey",
   "primaryPhotoId",
+  // The term of a card: the mask and the type say what the entry is about (TASK-042).
+  "expMonth",
+  "expYear",
 ]);
 
 const ACTIVE_ARCHIVED: Record<string, string> = {
@@ -771,6 +783,9 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
   },
   availability: { in_stock: "В наличии", on_order: "Под заказ" },
   reason: {
+    // The pause of a company: the administrator's decision or an unpaid subscription (TASK-042).
+    admin: "решение администратора",
+    billing: "не оплачена подписка",
     manual: "вручную",
     missing_in_import: "нет в прайсе",
     out_of_stock_in_import: "нет в наличии по прайсу",
@@ -794,6 +809,9 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
   eventKind: SUBSCRIPTION_EVENT_TEXT,
   provider: SUBSCRIPTION_PROVIDER_TEXT,
   audience: { user: "Пользователь", supplier: "Поставщик" },
+  // The card of a supplier: linked, replaced, taken off (TASK-042).
+  change: { linked: "карта привязана", replaced: "карта заменена", removed: "карта снята" },
+  brand: { visa: "Visa", mastercard: "Mastercard", other: "Карта" },
   note: { replaced: "заменена новой покупкой" },
   fulfillment: { pickup: "Самовывоз", delivery: "Доставка" },
   kind: {
@@ -869,6 +887,8 @@ export function valueText(
           ? VALUE_WORDS[field]
           : undefined;
     if (words?.[value]) return words[value]!;
+    // The mask of a card, as it is printed: «•••• 4242» (TASK-042; the token is never in a journal).
+    if (field === "mask" && /^\d{4}$/.test(value)) return `•••• ${value}`;
     // «2026-09-mvp» — a version of a consent text by its month (X28): «от сент. 2026».
     if (field && /consentversion$/i.test(field)) {
       const version = /^(\d{4})-(\d{2})/.exec(value);

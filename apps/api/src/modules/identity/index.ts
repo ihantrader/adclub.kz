@@ -48,6 +48,7 @@ export {
 export type { SignInDataRetention } from "./cleanup/sign-in-data-cleanup";
 export { account, adminUser, supplier, supplierCityName, supplierMember } from "./schema";
 export type { MembershipStatus, SupplierStatus } from "./schema";
+export { openSecret, sealSecret } from "./admin/admin-crypto";
 export { AccountStore } from "./account/account.store";
 export type {
   AccountProfileRow,

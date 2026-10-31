@@ -13,6 +13,7 @@ import {
 } from "@adclub/ui";
 import { useEffect, useState, type ReactNode } from "react";
 import { PageHeaderProvider, type ChildHeader } from "./PageHeader";
+import { refreshBillingFacts, useBillingFacts } from "../billing/billing-facts";
 import { companyBanners } from "../cabinet/company-state";
 import type { CabinetState } from "../cabinet/cabinet-store";
 import { useOnline } from "@adclub/web-session";
@@ -65,8 +66,16 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
   const supplierName = cabinet?.company.supplier.name ?? fallbackNames?.supplierName ?? "";
   const memberName = cabinet?.access.member.displayName ?? fallbackNames?.memberName ?? "";
   const canSwitch = (cabinet?.companies.length ?? 0) > 1;
-  const banners = cabinet ? companyBanners(cabinet.company.company) : [];
   const generation = cabinet?.generation ?? null;
+  // «Карта не привязана» (T-SUP-02): asked on every page, told by «Подписка» with its answers.
+  const billingFacts = useBillingFacts(generation);
+  useEffect(() => {
+    if (generation !== null) void refreshBillingFacts(generation);
+  }, [generation, route]);
+  const onBilling = route === "billing";
+  const banners = cabinet
+    ? companyBanners(cabinet.company.company, billingFacts?.cardMissing === true && !onBilling)
+    : [];
   const newOrders = useNewOrders(generation);
   // «Заявки» keep the count current themselves; elsewhere it is asked for alone.
   const askBadge = generation !== null && route !== "orders";
@@ -139,6 +148,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
     },
     { key: "team", label: t("nav.team"), icon: "users", href: routePaths.team },
     { key: "company", label: t("nav.company"), icon: "store", href: routePaths.company },
+    { key: "billing", label: t("nav.billing"), icon: "creditCard", href: routePaths.billing },
     { key: "settings", label: t("nav.settings"), icon: "settings", href: routePaths.settings },
     ...(installWay === "installed"
       ? []
@@ -266,7 +276,19 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
             </Banner>
           )}
           {banners.map((banner) => (
-            <Banner key={banner.kind} tone={banner.tone} placement="flush">
+            <Banner
+              key={banner.kind}
+              tone={banner.tone}
+              placement="flush"
+              // «Подписка» has the buttons itself: the banner needn't lead to where it is.
+              action={
+                banner.action && !onBilling ? (
+                  <Button variant="text" size="s" onClick={() => navigate("billing")}>
+                    {t(banner.action === "pay" ? "billing.pay" : "billing.link")}
+                  </Button>
+                ) : undefined
+              }
+            >
               {t(banner.text)}
             </Banner>
           ))}

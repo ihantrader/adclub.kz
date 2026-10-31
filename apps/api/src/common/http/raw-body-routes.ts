@@ -27,3 +27,17 @@ export const WHATSAPP_WEBHOOK_BODY: ApiUploadBodyDefinition = {
   contentTypes: ["application/json"],
   maxBytes: 256 * 1024,
 };
+
+/**
+ * The card processor's webhook (TASK-042, ARCHITECTURE 4.77): the same kind
+ * of route — outside the client contract, the signature over the bytes as
+ * they came, so the body is read as bytes and parsed only after the
+ * signature has been checked.
+ */
+export const PAYMENT_WEBHOOK_PATH = "/webhooks/payments";
+
+export const PAYMENT_WEBHOOK_BODY: ApiUploadBodyDefinition = {
+  description: "The payment provider's webhook event, as sent (the signature is over these bytes).",
+  contentTypes: ["application/json"],
+  maxBytes: 64 * 1024,
+};

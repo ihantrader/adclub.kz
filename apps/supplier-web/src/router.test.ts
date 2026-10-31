@@ -26,6 +26,14 @@ describe("the cabinet's addresses", () => {
     expect(tabOf("scan")).toBe("scan");
   });
 
+  it("gives «Подписка» an address under «Ещё» and an item of its own in the side menu (TASK-042)", () => {
+    // The provider's page sends the browser back with a query: the page is the same.
+    expect(routeOf("/billing")).toBe("billing");
+    expect(locationOf("/billing")).toEqual({ route: "billing", id: null });
+    expect(tabOf("billing")).toBe("more");
+    expect(menuOf("billing")).toBe("billing");
+  });
+
   it("gives «Прайс» a tab and an upload its own address under it (stage C, TASK-046)", () => {
     const id = "3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d";
     expect(priceImportPath(id)).toBe(`/price/${id}`);

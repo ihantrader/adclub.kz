@@ -89,6 +89,50 @@ describe("the words of signals", () => {
     ).toBe("Автомаркет · ★ 3,4 (5) · порог 3,5");
   });
 
+  it("words the three signals of the supplier's card subscription (TASK-042)", () => {
+    const id = "0b6c9f1e-2a3d-4c5b-8e7f-9a0b1c2d3e4f";
+    const plain = (text: string) => text.replaceAll(String.fromCharCode(0xa0), " ");
+    expect(KIND_TITLES.payment_failed).toBe("Платёж поставщика не прошёл");
+    expect(KIND_TITLES.payment_system_down).toBe("Платёжная система недоступна");
+    expect(KIND_TITLES.billing_plan_missing).toBe("Нет тарифа для подписки поставщиков");
+    // The failed payment opens the supplier's «Подписка»; the channel ones have no object.
+    expect(subjectLink({ subjectType: "supplier", subjectId: id, kind: "payment_failed" })).toBe(
+      `/suppliers/${id}?tab=billing`,
+    );
+    expect(
+      subjectLink({ subjectType: "channel", subjectId: id, kind: "payment_system_down" }),
+    ).toBeNull();
+    expect(
+      subjectLink({ subjectType: "channel", subjectId: id, kind: "billing_plan_missing" }),
+    ).toBeNull();
+    expect(
+      plain(
+        subjectText({
+          kind: "payment_failed",
+          payload: {
+            supplierName: "Автомаркет",
+            declineReason: "insufficient_funds",
+            declines: 2,
+            amount: 1000,
+          },
+        }),
+      ),
+    ).toBe("Автомаркет · недостаточно средств · 2 отказа банка · 1 000 ₸");
+    expect(
+      subjectText({
+        kind: "payment_system_down",
+        payload: { failedPayments: 3, windowMinutes: 60 },
+      }),
+    ).toBe("не принято 3 списания · порог 60 минут");
+    // A reason the dictionary doesn't know is shown as the server sent it.
+    expect(
+      subjectText({
+        kind: "payment_failed",
+        payload: { supplierName: "Шины Юг", declineReason: "something_new" },
+      }),
+    ).toBe("Шины Юг · something_new");
+  });
+
   it("tells who closed it first", () => {
     expect(
       conflictText({

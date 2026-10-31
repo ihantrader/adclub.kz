@@ -168,6 +168,8 @@ export const rateLimitNameSchema = z.enum([
    * client contract (ARCHITECTURE 4.35).
    */
   "whatsapp_webhook_per_ip",
+  /** The payment provider's webhook (TASK-042): an open route limited by address, protected by its signature. */
+  "payment_webhook_per_ip",
   /**
    * The admin panel (TASK-036.B): the search of the header and «Показать
    * номер», per administrator — against a loop and against reading the
@@ -194,6 +196,12 @@ export const rateLimitNameSchema = z.enum([
    * for — the file is written from the offers while it downloads.
    */
   "price_export_per_member",
+  /**
+   * The money actions of one employee in the cabinet (TASK-042): going to the
+   * provider's page to link a card and «Оплатить сейчас». The charges
+   * themselves are not limited here — the database lets one succeed per term.
+   */
+  "billing_actions_per_member",
   /**
    * Requests to add an item one company sends by hand (S-OFF-05, TASK-048)
    * in a rolling day — counted in the database by the requests themselves.

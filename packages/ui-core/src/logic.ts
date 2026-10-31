@@ -230,6 +230,7 @@ export type IconName =
   | "clock"
   | "contrast"
   | "copy"
+  | "creditCard"
   | "devices"
   | "dots"
   | "download"

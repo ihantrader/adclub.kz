@@ -53,8 +53,23 @@ import type { CatalogItemListQuery } from "./catalog-items";
  * by an administrator while still low, it opens again only at a new fall.
  * Nothing is blocked automatically.
  *
- * Later tasks add the others (a spike of complaints, a failed
- * payment).
+ * TASK-042 adds three about a supplier's card subscription (PRODUCT 14.3;
+ * ARCHITECTURE 18.5, 4.77):
+ *
+ * - `payment_failed` — the bank refused a supplier's charge and the retries
+ *   are on (`past_due`). One signal per supplier (the subject is the
+ *   supplier); it closes by itself when a charge succeeds, or when the
+ *   subscription ends the other way;
+ * - `payment_system_down` — the payment provider has not answered for longer
+ *   than `payment_outage_signal_minutes` (unavailable or answers lost). The
+ *   subject is the payment channel itself, like the WhatsApp outage; it
+ *   closes by itself when the provider answers again. Nobody is told they
+ *   failed to pay and nobody is paused because of it;
+ * - `billing_plan_missing` — a charge or a subscription could not be made
+ *   because no tariff for suppliers is recorded (the subject is the billing
+ *   itself); it closes when a tariff is in effect.
+ *
+ * Later tasks add the others (a spike of complaints).
  */
 
 export const adminSignalKindSchema = z.enum([
@@ -65,6 +80,9 @@ export const adminSignalKindSchema = z.enum([
   "supply_overdue",
   "visit_unresolved",
   "low_rating",
+  "payment_failed",
+  "payment_system_down",
+  "billing_plan_missing",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -79,6 +97,12 @@ export type AdminSignalSubject = z.infer<typeof adminSignalSubjectSchema>;
  * channel, one id, so one open signal about it at a time.
  */
 export const WHATSAPP_CHANNEL_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a1";
+
+/** The payment provider as the subject of `payment_system_down` (TASK-042): one provider, one open signal. */
+export const PAYMENT_CHANNEL_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a2";
+
+/** The billing itself as the subject of `billing_plan_missing` (TASK-042). */
+export const BILLING_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a3";
 
 /**
  * `open` — waiting for a person; `acknowledged` — seen; `closed` — dealt
@@ -144,6 +168,18 @@ export const adminSignalPayloadSchema = z.object({
   rating: z.number().optional(),
   ratingCount: z.number().int().optional(),
   ratingThreshold: z.number().optional(),
+  /**
+   * `payment_failed` (TASK-042): when the bank refused first, the latest
+   * reason, how many refusals in this term, the end of the retries and the
+   * amount; the supplier — `supplierId`, `supplierName`. `payment_system_down`:
+   * `since`, `lastFailureAt`, `endedAt` as for the WhatsApp outage and
+   * `failedPayments` — how many charges the provider could not take since.
+   */
+  declineReason: z.string().optional(),
+  declines: z.number().int().optional(),
+  graceUntil: z.iso.datetime().optional(),
+  amount: z.number().int().optional(),
+  failedPayments: z.number().int().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

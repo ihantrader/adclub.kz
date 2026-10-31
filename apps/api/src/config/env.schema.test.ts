@@ -67,6 +67,12 @@ describe("loadConfig", () => {
           baseUrl: "https://graph.facebook.com/v21.0",
         },
       },
+      payments: {
+        provider: "test",
+        testMode: "ok",
+        tokenEncryptionKey: expect.any(String),
+        webhookSecret: expect.any(String),
+      },
       // No index without MEILISEARCH_URL: the search runs on PostgreSQL.
       search: { url: undefined, apiKey: undefined, index: "catalog_items" },
       ignoredVariables: [],
@@ -146,6 +152,7 @@ describe("loadConfig", () => {
       LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
       SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-staging-payment-key-of-at-least-32-chars",
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
     const TOKEN = "metrics-collector-token-1234567890";
@@ -277,6 +284,7 @@ describe("loadConfig", () => {
           LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
           SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
           ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+          PAYMENT_TOKEN_ENCRYPTION_KEY: "a-staging-payment-key-of-at-least-32-chars",
         }),
       ).toThrow(/ADMIN_WEB_RELEASE_VERSION: required when NODE_ENV=staging/);
     });
@@ -290,6 +298,8 @@ describe("loadConfig", () => {
       LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
       SESSION_TOKEN_SECRET: "a-production-session-secret-of-32-chars",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-production-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-production-payment-key-of-at-least-32-chars",
+      PAYMENT_PROVIDER: "card_kz",
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
 
@@ -393,6 +403,8 @@ describe("loadConfig", () => {
       LOGIN_CODE_HASH_SECRET: "a-deployed-secret-of-at-least-32-chars",
       SESSION_TOKEN_SECRET: "a-deployed-session-secret-of-32-chars",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-deployed-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-deployed-payment-key-of-at-least-32-chars",
+      PAYMENT_PROVIDER: "card_kz",
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
     const STAGING = { ...DEPLOYED, NODE_ENV: "staging" };
@@ -548,6 +560,8 @@ describe("loadConfig", () => {
       LOGIN_CODE_HASH_SECRET: "a-production-secret-of-at-least-32-chars",
       SESSION_TOKEN_SECRET: "a-production-session-secret-of-32-chars",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-production-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-production-payment-key-of-at-least-32-chars",
+      PAYMENT_PROVIDER: "card_kz",
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
 
@@ -618,6 +632,7 @@ describe("loadConfig", () => {
       NODE_ENV: "staging",
       LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-staging-payment-key-of-at-least-32-chars",
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     };
 
@@ -695,6 +710,85 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...VALID_ENV, SUPPLIER_WEB_ORIGINS: origin })).toThrow(
         /SUPPLIER_WEB_ORIGINS/,
       );
+    });
+  });
+
+  describe("a supplier's card subscription (TASK-042)", () => {
+    const DEPLOYED = {
+      ...VALID_ENV,
+      LOGIN_CODE_HASH_SECRET: "a-deployed-secret-of-at-least-32-chars",
+      SESSION_TOKEN_SECRET: "a-deployed-session-secret-of-32-chars",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-deployed-totp-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-deployed-payment-key-of-at-least-32-chars",
+    };
+
+    it("runs the test provider in development with fixed development secrets", () => {
+      const { payments } = loadConfig(VALID_ENV);
+      expect(payments).toEqual({
+        provider: "test",
+        testMode: "ok",
+        tokenEncryptionKey: expect.any(String),
+        webhookSecret: expect.any(String),
+      });
+      expect(payments.tokenEncryptionKey.length).toBeGreaterThanOrEqual(32);
+    });
+
+    it("refuses the test provider in production, accepts it in staging, and starts with card_kz", () => {
+      const refusal = (env: Record<string, string>): string => {
+        try {
+          loadConfig(env);
+          return "";
+        } catch (error) {
+          return (error as Error).message;
+        }
+      };
+      expect(refusal({ ...DEPLOYED, NODE_ENV: "production" })).toContain(
+        "PAYMENT_PROVIDER: the test payment provider is not allowed when NODE_ENV=production",
+      );
+      expect(loadConfig({ ...DEPLOYED, NODE_ENV: "staging" }).payments.provider).toBe("test");
+      // The processor's class does not exist yet: it starts (as one that answers «unavailable»),
+      // and production has no complaint about the payments (other rules of production aside).
+      expect(
+        refusal({ ...DEPLOYED, NODE_ENV: "production", PAYMENT_PROVIDER: "card_kz" }),
+      ).not.toContain("PAYMENT_PROVIDER");
+      expect(
+        loadConfig({ ...DEPLOYED, NODE_ENV: "staging", PAYMENT_PROVIDER: "card_kz" }).payments
+          .provider,
+      ).toBe("card_kz");
+    });
+
+    it("requires the key that seals the tokens outside development, and no webhook without a secret there", () => {
+      const { PAYMENT_TOKEN_ENCRYPTION_KEY: _key, ...withoutKey } = DEPLOYED;
+      expect(() => loadConfig({ ...withoutKey, NODE_ENV: "staging" })).toThrow(
+        /PAYMENT_TOKEN_ENCRYPTION_KEY: required when NODE_ENV=staging/,
+      );
+      expect(() => loadConfig({ ...DEPLOYED, PAYMENT_TOKEN_ENCRYPTION_KEY: "too-short" })).toThrow(
+        /PAYMENT_TOKEN_ENCRYPTION_KEY/,
+      );
+      const staging = loadConfig({ ...DEPLOYED, NODE_ENV: "staging" }).payments;
+      expect(staging.webhookSecret).toBeUndefined();
+      expect(staging.tokenEncryptionKey).toBe(DEPLOYED.PAYMENT_TOKEN_ENCRYPTION_KEY);
+      expect(
+        loadConfig({
+          ...DEPLOYED,
+          NODE_ENV: "staging",
+          PAYMENT_WEBHOOK_SECRET: "a-webhook-secret-of-sixteen+",
+        }).payments.webhookSecret,
+      ).toBe("a-webhook-secret-of-sixteen+");
+    });
+
+    it("knows the modes of the test provider and nothing else", () => {
+      for (const mode of ["ok", "unavailable", "outcome_unknown", "declined", "slow"]) {
+        expect(loadConfig({ ...VALID_ENV, PAYMENT_TEST_MODE: mode }).payments.testMode).toBe(mode);
+      }
+      expect(() => loadConfig({ ...VALID_ENV, PAYMENT_TEST_MODE: "explodes" })).toThrow(
+        /PAYMENT_TEST_MODE/,
+      );
+      expect(() => loadConfig({ ...VALID_ENV, PAYMENT_PROVIDER: "stripe" })).toThrow(
+        /PAYMENT_PROVIDER/,
+      );
+      expect(loadConfig({ ...VALID_ENV, PAYMENT_PROVIDER: "" }).payments.provider).toBe("test");
     });
   });
 });

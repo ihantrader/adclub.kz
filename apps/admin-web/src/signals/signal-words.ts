@@ -3,9 +3,11 @@ import type {
   AdminSignalActor,
   AdminSignalKind,
   AdminSignalStatus,
+  PaymentDeclineReason,
 } from "@adclub/contracts";
 import { formatMoment } from "../format";
 import { orderExtensionsPath, orderPath, supplierPath } from "../router";
+import { amountText, DECLINE_REASON_TEXT } from "../suppliers/billing-words";
 import { ratingNumber, thresholdNumber } from "../suppliers/rating-words";
 
 /**
@@ -22,12 +24,19 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   visit_unresolved: "Запись не разобрана",
   // TASK-050.
   low_rating: "Низкий рейтинг",
+  // TASK-042.
+  payment_failed: "Платёж поставщика не прошёл",
+  payment_system_down: "Платёжная система недоступна",
+  billing_plan_missing: "Нет тарифа для подписки поставщиков",
 };
 
 /** The kinds in the order of importance of A-HOME. */
 export const KIND_ORDER: readonly AdminSignalKind[] = [
   "whatsapp_outage",
+  "payment_system_down",
   "supplier_unreachable",
+  "payment_failed",
+  "billing_plan_missing",
   "supply_overdue",
   "visit_unresolved",
   "low_rating",
@@ -121,6 +130,35 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
       ]
         .filter(Boolean)
         .join(" · ");
+    case "payment_failed":
+      return [
+        payload.supplierName,
+        payload.declineReason
+          ? (DECLINE_REASON_TEXT[payload.declineReason as PaymentDeclineReason] ??
+            payload.declineReason)
+          : null,
+        payload.declines !== undefined
+          ? count(payload.declines, "отказ банка", "отказа банка", "отказов банка")
+          : null,
+        payload.amount !== undefined ? amountText(payload.amount) : null,
+        payload.graceUntil ? `повторы до ${formatMoment(payload.graceUntil)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    case "payment_system_down":
+      return [
+        payload.failedPayments !== undefined
+          ? `не принято ${count(payload.failedPayments, "списание", "списания", "списаний")}`
+          : null,
+        payload.since ? `с ${formatMoment(payload.since)}` : null,
+        payload.windowMinutes !== undefined
+          ? `порог ${count(payload.windowMinutes, "минута", "минуты", "минут")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    case "billing_plan_missing":
+      return payload.since ? `с ${formatMoment(payload.since)}` : "";
   }
 }
 
@@ -146,7 +184,9 @@ export function subjectLink(
           ? "orders"
           : signal.kind === "low_rating"
             ? "rating"
-            : "members",
+            : signal.kind === "payment_failed"
+              ? "billing"
+              : "members",
       );
     case "channel":
       return signal.kind === "whatsapp_outage"
@@ -171,6 +211,12 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "Время записи на услугу прошло, а поставщик не отметил ни выполнение, ни неявку. Непонятно, кто кого подвёл — свяжитесь с поставщиком и клиентом.",
   low_rating:
     "Рейтинг поставщика ниже порога. Посмотрите составляющие и отзывы; блокировать или нет — решает человек. Сигнал закроется сам, когда рейтинг поднимется.",
+  payment_failed:
+    "Банк отказал в списании подписки поставщика. Система повторяет списание и пишет ему в WhatsApp; после повторов предложения снимаются с витрины сами. Сигнал закроется, когда подписка будет оплачена.",
+  payment_system_down:
+    "Платёжная система не принимает списания дольше порога. Никому не пишем и никого не ставим на паузу — списания повторяются сами. Сигнал закроется, когда платёжная система ответит.",
+  billing_plan_missing:
+    "Нет тарифа для поставщиков: подписку нельзя начать и продлить. Добавьте тариф командой оператора; сигнал закроется сам.",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

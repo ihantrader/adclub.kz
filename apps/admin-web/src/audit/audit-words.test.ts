@@ -298,6 +298,82 @@ describe("the words of the journal", () => {
       ]);
     });
 
+    it("the card of a supplier: «•••• 4242», what happened to it, the term only under «Подробнее» (TASK-042)", () => {
+      const lines = changeLines(
+        { cardLinked: false },
+        {
+          cardLinked: true,
+          change: "linked",
+          mask: "4242",
+          brand: "visa",
+          expMonth: 12,
+          expYear: 2029,
+        },
+        [],
+        { entityType: "supplier" },
+      );
+      expect(
+        lines
+          .filter((line) => !line.technical)
+          .map((line) => [line.field, line.before, line.after]),
+      ).toEqual([
+        ["Карта привязана", "нет", "да"],
+        ["Что с картой", "—", "карта привязана"],
+        ["Карта", "—", "•••• 4242"],
+        ["Тип карты", "—", "Visa"],
+      ]);
+      expect(lines.filter((line) => line.technical).map((line) => line.field)).toEqual([
+        "Месяц срока карты",
+        "Год срока карты",
+      ]);
+    });
+
+    it("the two pauses of a company: whose pause it was, in words; old entries stay readable (TASK-042)", () => {
+      expect(
+        changeLines(
+          { paused: false, reason: "billing", adminPaused: true },
+          {
+            paused: true,
+            reason: "billing",
+            adminPaused: true,
+            state: "paused",
+            visibleOnShowcase: false,
+          },
+          [],
+          { entityType: "supplier" },
+        ).filter((line) => !line.technical),
+      ).toEqual([
+        // What did not change (the reason, the administrator's pause beside it) is not repeated.
+        { field: "Пауза", before: "нет", after: "да" },
+        { field: "Состояние", before: "—", after: "Пауза" },
+        { field: "Видно клиентам", before: "—", after: "нет" },
+      ]);
+      // The reason of a pause that was put on, and who else holds one, in words.
+      expect(
+        changeLines(
+          { paused: false },
+          { paused: true, reason: "billing", adminPaused: true, billingPaused: false },
+          [],
+          { entityType: "supplier" },
+        ).filter((line) => !line.technical),
+      ).toEqual([
+        { field: "Пауза", before: "нет", after: "да" },
+        { field: "Причина", before: "—", after: "не оплачена подписка" },
+        { field: "Пауза администратора", before: "—", after: "да" },
+        { field: "Пауза по оплате", before: "—", after: "нет" },
+      ]);
+      // An entry from before the pauses were two: the reason of the one pause.
+      expect(
+        changeLines({ paused: false, reason: null }, { paused: true, reason: "admin" }, [], {
+          entityType: "supplier",
+        }).filter((line) => !line.technical),
+      ).toEqual([
+        { field: "Пауза", before: "нет", after: "да" },
+        { field: "Причина", before: "пусто", after: "решение администратора" },
+      ]);
+      expect(actionText("supplier.pause_changed")).toBe("Пауза компании");
+    });
+
     it("an order: its statuses and deadlines in words; an item: its status", () => {
       expect(
         changeLines({ status: "accepted" }, { number: 1028, status: "cancelled_by_admin" }, [], {

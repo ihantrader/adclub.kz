@@ -1,26 +1,28 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { auditActions, auditEntities } from "@adclub/contracts";
-import { eq, sql } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService } from "../../database";
-import { AuditLog } from "../audit";
+import { eq } from "drizzle-orm";
 import { supplier } from "../identity";
+import { PaymentMethods } from "./payment-methods";
+import { testBoundCard } from "./test-payment-provider";
 
 /**
- * Whether a company has linked a card (D-041; ARCHITECTURE 4.72; TASK-040):
- * `supplier.card_linked_at`, read by the rule of the showcase while the
- * switch `supplier_card_required` is on. Until the card processor
- * (TASK-042, which keeps it with the card itself) only the operator command
- * of development and tests sets it — through here, with the journal. It
- * changes no offer and no order, and not the company's version (it isn't
- * the company's card in the cabinet).
+ * The card of a company for development and tests (D-041; ARCHITECTURE 4.72,
+ * 4.77): `operator dev:supplier:card <supplierId> --linked|--unlinked` and the
+ * integration tests of the showcase, the offers and the cabinet. Since
+ * TASK-042 it is **not a second path** to `supplier.card_linked_at`: it links
+ * a test card (or takes the card off) through `PaymentMethods`, the one
+ * writer, so the column and the card table agree and the journal says the
+ * same as for a card linked on the provider's page. The operator command
+ * runs only in development and tests; there is no card here that was paid
+ * for — it makes no charge and starts no subscription.
  */
 @Injectable()
 export class SupplierCards {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(AuditLog) private readonly audit: AuditLog,
+    @Inject(PaymentMethods) private readonly methods: PaymentMethods,
   ) {}
 
   async mark(
@@ -29,33 +31,35 @@ export class SupplierCards {
   ): Promise<{ supplierId: string; cardLinked: boolean; changed: boolean }> {
     return this.database.db.transaction(async (tx) => {
       const [company] = await tx
-        .select({ id: supplier.id, cardLinkedAt: supplier.cardLinkedAt })
+        .select({ id: supplier.id })
         .from(supplier)
         .where(eq(supplier.id, supplierId))
         .for("update");
       if (!company) {
         throw new ApiException(404, "NOT_FOUND", "No such supplier");
       }
-      const was = company.cardLinkedAt !== null;
-      if (was === linked) {
-        return { supplierId, cardLinked: linked, changed: false };
-      }
-      await tx
-        .update(supplier)
-        .set({ cardLinkedAt: linked ? sql`now()` : null, updatedAt: sql`now()` })
-        .where(eq(supplier.id, supplierId));
-      await this.audit.record(
-        {
-          action: auditActions.supplierCardChanged,
+      const active = await this.methods.active(tx, supplierId);
+      if (linked) {
+        if (active) {
+          return { supplierId, cardLinked: true, changed: false };
+        }
+        const card = testBoundCard("ok");
+        await this.methods.link(tx, {
+          supplierId,
+          provider: "test",
+          token: card.token,
+          mask: card.mask,
+          brand: card.brand,
+          expMonth: card.expMonth,
+          expYear: card.expYear,
+          bindingId: null,
+          memberId: null,
           actor: { role: "operator" },
-          entityType: auditEntities.supplier,
-          entityId: supplierId,
-          before: { cardLinked: was },
-          after: { cardLinked: linked },
-        },
-        tx,
-      );
-      return { supplierId, cardLinked: linked, changed: true };
+        });
+        return { supplierId, cardLinked: true, changed: true };
+      }
+      const removed = await this.methods.remove(tx, supplierId, { role: "operator" });
+      return { supplierId, cardLinked: false, changed: removed };
     });
   }
 }

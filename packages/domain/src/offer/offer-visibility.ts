@@ -39,7 +39,11 @@ export type OfferScheduleFact = ScheduleFact;
 
 export interface OfferVisibilityFacts {
   offerStatus: OfferStatus;
-  supplierPauseReason: SupplierPauseReason | null;
+  /**
+   * The pauses that hold (TASK-042: the administrator's and the billing one
+   * live independently, ARCHITECTURE 4.77): any of them hides the offer.
+   */
+  supplierPauses: readonly SupplierPauseReason[];
   supplierBlocked: boolean;
   /**
    * D-041 (TASK-040): the switch `supplier_card_required` is on — a supplier's
@@ -86,7 +90,7 @@ export function offerVisibility(facts: OfferVisibilityFacts): OfferVisibility {
   if (facts.supplierBlocked) {
     reasons.push("supplier_blocked");
   }
-  if (facts.supplierPauseReason !== null) {
+  if (facts.supplierPauses.length > 0) {
     reasons.push("supplier_paused");
   }
   if (facts.cardRequired && !facts.cardLinked) {

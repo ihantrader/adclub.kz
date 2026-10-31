@@ -1206,6 +1206,21 @@ const publicLimits = group({
       default: 60,
       description: "Окно лимита вебхуков провайдера сообщений с одного адреса.",
     }),
+    payment_webhook_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000_000,
+      default: 600,
+      description:
+        "Сколько вебхуков платёжной системы принимается с одного адреса за окно; сверх — отказ с временем ожидания. Настоящая защита маршрута — проверка подписи.",
+    }),
+    payment_webhook_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита вебхуков платёжной системы с одного адреса.",
+    }),
   },
 });
 
@@ -1288,6 +1303,45 @@ const billing = group({
       max: 23,
       default: 10,
       description: "В котором часу (Алматы) повторяется списание и уходят напоминания об оплате.",
+    }),
+    billing_provider_retry_minutes: define.duration({
+      unit: "minutes",
+      min: 1,
+      max: 1440,
+      default: 60,
+      description:
+        "Через сколько минут повторяется списание, которое платёжная система не приняла (недоступна или ответ потерялся). Это не отказ банка: уведомления плательщику нет, дни повторов не тратятся.",
+    }),
+    billing_binding_minutes: define.duration({
+      unit: "minutes",
+      min: 5,
+      max: 1440,
+      default: 60,
+      description:
+        "Сколько минут открыта страница платёжной системы для привязки карты; после этого привязка считается брошенной.",
+    }),
+    payment_outage_signal_minutes: define.duration({
+      unit: "minutes",
+      min: 5,
+      max: 1440,
+      default: 60,
+      description:
+        "Сколько минут платёжная система не отвечает на списания, прежде чем администратор получит сигнал «Платёжная система недоступна».",
+    }),
+    billing_actions_per_member: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 20,
+      description:
+        "Сколько раз один сотрудник поставщика может перейти к привязке карты или нажать «Оплатить сейчас» за окно; сверх — отказ с временем ожидания.",
+    }),
+    billing_actions_per_member_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 600,
+      description: "Окно лимита действий с оплатой одного сотрудника.",
     }),
     price_increase_notice_text: define.localizedText({
       maxLength: 1000,

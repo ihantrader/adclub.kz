@@ -16,6 +16,7 @@ import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { JournalTable } from "../audit/JournalTable";
 import { formatDay, formatMoment } from "../format";
+import { navigateTo, supplierPath } from "../router";
 import { useLoad } from "../use-load";
 import { ReasonDialog, SaverError, useSupplierSaver, WasNow } from "./shared";
 import { STATE_TEXT } from "./supplier-words";
@@ -63,7 +64,12 @@ export function SupplierStatuses({
   const [dateProblem, setDateProblem] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
   const today = todayIn(card.timeZone);
-  const paused = card.pause !== null;
+  // Two pauses live apart (TASK-042): «Пауза» is the administrator's, the one this card puts and
+  // lifts; the unpaid subscription's is the system's and only a payment lifts it.
+  const adminPause = card.pauses.admin;
+  const billingPause = card.pauses.billing;
+  const paused = adminPause !== null;
+  const billingPaused = billingPause !== null;
   const blocked = card.block !== null;
 
   const open = (next: Action) => {
@@ -147,7 +153,7 @@ export function SupplierStatuses({
 
   const stateAfter = (change: { paused?: boolean; blocked?: boolean }) => {
     const willBlock = change.blocked ?? blocked;
-    const willPause = change.paused ?? paused;
+    const willPause = (change.paused ?? paused) || billingPaused;
     return willBlock ? STATE_TEXT.blocked : willPause ? STATE_TEXT.paused : STATE_TEXT.active;
   };
   const showcaseNow = card.visibleOnShowcase ? "предложения на витрине" : "предложения скрыты";
@@ -168,7 +174,9 @@ export function SupplierStatuses({
       confirm: "Снять паузу",
       text: blocked
         ? "Компания остаётся заблокированной — предложения вернутся на витрину только после снятия блокировки."
-        : "Предложения компании вернутся на витрину (если у точки заданы часы работы).",
+        : billingPaused
+          ? "Компания остаётся на паузе по оплате — предложения вернутся на витрину, когда поставщик оплатит подписку."
+          : "Предложения компании вернутся на витрину (если у точки заданы часы работы).",
     },
     block: {
       title: "Заблокировать компанию",
@@ -178,9 +186,10 @@ export function SupplierStatuses({
     unblock: {
       title: "Снять блокировку",
       confirm: "Снять блокировку",
-      text: paused
-        ? "Сотрудники снова смогут принимать заявки и добавлять коллег. Компания остаётся на паузе — предложения на витрину не вернутся, пока пауза не снята."
-        : "Сотрудники снова смогут принимать заявки и добавлять коллег; предложения вернутся на витрину (если у точки заданы часы работы).",
+      text:
+        paused || billingPaused
+          ? "Сотрудники снова смогут принимать заявки и добавлять коллег. Компания остаётся на паузе — предложения на витрину не вернутся, пока пауза не снята."
+          : "Сотрудники снова смогут принимать заявки и добавлять коллег; предложения вернутся на витрину (если у точки заданы часы работы).",
     },
   };
   const wasNow: Partial<Record<Action, [string, string]>> = {
@@ -246,12 +255,12 @@ export function SupplierStatuses({
           }
         />
         <StatusRow
-          title="Пауза"
-          text="Пауза снимает предложения с витрины; кабинет и текущие заявки работают как обычно."
+          title="Пауза администратора"
+          text="Пауза снимает предложения с витрины; кабинет и текущие заявки работают как обычно. Снимает её только администратор — оплата подписки её не снимает."
           badge={
-            card.pause ? (
+            adminPause ? (
               <StatusBadge kind="supplier" status="paused">
-                На паузе с {formatDay(card.pause.since)}
+                На паузе с {formatDay(adminPause.since)}
               </StatusBadge>
             ) : (
               <Badge tone="neutral" icon="minus">
@@ -260,8 +269,8 @@ export function SupplierStatuses({
             )
           }
           note={
-            card.pause
-              ? `${PAUSE_REASON_TEXT[card.pause.reason]}${card.pause.note ? `: ${card.pause.note}` : ""}. Предложения не видны клиентам.`
+            adminPause
+              ? `${PAUSE_REASON_TEXT.admin}${adminPause.note ? `: ${adminPause.note}` : ""}. Предложения не видны клиентам.`
               : undefined
           }
           action={
@@ -269,9 +278,38 @@ export function SupplierStatuses({
               variant="secondary"
               size="s"
               disabled={!online}
-              onClick={() => open(card.pause ? "unpause" : "pause")}
+              onClick={() => open(paused ? "unpause" : "pause")}
             >
-              {card.pause ? "Снять паузу…" : "Поставить на паузу…"}
+              {paused ? "Снять паузу…" : "Поставить на паузу…"}
+            </Button>
+          }
+        />
+        <StatusRow
+          title="Пауза по оплате"
+          text="Ставится сама, когда повторы списания закончились без оплаты, и снимается сама, когда подписка оплачена. Администратор её не снимает; пауза администратора при этом остаётся."
+          badge={
+            billingPause ? (
+              <StatusBadge kind="supplier" status="paused">
+                На паузе с {formatDay(billingPause.since)}
+              </StatusBadge>
+            ) : (
+              <Badge tone="neutral" icon="minus">
+                Нет
+              </Badge>
+            )
+          }
+          note={
+            billingPause
+              ? `${PAUSE_REASON_TEXT.billing}. Предложения не видны клиентам, пока поставщик не оплатит.`
+              : undefined
+          }
+          action={
+            <Button
+              variant="secondary"
+              size="s"
+              onClick={() => navigateTo(supplierPath(card.id, "billing"))}
+            >
+              Подписка
             </Button>
           }
         />

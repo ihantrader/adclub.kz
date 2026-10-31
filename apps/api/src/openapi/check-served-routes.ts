@@ -1,6 +1,7 @@
 import type { ApiRouteDefinition } from "@adclub/contracts";
 import { toNestPath, type ServedRoute } from "../common/contract";
-import { WHATSAPP_WEBHOOK_PATH } from "../common/http";
+import { PAYMENT_WEBHOOK_PATH, WHATSAPP_WEBHOOK_PATH } from "../common/http";
+import { DEV_PAYMENT_CARD_PATHS } from "../modules/billing";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
 import { DEV_MESSAGES_PATH } from "../modules/messaging";
 import { PRICE_EXPORT_DOWNLOAD_PATH } from "../modules/price-imports";
@@ -21,6 +22,8 @@ const NON_CONTRACT_PATHS: readonly string[] = [
   DEV_LOGIN_CODE_OUTBOX_PATH,
   DEV_MESSAGES_PATH,
   WHATSAPP_WEBHOOK_PATH,
+  PAYMENT_WEBHOOK_PATH,
+  ...DEV_PAYMENT_CARD_PATHS,
   METRICS_PATH,
   PRICE_EXPORT_DOWNLOAD_PATH,
 ];

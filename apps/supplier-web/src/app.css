@@ -3185,3 +3185,56 @@ a.ac-button {
     white-space: nowrap;
   }
 }
+
+/* ---------- «Подписка» (S-BILL-01, TASK-042) ---------- */
+.billing-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2) var(--ac-space-3);
+}
+
+/* The history of charges below 1024: a card-group of rows, as the uploads of «Прайс». */
+.billing-history {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+  list-style: none;
+}
+
+.billing-history > li + li {
+  border-top: var(--ac-line-hairline) solid var(--ac-color-border);
+}
+
+.billing-history__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+  padding: var(--ac-space-3) var(--ac-space-4);
+}
+
+.billing-history__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.billing-history__main > * {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 600px) {
+  .billing-history__row {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--ac-space-3);
+  }
+}

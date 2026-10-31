@@ -227,6 +227,17 @@ import { clientPlatformSchema } from "./client";
  * - `SUBSCRIPTION_ALREADY_ACTIVE` (409): the account pays for another
  *   purchase that still gives access («Подписка уже активна»).
  *
+ * A supplier's card subscription (TASK-042, ARCHITECTURE 4.77):
+ * - `BILLING_NO_PLAN` (409): there is no tariff for suppliers recorded —
+ *   the subscription can't be started (the administrator has been told).
+ * - `BILLING_NO_CARD` (409): «Оплатить сейчас» without a linked card.
+ * - `BILLING_NOTHING_TO_PAY` (409): the subscription is paid and its term
+ *   isn't over (or there is no subscription yet to pay for).
+ * - `BILLING_RETURN_URL_INVALID` (400 on `returnUrl`): the address the
+ *   provider would send the person back to isn't an address of the cabinet.
+ * - A provider that can't be reached is `SERVICE_UNAVAILABLE` (503) with
+ *   `retryable: true`: «Не удалось связаться с платёжной системой».
+ *
  * Orders (TASK-021, ARCHITECTURE 4.31):
  * - `SUBSCRIPTION_REQUIRED` (403): the user has no club access — only
  *   members of the club order (show the subscription screen, M-SUB-01).
@@ -459,6 +470,11 @@ export const errorCodeSchema = z.enum([
   // Subscriptions (TASK-040, ARCHITECTURE 4.72; returned by TASK-041's purchase routes).
   "SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT",
   "SUBSCRIPTION_ALREADY_ACTIVE",
+  // A supplier's card subscription (TASK-042, ARCHITECTURE 4.77).
+  "BILLING_NO_PLAN",
+  "BILLING_NO_CARD",
+  "BILLING_NOTHING_TO_PAY",
+  "BILLING_RETURN_URL_INVALID",
   // Orders (TASK-021, ARCHITECTURE 4.31).
   "SUBSCRIPTION_REQUIRED",
   "ORDER_OFFER_UNAVAILABLE",

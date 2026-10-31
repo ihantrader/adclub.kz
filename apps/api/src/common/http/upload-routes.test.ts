@@ -1,6 +1,11 @@
 import { apiRoutes, isUploadRoute, type ApiRouteDefinition } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
-import { WHATSAPP_WEBHOOK_BODY, WHATSAPP_WEBHOOK_PATH } from "./raw-body-routes";
+import {
+  PAYMENT_WEBHOOK_BODY,
+  PAYMENT_WEBHOOK_PATH,
+  WHATSAPP_WEBHOOK_BODY,
+  WHATSAPP_WEBHOOK_PATH,
+} from "./raw-body-routes";
 import { contractPathOf, uploadRouteFor } from "./upload-routes";
 
 /**
@@ -15,6 +20,19 @@ describe("uploadRouteFor", () => {
     // A bounded body: an event is a few kilobytes, never megabytes.
     expect(WHATSAPP_WEBHOOK_BODY.maxBytes).toBeLessThanOrEqual(1024 * 1024);
     expect(WHATSAPP_WEBHOOK_BODY.contentTypes).toEqual(["application/json"]);
+  });
+
+  it("finds the payment provider's webhook the same way, with a ceiling of its own (TASK-042)", () => {
+    const route = uploadRouteFor("POST", PAYMENT_WEBHOOK_PATH);
+    expect(route?.upload).toBe(PAYMENT_WEBHOOK_BODY);
+    expect(PAYMENT_WEBHOOK_BODY.maxBytes).toBeLessThanOrEqual(1024 * 1024);
+    expect(PAYMENT_WEBHOOK_BODY.contentTypes).toEqual(["application/json"]);
+    for (const method of ["GET", "PUT", "PATCH", "DELETE"]) {
+      expect(uploadRouteFor(method, PAYMENT_WEBHOOK_PATH), method).toBeNull();
+    }
+    for (const path of [`${PAYMENT_WEBHOOK_PATH}/extra`, "/webhooks/payments2", "/webhooks"]) {
+      expect(uploadRouteFor("POST", path), path).toBeNull();
+    }
   });
 
   it("does not take the subscription check (a GET has no body) or another method", () => {

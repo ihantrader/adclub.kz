@@ -45,6 +45,15 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "billing.apply-events",
   "billing.wake-events",
   "billing.expire-subscriptions",
+  "billing.charge-due",
+  "billing.charge-subscription",
+  "billing.run-attempt",
+  "billing.resolve-attempts",
+  "billing.finish-binding",
+  "billing.apply-payment-webhook",
+  "billing.detach-card",
+  "billing.expire-bindings",
+  "billing.watch-provider",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -54,10 +63,18 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   cron: string;
   timezone: string;
 }[] = [
+  // The daily charge of company subscriptions: at `billing_notify_hour` (10 by default) (TASK-042).
+  { name: "billing.charge-due", cron: "0 10 * * *", timezone: "Asia/Almaty" },
+  // Pages of the payment provider nobody came back from, and the tokens of failed trips (TASK-042).
+  { name: "billing.expire-bindings", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Time's events of subscriptions: a term without a word, its tolerance (TASK-040).
   { name: "billing.expire-subscriptions", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Charges the provider could not take, lost ones, deliveries nobody applied (TASK-042).
+  { name: "billing.resolve-attempts", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Events of subscriptions whose job was lost, put back on the queue (TASK-040).
   { name: "billing.wake-events", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The detector of an outage of the payment provider and the missing tariff (TASK-042).
+  { name: "billing.watch-provider", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Files of photos no record points at (TASK-013): hourly.
   { name: "catalog.cleanup-photo-files", cron: "17 * * * *", timezone: "Asia/Almaty" },
   // Files of removed photos, once their retention has passed (TASK-013).

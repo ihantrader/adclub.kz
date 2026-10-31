@@ -140,6 +140,43 @@ export const messageTestModes = [
 ] as const;
 export type MessageTestMode = (typeof messageTestModes)[number];
 
+/**
+ * Where a supplier's card subscription is charged (TASK-042, ARCHITECTURE
+ * 9.4.2, 4.77). `card_kz` is the card processor of Kazakhstan (Freedom Pay or
+ * CloudPayments KZ) and has no implementation yet — no contract, no API
+ * access; `test` is an in-process stand-in that charges nothing (development,
+ * tests and CI), refused in production.
+ */
+export const paymentProviders = ["test", "card_kz"] as const;
+export type PaymentProviderConfigName = (typeof paymentProviders)[number];
+
+/**
+ * What the test payment provider does with a charge (`PAYMENT_TEST_MODE`,
+ * development and tests): `ok` — the card of the page decides; `unavailable`
+ * — every call fails as an unreachable provider (retried in an hour, no
+ * notice to the payer); `outcome_unknown` — a charge goes through at the
+ * provider and the answer is lost (looked up by its key before anything is
+ * sent again); `declined` — every charge is refused for lack of funds;
+ * `slow` — answers after a delay.
+ */
+export const paymentTestModes = [
+  "ok",
+  "unavailable",
+  "outcome_unknown",
+  "declined",
+  "slow",
+] as const;
+export type PaymentTestMode = (typeof paymentTestModes)[number];
+
+/**
+ * Seals the cards' tokens in development and tests only; a constant anybody
+ * can read in this repository, so never the key of a deployed environment.
+ */
+const DEV_PAYMENT_TOKEN_ENCRYPTION_KEY = "adclub-dev-only-payment-token-encryption-key";
+
+/** Signs and checks the test payment provider's webhook in development and tests. */
+const DEV_PAYMENT_WEBHOOK_SECRET = "adclub-dev-only-payment-webhook-secret";
+
 /** The Cloud API version the real channel calls (Meta keeps versions ~2 years). */
 export const WHATSAPP_API_VERSION = "v21.0";
 /** Where the Cloud API is; only development points this elsewhere. */
@@ -346,6 +383,20 @@ export const envSchema = z.object({
   // Where the Cloud API is; development only (an address nothing answers
   // at, to watch retries and the dead letter queue without the network).
   WHATSAPP_API_BASE_URL: blankAsUndefined(z.url()),
+  // A supplier's card subscription (ARCHITECTURE 9.4.2, 4.77; TASK-042).
+  // Unset provider: `test`, which production refuses.
+  PAYMENT_PROVIDER: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(paymentProviders).optional(),
+  ),
+  PAYMENT_TEST_MODE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(paymentTestModes).default("ok"),
+  ),
+  // Seals the tokens of cards (AES-256-GCM); required outside development.
+  PAYMENT_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
+  // The secret the provider's webhook is signed with; without it none is accepted.
+  PAYMENT_WEBHOOK_SECRET: blankAsUndefined(z.string().trim().min(16)),
   // The search index of the catalog (ARCHITECTURE 10, 4.65; TASK-045).
   // Unset — no index: the users' search runs on PostgreSQL (TASK-044) and
   // the worker leaves the outbox alone.
@@ -369,6 +420,16 @@ export interface RateLimitSettings {
 }
 
 export type AppConfig = {
+  /** A supplier's card subscription (TASK-042, ARCHITECTURE 4.77). */
+  payments: {
+    provider: PaymentProviderConfigName;
+    /** What the test provider does (ignored by any other). */
+    testMode: PaymentTestMode;
+    /** Seals the tokens of cards; a fixed development value only in development and tests. */
+    tokenEncryptionKey: string;
+    /** Signs the provider's webhook; `undefined` — none is accepted. */
+    webhookSecret: string | undefined;
+  };
   nodeEnv: NodeEnv;
   port: number;
   logLevel: LogLevel;
@@ -567,6 +628,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       `WHATSAPP_API_BASE_URL: not allowed when NODE_ENV=${parsed.NODE_ENV} (messages would leave for another address)`,
     );
   }
+  // Cards of suppliers (TASK-042): the test provider charges nobody, so
+  // production refuses it. `card_kz` starts (the application must), but until
+  // the acquirer's class exists every call of it answers «unavailable» —
+  // `UnconfiguredPaymentProvider`, nothing is charged and nobody is paused.
+  const paymentProvider: PaymentProviderConfigName = parsed.PAYMENT_PROVIDER ?? "test";
+  if (parsed.NODE_ENV === "production" && paymentProvider === "test") {
+    environmentIssues.push(
+      "PAYMENT_PROVIDER: the test payment provider is not allowed when NODE_ENV=production",
+    );
+  }
+  if (!isLocal && !parsed.PAYMENT_TOKEN_ENCRYPTION_KEY) {
+    environmentIssues.push(
+      `PAYMENT_TOKEN_ENCRYPTION_KEY: required when NODE_ENV=${parsed.NODE_ENV}`,
+    );
+  }
   let monitoringTarget: MonitoringTarget | undefined;
   if (parsed.MONITORING_DSN) {
     try {
@@ -657,6 +733,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           (isLocal ? DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN : undefined),
         baseUrl: `${parsed.WHATSAPP_API_BASE_URL ?? WHATSAPP_PUBLIC_URL}/${WHATSAPP_API_VERSION}`,
       },
+    },
+    payments: {
+      provider: paymentProvider,
+      testMode: parsed.PAYMENT_TEST_MODE,
+      tokenEncryptionKey: parsed.PAYMENT_TOKEN_ENCRYPTION_KEY ?? DEV_PAYMENT_TOKEN_ENCRYPTION_KEY,
+      webhookSecret:
+        parsed.PAYMENT_WEBHOOK_SECRET ?? (isLocal ? DEV_PAYMENT_WEBHOOK_SECRET : undefined),
     },
     search: {
       url: parsed.MEILISEARCH_URL?.replace(/\/+$/, ""),

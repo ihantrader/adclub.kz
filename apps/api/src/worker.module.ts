@@ -68,7 +68,7 @@ export class WorkerModule {
         PriceImportJobsModule,
         ReviewJobsModule,
         RatingJobsModule,
-        BillingJobsModule,
+        BillingJobsModule.forRoot(config),
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

@@ -72,6 +72,7 @@ export function More({ generation }: { generation: number | null }) {
         />
         <MenuLink route="team" icon="users" label={t("nav.team")} />
         <MenuLink route="company" icon="store" label={t("nav.company")} />
+        <MenuLink route="billing" icon="creditCard" label={t("nav.billing")} />
         <MenuLink route="settings" icon="settings" label={t("nav.settings")} />
         {installWay !== "installed" && (
           <MenuLink route="install" icon="download" label={t("nav.install")} />

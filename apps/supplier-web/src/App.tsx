@@ -21,6 +21,7 @@ import { NewOfferScreen, OfferCardScreen } from "./offers/OfferScreen";
 import { OffersList } from "./offers/OffersList";
 import { OrderCardScreen } from "./orders/OrderScreen";
 import { OrdersList } from "./orders/OrdersList";
+import { Billing } from "./billing/Billing";
 import { Moderation } from "./moderation/Moderation";
 import { RequestFormScreen } from "./moderation/RequestForm";
 import { PriceImports } from "./price/PriceImports";
@@ -285,6 +286,10 @@ function Page({
       return <Moderation generation={cabinet.generation} timeZone={card.timeZone} />;
     case "offerRequest":
       return <RequestFormScreen />;
+    case "billing":
+      return (
+        <Billing generation={cabinet.generation} timeZone={card.timeZone} pauses={card.pauses} />
+      );
     default:
       return <Company cabinet={cabinet} />;
   }

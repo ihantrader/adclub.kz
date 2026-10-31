@@ -120,7 +120,13 @@ export class AppModule implements NestModule {
         // The rating of suppliers (TASK-050): its admin view and the list's column.
         RatingsModule.forRoot({ http: true, signals, suppliers }),
         // Subscriptions (TASK-040): «Моя подписка», the company's card, the admin's view.
-        BillingModule.forRoot({ http: true, clubAccess }),
+        BillingModule.forRoot(config, {
+          http: true,
+          clubAccess,
+          signals,
+          // The API serves GET /metrics, so it samples the charges for them.
+          metrics: config.metrics.enabled,
+        }),
         AdminHomeModule.forRoot({
           catalog,
           compatibility,

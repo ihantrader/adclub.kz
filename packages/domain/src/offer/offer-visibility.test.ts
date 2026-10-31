@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { supplierVisibleOnShowcase } from "../supplier/supplier-state";
+import { supplierPauseReasons, supplierVisibleOnShowcase } from "../supplier/supplier-state";
 import { offerVisibility, type OfferVisibilityFacts } from "./offer-visibility";
 import { scheduleFact } from "./receipt-date";
 
 const shown: OfferVisibilityFacts = {
   offerStatus: "active",
-  supplierPauseReason: null,
+  supplierPauses: [],
   supplierBlocked: false,
   cardRequired: false,
   cardLinked: false,
@@ -24,8 +24,10 @@ describe("an offer on the showcase", () => {
   it.each([
     [{ offerStatus: "withdrawn" as const }, ["offer_withdrawn"]],
     [{ offerStatus: "suspended" as const }, ["offer_suspended"]],
-    [{ supplierPauseReason: "admin" as const }, ["supplier_paused"]],
-    [{ supplierPauseReason: "billing" as const }, ["supplier_paused"]],
+    [{ supplierPauses: ["admin" as const] }, ["supplier_paused"]],
+    [{ supplierPauses: ["billing" as const] }, ["supplier_paused"]],
+    // Two pauses are still one reason: the offer is hidden once.
+    [{ supplierPauses: ["admin" as const, "billing" as const] }, ["supplier_paused"]],
     [{ supplierBlocked: true }, ["supplier_blocked"]],
     [{ cardRequired: true, cardLinked: false }, ["card_not_linked"]],
     [{ supplierTypeFits: false }, ["supplier_type_mismatch"]],
@@ -43,7 +45,7 @@ describe("an offer on the showcase", () => {
     expect(
       offerVisibility({
         offerStatus: "withdrawn",
-        supplierPauseReason: "billing",
+        supplierPauses: ["billing"],
         supplierBlocked: true,
         cardRequired: true,
         cardLinked: false,
@@ -81,12 +83,17 @@ describe("an offer on the showcase", () => {
   });
 
   it("agrees with the supplier's showcase sign in every state", () => {
-    for (const pauseReason of [null, "admin", "billing"] as const) {
-      for (const blocked of [false, true]) {
-        expect(
-          offerVisibility({ ...shown, supplierPauseReason: pauseReason, supplierBlocked: blocked })
-            .visible,
-        ).toBe(supplierVisibleOnShowcase({ pauseReason, blocked }));
+    for (const adminPaused of [false, true]) {
+      for (const billingPaused of [false, true]) {
+        for (const blocked of [false, true]) {
+          expect(
+            offerVisibility({
+              ...shown,
+              supplierPauses: supplierPauseReasons({ adminPaused, billingPaused }),
+              supplierBlocked: blocked,
+            }).visible,
+          ).toBe(supplierVisibleOnShowcase({ adminPaused, billingPaused, blocked }));
+        }
       }
     }
   });

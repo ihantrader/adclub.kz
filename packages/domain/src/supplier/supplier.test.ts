@@ -7,6 +7,7 @@ import {
 } from "./supplier-lead";
 import {
   supplierMayInvite,
+  supplierPauseReasons,
   supplierState,
   supplierVisibleOnShowcase,
   type SupplierStateFacts,
@@ -63,24 +64,37 @@ describe("the funnel of connection requests", () => {
 
 describe("the state of a supplier", () => {
   it("is visible on the showcase only when neither paused nor blocked", () => {
-    const cases = [
-      [{ pauseReason: null, blocked: false }, "active", true],
-      [{ pauseReason: "billing", blocked: false }, "paused", false],
-      [{ pauseReason: "admin", blocked: false }, "paused", false],
-      [{ pauseReason: null, blocked: true }, "blocked", false],
-      [{ pauseReason: "billing", blocked: true }, "blocked", false],
-    ] as const;
+    const cases: [SupplierStateFacts, string, boolean][] = [
+      [{ adminPaused: false, billingPaused: false, blocked: false }, "active", true],
+      [{ adminPaused: false, billingPaused: true, blocked: false }, "paused", false],
+      [{ adminPaused: true, billingPaused: false, blocked: false }, "paused", false],
+      [{ adminPaused: true, billingPaused: true, blocked: false }, "paused", false],
+      [{ adminPaused: false, billingPaused: false, blocked: true }, "blocked", false],
+      [{ adminPaused: false, billingPaused: true, blocked: true }, "blocked", false],
+    ];
     for (const [facts, state, visible] of cases) {
       expect(supplierState(facts)).toBe(state);
       expect(supplierVisibleOnShowcase(facts)).toBe(visible);
     }
   });
 
+  it("keeps the two pauses apart: lifting one leaves the other (TASK-042)", () => {
+    const both = { adminPaused: true, billingPaused: true };
+    expect(supplierPauseReasons(both)).toEqual(["admin", "billing"]);
+    // The administrator lifts theirs: the company stays paused for billing.
+    expect(supplierPauseReasons({ ...both, adminPaused: false })).toEqual(["billing"]);
+    expect(supplierState({ ...both, adminPaused: false, blocked: false })).toBe("paused");
+    // Paying lifts the billing one: the administrator's remains.
+    expect(supplierPauseReasons({ ...both, billingPaused: false })).toEqual(["admin"]);
+    expect(supplierState({ ...both, billingPaused: false, blocked: false })).toBe("paused");
+    expect(supplierPauseReasons({ adminPaused: false, billingPaused: false })).toEqual([]);
+  });
+
   it("adds employees and invites them unless blocked, paused or not (D-070)", () => {
     expect(supplierMayInvite({ blocked: false })).toBe(true);
     expect(supplierMayInvite({ blocked: true })).toBe(false);
-    const paused: SupplierStateFacts = { pauseReason: "admin", blocked: false };
-    const both: SupplierStateFacts = { pauseReason: "billing", blocked: true };
+    const paused: SupplierStateFacts = { adminPaused: true, billingPaused: false, blocked: false };
+    const both: SupplierStateFacts = { adminPaused: false, billingPaused: true, blocked: true };
     expect(supplierMayInvite(paused)).toBe(true);
     expect(supplierMayInvite(both)).toBe(false);
   });

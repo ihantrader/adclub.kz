@@ -130,9 +130,15 @@ export const supplier = pgTable("supplier", {
   contactPhone: text("contact_phone"),
   timeZone: text("time_zone").notNull().default("Asia/Almaty"),
   status: text("status").$type<SupplierStatus>().notNull().default("active"),
-  pauseReason: text("pause_reason").$type<"billing" | "admin">(),
-  pauseNote: text("pause_note"),
-  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  /**
+   * Two pauses that live apart (TASK-042, ARCHITECTURE 4.77): the
+   * administrator's decision (with the note why) and the billing one — an
+   * unpaid subscription once the retries are over. Lifting one never lifts
+   * the other; `status` is what they and the blocking make it.
+   */
+  adminPausedAt: timestamp("admin_paused_at", { withTimezone: true }),
+  adminPauseNote: text("admin_pause_note"),
+  billingPausedAt: timestamp("billing_paused_at", { withTimezone: true }),
   blockReason: text("block_reason"),
   blockedAt: timestamp("blocked_at", { withTimezone: true }),
   contractSignedOn: date("contract_signed_on"),

@@ -7,6 +7,7 @@ import { supplierPath, useLocation, type SupplierTab } from "../router";
 import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
 import { StateMark, SUPPLIERS_CRUMB } from "./shared";
+import { SupplierBilling } from "./SupplierBilling";
 import { SupplierHistory } from "./SupplierHistory";
 import { SupplierMembers } from "./SupplierMembers";
 import { SupplierOffers } from "./SupplierOffers";
@@ -25,6 +26,7 @@ const TAB_TEXT: Record<SupplierTab, string> = {
   offers: "Предложения",
   orders: "Заявки",
   rating: "Рейтинг и отзывы",
+  billing: "Подписка",
   price: "Прайс",
   history: "История",
 };
@@ -37,7 +39,9 @@ const TABS = Object.keys(TAB_TEXT) as SupplierTab[];
  * under it, one bar of the card's tabs in the address (`?tab=`), so the
  * journal, the home page and a signal open the right one. «Рейтинг и
  * отзывы» — TASK-049, TASK-050 (`?tab=reviews` of before opens it too);
- * «Подписка», «Модерация» come later.
+ * «Подписка» — TASK-042 (`?tab=billing`: the card, the charges and both
+ * pauses side by side; the payment-failed signal opens it); «Модерация»
+ * comes later.
  */
 export function SupplierCard({ supplierId }: { supplierId: string }) {
   const { query } = useLocation();
@@ -71,6 +75,9 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
         break;
       case "rating":
         body = <SupplierRating supplierId={supplierId} />;
+        break;
+      case "billing":
+        body = <SupplierBilling supplierId={supplierId} />;
         break;
       case "price":
         body = <SupplierPriceImports supplierId={supplierId} />;

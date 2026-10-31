@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { normalizeKzMobilePhone, providerEventKinds, type ProviderEventKind } from "@adclub/domain";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { PAYMENT_WEBHOOK_PATH } from "../../common/http";
+import { APP_CONFIG, type AppConfig } from "../../config";
 import { DatabaseService } from "../../database";
 import { AccountStore, OperatorCommandError } from "../identity";
-import { subscription } from "./schema";
+import { openAttemptStatuses, paymentAttempt, subscription } from "./schema";
 import { SubscriptionEvents } from "./subscription-events";
 import { TestSubscriptionProvider, type TestProviderEvent } from "./subscription-provider";
 import { SubscriptionViews } from "./subscription-views";
+import { PAYMENT_WEBHOOK_SIGNATURE_HEADER, signPaymentWebhook } from "./test-payment-provider";
 
 export interface TestEventCommand {
   phone: string;
@@ -41,6 +44,7 @@ export class BillingOperator {
     @Inject(AccountStore) private readonly accounts: AccountStore,
     @Inject(SubscriptionEvents) private readonly events: SubscriptionEvents,
     @Inject(SubscriptionViews) private readonly views: SubscriptionViews,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   private async accountOf(phoneInput: string): Promise<string> {
@@ -106,5 +110,69 @@ export class BillingOperator {
   /** The subscription, its history and the access of a phone number's account. */
   async status(phoneInput: string) {
     return this.views.forAdmin(await this.accountOf(phoneInput));
+  }
+
+  /**
+   * `dev:payments:webhook` (development and tests only): a webhook of the
+   * test payment provider, signed with the configured secret, sent to this
+   * deployment's own address — the check of the signature, the receipt, the
+   * queue and the applying, without an acquirer. Without a key it names the
+   * latest open charge of the company.
+   */
+  async paymentWebhook(input: {
+    key?: string;
+    status?: string;
+    reason?: string;
+    twice: boolean;
+    badSignature: boolean;
+  }) {
+    const secret = this.config.payments.webhookSecret;
+    if (!secret) {
+      throw new OperatorCommandError("PAYMENT_WEBHOOK_SECRET is not configured");
+    }
+    const status = input.status ?? "succeeded";
+    if (status !== "succeeded" && status !== "declined") {
+      throw new OperatorCommandError("--status is succeeded or declined");
+    }
+    let key = input.key;
+    if (!key) {
+      const [open] = await this.database.db
+        .select({ key: paymentAttempt.idempotencyKey })
+        .from(paymentAttempt)
+        .where(inArray(paymentAttempt.status, [...openAttemptStatuses]))
+        .orderBy(desc(paymentAttempt.createdAt))
+        .limit(1);
+      if (!open) {
+        throw new OperatorCommandError("No charge is waiting for an answer: give --key");
+      }
+      key = open.key;
+    }
+    const body = JSON.stringify({
+      id: `dev-payment-${randomUUID()}`,
+      type: "payment",
+      key,
+      status,
+      ...(status === "declined" ? { reason: input.reason ?? "insufficient_funds" } : {}),
+      paymentId: `dev-${randomUUID()}`,
+    });
+    const url = `http://127.0.0.1:${String(this.config.port)}${PAYMENT_WEBHOOK_PATH}`;
+    const signature = signPaymentWebhook(
+      input.badSignature ? "a-secret-nobody-configured" : secret,
+      body,
+    );
+    const answers: { status: number; body: string }[] = [];
+    for (let i = 0; i < (input.twice ? 2 : 1); i++) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [PAYMENT_WEBHOOK_SIGNATURE_HEADER]: signature,
+        },
+        // The same event twice is the same event: the id stays.
+        body,
+      });
+      answers.push({ status: response.status, body: (await response.text()).slice(0, 200) });
+    }
+    return { url, key, status, deliveries: answers };
   }
 }

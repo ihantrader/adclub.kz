@@ -1266,7 +1266,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
         asAdmin("post", `/admin/suppliers/${paused.supplierId}/pause`, {
           expectedVersion: await supplierVersion(paused.supplierId),
           paused: true,
-          reason: "billing",
+          reason: "admin",
           note: "Не оплачено",
         }),
         (body) => body,

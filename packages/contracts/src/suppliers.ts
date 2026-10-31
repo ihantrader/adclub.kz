@@ -579,6 +579,11 @@ export const supplierCardSchema = z.object({
   visibleOnShowcase: z.boolean(),
   /** A verified partner (PRODUCT 13): set by an administrator after the contract. */
   verification: z.object({ contractSignedOn: dateSchema, verifiedAt: z.iso.datetime() }).nullable(),
+  /**
+   * One pause for a reader that knows a single one: the administrator's when
+   * it holds, else the billing one. Since TASK-042 both can hold at once —
+   * `pauses` says which.
+   */
   pause: z
     .object({
       reason: supplierPauseReasonSchema,
@@ -586,6 +591,15 @@ export const supplierCardSchema = z.object({
       since: z.iso.datetime(),
     })
     .nullable(),
+  /**
+   * The two pauses that live apart (TASK-042, ARCHITECTURE 4.77): the
+   * administrator's (lifted only by an administrator) and the billing one (an
+   * unpaid subscription; lifted only by a payment).
+   */
+  pauses: z.object({
+    admin: z.object({ note: z.string().nullable(), since: z.iso.datetime() }).nullable(),
+    billing: z.object({ since: z.iso.datetime() }).nullable(),
+  }),
   block: z.object({ reason: z.string(), since: z.iso.datetime() }).nullable(),
   /**
    * «Доставка по умолчанию для новых предложений» (S-COMP-01, TASK-032):
@@ -1129,9 +1143,11 @@ export const setSupplierVerificationBodySchema = z.object({
 export type SetSupplierVerificationBody = z.infer<typeof setSupplierVerificationBodySchema>;
 
 /**
- * Pause: `paused: true` with its reason (`billing`/`admin`; pausing a
- * paused supplier changes the reason); `paused: false` lifts it. `note` —
- * why, always.
+ * The administrator's pause: `paused: true` with the reason `admin`;
+ * `paused: false` lifts it — and only it: the billing pause (an unpaid
+ * subscription, TASK-042) is put and lifted by the subscription itself, so
+ * `reason: "billing"` is refused (400 on `reason`), and lifting while only
+ * the billing pause holds is `not_paused`. `note` — why, always.
  */
 export const setSupplierPauseBodySchema = z.object({
   expectedVersion: expectedVersionSchema,

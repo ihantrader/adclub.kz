@@ -6505,7 +6505,10 @@
                 "supplier_unreachable",
                 "supply_overdue",
                 "visit_unresolved",
-                "low_rating"
+                "low_rating",
+                "payment_failed",
+                "payment_system_down",
+                "billing_plan_missing"
               ]
             }
           },
@@ -7510,6 +7513,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSupplierResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{supplierId}/billing": {
+      "get": {
+        "operationId": "getAdminSupplierBilling",
+        "summary": "A-SUP-03 «Подписка»: the subscription in words, paid until, the card (mask only), the latest charges and the events, and both pauses side by side",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "supplierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The supplier's billing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSupplierBillingResponse"
                 }
               }
             }
@@ -15085,6 +15141,228 @@
         }
       }
     },
+    "/supplier/billing/card-bindings": {
+      "post": {
+        "operationId": "startSupplierCardBinding",
+        "summary": "«Привязать карту» / «Сменить карту»: opens a trip to the payment provider's page (its address is in the answer; the card's number never reaches our server). An employee of an active company; one trip at a time — an open one is returned again. Without a subscription the first charge follows the card; a company that has one just changes its card",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perMember": "billing_actions_per_member",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "Where the provider sends the browser back to — an address of the cabinet",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartCardBindingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The trip and the provider's page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartCardBindingResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/billing/card-bindings/{bindingId}": {
+      "get": {
+        "operationId": "getSupplierCardBinding",
+        "summary": "How a trip to the payment provider's page stands (the cabinet asks when the person comes back): pending, the card received, the first charge on its way, linked, refused by the bank, failed or abandoned",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "bindingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardBindingResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/billing/charges": {
+      "get": {
+        "operationId": "listSupplierCharges",
+        "summary": "The history of the company's charges (S-BILL-01), newest first, by pages",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of charges",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierChargePage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/billing/pay": {
+      "post": {
+        "operationId": "payNowSupplierSubscription",
+        "summary": "«Оплатить сейчас»: charges the linked card for the term the subscription owes (after a refusal, on a pause). Two employees pressing it together get the same charge back; the result comes by the history of charges",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perMember": "billing_actions_per_member",
+          "whenUnavailable": "allow"
+        },
+        "responses": {
+          "202": {
+            "description": "The charge, finished or waiting for the provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayNowResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/catalog-requests": {
       "get": {
         "operationId": "listSupplierCatalogRequests",
@@ -18457,7 +18735,7 @@
     "/supplier/subscription": {
       "get": {
         "operationId": "getSupplierSubscription",
-        "summary": "The company's card and the switch D-041 (offers on the showcase only after a card is linked), the suppliers' tariff and its announced change",
+        "summary": "S-BILL-01: the company's subscription, its card, both pauses and what can be done now, the switch D-041 (offers on the showcase only after a card is linked), the suppliers' tariff and its announced change",
         "tags": [
           "supplier"
         ],
@@ -24150,7 +24428,10 @@
           "supplier_unreachable",
           "supply_overdue",
           "visit_unresolved",
-          "low_rating"
+          "low_rating",
+          "payment_failed",
+          "payment_system_down",
+          "billing_plan_missing"
         ]
       },
       "AdminSignalListQuery": {
@@ -24356,6 +24637,29 @@
           },
           "ratingThreshold": {
             "type": "number"
+          },
+          "declineReason": {
+            "type": "string"
+          },
+          "declines": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "graceUntil": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "failedPayments": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         }
       },
@@ -24393,6 +24697,75 @@
           "order",
           "supplier",
           "channel"
+        ]
+      },
+      "AdminSupplierBillingResponse": {
+        "type": "object",
+        "properties": {
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierSubscriptionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierPaymentCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pauses": {
+            "$ref": "#/components/schemas/AdminSupplierPauses"
+          },
+          "charges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierCharge"
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionHistoryEntry"
+            }
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubscriptionPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "announcedPlan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnouncedPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "subscription",
+          "card",
+          "pauses",
+          "charges",
+          "history",
+          "plan",
+          "announcedPlan"
         ]
       },
       "AdminSupplierCard": {
@@ -24502,6 +24875,62 @@
               }
             ]
           },
+          "pauses": {
+            "type": "object",
+            "properties": {
+              "admin": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "note": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "since": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "note",
+                      "since"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "billing": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "since"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "admin",
+              "billing"
+            ]
+          },
           "block": {
             "anyOf": [
               {
@@ -24578,6 +25007,7 @@
           "visibleOnShowcase",
           "verification",
           "pause",
+          "pauses",
           "block",
           "deliveryByDefault",
           "version",
@@ -25172,6 +25602,62 @@
           "suppliers",
           "total",
           "nextCursor"
+        ]
+      },
+      "AdminSupplierPauses": {
+        "type": "object",
+        "properties": {
+          "admin": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "since": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "note",
+                  "since"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "billing": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "since": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "since"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "admin",
+          "billing"
         ]
       },
       "AdminSupplierPriceImportsPath": {
@@ -27713,6 +28199,57 @@
           "engine",
           "transmission",
           "drive"
+        ]
+      },
+      "CardBindingFailure": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PaymentDeclineReason"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "provider_unavailable",
+              "cancelled",
+              "expired"
+            ]
+          }
+        ]
+      },
+      "CardBindingPath": {
+        "type": "object",
+        "properties": {
+          "bindingId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "bindingId"
+        ]
+      },
+      "CardBindingResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/SupplierCardBinding"
+          }
+        },
+        "required": [
+          "binding"
+        ]
+      },
+      "CardBindingStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "card_received",
+          "charging",
+          "completed",
+          "declined",
+          "failed",
+          "abandoned"
         ]
       },
       "CatalogAnalogInvalidDetails": {
@@ -32526,6 +33063,10 @@
           "CLUB_ACCESS_NOT_GRANTED",
           "SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT",
           "SUBSCRIPTION_ALREADY_ACTIVE",
+          "BILLING_NO_PLAN",
+          "BILLING_NO_CARD",
+          "BILLING_NOTHING_TO_PAY",
+          "BILLING_RETURN_URL_INVALID",
           "SUBSCRIPTION_REQUIRED",
           "ORDER_OFFER_UNAVAILABLE",
           "ORDER_KIND_NOT_SUPPORTED",
@@ -35447,6 +35988,36 @@
           "leadDays"
         ]
       },
+      "PayNowResponse": {
+        "type": "object",
+        "properties": {
+          "charge": {
+            "$ref": "#/components/schemas/SupplierCharge"
+          }
+        },
+        "required": [
+          "charge"
+        ]
+      },
+      "PaymentCardBrand": {
+        "type": "string",
+        "enum": [
+          "visa",
+          "mastercard",
+          "other"
+        ]
+      },
+      "PaymentDeclineReason": {
+        "type": "string",
+        "enum": [
+          "insufficient_funds",
+          "card_expired",
+          "card_blocked",
+          "invalid_card",
+          "do_not_honor",
+          "declined_other"
+        ]
+      },
       "PhoneRevealSubject": {
         "type": "string",
         "enum": [
@@ -37551,6 +38122,7 @@
           "order_actions_per_member",
           "active_orders_per_account",
           "whatsapp_webhook_per_ip",
+          "payment_webhook_per_ip",
           "admin_search_per_account",
           "phone_reveal_per_account",
           "vehicle_document_per_device",
@@ -37558,6 +38130,7 @@
           "vehicle_document_per_account",
           "price_import_uploads_per_supplier",
           "price_export_per_member",
+          "billing_actions_per_member",
           "catalog_requests_per_supplier",
           "review_create_per_account",
           "complaint_create_per_account"
@@ -40665,6 +41238,34 @@
           "expiresAt"
         ]
       },
+      "StartCardBindingBody": {
+        "type": "object",
+        "properties": {
+          "returnUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "returnUrl"
+        ]
+      },
+      "StartCardBindingResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "$ref": "#/components/schemas/SupplierCardBinding"
+          },
+          "redirectUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "redirectUrl"
+        ]
+      },
       "SubmitSupplierLeadBody": {
         "type": "object",
         "properties": {
@@ -41041,6 +41642,62 @@
               }
             ]
           },
+          "pauses": {
+            "type": "object",
+            "properties": {
+              "admin": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "note": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "since": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "note",
+                      "since"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "billing": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "since": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "since"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "admin",
+              "billing"
+            ]
+          },
           "block": {
             "anyOf": [
               {
@@ -41099,11 +41756,74 @@
           "visibleOnShowcase",
           "verification",
           "pause",
+          "pauses",
           "block",
           "deliveryByDefault",
           "version",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "SupplierCardBinding": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CardBindingStatus"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardBindingFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierPaymentCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscriptionStatus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierSubscriptionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "failure",
+          "card",
+          "subscriptionStatus",
+          "startedAt",
+          "expiresAt"
         ]
       },
       "SupplierCardResponse": {
@@ -41287,6 +42007,150 @@
         },
         "required": [
           "request"
+        ]
+      },
+      "SupplierCharge": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SupplierChargeKind"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SupplierChargeOutcome"
+          },
+          "declineReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentDeclineReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "currency": {
+            "type": "string",
+            "const": "KZT"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "outcome",
+          "declineReason",
+          "amount",
+          "currency",
+          "periodFrom",
+          "periodTo",
+          "at",
+          "resolvedAt",
+          "retryAt"
+        ]
+      },
+      "SupplierChargeKind": {
+        "type": "string",
+        "enum": [
+          "first",
+          "scheduled",
+          "retry",
+          "manual"
+        ]
+      },
+      "SupplierChargeOutcome": {
+        "type": "string",
+        "enum": [
+          "succeeded",
+          "declined",
+          "in_progress"
+        ]
+      },
+      "SupplierChargePage": {
+        "type": "object",
+        "properties": {
+          "charges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierCharge"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "charges",
+          "nextCursor"
+        ]
+      },
+      "SupplierChargesQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "limit"
         ]
       },
       "SupplierColleagueRef": {
@@ -43062,6 +43926,78 @@
           "admin"
         ]
       },
+      "SupplierPausesFlags": {
+        "type": "object",
+        "properties": {
+          "admin": {
+            "type": "boolean"
+          },
+          "billing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "admin",
+          "billing"
+        ]
+      },
+      "SupplierPaymentActions": {
+        "type": "object",
+        "properties": {
+          "canPayNow": {
+            "type": "boolean"
+          },
+          "inProgress": {
+            "type": "boolean"
+          },
+          "canStart": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "canPayNow",
+          "inProgress",
+          "canStart"
+        ]
+      },
+      "SupplierPaymentCard": {
+        "type": "object",
+        "properties": {
+          "mask": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$"
+          },
+          "brand": {
+            "$ref": "#/components/schemas/PaymentCardBrand"
+          },
+          "expMonth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "expYear": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "expired": {
+            "type": "boolean"
+          },
+          "linkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "mask",
+          "brand",
+          "expMonth",
+          "expYear",
+          "expired",
+          "linkedAt"
+        ]
+      },
       "SupplierProfileResponse": {
         "type": "object",
         "properties": {
@@ -43645,6 +44581,32 @@
                 "type": "null"
               }
             ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierSubscriptionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupplierPaymentCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pauses": {
+            "$ref": "#/components/schemas/SupplierPausesFlags"
+          },
+          "actions": {
+            "$ref": "#/components/schemas/SupplierPaymentActions"
           }
         },
         "required": [
@@ -43652,7 +44614,102 @@
           "cardRequired",
           "hiddenWithoutCard",
           "plan",
-          "announcedPlan"
+          "announcedPlan",
+          "subscription",
+          "card",
+          "pauses",
+          "actions"
+        ]
+      },
+      "SupplierSubscriptionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "past_due",
+          "cancelled",
+          "suspended",
+          "expired"
+        ]
+      },
+      "SupplierSubscriptionSummary": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SupplierSubscriptionStatus"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "graceUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nextChargeAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastDecline": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  "reason": {
+                    "$ref": "#/components/schemas/PaymentDeclineReason"
+                  }
+                },
+                "required": [
+                  "at",
+                  "reason"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "periodEnd",
+          "graceUntil",
+          "amount",
+          "nextChargeAt",
+          "lastDecline"
         ]
       },
       "SupplierSummary": {

@@ -1,9 +1,10 @@
+import type { PaymentDeclineReason } from "@adclub/contracts";
 import type {
   SubscriptionAudience,
   SubscriptionEventKind,
   SubscriptionStatus,
 } from "@adclub/domain";
-import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { subscription, type SubscriptionProviderName, type SubscriptionRow } from "../club-access";
 import { account, supplier } from "../identity";
 
@@ -70,5 +71,135 @@ export const billingEvent = pgTable("billing_event", {
 
 export type BillingEventRow = typeof billingEvent.$inferSelect;
 
+/** Which processor a card and its charges belong to. */
+export type PaymentProviderName = "card_kz" | "test";
+
+export type CardBrand = "visa" | "mastercard" | "other";
+
+/**
+ * `payment_method` (TASK-042, ARCHITECTURE 4.77): the card a company's
+ * subscription is charged to. The provider's token is sealed (AES-256-GCM,
+ * bound to the row's id); the mask, brand and term are what the provider
+ * told us and what the cabinet shows. **This table is the only place a card
+ * is linked or taken off**, and `supplier.card_linked_at` follows it.
+ */
+export const paymentMethod = pgTable("payment_method", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  supplierId: uuid("supplier_id")
+    .notNull()
+    .references(() => supplier.id),
+  provider: text("provider").$type<PaymentProviderName>().notNull(),
+  tokenSealed: text("token_sealed").notNull(),
+  mask: text("mask").notNull(),
+  brand: text("brand").$type<CardBrand>().notNull(),
+  expMonth: smallint("exp_month").notNull(),
+  expYear: smallint("exp_year").notNull(),
+  status: text("status").$type<"active" | "replaced" | "removed">().notNull().default("active"),
+  bindingId: uuid("binding_id"),
+  linkedByMemberId: uuid("linked_by_member_id"),
+  detachedAt: timestamp("detached_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  replacedAt: timestamp("replaced_at", { withTimezone: true }),
+});
+
+export type PaymentMethodRow = typeof paymentMethod.$inferSelect;
+
+export type CardBindingStatusValue =
+  "pending" | "card_received" | "charging" | "completed" | "declined" | "failed" | "abandoned";
+
+/** `card_binding`: a company's trip to the provider's page and back. */
+export const cardBinding = pgTable("card_binding", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  supplierId: uuid("supplier_id")
+    .notNull()
+    .references(() => supplier.id),
+  provider: text("provider").$type<PaymentProviderName>().notNull(),
+  providerRef: text("provider_ref").notNull(),
+  returnUrl: text("return_url").notNull(),
+  redirectUrl: text("redirect_url"),
+  status: text("status").$type<CardBindingStatusValue>().notNull().default("pending"),
+  failure: text("failure"),
+  startedByMemberId: uuid("started_by_member_id"),
+  cardTokenSealed: text("card_token_sealed"),
+  cardMask: text("card_mask"),
+  cardBrand: text("card_brand").$type<CardBrand>(),
+  cardExpMonth: smallint("card_exp_month"),
+  cardExpYear: smallint("card_exp_year"),
+  paymentMethodId: uuid("payment_method_id"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type CardBindingRow = typeof cardBinding.$inferSelect;
+
+export type PaymentAttemptKind = "first" | "scheduled" | "retry" | "manual";
+export type PaymentAttemptStatus =
+  "created" | "unavailable" | "unknown" | "succeeded" | "declined" | "cancelled";
+
+/** The attempts that are not over: at most one per period (a unique index). */
+export const openAttemptStatuses = ["created", "unavailable", "unknown"] as const;
+
+/**
+ * `payment_attempt`: one charge at the provider under one idempotency key.
+ * The database keeps «not twice for a period»: one success and one attempt in
+ * flight per `period_key`.
+ */
+export const paymentAttempt = pgTable("payment_attempt", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  supplierId: uuid("supplier_id")
+    .notNull()
+    .references(() => supplier.id),
+  subscriptionId: uuid("subscription_id").references(() => subscription.id),
+  bindingId: uuid("binding_id").references(() => cardBinding.id),
+  paymentMethodId: uuid("payment_method_id").references(() => paymentMethod.id),
+  planId: uuid("plan_id").references(() => plan.id),
+  kind: text("kind").$type<PaymentAttemptKind>().notNull(),
+  periodKey: text("period_key").notNull(),
+  attemptNo: integer("attempt_no").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  amount: integer("amount").notNull(),
+  currency: text("currency").$type<"KZT">().notNull().default("KZT"),
+  periodFrom: timestamp("period_from", { withTimezone: true }).notNull(),
+  periodTo: timestamp("period_to", { withTimezone: true }).notNull(),
+  anchorDay: smallint("anchor_day").notNull(),
+  status: text("status").$type<PaymentAttemptStatus>().notNull().default("created"),
+  declineReason: text("decline_reason").$type<PaymentDeclineReason>(),
+  provider: text("provider").$type<PaymentProviderName>().notNull(),
+  providerPaymentId: text("provider_payment_id"),
+  claimedUntil: timestamp("claimed_until", { withTimezone: true }),
+  nextTryAt: timestamp("next_try_at", { withTimezone: true }),
+  tries: integer("tries").notNull().default(0),
+  firstFailureAt: timestamp("first_failure_at", { withTimezone: true }),
+  lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+  requestedByMemberId: uuid("requested_by_member_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+});
+
+export type PaymentAttemptRow = typeof paymentAttempt.$inferSelect;
+
+/** `payment_webhook_event`: a delivery of the provider, kept once by its id. */
+export const paymentWebhookEvent = pgTable("payment_webhook_event", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").$type<PaymentProviderName>().notNull(),
+  providerEventId: text("provider_event_id").notNull(),
+  kind: text("kind").$type<"card_bound" | "card_cancelled" | "payment">().notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  result: text("result"),
+});
+
+export type PaymentWebhookEventRow = typeof paymentWebhookEvent.$inferSelect;
+
 /** Every table this module owns — checked against the migrated database. */
-export const billingTables = [plan, billingEvent];
+export const billingTables = [
+  plan,
+  billingEvent,
+  paymentMethod,
+  cardBinding,
+  paymentAttempt,
+  paymentWebhookEvent,
+];

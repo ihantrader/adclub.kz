@@ -395,9 +395,10 @@ describe("a refused exchange for too many of them (TASK-077)", () => {
     });
     await session.start();
     expect(session.state()).toEqual({ status: "throttled", retryAfterSeconds: 600 });
-    verdict = { kind: "ok", tokens: tokens("at-2") };
+    const fresh = tokens("at-2");
+    verdict = { kind: "ok", tokens: fresh };
     await session.start();
-    expect(session.state()).toEqual({ status: "signed_in", tokens: tokens("at-2") });
+    expect(session.state()).toEqual({ status: "signed_in", tokens: fresh });
   });
 
   it("gives an expired request the server's 429 and keeps the session", async () => {

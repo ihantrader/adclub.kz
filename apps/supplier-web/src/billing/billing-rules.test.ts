@@ -153,7 +153,17 @@ describe("the words of S-BILL-01 (SCREENS 6.8)", () => {
   it("says the active subscription: until when, how much a month, when the card is charged next", () => {
     expect(stateTexts(response(), ZONE, "ru", t)).toEqual([
       "Активна до 5 ноября · 1 000 ₸ в месяц",
-      "Следующее списание — 5 ноября",
+      "Следующее списание — 5 ноября · 1 000 ₸",
+    ]);
+  });
+
+  it("says the tariff in force beside «Активна до», and the risen price with the next charge", () => {
+    const rising = response({
+      subscription: { ...response().subscription!, amount: 3_000 },
+    });
+    expect(stateTexts(rising, ZONE, "ru", t)).toEqual([
+      "Активна до 5 ноября · 1 000 ₸ в месяц",
+      "Следующее списание — 5 ноября · 3 000 ₸",
     ]);
   });
 

@@ -96,20 +96,22 @@ export function stateTexts(
       return [t("billing.activating")];
     case "active": {
       if (!subscription) return [];
+      // «Активна до … · {цена} в месяц» is the tariff in force, as «Тариф» beside
+      // it; what the next charge takes (a rise announced may be due by then) is
+      // said with the next charge itself (TASK-042.A).
+      const current = data.plan?.price ?? subscription.amount;
       const lines = [
-        subscription.amount !== null
-          ? t("billing.activeUntil", {
-              date: dayText(subscription.periodEnd, timeZone, lang),
-              price: priceText(subscription.amount),
-            })
-          : t("billing.activeUntil", {
-              date: dayText(subscription.periodEnd, timeZone, lang),
-              price: "—",
-            }),
+        t("billing.activeUntil", {
+          date: dayText(subscription.periodEnd, timeZone, lang),
+          price: current !== null ? priceText(current) : "—",
+        }),
       ];
       if (subscription.nextChargeAt) {
+        const date = dayText(subscription.nextChargeAt, timeZone, lang);
         lines.push(
-          t("billing.nextCharge", { date: dayText(subscription.nextChargeAt, timeZone, lang) }),
+          subscription.amount !== null
+            ? t("billing.nextChargeAmount", { date, price: priceText(subscription.amount) })
+            : t("billing.nextCharge", { date }),
         );
       }
       return lines;

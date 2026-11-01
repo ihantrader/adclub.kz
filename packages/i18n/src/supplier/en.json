@@ -1030,6 +1030,7 @@
   "billing.noCard.noPlan": "The subscription isn't available yet: no tariff for suppliers has been set. We have told the club administrator",
   "billing.activeUntil": "Active until {date} · {price} a month",
   "billing.nextCharge": "Next charge — {date}",
+  "billing.nextChargeAmount": "Next charge — {date} · {price}",
   "billing.activating": "The card is linked. We are setting up the subscription — it takes a few seconds",
   "billing.pastDue": "We could not charge the payment on {failed}. Next attempt — {next}. If the payment doesn't go through by {until}, your offers will be taken off the showcase",
   "billing.pastDue.noRetry": "We could not charge the payment on {failed}. There will be no more automatic attempts. If it isn't paid by {until}, your offers will be taken off the showcase",

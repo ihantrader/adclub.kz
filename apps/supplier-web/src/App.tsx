@@ -121,6 +121,18 @@ export function App() {
     };
   }, []);
 
+  // A move to another section re-reads the company as well, as the orders are
+  // re-read: a pause or a block set meanwhile shows its banner without a
+  // reload of the page (TASK-042.A).
+  const firstRoute = useRef(true);
+  useEffect(() => {
+    if (firstRoute.current) {
+      firstRoute.current = false;
+      return;
+    }
+    void refreshCompany();
+  }, [route]);
+
   // The screens of the page take each other's place with a fade (D-069):
   // the start, the sign-in, the cabinet. Within the cabinet the pages fade
   // by themselves (Shell), so the frame is one screen here.

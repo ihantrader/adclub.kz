@@ -141,12 +141,19 @@ export function xlsxBomb(options: {
    * One ordinary deflate stream of the whole part, as zlib writes it (the
    * acceptance's file) instead of repeated pieces: slower to build (the
    * part is compressed whole), so for a few hundred megabytes at most.
+   * Compressed at the fastest level: still one ordinary zlib stream, but
+   * built in a fraction of the time — level 9 over 256 MB took 3.6 s on CI
+   * with Node 24.21 and over 5 s with Node 24.22 (zlib 1.3.2.1-motley),
+   * which timed the test out though the worker refuses the file in
+   * milliseconds.
    */
   single?: boolean;
 }): Buffer {
   const fill = options.fill ?? 0;
   if (options.single) {
-    const data = deflateRawSync(Buffer.alloc(options.megabytes * MEGABYTE, fill), { level: 9 });
+    const data = deflateRawSync(Buffer.alloc(options.megabytes * MEGABYTE, fill), {
+      level: constants.Z_BEST_SPEED,
+    });
     return writeRawZip(
       workbookEntries().map((entry) =>
         entry.name === options.part

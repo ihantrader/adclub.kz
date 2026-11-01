@@ -639,6 +639,7 @@ describe("observability: what leaves the process (PostgreSQL + Redis)", () => {
       LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
       SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
       ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-staging-payment-key-of-at-least-32-chars",
       ADMIN_WEB_RELEASE_VERSION: "1.0.0",
     });
     try {

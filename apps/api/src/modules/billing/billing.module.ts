@@ -78,7 +78,7 @@ import {
   RunAttemptHandler,
   WatchProviderHandler,
 } from "./billing-handlers";
-import { BillingNotices, SUBSCRIPTION_SUBJECT } from "./billing-notices";
+import { BillingNotices, PAYMENT_TERM_SUBJECT, SUBSCRIPTION_SUBJECT } from "./billing-notices";
 import { CardBindings } from "./card-bindings";
 import { DevPaymentCardController } from "./dev-payment-card.controller";
 import { PaymentCharger } from "./payment-charger";
@@ -95,7 +95,7 @@ import { chargeView, SubscriptionViews } from "./subscription-views";
 import { TestPaymentProvider } from "./test-payment-provider";
 import { UnconfiguredPaymentProvider } from "./unconfigured-payment-provider";
 import { DatabaseService } from "../../database";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { subscription } from "./schema";
 
 /** `GET /me/subscription` (context `user`, M-SUB-02). */
@@ -392,6 +392,24 @@ export class BillingJobsModule implements OnModuleInit {
           .from(subscription)
           .where(eq(subscription.id, subjectId));
         return row?.status === "past_due";
+      },
+      onResult: () => Promise.resolve(),
+    });
+    // W-05 goes while the term of the refused charge is not paid (I834): the
+    // refusal's event may not be applied yet when the sender takes the
+    // message, so the subscription's status is not what decides.
+    this.subjects.register(PAYMENT_TERM_SUBJECT, {
+      stillSend: async (tx, subjectId) => {
+        if (!subjectId) return false;
+        const { rows } = await tx.execute<{ unpaid: boolean }>(sql`
+          SELECT NOT EXISTS (
+            SELECT 1 FROM payment_attempt paid
+            WHERE paid.period_key = a.period_key AND paid.status = 'succeeded'
+          ) AND s.status IN ('active', 'past_due') AS unpaid
+          FROM payment_attempt a JOIN subscription s ON s.id = a.subscription_id
+          WHERE a.id = ${subjectId}
+        `);
+        return rows[0]?.unpaid === true;
       },
       onResult: () => Promise.resolve(),
     });

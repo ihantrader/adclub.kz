@@ -140,7 +140,8 @@ export class ResolvePaymentsHandler implements PeriodicJobHandler {
       await this.charger.schedule(row.id);
     }
     const woke = await this.webhooks.wake();
-    return { worked: due.length > 0 || woke > 0 };
+    const detached = await this.webhooks.detachLeftovers();
+    return { worked: due.length > 0 || woke > 0 || detached > 0 };
   }
 }
 
@@ -182,6 +183,8 @@ export class DetachCardHandler implements JobHandler<{ paymentMethodId: string }
       .from(paymentMethod)
       .where(eq(paymentMethod.id, payload.paymentMethodId));
     if (!method || method.detachedAt || method.status === "active") return;
+    // A charge not over stands on it: the charge's settlement puts this job back (I836).
+    if (!(await this.methods.freeToDetach(this.database.db, method.id))) return;
     await this.provider.detachCard(this.methods.token(method));
     await this.database.db
       .update(paymentMethod)

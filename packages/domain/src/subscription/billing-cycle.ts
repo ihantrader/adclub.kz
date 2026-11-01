@@ -96,7 +96,73 @@ export function nextDailyRun(from: Date, hour: number, timeZone: string = BILLIN
 
 /** The end of the retries after the first failed charge: `billing_retry_days` days on. */
 export function retryWindowEnd(failedAt: Date, retryDays: number): Date {
-  return new Date(failedAt.getTime() + retryDays * 24 * 3_600_000);
+  return new Date(failedAt.getTime() + retryDays * DAY_MS);
+}
+
+const DAY_MS = 24 * 3_600_000;
+
+function nextLocalDate(date: string): string {
+  const next = new Date(
+    Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)) + 1),
+  );
+  return next.toISOString().slice(0, 10);
+}
+
+export interface BankRetry {
+  /** The day of the billing time zone (`YYYY-MM-DD`) on which the daily job may try again. */
+  day: string;
+  /** When it does: `hour`:00 of that day. */
+  at: Date;
+}
+
+/**
+ * The next bank retry after a refusal at `declinedAt` (TASK-042.A,
+ * ARCHITECTURE 4.77 I838): **the first run of the daily job on a later
+ * local day than the refusal**. One rule for the three who need it — the
+ * daily job (it retries on `day` or later, never on the day of a refusal),
+ * W-05 («Повторим {дата}» is `at`) and the cabinet («Следующая попытка»).
+ * A refusal of «Оплатить сейчас» at 08:00, before the job's hour, is
+ * retried tomorrow, not «today at 10:00», because today has a refusal.
+ */
+export function nextBankRetry(
+  declinedAt: Date,
+  hour: number,
+  timeZone: string = BILLING_TIME_ZONE,
+): BankRetry {
+  const day = nextLocalDate(localDateTime(declinedAt, timeZone).date);
+  const at = new Date(visitInstant(day, `${String(hour).padStart(2, "0")}:00`, timeZone));
+  return { day, at };
+}
+
+/**
+ * The end of a term's retries' window after `declinedCount` refusals of the
+ * bank (TASK-042.A, ARCHITECTURE 4.77 I837). It is never earlier than
+ * `retryDays` days after the first refusal (the window of ARCHITECTURE
+ * 18.5), and **never earlier than a day after the last try the bank is still
+ * owed** — the next retry and the ones after it, one a day. A provider that
+ * could not be reached delays the tries; it does not use them up: the window
+ * grows by what the outage took, so the company gets every try and W-05
+ * never promises a retry that the pause would come before.
+ */
+export function bankRetryWindowEnd(input: {
+  firstDeclinedAt: Date;
+  lastDeclinedAt: Date;
+  declinedCount: number;
+  retryDays: number;
+  hour: number;
+  timeZone?: string;
+}): Date {
+  const base = retryWindowEnd(input.firstDeclinedAt, input.retryDays);
+  const owed = input.retryDays - input.declinedCount;
+  const lastTry =
+    owed > 0
+      ? new Date(
+          nextBankRetry(input.lastDeclinedAt, input.hour, input.timeZone).at.getTime() +
+            (owed - 1) * DAY_MS,
+        )
+      : input.lastDeclinedAt;
+  const afterLast = new Date(lastTry.getTime() + DAY_MS);
+  return afterLast.getTime() > base.getTime() ? afterLast : base;
 }
 
 /**

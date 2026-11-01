@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { CardBindingFailure, SupplierCardBinding } from "@adclub/contracts";
-import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { ApiException, serviceUnavailableException } from "../../common/errors";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import { DatabaseService, type DbExecutor } from "../../database";
@@ -19,7 +19,15 @@ import {
   type BoundCard,
 } from "./payment-provider";
 import { PaymentTokenVault, tokenContext } from "./payment-token-vault";
-import { cardBinding, subscription, type CardBindingRow, type PaymentProviderName } from "./schema";
+import {
+  cardBinding,
+  openAttemptStatuses,
+  paymentAttempt,
+  paymentMethod,
+  subscription,
+  type CardBindingRow,
+  type PaymentProviderName,
+} from "./schema";
 
 const OPEN_STATUSES = ["pending", "card_received", "charging"] as const;
 
@@ -257,12 +265,18 @@ export class CardBindings {
 
   // ------------------------------------------------------------ the provider's word
 
-  /** The provider named the card of a trip (its page, or its webhook). */
+  /**
+   * The provider named the card of a trip (its page, or its webhook). A card
+   * named for a trip that is over — expired, left, already given a card — is
+   * `foreign_card` unless it is the very card the trip holds (a repeat of the
+   * same word): nobody will ever charge it, so the caller forgets it at the
+   * provider (TASK-042.A, I840) rather than leave a live card there.
+   */
   async cardReported(
     provider: PaymentProviderName,
     providerRef: string,
     card: BoundCard,
-  ): Promise<"applied" | "stale" | "unknown_reference"> {
+  ): Promise<"applied" | "stale" | "foreign_card" | "unknown_reference"> {
     return this.database.db.transaction(async (tx) => {
       const [row] = await tx
         .select()
@@ -270,7 +284,11 @@ export class CardBindings {
         .where(and(eq(cardBinding.provider, provider), eq(cardBinding.providerRef, providerRef)))
         .for("update");
       if (!row) return "unknown_reference" as const;
-      if (row.status !== "pending") return "stale" as const;
+      if (row.status !== "pending") {
+        return (await this.holdsCard(tx, row, card.token))
+          ? ("stale" as const)
+          : ("foreign_card" as const);
+      }
       await tx
         .update(cardBinding)
         .set({
@@ -290,6 +308,19 @@ export class CardBindings {
       );
       return "applied" as const;
     });
+  }
+
+  /** Whether `token` is the card the trip took (still sealed in it, or linked from it). */
+  private async holdsCard(tx: DbExecutor, row: CardBindingRow, token: string): Promise<boolean> {
+    if (row.cardTokenSealed) {
+      return this.vault.open(tokenContext.cardBinding(row.id), row.cardTokenSealed) === token;
+    }
+    if (!row.paymentMethodId) return false;
+    const [method] = await tx
+      .select()
+      .from(paymentMethod)
+      .where(eq(paymentMethod.id, row.paymentMethodId));
+    return method !== undefined && this.methods.token(method) === token;
   }
 
   /** The person left the provider's page without a card. */
@@ -340,7 +371,23 @@ export class CardBindings {
         .where(
           and(eq(subscription.supplierId, row.supplierId), ne(subscription.status, "expired")),
         );
-      if (current) {
+      // A first charge that went through but whose subscription is not begun
+      // yet (its event waits for the worker) is a subscription already: the
+      // new card replaces that one's, nothing is charged again (I839). The
+      // database keeps it too — one such charge per company, a unique index.
+      const [unbound] = await tx
+        .select({ id: paymentAttempt.id })
+        .from(paymentAttempt)
+        .where(
+          and(
+            eq(paymentAttempt.supplierId, row.supplierId),
+            eq(paymentAttempt.kind, "first"),
+            isNull(paymentAttempt.subscriptionId),
+            inArray(paymentAttempt.status, [...openAttemptStatuses, "succeeded"]),
+          ),
+        )
+        .limit(1);
+      if (current || unbound) {
         await this.replaceCard(tx, row);
         return null;
       }

@@ -16,6 +16,14 @@ async function tableExists(client: Client, table: string): Promise<boolean> {
   return rows[0]?.exists ?? false;
 }
 
+async function indexExists(client: Client, index: string): Promise<boolean> {
+  const { rows } = await client.query<{ exists: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = $1) AS exists",
+    [index],
+  );
+  return rows[0]?.exists ?? false;
+}
+
 async function columnExists(client: Client, table: string, column: string): Promise<boolean> {
   const { rows } = await client.query<{ exists: boolean }>(
     `SELECT EXISTS (SELECT 1 FROM information_schema.columns
@@ -96,6 +104,77 @@ describe("PostgreSQL: migrations and readiness", () => {
   it("records the applied migrations in the tracking table (status)", async () => {
     const { rows } = await client.query<{ name: string }>('SELECT name FROM "pgmigrations"');
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
+  });
+
+  it("hands an old «billing» pause of a company without a subscription to the administrator, keeps one first charge until the subscription, and rolls back (supplier billing fixes)", async () => {
+    // As the migration before left them: a «billing» pause put by hand before billing existed.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    const { rows: city } = await client.query<{ id: string }>(
+      "INSERT INTO city (code, name_ru, source) VALUES ('billing-fix-test', 'Тест исправлений', 'migrated') RETURNING id",
+    );
+    const paused = async (name: string) => {
+      const { rows } = await client.query<{ id: string }>(
+        "INSERT INTO supplier (name, city_id, status, billing_paused_at) VALUES ($1, $2, 'paused', now()) RETURNING id",
+        [name, city[0]!.id],
+      );
+      return rows[0]!.id;
+    };
+    const bare = await paused("Без подписки");
+    const paying = await paused("С подпиской");
+    await client.query(
+      `INSERT INTO subscription (audience, supplier_id, provider, provider_ref, status, current_period_end)
+       VALUES ('supplier', $1, 'test', 'bind:fix-test', 'suspended', now())`,
+      [paying],
+    );
+    expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
+    const pauseOf = async (id: string) =>
+      (
+        await client.query<{ admin: boolean; billing: boolean; status: string }>(
+          "SELECT admin_paused_at IS NOT NULL AS admin, billing_paused_at IS NOT NULL AS billing, status FROM supplier WHERE id = $1",
+          [id],
+        )
+      ).rows[0];
+    expect(await pauseOf(bare)).toEqual({ admin: true, billing: false, status: "paused" });
+    expect(await pauseOf(paying)).toEqual({ admin: false, billing: true, status: "paused" });
+
+    // One first charge per company until its subscription is written into it.
+    const binding = async (ref: string) =>
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO card_binding (supplier_id, provider, provider_ref, return_url, status, expires_at, finished_at)
+           VALUES ($1, 'test', $2, 'http://localhost:5175/billing', 'completed', now(), now()) RETURNING id`,
+          [bare, ref],
+        )
+      ).rows[0]!.id;
+    const first = async (bindingId: string, key: string) =>
+      client.query(
+        `INSERT INTO payment_attempt (supplier_id, binding_id, kind, period_key, attempt_no, idempotency_key, amount, period_from, period_to, anchor_day, status, provider, resolved_at)
+         VALUES ($1, $2::uuid, 'first', 'bind:' || $2::text, 1, $3, 1000, now(), now() + interval '1 month', 5, 'succeeded', 'test', now())`,
+        [bare, bindingId, key],
+      );
+    await first(await binding("fix-1"), "fix-key-1");
+    const second = await binding("fix-2");
+    await expect(first(second, "fix-key-2")).rejects.toThrow(/payment_attempt_first_unbound_key/);
+    const { rows: sub } = await client.query<{ id: string }>(
+      `INSERT INTO subscription (audience, supplier_id, provider, provider_ref, status, current_period_end)
+       VALUES ('supplier', $1, 'test', 'bind:fix-1', 'active', now() + interval '1 month') RETURNING id`,
+      [bare],
+    );
+    await client.query(
+      "UPDATE payment_attempt SET subscription_id = $1 WHERE idempotency_key = 'fix-key-1'",
+      [sub[0]!.id],
+    );
+    await first(second, "fix-key-2");
+
+    // Back: the pause returns to billing, the index goes.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await pauseOf(bare)).toEqual({ admin: false, billing: true, status: "paused" });
+    expect(await indexExists(client, "payment_attempt_first_unbound_key")).toBe(false);
+    await client.query("DELETE FROM payment_attempt WHERE idempotency_key LIKE 'fix-key-%'");
+    await client.query("DELETE FROM subscription WHERE provider_ref LIKE 'bind:fix-%'");
+    await client.query("DELETE FROM card_binding WHERE provider_ref LIKE 'fix-%'");
+    await client.query("DELETE FROM supplier WHERE id = ANY($1)", [[bare, paying]]);
+    await client.query("DELETE FROM city WHERE code = 'billing-fix-test'");
   });
 
   it("keeps the two pauses of a company apart, one open charge and one success per term, and rolls back keeping every company's pause (supplier billing)", async () => {
@@ -231,7 +310,9 @@ describe("PostgreSQL: migrations and readiness", () => {
       { name: "Свободная", status: "active", pause_reason: null, pause_note: null, paused: false },
     ]);
 
-    // Forward again: the pauses return to their own columns.
+    // Forward again: the pauses return to their own columns — and the migration after
+    // this one (TASK-042.A) hands the «billing» pause of a company without a
+    // subscription to the administrator.
     expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
     const { rows: forward } = await client.query<{
       name: string;
@@ -244,13 +325,13 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(forward).toEqual([
       { name: "Админом", admin: true, billing: false },
       { name: "Обе", admin: true, billing: false },
-      { name: "Оплатой", admin: false, billing: true },
+      { name: "Оплатой", admin: true, billing: false },
       { name: "Свободная", admin: false, billing: false },
     ]);
     await client.query("DELETE FROM supplier WHERE city_id = $1", [city[0]!.id]);
     await client.query("DELETE FROM city WHERE id = $1", [city[0]!.id]);
     // The chain below walks down from the migration before this one.
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    await walkDownPast(() => tableExists(client, "payment_method"));
   });
 
   it("holds the sign-in for store review with its rules, and rolls back keeping the codes (review login)", async () => {

@@ -2,11 +2,12 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { BILLING_SUBJECT_ID, type PaymentDeclineReason } from "@adclub/contracts";
 import {
   bankRetriesLeft,
+  bankRetryWindowEnd,
   BILLING_TIME_ZONE,
   firstPeriod,
   localDateTime,
+  nextBankRetry,
   renewalPeriod,
-  retryWindowEnd,
 } from "@adclub/domain";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
@@ -16,7 +17,7 @@ import { supplierMember } from "../identity";
 import type { AuditActorRecord } from "../audit";
 import { AppSettings } from "../settings";
 import { Plans } from "./plans.service";
-import { BillingNotices, localDay } from "./billing-notices";
+import { BillingNotices } from "./billing-notices";
 import { runPaymentAttemptJob } from "./billing-jobs";
 import { PaymentMethods } from "./payment-methods";
 import {
@@ -160,7 +161,14 @@ export class PaymentCharger {
     const paid = existing.find((row) => row.status === "succeeded");
     if (paid) return { kind: "paid", attempt: paid };
     const open = existing.find((row) => isOpen(row.status));
-    if (open) return { kind: "existing", attempt: open };
+    if (open) {
+      // An attempt on a card that was replaced since, and that never reached
+      // the provider, gives way to one on the card the company has now (I835).
+      // One that may have reached it stays: it is only looked up (`claim`).
+      if (open.paymentMethodId === method.id || !(await this.cancelUnsent(tx, open.id))) {
+        return { kind: "existing", attempt: open };
+      }
+    }
     const plan = await this.plans.inEffect("supplier", now, tx);
     if (!plan) throw new NoPlanError();
     const [last] = await tx
@@ -246,7 +254,10 @@ export class PaymentCharger {
 
   /** The daily job's work for one subscription: open the term's attempt (or take the open one) and run it. */
   async chargeSubscription(subscriptionId: string, kind: "scheduled" | "retry"): Promise<void> {
-    const retryDays = await this.settings.get("billing_retry_days");
+    const [retryDays, hour] = await Promise.all([
+      this.settings.get("billing_retry_days"),
+      this.settings.get("billing_notify_hour"),
+    ]);
     let attemptId: string | null;
     try {
       attemptId = await this.database.db.transaction(async (tx) => {
@@ -278,12 +289,13 @@ export class PaymentCharger {
                 eq(paymentAttempt.periodKey, termKey(sub.id, sub.currentPeriodEnd)),
                 eq(paymentAttempt.status, "declined"),
               ),
-            );
+            )
+            .orderBy(desc(paymentAttempt.resolvedAt));
           // The retries are the bank's refusals: three days, three tries, one a day.
           if (!bankRetriesLeft(declined.length, retryDays)) return null;
-          if (
-            declined.some((row) => row.resolvedAt && localDay(row.resolvedAt) === localDay(now))
-          ) {
+          // The day W-05 promised, not earlier (one rule with the notice, I838).
+          const last = declined[0]?.resolvedAt;
+          if (last && localDateTime(now, BILLING_TIME_ZONE).date < nextBankRetry(last, hour).day) {
             return null;
           }
         }
@@ -330,7 +342,14 @@ export class PaymentCharger {
           throw new ApiException(409, "BILLING_NO_CARD", "No card is linked");
         }
         const opened = await this.openForSubscription(tx, sub, method, "manual", memberId, now);
-        if (opened.kind === "opened") await this.schedule(opened.attempt.id, tx);
+        // An attempt still standing on the card replaced since is looked up now,
+        // not in an hour: what it finds decides, and the new card pays (I835).
+        if (
+          opened.kind === "opened" ||
+          (opened.kind === "existing" && opened.attempt.paymentMethodId !== method.id)
+        ) {
+          await this.schedule(opened.attempt.id, tx);
+        }
         return opened.attempt;
       });
     } catch (error) {
@@ -348,13 +367,127 @@ export class PaymentCharger {
   async run(attemptId: string): Promise<void> {
     const claimed = await this.claim(attemptId);
     if (!claimed) return;
+    if (claimed.kind !== "send") {
+      if (claimed.kind === "reroute") {
+        await this.moveToActiveCard(attemptId);
+        return;
+      }
+      // The card it was made on is gone: what the provider has under the key
+      // decides, and nothing new is sent to that card (I835).
+      const found = await this.lookUp(claimed.attempt);
+      if (found.kind === "succeeded" || found.kind === "unknown") {
+        await this.settle(attemptId, found);
+      } else {
+        await this.moveToActiveCard(attemptId);
+      }
+      return;
+    }
     const outcome = await this.ask(claimed.attempt, claimed.token);
     await this.settle(attemptId, outcome);
   }
 
+  /** The provider's word under an attempt's key, without sending anything. */
+  private async lookUp(
+    attempt: PaymentAttemptRow,
+  ): Promise<
+    Extract<AttemptOutcome, { kind: "succeeded" | "unknown" }> | { kind: "declined" | "not_found" }
+  > {
+    try {
+      const found = await this.provider.getPayment(attempt.idempotencyKey);
+      if (found.kind === "succeeded") {
+        return { kind: "succeeded", providerPaymentId: found.providerPaymentId };
+      }
+      if (found.kind === "unavailable") return { kind: "unknown", detail: found.detail };
+      return { kind: found.kind };
+    } catch (error) {
+      return { kind: "unknown", detail: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
+  /**
+   * An open attempt that was never sent gives way: cancelled, nothing was
+   * charged. Only an attempt nobody holds right now — one a worker is sending
+   * this moment may already be at the provider. Returns whether it gave way.
+   */
+  private async cancelUnsent(tx: DbExecutor, attemptId: string): Promise<boolean> {
+    // A row another transaction holds (its outcome being settled) is not
+    // waited for: the caller holds the subscription, the settlement takes the
+    // attempt first and the subscription after — waiting would deadlock.
+    const [free] = await tx
+      .select({ id: paymentAttempt.id })
+      .from(paymentAttempt)
+      .where(
+        and(
+          eq(paymentAttempt.id, attemptId),
+          sql`(${paymentAttempt.status} = 'unavailable' OR (${paymentAttempt.status} = 'created' AND ${paymentAttempt.tries} = 0))`,
+          sql`(${paymentAttempt.claimedUntil} IS NULL OR ${paymentAttempt.claimedUntil} <= now())`,
+        ),
+      )
+      .for("update", { skipLocked: true });
+    if (!free) return false;
+    const [cancelled] = await tx
+      .update(paymentAttempt)
+      .set({ status: "cancelled", resolvedAt: sql`now()`, claimedUntil: null, nextTryAt: null })
+      .where(eq(paymentAttempt.id, free.id))
+      .returning({ paymentMethodId: paymentAttempt.paymentMethodId });
+    if (!cancelled) return false;
+    if (cancelled.paymentMethodId) await this.methods.detachWhenFree(tx, cancelled.paymentMethodId);
+    return true;
+  }
+
+  /**
+   * The attempt held by this worker stood on a card that is no longer the
+   * company's, and nothing of it is at the provider: it ends (`cancelled`,
+   * nothing was charged) and the term's charge goes on the card the company
+   * has now, under a new key (I835). No card — the term waits for one.
+   */
+  private async moveToActiveCard(attemptId: string): Promise<void> {
+    const successor = await this.database.db.transaction(async (tx) => {
+      // The attempt first, then the subscription: the order `settle` takes them in.
+      const [attempt] = await tx
+        .select()
+        .from(paymentAttempt)
+        .where(eq(paymentAttempt.id, attemptId))
+        .for("update");
+      if (!attempt?.subscriptionId || !isOpen(attempt.status) || attempt.kind === "first") {
+        return null;
+      }
+      const [sub] = await tx
+        .select()
+        .from(subscription)
+        .where(eq(subscription.id, attempt.subscriptionId))
+        .for("update");
+      if (!sub) return null;
+      await tx
+        .update(paymentAttempt)
+        .set({ status: "cancelled", resolvedAt: sql`now()`, claimedUntil: null, nextTryAt: null })
+        .where(eq(paymentAttempt.id, attempt.id));
+      if (attempt.paymentMethodId) await this.methods.detachWhenFree(tx, attempt.paymentMethodId);
+      this.logger.log(`Charge moved off a replaced card attempt=${attempt.id}`);
+      const method = await this.methods.active(tx, attempt.supplierId);
+      if (!method || sub.currentPeriodEnd.getTime() !== attempt.periodFrom.getTime()) return null;
+      const opened = await this.openForSubscription(
+        tx,
+        sub,
+        method,
+        attempt.kind,
+        attempt.requestedByMemberId,
+        new Date(),
+      );
+      if (opened.kind !== "opened") return null;
+      await this.schedule(opened.attempt.id, tx);
+      return opened.attempt.id;
+    });
+    if (successor) this.logger.log(`Charge goes on the current card attempt=${successor}`);
+  }
+
   private async claim(
     attemptId: string,
-  ): Promise<{ attempt: PaymentAttemptRow; token: string } | null> {
+  ): Promise<
+    | { kind: "send"; attempt: PaymentAttemptRow; token: string }
+    | { kind: "lookup" | "reroute"; attempt: PaymentAttemptRow }
+    | null
+  > {
     const [attempt] = await this.database.db
       .update(paymentAttempt)
       .set({
@@ -384,6 +517,7 @@ export class PaymentCharger {
         return null;
       }
       return {
+        kind: "send",
         attempt,
         token: this.vault.open(tokenContext.cardBinding(attempt.bindingId!), binding.sealed),
       };
@@ -392,7 +526,16 @@ export class PaymentCharger {
       .select()
       .from(paymentMethod)
       .where(eq(paymentMethod.id, attempt.paymentMethodId!));
-    return { attempt, token: this.methods.token(method!) };
+    if (method!.status !== "active") {
+      // The card was replaced (or taken off) since the attempt was opened: it
+      // is never charged again. An attempt that may have reached the provider
+      // (its answer lost, a worker lost in the call) is only looked up; one
+      // that surely did not is moved to the current card (I835).
+      const maybeSent =
+        attempt.status === "unknown" || (attempt.status === "created" && attempt.tries > 1);
+      return { kind: maybeSent ? "lookup" : "reroute", attempt };
+    }
+    return { kind: "send", attempt, token: this.methods.token(method!) };
   }
 
   /** Looks the payment up if it may have been sent, then sends it if it was not. */
@@ -501,6 +644,7 @@ export class PaymentCharger {
           await this.completeFirst(tx, attempt, at);
           return;
         }
+        if (attempt.paymentMethodId) await this.methods.detachWhenFree(tx, attempt.paymentMethodId);
         const [sub] = await tx
           .select()
           .from(subscription)
@@ -543,6 +687,7 @@ export class PaymentCharger {
           await this.endBinding(tx, attempt.bindingId!, "declined", outcome.reason);
           return;
         }
+        if (attempt.paymentMethodId) await this.methods.detachWhenFree(tx, attempt.paymentMethodId);
         await this.afterDecline(tx, attempt, done!.resolvedAt!, tuning);
         return;
       }
@@ -676,8 +821,15 @@ export class PaymentCharger {
         and(eq(paymentAttempt.periodKey, attempt.periodKey), eq(paymentAttempt.status, "declined")),
       )
       .orderBy(asc(paymentAttempt.resolvedAt));
-    // The window runs from the first refusal of the term, however the events are applied.
-    const graceUntil = retryWindowEnd(declined[0]?.resolvedAt ?? at, tuning.retryDays);
+    // The window runs from the first refusal of the term, however the events are
+    // applied, and holds every try the bank is still owed (I837).
+    const graceUntil = bankRetryWindowEnd({
+      firstDeclinedAt: declined[0]?.resolvedAt ?? at,
+      lastDeclinedAt: at,
+      declinedCount: declined.length,
+      retryDays: tuning.retryDays,
+      hour: tuning.hour,
+    });
     await this.events.receive(
       attempt.provider,
       {
@@ -696,6 +848,7 @@ export class PaymentCharger {
     );
     await this.effects.raiseFailed(tx, attempt.supplierId, { ...sub, graceUntil });
     await this.notices.paymentFailed(tx, {
+      attemptId: attempt.id,
       subscriptionId: sub.id,
       supplierId: attempt.supplierId,
       declinedCount: declined.length,

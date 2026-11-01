@@ -2,6 +2,7 @@ import { Controller, Get, Inject, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { ApiException } from "../../common/errors";
 import { CardBindings } from "./card-bindings";
+import { PaymentProvider } from "./payment-provider";
 import { TEST_CARDS, testBoundCard, type TestCardCode } from "./test-payment-provider";
 
 /** Not part of the contract; excluded from the served-routes check (as `/dev/messages`). */
@@ -40,7 +41,10 @@ const STYLE = `
 @Controller()
 export class DevPaymentCardController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(@Inject(CardBindings) private readonly bindings: CardBindings) {}
+  constructor(
+    @Inject(CardBindings) private readonly bindings: CardBindings,
+    @Inject(PaymentProvider) private readonly provider: PaymentProvider,
+  ) {}
 
   @Get(DEV_PAYMENT_CARD_PATH)
   async page(
@@ -67,8 +71,9 @@ export class DevPaymentCardController {
     @Res() response: Response,
   ): Promise<void> {
     const binding = ref ? await this.bindings.byRef("test", ref) : null;
-    if (!binding) {
-      throw new ApiException(404, "NOT_FOUND", "No card page for this reference");
+    if (!binding || binding.status !== "pending") {
+      // A trip that is over takes no card: none is handed out to be left behind (I840).
+      throw new ApiException(404, "NOT_FOUND", "No open card page for this reference");
     }
     if (card === "cancel") {
       await this.bindings.cancelled("test", binding.providerRef);
@@ -79,11 +84,10 @@ export class DevPaymentCardController {
           details: [{ path: "card", message: "Unknown test card" }],
         });
       }
-      await this.bindings.cardReported(
-        "test",
-        binding.providerRef,
-        testBoundCard(known.code as TestCardCode),
-      );
+      const bound = testBoundCard(known.code as TestCardCode);
+      const result = await this.bindings.cardReported("test", binding.providerRef, bound);
+      // Two clicks at once: the trip took the first card, the second is forgotten.
+      if (result === "foreign_card") await this.provider.detachCard(bound.token);
     }
     // The browser goes back to the cabinet, as the real provider's page sends it.
     response.setHeader("cache-control", "no-store");

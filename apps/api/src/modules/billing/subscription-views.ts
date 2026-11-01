@@ -11,7 +11,7 @@ import type {
   SupplierSubscriptionResponse,
   SupplierSubscriptionSummary,
 } from "@adclub/contracts";
-import { bankRetriesLeft, nextDailyRun, subscriptionAccess } from "@adclub/domain";
+import { bankRetriesLeft, nextBankRetry, nextDailyRun, subscriptionAccess } from "@adclub/domain";
 import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService } from "../../database";
@@ -242,7 +242,11 @@ export class SubscriptionViews {
       const due = nextDailyRun(new Date(sub.currentPeriodEnd.getTime() - 1), hour);
       nextChargeAt = due.getTime() > now.getTime() ? due : nextDailyRun(now, hour);
     } else if (sub.status === "past_due" && bankRetriesLeft(declined.length, retryDays)) {
-      const run = nextDailyRun(now, hour);
+      // The retry W-05 promised (one rule with it and the daily job, I836);
+      // a run of the day that is already due counts from now.
+      const lastAt = declined[0]?.resolvedAt;
+      const promised = lastAt ? nextBankRetry(lastAt, hour).at : nextDailyRun(now, hour);
+      const run = promised.getTime() > now.getTime() ? promised : nextDailyRun(now, hour);
       nextChargeAt = sub.graceUntil && run.getTime() >= sub.graceUntil.getTime() ? null : run;
     }
     const last = declined[0];

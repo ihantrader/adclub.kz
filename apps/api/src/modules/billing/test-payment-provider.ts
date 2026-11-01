@@ -206,7 +206,8 @@ export class TestPaymentProvider extends PaymentProvider {
           };
     }
     const scenario = scenarioOf(request.token);
-    if (scenario === null) {
+    // A card forgotten at the provider is no card any more, as at a real processor.
+    if (scenario === null || this.detached.includes(request.token)) {
       return { kind: "declined", reason: "invalid_card", providerPaymentId: null };
     }
     if (scenario === "provider_unavailable") {

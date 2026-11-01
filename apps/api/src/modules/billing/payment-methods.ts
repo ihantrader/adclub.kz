@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { auditActions, auditEntities, type SupplierPaymentCard } from "@adclub/contracts";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue } from "../../jobs";
 import { AuditLog, type AuditActorRecord } from "../audit";
@@ -9,6 +9,8 @@ import { supplier } from "../identity";
 import { detachCardJob } from "./billing-jobs";
 import { PaymentTokenVault, tokenContext } from "./payment-token-vault";
 import {
+  openAttemptStatuses,
+  paymentAttempt,
   paymentMethod,
   type CardBrand,
   type PaymentMethodRow,
@@ -151,6 +153,40 @@ export class PaymentMethods {
       await this.queue.enqueue(detachCardJob, { paymentMethodId: previous.id }, { tx });
     }
     return { method: created!, replaced: previous };
+  }
+
+  /**
+   * Whether a card that is no longer the company's may be forgotten at the
+   * provider now (TASK-042.A, I836): not while a charge that is not over
+   * stands on it — that one may still have to be looked up under its key,
+   * and the card stays the provider's until it is settled.
+   */
+  async freeToDetach(executor: DbExecutor, paymentMethodId: string): Promise<boolean> {
+    const [busy] = await executor
+      .select({ id: paymentAttempt.id })
+      .from(paymentAttempt)
+      .where(
+        and(
+          eq(paymentAttempt.paymentMethodId, paymentMethodId),
+          inArray(paymentAttempt.status, [...openAttemptStatuses]),
+        ),
+      )
+      .limit(1);
+    return busy === undefined;
+  }
+
+  /**
+   * Called in the transaction that ends a charge on a card: a card replaced
+   * or taken off meanwhile is put on the queue to be forgotten once nothing
+   * stands on it any more (the job checks again).
+   */
+  async detachWhenFree(tx: DbExecutor, paymentMethodId: string): Promise<void> {
+    const [method] = await tx
+      .select({ status: paymentMethod.status, detachedAt: paymentMethod.detachedAt })
+      .from(paymentMethod)
+      .where(eq(paymentMethod.id, paymentMethodId));
+    if (!method || method.status === "active" || method.detachedAt) return;
+    await this.queue.enqueue(detachCardJob, { paymentMethodId }, { tx });
   }
 
   /** Takes the card off (the operator command of development and tests only). */

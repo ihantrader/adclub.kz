@@ -50,7 +50,14 @@ import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "
 import { offer as offerTable, offerShowcase, shownOffers } from "../offers";
 import { BillingOperator } from "./billing-operator";
 import { expireSubscriptionsJob } from "./billing-jobs";
-import { ChargeDueHandler, ResolvePaymentsHandler, WatchProviderHandler } from "./billing-handlers";
+import {
+  ChargeDueHandler,
+  ExpireBindingsHandler,
+  RunAttemptHandler,
+  ResolvePaymentsHandler,
+  WatchProviderHandler,
+} from "./billing-handlers";
+import { BillingEventsApply } from "./billing.module";
 import { dayText } from "./billing-notices";
 import { PaymentCharger } from "./payment-charger";
 import { PaymentProvider } from "./payment-provider";
@@ -1431,7 +1438,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       expect(await messagesOf(of)).toHaveLength(0);
     });
 
-    it("does not pause a company in its retries while the provider owes an answer, even past the window", async () => {
+    it("does not let an outage use up the retries: the refusal after it promises a retry that comes, then the last one, then the pause (defect 3)", async () => {
       await addPlan(1_000);
       const of = await subscribed("Не пауза");
       await changeCard(of, "insufficient_funds");
@@ -1448,7 +1455,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       await expireRun();
       expect((await subOf(of))!.status).toBe("past_due");
       expect(await supplierRow(of)).toMatchObject({ status: "active" });
-      // The provider answers (the card is still short of funds): with nothing left to wait for, the pause follows.
+      // The provider answers: the card is still short of funds — the second refusal of the bank.
       provider().mode = "ok";
       await db.query(
         "UPDATE payment_attempt SET next_try_at = now() - interval '1 minute' WHERE supplier_id = $1 AND status = 'unavailable'",
@@ -1456,11 +1463,41 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       );
       await worker.get(ResolvePaymentsHandler).run({} as never);
       await waitFor("the answer", async () => (await attemptsOf(of)).at(-1)!.status === "declined");
-      // The refusal's own event is applied (it names the same end of the window: no change).
       await waitFor("the event", async () => {
         const { rows } = await db.query("SELECT 1 FROM billing_event WHERE outcome = 'pending'");
         return rows.length === 0;
       });
+      // Two refusals of three: W-05 promises tomorrow's retry, and the window is still open for it.
+      const second = await waitFor("the second notice", async () => {
+        const notices = await messagesOf(of);
+        return notices.length === 2 ? notices[1]! : null;
+      });
+      expect(second.template).toBe("payment_failed");
+      expect(second.variables).toMatchObject({ date: dayText(new Date(Date.now() + DAY), "ru") });
+      await expireRun();
+      expect((await subOf(of))!.status).toBe("past_due");
+      expect((await subOf(of))!.grace_until!.getTime()).toBeGreaterThan(Date.now() + DAY);
+      expect(await supplierRow(of)).toMatchObject({ status: "active" });
+      // The promised retry comes: the third refusal, W-05a, and only then the pause.
+      await aDayPasses(of);
+      await chargeDay(of, "retry");
+      await waitFor("the third notice", async () => (await messagesOf(of)).length === 3);
+      expect((await attemptsOf(of)).filter((row) => row.status === "declined")).toHaveLength(3);
+      const last = (await messagesOf(of))[2]!;
+      expect(last.template).toBe("payment_failed_last");
+      await waitFor("the event", async () => {
+        const { rows } = await db.query("SELECT 1 FROM billing_event WHERE outcome = 'pending'");
+        return rows.length === 0;
+      });
+      const windowEnd = (await subOf(of))!.grace_until!;
+      expect(last.variables).toMatchObject({ date: dayText(windowEnd, "ru") });
+      expect(windowEnd.getTime()).toBeGreaterThan(Date.now());
+      await expireRun();
+      expect((await subOf(of))!.status).toBe("past_due");
+      await db.query(
+        "UPDATE subscription SET grace_until = now() - interval '1 minute' WHERE supplier_id = $1",
+        [of.supplierId],
+      );
       await expireRun();
       await waitStatus(of, "suspended");
     });
@@ -1692,6 +1729,466 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
               || (SELECT string_agg(to_jsonb(m)::text, ' ') FROM payment_method m) AS text`,
       );
       expect(rows[0]!.text).not.toContain(secret);
+    });
+  });
+
+  // ------------------------------------------------- TASK-042.A: the acceptance
+
+  describe("what the acceptance found (TASK-042.A)", () => {
+    /** Holds the worker's application of billing events until released: what races them goes first. */
+    function holdEvents(): () => void {
+      const handler = worker.get(BillingEventsApply);
+      const original = handler.run.bind(handler);
+      let open!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      handler.run = async (payload, context) => {
+        await gate;
+        return original(payload, context);
+      };
+      return () => {
+        open();
+        handler.run = original;
+      };
+    }
+
+    /**
+     * The jobs of attempts do nothing until restored: the charge `chargeDay` makes
+     * itself stays as it ended, and is not tried again by its own queued job a moment
+     * later (which would pay it on the old card before the card is changed).
+     */
+    function idleAttemptJobs(): () => void {
+      const handler = worker.get(RunAttemptHandler);
+      const original = handler.run.bind(handler);
+      handler.run = () => Promise.resolve();
+      return () => {
+        handler.run = original;
+      };
+    }
+
+    async function methodsOf(of: Company) {
+      const { rows } = await db.query<{
+        id: string;
+        status: string;
+        detached_at: Date | null;
+      }>(
+        "SELECT id, status, detached_at FROM payment_method WHERE supplier_id = $1 ORDER BY created_at",
+        [of.supplierId],
+      );
+      return rows;
+    }
+
+    async function attemptRows(of: Company) {
+      const { rows } = await db.query<{
+        id: string;
+        status: string;
+        kind: string;
+        period_key: string;
+        payment_method_id: string | null;
+        idempotency_key: string;
+      }>(
+        "SELECT id, status, kind, period_key, payment_method_id, idempotency_key FROM payment_attempt WHERE supplier_id = $1 ORDER BY created_at, attempt_no",
+        [of.supplierId],
+      );
+      return rows;
+    }
+
+    async function noticeStatuses(of: Company) {
+      const { rows } = await db.query<{ status: string }>(
+        "SELECT status FROM outbound_message WHERE template IN ('payment_failed', 'payment_failed_last') AND phone = $1",
+        [of.phone],
+      );
+      return rows.map((row) => row.status);
+    }
+
+    it("sends W-05 even when the sender takes it before the refusal's event is applied (defect 1)", async () => {
+      await addPlan(1_000);
+      const of = await subscribed("Гонка W-05");
+      await changeCard(of, "insufficient_funds");
+      await atTermEnd(of);
+      const release = holdEvents();
+      try {
+        await chargeDay(of, "scheduled");
+        const [decided] = await waitFor("the notice to be decided", async () => {
+          const statuses = await noticeStatuses(of);
+          return statuses.length === 1 && ["sent", "cancelled", "failed"].includes(statuses[0]!)
+            ? statuses
+            : null;
+        });
+        // The sender went first: the subscription did not yet know of the refusal.
+        expect((await subOf(of))!.status).toBe("active");
+        expect(decided).toBe("sent");
+      } finally {
+        release();
+      }
+      await waitStatus(of, "past_due");
+      expect(await noticeStatuses(of)).toEqual(["sent"]);
+    });
+
+    it("pays a charge the provider could not take with the new card after «Сменить карту», and lets the old one go only then (defect 2)", async () => {
+      await addPlan(1_000);
+      const of = await subscribed("Смена карты");
+      await atTermEnd(of);
+      const restore = idleAttemptJobs();
+      let stuck: Awaited<ReturnType<typeof attemptRows>>[number];
+      try {
+        provider().mode = "unavailable";
+        await chargeDay(of, "scheduled");
+        stuck = (await attemptRows(of)).at(-1)!;
+        expect(stuck.status).toBe("unavailable");
+        provider().mode = "ok";
+        await changeCard(of, "ok");
+      } finally {
+        restore();
+      }
+      const [old, current] = await methodsOf(of);
+      // The detach job had its chance: the card a charge not over stands on is kept.
+      await sleep(1_000);
+      expect((await methodsOf(of))[0]!.detached_at).toBeNull();
+      expect(old).toMatchObject({ id: stuck.payment_method_id, status: "replaced" });
+      expect(current).toMatchObject({ status: "active" });
+      // The provider is back and the hour passes.
+      await db.query(
+        "UPDATE payment_attempt SET next_try_at = now() - interval '1 minute' WHERE id = $1",
+        [stuck.id],
+      );
+      await worker.get(ResolvePaymentsHandler).run({} as never);
+      const paid = await waitFor("the payment", async () =>
+        (await attemptRows(of)).find(
+          (row) => row.period_key === stuck.period_key && row.status === "succeeded",
+        ),
+      );
+      // Paid by the new card, under a new key; the old attempt was never sent to the old card.
+      expect(paid.payment_method_id).toBe(current!.id);
+      expect(paid.idempotency_key).not.toBe(stuck.idempotency_key);
+      expect((await attemptRows(of)).find((row) => row.id === stuck.id)!.status).toBe("cancelled");
+      expect(
+        provider().charges.filter((request) => request.idempotencyKey === stuck.idempotency_key),
+      ).toHaveLength(1 /* the call that found the provider down */);
+      await waitFor(
+        "the term moved",
+        async () => (await subOf(of))!.current_period_end.getTime() > Date.now(),
+      );
+      expect((await subOf(of))!.status).toBe("active");
+      expect(await messagesOf(of)).toHaveLength(0);
+      expect(await signalsOf("payment_failed")).toHaveLength(0);
+      await waitFor(
+        "the old card forgotten",
+        async () => (await methodsOf(of))[0]!.detached_at !== null,
+      );
+    });
+
+    it("pays «Оплатить сейчас» after «Сменить карту» with the new card at once", async () => {
+      await addPlan(1_000);
+      const of = await subscribed("Сменить и оплатить");
+      await atTermEnd(of);
+      const restore = idleAttemptJobs();
+      let stuck: Awaited<ReturnType<typeof attemptRows>>[number];
+      try {
+        provider().mode = "unavailable";
+        await chargeDay(of, "scheduled");
+        stuck = (await attemptRows(of)).at(-1)!;
+        expect(stuck.status).toBe("unavailable");
+        provider().mode = "ok";
+        await changeCard(of, "ok");
+      } finally {
+        restore();
+      }
+      const current = (await methodsOf(of)).at(-1)!;
+      const charge = await ok(
+        of.as("post", "/supplier/billing/pay"),
+        (body) => payNowResponseSchema.parse(body).charge,
+        202,
+      );
+      expect(charge.kind).toBe("manual");
+      const paid = await waitFor("the payment", async () =>
+        (await attemptRows(of)).find(
+          (row) => row.period_key === stuck.period_key && row.status === "succeeded",
+        ),
+      );
+      expect(
+        paid.payment_method_id,
+        JSON.stringify({ attempts: await attemptRows(of), methods: await methodsOf(of) }),
+      ).toBe(current.id);
+      expect(await messagesOf(of)).toHaveLength(0);
+    });
+
+    it("only looks up an unknown charge after «Сменить карту», and keeps the old card until it is settled", async () => {
+      await addPlan(1_000);
+      const of = await subscribed("Неизвестно и карта");
+      await atTermEnd(of);
+      const restore = idleAttemptJobs();
+      let lost: Awaited<ReturnType<typeof attemptRows>>[number];
+      try {
+        provider().mode = "outcome_unknown";
+        await chargeDay(of, "scheduled");
+        lost = (await attemptRows(of)).at(-1)!;
+        expect(lost.status).toBe("unknown");
+        provider().mode = "ok";
+        await changeCard(of, "ok");
+        // The detach job had its chance: the card an open charge stands on is not let go.
+        await sleep(1_500);
+        expect((await methodsOf(of))[0]).toMatchObject({ status: "replaced", detached_at: null });
+      } finally {
+        restore();
+      }
+      const calls = provider().charges.length;
+      await db.query(
+        "UPDATE payment_attempt SET next_try_at = now() - interval '1 minute' WHERE id = $1",
+        [lost.id],
+      );
+      await worker.get(ResolvePaymentsHandler).run({} as never);
+      await waitFor(
+        "the lookup",
+        async () =>
+          (await attemptRows(of)).find((row) => row.id === lost.id)!.status === "succeeded",
+      );
+      // Found by its key: nothing was sent, to either card.
+      expect(provider().charges).toHaveLength(calls);
+      await waitFor(
+        "the old card forgotten",
+        async () => (await methodsOf(of))[0]!.detached_at !== null,
+      );
+      expect(await messagesOf(of)).toHaveLength(0);
+    });
+
+    it("charges the first term once when the card is linked again before the subscription begins (defect 4)", async () => {
+      await addPlan(1_000);
+      const of = await company("Две привязки");
+      const release = holdEvents();
+      let secondBinding: string;
+      try {
+        const first = await bindAndWait(of, "ok");
+        expect(first.status).toBe("completed");
+        expect(await subOf(of)).toBeUndefined();
+        const second = await bindAndWait(of, "ok");
+        expect(second.status).toBe("completed");
+        secondBinding = second.id;
+        expect(provider().charges).toHaveLength(1);
+        // The database itself takes no second first charge while the subscription is on its way.
+        await expect(
+          db.query(
+            `INSERT INTO payment_attempt (supplier_id, binding_id, kind, period_key, attempt_no, idempotency_key,
+               amount, period_from, period_to, anchor_day, status, provider, resolved_at)
+             VALUES ($1, $2, 'first', $3, 1, $4, 1000, now(), now() + interval '30 days', 1, 'succeeded', 'test', now())`,
+            [of.supplierId, secondBinding, `bind:${secondBinding}`, `k${randomUUID()}`],
+          ),
+        ).rejects.toMatchObject({ code: "23505" });
+      } finally {
+        release();
+      }
+      await waitStatus(of, "active");
+      expect(provider().charges).toHaveLength(1);
+      const { rows: refused } = await db.query(
+        "SELECT 1 FROM billing_event WHERE supplier_id = $1 AND outcome = 'refused'",
+        [of.supplierId],
+      );
+      expect(refused).toHaveLength(0);
+      // The card of the second trip is the one the subscription is charged to.
+      const methods = await methodsOf(of);
+      expect(methods.filter((row) => row.status === "active")).toHaveLength(1);
+      const { rows: active } = await db.query<{ binding_id: string }>(
+        "SELECT binding_id FROM payment_method WHERE supplier_id = $1 AND status = 'active'",
+        [of.supplierId],
+      );
+      expect(active[0]!.binding_id).toBe(secondBinding!);
+    });
+
+    it("promises tomorrow, not today, after a refusal of «Оплатить сейчас» before the daily hour (defect 5)", async () => {
+      const hourNow = Number(
+        new Intl.DateTimeFormat("en-GB", {
+          hour: "2-digit",
+          hourCycle: "h23",
+          timeZone: "Asia/Almaty",
+        }).format(new Date()),
+      );
+      // The daily job runs later today (at 23:xx there is no later hour: the rule is the same).
+      await settings.set({ billing_notify_hour: Math.min(hourNow + 1, 23) });
+      await new TestSettings(app).reload();
+      await addPlan(1_000);
+      const of = await subscribed("Не сегодня");
+      await changeCard(of, "insufficient_funds");
+      await atTermEnd(of);
+      await ok(of.as("post", "/supplier/billing/pay"), (body) => body, 202);
+      await waitStatus(of, "past_due");
+      const [notice] = await waitFor("the notice", async () => {
+        const notices = await messagesOf(of);
+        return notices.length === 1 ? notices : null;
+      });
+      const tomorrow = dayText(new Date(Date.now() + DAY), "ru");
+      expect(notice!.variables).toMatchObject({ date: tomorrow });
+      await sleep(200);
+      const view = await cabinet(of);
+      expect(dayText(new Date(view.subscription!.nextChargeAt!), "ru")).toBe(tomorrow);
+      // And the daily job keeps the promise: no second try today.
+      const before = (await attemptRows(of)).length;
+      await chargeDay(of, "retry");
+      expect(await attemptRows(of)).toHaveLength(before);
+    });
+
+    it("forgets at the provider a card named for a trip that is over, and keeps the card of a trip that took it (defect 6)", async () => {
+      await addPlan(1_000);
+      const of = await company("Поздняя карта");
+      const started = await ok(
+        of.as("post", "/supplier/billing/card-bindings", { returnUrl: `${CABINET}/billing` }),
+        (body) => startCardBindingResponseSchema.parse(body),
+        201,
+      );
+      const ref = new URL(started.redirectUrl, "http://x").searchParams.get("ref");
+      // The page was left: the trip is over.
+      await db.query(
+        "UPDATE card_binding SET expires_at = now() - interval '1 minute' WHERE id = $1",
+        [started.binding.id],
+      );
+      await worker.get(ExpireBindingsHandler).run({} as never);
+      expect((await bindingStatus(of, started.binding.id)).status).toBe("abandoned");
+      const late = "tok_test_ok_late00000001";
+      rememberSecret(late);
+      const card = { mask: "4242", brand: "visa", expMonth: 12, expYear: 2099 };
+      expect(
+        (
+          await webhook({
+            id: "evt-late-card",
+            type: "card_bound",
+            ref,
+            card: { ...card, token: late },
+          })
+        ).status,
+      ).toBe(200);
+      await waitFor("the late card forgotten", async () => provider().detached.includes(late));
+      expect(provider().charges).toHaveLength(0);
+
+      // A trip that took its card: the same card again is nothing; another card is let go.
+      const other = await company("Повтор карты");
+      const trip = await ok(
+        other.as("post", "/supplier/billing/card-bindings", { returnUrl: `${CABINET}/billing` }),
+        (body) => startCardBindingResponseSchema.parse(body),
+        201,
+      );
+      const tripRef = new URL(trip.redirectUrl, "http://x").searchParams.get("ref");
+      const kept = "tok_test_ok_kept00000001";
+      const stray = "tok_test_ok_stray0000001";
+      rememberSecret(kept);
+      rememberSecret(stray);
+      await webhook({
+        id: "evt-kept-1",
+        type: "card_bound",
+        ref: tripRef,
+        card: { ...card, token: kept },
+      });
+      await waitStatus(other, "active");
+      await webhook({
+        id: "evt-kept-2",
+        type: "card_bound",
+        ref: tripRef,
+        card: { ...card, token: kept },
+      });
+      await webhook({
+        id: "evt-stray",
+        type: "card_bound",
+        ref: tripRef,
+        card: { ...card, token: stray },
+      });
+      await waitFor("the stray card forgotten", async () => provider().detached.includes(stray));
+      await sleep(400);
+      expect(provider().detached).not.toContain(kept);
+      // No token is left behind in the deliveries.
+      const { rows } = await db.query<{ text: string }>(
+        "SELECT coalesce(string_agg(payload::text, ' '), '') AS text FROM payment_webhook_event",
+      );
+      expect(rows[0]!.text).not.toContain("tokenSealed");
+    });
+
+    it("keeps trying to forget a late card while the provider is away, and keeps only its sealed token meanwhile", async () => {
+      await addPlan(1_000);
+      const of = await company("Поздняя карта, провайдер ушёл");
+      const started = await ok(
+        of.as("post", "/supplier/billing/card-bindings", { returnUrl: `${CABINET}/billing` }),
+        (body) => startCardBindingResponseSchema.parse(body),
+        201,
+      );
+      const ref = new URL(started.redirectUrl, "http://x").searchParams.get("ref");
+      await db.query(
+        "UPDATE card_binding SET expires_at = now() - interval '1 minute' WHERE id = $1",
+        [started.binding.id],
+      );
+      await worker.get(ExpireBindingsHandler).run({} as never);
+      const late = "tok_test_ok_away00000001";
+      rememberSecret(late);
+      provider().mode = "unavailable";
+      await webhook({
+        id: "evt-away-card",
+        type: "card_bound",
+        ref,
+        card: { token: late, mask: "4242", brand: "visa", expMonth: 12, expYear: 2099 },
+      });
+      await waitFor("the detach to wait", async () => {
+        const { rows } = await db.query<{ result: string | null }>(
+          "SELECT result FROM payment_webhook_event WHERE provider_event_id = 'evt-away-card'",
+        );
+        return rows[0]?.result === "detach_pending";
+      });
+      expect(provider().detached).not.toContain(late);
+      // The provider is back: the minute's resolver forgets the card and the token goes.
+      provider().mode = "ok";
+      await worker.get(ResolvePaymentsHandler).run({} as never);
+      expect(provider().detached).toContain(late);
+      const { rows } = await db.query<{ result: string; payload: string }>(
+        "SELECT result, payload::text AS payload FROM payment_webhook_event WHERE provider_event_id = 'evt-away-card'",
+      );
+      expect(rows[0]!.result).toBe("card_detached");
+      expect(rows[0]!.payload).not.toContain("tokenSealed");
+    });
+
+    it("hands a pre-billing «billing» pause of a company without a subscription to the administrator, reversibly (defect 7)", async () => {
+      await addPlan(1_000);
+      const bare = await company("Старая пауза");
+      const paying = await subscribed("Пауза с подпиской");
+      // As the migration of TASK-042 left them: a pause for «billing» set by hand before billing existed.
+      runMigrate("down", postgres.getConnectionUri(), 1);
+      try {
+        await db.query(
+          "UPDATE supplier SET billing_paused_at = now() - interval '10 days', status = 'paused' WHERE id = ANY($1)",
+          [[bare.supplierId, paying.supplierId]],
+        );
+      } finally {
+        runMigrate("up", postgres.getConnectionUri());
+      }
+      expect(await supplierRow(bare)).toMatchObject({ status: "paused", billing_paused_at: null });
+      expect((await supplierRow(bare)).admin_paused_at).not.toBeNull();
+      // The company with a subscription keeps its billing pause: its subscription lifts it.
+      expect((await supplierRow(paying)).billing_paused_at).not.toBeNull();
+      expect((await supplierRow(paying)).admin_paused_at).toBeNull();
+      // Reversible: down gives the pause back to billing, up hands it over again.
+      runMigrate("down", postgres.getConnectionUri(), 1);
+      try {
+        expect((await supplierRow(bare)).billing_paused_at).not.toBeNull();
+        expect((await supplierRow(bare)).admin_paused_at).toBeNull();
+      } finally {
+        runMigrate("up", postgres.getConnectionUri());
+      }
+      // Now somebody can lift it: the administrator.
+      const card = (
+        await ok(asAdmin("get", `/admin/suppliers/${bare.supplierId}`), (body) =>
+          adminSupplierResponseSchema.parse(body),
+        )
+      ).supplier;
+      expect(card.pauses.admin).not.toBeNull();
+      expect(
+        (
+          await asAdmin("post", `/admin/suppliers/${bare.supplierId}/pause`, {
+            expectedVersion: card.version,
+            paused: false,
+            note: "Оплата по договору",
+          })
+        ).status,
+      ).toBe(200);
+      expect(await supplierRow(bare)).toMatchObject({
+        status: "active",
+        admin_paused_at: null,
+        billing_paused_at: null,
+      });
     });
   });
 

@@ -31,6 +31,9 @@ import { paymentWebhookEvent } from "./schema";
 /** Waiting longer than this, a delivery has lost its job: `billing.resolve-attempts` puts it back. */
 const WAKE_AFTER_SECONDS = 60;
 
+/** The result of a delivery whose card is still to be forgotten at the provider (I840). */
+const DETACH_PENDING = "detach_pending";
+
 /**
  * What the payment provider tells us (TASK-042; ARCHITECTURE 4.77): a card
  * named for a trip, a trip left without one, the result of a charge. Kept
@@ -134,13 +137,29 @@ export class PaymentWebhooks {
           expMonth: number;
           expYear: number;
         };
+        const token = this.vault.open(tokenContext.webhookEvent(row.id), card.tokenSealed);
         result = await this.bindings.cardReported(row.provider, String(payload.providerRef), {
-          token: this.vault.open(tokenContext.webhookEvent(row.id), card.tokenSealed),
+          token,
           mask: card.mask,
           brand: card.brand,
           expMonth: card.expMonth,
           expYear: card.expYear,
         });
+        if (result === "foreign_card") {
+          // A card nobody will charge: forgotten at the provider now, or — if
+          // it is away — by `detachLeftovers` each minute until it is (I840).
+          // Until then the delivery keeps the sealed token, and only it.
+          if (await this.forget(token)) {
+            result = "card_detached";
+          } else {
+            await this.database.db
+              .update(paymentWebhookEvent)
+              .set({ processedAt: sql`now()`, result: DETACH_PENDING })
+              .where(eq(paymentWebhookEvent.id, row.id));
+            this.logger.warn(`A card of a trip that is over waits to be detached event=${row.id}`);
+            return;
+          }
+        }
         break;
       }
       case "card_cancelled":
@@ -170,6 +189,39 @@ export class PaymentWebhooks {
       })
       .where(eq(paymentWebhookEvent.id, row.id));
     this.logger.log(`Payment webhook applied event=${row.id} kind=${row.kind} result=${result}`);
+  }
+
+  private async forget(token: string): Promise<boolean> {
+    try {
+      await this.provider.detachCard(token);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** `billing.resolve-attempts`: cards of trips that were over, forgotten at the provider at last. */
+  async detachLeftovers(): Promise<number> {
+    const rows = await this.database.db
+      .select()
+      .from(paymentWebhookEvent)
+      .where(eq(paymentWebhookEvent.result, DETACH_PENDING))
+      .orderBy(asc(paymentWebhookEvent.receivedAt))
+      .limit(50);
+    let detached = 0;
+    for (const row of rows) {
+      const card = row.payload.card as { tokenSealed: string } | undefined;
+      const done =
+        !card ||
+        (await this.forget(this.vault.open(tokenContext.webhookEvent(row.id), card.tokenSealed)));
+      if (!done) continue;
+      await this.database.db
+        .update(paymentWebhookEvent)
+        .set({ result: "card_detached", payload: { providerRef: row.payload.providerRef } })
+        .where(eq(paymentWebhookEvent.id, row.id));
+      detached += 1;
+    }
+    return detached;
   }
 
   /** Deliveries nobody applied for a minute go back on the queue. */

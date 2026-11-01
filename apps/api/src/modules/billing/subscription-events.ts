@@ -12,7 +12,7 @@ import {
   type SubscriptionStatus,
   type TimeEventKind,
 } from "@adclub/domain";
-import { and, asc, eq, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import { afterCommit, DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue, type Sweeper } from "../../jobs";
 import { AuditLog, type AuditActorRecord } from "../audit";
@@ -167,6 +167,28 @@ export class SubscriptionEvents {
     return outer ? run(outer) : this.database.db.transaction(run);
   }
 
+  /**
+   * The first charge of a card (its term is `bind:<binding>`, the purchase's
+   * own reference) is written into the subscription it began: until then it
+   * is the one first charge a company may have (I839).
+   */
+  private async bindFirstCharge(
+    tx: DbExecutor,
+    providerRef: string,
+    subscriptionId: string,
+  ): Promise<void> {
+    await tx
+      .update(paymentAttempt)
+      .set({ subscriptionId })
+      .where(
+        and(
+          eq(paymentAttempt.kind, "first"),
+          eq(paymentAttempt.periodKey, providerRef),
+          isNull(paymentAttempt.subscriptionId),
+        ),
+      );
+  }
+
   private async enqueue(tx: DbExecutor | undefined, provider: string, providerRef: string) {
     await this.queue.enqueue(
       applyBillingEventsJob,
@@ -255,7 +277,13 @@ export class SubscriptionEvents {
           .where(
             and(eq(subscription.supplierId, row.supplierId), ne(subscription.status, "expired")),
           );
-        if (other) return refused("already_active");
+        if (other) {
+          // Not expected (a card linked again before the subscription began
+          // replaces the card, I839), but if it ever is: the first charge is
+          // tied to the subscription that stands, so it blocks no later one.
+          await this.bindFirstCharge(tx, row.providerRef!, other.id);
+          return refused("already_active");
+        }
         const plan = await this.plans.inEffect("supplier", row.eventAt, tx);
         const [created] = await tx
           .insert(subscription)
@@ -271,6 +299,7 @@ export class SubscriptionEvents {
             lastProviderEventAt: row.eventAt,
           })
           .returning();
+        await this.bindFirstCharge(tx, row.providerRef!, created!.id);
         await this.journal(tx, null, created!, changedBy, row.kind, row.id);
         await this.effects.afterChange(tx, null, created!);
         return {
@@ -558,6 +587,8 @@ export class SubscriptionExpiry implements Sweeper<ExpiryContext> {
               // about its charge (unavailable, or its answer lost): the
               // pause is for a bank that refused, not for a provider that
               // couldn't be reached (TASK-042).
+              // Nor while the event of a refusal waits to be applied: it may
+              // carry a later end of the window (TASK-042.A, I837).
               or(
                 eq(subscription.audience, "user"),
                 sql`NOT EXISTS (
@@ -567,6 +598,11 @@ export class SubscriptionExpiry implements Sweeper<ExpiryContext> {
                       openAttemptStatuses.map((status) => sql`${status}`),
                       sql`, `,
                     )})
+                ) AND NOT EXISTS (
+                  SELECT 1 FROM billing_event e
+                  WHERE e.provider = ${subscription.provider}
+                    AND e.provider_ref = ${subscription.providerRef}
+                    AND e.outcome = 'pending'
                 )`,
               ),
             ),
@@ -607,6 +643,18 @@ export class SubscriptionExpiry implements Sweeper<ExpiryContext> {
         )
         .limit(1);
       if (open) return;
+      const [waiting] = await tx
+        .select({ id: billingEvent.id })
+        .from(billingEvent)
+        .where(
+          and(
+            eq(billingEvent.provider, row.provider),
+            eq(billingEvent.providerRef, row.providerRef),
+            eq(billingEvent.outcome, "pending"),
+          ),
+        )
+        .limit(1);
+      if (waiting) return;
     }
     const transition = subscriptionTransition(
       row.audience,

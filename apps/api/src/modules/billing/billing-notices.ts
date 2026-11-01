@@ -1,14 +1,26 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { and, asc, eq } from "drizzle-orm";
-import { bankRetriesLeft, BILLING_TIME_ZONE, nextDailyRun } from "@adclub/domain";
+import { bankRetriesLeft, BILLING_TIME_ZONE, nextBankRetry } from "@adclub/domain";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import type { DbExecutor } from "../../database";
 import { account, supplierMember } from "../identity";
 import { Messaging } from "../messaging";
 import { AppSettings } from "../settings";
 
-/** What a message about a subscription is about (`MessageSubjects`). */
+/**
+ * What W-05 queued before TASK-042.A is about (`MessageSubjects`): the
+ * subscription, sent only while it is `past_due`. Kept for the messages
+ * still in the queue; new ones are about the term.
+ */
 export const SUBSCRIPTION_SUBJECT = "subscription";
+
+/**
+ * What W-05 and W-05a are about (TASK-042.A, ARCHITECTURE 4.77 I834): the
+ * refused charge, and through it the term it was to pay. The notice goes
+ * while **that term is not paid** — whether or not the refusal's event has
+ * been applied to the subscription yet, which the sender may well beat.
+ */
+export const PAYMENT_TERM_SUBJECT = "payment_term";
 
 type NoticeLang = "kk" | "ru";
 
@@ -125,6 +137,8 @@ export class BillingNotices {
   async paymentFailed(
     tx: DbExecutor,
     input: {
+      /** The refused charge: the notice is about its term (`PAYMENT_TERM_SUBJECT`). */
+      attemptId: string;
       subscriptionId: string;
       supplierId: string;
       declinedCount: number;
@@ -141,8 +155,12 @@ export class BillingNotices {
       this.logger.warn(`No cabinet address to put into W-05 supplier=${input.supplierId}`);
       return 0;
     }
-    const retriesLeft = bankRetriesLeft(input.declinedCount, input.retryDays);
-    const next = retriesLeft ? nextDailyRun(input.at, input.hour) : input.graceUntil;
+    // «Повторим {дата}» only if that retry comes before the window ends (I837, I838).
+    const retry = nextBankRetry(input.at, input.hour);
+    const retriesLeft =
+      bankRetriesLeft(input.declinedCount, input.retryDays) &&
+      retry.at.getTime() < input.graceUntil.getTime();
+    const next = retriesLeft ? retry.at : input.graceUntil;
     const template = retriesLeft ? "payment_failed" : "payment_failed_last";
     const recipients = await this.recipients(tx, input.supplierId, input.notifiedLimit);
     const day = localDay(input.at);
@@ -152,7 +170,7 @@ export class BillingNotices {
         phone: recipient.phone,
         lang: recipient.lang,
         variables: { date: dayText(next, recipient.lang), link: `${origin}/billing` },
-        subject: { type: SUBSCRIPTION_SUBJECT, id: input.subscriptionId },
+        subject: { type: PAYMENT_TERM_SUBJECT, id: input.attemptId },
         dedupeKey: `payment_failed:${input.subscriptionId}:${day}:${recipient.memberId}`,
       });
     }

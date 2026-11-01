@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   addCalendarMonths,
   bankRetriesLeft,
+  bankRetryWindowEnd,
   BILLING_TIME_ZONE,
   firstPeriod,
+  nextBankRetry,
   nextDailyRun,
   renewalPeriod,
   retryWindowEnd,
@@ -142,5 +144,85 @@ describe("the retries after a refusal", () => {
     ]);
     expect(bankRetriesLeft(0, 1)).toBe(true);
     expect(bankRetriesLeft(1, 1)).toBe(false);
+  });
+});
+
+describe("the next bank retry", () => {
+  it("is the daily run of the next local day, not of the refusal's own day", () => {
+    // «Оплатить сейчас» refused at 08:00, before the job's 10:00: not «today», tomorrow.
+    expect(nextBankRetry(almaty("2026-11-05T08:00:00"), 10)).toEqual({
+      day: "2026-11-06",
+      at: almaty("2026-11-06T10:00:00"),
+    });
+    // The daily job's own refusal at 10:00:05.
+    expect(nextBankRetry(almaty("2026-11-05T10:00:05"), 10).at.toISOString()).toBe(
+      almaty("2026-11-06T10:00:00").toISOString(),
+    );
+    // Late in the evening: still the next day.
+    expect(nextBankRetry(almaty("2026-11-05T23:59:00"), 10).day).toBe("2026-11-06");
+  });
+
+  it("crosses a month and a year, and goes by the billing time zone", () => {
+    expect(nextBankRetry(almaty("2026-12-31T12:00:00"), 10).day).toBe("2027-01-01");
+    expect(nextBankRetry(almaty("2028-02-28T12:00:00"), 7).at.toISOString()).toBe(
+      almaty("2028-02-29T07:00:00").toISOString(),
+    );
+    // 20:00 UTC on the fifth is already the sixth in Almaty: the retry is on the seventh.
+    expect(nextBankRetry(new Date("2026-11-05T20:00:00Z"), 10).day).toBe("2026-11-07");
+  });
+});
+
+describe("the end of the retries' window", () => {
+  const tuning = { retryDays: 3, hour: 10 };
+
+  it("is three days from the first refusal when every try happens on its day", () => {
+    const first = almaty("2026-11-05T10:00:05");
+    for (const [count, last] of [
+      [1, first],
+      [2, almaty("2026-11-06T10:00:04")],
+    ] as const) {
+      expect(
+        bankRetryWindowEnd({
+          ...tuning,
+          firstDeclinedAt: first,
+          lastDeclinedAt: last,
+          declinedCount: count,
+        }).toISOString(),
+      ).toBe(almaty("2026-11-08T10:00:05").toISOString());
+    }
+    // The third refusal on day 2: a day after it, a few seconds past the three days.
+    const third = almaty("2026-11-07T10:00:06");
+    expect(
+      bankRetryWindowEnd({
+        ...tuning,
+        firstDeclinedAt: first,
+        lastDeclinedAt: third,
+        declinedCount: 3,
+      }).toISOString(),
+    ).toBe(almaty("2026-11-08T10:00:06").toISOString());
+  });
+
+  it("grows by what a provider outage took: the second refusal on day 4 still has its retry", () => {
+    const first = almaty("2026-11-05T10:00:05");
+    const second = almaty("2026-11-09T14:00:00");
+    const end = bankRetryWindowEnd({
+      ...tuning,
+      firstDeclinedAt: first,
+      lastDeclinedAt: second,
+      declinedCount: 2,
+    });
+    // One try is owed (10 November), and a day after it.
+    expect(end.toISOString()).toBe(almaty("2026-11-11T10:00:00").toISOString());
+    expect(end.getTime()).toBeGreaterThan(nextBankRetry(second, 10).at.getTime());
+  });
+
+  it("gives a day after the last refusal when the provider held the last try past the window", () => {
+    const end = bankRetryWindowEnd({
+      ...tuning,
+      firstDeclinedAt: almaty("2026-11-05T10:00:05"),
+      lastDeclinedAt: almaty("2026-11-10T15:00:00"),
+      declinedCount: 3,
+    });
+    expect(end.toISOString()).toBe(almaty("2026-11-11T15:00:00").toISOString());
   });
 });

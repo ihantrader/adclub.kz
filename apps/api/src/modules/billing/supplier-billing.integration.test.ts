@@ -51,6 +51,7 @@ import { offer as offerTable, offerShowcase, shownOffers } from "../offers";
 import { BillingOperator } from "./billing-operator";
 import { expireSubscriptionsJob } from "./billing-jobs";
 import { ChargeDueHandler, ResolvePaymentsHandler, WatchProviderHandler } from "./billing-handlers";
+import { dayText } from "./billing-notices";
 import { PaymentCharger } from "./payment-charger";
 import { PaymentProvider } from "./payment-provider";
 import { PaymentTokenVault, tokenContext } from "./payment-token-vault";
@@ -584,7 +585,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
     );
     // Yesterday's notices are yesterday's: today's refusal is a new day's message.
     await db.query(
-      "UPDATE outbound_message SET dedupe_key = dedupe_key || ':earlier' || gen_random_uuid()::text WHERE template = 'payment_failed'",
+      "UPDATE outbound_message SET dedupe_key = dedupe_key || ':earlier' || gen_random_uuid()::text WHERE template IN ('payment_failed', 'payment_failed_last')",
     );
   }
 
@@ -621,10 +622,17 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
     );
   }
 
-  async function messagesOf(of: Company, template = "payment_failed") {
-    const { rows } = await db.query<{ phone: string; status: string; dedupe_key: string }>(
-      "SELECT phone, status, dedupe_key FROM outbound_message WHERE template = $1 AND phone = $2 ORDER BY created_at",
-      [template, of.phone],
+  /** The notices of an unpaid subscription, W-05 and W-05a, in the order they were queued. */
+  async function messagesOf(of: Company) {
+    const { rows } = await db.query<{
+      template: string;
+      phone: string;
+      status: string;
+      dedupe_key: string;
+      variables: Record<string, string> | null;
+    }>(
+      "SELECT template, phone, status, dedupe_key, variables FROM outbound_message WHERE template IN ('payment_failed', 'payment_failed_last') AND phone = $1 ORDER BY created_at, id",
+      [of.phone],
     );
     return rows;
   }
@@ -1058,17 +1066,28 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       expect(await attemptsOf(of)).toHaveLength(2); // the first charge and today's refusal
       expect(await messagesOf(of)).toHaveLength(1);
 
-      // Day 1 and day 2: a retry and a message each.
+      // Day 1: a retry and a message that promises the next one.
       await aDayPasses(of);
       await chargeDay(of, "retry");
       await waitFor("the second message", async () => (await messagesOf(of)).length === 2);
+      // Day 2: the last try of the window, and the message that says there will be no more.
       await aDayPasses(of);
       await chargeDay(of, "retry");
       await waitFor("the third message", async () => (await messagesOf(of)).length === 3);
       const declined = (await attemptsOf(of)).filter((row) => row.status === "declined");
       expect(declined.map((row) => row.attempt_no)).toEqual([1, 2, 3]);
-      expect(new Set((await messagesOf(of)).map((row) => row.dedupe_key)).size).toBe(3);
-      expect((await messagesOf(of)).every((row) => row.phone === of.phone)).toBe(true);
+      const notices = await messagesOf(of);
+      expect(new Set(notices.map((row) => row.dedupe_key)).size).toBe(3);
+      expect(notices.every((row) => row.phone === of.phone)).toBe(true);
+      // «Повторим {дата}» twice, then W-05a with the day the offers leave the showcase.
+      expect(notices.map((row) => row.template)).toEqual([
+        "payment_failed",
+        "payment_failed",
+        "payment_failed_last",
+      ]);
+      const windowEnd = (await subOf(of))!.grace_until!;
+      expect(notices[2]!.variables).toMatchObject({ date: dayText(windowEnd, "ru") });
+      expect(notices[2]!.variables!.link).toMatch(/\/billing$/);
 
       // Day 3: the retries are over — no fourth try — and the window ends: paused.
       await aDayPasses(of);

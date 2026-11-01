@@ -56,7 +56,23 @@ describe("the registry of message templates (TASK-024 requirement 2)", () => {
   it("holds exactly the templates of SCREENS 8.5", () => {
     const registry = Object.values(messageTemplates).map((template) => template.screen);
     expect([...registry].sort()).toEqual([...screensTemplateIds()].sort());
-    expect(registry.length).toBe(10);
+    expect(registry.length).toBe(11);
+  });
+
+  it("tells the last refusal of the window from the others: W-05a has no next attempt", () => {
+    const again = messageTemplates.payment_failed;
+    const last = messageTemplates.payment_failed_last;
+    // The same values, so the one place that sends them fills either.
+    expect(last.variables).toEqual(again.variables);
+    expect(last.providerName).not.toBe(again.providerName);
+    expect(again.texts.ru).toContain("Повторим {date}");
+    expect(last.texts.ru).not.toContain("Повторим");
+    expect(last.texts.ru).toContain("Автоматических попыток больше не будет");
+    expect(last.texts.ru).toContain("сняты с витрины");
+    expect(last.texts.kk).toContain("витринадан алынады");
+    expect(renderMessageText("payment_failed_last", "ru", { date: "3 ноября", link: "L" })).toBe(
+      "Не удалось списать оплату подписки. Автоматических попыток больше не будет. Если не оплатить до 3 ноября, предложения будут сняты с витрины. Оплатите или обновите карту: L",
+    );
   });
 
   it("has a text in every language for every template, and the buttons of W-01 in both", () => {

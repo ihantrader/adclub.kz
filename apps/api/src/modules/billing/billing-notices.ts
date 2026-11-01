@@ -43,11 +43,13 @@ export function localDay(at: Date): string {
 }
 
 /**
- * W-05, the notice of an unpaid subscription (PRODUCT 14.3; SCREENS 8.5;
- * ARCHITECTURE 18.5, 4.77): «Не удалось списать оплату подписки. Повторим
- * {дата}. Обновите карту: {ссылка}». The only way a message about money is
- * queued — in the transaction of the refusal that causes it, through
- * `Messaging.enqueue`, one per recipient per day.
+ * W-05 and W-05a, the notices of an unpaid subscription (PRODUCT 14.3;
+ * SCREENS 8.5; ARCHITECTURE 18.5, 4.77): «Не удалось списать оплату
+ * подписки. Повторим {дата}. Обновите карту: {ссылка}», and on the last
+ * refusal of the window «…Автоматических попыток больше не будет. Если не
+ * оплатить до {дата}, предложения будут сняты с витрины…». The only way a
+ * message about money is queued — in the transaction of the refusal that
+ * causes it, through `Messaging.enqueue`, one per recipient per day.
  *
  * **Who hears of it: the company's contact person** (the one a person of the
  * club would call about money); if the contact person was removed, the
@@ -114,10 +116,11 @@ export class BillingNotices {
 
   /**
    * W-05 after a refusal of the bank. «Повторим {дата}» is the next
-   * attempt of the daily job; when the retries are over there is none, and
-   * the date is the one the offers leave the showcase — the template says
-   * «Повторим», its text can't change without Meta approving it again, and
-   * the date is still the one the payer has to act by.
+   * attempt of the daily job. The refusal after which there is none (the
+   * retries are over) is a different message, W-05a: it says there will be
+   * no more attempts and gives the day the offers leave the showcase. Both
+   * share the day's key, so a person hears of the money once a day whichever
+   * refusal of that day it was.
    */
   async paymentFailed(
     tx: DbExecutor,
@@ -138,14 +141,14 @@ export class BillingNotices {
       this.logger.warn(`No cabinet address to put into W-05 supplier=${input.supplierId}`);
       return 0;
     }
-    const next = bankRetriesLeft(input.declinedCount, input.retryDays)
-      ? nextDailyRun(input.at, input.hour)
-      : input.graceUntil;
+    const retriesLeft = bankRetriesLeft(input.declinedCount, input.retryDays);
+    const next = retriesLeft ? nextDailyRun(input.at, input.hour) : input.graceUntil;
+    const template = retriesLeft ? "payment_failed" : "payment_failed_last";
     const recipients = await this.recipients(tx, input.supplierId, input.notifiedLimit);
     const day = localDay(input.at);
     for (const recipient of recipients) {
       await this.messaging.enqueue(tx, {
-        template: "payment_failed",
+        template,
         phone: recipient.phone,
         lang: recipient.lang,
         variables: { date: dayText(next, recipient.lang), link: `${origin}/billing` },

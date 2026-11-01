@@ -233,7 +233,7 @@ export const messageTemplates = {
     sample: pick("number", "item"),
     sentBy: "orders (OrderNotices.cancelled)",
   },
-  /** W-05 — a subscription payment did not go through. */
+  /** W-05 — a subscription payment did not go through; the next attempt is {date}. */
   payment_failed: {
     screen: "W-05",
     providerName: "adclub_payment_failed",
@@ -245,7 +245,25 @@ export const messageTemplates = {
       kk: "Жазылым ақысын есептен шығара алмадық. {date} қайталаймыз. Картаңызды жаңартыңыз: {link}",
     },
     sample: pick("date", "link"),
-    sentBy: null,
+    sentBy: "billing (BillingNotices.paymentFailed)",
+  },
+  /**
+   * W-05a — the last refusal of the retry window: there is no next attempt,
+   * and {date} is the day the offers leave the showcase. The wording of the
+   * cabinet's «billing.pastDue.noRetry» (S-BILL-01) in a message.
+   */
+  payment_failed_last: {
+    screen: "W-05a",
+    providerName: "adclub_payment_failed_last",
+    category: "utility",
+    variables: ["date", "link"],
+    buttons: [],
+    texts: {
+      ru: "Не удалось списать оплату подписки. Автоматических попыток больше не будет. Если не оплатить до {date}, предложения будут сняты с витрины. Оплатите или обновите карту: {link}",
+      kk: "Жазылым ақысын есептен шығара алмадық. Автоматты әрекеттер енді болмайды. {date} дейін төленбесе, ұсыныстар витринадан алынады. Төлеңіз немесе картаны жаңартыңыз: {link}",
+    },
+    sample: pick("date", "link"),
+    sentBy: "billing (BillingNotices.paymentFailed)",
   },
   /** W-06 — the moderation digest, at most once a day. */
   moderation_digest: {

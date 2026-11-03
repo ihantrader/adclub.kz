@@ -178,13 +178,22 @@ export class DetachCardHandler implements JobHandler<{ paymentMethodId: string }
   ) {}
 
   async run(payload: { paymentMethodId: string }): Promise<void> {
-    const [method] = await this.database.db
-      .select()
-      .from(paymentMethod)
-      .where(eq(paymentMethod.id, payload.paymentMethodId));
-    if (!method || method.detachedAt || method.status === "active") return;
-    // A charge not over stands on it: the charge's settlement puts this job back (I836).
-    if (!(await this.methods.freeToDetach(this.database.db, method.id))) return;
+    // Under the card's row lock, which the settlement of a charge on it takes
+    // too: a run that starts while that settlement is not committed waits for
+    // it and sees the charge over, so it cannot wrongly find the card busy
+    // after the settlement's own detach was dropped as a duplicate (I846).
+    // The provider is called after the lock is gone.
+    const method = await this.database.db.transaction(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(paymentMethod)
+        .where(eq(paymentMethod.id, payload.paymentMethodId))
+        .for("update");
+      if (!row || row.detachedAt || row.status === "active") return null;
+      // A charge not over stands on it: the charge's settlement puts this job back (I836).
+      return (await this.methods.freeToDetach(tx, row.id)) ? row : null;
+    });
+    if (!method) return;
     await this.provider.detachCard(this.methods.token(method));
     await this.database.db
       .update(paymentMethod)

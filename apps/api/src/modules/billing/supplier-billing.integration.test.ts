@@ -38,8 +38,8 @@ import { loadConfig, type AppConfig } from "../../config";
 import { DatabaseService } from "../../database";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
-import { SweepRunner, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { JobQueue, SweepRunner, type JobsTuning } from "../../jobs";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { completeTestRegistration } from "../../testing/registration";
 import { TestSettings } from "../../testing/settings";
@@ -49,9 +49,10 @@ import { DevCatalogSeed } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
 import { offer as offerTable, offerShowcase, shownOffers } from "../offers";
 import { BillingOperator } from "./billing-operator";
-import { expireSubscriptionsJob } from "./billing-jobs";
+import { detachCardJob, expireSubscriptionsJob } from "./billing-jobs";
 import {
   ChargeDueHandler,
+  DetachCardHandler,
   ExpireBindingsHandler,
   RunAttemptHandler,
   ResolvePaymentsHandler,
@@ -216,28 +217,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    // The background jobs of the minute (a dozen sweepers at once) hold tables for a
-    // moment: TRUNCATE waits a short while and tries again, instead of standing in
-    // the queue of locks for as long as it takes. A table still locked after all the
-    // tries is a transaction somebody left open: say whose.
-    await db.query("SET lock_timeout = '3s'");
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        break;
-      } catch (error) {
-        if (attempt >= 20) {
-          const { rows: activity } = await db.query(
-            `SELECT pid, state, wait_event_type, xact_start, left(query, 160) AS query
-             FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND state <> 'idle'`,
-          );
-          throw new Error(`${(error as Error).message}; open: ${JSON.stringify(activity)}`, {
-            cause: error,
-          });
-        }
-        await sleep(200);
-      }
-    }
+    await truncateAll(db);
     await redis.flushall();
     provider().reset();
     (app.get(PaymentProvider) as TestPaymentProvider).reset();
@@ -627,6 +607,19 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       worker.get(SubscriptionExpiry),
       { signal: new AbortController().signal },
     );
+  }
+
+  /**
+   * The minute sweep, run until the subscription reaches `status`: one pass
+   * skips a row another transaction holds (`SKIP LOCKED`) — the worker applying
+   * an event, say — and the scheduled pass comes only a minute later.
+   */
+  async function expireUntil(of: Company, status: string): Promise<SubRow> {
+    return waitFor(`the subscription to be ${status}`, async () => {
+      await expireRun();
+      const sub = await subOf(of);
+      return sub?.status === status ? sub : null;
+    });
   }
 
   /** The notices of an unpaid subscription, W-05 and W-05a, in the order they were queued. */
@@ -1100,8 +1093,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       await aDayPasses(of);
       await chargeDay(of, "retry");
       expect((await attemptsOf(of)).filter((row) => row.status === "declined")).toHaveLength(3);
-      await expireRun();
-      await waitStatus(of, "suspended");
+      await expireUntil(of, "suspended");
       expect(await supplierRow(of)).toMatchObject({ status: "paused", admin_paused_at: null });
       expect((await supplierRow(of)).billing_paused_at).not.toBeNull();
       expect((await shown(offer)).reasons).toContain("supplier_paused");
@@ -1143,8 +1135,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
         "UPDATE subscription SET grace_until = now() - interval '1 minute' WHERE supplier_id = $1",
         [of.supplierId],
       );
-      await expireRun();
-      await waitStatus(of, "suspended");
+      await expireUntil(of, "suspended");
       expect((await shown(offer)).visible).toBe(false);
 
       await changeCard(of, "ok");
@@ -1256,8 +1247,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
         "UPDATE subscription SET grace_until = now() - interval '1 minute' WHERE supplier_id = $1",
         [of.supplierId],
       );
-      await expireRun();
-      await waitStatus(of, "suspended");
+      await expireUntil(of, "suspended");
     }
 
     it("keeps the administrator's pause when the payment lifts the billing one, and the billing one when the administrator lifts theirs", async () => {
@@ -1498,8 +1488,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
         "UPDATE subscription SET grace_until = now() - interval '1 minute' WHERE supplier_id = $1",
         [of.supplierId],
       );
-      await expireRun();
-      await waitStatus(of, "suspended");
+      await expireUntil(of, "suspended");
     });
 
     it("looks an unknown outcome up by its key before anything is sent again: the payment went through, so no second charge", async () => {
@@ -1673,8 +1662,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
         "UPDATE subscription SET grace_until = now() - interval '1 minute' WHERE supplier_id = $1",
         [of.supplierId],
       );
-      await expireRun();
-      await waitStatus(of, "suspended");
+      await expireUntil(of, "suspended");
       expect((await shown(offer)).visible).toBe(false);
       // The person paid at the bank's own page: a manual attempt is open, and the provider says it succeeded.
       await changeCard(of, "ok");
@@ -1754,17 +1742,13 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
     }
 
     /**
-     * The jobs of attempts do nothing until restored: the charge `chargeDay` makes
-     * itself stays as it ended, and is not tried again by its own queued job a moment
-     * later (which would pay it on the old card before the card is changed).
+     * What the queue would do with an attempt and a replaced card right now,
+     * done here and awaited instead of waited for: whenever the worker takes
+     * these jobs, they can do no more than this.
      */
-    function idleAttemptJobs(): () => void {
-      const handler = worker.get(RunAttemptHandler);
-      const original = handler.run.bind(handler);
-      handler.run = () => Promise.resolve();
-      return () => {
-        handler.run = original;
-      };
+    async function runQueuedJobs(attemptId: string, paymentMethodId: string): Promise<void> {
+      await worker.get(RunAttemptHandler).run({ attemptId });
+      await worker.get(DetachCardHandler).run({ paymentMethodId });
     }
 
     async function methodsOf(of: Company) {
@@ -1830,21 +1814,19 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       await addPlan(1_000);
       const of = await subscribed("Смена карты");
       await atTermEnd(of);
-      const restore = idleAttemptJobs();
-      let stuck: Awaited<ReturnType<typeof attemptRows>>[number];
-      try {
-        provider().mode = "unavailable";
-        await chargeDay(of, "scheduled");
-        stuck = (await attemptRows(of)).at(-1)!;
-        expect(stuck.status).toBe("unavailable");
-        provider().mode = "ok";
-        await changeCard(of, "ok");
-      } finally {
-        restore();
-      }
+      provider().mode = "unavailable";
+      await chargeDay(of, "scheduled");
+      const stuck = (await attemptRows(of)).at(-1)!;
+      expect(stuck.status).toBe("unavailable");
+      provider().mode = "ok";
+      await changeCard(of, "ok");
       const [old, current] = await methodsOf(of);
-      // The detach job had its chance: the card a charge not over stands on is kept.
-      await sleep(1_000);
+      // The jobs had their chance: the hour has not come, so the charge is not
+      // sent again, and the card a charge not over stands on is kept.
+      await runQueuedJobs(stuck.id, old!.id);
+      expect((await attemptRows(of)).find((row) => row.id === stuck.id)!.status).toBe(
+        "unavailable",
+      );
       expect((await methodsOf(of))[0]!.detached_at).toBeNull();
       expect(old).toMatchObject({ id: stuck.payment_method_id, status: "replaced" });
       expect(current).toMatchObject({ status: "active" });
@@ -1879,23 +1861,80 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       );
     });
 
+    it("forgets a replaced card while another card's detach waits on the queue (I846)", async () => {
+      await addPlan(1_000);
+      // A detach of some other card waiting its turn, as every detach was put
+      // on the queue before I846 (and may still be at the release).
+      await worker
+        .get(JobQueue)
+        .enqueue(
+          detachCardJob,
+          { paymentMethodId: randomUUID() },
+          { startAfter: new Date(Date.now() + 3_600_000) },
+        );
+      const of = await subscribed("Чужая отвязка");
+      await changeCard(of, "ok");
+      await waitFor(
+        "the replaced card forgotten",
+        async () => (await methodsOf(of))[0]!.detached_at !== null,
+      );
+    });
+
+    it("does not take a charge the provider could not take (or whose answer was lost) to it before its hour, whatever job runs", async () => {
+      await addPlan(1_000);
+      for (const mode of ["unavailable", "outcome_unknown"] as const) {
+        const of = await subscribed(`Рано ${mode}`);
+        await atTermEnd(of);
+        provider().mode = mode;
+        await chargeDay(of, "scheduled");
+        provider().mode = "ok";
+        const read = async () =>
+          (
+            await db.query<{ id: string; status: string; tries: number }>(
+              "SELECT id, status, tries FROM payment_attempt WHERE supplier_id = $1 AND kind <> 'first'",
+              [of.supplierId],
+            )
+          ).rows;
+        const [waiting] = await read();
+        expect(waiting!.status).toBe(mode === "unavailable" ? "unavailable" : "unknown");
+        const calls = provider().charges.length;
+        // The job of the attempt, and the daily retry, before `next_try_at`.
+        await worker.get(RunAttemptHandler).run({ attemptId: waiting!.id });
+        await worker.get(PaymentCharger).run(waiting!.id);
+        await chargeDay(of, "scheduled");
+        expect(provider().charges).toHaveLength(calls);
+        expect(await read()).toEqual([waiting]);
+        // The hour comes: the same job sends it.
+        await db.query(
+          "UPDATE payment_attempt SET next_try_at = now() - interval '1 minute' WHERE id = $1",
+          [waiting!.id],
+        );
+        await worker.get(RunAttemptHandler).run({ attemptId: waiting!.id });
+        // (`billing.resolve-attempts` of the worker may have taken it first: one of the two sends it.)
+        const [paid] = await waitFor("the charge", async () => {
+          const rows = await read();
+          return rows[0]?.status === "succeeded" ? rows : null;
+        });
+        expect(paid).toMatchObject({ tries: waiting!.tries + 1 });
+      }
+    });
+
     it("pays «Оплатить сейчас» after «Сменить карту» with the new card at once", async () => {
       await addPlan(1_000);
       const of = await subscribed("Сменить и оплатить");
       await atTermEnd(of);
-      const restore = idleAttemptJobs();
-      let stuck: Awaited<ReturnType<typeof attemptRows>>[number];
-      try {
-        provider().mode = "unavailable";
-        await chargeDay(of, "scheduled");
-        stuck = (await attemptRows(of)).at(-1)!;
-        expect(stuck.status).toBe("unavailable");
-        provider().mode = "ok";
-        await changeCard(of, "ok");
-      } finally {
-        restore();
-      }
-      const current = (await methodsOf(of)).at(-1)!;
+      provider().mode = "unavailable";
+      await chargeDay(of, "scheduled");
+      const stuck = (await attemptRows(of)).at(-1)!;
+      expect(stuck.status).toBe("unavailable");
+      provider().mode = "ok";
+      await changeCard(of, "ok");
+      const [old, current] = await methodsOf(of);
+      // Before the press nothing is due: the queued jobs leave the old card's charge as it is.
+      await runQueuedJobs(stuck.id, old!.id);
+      expect(
+        provider().charges.filter((c) => c.idempotencyKey === stuck.idempotency_key),
+      ).toHaveLength(1);
       const charge = await ok(
         of.as("post", "/supplier/billing/pay"),
         (body) => payNowResponseSchema.parse(body).charge,
@@ -1910,7 +1949,7 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       expect(
         paid.payment_method_id,
         JSON.stringify({ attempts: await attemptRows(of), methods: await methodsOf(of) }),
-      ).toBe(current.id);
+      ).toBe(current!.id);
       expect(await messagesOf(of)).toHaveLength(0);
     });
 
@@ -1918,21 +1957,16 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       await addPlan(1_000);
       const of = await subscribed("Неизвестно и карта");
       await atTermEnd(of);
-      const restore = idleAttemptJobs();
-      let lost: Awaited<ReturnType<typeof attemptRows>>[number];
-      try {
-        provider().mode = "outcome_unknown";
-        await chargeDay(of, "scheduled");
-        lost = (await attemptRows(of)).at(-1)!;
-        expect(lost.status).toBe("unknown");
-        provider().mode = "ok";
-        await changeCard(of, "ok");
-        // The detach job had its chance: the card an open charge stands on is not let go.
-        await sleep(1_500);
-        expect((await methodsOf(of))[0]).toMatchObject({ status: "replaced", detached_at: null });
-      } finally {
-        restore();
-      }
+      provider().mode = "outcome_unknown";
+      await chargeDay(of, "scheduled");
+      const lost = (await attemptRows(of)).at(-1)!;
+      expect(lost.status).toBe("unknown");
+      provider().mode = "ok";
+      await changeCard(of, "ok");
+      // The jobs had their chance: the card an open charge stands on is not let go.
+      await runQueuedJobs(lost.id, (await methodsOf(of))[0]!.id);
+      expect((await methodsOf(of))[0]).toMatchObject({ status: "replaced", detached_at: null });
+      expect((await attemptRows(of)).find((row) => row.id === lost.id)!.status).toBe("unknown");
       const calls = provider().charges.length;
       await db.query(
         "UPDATE payment_attempt SET next_try_at = now() - interval '1 minute' WHERE id = $1",

@@ -250,6 +250,19 @@ export class PaymentCharger {
     );
   }
 
+  /** A human asked for the charge: an attempt waiting for its hour may go now (I843). */
+  private async makeDueNow(tx: DbExecutor, attemptId: string): Promise<void> {
+    await tx
+      .update(paymentAttempt)
+      .set({ nextTryAt: null })
+      .where(
+        and(
+          eq(paymentAttempt.id, attemptId),
+          inArray(paymentAttempt.status, ["unavailable", "unknown"]),
+        ),
+      );
+  }
+
   // ------------------------------------------------------------ the daily job
 
   /** The daily job's work for one subscription: open the term's attempt (or take the open one) and run it. */
@@ -301,7 +314,9 @@ export class PaymentCharger {
         }
         const opened = await this.openForSubscription(tx, sub, method, kind, null, now);
         if (opened.kind === "paid") return null;
-        if (opened.kind === "opened") await this.schedule(opened.attempt.id, tx);
+        // Run right below, not queued as well: a second runner of the same
+        // attempt would race this one. A worker lost before it runs leaves a
+        // `created` attempt nobody holds — `billing.resolve-attempts` starts it (I843).
         return opened.attempt.id;
       });
     } catch (error) {
@@ -344,10 +359,11 @@ export class PaymentCharger {
         const opened = await this.openForSubscription(tx, sub, method, "manual", memberId, now);
         // An attempt still standing on the card replaced since is looked up now,
         // not in an hour: what it finds decides, and the new card pays (I835).
-        if (
-          opened.kind === "opened" ||
-          (opened.kind === "existing" && opened.attempt.paymentMethodId !== method.id)
-        ) {
+        // The press is a human's: it makes the attempt due at once (I843).
+        if (opened.kind === "existing" && opened.attempt.paymentMethodId !== method.id) {
+          await this.makeDueNow(tx, opened.attempt.id);
+          await this.schedule(opened.attempt.id, tx);
+        } else if (opened.kind === "opened") {
           await this.schedule(opened.attempt.id, tx);
         }
         return opened.attempt;
@@ -499,6 +515,10 @@ export class PaymentCharger {
           eq(paymentAttempt.id, attemptId),
           inArray(paymentAttempt.status, [...openAttemptStatuses]),
           sql`(${paymentAttempt.claimedUntil} IS NULL OR ${paymentAttempt.claimedUntil} <= now())`,
+          // A charge the provider could not take (or whose answer was lost) is
+          // tried again when its hour comes, not when some job of it happens to
+          // run: the due time lives in the row, a human action clears it (I843).
+          sql`(${paymentAttempt.status} NOT IN ('unavailable', 'unknown') OR ${paymentAttempt.nextTryAt} IS NULL OR ${paymentAttempt.nextTryAt} <= now())`,
         ),
       )
       .returning();

@@ -150,7 +150,7 @@ export class PaymentMethods {
       tx,
     );
     if (previous) {
-      await this.queue.enqueue(detachCardJob, { paymentMethodId: previous.id }, { tx });
+      await this.scheduleDetach(tx, previous.id);
     }
     return { method: created!, replaced: previous };
   }
@@ -184,9 +184,11 @@ export class PaymentMethods {
     const [method] = await tx
       .select({ status: paymentMethod.status, detachedAt: paymentMethod.detachedAt })
       .from(paymentMethod)
-      .where(eq(paymentMethod.id, paymentMethodId));
+      .where(eq(paymentMethod.id, paymentMethodId))
+      // A detach run checking this card waits for this transaction (I846).
+      .for("update");
     if (!method || method.status === "active" || method.detachedAt) return;
-    await this.queue.enqueue(detachCardJob, { paymentMethodId }, { tx });
+    await this.scheduleDetach(tx, paymentMethodId);
   }
 
   /** Takes the card off (the operator command of development and tests only). */
@@ -233,7 +235,20 @@ export class PaymentMethods {
       },
       tx,
     );
-    await this.queue.enqueue(detachCardJob, { paymentMethodId: previous.id }, { tx });
+    await this.scheduleDetach(tx, previous.id);
     return true;
+  }
+
+  /**
+   * One waiting detach per card, not per queue: the job is a singleton, and
+   * without a key a detach of one company's card still waiting (a retry while
+   * the provider is away) silently dropped every other company's (I846).
+   */
+  private async scheduleDetach(tx: DbExecutor, paymentMethodId: string): Promise<void> {
+    await this.queue.enqueue(
+      detachCardJob,
+      { paymentMethodId },
+      { tx, singletonKey: paymentMethodId },
+    );
   }
 }

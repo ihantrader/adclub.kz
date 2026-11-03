@@ -28,7 +28,7 @@ import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import {
   allOutput,
   appLogText,
@@ -154,7 +154,7 @@ describe("roles and contexts over HTTP (PostgreSQL + Redis)", () => {
     lastSteps.clear();
     stepCookies.clear();
     // Every setting back to its default, as the tables are emptied.
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await settings.reload();
     await settings.set({
       login_code_requests_per_phone: 10_000,

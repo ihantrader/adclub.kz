@@ -21,7 +21,7 @@ import { DatabaseService } from "../../database";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { JobAdmin, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import {
   appLogText,
   captureOutput,
@@ -223,22 +223,9 @@ describe("messages to suppliers (PostgreSQL + Redis, API and two workers)", () =
       channel.mode = "ok";
       channel.delayMs = 5_000;
     }
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        // Jobs of the previous test that are still waiting or dead: the
-        // queue is not part of `TRUNCATE_ALL`.
-        await db.query(
-          "DELETE FROM pgboss.job WHERE name LIKE 'messaging.%' OR name LIKE 'suppliers.%'",
-        );
-        break;
-      } catch (error) {
-        if (attempt >= 10) {
-          throw error;
-        }
-        await sleep(200);
-      }
-    }
+    await truncateAll(db, [
+      "DELETE FROM pgboss.job WHERE name LIKE 'messaging.%' OR name LIKE 'suppliers.%'",
+    ]);
     await redis.flushall();
     receiver.bodies.length = 0;
     await settings.reload();

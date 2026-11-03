@@ -19,7 +19,7 @@ import { JsonLoggerService } from "../../../common/logging";
 import { loadConfig, type AppConfig } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
-import { TRUNCATE_ALL } from "../../../testing/database";
+import { truncateAll } from "../../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../../testing/output-capture";
 import { TestSettings } from "../../../testing/settings";
 import { LoginCodeChannels, type TestLoginCodeChannels } from "../index";
@@ -89,7 +89,7 @@ describe("account profile (PostgreSQL + Redis)", () => {
 
   beforeEach(async () => {
     channels.sent.length = 0;
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await redis.flushall();
     await settings.reload();
     output = captureOutput();

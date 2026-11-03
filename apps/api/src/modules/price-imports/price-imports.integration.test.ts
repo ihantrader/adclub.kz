@@ -41,7 +41,7 @@ import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { JobAdmin, JobQueue, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
@@ -200,7 +200,7 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await truncateAll();
+    await truncateAll(db);
     await redis.flushall();
     await Promise.all([settings.reload(), new TestSettings(app).reload()]);
     output = captureOutput();
@@ -212,18 +212,6 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
   });
 
   // ------------------------------------------------------------- plumbing
-
-  async function truncateAll(): Promise<void> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        return;
-      } catch (error) {
-        if (attempt >= 10) throw error;
-        await sleep(200);
-      }
-    }
-  }
 
   async function createBucket(): Promise<void> {
     const { CreateBucketCommand } = await import("@aws-sdk/client-s3");

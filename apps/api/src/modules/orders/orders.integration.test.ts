@@ -56,7 +56,7 @@ import { DatabaseService } from "../../database";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { JobAdmin, JobRegistry, SweepRunner, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import {
   appLogText,
   captureOutput,
@@ -259,7 +259,7 @@ describe("orders on items in stock (PostgreSQL + Redis)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await redis.flushall();
     await settings.reload();
     await settings.set({

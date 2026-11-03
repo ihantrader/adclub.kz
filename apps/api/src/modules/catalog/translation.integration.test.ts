@@ -32,7 +32,7 @@ import { runMigrate } from "../../database/migrate-cli";
 import { DatabaseService } from "../../database";
 import { configureHttpApp } from "../../http-app";
 import { JobAdmin, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import {
   appLogText,
   captureOutput,
@@ -165,7 +165,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
     lastSteps.clear();
     stepCookies.clear();
     await db.query("DELETE FROM pgboss.job WHERE name LIKE 'catalog.%'");
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await redis.flushall();
     await new TestSettings(app).reload();
     output = captureOutput();

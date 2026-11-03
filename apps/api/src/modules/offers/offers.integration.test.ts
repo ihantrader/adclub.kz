@@ -44,7 +44,7 @@ import { loadConfig, type AppConfig } from "../../config";
 import { DatabaseService } from "../../database";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
@@ -171,7 +171,7 @@ describe("offers of suppliers (PostgreSQL + Redis)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await redis.flushall();
     await settings.reload();
     await settings.set({

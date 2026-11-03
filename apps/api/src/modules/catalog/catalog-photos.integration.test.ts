@@ -39,7 +39,7 @@ import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { JobAdmin, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
 import { TcpProxy } from "../../testing/tcp-proxy";
@@ -224,7 +224,7 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await truncateAll();
+    await truncateAll(db);
     await redis.flushall();
     await Promise.all([settings.reload(), new TestSettings(app).reload()]);
     output = captureOutput();
@@ -240,25 +240,6 @@ describe("photos of catalog items (PostgreSQL + Redis + MinIO)", () => {
   });
 
   // ------------------------------------------------------------- plumbing
-
-  /**
-   * Empties the tables. The worker is running its jobs against the same
-   * ones, so a sweep in flight can deadlock with the truncation; that is a
-   * fact of the test bench, not of the product, and repeating settles it.
-   */
-  async function truncateAll(): Promise<void> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        return;
-      } catch (error) {
-        if (attempt >= 10) {
-          throw error;
-        }
-        await sleep(200);
-      }
-    }
-  }
 
   /**
    * The bucket, and the proof that the storage really takes objects before

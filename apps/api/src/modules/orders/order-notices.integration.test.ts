@@ -43,7 +43,7 @@ import { DatabaseService } from "../../database";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { SweepRunner, type JobRegistry, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import {
   allOutput,
   appLogText,
@@ -233,22 +233,9 @@ describe("notices of orders to suppliers, their buttons and the outage of the ch
     logins.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    // The workers are live and poll the tables; an emptying that loses a
-    // deadlock to one of them is simply tried again (as in the gateway's own file).
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        await db.query(
-          "DELETE FROM pgboss.job WHERE name LIKE 'messaging.%' OR name LIKE 'suppliers.%'",
-        );
-        break;
-      } catch (error) {
-        if (attempt >= 10) {
-          throw error;
-        }
-        await sleep(200);
-      }
-    }
+    await truncateAll(db, [
+      "DELETE FROM pgboss.job WHERE name LIKE 'messaging.%' OR name LIKE 'suppliers.%'",
+    ]);
     await redis.flushall();
     await settings.reload();
     await configure({

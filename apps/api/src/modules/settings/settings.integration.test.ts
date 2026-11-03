@@ -32,7 +32,7 @@ import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import {
   appLogText,
   captureOutput,
@@ -155,7 +155,7 @@ describe("settings (PostgreSQL + Redis)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await Promise.all([app.get(AppSettings).refresh(), worker.get(AppSettings).refresh()]);
     await operatorSet({
       login_code_requests_per_phone: 10_000,

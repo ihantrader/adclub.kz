@@ -16,7 +16,7 @@ import { loadConfig, type AppConfig } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
 import { JobAdmin, type JobsTuning } from "../../../jobs";
-import { TRUNCATE_ALL } from "../../../testing/database";
+import { truncateAll } from "../../../testing/database";
 import {
   appLogText,
   captureOutput,
@@ -123,7 +123,7 @@ describe("cleanup of stale sign-in data (PostgreSQL + Redis)", () => {
 
   beforeEach(async () => {
     channels.sent.length = 0;
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await Promise.all([settings.reload(), new TestSettings(app).reload()]);
     output = captureOutput();
   });

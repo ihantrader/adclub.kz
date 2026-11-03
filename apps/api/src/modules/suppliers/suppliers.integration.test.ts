@@ -37,7 +37,7 @@ import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import type { JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
 import { TcpProxy } from "../../testing/tcp-proxy";
@@ -211,7 +211,7 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
     messages.mode = "ok";
     lastSteps.clear();
     stepCookies.clear();
-    await truncateAll();
+    await truncateAll(db);
     await redis.flushall();
     await settings.reload();
     output = captureOutput();
@@ -226,20 +226,6 @@ describe("cities and suppliers (PostgreSQL + Redis)", () => {
   });
 
   // ------------------------------------------------------------- plumbing
-
-  async function truncateAll(): Promise<void> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        return;
-      } catch (error) {
-        if (attempt >= 10) {
-          throw error;
-        }
-        await sleep(200);
-      }
-    }
-  }
 
   const http = () => request(app.getHttpServer());
   const nextIp = () => `198.51.100.${String((ipCounter++ % 250) + 1)}`;

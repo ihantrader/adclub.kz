@@ -30,7 +30,7 @@ import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import type { JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
 import { TcpProxy } from "../../testing/tcp-proxy";
@@ -185,7 +185,7 @@ describe("the search index (PostgreSQL + Redis + Meilisearch)", () => {
     lastSteps.clear();
     stepCookies.clear();
     await stopWorker();
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await db.query(
       "INSERT INTO search_index_state (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET synonyms_hash = NULL, retry_after = NULL, failures = 0, last_error = NULL, last_applied_at = NULL, reindex_started_at = NULL, last_reindexed_at = NULL, last_reconciled_at = NULL, last_reconcile_documents = NULL, last_reconcile_mismatches = NULL",
     );

@@ -17,7 +17,7 @@ import { JsonLoggerService } from "../../../common/logging";
 import { loadConfig, type AppConfig } from "../../../config";
 import { runMigrate } from "../../../database/migrate-cli";
 import { configureHttpApp } from "../../../http-app";
-import { TRUNCATE_ALL } from "../../../testing/database";
+import { truncateAll } from "../../../testing/database";
 import {
   appLogText,
   captureOutput,
@@ -106,7 +106,7 @@ describe("login codes over HTTP (PostgreSQL + Redis)", () => {
     channels.failing.clear();
     channels.sent.length = 0;
     // Every setting back to its default, as the tables are emptied.
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await settings.reload();
     await redis.flushall();
     output = captureOutput();

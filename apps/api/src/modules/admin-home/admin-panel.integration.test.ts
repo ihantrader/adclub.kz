@@ -32,7 +32,7 @@ import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
@@ -131,18 +131,7 @@ describe("admin panel (PostgreSQL + Redis)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    // The worker is live and its sweepers poll the tables every minute; an
-    // emptying that loses a deadlock to one of them is simply tried again
-    // (a fact of the test bench, as in the other suites with a worker).
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        break;
-      } catch (error) {
-        if (attempt >= 10) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      }
-    }
+    await truncateAll(db);
     await Promise.all([app.get(AppSettings).refresh(), worker.get(AppSettings).refresh()]);
     await operatorSet({
       login_code_requests_per_phone: 10_000,

@@ -44,7 +44,7 @@ import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
@@ -160,7 +160,7 @@ describe("catalog items (PostgreSQL + Redis)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    await db.query(TRUNCATE_ALL);
+    await truncateAll(db);
     await redis.flushall();
     output = captureOutput();
     token = await setUpAdmin(ADMIN_PHONE);

@@ -38,7 +38,7 @@ import { DatabaseService } from "../../database";
 import { runMigrate } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { SweepRunner, type JobRegistry, type JobsTuning } from "../../jobs";
-import { TRUNCATE_ALL } from "../../testing/database";
+import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { completeTestRegistration } from "../../testing/registration";
 import { TestSettings } from "../../testing/settings";
@@ -176,15 +176,7 @@ describe("the rating of suppliers (PostgreSQL + Redis + worker)", () => {
     channels.sent.length = 0;
     lastSteps.clear();
     stepCookies.clear();
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await db.query(TRUNCATE_ALL);
-        break;
-      } catch (error) {
-        if (attempt >= 10) throw error;
-        await sleep(200);
-      }
-    }
+    await truncateAll(db);
     await redis.flushall();
     await settings.reload();
     await settings.set({

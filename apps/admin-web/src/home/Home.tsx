@@ -2,6 +2,7 @@ import { adminHomeCatalogFilters, type AdminHome } from "@adclub/contracts";
 import { ActionBar, Banner, Button, Icon, IconButton, LoadingContent, Skeleton } from "@adclub/ui";
 import type { IconName } from "@adclub/ui-core";
 import { apiClient } from "../api";
+import { paymentsPath } from "../billing/billing-words";
 import { itemsLink } from "../catalog/item-filters";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
@@ -39,7 +40,7 @@ const SIGNAL_KINDS = [
  * the quality of the catalog — every counter from one answer of the server.
  */
 export function homeCards(home: AdminHome): HomeCard[] {
-  const signal = (kind: (typeof SIGNAL_KINDS)[number] | "payment_failed") => {
+  const signal = (kind: (typeof SIGNAL_KINDS)[number]) => {
     const row = home.signals.find((entry) => entry.kind === kind);
     return (row?.open ?? 0) + (row?.acknowledged ?? 0);
   };
@@ -78,12 +79,14 @@ export function homeCards(home: AdminHome): HomeCard[] {
       href: withQuery(routePaths.complaints, { status: "new" }),
     },
     {
+      // TASK-043: the companies of «Неуспешные» whose bank refused or that are paused —
+      // the `total` of the list the card opens (the signal of each is there too).
       key: "payments",
       icon: "creditCard",
-      title: KIND_TITLES.payment_failed,
-      value: signal("payment_failed"),
-      note: KIND_HINTS.payment_failed,
-      href: withQuery(routePaths.signals, { kind: "payment_failed" }),
+      title: "Платежи поставщиков не прошли",
+      value: home.supplierPaymentsFailed,
+      note: "Банк отказал в списании подписки или повторы кончились и предложения сняты с витрины",
+      href: paymentsPath(["declined", "paused"]),
     },
     {
       key: "leads",

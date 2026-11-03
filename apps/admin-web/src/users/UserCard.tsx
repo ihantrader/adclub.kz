@@ -29,6 +29,7 @@ import { useOnline } from "@adclub/web-session";
 import { useState, type ReactNode } from "react";
 import { apiClient } from "../api";
 import { JournalHistory } from "../audit/JournalHistory";
+import { userSubscriptionsPath } from "../billing/billing-words";
 import { formatMoment } from "../format";
 import { AppLink, Header, Table } from "../layout/layout";
 import { Discipline } from "../orders/OrderCard";
@@ -388,6 +389,7 @@ function Access({ user, onChanged }: { user: AdminUser; onChanged: () => void })
         error={paid.error}
         retry={paid.reload}
         indicator={paid.indicator}
+        accountId={user.accountId}
       />
       <section className="section" aria-labelledby="user-grants-title">
         <div className="section__head">
@@ -525,6 +527,7 @@ function capitalized(text: string): string {
  * server's, read only (the stores manage it; the billing screens — TASK-043).
  */
 function Subscription({
+  accountId,
   data,
   error,
   retry,
@@ -534,6 +537,7 @@ function Subscription({
   error: unknown;
   retry: () => void;
   indicator: boolean;
+  accountId: string;
 }) {
   const subscription = data?.subscription ?? null;
   return (
@@ -542,6 +546,7 @@ function Subscription({
         <h2 className="section__title" id="user-subscription-title">
           Подписка
         </h2>
+        <AppLink href={userSubscriptionsPath(accountId)}>Все подписки</AppLink>
       </div>
       <LoadError error={error} retry={retry} />
       <LoadingContent

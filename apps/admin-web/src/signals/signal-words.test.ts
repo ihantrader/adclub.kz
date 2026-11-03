@@ -95,16 +95,17 @@ describe("the words of signals", () => {
     expect(KIND_TITLES.payment_failed).toBe("Платёж поставщика не прошёл");
     expect(KIND_TITLES.payment_system_down).toBe("Платёжная система недоступна");
     expect(KIND_TITLES.billing_plan_missing).toBe("Нет тарифа для подписки поставщиков");
-    // The failed payment opens the supplier's «Подписка»; the channel ones have no object.
+    // The failed payment opens the supplier's «Подписка»; the payment system's silence —
+    // the charges waiting for it, no tariff — «Тарифы» (TASK-043).
     expect(subjectLink({ subjectType: "supplier", subjectId: id, kind: "payment_failed" })).toBe(
       `/suppliers/${id}?tab=billing`,
     );
     expect(
       subjectLink({ subjectType: "channel", subjectId: id, kind: "payment_system_down" }),
-    ).toBeNull();
+    ).toBe("/billing/payments?groups=awaiting_provider");
     expect(
       subjectLink({ subjectType: "channel", subjectId: id, kind: "billing_plan_missing" }),
-    ).toBeNull();
+    ).toBe("/billing/plans");
     expect(
       plain(
         subjectText({

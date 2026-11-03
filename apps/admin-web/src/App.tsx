@@ -4,6 +4,10 @@ import { isOnline, subscribeOnline } from "@adclub/web-session";
 import { useEffect, useState, type ReactNode } from "react";
 import { apiClient, session, useSessionState, useUpdateRequiredMessage } from "./api";
 import { Audit } from "./audit/Audit";
+import { Payments } from "./billing/Payments";
+import { Plans } from "./billing/Plans";
+import { BillingSummary } from "./billing/Summary";
+import { UserSubscriptions } from "./billing/UserSubscriptions";
 import { CategoryTree } from "./catalog/CategoryTree";
 import { Fill } from "./catalog/Fill";
 import { ItemCard } from "./catalog/ItemCard";
@@ -249,6 +253,14 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
       return <NoShows />;
     case "user":
       return id ? <UserCard key={id} accountId={id} /> : null;
+    case "billing":
+      return <BillingSummary />;
+    case "billingUsers":
+      return <UserSubscriptions />;
+    case "billingPayments":
+      return <Payments />;
+    case "billingPlans":
+      return <Plans />;
     case "reviews":
       return <Reviews />;
     case "complaints":

@@ -32,6 +32,8 @@ const KIND_OF_SCHEMA: Record<string, StatusKind | "not a badge"> = {
   subscriptionStatusSchema: "subscription",
   // A supplier's subscription uses a subset of the same statuses (TASK-042).
   supplierSubscriptionStatusSchema: "subscription",
+  // A charge of a supplier in the admin panel's history (TASK-043).
+  adminChargeStatusSchema: "charge",
   // The states of a trip to the payment provider are progress text in the cabinet, not a badge.
   cardBindingStatusSchema: "not a badge",
   supplierInvitationStatusSchema: "invitation",

@@ -2,7 +2,8 @@ import type { AdminSupplierBillingResponse } from "@adclub/contracts";
 import { Badge, EmptyState, LoadingContent, SkeletonList, StatusBadge } from "@adclub/ui";
 import { apiClient } from "../api";
 import { formatDay, formatMoment } from "../format";
-import { Muted, Table } from "../layout/layout";
+import { chargesPath } from "../billing/billing-words";
+import { AppLink, Muted, Table } from "../layout/layout";
 import { useLoad } from "../use-load";
 import {
   SUBSCRIPTION_BY_TEXT,
@@ -48,13 +49,13 @@ export function SupplierBilling({ supplierId }: { supplierId: string }) {
         label="Загрузка"
         skeleton={<SkeletonList rows={4} label="Загрузка" />}
       >
-        {data && <Loaded data={data} />}
+        {data && <Loaded supplierId={supplierId} data={data} />}
       </LoadingContent>
     </div>
   );
 }
 
-function Loaded({ data }: { data: AdminSupplierBillingResponse }) {
+function Loaded({ supplierId, data }: { supplierId: string; data: AdminSupplierBillingResponse }) {
   const { subscription, card, pauses, charges, history } = data;
   const lines = pauseLines(pauses);
   return (
@@ -191,6 +192,7 @@ function Loaded({ data }: { data: AdminSupplierBillingResponse }) {
           <h2 id="billing-charges-title" className="section__title">
             Списания
           </h2>
+          <AppLink href={chargesPath({ supplierId })}>Все платежи</AppLink>
         </div>
         {charges.length === 0 ? (
           <EmptyState compact icon="receipt" title="Списаний пока не было" />

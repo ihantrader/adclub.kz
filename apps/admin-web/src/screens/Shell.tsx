@@ -34,6 +34,7 @@ const MENU: NavItem<StaticRoute>[] = [
   { key: "users", label: "Пользователи", icon: "users", href: routePaths.users },
   { key: "reviews", label: "Отзывы и жалобы", icon: "star", href: routePaths.reviews },
   { key: "suppliers", label: "Поставщики", icon: "store", href: routePaths.suppliers },
+  { key: "billing", label: "Биллинг", icon: "creditCard", href: routePaths.billing },
   { key: "settings", label: "Настройки", icon: "settings", href: routePaths.settings },
   { key: "audit", label: "Журнал", icon: "clock", href: routePaths.audit },
   { key: "security", label: "Безопасность", icon: "lock", href: routePaths.security },

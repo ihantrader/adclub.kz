@@ -136,6 +136,7 @@ const ACTIONS: Record<string, string> = {
   "club_access.revoked": "Отозван клубный доступ",
   "subscription.changed": "Изменилась подписка",
   "plan.added": "Добавлен тариф",
+  "plan.cancelled": "Отменён запланированный тариф",
   "review_login.enabled": "Включён служебный вход для сторов",
   "review_login.disabled": "Выключен служебный вход для сторов",
   "review_login.signed_in": "Вход в приложение служебным входом для сторов",
@@ -460,6 +461,9 @@ export function entityLink(
       return UUID.test(entityId) ? vehicleImportPath(entityId) : null;
     // Suppliers (TASK-036): the company opens its card, an employee and an
     // invitation — the card's «Сотрудники», a request — its card.
+    // A tariff (TASK-043): «Биллинг → Тарифы» with every record.
+    case "plan":
+      return routePaths.billingPlans;
     case "supplier":
       return UUID.test(entityId) ? supplierPath(entityId) : null;
     case "supplier_member":

@@ -1,0 +1,93 @@
+/* «Биллинг» (A-BILL-01…04; TASK-043). Only what the shared layout lacks: the cards are the home screen's. */
+
+.billing-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-8);
+  min-width: 0;
+}
+
+.billing-section__title {
+  margin: 0 0 var(--ac-space-3);
+}
+
+/* The sum of the charges next to their number, quieter than it. */
+.billing-card__extra {
+  margin-left: var(--ac-space-3);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: var(--ac-font-weight-body);
+  color: var(--ac-color-text-muted);
+  white-space: nowrap;
+}
+
+.billing-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+.billing-plan h2,
+.billing-plan p {
+  margin: 0;
+}
+
+.billing-plan__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-4);
+}
+
+.billing-plan__head h3 {
+  margin: 0;
+}
+
+.billing-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  max-width: 720px;
+  padding: var(--ac-space-4);
+  border: var(--ac-line-hairline) solid var(--ac-color-border);
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface);
+}
+
+.billing-notice__texts {
+  display: grid;
+  gap: var(--ac-space-3);
+  margin: 0;
+}
+
+.billing-notice__texts dd {
+  margin: 0;
+}
+
+.billing-row--cancelled td {
+  color: var(--ac-color-text-muted);
+}
+
+.billing-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-2);
+}
+
+.billing-form,
+.billing-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-4);
+}
+
+.billing-preview p {
+  margin: 0;
+}
+
+.billing-days {
+  flex: 0 0 220px;
+  width: 220px;
+}

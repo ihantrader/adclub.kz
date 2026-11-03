@@ -6,7 +6,8 @@ import type {
   PaymentDeclineReason,
 } from "@adclub/contracts";
 import { formatMoment } from "../format";
-import { orderExtensionsPath, orderPath, supplierPath } from "../router";
+import { paymentsPath } from "../billing/billing-words";
+import { orderExtensionsPath, orderPath, routePaths, supplierPath } from "../router";
 import { amountText, DECLINE_REASON_TEXT } from "../suppliers/billing-words";
 import { ratingNumber, thresholdNumber } from "../suppliers/rating-words";
 
@@ -189,9 +190,15 @@ export function subjectLink(
               : "members",
       );
     case "channel":
+      // TASK-043: the payment system's silence — the charges waiting for it (A-BILL-03);
+      // no tariff — «Тарифы» (A-BILL-04).
       return signal.kind === "whatsapp_outage"
         ? orderExtensionsPath(signal.payload?.since ?? undefined)
-        : null;
+        : signal.kind === "payment_system_down"
+          ? paymentsPath(["awaiting_provider"])
+          : signal.kind === "billing_plan_missing"
+            ? routePaths.billingPlans
+            : null;
   }
 }
 
@@ -216,7 +223,7 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
   payment_system_down:
     "Платёжная система не принимает списания дольше порога. Никому не пишем и никого не ставим на паузу — списания повторяются сами. Сигнал закроется, когда платёжная система ответит.",
   billing_plan_missing:
-    "Нет тарифа для поставщиков: подписку нельзя начать и продлить. Добавьте тариф командой оператора; сигнал закроется сам.",
+    "Нет тарифа для поставщиков: подписку нельзя начать и продлить. Задайте тариф в «Биллинг → Тарифы»; сигнал закроется сам.",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

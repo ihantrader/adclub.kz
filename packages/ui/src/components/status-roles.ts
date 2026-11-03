@@ -1,5 +1,6 @@
 import type { IconName, Tone } from "@adclub/ui-core";
 import type {
+  AdminChargeStatus,
   CatalogEntryStatus,
   CatalogItemStatus,
   CatalogRequestStatus,
@@ -166,6 +167,14 @@ export const statusRoles = {
     suspended: waits,
     expired: over,
   } satisfies Record<SubscriptionStatusValue, StatusRole>,
+  // A charge of a supplier in «История списаний» (TASK-043): the payment system's silence is no refusal.
+  charge: {
+    succeeded: done,
+    declined: failed,
+    unavailable: pending,
+    unknown: pending,
+    created: working,
+  } satisfies Record<AdminChargeStatus, StatusRole>,
   invitation: {
     queued: pending,
     sent: done,

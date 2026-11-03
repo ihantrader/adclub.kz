@@ -36,6 +36,11 @@ export const routePaths = {
   orderExtensions: "/orders/extensions",
   users: "/users",
   userNoShows: "/users/no-shows",
+  // Billing (TASK-043): the summary, users' subscriptions, suppliers' payments, tariffs.
+  billing: "/billing",
+  billingUsers: "/billing/users",
+  billingPayments: "/billing/payments",
+  billingPlans: "/billing/plans",
   // Reviews and complaints (TASK-049): A-REV-01, A-REV-02.
   reviews: "/reviews",
   complaints: "/complaints",
@@ -253,6 +258,9 @@ export function menuOf(route: RouteKey): StaticRoute {
   }
   if (route === "user" || route === "userNoShows") {
     return "users";
+  }
+  if (route === "billingUsers" || route === "billingPayments" || route === "billingPlans") {
+    return "billing";
   }
   if (route === "complaints" || route === "complaint") {
     return "reviews";

@@ -352,6 +352,12 @@ export const adminHomeSchema = z.object({
   reviewsHeld: z.number().int(),
   /** TASK-049 (5, «Жалобы · новых N»): `GET /admin/complaints?status=new`. */
   complaintsNew: z.number().int(),
+  /**
+   * TASK-043 (6, «Платежи поставщиков не прошли · N»): the suppliers whose
+   * bank refused or who are on the billing pause —
+   * `GET /admin/billing/suppliers?groups=declined,paused` (`total`).
+   */
+  supplierPaymentsFailed: z.number().int(),
   /** The quality of the catalog (8). Items that are not archived. */
   catalog: z.object({
     /** No approved photo. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { announcedPlan, planInEffect, type PlanRecord } from "./plans";
+import { announcedPlan, earliestPlanStart, planInEffect, type PlanRecord } from "./plans";
 import { purchaseLinkVerdict } from "./purchase-link";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -97,5 +97,28 @@ describe("whose a purchase is", () => {
         otherCurrent: { grantsAccess: false },
       }),
     ).toEqual({ kind: "link_new", replaces: true });
+  });
+});
+
+describe("the earliest start of a tariff of the admin panel (TASK-043)", () => {
+  // 12:00 in Almaty on 4 November.
+  const noon = new Date("2026-11-04T07:00:00Z");
+
+  it("is tomorrow for a lowering, today only for the first tariff", () => {
+    expect(earliestPlanStart({ now: noon, announceBeforeDays: 7, rise: false })).toBe("2026-11-05");
+    expect(
+      earliestPlanStart({ now: noon, announceBeforeDays: 7, rise: true, firstTariff: true }),
+    ).toBe("2026-11-04");
+  });
+
+  it("keeps a rise's notice whole: the first midnight N days from now or later", () => {
+    // Now + 7 days is 11 November 12:00, so 11 November's 00:00 is too early.
+    expect(earliestPlanStart({ now: noon, announceBeforeDays: 7, rise: true })).toBe("2026-11-12");
+    // Exactly at a midnight of Almaty: that very day.
+    const midnight = new Date("2026-11-03T19:00:00Z");
+    expect(earliestPlanStart({ now: midnight, announceBeforeDays: 7, rise: true })).toBe(
+      "2026-11-11",
+    );
+    expect(earliestPlanStart({ now: noon, announceBeforeDays: 0, rise: true })).toBe("2026-11-05");
   });
 });

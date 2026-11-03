@@ -185,6 +185,20 @@ import {
   revokeClubAccessBodySchema,
 } from "./club-access";
 import {
+  addAdminPlanBodySchema,
+  adminBillingPeriodQuerySchema,
+  adminBillingPlansSchema,
+  adminBillingSummarySchema,
+  adminBillingSupplierListQuerySchema,
+  adminBillingSupplierPageSchema,
+  adminChargeListQuerySchema,
+  adminChargePageSchema,
+  adminPlanPathSchema,
+  adminUserSubscriptionListQuerySchema,
+  adminUserSubscriptionPageSchema,
+  cancelAdminPlanBodySchema,
+} from "./admin-billing";
+import {
   adminSupplierBillingResponseSchema,
   adminUserSubscriptionResponseSchema,
   mySubscriptionResponseSchema,
@@ -1241,6 +1255,113 @@ export const apiRoutes = {
     pathParams: supplierAdminPathSchema,
     responses: {
       200: { description: "The supplier's billing", schema: adminSupplierBillingResponseSchema },
+    },
+  }),
+  // «Биллинг» of the admin panel (TASK-043, SCREENS 7.8): every number of the
+  // summary is the `total` of the list its card opens (ARCHITECTURE 4.78 I847).
+  getAdminBillingSummary: defineRoute({
+    operationId: "getAdminBillingSummary",
+    method: "GET",
+    path: "/admin/billing/summary",
+    summary:
+      "A-BILL-01: users' subscriptions giving access by platform, started and ended in the period; suppliers by their one billing group; charges of the period; the suppliers' tariff",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminBillingPeriodQuerySchema,
+    responses: {
+      200: { description: "The summary", schema: adminBillingSummarySchema },
+    },
+  }),
+  listAdminUserSubscriptions: defineRoute({
+    operationId: "listAdminUserSubscriptions",
+    method: "GET",
+    path: "/admin/billing/user-subscriptions",
+    summary:
+      "A-BILL-02: users' subscriptions — giving access now or not — by status, platform, provider, ending soon, started or ended in a period, phone or name; numbers partly hidden",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminUserSubscriptionListQuerySchema,
+    responses: {
+      200: { description: "A page of subscriptions", schema: adminUserSubscriptionPageSchema },
+    },
+  }),
+  listAdminBillingSuppliers: defineRoute({
+    operationId: "listAdminBillingSuppliers",
+    method: "GET",
+    path: "/admin/billing/suppliers",
+    summary:
+      "A-BILL-03 «Неуспешные»: suppliers by their billing group — the refusal, its try, the next try and the days to the pause, or the charge waiting for the payment system",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminBillingSupplierListQuerySchema,
+    responses: {
+      200: { description: "A page of suppliers", schema: adminBillingSupplierPageSchema },
+    },
+  }),
+  listAdminCharges: defineRoute({
+    operationId: "listAdminCharges",
+    method: "GET",
+    path: "/admin/billing/charges",
+    summary:
+      "A-BILL-03 «История списаний»: every charge of suppliers by period, supplier, status and kind, newest first; the card as its mask only",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminChargeListQuerySchema,
+    responses: {
+      200: { description: "A page of charges", schema: adminChargePageSchema },
+    },
+  }),
+  getAdminBillingPlans: defineRoute({
+    operationId: "getAdminBillingPlans",
+    method: "GET",
+    path: "/admin/billing/plans",
+    summary:
+      "A-BILL-04: the suppliers' tariff in effect, the announced and planned changes and every record (cancelled ones too); the users' records to look at",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    responses: {
+      200: { description: "The tariffs", schema: adminBillingPlansSchema },
+    },
+  }),
+  addAdminBillingPlan: defineRoute({
+    operationId: "addAdminBillingPlan",
+    method: "POST",
+    path: "/admin/billing/plans",
+    summary:
+      "«Запланировать изменение» of the suppliers' tariff: from a later day of Almaty, a rise no earlier than its notice; another version — PLAN_VERSION_CONFLICT",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: { description: "The new record", schema: addAdminPlanBodySchema },
+    responses: {
+      200: { description: "The tariffs as they are now", schema: adminBillingPlansSchema },
+    },
+  }),
+  cancelAdminBillingPlan: defineRoute({
+    operationId: "cancelAdminBillingPlan",
+    method: "POST",
+    path: "/admin/billing/plans/{planId}/cancel",
+    summary:
+      "«Отменить запланированное»: a suppliers' record that has not started is marked cancelled with the reason (its notice leaves the cabinet); one that started — PLAN_NOT_CANCELLABLE",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminPlanPathSchema,
+    requestBody: { description: "Why, and the version seen", schema: cancelAdminPlanBodySchema },
+    responses: {
+      200: { description: "The tariffs as they are now", schema: adminBillingPlansSchema },
     },
   }),
   getSupplierCompany: defineRoute({

@@ -3,10 +3,12 @@ import {
   addCalendarMonths,
   bankRetriesLeft,
   bankRetryWindowEnd,
+  daysUntilPause,
   BILLING_TIME_ZONE,
   firstPeriod,
   nextBankRetry,
   nextDailyRun,
+  pastDueNextRetry,
   renewalPeriod,
   retryWindowEnd,
 } from "./billing-cycle";
@@ -224,5 +226,72 @@ describe("the end of the retries' window", () => {
       declinedCount: 3,
     });
     expect(end.toISOString()).toBe(almaty("2026-11-11T15:00:00").toISOString());
+  });
+});
+
+describe("the next retry and the days to the pause (A-BILL-03, S-BILL-01)", () => {
+  const tuning = { retryDays: 3, hour: 10 };
+  const first = almaty("2026-11-05T10:00:05");
+
+  it("names the retry W-05 promised, and none once the retries are used up", () => {
+    const graceUntil = bankRetryWindowEnd({
+      ...tuning,
+      firstDeclinedAt: first,
+      lastDeclinedAt: first,
+      declinedCount: 1,
+    });
+    const next = pastDueNextRetry({
+      ...tuning,
+      declinedCount: 1,
+      lastDeclinedAt: first,
+      graceUntil,
+      now: almaty("2026-11-05T12:00:00"),
+    });
+    expect(next?.toISOString()).toBe(nextBankRetry(first, 10).at.toISOString());
+    const third = almaty("2026-11-07T10:00:06");
+    expect(
+      pastDueNextRetry({
+        ...tuning,
+        declinedCount: 3,
+        lastDeclinedAt: third,
+        graceUntil: bankRetryWindowEnd({
+          ...tuning,
+          firstDeclinedAt: first,
+          lastDeclinedAt: third,
+          declinedCount: 3,
+        }),
+        now: almaty("2026-11-07T11:00:00"),
+      }),
+    ).toBeNull();
+  });
+
+  it("takes the next run when the promised day is due already, and none at the pause", () => {
+    const now = almaty("2026-11-06T11:00:00");
+    expect(
+      pastDueNextRetry({
+        ...tuning,
+        declinedCount: 1,
+        lastDeclinedAt: first,
+        graceUntil: almaty("2026-11-09T10:00:00"),
+        now,
+      })?.toISOString(),
+    ).toBe(almaty("2026-11-07T10:00:00").toISOString());
+    expect(
+      pastDueNextRetry({
+        ...tuning,
+        declinedCount: 1,
+        lastDeclinedAt: first,
+        graceUntil: almaty("2026-11-07T10:00:00"),
+        now,
+      }),
+    ).toBeNull();
+  });
+
+  it("counts the days of Almaty to the pause, 0 on its day", () => {
+    const pause = almaty("2026-11-08T10:00:06");
+    expect(daysUntilPause(pause, almaty("2026-11-05T23:30:00"))).toBe(3);
+    expect(daysUntilPause(pause, almaty("2026-11-06T00:10:00"))).toBe(2);
+    expect(daysUntilPause(pause, almaty("2026-11-08T09:00:00"))).toBe(0);
+    expect(daysUntilPause(pause, almaty("2026-11-09T09:00:00"))).toBe(0);
   });
 });

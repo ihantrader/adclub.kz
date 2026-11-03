@@ -296,6 +296,13 @@ import { clientPlatformSchema } from "./client";
  * - `COMPLAINT_CONFLICT` (409): another administrator acted first; nothing
  *   changed. `details` is `ComplaintConflictDetails`.
  *
+ * Tariffs (TASK-043, ARCHITECTURE 4.78):
+ * - `PLAN_VERSION_CONFLICT` (409): another administrator (or the operator)
+ *   added or cancelled a tariff after the page was loaded; nothing changed.
+ *   `details` is `PlanVersionConflictDetails`.
+ * - `PLAN_NOT_CANCELLABLE` (409): the record has started already, or is
+ *   cancelled already — only a change still ahead is cancelled.
+ *
  * Price list imports (TASK-046, ARCHITECTURE 4.66):
  * - `PRICE_IMPORT_FILE_INVALID` (400): the uploaded file can't be read as a
  *   price list — the content is looked at, not the name; `details` is
@@ -518,6 +525,9 @@ export const errorCodeSchema = z.enum([
   "COMPLAINT_NOT_ALLOWED",
   "COMPLAINT_EXISTS",
   "COMPLAINT_CONFLICT",
+  // Tariffs in the admin panel (TASK-043, ARCHITECTURE 4.78).
+  "PLAN_VERSION_CONFLICT",
+  "PLAN_NOT_CANCELLABLE",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

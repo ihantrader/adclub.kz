@@ -107,6 +107,53 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("marks a cancelled tariff instead of deleting it, keeps one start among the live ones, and rolls back (billing admin)", async () => {
+    // As the migration before left them: a tariff record without a cancel.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    const start = "2027-03-01T00:00:00+05:00";
+    await client.query(
+      `INSERT INTO plan (audience, code, price, valid_from, announce_before_days, reason, created_by_role)
+       VALUES ('supplier', 'supplier-before', 3000, $1, 7, 'До миграции', 'operator')`,
+      [start],
+    );
+    expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
+    const add = (code: string) =>
+      client.query(
+        `INSERT INTO plan (audience, code, price, valid_from, announce_before_days, reason, created_by_role)
+         VALUES ('supplier', $1, 5000, $2, 7, 'Тест', 'admin') RETURNING id`,
+        [code, start],
+      );
+    // The same start twice among the live records: refused.
+    await expect(add("supplier-twice")).rejects.toThrow(/plan_audience_from_key/);
+    // A cancel is whole or nothing.
+    await expect(
+      client.query("UPDATE plan SET cancelled_at = now() WHERE code = 'supplier-before'"),
+    ).rejects.toThrow(/plan_cancelled_check/);
+    await client.query(
+      "UPDATE plan SET cancelled_at = now(), cancelled_by_role = 'admin', cancel_reason = 'Отмена' WHERE code = 'supplier-before'",
+    );
+    // The day freed by the cancellation can be planned again; the cancelled record stays.
+    await add("supplier-again");
+    const { rows: kept } = await client.query<{ code: string; cancelled: boolean }>(
+      "SELECT code, cancelled_at IS NOT NULL AS cancelled FROM plan WHERE valid_from = $1 ORDER BY code",
+      [start],
+    );
+    expect(kept).toEqual([
+      { code: "supplier-again", cancelled: false },
+      { code: "supplier-before", cancelled: true },
+    ]);
+
+    // Back: the cancelled record goes (the full unique key returns), the live one stays.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    const { rows: after } = await client.query<{ code: string }>(
+      "SELECT code FROM plan WHERE valid_from = $1",
+      [start],
+    );
+    expect(after).toEqual([{ code: "supplier-again" }]);
+    await expect(add("supplier-twice")).rejects.toThrow(/plan_audience_from_key/);
+    await client.query("DELETE FROM plan WHERE valid_from = $1", [start]);
+  });
+
   it("hands an old «billing» pause of a company without a subscription to the administrator, keeps one first charge until the subscription, and rolls back (supplier billing fixes)", async () => {
     // As the migration before left them: a «billing» pause put by hand before billing existed.
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
@@ -168,6 +215,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     await first(second, "fix-key-2");
 
     // Back: the pause returns to billing, the index goes.
+    // The `up` above brought back the later migration too (billing admin): it goes first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(await pauseOf(bare)).toEqual({ admin: false, billing: true, status: "paused" });
     expect(await indexExists(client, "payment_attempt_first_unbound_key")).toBe(false);

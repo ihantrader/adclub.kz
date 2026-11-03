@@ -246,6 +246,11 @@ export const auditActions = {
   /** A tariff was added (TASK-040, operator command): `after` — the record. */
   planAdded: "plan.added",
   /**
+   * A tariff that had not started was cancelled (TASK-043, A-BILL-04): the
+   * record stays, marked; `before` — the record, `after.cancelledAt`.
+   */
+  planCancelled: "plan.cancelled",
+  /**
    * The sign-in for store review (TASK-077, PRODUCT 5), only by the operator
    * command: `enabled` — `after` the masked number and the term (a current
    * one replaced is named in `before`); `disabled` — ended early; `signed_in`

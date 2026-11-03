@@ -177,3 +177,48 @@ export function bankRetryWindowEnd(input: {
 export function bankRetriesLeft(declinedCount: number, retryDays: number): boolean {
   return declinedCount < retryDays;
 }
+
+/**
+ * **When a past-due subscription's card is tried again** (TASK-043,
+ * ARCHITECTURE 4.78 I849): the retry W-05 promised after the last refusal
+ * (`nextBankRetry`), or the next run of the daily job when that day is due
+ * already; `null` — no more automatic tries: the retries are used up
+ * (`bankRetriesLeft`) or the next run would come no earlier than the pause
+ * (`graceUntil`, what W-05a names). One rule for the cabinet's «Следующая
+ * попытка» (S-BILL-01) and the administrator's list (A-BILL-03).
+ */
+export function pastDueNextRetry(input: {
+  declinedCount: number;
+  lastDeclinedAt: Date | null;
+  graceUntil: Date | null;
+  retryDays: number;
+  hour: number;
+  now: Date;
+  timeZone?: string;
+}): Date | null {
+  if (!bankRetriesLeft(input.declinedCount, input.retryDays)) return null;
+  const timeZone = input.timeZone ?? BILLING_TIME_ZONE;
+  const promised = input.lastDeclinedAt
+    ? nextBankRetry(input.lastDeclinedAt, input.hour, timeZone).at
+    : nextDailyRun(input.now, input.hour, timeZone);
+  const run =
+    promised.getTime() > input.now.getTime()
+      ? promised
+      : nextDailyRun(input.now, input.hour, timeZone);
+  return input.graceUntil && run.getTime() >= input.graceUntil.getTime() ? null : run;
+}
+
+/**
+ * «Дней до паузы» (A-BILL-03): how many days of the billing time zone lie
+ * between today and the day of `pauseAt` — 0 on the day itself, never
+ * below 0. `pauseAt` is `subscription.grace_until`, written by
+ * `bankRetryWindowEnd` — the very moment W-05a names.
+ */
+export function daysUntilPause(
+  pauseAt: Date,
+  now: Date,
+  timeZone: string = BILLING_TIME_ZONE,
+): number {
+  const day = (at: Date) => Date.parse(`${localDateTime(at, timeZone).date}T00:00:00Z`);
+  return Math.max(0, Math.round((day(pauseAt) - day(now)) / DAY_MS));
+}

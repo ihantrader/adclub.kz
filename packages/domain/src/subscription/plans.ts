@@ -1,3 +1,5 @@
+import { localDateTime } from "../offer/receipt-date";
+import { startOfLocalDate } from "../order/order-reserve";
 import type { SubscriptionAudience } from "./subscription-machine";
 
 /**
@@ -56,4 +58,38 @@ export function announcedPlan<Plan extends PlanRecord>(
     if (!found || starts < found.validFrom.getTime()) found = plan;
   }
   return found;
+}
+
+/**
+ * **The earliest day a new tariff of the admin panel may start** (TASK-043,
+ * ARCHITECTURE 4.78 I850), a day of `timeZone` (`YYYY-MM-DD`): tomorrow —
+ * never today or a day gone (a term already being paid is not repriced under
+ * the supplier's feet); a **rise** besides no earlier than the first day whose
+ * 00:00 is `announceBeforeDays` days from now, so the notice of PRODUCT 14.1
+ * («предупреждается заранее») is really shown that long. `firstTariff` —
+ * nothing is in effect: the first tariff may start today (without it nobody
+ * can subscribe).
+ */
+export function earliestPlanStart(input: {
+  now: Date;
+  announceBeforeDays: number;
+  rise: boolean;
+  firstTariff?: boolean;
+  timeZone?: string;
+}): string {
+  const timeZone = input.timeZone ?? "Asia/Almaty";
+  const today = localDateTime(input.now, timeZone).date;
+  if (input.firstTariff) return today;
+  const tomorrow = nextDate(today);
+  if (!input.rise) return tomorrow;
+  const ready = new Date(input.now.getTime() + input.announceBeforeDays * DAY_MS);
+  let day = localDateTime(ready, timeZone).date;
+  if (startOfLocalDate(day, timeZone).getTime() < ready.getTime()) day = nextDate(day);
+  return day > tomorrow ? day : tomorrow;
+}
+
+function nextDate(date: string): string {
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
 }

@@ -206,21 +206,31 @@ export function clubAccessUntil(
   at: Date,
   toleranceMs: number,
 ): SQL<Date | null> {
-  const tolerance = sql`make_interval(secs => ${toleranceMs / 1000})`;
   const now = sql`${at.toISOString()}::timestamptz`;
   return sql<Date | null>`(SELECT max(ends.until) FROM (
       SELECT ${clubAccessGrant.validUntil} AS until FROM ${clubAccessGrant}
         WHERE ${clubAccessGrant.accountId} = ${accountId}
           AND ${clubAccessGrant.endedAt} IS NULL
       UNION ALL
-      SELECT CASE paid.status
-          WHEN 'active' THEN paid.current_period_end + ${tolerance}
-          WHEN 'grace' THEN GREATEST(paid.current_period_end, paid.grace_until) + ${tolerance}
-          WHEN 'cancelled' THEN paid.current_period_end
-          WHEN 'expired_unconfirmed'
-            THEN coalesce(paid.unconfirmed_since, paid.current_period_end) + ${tolerance}
-        END
+      SELECT ${subscriptionAccessUntilSql(sql.raw("paid"), toleranceMs)}
         FROM subscription AS paid
         WHERE paid.account_id = ${accountId} AND paid.audience = 'user' AND paid.status <> 'expired'
     ) AS ends WHERE ends.until > ${now})`;
+}
+
+/**
+ * The SQL twin of `subscriptionAccessUntil` for a row of `subscription`
+ * named `alias`: when the access it gives ends, `NULL` — it gives none.
+ * Club access (`clubAccessUntil`) and the admin panel's billing (A-BILL-01,
+ * A-BILL-02 «Действующие», TASK-043) read this one expression.
+ */
+export function subscriptionAccessUntilSql(alias: SQL, toleranceMs: number): SQL<Date | null> {
+  const tolerance = sql`make_interval(secs => ${toleranceMs / 1000})`;
+  return sql<Date | null>`(CASE ${alias}.status
+      WHEN 'active' THEN ${alias}.current_period_end + ${tolerance}
+      WHEN 'grace' THEN GREATEST(${alias}.current_period_end, ${alias}.grace_until) + ${tolerance}
+      WHEN 'cancelled' THEN ${alias}.current_period_end
+      WHEN 'expired_unconfirmed'
+        THEN coalesce(${alias}.unconfirmed_since, ${alias}.current_period_end) + ${tolerance}
+    END)`;
 }

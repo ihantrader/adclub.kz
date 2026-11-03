@@ -5,7 +5,10 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
   adminCityResponseSchema,
   adminSupplierResponseSchema,
+  adminBillingSummarySchema,
+  adminChargePageSchema,
   adminUserPageSchema,
+  adminUserSubscriptionPageSchema,
   adminUserSubscriptionResponseSchema,
   apiErrorResponseSchema,
   createOrderResponseSchema,
@@ -17,6 +20,7 @@ import {
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
   totpStepRequiredDetailsSchema,
+  type AdminUserSubscriptionPage,
   type DayHours,
   type ErrorCode,
   type SupplierOffer,
@@ -1118,6 +1122,329 @@ describe("subscriptions (PostgreSQL + Redis + worker)", () => {
         await asAdmin("get", `/admin/users/${randomUUID()}/subscription`),
         404,
         "NOT_FOUND",
+      );
+    });
+  });
+
+  describe("«Биллинг» of the admin panel: users' subscriptions (TASK-043 AC-1, AC-5)", () => {
+    /** Every row of a list, page by page, each once. */
+    async function walk(query: Record<string, string>): Promise<{ ids: string[]; total: number }> {
+      const ids: string[] = [];
+      let cursor: string | null = null;
+      let total: number;
+      do {
+        const params: URLSearchParams = new URLSearchParams({
+          ...query,
+          limit: "2",
+          ...(cursor ? { cursor } : {}),
+        });
+        const page: AdminUserSubscriptionPage = await ok(
+          asAdmin("get", `/admin/billing/user-subscriptions?${params.toString()}`),
+          (body) => adminUserSubscriptionPageSchema.parse(body),
+        );
+        total = page.total;
+        ids.push(...page.subscriptions.map((row) => row.id));
+        cursor = page.nextCursor;
+      } while (cursor);
+      expect(new Set(ids).size).toBe(ids.length);
+      return { ids, total };
+    }
+
+    it("counts the summary with the lists' own filters, every status and both platforms, the period's edges by Almaty", async () => {
+      await settings.set({ store_lag_tolerance_hours: 48 });
+      const now = Date.now();
+      // The period: from 00:00 in Almaty ten days ago to 00:00 of tomorrow.
+      const today = new Date(now + 5 * HOUR).toISOString().slice(0, 10);
+      const day = (offset: number) => {
+        const date = new Date(`${today}T00:00:00+05:00`);
+        date.setUTCDate(date.getUTCDate() + offset);
+        return date;
+      };
+      const from = day(-10);
+      const to = day(1);
+      const ms = (date: Date, offset: number) => new Date(date.getTime() + offset);
+      const cases: {
+        status: string;
+        platform?: "ios" | "android";
+        periodEnd: number;
+        grace?: number;
+        unconfirmed?: number;
+        started: Date;
+        ended?: { at: Date; kind: string };
+      }[] = [
+        { status: "active", platform: "ios", periodEnd: 20 * DAY, started: ms(from, 0) },
+        { status: "active", platform: "android", periodEnd: 20 * DAY, started: ms(from, -1) },
+        { status: "active", platform: "android", periodEnd: 5 * DAY, started: ms(to, -60_000) },
+        { status: "cancelled", periodEnd: 3 * DAY, started: ms(from, HOUR) },
+        {
+          status: "grace",
+          platform: "ios",
+          periodEnd: -DAY,
+          grace: 5 * DAY,
+          started: ms(from, -DAY),
+        },
+        {
+          status: "expired_unconfirmed",
+          periodEnd: -HOUR,
+          unconfirmed: -HOUR,
+          started: ms(from, 2 * DAY),
+        },
+        // Past the tolerance: still marked so, it gives no access any more.
+        {
+          status: "expired_unconfirmed",
+          periodEnd: -50 * HOUR,
+          unconfirmed: -50 * HOUR,
+          started: ms(from, -3 * DAY),
+        },
+        { status: "suspended", platform: "ios", periodEnd: 10 * DAY, started: ms(from, DAY) },
+        {
+          status: "expired",
+          periodEnd: -DAY,
+          started: ms(from, -20 * DAY),
+          ended: { at: ms(from, 0), kind: "refunded" },
+        },
+        {
+          status: "expired",
+          platform: "android",
+          periodEnd: -DAY,
+          started: ms(from, -20 * DAY),
+          ended: { at: ms(from, -1), kind: "expired" },
+        },
+        {
+          status: "expired",
+          periodEnd: -DAY,
+          started: ms(from, 3 * DAY),
+          ended: { at: ms(to, -1), kind: "revoked" },
+        },
+      ];
+      const ids: string[] = [];
+      for (const [index, entry] of cases.entries()) {
+        const phone = `+7700${String(8_000_000 + index)}`;
+        rememberCode(phone);
+        const { rows } = await db.query<{ id: string }>(
+          "INSERT INTO account (phone, name) VALUES ($1, $2) RETURNING id",
+          [phone, `Подписчик ${String(index)}`],
+        );
+        const accountId = rows[0]!.id;
+        const moment = (offset: number | undefined) =>
+          offset === undefined ? null : new Date(now + offset);
+        const inserted = await db.query<{ id: string }>(
+          "INSERT INTO subscription (audience, account_id, provider, provider_ref, purchase_platform, status, current_period_end, grace_until, unconfirmed_since) VALUES ('user', $1, 'test', $2, $3, $4, $5, $6, $7) RETURNING id",
+          [
+            accountId,
+            `bill-${String(index)}`,
+            entry.platform ?? null,
+            entry.status,
+            moment(entry.periodEnd),
+            moment(entry.grace),
+            moment(entry.unconfirmed),
+          ],
+        );
+        const subscriptionId = inserted.rows[0]!.id;
+        ids.push(subscriptionId);
+        const applied = (kind: string, at: Date, toStatus: string) =>
+          db.query(
+            "INSERT INTO billing_event (provider, provider_event_id, source, kind, provider_ref, account_id, subscription_id, event_at, outcome, applied_at, to_status) VALUES ('test', $1, 'operator', $2, $3, $4, $5, $6, 'applied', now(), $7)",
+            [randomUUID(), kind, `bill-${String(index)}`, accountId, subscriptionId, at, toStatus],
+          );
+        await applied("started", entry.started, "active");
+        if (entry.ended) await applied(entry.ended.kind, entry.ended.at, "expired");
+      }
+      // A grant by hand is no subscription: nowhere in these numbers.
+      const granted = await customer();
+      await db.query(
+        "INSERT INTO club_access_grant (account_id, valid_until, reason, granted_by_role) VALUES ($1, $2, 'тест', 'operator')",
+        [granted.accountId, new Date(now + 10 * DAY)],
+      );
+
+      const period = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+      const summary = await ok(
+        asAdmin("get", `/admin/billing/summary?${period.toString()}`),
+        (body) => adminBillingSummarySchema.parse(body),
+      );
+      // Giving access now: active ×3, cancelled, grace, the unconfirmed within the tolerance.
+      expect(summary.users.active).toEqual({ total: 6, ios: 2, android: 2, other: 2 });
+      // Started at `from` exactly and later, before `to`: 0, 2, 3, 5, 7, 10.
+      expect(summary.users.started).toBe(6);
+      // Ended at `from` and a moment before `to`; one a moment before `from` is not.
+      expect(summary.users.ended).toBe(2);
+
+      const cards: [number, Record<string, string>][] = [
+        [summary.users.active.total, { tab: "active" }],
+        [summary.users.active.ios, { tab: "active", platform: "ios" }],
+        [summary.users.active.android, { tab: "active", platform: "android" }],
+        [summary.users.active.other, { tab: "active", platform: "other" }],
+        [
+          summary.users.started,
+          { tab: "all", startedFrom: from.toISOString(), startedTo: to.toISOString() },
+        ],
+        [
+          summary.users.ended,
+          { tab: "ended", endedFrom: from.toISOString(), endedTo: to.toISOString() },
+        ],
+      ];
+      for (const [number, query] of cards) {
+        const list = await walk(query);
+        expect({ query, total: list.total, rows: list.ids.length }).toEqual({
+          query,
+          total: number,
+          rows: number,
+        });
+      }
+      // The tabs split every subscription in two; each status is its own word.
+      const all = await walk({ tab: "all" });
+      const active = await walk({ tab: "active" });
+      const ended = await walk({ tab: "ended" });
+      expect(all.total).toBe(cases.length);
+      expect(active.total + ended.total).toBe(all.total);
+      expect(new Set([...active.ids, ...ended.ids])).toEqual(new Set(ids));
+      const page = await ok(
+        asAdmin("get", "/admin/billing/user-subscriptions?tab=all&limit=100"),
+        (body) => adminUserSubscriptionPageSchema.parse(body),
+      );
+      expect(page.counts).toEqual({ active: 6, ended: 5, all: 11 });
+      const refunded = page.subscriptions.find((row) => row.id === ids[8]);
+      expect(refunded).toMatchObject({ status: "expired", grantsAccess: false, accessUntil: null });
+      expect(refunded!.ended).toEqual({ at: from.toISOString(), kind: "refunded" });
+      expect(page.subscriptions.find((row) => row.id === ids[0])).toMatchObject({
+        grantsAccess: true,
+        platform: "ios",
+        startedAt: from.toISOString(),
+        name: "Подписчик 0",
+      });
+      // The numbers go out partly hidden; the search finds by a part of the full one.
+      expect(JSON.stringify(page)).not.toContain("8000000");
+      expect(page.subscriptions.every((row) => row.phone.includes("*"))).toBe(true);
+      expect((await walk({ tab: "all", q: "8000004" })).ids).toEqual([ids[4]]);
+      // Newest first: «Подписчик 10», then «Подписчик 1».
+      expect((await walk({ tab: "all", q: "Подписчик 1" })).ids).toEqual([ids[10], ids[1]]);
+      // Ending within N days: the cancelled one (3 days), not the active ones (20 days).
+      expect(new Set((await walk({ tab: "active", expiringDays: "4" })).ids)).toEqual(
+        new Set([ids[3], ids[5]]),
+      );
+      expect((await walk({ tab: "all", status: "suspended" })).ids).toEqual([ids[7]]);
+      expect((await walk({ tab: "all", accountId: granted.accountId })).total).toBe(0);
+    });
+
+    it("answers the summary and the first pages on ~2 000 suppliers × 12 terms and ~20 000 subscriptions (requirement 7)", async () => {
+      await db.query(
+        `INSERT INTO supplier (name, city_id) SELECT 'Нагрузка ' || g, $1 FROM generate_series(1, 2000) g`,
+        [almaty],
+      );
+      await db.query(`
+        INSERT INTO subscription (audience, supplier_id, provider, provider_ref, status, current_period_end, grace_until)
+        SELECT 'supplier', id, 'test', 'load-' || id,
+          (ARRAY['active', 'active', 'active', 'past_due', 'suspended'])[1 + (row_number() OVER () % 5)],
+          now() + interval '10 days',
+          CASE WHEN row_number() OVER () % 5 = 3 THEN now() + interval '2 days' END
+        FROM supplier WHERE name LIKE 'Нагрузка %'`);
+      await db.query(`
+        INSERT INTO payment_method (supplier_id, provider, token_sealed, mask, brand, exp_month, exp_year)
+        SELECT supplier_id, 'test', 'sealed-' || id, '4242', 'visa', 12, 2030
+        FROM subscription WHERE provider_ref LIKE 'load-%'`);
+      await db.query(`
+        INSERT INTO payment_attempt (supplier_id, subscription_id, payment_method_id, kind, period_key, attempt_no,
+          idempotency_key, amount, period_from, period_to, anchor_day, status, decline_reason, provider,
+          created_at, resolved_at)
+        SELECT s.supplier_id, s.id, m.id, 'scheduled', s.id || ':' || n, 1, gen_random_uuid()::text, 1000,
+          now() - make_interval(months => n), now() - make_interval(months => n - 1), 1,
+          CASE WHEN n % 7 = 0 THEN 'declined' ELSE 'succeeded' END,
+          CASE WHEN n % 7 = 0 THEN 'insufficient_funds' END, 'test',
+          now() - make_interval(months => n), now() - make_interval(months => n)
+        FROM subscription s JOIN payment_method m ON m.supplier_id = s.supplier_id,
+          generate_series(1, 12) n
+        WHERE s.provider_ref LIKE 'load-%'`);
+      await db.query(`
+        INSERT INTO account (phone, name)
+        SELECT '+7702' || lpad(g::text, 7, '0'), 'Нагрузка ' || g FROM generate_series(1, 20000) g`);
+      await db.query(`
+        INSERT INTO subscription (audience, account_id, provider, provider_ref, purchase_platform, status, current_period_end)
+        SELECT 'user', id, 'test', 'load-' || id,
+          (ARRAY['ios', 'android', NULL])[1 + (row_number() OVER () % 3)],
+          CASE WHEN row_number() OVER () % 4 = 0 THEN 'expired' ELSE 'active' END,
+          now() + make_interval(days => (row_number() OVER () % 40)::int - 10)
+        FROM account WHERE phone LIKE '+7702%'`);
+      await db.query(`
+        INSERT INTO billing_event (provider, provider_event_id, source, kind, provider_ref, account_id, subscription_id, event_at, outcome, applied_at, to_status)
+        SELECT 'test', 'load-start-' || id, 'operator', 'started', provider_ref, account_id, id,
+          now() - make_interval(days => (abs(hashtext(id::text)) % 120)), 'applied', now(), 'active'
+        FROM subscription WHERE audience = 'user' AND provider_ref LIKE 'load-%'`);
+      await db.query(`
+        INSERT INTO billing_event (provider, provider_event_id, source, kind, provider_ref, account_id, subscription_id, event_at, outcome, applied_at, to_status)
+        SELECT 'test', 'load-end-' || id, 'operator', 'expired', provider_ref, account_id, id,
+          now() - make_interval(days => (abs(hashtext(id::text)) % 20)), 'applied', now(), 'expired'
+        FROM subscription WHERE audience = 'user' AND status = 'expired' AND provider_ref LIKE 'load-%'`);
+      await db.query("ANALYZE");
+
+      const timed = async (label: string, path: string) => {
+        // The second call is what is measured: the first warms the plans and the caches.
+        await asAdmin("get", path);
+        const started = performance.now();
+        const response = await asAdmin("get", path);
+        const ms = Math.round(performance.now() - started);
+        expect(response.status, JSON.stringify(response.body)).toBe(200);
+        process.stdout.write(`MEASURE ${label} ${String(ms)} ms\n`);
+        return { ms, body: response.body as unknown };
+      };
+      const summary = await timed("summary", "/admin/billing/summary");
+      const parsed = adminBillingSummarySchema.parse(summary.body);
+      expect(parsed.suppliers.paid + parsed.suppliers.declined + parsed.suppliers.paused).toBe(
+        2000,
+      );
+      expect(parsed.users.active.total).toBeGreaterThan(10_000);
+      const results = [
+        summary,
+        await timed("charges-first-page", "/admin/billing/charges?limit=50"),
+        await timed("failed-first-page", "/admin/billing/suppliers?limit=50"),
+        await timed("user-subscriptions-first-page", "/admin/billing/user-subscriptions?limit=50"),
+        await timed(
+          "user-subscriptions-ended-in-period",
+          `/admin/billing/user-subscriptions?tab=ended&endedFrom=${encodeURIComponent(parsed.period.from)}&endedTo=${encodeURIComponent(parsed.period.to)}&limit=50`,
+        ),
+      ];
+      expect(adminChargePageSchema.parse(results[1]!.body).total).toBe(24_000);
+      // A generous bound for a busy CI runner; the measured times go into the report.
+      for (const result of results) expect(result.ms).toBeLessThan(5_000);
+    }, 300_000);
+
+    it("lets only the administrator in", async () => {
+      const who = await customer();
+      const routes = [
+        "/admin/billing/summary",
+        "/admin/billing/user-subscriptions",
+        "/admin/billing/suppliers",
+        "/admin/billing/charges",
+        "/admin/billing/plans",
+      ];
+      for (const path of routes) {
+        expectError(await call(null, ADMIN_WEB, "get", path), 401, "AUTH_REQUIRED");
+        expectError(await who.as("get", path), 403, "FORBIDDEN");
+      }
+      const body = {
+        price: 1,
+        startsOn: "2099-01-01",
+        announceBeforeDays: 1,
+        reason: "x",
+        expectedVersion: 0,
+      };
+      expectError(
+        await call(null, ADMIN_WEB, "post", "/admin/billing/plans", body),
+        401,
+        "AUTH_REQUIRED",
+      );
+      expectError(await who.as("post", "/admin/billing/plans", body), 403, "FORBIDDEN");
+      expectError(
+        await who.as("post", `/admin/billing/plans/${randomUUID()}/cancel`, {
+          reason: "x",
+          expectedVersion: 0,
+        }),
+        403,
+        "FORBIDDEN",
+      );
+      expectError(
+        await asAdmin("get", "/admin/billing/user-subscriptions?cursor=nonsense"),
+        400,
+        "VALIDATION_ERROR",
       );
     });
   });

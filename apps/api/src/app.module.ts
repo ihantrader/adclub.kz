@@ -72,6 +72,15 @@ export class AppModule implements NestModule {
     const orders = OrdersModule.forRoot({ http: true, offers, clubAccess, signals, catalog });
     // One reviews module: the home screen counts its queue (TASK-049).
     const reviews = ReviewsModule.forRoot({ http: true, orders, clubAccess });
+    // Subscriptions (TASK-040): «Моя подписка», the company's card, the admin's
+    // billing; one instance — the home screen counts its failed payments (TASK-043).
+    const billing = BillingModule.forRoot(config, {
+      http: true,
+      clubAccess,
+      signals,
+      // The API serves GET /metrics, so it samples the charges for them.
+      metrics: config.metrics.enabled,
+    });
     return {
       module: AppModule,
       imports: [
@@ -119,14 +128,7 @@ export class AppModule implements NestModule {
         reviews,
         // The rating of suppliers (TASK-050): its admin view and the list's column.
         RatingsModule.forRoot({ http: true, signals, suppliers }),
-        // Subscriptions (TASK-040): «Моя подписка», the company's card, the admin's view.
-        BillingModule.forRoot(config, {
-          http: true,
-          clubAccess,
-          signals,
-          // The API serves GET /metrics, so it samples the charges for them.
-          metrics: config.metrics.enabled,
-        }),
+        billing,
         AdminHomeModule.forRoot({
           catalog,
           compatibility,
@@ -134,6 +136,7 @@ export class AppModule implements NestModule {
           suppliers,
           priceImports,
           reviews,
+          billing,
         }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers }),
         priceImports,

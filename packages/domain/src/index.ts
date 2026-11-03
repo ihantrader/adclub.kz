@@ -389,15 +389,17 @@ export {
   addCalendarMonths,
   bankRetriesLeft,
   bankRetryWindowEnd,
+  daysUntilPause,
   BILLING_TIME_ZONE,
   firstPeriod,
   nextBankRetry,
   nextDailyRun,
+  pastDueNextRetry,
   renewalPeriod,
   retryWindowEnd,
 } from "./subscription/billing-cycle";
 export type { BankRetry, SubscriptionPeriod } from "./subscription/billing-cycle";
-export { announcedPlan, planInEffect } from "./subscription/plans";
+export { announcedPlan, earliestPlanStart, planInEffect } from "./subscription/plans";
 export type { PlanRecord } from "./subscription/plans";
 export { purchaseLinkVerdict } from "./subscription/purchase-link";
 export type { PurchaseLinkFacts, PurchaseLinkVerdict } from "./subscription/purchase-link";

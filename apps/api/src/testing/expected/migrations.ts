@@ -52,4 +52,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791550000000_review-login",
   "1791600000000_supplier-billing",
   "1791650000000_supplier-billing-fixes",
+  "1791700000000_billing-admin",
 ];

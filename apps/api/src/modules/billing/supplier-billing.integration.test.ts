@@ -3,6 +3,10 @@ import type { INestApplication, INestApplicationContext } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
+  adminBillingPlansSchema,
+  adminBillingSummarySchema,
+  adminBillingSupplierPageSchema,
+  adminChargePageSchema,
   adminCityResponseSchema,
   adminSignalPageSchema,
   adminSupplierBillingResponseSchema,
@@ -19,12 +23,19 @@ import {
   totpSetupCompletedResponseSchema,
   totpSetupResponseSchema,
   totpStepRequiredDetailsSchema,
+  type AdminHome,
   type DayHours,
   type ErrorCode,
   type SupplierOffer,
   type UserOrder,
 } from "@adclub/contracts";
-import { kzBinCheckDigit, normalizeArticle } from "@adclub/domain";
+import {
+  daysUntilPause,
+  earliestPlanStart,
+  kzBinCheckDigit,
+  nextBankRetry,
+  normalizeArticle,
+} from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Redis } from "ioredis";
@@ -2180,7 +2191,8 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       const bare = await company("Старая пауза");
       const paying = await subscribed("Пауза с подпиской");
       // As the migration of TASK-042 left them: a pause for «billing» set by hand before billing existed.
-      runMigrate("down", postgres.getConnectionUri(), 1);
+      // Two back: the migration of TASK-043 (billing admin) is above the fixes of TASK-042.A.
+      runMigrate("down", postgres.getConnectionUri(), 2);
       try {
         await db.query(
           "UPDATE supplier SET billing_paused_at = now() - interval '10 days', status = 'paused' WHERE id = ANY($1)",
@@ -2195,7 +2207,8 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       expect((await supplierRow(paying)).billing_paused_at).not.toBeNull();
       expect((await supplierRow(paying)).admin_paused_at).toBeNull();
       // Reversible: down gives the pause back to billing, up hands it over again.
-      runMigrate("down", postgres.getConnectionUri(), 1);
+      // Two back: the migration of TASK-043 (billing admin) is above the fixes of TASK-042.A.
+      runMigrate("down", postgres.getConnectionUri(), 2);
       try {
         expect((await supplierRow(bare)).billing_paused_at).not.toBeNull();
         expect((await supplierRow(bare)).admin_paused_at).toBeNull();
@@ -2338,6 +2351,485 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
         (body) => body as { entries: { action: string }[] },
       );
       expect(entries.entries.map((entry) => entry.action)).toContain("supplier.card_changed");
+    });
+  });
+
+  // ------------------------------------- «Биллинг» of the admin panel (TASK-043)
+
+  describe("«Биллинг» of the admin panel (TASK-043)", () => {
+    async function pause(of: Company): Promise<void> {
+      const card = (
+        await ok(asAdmin("get", `/admin/suppliers/${of.supplierId}`), (body) =>
+          adminSupplierResponseSchema.parse(body),
+        )
+      ).supplier;
+      const paused = await asAdmin("post", `/admin/suppliers/${of.supplierId}/pause`, {
+        expectedVersion: card.version,
+        paused: true,
+        reason: "admin",
+        note: "Проверка документов",
+      });
+      expect(paused.status, JSON.stringify(paused.body)).toBe(200);
+    }
+
+    /** Every row of a list, page by page, each once. */
+    async function walk<T>(
+      path: string,
+      query: Record<string, string>,
+      rowsOf: (body: unknown) => { rows: T[]; total: number; nextCursor: string | null },
+    ): Promise<{ rows: T[]; total: number }> {
+      const rows: T[] = [];
+      let cursor: string | null = null;
+      let total: number;
+      do {
+        const params: URLSearchParams = new URLSearchParams({
+          ...query,
+          limit: "2",
+          ...(cursor ? { cursor } : {}),
+        });
+        const page: { rows: T[]; total: number; nextCursor: string | null } = await ok(
+          asAdmin("get", `${path}?${params.toString()}`),
+          rowsOf,
+        );
+        total = page.total;
+        rows.push(...page.rows);
+        cursor = page.nextCursor;
+      } while (cursor);
+      return { rows, total };
+    }
+
+    const suppliersOf = (query: Record<string, string>) =>
+      walk("/admin/billing/suppliers", query, (body) => {
+        const page = adminBillingSupplierPageSchema.parse(body);
+        return { rows: page.suppliers, total: page.total, nextCursor: page.nextCursor };
+      });
+    const chargesOf = (query: Record<string, string>) =>
+      walk("/admin/billing/charges", query, (body) => {
+        const page = adminChargePageSchema.parse(body);
+        return { rows: page.charges, total: page.total, nextCursor: page.nextCursor };
+      });
+
+    it("puts every supplier in exactly one group, counts the summary with the lists, and promises what W-05 promised (AC-1, AC-2, AC-3)", async () => {
+      await addPlan(1_000);
+      const paid = await subscribed("Оплачено");
+      // The second day of the retries: two refusals of the bank.
+      const declined = await subscribed("Отказ банка");
+      await changeCard(declined, "insufficient_funds");
+      await atTermEnd(declined);
+      await chargeDay(declined, "scheduled");
+      await waitStatus(declined, "past_due");
+      await aDayPasses(declined);
+      await chargeDay(declined, "retry");
+      await waitFor("two refusals", async () =>
+        (await attemptsOf(declined)).filter((row) => row.status === "declined").length === 2
+          ? true
+          : null,
+      );
+      // On the billing pause and on the administrator's at once.
+      const paused = await subscribed("Пауза");
+      await pause(paused);
+      await changeCard(paused, "insufficient_funds");
+      await atTermEnd(paused);
+      await chargeDay(paused, "scheduled");
+      await waitStatus(paused, "past_due");
+      await db.query(
+        "UPDATE subscription SET grace_until = now() - interval '1 minute' WHERE supplier_id = $1",
+        [paused.supplierId],
+      );
+      await expireUntil(paused, "suspended");
+      expect(await supplierRow(paused)).toMatchObject({
+        admin_paused_at: expect.any(Date),
+        billing_paused_at: expect.any(Date),
+      });
+      // A charge the payment system could not take: no failure of the payer.
+      const waiting = await subscribed("Ждёт платёжную систему");
+      await atTermEnd(waiting);
+      provider().mode = "unavailable";
+      await chargeDay(waiting, "scheduled");
+      provider().mode = "ok";
+      // No card, no subscription; and the administrator's pause alone is not billing's.
+      const none = await company("Без подписки");
+      const adminOnly = await company("Пауза администратора");
+      await pause(adminOnly);
+
+      const summary = await ok(asAdmin("get", "/admin/billing/summary"), (body) =>
+        adminBillingSummarySchema.parse(body),
+      );
+      expect(summary.suppliers).toEqual({
+        paid: 1,
+        declined: 1,
+        awaitingProvider: 1,
+        paused: 1,
+        none: 2,
+      });
+      const groups = {
+        paid: [paid],
+        declined: [declined],
+        awaiting_provider: [waiting],
+        paused: [paused],
+        none: [none, adminOnly],
+      };
+      const seen: string[] = [];
+      for (const [group, members] of Object.entries(groups)) {
+        const list = await suppliersOf({ groups: group });
+        const number =
+          summary.suppliers[group === "awaiting_provider" ? "awaitingProvider" : (group as "paid")];
+        expect({ group, total: list.total, rows: list.rows.length }).toEqual({
+          group,
+          total: number,
+          rows: number,
+        });
+        expect(new Set(list.rows.map((row) => row.supplierId))).toEqual(
+          new Set(members.map((of) => of.supplierId)),
+        );
+        expect(list.rows.every((row) => row.group === group)).toBe(true);
+        seen.push(...list.rows.map((row) => row.supplierId));
+      }
+      // Exactly one group each: every supplier of the database, none twice.
+      const { rows: everyone } = await db.query<{ id: string }>("SELECT id FROM supplier");
+      expect(seen.sort()).toEqual(everyone.map((row) => row.id).sort());
+
+      // «Неуспешные»: the refusals, the waiting and the pauses, nearest pause first.
+      const failed = await suppliersOf({});
+      expect(failed.rows.map((row) => row.supplierId)).toEqual([
+        declined.supplierId,
+        waiting.supplierId,
+        paused.supplierId,
+      ]);
+      const [refused, slow, stopped] = failed.rows;
+      const hour = 10;
+      const sub = (await subOf(declined))!;
+      expect(refused).toMatchObject({
+        declines: 2,
+        lastDecline: { reason: "insufficient_funds", amount: 1_000 },
+        cardMask: "9995",
+        pauseAt: sub.grace_until!.toISOString(),
+        waiting: null,
+      });
+      // The retry and the pause are the cabinet's and W-05's: one rule (I851).
+      const shownToCompany = await cabinet(declined);
+      expect(refused!.nextRetryAt).toBe(shownToCompany.subscription!.nextChargeAt);
+      const promised = nextBankRetry(new Date(refused!.lastDecline!.at), hour).at;
+      expect(refused!.nextRetryAt).toBe(
+        promised.getTime() < sub.grace_until!.getTime() ? promised.toISOString() : null,
+      );
+      expect(refused!.daysToPause).toBe(daysUntilPause(sub.grace_until!, new Date()));
+      const notice = (await messagesOf(declined)).at(-1)!;
+      expect(notice.template).toBe("payment_failed");
+      expect(notice.variables?.date).toBe(dayText(promised, "ru"));
+      expect(slow).toMatchObject({
+        group: "awaiting_provider",
+        waiting: { status: "unavailable", amount: 1_000 },
+        nextRetryAt: null,
+      });
+      expect(stopped).toMatchObject({
+        group: "paused",
+        adminPaused: true,
+        pausedSince: expect.any(String),
+        nextRetryAt: null,
+        daysToPause: null,
+        lastDecline: { reason: "insufficient_funds" },
+      });
+
+      // The home screen: «Платежи поставщиков не прошли · N» is that list's total.
+      const home = await ok(asAdmin("get", "/admin/home"), (body) => body as AdminHome);
+      const unpaid = await suppliersOf({ groups: "declined,paused" });
+      expect(home.supplierPaymentsFailed).toBe(unpaid.total);
+      expect(unpaid.total).toBe(2);
+
+      // «История списаний»: the summary's numbers are the history's totals of the period.
+      const period = { from: summary.period.from, to: summary.period.to };
+      const succeeded = await chargesOf({ ...period, status: "succeeded" });
+      expect(succeeded.total).toBe(summary.charges.succeeded.count);
+      expect(succeeded.rows.reduce((sum, row) => sum + row.amount, 0)).toBe(
+        summary.charges.succeeded.amount,
+      );
+      const refusals = await chargesOf({ ...period, status: "declined" });
+      expect(refusals.total).toBe(summary.charges.declined.count);
+      expect(refusals.total).toBe(3);
+      const all = await chargesOf({});
+      expect(all.total).toBe(all.rows.length);
+      expect(new Set(all.rows.map((row) => row.id)).size).toBe(all.rows.length);
+      expect(all.rows.map((row) => row.at)).toEqual(
+        [...all.rows.map((row) => row.at)].sort().reverse(),
+      );
+      const ofDeclined = await chargesOf({ supplierId: declined.supplierId });
+      expect(ofDeclined.rows.map((row) => [row.kind, row.status])).toEqual([
+        ["retry", "declined"],
+        ["scheduled", "declined"],
+        ["first", "succeeded"],
+      ]);
+      expect(ofDeclined.rows[0]).toMatchObject({
+        supplier: { id: declined.supplierId, name: "Отказ банка" },
+        declineReason: "insufficient_funds",
+        cardMask: "9995",
+      });
+      expect(
+        (await chargesOf({ status: "unavailable" })).rows.map((row) => row.supplier.id),
+      ).toEqual([waiting.supplierId]);
+      expect((await chargesOf({ kind: "first,retry" })).total).toBe(
+        all.rows.filter((row) => row.kind === "first" || row.kind === "retry").length,
+      );
+      // «Оплатить сейчас»: who pressed it.
+      await changeCard(declined, "ok");
+      await ok(
+        declined.as("post", "/supplier/billing/pay"),
+        (body) => payNowResponseSchema.parse(body),
+        202,
+      );
+      const manual = await waitFor("the manual charge", async () => {
+        const rows = (await chargesOf({ kind: "manual" })).rows;
+        return rows.length === 1 ? rows[0]! : null;
+      });
+      expect(manual.requestedBy).toEqual({ memberId: declined.memberId, name: "Ерлан" });
+
+      // The card's token is nowhere: only the mask goes out.
+      const { rows: tokens } = await db.query<{ token_sealed: string }>(
+        "SELECT token_sealed FROM payment_method",
+      );
+      const answers = JSON.stringify([
+        await ok(asAdmin("get", "/admin/billing/charges?limit=100"), (body) => body),
+        await ok(
+          asAdmin(
+            "get",
+            "/admin/billing/suppliers?groups=paid,declined,awaiting_provider,paused,none&limit=100",
+          ),
+          (body) => body,
+        ),
+      ]);
+      for (const { token_sealed: sealed } of tokens) {
+        expect(answers).not.toContain(sealed);
+      }
+      expect(answers).not.toMatch(/token/i);
+      // The cabinet's employees are not let in.
+      for (const path of [
+        "/admin/billing/summary",
+        "/admin/billing/suppliers",
+        "/admin/billing/charges",
+      ]) {
+        expectError(await paid.as("get", path), 403, "FORBIDDEN");
+      }
+    });
+
+    it("plans and cancels a tariff by the rules, one record when two administrators race, the operator through the same service (AC-4)", async () => {
+      await addPlan(1_000);
+      const of = await subscribed("Тариф");
+      const plans = async () =>
+        ok(asAdmin("get", "/admin/billing/plans"), (body) => adminBillingPlansSchema.parse(body));
+      const plan = (body: object) => asAdmin("post", "/admin/billing/plans", body);
+      const first = await plans();
+      expect(first.supplier.inEffect).toMatchObject({
+        price: 1_000,
+        state: "in_effect",
+        createdByRole: "operator",
+      });
+      const now = new Date();
+      const tomorrow = earliestPlanStart({ now, announceBeforeDays: 0, rise: false });
+      expect(first.earliestStart).toBe(tomorrow);
+
+      const fieldOf = (response: Response) =>
+        (response.body as { details: { path: string; earliest?: string }[] }).details[0]!;
+      // A rise sooner than its notice: refused at the date, with the nearest day allowed.
+      const rise = earliestPlanStart({ now, announceBeforeDays: 7, rise: true });
+      const early = await plan({
+        price: 3_000,
+        startsOn: tomorrow,
+        announceBeforeDays: 7,
+        reason: "Повышение",
+        expectedVersion: first.version,
+      });
+      expectError(early, 400, "VALIDATION_ERROR");
+      expect(fieldOf(early)).toMatchObject({ path: "startsOn", earliest: rise });
+      // Today and a day gone: refused.
+      const today = first.today;
+      for (const startsOn of [today, "2020-01-01"]) {
+        const refused = await plan({
+          price: 900,
+          startsOn,
+          announceBeforeDays: 3,
+          reason: "Понижение",
+          expectedVersion: first.version,
+        });
+        expectError(refused, 400, "VALIDATION_ERROR");
+        expect(fieldOf(refused).path).toBe("startsOn");
+      }
+      // A rise is announced at least a day ahead.
+      const silent = await plan({
+        price: 3_000,
+        startsOn: rise,
+        announceBeforeDays: 0,
+        reason: "Повышение",
+        expectedVersion: first.version,
+      });
+      expectError(silent, 400, "VALIDATION_ERROR");
+      expect(fieldOf(silent).path).toBe("announceBeforeDays");
+
+      // The rise on the earliest day: the cabinet shows it at once (its notice window is open).
+      const planned = await ok(
+        plan({
+          price: 3_000,
+          startsOn: rise,
+          announceBeforeDays: 7,
+          reason: "Повышение",
+          expectedVersion: first.version,
+        }),
+        (body) => adminBillingPlansSchema.parse(body),
+      );
+      expect(planned.version).toBe(first.version + 1);
+      // On the earliest day the notice opens exactly N days ahead — not yet, the cabinet is silent.
+      const rising = planned.supplier.records.find((row) => row.reason === "Повышение")!;
+      expect(rising).toMatchObject({ price: 3_000, state: "scheduled", createdByRole: "admin" });
+      expect(new Date(rising.announceFrom).getTime()).toBeGreaterThanOrEqual(now.getTime());
+      expect((await cabinet(of)).announcedPlan).toBeNull();
+      // A day passes (the start comes a day nearer): the cabinet shows «С {дата} тариф — {цена}».
+      await db.query("UPDATE plan SET valid_from = valid_from - interval '1 day' WHERE id = $1", [
+        rising.id,
+      ]);
+      const announced = (await plans()).supplier.announced!;
+      expect(announced).toMatchObject({ id: rising.id, price: 3_000, state: "announced" });
+      expect((await cabinet(of)).announcedPlan).toMatchObject({
+        price: 3_000,
+        validFrom: announced.validFrom,
+      });
+      // A farther one is planned, not announced yet: the cabinet keeps the nearest.
+      const later = new Date(`${rise}T00:00:00Z`);
+      later.setUTCDate(later.getUTCDate() + 40);
+      const laterDay = later.toISOString().slice(0, 10);
+      const second = await ok(
+        plan({
+          price: 5_000,
+          startsOn: laterDay,
+          announceBeforeDays: 3,
+          reason: "Ещё",
+          expectedVersion: planned.version,
+        }),
+        (body) => adminBillingPlansSchema.parse(body),
+      );
+      expect(second.supplier.records.find((row) => row.price === 5_000)?.state).toBe("scheduled");
+      // The same day twice: refused at the field; a stale version: refused as a conflict.
+      const twice = await plan({
+        price: 6_000,
+        startsOn: laterDay,
+        announceBeforeDays: 3,
+        reason: "Дубль",
+        expectedVersion: second.version,
+      });
+      expectError(twice, 400, "VALIDATION_ERROR");
+      expect(fieldOf(twice).path).toBe("startsOn");
+      expectError(
+        await plan({
+          price: 6_000,
+          startsOn: laterDay,
+          announceBeforeDays: 3,
+          reason: "Устарело",
+          expectedVersion: planned.version,
+        }),
+        409,
+        "PLAN_VERSION_CONFLICT",
+      );
+
+      // Two administrators at once with the same version: one record.
+      const other = new Date(later);
+      other.setUTCDate(other.getUTCDate() + 10);
+      const raced = await Promise.all(
+        [0, 1].map((offset) => {
+          const day = new Date(other);
+          day.setUTCDate(day.getUTCDate() + offset);
+          return plan({
+            price: 7_000,
+            startsOn: day.toISOString().slice(0, 10),
+            announceBeforeDays: 3,
+            reason: "Гонка",
+            expectedVersion: second.version,
+          });
+        }),
+      );
+      expect(raced.map((response) => response.status).sort()).toEqual([200, 409]);
+      const afterRace = await plans();
+      expect(afterRace.supplier.records.filter((row) => row.price === 7_000)).toHaveLength(1);
+
+      // The operator command goes through the same service: the page's version is stale then.
+      await addPlan(8_000, 200 * DAY);
+      const afterOperator = await plans();
+      expect(afterOperator.version).toBe(afterRace.version + 1);
+      expectError(
+        await asAdmin("post", `/admin/billing/plans/${announced.id}/cancel`, {
+          reason: "Отмена",
+          expectedVersion: afterRace.version,
+        }),
+        409,
+        "PLAN_VERSION_CONFLICT",
+      );
+
+      // Cancelling the announced rise: the record stays, marked; the notice leaves the cabinet.
+      const cancelled = await ok(
+        asAdmin("post", `/admin/billing/plans/${announced.id}/cancel`, {
+          reason: "Передумали",
+          expectedVersion: afterOperator.version,
+        }),
+        (body) => adminBillingPlansSchema.parse(body),
+      );
+      expect(cancelled.supplier.records.find((row) => row.id === announced.id)).toMatchObject({
+        state: "cancelled",
+        cancelled: { byRole: "admin", reason: "Передумали" },
+      });
+      expect(cancelled.supplier.announced).toBeNull();
+      expect((await cabinet(of)).announcedPlan).toBeNull();
+      // Only what has not started: the tariff in effect and a cancelled one are refused.
+      for (const id of [first.supplier.inEffect!.id, announced.id]) {
+        expectError(
+          await asAdmin("post", `/admin/billing/plans/${id}/cancel`, {
+            reason: "Нельзя",
+            expectedVersion: cancelled.version,
+          }),
+          409,
+          "PLAN_NOT_CANCELLABLE",
+        );
+      }
+      // The day freed by the cancellation can be planned again.
+      const again = await ok(
+        plan({
+          price: 3_000,
+          startsOn: rise,
+          announceBeforeDays: 7,
+          reason: "Снова",
+          expectedVersion: cancelled.version,
+        }),
+        (body) => adminBillingPlansSchema.parse(body),
+      );
+      const replanned = again.supplier.records.find((row) => row.reason === "Снова")!;
+      expect(replanned.price).toBe(3_000);
+
+      // The journal: who, what and why.
+      const { rows: journal } = await db.query<{
+        action: string;
+        actor_role: string;
+        reason: string;
+      }>(
+        "SELECT action, actor_role, reason FROM audit_log WHERE entity_type = 'plan' ORDER BY created_at, id",
+      );
+      expect(
+        journal.filter((row) => row.actor_role === "admin").map((row) => [row.action, row.reason]),
+      ).toEqual([
+        ["plan.added", "Повышение"],
+        ["plan.added", "Ещё"],
+        ["plan.added", "Гонка"],
+        ["plan.cancelled", "Передумали"],
+        ["plan.added", "Снова"],
+      ]);
+
+      // Time passes to the start: the next term is charged by the new price.
+      await db.query("UPDATE plan SET valid_from = now() - interval '1 minute' WHERE id = $1", [
+        replanned.id,
+      ]);
+      await atTermEnd(of);
+      await chargeDay(of, "scheduled");
+      const last = await waitFor("the charge", async () => {
+        const row = (await attemptsOf(of)).at(-1)!;
+        return row.kind === "scheduled" && row.status === "succeeded" ? row : null;
+      });
+      expect(last.amount).toBe(3_000);
+      expect((await cabinet(of)).plan).toMatchObject({ price: 3_000 });
     });
   });
 

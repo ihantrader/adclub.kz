@@ -7,6 +7,7 @@ import {
   type AdminHome,
 } from "@adclub/contracts";
 import { AiService } from "../ai";
+import { AdminBilling } from "../billing";
 import { CatalogItemsService, TranslationAdminService, UNTRANSLATED_STATES } from "../catalog";
 import { AdminSignals } from "../signals";
 import { CatalogRequestsService } from "../price-imports";
@@ -44,10 +45,11 @@ export class AdminHomeService {
     @Inject(CatalogRequestsService) private readonly requests: CatalogRequestsService,
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
     @Inject(ComplaintsService) private readonly complaints: ComplaintsService,
+    @Inject(AdminBilling) private readonly billing: AdminBilling,
   ) {}
 
   async summary(): Promise<AdminHome> {
-    const [outage, signals, budget, leads, quality, queue, requests, held, complaints] =
+    const [outage, signals, budget, leads, quality, queue, requests, held, complaints, unpaid] =
       await Promise.all([
         this.signals.currentOfKind("whatsapp_outage"),
         this.signals.currentCounts(),
@@ -66,6 +68,7 @@ export class AdminHomeService {
         this.requests.waiting(),
         this.reviews.heldCount(),
         this.complaints.newCount(),
+        this.billing.unpaidSuppliers(),
       ]);
     const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
@@ -88,6 +91,7 @@ export class AdminHomeService {
       catalogRequests: requests,
       reviewsHeld: held,
       complaintsNew: complaints,
+      supplierPaymentsFailed: unpaid,
       catalog: {
         withoutPhoto: withoutPhoto!,
         incomplete: incomplete!,

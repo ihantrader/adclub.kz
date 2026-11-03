@@ -502,6 +502,7 @@ export * from "./offers";
 export * from "./club-access";
 export * from "./subscriptions";
 export * from "./supplier-billing";
+export * from "./admin-billing";
 export * from "./orders";
 export * from "./signals";
 export * from "./reviews";

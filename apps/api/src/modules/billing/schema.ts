@@ -27,6 +27,10 @@ export const plan = pgTable("plan", {
   reason: text("reason").notNull(),
   createdByRole: text("created_by_role").$type<"operator" | "admin">().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** A planned change cancelled before it started (TASK-043): kept as history, read by nobody else. */
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelledByRole: text("cancelled_by_role").$type<"operator" | "admin">(),
+  cancelReason: text("cancel_reason"),
 });
 
 export type PlanRow = typeof plan.$inferSelect;

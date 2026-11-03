@@ -52,6 +52,8 @@ import {
 } from "../identity";
 import { MessageSubjects } from "../messaging";
 import { AdminSignals } from "../signals";
+import { AdminBillingController } from "./admin-billing.controller";
+import { AdminBilling } from "./admin-billing.service";
 import { BillingOperator } from "./billing-operator";
 import {
   applyPaymentWebhookJob,
@@ -271,6 +273,7 @@ export class BillingModule {
             MySubscriptionController,
             SupplierBillingController,
             AdminSubscriptionController,
+            AdminBillingController,
             PaymentWebhookController,
             ...(devCardPage ? [DevPaymentCardController] : []),
           ]
@@ -280,6 +283,7 @@ export class BillingModule {
         ...paymentProviders(config),
         ...billingCore,
         SubscriptionViews,
+        AdminBilling,
         SupplierCards,
         BillingOperator,
         ...(options.metrics ? [PaymentMetrics] : []),
@@ -288,6 +292,7 @@ export class BillingModule {
         Plans,
         SubscriptionEvents,
         SubscriptionViews,
+        AdminBilling,
         SupplierCards,
         BillingOperator,
         PaymentMethods,

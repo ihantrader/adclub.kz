@@ -1,5 +1,6 @@
 export { BillingJobsModule, BillingModule } from "./billing.module";
 export type { BillingModuleOptions } from "./billing.module";
+export { AdminBilling } from "./admin-billing.service";
 export { BillingOperator } from "./billing-operator";
 export type { TestEventCommand } from "./billing-operator";
 export {

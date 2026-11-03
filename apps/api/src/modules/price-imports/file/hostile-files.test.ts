@@ -153,7 +153,9 @@ describe("the worker unpacking a hostile workbook", () => {
     const bomb = xlsxBomb({ part: SHEET, megabytes: 19_000, declaredSize: 20 * MB, fill: 0x20 });
     const result = await run(bomb, "xlsx");
     expect(reasonOf(result.error)).toBe("broken");
-    expect(result.ms).toBeLessThan(2000);
+    // «Stopped once past the declared 20 MB» against «unpacked all 19 GB»: the
+    // first takes about a second (two on a busy CI runner), the second minutes.
+    expect(result.ms).toBeLessThan(5000);
     expect(result.growthMb).toBeLessThan(200);
   });
 

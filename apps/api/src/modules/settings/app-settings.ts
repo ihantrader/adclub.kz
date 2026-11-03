@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { serviceUnavailableException } from "../../common/errors";
 import { describeError } from "../../common/health";
 import { APP_CONFIG, type AppConfig } from "../../config";
-import { withoutQueryParameters } from "../../database";
+import { withoutQueryParameters, type DbExecutor } from "../../database";
 import {
   defaultSettingValues,
   isSettingKey,
@@ -155,11 +155,13 @@ export class AppSettings implements OnModuleInit {
   }
 
   /**
-   * The values read by a query that starts after this call (and the cache
-   * updated with them). Throws if the database can't be read.
+   * The values as the caller's open transaction sees them (and the cache
+   * updated with them). For code that needs them fresh while it holds a
+   * transaction: a read on another pool connection there would wait for a
+   * connection, or for a lock, while the transaction stays open (I844).
    */
-  async fresh(): Promise<Readonly<SettingValues>> {
-    await this.refresh();
+  async freshWithin(executor: DbExecutor): Promise<Readonly<SettingValues>> {
+    await this.load(executor);
     return this.snapshot!.values;
   }
 
@@ -170,11 +172,11 @@ export class AppSettings implements OnModuleInit {
     return this.loading;
   }
 
-  private async load(): Promise<void> {
+  private async load(executor?: DbExecutor): Promise<void> {
     const readAt = this.options.now();
     let rows: StoredSetting[];
     try {
-      rows = await this.store.listStored();
+      rows = await this.store.listStored(executor);
     } catch (error) {
       this.lastFailureAt = this.options.now();
       if (!this.outage) {

@@ -348,6 +348,8 @@ export class CatalogRequestsService {
       availability: null,
       leadDays: null,
     };
+    // Read before the transaction: never a second pool connection while it is open (I844).
+    const limit = await this.settings.get("catalog_requests_per_supplier_day");
     const id = await db.transaction(async (tx) => {
       // One company at a time: the count of the day and the waiting key are checked together.
       await tx.execute(sql`SELECT id FROM supplier WHERE id = ${actor.supplierId} FOR UPDATE`);
@@ -372,7 +374,6 @@ export class CatalogRequestsService {
           { details },
         );
       }
-      const limit = await this.settings.get("catalog_requests_per_supplier_day");
       const day = await tx.execute<{ sent: number; wait: number | null }>(sql`
         SELECT count(*)::int AS sent,
           extract(epoch FROM min(created_at) + interval '1 day' - now())::float AS wait

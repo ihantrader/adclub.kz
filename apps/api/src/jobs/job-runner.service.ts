@@ -189,7 +189,9 @@ export class JobRunner implements OnApplicationBootstrap, BeforeApplicationShutd
         await tx.execute(SCHEDULE_SYNC_LOCK);
         // Not the cache: two workers' caches may hold different values for
         // up to 30 seconds, and the stale one would put the old time back.
-        const settings = await this.settings.fresh();
+        // Read on this transaction's own connection: one on another would leave
+        // it idle in transaction behind any lock queue of the tables (I844).
+        const settings = await this.settings.freshWithin(tx);
         await this.writeSchedules(boss, periodic, (key) => Promise.resolve(settings[key]));
       });
     } catch (error) {

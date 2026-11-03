@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { sql } from "drizzle-orm";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
@@ -3626,6 +3627,52 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(await tableExists(client, "catalog_item")).toBe(true);
     expect(await tableExists(client, "item_analog")).toBe(true);
   });
+
+  it("leaves no transaction open in the server when a statement in it waits too long (I845)", async () => {
+    const databaseService = new DatabaseService(
+      loadConfig({
+        NODE_ENV: "test",
+        DATABASE_URL: container.getConnectionUri(),
+        REDIS_URL: "redis://unused",
+        S3_ENDPOINT: "http://unused",
+        S3_ACCESS_KEY: "x",
+        S3_SECRET_KEY: "x",
+        S3_BUCKET: "x",
+      }),
+    );
+    const openTransactions = async () => {
+      const { rows } = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM pg_stat_activity
+         WHERE pid <> pg_backend_pid() AND state LIKE 'idle in transaction%'`,
+      );
+      return rows[0]!.count;
+    };
+    try {
+      // A lock queue the application's statement stands in, as behind a TRUNCATE.
+      await client.query("BEGIN");
+      await client.query("LOCK TABLE account IN ACCESS EXCLUSIVE MODE");
+      const waited = databaseService.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT 1`);
+        await tx.execute(sql`SELECT count(*) FROM account`);
+      });
+      await expect(waited).rejects.toThrow();
+      await client.query("COMMIT");
+
+      // Before the fix the statement went on after pg stopped waiting for it,
+      // and its connection came back to the pool still in its transaction.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(await openTransactions()).toBe(0);
+
+      // A connection the pool hands out next is not inside an old transaction.
+      const { rows } = await databaseService.pool.query<{ open: boolean }>(
+        "SELECT now() = statement_timestamp() AS open",
+      );
+      expect(rows[0]?.open).toBe(true);
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      await databaseService.pool.end().catch(() => undefined);
+    }
+  }, 30_000);
 
   it("readiness reports PostgreSQL as unavailable once it stops, without the process crashing", async () => {
     const databaseService = new DatabaseService(

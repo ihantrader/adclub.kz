@@ -30,6 +30,7 @@ import { useOnline } from "../../services/use-network";
 import { cityLabel } from "../../state/city";
 import { useCity } from "../../state/city-provider";
 import { useLanguage, useT } from "../../state/language";
+import { usePush } from "../../state/push-provider";
 import { useSession } from "../../state/session-provider";
 import { CitySheet } from "../CitySheet";
 
@@ -51,7 +52,8 @@ const ShowcaseScreen = __DEV__ ? lazy(() => import("../../dev/ShowcaseScreen")) 
  * either way — they already live on the device (TASK-027) and, once signed
  * in, in the account too (`SessionProvider` keeps them in step). «Документы
  * и поддержка» and «Стать партнёром клуба» (TASK-077) are there for both.
- * Items the app doesn't have yet (subscription, notifications, deleting the
+ * «Уведомления» (M-PRO-04, TASK-051) shows the state of push. Items the app
+ * doesn't have yet (subscription, deleting the
  * account) are left out on purpose, not shown disabled.
  */
 export function ProfileScreen({
@@ -63,6 +65,7 @@ export function ProfileScreen({
   const { selection } = useCity();
   const online = useOnline();
   const session = useSession();
+  const push = usePush();
   const signIn = useSignIn();
   const [sheet, setSheet] = useState<"city" | "language" | "appearance" | null>(null);
   const [showcase, setShowcase] = useState(false);
@@ -141,6 +144,24 @@ export function ProfileScreen({
                 navigates
                 onPress={() => navigation.navigate("profile-devices")}
               />
+              {/* M-PRO-04 (TASK-051): the state of push and the system settings. */}
+              {push.available && (
+                <ListRow
+                  icon="bell"
+                  title={t("profile.notifications")}
+                  subtitle={
+                    push.permission?.status === "granted"
+                      ? t("profile.notificationsOn")
+                      : t("profile.notificationsOff")
+                  }
+                  trailing={
+                    <Text variant="caption" color="accent">
+                      {t("profile.notificationsSettings")}
+                    </Text>
+                  }
+                  onPress={() => void push.openSettings()}
+                />
+              )}
             </ListGroup>
           </Section>
         )}

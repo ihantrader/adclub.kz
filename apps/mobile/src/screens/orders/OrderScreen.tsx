@@ -55,6 +55,7 @@ import {
   orderMarkKey,
   orderStatusView,
   orderStepKey,
+  withPushPromise,
 } from "../../orders/order-status";
 import { orderViewOfCopy, orderViewOfServer, type OrderView } from "../../orders/order-view";
 import {
@@ -71,6 +72,8 @@ import { useOnline } from "../../services/use-network";
 import { useRequest } from "../../services/use-request";
 import { useLanguage } from "../../state/language";
 import { useOrdersCopy, useOrdersReadOnly } from "../../state/orders-provider";
+import { usePush } from "../../state/push-provider";
+import { orderOnScreen } from "../../push/push-port";
 import { ItemPhoto } from "../catalog/parts";
 import { CallSheet } from "./CallSheet";
 import { NavigatorSheet } from "./NavigatorSheet";
@@ -110,6 +113,7 @@ export function OrderScreen({ route, navigation }: Props) {
   const readOnly = useOrdersReadOnly();
   const orders = useOrdersCopy();
   const repeat = useRepeatOrder();
+  const push = usePush();
   useLeaveWhenSignedOut(navigation);
 
   const request = useRequest(
@@ -136,6 +140,26 @@ export function OrderScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (order) rememberOpenedOrder(order);
   }, [order]);
+
+  // TASK-051: the screen of the order confirms its pushes (the person sees the
+  // state itself); a push of this order arriving while it is open refreshes it,
+  // and is not drawn over it.
+  const loaded = request.data !== undefined && request.data !== null;
+  useEffect(() => {
+    if (readOnly || !online || !loaded) return;
+    apiClient.ackOrderNotifications({ orderId }).catch(() => undefined);
+  }, [orderId, readOnly, online, loaded]);
+  const reload = request.reload;
+  useEffect(() => {
+    orderOnScreen.current = orderId;
+    const unsubscribe = push.subscribe((pushed) => {
+      if (pushed === orderId) reload();
+    });
+    return () => {
+      unsubscribe();
+      if (orderOnScreen.current === orderId) orderOnScreen.current = null;
+    };
+  }, [orderId, push, reload]);
 
   // The order just loaded says the copy is behind (accepted a moment ago,
   // finished): the copy is asked for again, so the list and the QR without
@@ -397,7 +421,7 @@ export function OrderScreen({ route, navigation }: Props) {
                 )}
                 {view.text && (
                   <Text color="textMuted">
-                    {t(view.text, {
+                    {t(withPushPromise(view.text, push.promised), {
                       time:
                         view.deadline === "respondBy"
                           ? time.deadline(order.respondBy, timeZone, now)

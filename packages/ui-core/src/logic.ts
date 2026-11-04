@@ -213,6 +213,7 @@ export type IconName =
   | "arrowDown"
   | "arrowUp"
   | "backspace"
+  | "bell"
   | "calendar"
   | "calendarX"
   | "cameraSlash"

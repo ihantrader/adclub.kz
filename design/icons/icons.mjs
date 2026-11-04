@@ -14,6 +14,8 @@ export const ui = {
   arrowDown: "arrow-down",
   arrowUp: "arrow-up",
   backspace: "backspace",
+  // «Уведомления» of the profile (M-PRO-04, TASK-051).
+  bell: "bell",
   // The date field's calendar (TASK-079).
   calendar: "calendar-blank",
   calendarX: "calendar-x",

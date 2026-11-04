@@ -9,6 +9,7 @@ import { useNetworkStatus } from "../services/use-network";
 import { useGarage } from "../state/garage-provider";
 import { useLanguage } from "../state/language";
 import { OrdersReadOnly, useOrdersCopy } from "../state/orders-provider";
+import { usePush } from "../state/push-provider";
 import {
   devicePreferencesLoaded,
   devicePreferencesWereRead,
@@ -17,13 +18,10 @@ import {
 } from "../state/stores";
 import { useUpdateGateState, type UpdateGateState } from "../update-gate";
 import { rootStart } from "./root-start";
-import { decideStart, type PolicyState, type StartInput } from "./start-decision";
+import { decideStart, type PolicyState } from "./start-decision";
 
 /** How long the splash may wait for the client policy before going on (SCREENS 5.1). */
 const POLICY_WAIT_MS = 2_500;
-
-/** What TASK-031 will provide: the push the app was opened from. */
-const PUSH: StartInput["push"] = null;
 
 /**
  * The start of the app (M-START-01): it collects the inputs, asks
@@ -49,6 +47,7 @@ export function AppStart() {
   const leaveReadOnly = useCallback(() => setReadOnlyOrders(false), [setReadOnlyOrders]);
   const firstRun = useSyncExternalStore(firstRunStore.subscribe, firstRunStore.get);
   const { cars } = useGarage();
+  const push = usePush();
   const preferencesRead = usePreferencesRead();
   // TASK-029: a stored session is "active"; a guest (never signed in, or
   // signed out) is "none". Distinguishing "none" from a session that was
@@ -79,7 +78,8 @@ export function AppStart() {
     online: network ?? (waited ? true : null),
     // The copy of this account only (`useOrdersCopy` shows no other).
     savedActiveOrders,
-    push: PUSH,
+    // SCREENS 5.1 rule 6 (TASK-051): the push the app was opened from, for a signed-in person.
+    push: session.status === "signed_in" ? push.startTarget : null,
   });
 
   // The update is no longer required (checked again on return): the
@@ -131,7 +131,7 @@ export function AppStart() {
       // The key: a device whose storage answered late was opened on the
       // defaults, and the navigator opens again — once — on what the device
       // really holds (a returning person must not be left on the first run).
-      const start = rootStart(decision.screen);
+      const start = rootStart(decision.screen, decision.push);
       return start ? (
         <RootNavigator key={preferencesRead ? "read" : "defaults"} start={start} />
       ) : (

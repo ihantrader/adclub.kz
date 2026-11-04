@@ -23,6 +23,15 @@ describe("where the root stack opens", () => {
   it("opens the tabs on the catalog, or on the orders without a network", () => {
     expect(rootStart("catalog")).toEqual({ screen: "tabs", tab: "catalog" });
     expect(rootStart("push")).toEqual({ screen: "tabs", tab: "catalog" });
+    // TASK-051: a push of an order opens over «Заявки», of the subscription — the profile.
+    expect(rootStart("push", { screen: "order", params: { orderId: "x" } })).toEqual({
+      screen: "tabs",
+      tab: "orders",
+    });
+    expect(rootStart("push", { screen: "subscription" })).toEqual({
+      screen: "tabs",
+      tab: "profile",
+    });
     expect(rootStart("orders-offline")).toEqual({ screen: "tabs", tab: "orders" });
   });
 

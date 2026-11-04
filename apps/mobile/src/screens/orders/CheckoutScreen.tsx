@@ -63,6 +63,7 @@ import { useCity } from "../../state/city-provider";
 import { useGarage } from "../../state/garage-provider";
 import { useLanguage } from "../../state/language";
 import { useOrdersCopy } from "../../state/orders-provider";
+import { usePush } from "../../state/push-provider";
 import { NoCarContent } from "../NoCarState";
 import { CompatibilityLine, ItemPhoto, useReceiptText } from "../catalog/parts";
 import { ClubAccessSheet } from "./ClubAccessSheet";
@@ -130,6 +131,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
   const online = useOnline();
   const { selection } = useCity();
   const orders = useOrdersCopy();
+  const push = usePush();
   const receiptText = useReceiptText();
   const cityId = cityIdOf(selection);
   const request = useShowcaseItem(itemId, {
@@ -254,6 +256,8 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
       const { order } = await apiClient.createOrder(body);
       void orders.refresh();
       navigation.replace("order", { orderId: order.id });
+      // M-PUSH-01 over the new order, when it is due (TASK-051).
+      push.afterOrderPlaced();
     } catch (error) {
       react(checkoutFailure(error));
     } finally {

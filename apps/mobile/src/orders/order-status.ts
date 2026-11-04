@@ -61,6 +61,8 @@ export type OrderStatusTitleKey =
 export type OrderStatusTextKey =
   | "orderStatus.created.text"
   | "orderStatus.acceptedPickup.text"
+  | "orderStatus.acceptedPickup.textPush"
+  | "orderStatus.termConfirmed.textPush"
   | "orderStatus.acceptedDelivery.text"
   | "orderStatus.readyPickup.text"
   | "orderStatus.readyDelivery.text"
@@ -103,6 +105,19 @@ export interface OrderStatusView {
   finished: boolean;
   /** «Отменить заявку» is offered (PRODUCT 10.1: until it is given out). */
   cancellable: boolean;
+}
+
+/**
+ * The line of M-ORD-03 that may promise a push (I455, TASK-051): «Сообщим,
+ * когда можно забирать» only where the push «Можно забирать» really goes and
+ * only to a person whose push is allowed; otherwise the honest «статус
+ * заявки изменится».
+ */
+export function withPushPromise(text: OrderStatusTextKey, promised: boolean): OrderStatusTextKey {
+  if (!promised) return text;
+  if (text === "orderStatus.acceptedPickup.text") return "orderStatus.acceptedPickup.textPush";
+  if (text === "orderStatus.termConfirmed.text") return "orderStatus.termConfirmed.textPush";
+  return text;
 }
 
 /** The fields of an order the state depends on — present in the order and in the saved copy alike. */

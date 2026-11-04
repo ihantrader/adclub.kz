@@ -14,6 +14,7 @@ import { CityProvider } from "./src/state/city-provider";
 import { GarageProvider } from "./src/state/garage-provider";
 import { LanguageProvider } from "./src/state/language";
 import { OrdersCopyProvider } from "./src/state/orders-provider";
+import { PushProvider } from "./src/state/push-provider";
 import { SessionProvider } from "./src/state/session-provider";
 import { readyWithin } from "./src/state/device-store";
 import { devicePreferencesReady } from "./src/state/stores";
@@ -64,7 +65,9 @@ export default function App() {
               <ToastProvider>
                 <SessionProvider>
                   <OrdersCopyProvider>
-                    <Root />
+                    <PushProvider>
+                      <Root />
+                    </PushProvider>
                   </OrdersCopyProvider>
                 </SessionProvider>
               </ToastProvider>

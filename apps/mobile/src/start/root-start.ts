@@ -1,5 +1,5 @@
 import type { TabName } from "../navigation/routes";
-import type { StartScreen } from "./start-decision";
+import type { PushTarget, StartScreen } from "./start-decision";
 
 /**
  * Where the root stack of the app opens (ARCHITECTURE 4.39). The start
@@ -22,7 +22,7 @@ export type RootStart =
    */
   | { screen: "orders-readonly" };
 
-export function rootStart(screen: StartScreen): RootStart | null {
+export function rootStart(screen: StartScreen, push?: PushTarget | null): RootStart | null {
   switch (screen) {
     case "first-run-city":
       return { screen: "first-run-city" };
@@ -30,8 +30,13 @@ export function rootStart(screen: StartScreen): RootStart | null {
       return { screen: "first-run-car" };
     case "orders-offline":
       return { screen: "tabs", tab: "orders" };
-    // The screen a push points at — TASK-031 maps it; the catalog until then.
+    // Opened from a push (TASK-051): the tab under the screen it points at —
+    // «Заявки» under M-ORD-03 (the order itself is opened over it,
+    // `openPushTarget`), the profile for the subscription (M-SUB-02 is TASK-041).
     case "push":
+      if (push?.screen === "order") return { screen: "tabs", tab: "orders" };
+      if (push?.screen === "subscription") return { screen: "tabs", tab: "profile" };
+      return { screen: "tabs", tab: "catalog" };
     case "catalog":
       return { screen: "tabs", tab: "catalog" };
     default:

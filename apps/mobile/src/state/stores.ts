@@ -11,6 +11,7 @@ import {
   type OrdersCopyStore,
   type ValueStorage,
 } from "../orders/order-copy";
+import { parsePushOffers, type PushOffers } from "../push/push-logic";
 import { INITIAL_FIRST_RUN, parseFirstRun, type FirstRunState } from "../start/first-run";
 import { INITIAL_CITY_STATE, parseCityState, type CityState } from "./city";
 import {
@@ -161,6 +162,17 @@ export const profileSyncStore: DeviceStore<ProfileSyncState | null> = createDevi
   key: "adclub.mobile.profile-sync",
   initial: null,
   parse: parseProfileSync,
+});
+
+/**
+ * How many times each account was offered push on this device (M-PUSH-01,
+ * TASK-051): no more than twice. Not a secret — kept when the session ends,
+ * so signing in again does not ask again.
+ */
+export const pushOffersStore: DeviceStore<PushOffers> = createDeviceStore(storage, {
+  key: "adclub.mobile.push-offers",
+  initial: {},
+  parse: parsePushOffers,
 });
 
 /** Resolves once every store of the device has really been read, however long it takes. */

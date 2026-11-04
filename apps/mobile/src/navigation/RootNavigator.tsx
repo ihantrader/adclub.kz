@@ -22,6 +22,7 @@ import { OrdersScreen } from "../screens/tabs/OrdersScreen";
 import type { RootStart } from "../start/root-start";
 import { firstRunStore } from "../state/stores";
 import { MainTabs } from "./MainTabs";
+import { flushPushTarget, navigationRef } from "./navigation-ref";
 import { ROOT_NAVIGATOR, type RootParams } from "./routes";
 import { useStackScreenOptions } from "./use-stack-screen-options";
 
@@ -64,7 +65,7 @@ export function RootNavigator({ start }: { start: RootStart }) {
   );
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} onReady={flushPushTarget} theme={navigationTheme}>
       <Stack.Navigator
         id={ROOT_NAVIGATOR}
         initialRouteName={initial.screen}

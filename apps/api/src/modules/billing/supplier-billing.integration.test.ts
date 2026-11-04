@@ -30,6 +30,7 @@ import {
   type UserOrder,
 } from "@adclub/contracts";
 import {
+  bankRetryWindowEnd,
   daysUntilPause,
   earliestPlanStart,
   kzBinCheckDigit,
@@ -587,6 +588,17 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
     );
   }
 
+  /** The hour of the day in Almaty right now: the tests that set the job's hour against it. */
+  function almatyHourNow(): number {
+    return Number(
+      new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        hourCycle: "h23",
+        timeZone: "Asia/Almaty",
+      }).format(new Date()),
+    );
+  }
+
   /** The daily job's work for one company, in the worker. */
   async function chargeDay(of: Company, kind: "scheduled" | "retry"): Promise<void> {
     const sub = (await subOf(of))!;
@@ -603,9 +615,10 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       decline_reason: string | null;
       idempotency_key: string;
       next_try_at: Date | null;
+      resolved_at: Date | null;
       period_key: string;
     }>(
-      "SELECT id, kind, status, attempt_no, amount, decline_reason, idempotency_key, next_try_at, period_key FROM payment_attempt WHERE supplier_id = $1 ORDER BY created_at, attempt_no",
+      "SELECT id, kind, status, attempt_no, amount, decline_reason, idempotency_key, next_try_at, resolved_at, period_key FROM payment_attempt WHERE supplier_id = $1 ORDER BY created_at, attempt_no",
       [of.supplierId],
     );
     return rows;
@@ -1031,6 +1044,12 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
 
   describe("a refusal of the bank", () => {
     it("tells the payer by the day, retries once a day for three days and pauses on the third, offers hidden, orders kept", async () => {
+      // The days of this scenario pass by moving what happened back a day, so the
+      // refusal has to come after the daily job's hour, as a scheduled one does:
+      // refused before the hour, the window would end a day later than three
+      // days (`bankRetryWindowEnd`) and the pause would not come on day 3.
+      await settings.set({ billing_notify_hour: almatyHourNow() });
+      await new TestSettings(app).reload();
       await addPlan(1_000);
       const of = await subscribed("Отказ");
       const offer = await put(of);
@@ -1049,8 +1068,21 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       // Day 0: the first refusal.
       await chargeDay(of, "scheduled");
       const pastDue = await waitStatus(of, "past_due");
+      // The pause is where the retries' window ends (ARCHITECTURE 4.77 I837): three
+      // days after the first refusal, and never earlier than a day after the last
+      // retry owed — which is later than three days when the refusal comes before
+      // the daily job's hour. The rule itself, not «about three days».
+      const firstRefusal = (await attemptsOf(of)).find((row) => row.status === "declined")!;
+      expect(pastDue.grace_until!.getTime()).toBe(
+        bankRetryWindowEnd({
+          firstDeclinedAt: firstRefusal.resolved_at!,
+          lastDeclinedAt: firstRefusal.resolved_at!,
+          declinedCount: 1,
+          retryDays: 3,
+          hour: almatyHourNow(),
+        }).getTime(),
+      );
       expect(pastDue.grace_until!.getTime()).toBeGreaterThan(Date.now() + 2.9 * DAY);
-      expect(pastDue.grace_until!.getTime()).toBeLessThan(Date.now() + 3.1 * DAY);
       expect(await messagesOf(of)).toHaveLength(1);
       const signals = await signalsOf("payment_failed");
       expect(signals).toHaveLength(1);
@@ -2041,15 +2073,8 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
     });
 
     it("promises tomorrow, not today, after a refusal of «Оплатить сейчас» before the daily hour (defect 5)", async () => {
-      const hourNow = Number(
-        new Intl.DateTimeFormat("en-GB", {
-          hour: "2-digit",
-          hourCycle: "h23",
-          timeZone: "Asia/Almaty",
-        }).format(new Date()),
-      );
       // The daily job runs later today (at 23:xx there is no later hour: the rule is the same).
-      await settings.set({ billing_notify_hour: Math.min(hourNow + 1, 23) });
+      await settings.set({ billing_notify_hour: Math.min(almatyHourNow() + 1, 23) });
       await new TestSettings(app).reload();
       await addPlan(1_000);
       const of = await subscribed("Не сегодня");

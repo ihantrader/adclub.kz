@@ -51,7 +51,7 @@ COMPLETED — 9/9 AC (оговорки — в Known Issues: живой отпр�
   - `account-profile.integration.test.ts` — PASS
   - `admin-users.integration.test.ts` — PASS
   - `messaging.integration.test.ts`, `order-notices.integration.test.ts`, `login-code.integration.test.ts` — PASS (142/142)
-- CI — RUN_ID
+- CI — запущен прогон 41876253314 (push `3d76727`), результат не ожидался (CLAUDE.md 11)
 
 ## UAT / E2E
 Окружение: dev-база проекта (PostgreSQL :5433, MinIO :9002), API и worker — временная конфигурация `.claude/launch.json` (`api-test-ai`, `worker-test-ai` с `AI_PROVIDER=test` и портами 5433/9002; возвращена перед коммитом), кабинет `supplier-web`, приложение `mobile-web`; тестовый провайдер push и тестовый канал сообщений; только тестовые номера `+77010000521`, `+77010000522` (клубный доступ выдан `club-access:grant`), сотрудник «Автомаркета» `+77055550101`. `push_ack_timeout_minutes` = 1 на время проверки, после — `settings:reset`.

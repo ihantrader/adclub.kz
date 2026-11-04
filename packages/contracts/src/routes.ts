@@ -276,6 +276,13 @@ import {
   supplierOrderTimeOptionsSchema,
 } from "./orders";
 import {
+  notificationAckResponseSchema,
+  notificationPathSchema,
+  orderNotificationsAckResponseSchema,
+  pushTokenResponseSchema,
+  registerPushTokenBodySchema,
+} from "./notifications";
+import {
   adminSearchQuerySchema,
   adminSearchResponseSchema,
   adminUserGarageResponseSchema,
@@ -4470,6 +4477,75 @@ export const apiRoutes = {
     pathParams: orderPathSchema,
     responses: {
       200: { description: "The order", schema: userOrderResponseSchema },
+    },
+  }),
+  // ------------------------------------------------ push to the user (TASK-051)
+  registerPushToken: defineRoute({
+    operationId: "registerPushToken",
+    method: "PUT",
+    path: "/notifications/device-token",
+    summary:
+      "Register or refresh this device's push token (after the permission, at start with it, at sign-in, when the platform changes it). Bound to this session: its end takes the device off every push; a token another account had moves to this one",
+    tag: "notifications",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: {
+      description: "The platform's token of this device",
+      schema: registerPushTokenBodySchema,
+    },
+    responses: {
+      200: { description: "The token is registered", schema: pushTokenResponseSchema },
+    },
+  }),
+  removePushToken: defineRoute({
+    operationId: "removePushToken",
+    method: "DELETE",
+    path: "/notifications/device-token",
+    summary:
+      "Take this session's device off push (the server does it by itself when the session ends); nothing registered is no error",
+    tag: "notifications",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    responses: {
+      200: {
+        description: "Nothing is registered for this session",
+        schema: pushTokenResponseSchema,
+      },
+    },
+  }),
+  ackNotification: defineRoute({
+    operationId: "ackNotification",
+    method: "POST",
+    path: "/notifications/{notificationId}/ack",
+    summary:
+      "The app got (or opened) this push: confirms it; any device of the person confirms it. Someone else's and a missing one answer the same 404; a repeat is no error",
+    tag: "notifications",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: notificationPathSchema,
+    responses: {
+      200: { description: "The notification is confirmed", schema: notificationAckResponseSchema },
+    },
+  }),
+  ackOrderNotifications: defineRoute({
+    operationId: "ackOrderNotifications",
+    method: "POST",
+    path: "/orders/{orderId}/notifications/ack",
+    summary:
+      "The screen of the order (M-ORD-03) is open: confirms every push of this order not confirmed yet — the app does not list the ones it never got",
+    tag: "notifications",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: orderPathSchema,
+    responses: {
+      200: {
+        description: "How many were confirmed",
+        schema: orderNotificationsAckResponseSchema,
+      },
     },
   }),
   // ------------------------------------------------ orders under order (TASK-037)

@@ -3,12 +3,14 @@ import { sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { defineSweeperJob, JobRegistry, type Sweeper, type SweepResult } from "../../jobs";
 import { AccountDirectory } from "../identity";
+import { ClubAccess } from "../club-access";
 import { AdminSignals } from "../signals";
 import { OrderIdempotencyCleanup, orderIdempotencyCleanupJob } from "./order-cleanup";
 import { Discipline } from "./order-discipline";
 import { OrderButtonPresses } from "./order-button-presses";
 import { NoticeChannelWatch, noticeChannelWatchJob } from "./order-notice-channel";
 import { OrderMessages, OrderNotices } from "./order-notices";
+import { OrderPushes } from "./order-pushes";
 import { OrderTransitions, type DeadlineOutcome } from "./order-transitions";
 import { SupplierReachWatch, supplierReachWatchJob } from "./supplier-reach";
 
@@ -157,6 +159,8 @@ export class OrderDeadlineSweeper implements Sweeper<void>, OnModuleInit {
     AdminSignals,
     AccountDirectory,
     OrderNotices,
+    ClubAccess,
+    OrderPushes,
     OrderTransitions,
     OrderDeadlineSweeper,
     OrderIdempotencyCleanup,

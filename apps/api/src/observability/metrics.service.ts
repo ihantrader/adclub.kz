@@ -74,6 +74,18 @@ export class Metrics {
     "adclub_messages_by_template",
     "Messages to suppliers by template and state, all of them on record (from outbound_message)",
   );
+  private readonly pushNotifications = this.registry.gauge(
+    "adclub_push_notifications",
+    "Push notifications to users by kind and state, all of them on record (from notification)",
+  );
+  private readonly pushDeliveries = this.registry.gauge(
+    "adclub_push_deliveries",
+    "Push deliveries to devices by state (queued, sending, sent, failed, unknown, cancelled)",
+  );
+  private readonly pushUnackedRatio = this.registry.gauge(
+    "adclub_push_unacked_ratio",
+    "Of the pushes sent within push_unacked_window_hours, the share the app has not confirmed (0 when none was sent)",
+  );
   private readonly messageQueue = this.registry.gauge(
     "adclub_message_queue_depth",
     "Messages to suppliers by state (queued, sending, sent, delivered, read, failed, cancelled, unknown)",
@@ -176,6 +188,27 @@ export class Metrics {
 
   setMessagesByTemplate(template: string, status: string, count: number): void {
     this.messagesByTemplate.set({ template, status }, count);
+  }
+
+  setPushNotifications(kind: string, status: string, count: number): void {
+    this.pushNotifications.set({ kind, status }, count);
+  }
+
+  setPushDeliveries(state: string, count: number): void {
+    this.pushDeliveries.set({ state }, count);
+  }
+
+  setPushUnackedRatio(ratio: number): void {
+    this.pushUnackedRatio.set({}, ratio);
+  }
+
+  /** Push to users, sampled from the database like the messages (the worker sends). */
+  collectPushes(collector: MetricCollector): void {
+    this.registry.collect("pushes", collector, [
+      this.pushNotifications,
+      this.pushDeliveries,
+      this.pushUnackedRatio,
+    ]);
   }
 
   setMessageQueueDepth(state: string, count: number): void {

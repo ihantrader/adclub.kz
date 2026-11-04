@@ -4,6 +4,7 @@ import { PAYMENT_WEBHOOK_PATH, WHATSAPP_WEBHOOK_PATH } from "../common/http";
 import { DEV_PAYMENT_CARD_PATHS } from "../modules/billing";
 import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
 import { DEV_MESSAGES_PATH } from "../modules/messaging";
+import { DEV_PUSHES_PATH } from "../modules/notifications";
 import { PRICE_EXPORT_DOWNLOAD_PATH } from "../modules/price-imports";
 import { METRICS_PATH } from "../observability";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
@@ -21,6 +22,7 @@ const NON_CONTRACT_PATHS: readonly string[] = [
   ...DEV_ONLY_PATHS,
   DEV_LOGIN_CODE_OUTBOX_PATH,
   DEV_MESSAGES_PATH,
+  DEV_PUSHES_PATH,
   WHATSAPP_WEBHOOK_PATH,
   PAYMENT_WEBHOOK_PATH,
   ...DEV_PAYMENT_CARD_PATHS,

@@ -50,6 +50,7 @@ import {
   type OrderActionBody,
   type OrderCredential,
   type OrderLookupResponse,
+  type OrderNotificationsAckResponse,
   type OrderPath,
   type OrderTermAnswerBody,
   type ProposeOrderTermBody,
@@ -169,6 +170,14 @@ export class UserOrdersController {
         pickLanguage(acceptLanguage),
       ),
     };
+  }
+
+  @SessionRoute(apiRoutes.ackOrderNotifications)
+  async ackNotifications(
+    @Param(new ZodValidationPipe(orderPathSchema)) params: OrderPath,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<OrderNotificationsAckResponse> {
+    return { acked: await this.orders.ackNotifications(session.accountId, params.orderId) };
   }
 
   @SessionRoute(apiRoutes.cancelUserOrder)

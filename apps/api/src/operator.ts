@@ -22,6 +22,11 @@ import {
 } from "./modules/identity";
 import { AiModule, AiService } from "./modules/ai";
 import { MessagingAdmin, MessagingCommandError, MessagingModule } from "./modules/messaging";
+import {
+  NotificationsAdmin,
+  NotificationsCommandError,
+  NotificationsModule,
+} from "./modules/notifications";
 import { AuditModule } from "./modules/audit";
 import {
   CatalogModule,
@@ -161,6 +166,16 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                the latest webhook deliveries of the provider and
  *                                what each of them held
  *
+ * Push to the user (ARCHITECTURE 4.79) — never a whole token, never the text:
+ *   push:list [--limit <n>] [--status <status>]
+ *                                the latest notifications: kind, template, language,
+ *                                status, acked, each device as a masked token
+ *   push:retry <notificationId|deliveryId>
+ *                                send again a delivery that failed or whose outcome
+ *                                is unknown (never one the provider took)
+ *   push:status                  counts by kind and status, deliveries, the share of
+ *                                pushes the app has not confirmed
+ *
  * Development and tests only (the real flows arrive with TASK-016/017):
  *   dev:supplier:create --name <name> --city <city>
  *   dev:member:add <supplierId> <phone> --name <display name>
@@ -219,6 +234,7 @@ class OperatorModule {
         SettingsModule.forRoot({ http: false }),
         AiModule.forRoot(config),
         MessagingModule.forRoot(config, { http: false }),
+        NotificationsModule.forRoot(config, { http: false }),
         catalog,
         VehiclesModule.forRoot({ http: false }),
         compatibility,
@@ -272,6 +288,9 @@ const USAGE = `Usage: operator <command> [arguments]
   messages:list [--limit <n>] [--status <status>] [--template <key>]
   messages:retry <messageId>
   messages:webhooks [--limit <n>]
+  push:list [--limit <n>] [--status <status>]
+  push:retry <notificationId|deliveryId>
+  push:status
   ai:status
   translations:status
   translations:queue-missing
@@ -388,6 +407,7 @@ interface Services {
   operator: OperatorService;
   reviewLogins: ReviewLogins;
   messaging: MessagingAdmin;
+  pushes: NotificationsAdmin;
   settings: SettingsChangeService;
   jobs: JobAdmin;
   queue: JobQueue;
@@ -414,6 +434,7 @@ async function run(
     operator,
     reviewLogins,
     messaging,
+    pushes,
     settings,
     jobs,
     queue,
@@ -529,6 +550,15 @@ async function run(
       return messaging.retry(required(first, "<messageId>"));
     case "messages:webhooks":
       return messaging.webhooks(countOption(values.limit, "--limit") ?? 20);
+    case "push:list":
+      return pushes.list({
+        limit: countOption(values.limit, "--limit"),
+        ...(values.status === undefined ? {} : { status: values.status }),
+      });
+    case "push:retry":
+      return pushes.retry(required(first, "<notificationId|deliveryId>"));
+    case "push:status":
+      return pushes.status();
     case "dev:messages:webhook": {
       if (!devCommands) {
         throw new MessagingCommandError(
@@ -854,6 +884,7 @@ async function main(): Promise<void> {
         operator: app.get(OperatorService),
         reviewLogins: app.get(ReviewLogins),
         messaging: app.get(MessagingAdmin),
+        pushes: app.get(NotificationsAdmin),
         settings: app.get(SettingsChangeService),
         jobs: app.get(JobAdmin),
         queue: app.get(JobQueue),
@@ -892,6 +923,7 @@ main().catch((error: unknown) => {
     error instanceof DevSupplierSeedError ||
     error instanceof JobAdminError ||
     error instanceof MessagingCommandError ||
+    error instanceof NotificationsCommandError ||
     error instanceof DocumentEvalBudgetError ||
     error instanceof SearchReindexBusyError ||
     error instanceof SearchIndexUnavailableError

@@ -89,6 +89,17 @@ describe("sanitizeText: other personal data", () => {
     }
   });
 
+  it("removes a device's push token in text and under any key (TASK-051)", () => {
+    const fcm = `dGVzdC1pbnN0YW5jZQ:APA91b${"Hx7_kQ2-".repeat(18)}`;
+    const expo = "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]";
+    const text = sanitizeText(`push to ${fcm} failed; expo ${expo} too`);
+    expect(text).not.toContain("APA91b");
+    expect(text).not.toContain("xxxxxxxxxxxxxxxxxxxxxx");
+    expect(
+      JSON.stringify(sanitizeValue({ deviceToken: fcm, pushToken: fcm, token: fcm })),
+    ).not.toContain("APA91b");
+  });
+
   it("drops the query string of a URL, keeping the path", () => {
     expect(sanitizeText("GET /admin/audit-log?actorAccountId=1&q=Айгерим 200")).toBe(
       `GET /admin/audit-log?${REDACTED} 200`,

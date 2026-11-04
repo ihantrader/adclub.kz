@@ -39,6 +39,7 @@ import { ratingChanged } from "../ratings";
 import { AdminSignals } from "../signals";
 import { Discipline } from "./order-discipline";
 import { OrderNotices } from "./order-notices";
+import { OrderPushes } from "./order-pushes";
 import {
   customerOrder,
   inSupplierStatistics,
@@ -309,6 +310,7 @@ export class OrderTransitions {
     @Inject(AdminSignals) private readonly signals: AdminSignals,
     @Inject(OrderNotices) private readonly notices: OrderNotices,
     @Inject(JobQueue) private readonly queue: JobQueue,
+    @Inject(OrderPushes) private readonly pushes: OrderPushes,
   ) {}
 
   /** A person's move on an order (the caller has checked the order is theirs). */
@@ -999,6 +1001,9 @@ export class OrderTransitions {
       return null;
     }
     await this.record(tx, updated, action, row.status, to, actor, channel, at, details);
+    // The push to the user (TASK-051), in this very transaction: a move lost to
+    // a race or rolled back sends nothing.
+    await this.pushes.afterMove(tx, updated, action);
     if (action === "cancel" || action === "reject_term") {
       // W-04 to the supplier's employees, in this very transaction (TASK-025);
       // the user's «no» to another term is their cancel (TASK-037).
@@ -1184,6 +1189,9 @@ export class OrderTransitions {
       readyOn: updated.receiptOn ?? undefined,
       leadDays: updated.confirmedLeadDays ?? undefined,
     });
+    // «Срок поставки прошёл — свяжитесь с поставщиком» (ARCHITECTURE 4.59): the
+    // user hears it too, a test order of an employee included.
+    await this.pushes.supplyOverdue(tx, updated);
     if (countsInStatistics(updated)) {
       await this.signals.raise(tx, {
         kind: "supply_overdue",
@@ -1368,6 +1376,7 @@ export class OrderTransitions {
         deadline: iso(updated.expiresAt),
       },
     );
+    await this.pushes.reserveExpiring(tx, updated);
     this.logger.log(`Order reserve ending order=${updated.id}`);
     return true;
   }

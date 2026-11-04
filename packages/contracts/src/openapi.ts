@@ -24,6 +24,15 @@ import {
   vehicleDocumentResponseSchema,
   vehicleDocumentUnavailableDetailsSchema,
 } from "./vehicle-document";
+import {
+  notificationAckResponseSchema,
+  notificationKindSchema,
+  orderNotificationsAckResponseSchema,
+  pushPlatformSchema,
+  pushTargetSchema,
+  pushTokenResponseSchema,
+  registerPushTokenBodySchema,
+} from "./notifications";
 import * as compatibilityContract from "./compatibility";
 import * as supplierContract from "./suppliers";
 import * as offerContract from "./offers";
@@ -465,6 +474,14 @@ const componentSchemas: Record<string, z.ZodType> = {
   VehicleDocumentAttempts: vehicleDocumentAttemptsSchema,
   VehicleDocumentResponse: vehicleDocumentResponseSchema,
   VehicleDocumentUnavailableDetails: vehicleDocumentUnavailableDetailsSchema,
+  // Push to the user (TASK-051).
+  NotificationKind: notificationKindSchema,
+  PushTarget: pushTargetSchema,
+  PushPlatform: pushPlatformSchema,
+  RegisterPushTokenBody: registerPushTokenBodySchema,
+  PushTokenResponse: pushTokenResponseSchema,
+  NotificationAckResponse: notificationAckResponseSchema,
+  OrderNotificationsAckResponse: orderNotificationsAckResponseSchema,
 };
 
 type JsonObject = Record<string, unknown>;

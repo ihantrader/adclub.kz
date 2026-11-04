@@ -17,6 +17,7 @@ import { afterCommit, DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue, type Sweeper } from "../../jobs";
 import { AuditLog, type AuditActorRecord } from "../audit";
 import { account, supplier } from "../identity";
+import { Notifications } from "../notifications";
 import { AppSettings } from "../settings";
 import { applyBillingEventsJob } from "./billing-jobs";
 import { Plans } from "./plans.service";
@@ -110,6 +111,7 @@ export class SubscriptionEvents {
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(Plans) private readonly plans: Plans,
     @Inject(SupplierBillingEffects) private readonly effects: SupplierBillingEffects,
+    @Inject(Notifications) private readonly notifications: Notifications,
   ) {}
 
   /** What a company's status change does to the platform (the pause, the signal); a user's — nothing. */
@@ -118,7 +120,39 @@ export class SubscriptionEvents {
     before: SubscriptionRow | null,
     after: SubscriptionRow,
   ): Promise<void> {
+    await this.afterChange(tx, before, after);
+  }
+
+  /**
+   * What a change of a subscription does: a company's — its pause and its
+   * signal (`SupplierBillingEffects`); a user's that entered the grace period
+   * («grace_started», a store could not charge) — P-SUB-01 to the user, in this
+   * transaction, once per move (TASK-051; PRODUCT 14.3).
+   */
+  private async afterChange(
+    tx: DbExecutor,
+    before: SubscriptionRow | null,
+    after: SubscriptionRow,
+  ): Promise<void> {
     await this.effects.afterChange(tx, before, after);
+    if (
+      after.audience === "user" &&
+      after.accountId &&
+      after.status === "grace" &&
+      before?.status !== "grace"
+    ) {
+      const lang = await this.notifications.languageOf(tx, after.accountId);
+      await this.notifications.enqueue(tx, {
+        kind: "payment_failed",
+        template: "payment_failed",
+        recipientAccountId: after.accountId,
+        lang,
+        variables: {},
+        target: { screen: "subscription" },
+        subject: { type: "subscription", id: after.id },
+        dedupeKey: `subscription:${after.id}:grace:v${String(after.version)}`,
+      });
+    }
   }
 
   /** Keeps a provider's event and puts its purchase on the queue; a duplicate changes nothing. */
@@ -301,7 +335,7 @@ export class SubscriptionEvents {
           .returning();
         await this.bindFirstCharge(tx, row.providerRef!, created!.id);
         await this.journal(tx, null, created!, changedBy, row.kind, row.id);
-        await this.effects.afterChange(tx, null, created!);
+        await this.afterChange(tx, null, created!);
         return {
           outcome: "applied",
           detail: null,
@@ -397,7 +431,7 @@ export class SubscriptionEvents {
     }
     const updated = await this.write(tx, current, next, { lastProviderEventAt: row.eventAt });
     await this.journal(tx, current, updated, changedBy, row.kind, row.id);
-    await this.effects.afterChange(tx, current, updated);
+    await this.afterChange(tx, current, updated);
     return {
       outcome: "applied",
       detail: null,

@@ -141,6 +141,37 @@ export const messageTestModes = [
 export type MessageTestMode = (typeof messageTestModes)[number];
 
 /**
+ * Where push notifications to the user go (TASK-051, ARCHITECTURE 9.3,
+ * 4.79). `fcm` is Firebase Cloud Messaging HTTP v1 (Android, and iOS through
+ * APNs) and needs a service account; `test` is an in-process stand-in that
+ * sends nothing (development, tests and CI), refused in production.
+ */
+export const pushProviders = ["test", "fcm"] as const;
+export type PushProviderName = (typeof pushProviders)[number];
+
+/**
+ * What the test push provider does (`PUSH_TEST_MODE`): `ok` — accepts and
+ * keeps it for `GET /dev/pushes`; `unavailable` — fails like an unreachable
+ * provider (retried); `rejected` — refuses for good; `invalid_token` — the
+ * token is dead (the device is taken off push); `unknown` — the request may
+ * have reached the provider (not retried by itself); `slow` — answers after
+ * a delay.
+ */
+export const pushTestModes = [
+  "ok",
+  "unavailable",
+  "rejected",
+  "invalid_token",
+  "unknown",
+  "slow",
+] as const;
+export type PushTestMode = (typeof pushTestModes)[number];
+
+/** Where FCM HTTP v1 and Google's token endpoint are. */
+export const FCM_PUBLIC_URL = "https://fcm.googleapis.com";
+export const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
+
+/**
  * Where a supplier's card subscription is charged (TASK-042, ARCHITECTURE
  * 9.4.2, 4.77). `card_kz` is the card processor of Kazakhstan (Freedom Pay or
  * CloudPayments KZ) and has no implementation yet — no contract, no API
@@ -383,6 +414,29 @@ export const envSchema = z.object({
   // Where the Cloud API is; development only (an address nothing answers
   // at, to watch retries and the dead letter queue without the network).
   WHATSAPP_API_BASE_URL: blankAsUndefined(z.url()),
+  // Push to the user (ARCHITECTURE 9.3, 4.79; TASK-051). Unset provider:
+  // `fcm` when the service account is fully given, `test` otherwise.
+  PUSH_PROVIDER: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(pushProviders).optional(),
+  ),
+  PUSH_TEST_MODE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(pushTestModes).default("ok"),
+  ),
+  // The Firebase project and its service account (the JSON key's
+  // `project_id`, `client_email` and `private_key`; the key's line breaks
+  // may be written as `\n`).
+  FCM_PROJECT_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[a-z][a-z0-9-]{4,61}$/),
+  ),
+  FCM_CLIENT_EMAIL: blankAsUndefined(z.email()),
+  FCM_PRIVATE_KEY: blankAsUndefined(z.string().trim().min(100)),
+  // Where FCM is; development only.
+  FCM_API_BASE_URL: blankAsUndefined(z.url()),
   // A supplier's card subscription (ARCHITECTURE 9.4.2, 4.77; TASK-042).
   // Unset provider: `test`, which production refuses.
   PAYMENT_PROVIDER: z.preprocess(
@@ -519,6 +573,23 @@ export type AppConfig = {
       baseUrl: string;
     };
   };
+  push: {
+    provider: PushProviderName;
+    /** What the test provider does (ignored by `fcm`). */
+    testMode: PushTestMode;
+    /** The service account of FCM; `undefined` with the test provider. */
+    fcm:
+      | {
+          projectId: string;
+          clientEmail: string;
+          /** PEM, with real line breaks. */
+          privateKey: string;
+          /** FCM itself (`https://fcm.googleapis.com` unless development says otherwise). */
+          baseUrl: string;
+          tokenUrl: string;
+        }
+      | undefined;
+  };
   search: {
     /** Where Meilisearch is; `undefined` — no index, the search runs on PostgreSQL. */
     url: string | undefined;
@@ -626,6 +697,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.WHATSAPP_API_BASE_URL && !isLocal) {
     environmentIssues.push(
       `WHATSAPP_API_BASE_URL: not allowed when NODE_ENV=${parsed.NODE_ENV} (messages would leave for another address)`,
+    );
+  }
+  // Push to the user (TASK-051): FCM needs its service account whole; the
+  // test provider sends nothing, which production refuses.
+  const fcmConfigured =
+    parsed.FCM_PROJECT_ID !== undefined &&
+    parsed.FCM_CLIENT_EMAIL !== undefined &&
+    parsed.FCM_PRIVATE_KEY !== undefined;
+  const pushProvider: PushProviderName = parsed.PUSH_PROVIDER ?? (fcmConfigured ? "fcm" : "test");
+  if (pushProvider === "fcm") {
+    for (const name of ["FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"] as const) {
+      if (!parsed[name]) {
+        environmentIssues.push(`${name}: required when PUSH_PROVIDER=fcm`);
+      }
+    }
+  }
+  if (parsed.NODE_ENV === "production" && pushProvider === "test") {
+    environmentIssues.push(
+      "PUSH_PROVIDER: the test push provider is not allowed when NODE_ENV=production (configure FCM_*)",
+    );
+  }
+  if (parsed.FCM_API_BASE_URL && !isLocal) {
+    environmentIssues.push(
+      `FCM_API_BASE_URL: not allowed when NODE_ENV=${parsed.NODE_ENV} (pushes would leave for another address)`,
     );
   }
   // Cards of suppliers (TASK-042): the test provider charges nobody, so
@@ -740,6 +835,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       tokenEncryptionKey: parsed.PAYMENT_TOKEN_ENCRYPTION_KEY ?? DEV_PAYMENT_TOKEN_ENCRYPTION_KEY,
       webhookSecret:
         parsed.PAYMENT_WEBHOOK_SECRET ?? (isLocal ? DEV_PAYMENT_WEBHOOK_SECRET : undefined),
+    },
+    push: {
+      provider: pushProvider,
+      testMode: parsed.PUSH_TEST_MODE,
+      fcm:
+        pushProvider === "fcm" && fcmConfigured
+          ? {
+              projectId: parsed.FCM_PROJECT_ID!,
+              clientEmail: parsed.FCM_CLIENT_EMAIL!,
+              privateKey: parsed.FCM_PRIVATE_KEY!.replaceAll("\\n", "\n"),
+              baseUrl: (parsed.FCM_API_BASE_URL ?? FCM_PUBLIC_URL).replace(/\/+$/, ""),
+              tokenUrl: GOOGLE_OAUTH_TOKEN_URL,
+            }
+          : undefined,
     },
     search: {
       url: parsed.MEILISEARCH_URL?.replace(/\/+$/, ""),

@@ -22,6 +22,9 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "messaging.cleanup-webhook-events",
   "messaging.clear-stale-variables",
   "messaging.recover-interrupted",
+  "notifications.send",
+  "notifications.recover-interrupted",
+  "notifications.cleanup-device-tokens",
   "suppliers.send-invitation",
   "orders.apply-deadlines",
   "orders.cleanup-idempotency-keys",
@@ -92,6 +95,10 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "messaging.clear-stale-variables", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Messages whose sending was interrupted and whose job will not come back (TASK-024).
   { name: "messaging.recover-interrupted", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Tokens of ended sessions off push, old ones deleted (TASK-051).
+  { name: "notifications.cleanup-device-tokens", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Pushes whose sending was interrupted (TASK-051).
+  { name: "notifications.recover-interrupted", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Deadlines of orders: no answer, the end of a reserve, its warning (TASK-021).
   { name: "orders.apply-deadlines", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Keys of creation requests of orders long finished (TASK-022).

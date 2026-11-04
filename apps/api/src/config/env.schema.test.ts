@@ -73,6 +73,8 @@ describe("loadConfig", () => {
         tokenEncryptionKey: expect.any(String),
         webhookSecret: expect.any(String),
       },
+      // Push to the user (TASK-051): the test provider without a service account.
+      push: { provider: "test", testMode: "ok", fcm: undefined },
       // No index without MEILISEARCH_URL: the search runs on PostgreSQL.
       search: { url: undefined, apiKey: undefined, index: "catalog_items" },
       ignoredVariables: [],
@@ -550,6 +552,69 @@ describe("loadConfig", () => {
       expect(refusal({ ...VALID_ENV, WHATSAPP_APP_SECRET: "tiny" })).toContain(
         "WHATSAPP_APP_SECRET",
       );
+    });
+  });
+
+  describe("push to the user (TASK-051, ARCHITECTURE 4.79)", () => {
+    const KEY = `-----BEGIN PRIVATE KEY-----\\n${"A".repeat(120)}\\n-----END PRIVATE KEY-----\\n`;
+    const FCM = {
+      FCM_PROJECT_ID: "adclub-prod",
+      FCM_CLIENT_EMAIL: "push@adclub-prod.iam.gserviceaccount.com",
+      FCM_PRIVATE_KEY: KEY,
+    };
+    function refusal(env: Record<string, string>): string | undefined {
+      try {
+        loadConfig(env);
+        return undefined;
+      } catch (error) {
+        return (error as Error).message;
+      }
+    }
+
+    it("runs the test provider without a service account, and FCM with a whole one", () => {
+      expect(loadConfig(VALID_ENV).push).toEqual({
+        provider: "test",
+        testMode: "ok",
+        fcm: undefined,
+      });
+      const fcm = loadConfig({ ...VALID_ENV, ...FCM }).push;
+      expect(fcm.provider).toBe("fcm");
+      // The key's `\n` written in the variable become real line breaks.
+      expect(fcm.fcm?.privateKey).toContain("\n");
+      expect(fcm.fcm?.privateKey).not.toContain("\\n");
+      expect(fcm.fcm?.baseUrl).toBe("https://fcm.googleapis.com");
+    });
+
+    it("names what FCM lacks, without printing the key", () => {
+      const message = refusal({
+        ...VALID_ENV,
+        PUSH_PROVIDER: "fcm",
+        FCM_PRIVATE_KEY: KEY,
+      })!;
+      expect(message).toContain("FCM_PROJECT_ID: required when PUSH_PROVIDER=fcm");
+      expect(message).toContain("FCM_CLIENT_EMAIL: required when PUSH_PROVIDER=fcm");
+      expect(message).not.toContain("AAAA");
+    });
+
+    it("refuses production on the test provider, and another FCM address outside development", () => {
+      const production = {
+        ...VALID_ENV,
+        NODE_ENV: "production",
+      };
+      expect(refusal(production)).toContain(
+        "PUSH_PROVIDER: the test push provider is not allowed when NODE_ENV=production",
+      );
+      expect(refusal({ ...production, ...FCM }) ?? "").not.toMatch(/PUSH_PROVIDER|FCM_/);
+      expect(
+        refusal({ ...VALID_ENV, NODE_ENV: "staging", ...FCM, FCM_API_BASE_URL: "http://x.test" }),
+      ).toContain("FCM_API_BASE_URL: not allowed");
+    });
+
+    it("takes a test mode and refuses one it does not know", () => {
+      expect(loadConfig({ ...VALID_ENV, PUSH_TEST_MODE: "invalid_token" }).push.testMode).toBe(
+        "invalid_token",
+      );
+      expect(refusal({ ...VALID_ENV, PUSH_TEST_MODE: "broken" })).toContain("PUSH_TEST_MODE");
     });
   });
 

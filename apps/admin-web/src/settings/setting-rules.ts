@@ -99,6 +99,8 @@ const PART_TEXT: Record<string, string> = {
   time_proposed: "Предложено время",
   reserve_expiring: "Резерв истекает",
   order_closed: "Заявка закрыта",
+  supply_overdue: "Срок поставки прошёл",
+  review_text_rejected: "Отзыв не опубликован",
   maintenance_reminder: "Напоминание о ТО",
   payment_failed: "Проблема с оплатой",
 };

@@ -8,6 +8,7 @@ import { compatibilityTables } from "./modules/compatibility";
 import { garageTables } from "./modules/garage";
 import { identityTables } from "./modules/identity";
 import { messagingTables } from "./modules/messaging";
+import { notificationTables } from "./modules/notifications";
 import { offerTables } from "./modules/offers";
 import { orderTables } from "./modules/orders";
 import { searchIndexTables } from "./modules/search-index";
@@ -36,6 +37,7 @@ export const ormTables: readonly PgTable[] = [
   ...compatibilityTables,
   ...supplierTables,
   ...messagingTables,
+  ...notificationTables,
   ...offerTables,
   ...clubAccessTables,
   ...orderTables,

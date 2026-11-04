@@ -99,6 +99,10 @@ const TOKEN_LIKE = [
   /\b[a-z]{2}\d\.[0-9a-fA-F-]{36}\.[A-Za-z0-9_.-]{6,}/g,
   // The content of an order's QR, wherever it appears in text (TASK-022).
   /ADCLUB-ORDER:[A-Za-z0-9_-]+/g,
+  // A device's push token (TASK-051): FCM's registration token
+  // `<instance>:APA91b…` and an Expo push token, wherever they appear in text.
+  /\b[A-Za-z0-9_-]{8,}:APA91[A-Za-z0-9_-]{20,}/g,
+  /\bExpo(?:nent)?PushToken\[[^\]\s]+\]/g,
   // The authenticator app URI carries the TOTP secret.
   /otpauth:\/\/\S+/g,
   // A bearer credential wherever it appears in text.

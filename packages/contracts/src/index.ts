@@ -515,6 +515,7 @@ export * from "./garage";
 export * from "./vehicle-document";
 export * from "./price-imports";
 export * from "./price-review";
+export * from "./notifications";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

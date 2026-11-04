@@ -563,6 +563,25 @@ async function pickupPointOf(
   return (await pickupPointsOf(executor, [row.locationId])).get(row.locationId);
 }
 
+/**
+ * The supplier's name in a push to the user of an order (TASK-051): the name
+ * the order's screen shows, only while the person has club access at the
+ * moment of sending — a push is read on a lock screen, and SCREENS 8.4 says
+ * «Поставщик» without a subscription; `null` — say «Поставщик». The screen of
+ * the order itself keeps showing the name to the end (edge case 17.5).
+ */
+export async function supplierNameForUser(
+  executor: DbExecutor,
+  row: OrderRow,
+  clubAccess: boolean,
+): Promise<string | null> {
+  if (!clubAccess) {
+    return null;
+  }
+  const names = await supplierNames(executor, [row.supplierId]);
+  return names.get(row.supplierId) ?? row.offerSnapshot.supplier.name;
+}
+
 export async function userSummaries(
   executor: DbExecutor,
   rows: readonly OrderRow[],

@@ -4,6 +4,7 @@ import { Discipline } from "./order-discipline";
 import { OrderFeedback } from "./order-feedback";
 import { OrderLookup } from "./order-lookup.service";
 import { OrderNotices } from "./order-notices";
+import { OrderPushes } from "./order-pushes";
 import { OrderTransitions } from "./order-transitions";
 import {
   AdminDisciplineController,
@@ -60,6 +61,7 @@ export class OrdersModule {
         Discipline,
         OrderFeedback,
         OrderNotices,
+        OrderPushes,
         OrderTransitions,
         OrderLookup,
         OrdersService,

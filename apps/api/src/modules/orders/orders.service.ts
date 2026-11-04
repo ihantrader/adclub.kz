@@ -78,6 +78,7 @@ import { CatalogPhotosService, decodeCursor, encodeCursor, TIME_POSITION } from 
 import { ClubAccess } from "../club-access";
 import { accountCar, type AccountCarRow } from "../garage";
 import { AccountStore, supplier, supplierMember } from "../identity";
+import { Notifications } from "../notifications";
 import { offer, offerShowcase, OfferSnapshots, receiptSchedules, servicePricings } from "../offers";
 import { AppSettings } from "../settings";
 import { newConfirmationCode, newQrToken } from "./order-code";
@@ -275,6 +276,8 @@ export class OrdersService {
     @Inject(CatalogPhotosService) private readonly photos: CatalogPhotosService,
     // The review and the complaints of an order (TASK-049), registered by the reviews module.
     @Inject(OrderFeedback) private readonly feedback: OrderFeedback,
+    // Push to the user (TASK-051): the order's screen confirms its pushes.
+    @Inject(Notifications) private readonly notifications: Notifications,
   ) {}
 
   // ---------------------------------------------------------------- create
@@ -872,6 +875,16 @@ export class OrdersService {
       forUser: true,
     });
     return userOrderView(this.database.db, row, lang, this.photos, this.feedback);
+  }
+
+  /**
+   * The screen of the order is open (M-ORD-03; TASK-051): every push of
+   * this order the person has not confirmed is confirmed — they see the
+   * state itself. Someone else's order is the same 404 as a missing one.
+   */
+  async ackNotifications(accountId: string, orderId: string): Promise<number> {
+    await this.userRow(this.database.db, accountId, orderId);
+    return this.notifications.ackSubject(accountId, { type: "order", id: orderId });
   }
 
   private async userRow(executor: DbExecutor, accountId: string, orderId: string) {

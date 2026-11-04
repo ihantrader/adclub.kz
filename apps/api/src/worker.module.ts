@@ -9,6 +9,7 @@ import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { IdentityJobsModule } from "./modules/identity";
 import { AiModule, type AiServiceOptions } from "./modules/ai";
 import { MessagingJobsModule, MessagingModule } from "./modules/messaging";
+import { NotificationJobsModule, NotificationsModule } from "./modules/notifications";
 import { AuditModule } from "./modules/audit";
 import { CatalogJobsModule } from "./modules/catalog";
 import { VehicleJobsModule } from "./modules/vehicles";
@@ -53,6 +54,7 @@ export class WorkerModule {
         SettingsModule.forRoot({ http: false, cache: options.settingsCache }),
         AiModule.forRoot(config, { service: options.ai }),
         MessagingModule.forRoot(config, { http: false }),
+        NotificationsModule.forRoot(config, { http: false }),
         JobsModule.forRoot({
           role: "worker",
           catalog: backgroundJobCatalog(config),
@@ -62,6 +64,7 @@ export class WorkerModule {
         CatalogJobsModule,
         VehicleJobsModule,
         MessagingJobsModule,
+        NotificationJobsModule,
         SupplierJobsModule,
         OrderJobsModule,
         SearchIndexJobsModule,

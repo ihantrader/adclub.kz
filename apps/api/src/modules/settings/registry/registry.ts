@@ -1,4 +1,4 @@
-import type { SettingEditableBy } from "@adclub/contracts";
+import { notificationKinds, type SettingEditableBy } from "@adclub/contracts";
 import { z } from "zod";
 import { define, type SettingDefinition } from "./setting-definition";
 
@@ -268,19 +268,8 @@ const orders = group({
   },
 });
 
-const notificationKinds = [
-  "order_accepted",
-  "order_ready",
-  "order_confirmed",
-  "order_declined",
-  "order_expired_no_response",
-  "term_proposed",
-  "time_proposed",
-  "reserve_expiring",
-  "order_closed",
-  "maintenance_reminder",
-  "payment_failed",
-] as const;
+// The kinds of notifications to the user: one list, in the contract
+// (TASK-051) — the push gateway and this setting take them from there.
 
 const notifications = group({
   id: "notifications",
@@ -323,6 +312,46 @@ const notifications = group({
       ],
       description:
         "Какие уведомления пользователю дублируются в WhatsApp, если push не подтверждён.",
+    }),
+    push_send_attempts: define.integer({
+      unit: "count",
+      min: 1,
+      max: 20,
+      default: 5,
+      description:
+        "Сколько раз push пользователю пробуют отправить на устройство, если провайдер временно недоступен; после этого отправка попадает в мёртвую очередь и видна оператору. Постоянный отказ не повторяется, мёртвый токен устройства снимается с рассылки.",
+    }),
+    push_retry_delay_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: HOUR,
+      default: 30,
+      description:
+        "Пауза перед повторной попыткой отправки push; каждая следующая вдвое дольше (механизм очереди).",
+    }),
+    push_send_claim_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: 600,
+      default: 120,
+      description:
+        "На сколько отправка push на устройство закрепляется за попыткой: пока срок не прошёл, второй worker её не берёт. Попытка, прерванная остановкой процесса, после срока не повторяется — отправка помечается «неизвестно, ушло ли».",
+    }),
+    push_token_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Сколько дней хранится токен устройства, снятый с рассылки (сессия завершена, провайдер сказал, что токен мёртв); потом его удаляет уборка.",
+    }),
+    push_unacked_window_hours: define.duration({
+      unit: "hours",
+      min: 1,
+      max: 720,
+      default: 24,
+      description:
+        "За какое окно метрика считает долю отправленных push, которые приложение не подтвердило.",
     }),
     whatsapp_batch_window_seconds: define.duration({
       unit: "seconds",

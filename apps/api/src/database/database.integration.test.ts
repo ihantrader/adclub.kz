@@ -107,6 +107,63 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keeps one token per device and per session, one notification per event, and rolls back (push notifications)", async () => {
+    const { rows: account } = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77001239876') RETURNING id",
+    );
+    const accountId = account[0]!.id;
+    const session = async () =>
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO session (account_id, kind, refresh_seed, last_used_at, expires_at)
+           VALUES ($1, 'mobile', 'seed', now(), now() + interval '1 day') RETURNING id`,
+          [accountId],
+        )
+      ).rows[0]!.id;
+    const [first, second] = [await session(), await session()];
+    const token = `dev:APA91b${"x".repeat(40)}`;
+    const register = (sessionId: string, value: string) =>
+      client.query(
+        "INSERT INTO device_token (account_id, session_id, platform, token) VALUES ($1, $2, 'android', $3)",
+        [accountId, sessionId, value],
+      );
+    await register(first, token);
+    // One row per device and one device per session.
+    await expect(register(second, token)).rejects.toThrow(/device_token_token_key/);
+    await expect(register(first, `${token}2`)).rejects.toThrow(/device_token_session_key/);
+    const notify = (key: string) =>
+      client.query(
+        `INSERT INTO notification (dedupe_key, recipient_account_id, event_kind, template_code, lang, payload, subject_type)
+         VALUES ($1, $2, 'order_accepted', 'order_accepted', 'ru', '{}', 'order') RETURNING id`,
+        [key, accountId],
+      );
+    const { rows: notification } = await notify("order:x:accept:v2");
+    await expect(notify("order:x:accept:v2")).rejects.toThrow(/notification_dedupe_key/);
+    await expect(
+      client.query(
+        `INSERT INTO notification (dedupe_key, recipient_account_id, event_kind, template_code, lang, payload, subject_type)
+         VALUES ('k', $1, 'order_whatever', 'x', 'ru', '{}', 'order')`,
+        [accountId],
+      ),
+    ).rejects.toThrow(/notification_kind_check/);
+    // A sent delivery always has the provider's id.
+    await expect(
+      client.query(
+        `INSERT INTO notification_delivery (notification_id, token_mask, platform, status, settled_at)
+         VALUES ($1, 'dev:AP…xxxx', 'android', 'sent', now())`,
+        [notification[0]!.id],
+      ),
+    ).rejects.toThrow(/notification_delivery_sent_check/);
+
+    // Back: the tables go with everything in them.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "notification_delivery")).toBe(false);
+    expect(await tableExists(client, "notification")).toBe(false);
+    expect(await tableExists(client, "device_token")).toBe(false);
+    await client.query("DELETE FROM session WHERE account_id = $1", [accountId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
   it("marks a cancelled tariff instead of deleting it, keeps one start among the live ones, and rolls back (billing admin)", async () => {
     // As the migration before left them: a tariff record without a cancel.
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
@@ -144,6 +201,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     ]);
 
     // Back: the cancelled record goes (the full unique key returns), the live one stays.
+    // The `up` above brought back the later migration too (push notifications): it goes first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     const { rows: after } = await client.query<{ code: string }>(
       "SELECT code FROM plan WHERE valid_from = $1",
@@ -215,7 +274,9 @@ describe("PostgreSQL: migrations and readiness", () => {
     await first(second, "fix-key-2");
 
     // Back: the pause returns to billing, the index goes.
-    // The `up` above brought back the later migration too (billing admin): it goes first.
+    // The `up` above brought back the later migrations too (push notifications,
+    // billing admin): they go first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(await pauseOf(bare)).toEqual({ admin: false, billing: true, status: "paused" });

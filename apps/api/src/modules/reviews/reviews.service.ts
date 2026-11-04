@@ -20,6 +20,7 @@ import {
   reviewTransition,
   type ReviewAction,
 } from "@adclub/domain";
+import { mobileText, type MobileTextKey } from "@adclub/i18n";
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
@@ -28,6 +29,7 @@ import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, escapeLike, TIME_POSITION } from "../catalog";
 import { account, supplier } from "../identity";
 import { customerOrder, reviewable } from "../orders";
+import { Notifications } from "../notifications";
 import { ratingChanged } from "../ratings";
 import { AppSettings } from "../settings";
 import { describeViewer, supplierShownTo, type Viewer } from "../showcase";
@@ -43,6 +45,17 @@ import {
 import { checkReviewJob } from "./review-jobs";
 import { adminReviewViews, publicReviewView, userReviewView } from "./review-views";
 import { review, type ReviewRow } from "./schema";
+
+/**
+ * P-REV-01 {причина}: the words the app shows for it (T-REV-02), from the
+ * same dictionary — one wording of a reason everywhere.
+ */
+const REJECT_REASON_TEXT = {
+  profanity: "review.reason.profanity",
+  personal_data: "review.reason.personalData",
+  supplier_name: "review.reason.supplierName",
+  advertising: "review.reason.advertising",
+} as const satisfies Record<ReviewRejectReason, MobileTextKey>;
 
 /** The administrator acting on a review or a complaint. */
 export interface ReviewAdmin {
@@ -88,6 +101,7 @@ export class ReviewsService {
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(JobQueue) private readonly queue: JobQueue,
+    @Inject(Notifications) private readonly notifications: Notifications,
   ) {}
 
   // ---------------------------------------------------------------- author
@@ -371,6 +385,22 @@ export class ReviewsService {
       // TASK-050: published, hidden or restored — the scores of the rating changed.
       if (next === "published" || current.status === "published") {
         await ratingChanged(this.queue, tx, current.supplierId);
+      }
+      // P-REV-01 (TASK-051): the author hears that the text was not published,
+      // in this transaction — once per decision (the review's version).
+      if (decision.action === "reject_text") {
+        const lang = await this.notifications.languageOf(tx, current.userAccountId);
+        await this.notifications.enqueue(tx, {
+          kind: "review_text_rejected",
+          template: "review_text_rejected",
+          recipientAccountId: current.userAccountId,
+          lang,
+          variables: { reason: mobileText(lang, REJECT_REASON_TEXT[decision.reason]) },
+          // M-ORD-03 of the order, where «Исправить текст» is.
+          target: { screen: "order", params: { orderId: current.orderId } },
+          subject: { type: "order", id: current.orderId },
+          dedupeKey: `review:${reviewId}:reject_text:v${String(updated!.version)}`,
+        });
       }
       return { updated: updated! };
     });

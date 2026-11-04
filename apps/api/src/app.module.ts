@@ -11,6 +11,7 @@ import { IdentityModule } from "./modules/identity";
 import { GarageModule } from "./modules/garage";
 import { AiModule } from "./modules/ai";
 import { MessagingModule } from "./modules/messaging";
+import { NotificationsModule } from "./modules/notifications";
 import { AuditModule } from "./modules/audit";
 import { CatalogModule } from "./modules/catalog";
 import { VehiclesModule } from "./modules/vehicles";
@@ -94,6 +95,12 @@ export class AppModule implements NestModule {
         SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
         AiModule.forRoot(config, { metrics: config.metrics.enabled }),
         MessagingModule.forRoot(config, {
+          http: true,
+          metrics: config.metrics.enabled,
+          devOutbox: config.loginCode.devOutbox,
+        }),
+        // Push to the user (TASK-051): the app's routes, the queue, `/dev/pushes`.
+        NotificationsModule.forRoot(config, {
           http: true,
           metrics: config.metrics.enabled,
           devOutbox: config.loginCode.devOutbox,

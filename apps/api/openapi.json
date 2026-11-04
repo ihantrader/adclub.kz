@@ -14893,6 +14893,154 @@
         }
       }
     },
+    "/notifications/{notificationId}/ack": {
+      "post": {
+        "operationId": "ackNotification",
+        "summary": "The app got (or opened) this push: confirms it; any device of the person confirms it. Someone else's and a missing one answer the same 404; a repeat is no error",
+        "tags": [
+          "notifications"
+        ],
+        "parameters": [
+          {
+            "name": "notificationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The notification is confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationAckResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/notifications/device-token": {
+      "delete": {
+        "operationId": "removePushToken",
+        "summary": "Take this session's device off push (the server does it by itself when the session ends); nothing registered is no error",
+        "tags": [
+          "notifications"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "Nothing is registered for this session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushTokenResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "registerPushToken",
+        "summary": "Register or refresh this device's push token (after the permission, at start with it, at sign-in, when the platform changes it). Bound to this session: its end takes the device off every push; a token another account had moves to this one",
+        "tags": [
+          "notifications"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The platform's token of this device",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPushTokenBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The token is registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushTokenResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/order-history": {
       "get": {
         "operationId": "getOrderHistory",
@@ -15232,6 +15380,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserOrderResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/notifications/ack": {
+      "post": {
+        "operationId": "ackOrderNotifications",
+        "summary": "The screen of the order (M-ORD-03) is open: confirms every push of this order not confirmed yet — the app does not list the ones it never got",
+        "tags": [
+          "notifications"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "How many were confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderNotificationsAckResponse"
                 }
               }
             }
@@ -35655,6 +35856,43 @@
           "announcedPlan"
         ]
       },
+      "NotificationAckResponse": {
+        "type": "object",
+        "properties": {
+          "notificationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "ackedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "notificationId",
+          "ackedAt"
+        ]
+      },
+      "NotificationKind": {
+        "type": "string",
+        "enum": [
+          "order_accepted",
+          "order_ready",
+          "order_confirmed",
+          "order_declined",
+          "order_expired_no_response",
+          "term_proposed",
+          "time_proposed",
+          "reserve_expiring",
+          "order_closed",
+          "supply_overdue",
+          "review_text_rejected",
+          "maintenance_reminder",
+          "payment_failed"
+        ]
+      },
       "NotificationLanguage": {
         "type": "string",
         "enum": [
@@ -37615,6 +37853,19 @@
           "delivered",
           "failed",
           "pending"
+        ]
+      },
+      "OrderNotificationsAckResponse": {
+        "type": "object",
+        "properties": {
+          "acked": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "acked"
         ]
       },
       "OrderPath": {
@@ -39995,6 +40246,81 @@
           "author"
         ]
       },
+      "PushPlatform": {
+        "type": "string",
+        "enum": [
+          "ios",
+          "android"
+        ]
+      },
+      "PushTarget": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "screen": {
+                "type": "string",
+                "const": "order"
+              },
+              "params": {
+                "type": "object",
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": [
+                  "orderId"
+                ]
+              }
+            },
+            "required": [
+              "screen",
+              "params"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "screen": {
+                "type": "string",
+                "const": "subscription"
+              },
+              "params": {
+                "type": "object",
+                "properties": {}
+              }
+            },
+            "required": [
+              "screen"
+            ]
+          }
+        ]
+      },
+      "PushTokenResponse": {
+        "type": "object",
+        "properties": {
+          "registered": {
+            "type": "boolean"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PushPlatform"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "registered",
+          "platform"
+        ]
+      },
       "RateLimitName": {
         "type": "string",
         "enum": [
@@ -40112,6 +40438,35 @@
         },
         "required": [
           "totpCode"
+        ]
+      },
+      "RegisterPushTokenBody": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/PushPlatform"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 4096,
+            "pattern": "^[\\x21-\\x7e]+$"
+          },
+          "deviceModel": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "platform",
+          "token"
         ]
       },
       "RejectCatalogRequestBody": {

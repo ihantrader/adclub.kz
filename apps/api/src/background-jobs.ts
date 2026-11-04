@@ -3,6 +3,7 @@ import { devJobCatalog, type JobDefinition } from "./jobs";
 import { catalogJobCatalog, photoJobCatalog } from "./modules/catalog";
 import { identityJobCatalog } from "./modules/identity";
 import { messagingJobCatalog } from "./modules/messaging";
+import { notificationJobCatalog } from "./modules/notifications";
 import { orderJobCatalog } from "./modules/orders";
 import { searchJobCatalog } from "./modules/search-index";
 import { priceImportJobCatalog } from "./modules/price-imports";
@@ -26,6 +27,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
     ...photoJobCatalog,
     ...vehicleJobCatalog,
     ...messagingJobCatalog,
+    ...notificationJobCatalog,
     ...supplierJobCatalog,
     ...orderJobCatalog,
     ...searchJobCatalog,

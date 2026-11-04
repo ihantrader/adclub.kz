@@ -182,7 +182,7 @@ export class ReviewsService {
         );
       } else {
         // A score without a text is published at once (TASK-050: the rating).
-        await ratingChanged(this.queue, tx, row.supplierId);
+        ratingChanged(this.queue, row.supplierId);
       }
       return { review: userReviewView(row), created: true };
     });
@@ -270,7 +270,7 @@ export class ReviewsService {
         },
         tx,
       );
-      await ratingChanged(this.queue, tx, row.supplierId);
+      ratingChanged(this.queue, row.supplierId);
       return userReviewView(updated!);
     });
   }
@@ -384,7 +384,7 @@ export class ReviewsService {
       );
       // TASK-050: published, hidden or restored — the scores of the rating changed.
       if (next === "published" || current.status === "published") {
-        await ratingChanged(this.queue, tx, current.supplierId);
+        ratingChanged(this.queue, current.supplierId);
       }
       // P-REV-01 (TASK-051): the author hears that the text was not published,
       // in this transaction — once per decision (the review's version).

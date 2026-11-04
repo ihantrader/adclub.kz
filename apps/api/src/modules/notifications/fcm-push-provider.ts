@@ -261,10 +261,9 @@ export function failureOf(
     /registration token|token/i.test(error?.message ?? "")
   ) {
     kind = "invalid_token";
-  } else if (status === 404) {
-    // `NOT_FOUND` of a send is the token: the app was removed.
-    kind = "invalid_token";
   } else if (status === 401) {
+    // A 404 is the token only when FCM says so (`UNREGISTERED`, above): a 404
+    // of a wrong project path must not take every device off the list.
     // Our access token was refused; the provider took nothing. The next try
     // exchanges a fresh one.
     kind = "unavailable";

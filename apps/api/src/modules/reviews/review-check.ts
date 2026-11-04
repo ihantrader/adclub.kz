@@ -191,7 +191,7 @@ export class ReviewChecker implements JobHandler<{ reviewId: string }> {
       );
       if (!held) {
         // TASK-050: a published score counts in the supplier's rating.
-        await ratingChanged(this.queue, tx, row.supplierId);
+        ratingChanged(this.queue, row.supplierId);
       }
       return true;
     });

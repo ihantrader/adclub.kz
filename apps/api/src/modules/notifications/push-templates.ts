@@ -201,7 +201,10 @@ function oneLine(value: string): string {
 /**
  * The text of a push with its values. Every placeholder of the template needs
  * a value and no other value is taken: a template used wrongly fails where
- * the mistake is, when it is queued.
+ * the mistake is, when it is queued. A text that is still too long with its
+ * values (a long supplier's name and a long item) is cut with an ellipsis,
+ * never refused: the push is queued in the transaction of the event, and
+ * the length of a name must not fail an acceptance (TASK-051 acceptance).
  */
 export function renderPushText(
   code: PushTemplateCode,
@@ -219,10 +222,10 @@ export function renderPushText(
     );
   }
   const body = text.replace(PLACEHOLDER, (_, name: string) => oneLine(variables[name] ?? ""));
-  if ([...body].length > PUSH_BODY_MAX_LENGTH) {
-    throw new PushRenderError(`${code}: longer than ${String(PUSH_BODY_MAX_LENGTH)} characters`);
-  }
-  return body;
+  const chars = [...body];
+  return chars.length <= PUSH_BODY_MAX_LENGTH
+    ? body
+    : `${chars.slice(0, PUSH_BODY_MAX_LENGTH - 1).join("")}…`;
 }
 
 /** What is wrong with the registry; empty — nothing. */

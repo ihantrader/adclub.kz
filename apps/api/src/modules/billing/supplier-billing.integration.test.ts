@@ -48,10 +48,11 @@ import { PAYMENT_WEBHOOK_PATH } from "../../common/http";
 import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
 import { DatabaseService } from "../../database";
-import { runMigrate } from "../../database/migrate-cli";
+import { runMigrate, runMigrateAsync } from "../../database/migrate-cli";
 import { configureHttpApp } from "../../http-app";
 import { JobQueue, SweepRunner, type JobsTuning } from "../../jobs";
 import { truncateAll } from "../../testing/database";
+import { EXPECTED_MIGRATIONS } from "../../testing/expected/migrations";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { completeTestRegistration } from "../../testing/registration";
 import { TestSettings } from "../../testing/settings";
@@ -103,6 +104,14 @@ const SUPPLIER_WEB = "supplier-web/0.1.0";
 const CABINET = "http://localhost:5175";
 const PADS = "04465-0K090";
 const HOUR = 3_600_000;
+/** `down` this many: the fixes of TASK-042.A and whatever came after them (counted, not guessed). */
+const MIGRATIONS_DOWN_TO_BELOW_BILLING_FIXES = (() => {
+  const at = EXPECTED_MIGRATIONS.indexOf("1791650000000_supplier-billing-fixes");
+  if (at < 0) {
+    throw new Error("The migration of TASK-042.A is not in EXPECTED_MIGRATIONS");
+  }
+  return EXPECTED_MIGRATIONS.length - at;
+})();
 const DAY = 24 * HOUR;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2216,15 +2225,21 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       const bare = await company("Старая пауза");
       const paying = await subscribed("Пауза с подпиской");
       // As the migration of TASK-042 left them: a pause for «billing» set by hand before billing existed.
-      // Two back: the migration of TASK-043 (billing admin) is above the fixes of TASK-042.A.
-      runMigrate("down", postgres.getConnectionUri(), 2);
+      // Down to just below the fixes of TASK-042.A (the migrations above them are counted, not guessed).
+      // Asynchronously: the workers of this process must be able to finish their
+      // transactions, or the migration's `DROP TABLE` waits for their locks forever.
+      await runMigrateAsync(
+        "down",
+        postgres.getConnectionUri(),
+        MIGRATIONS_DOWN_TO_BELOW_BILLING_FIXES,
+      );
       try {
         await db.query(
           "UPDATE supplier SET billing_paused_at = now() - interval '10 days', status = 'paused' WHERE id = ANY($1)",
           [[bare.supplierId, paying.supplierId]],
         );
       } finally {
-        runMigrate("up", postgres.getConnectionUri());
+        await runMigrateAsync("up", postgres.getConnectionUri());
       }
       expect(await supplierRow(bare)).toMatchObject({ status: "paused", billing_paused_at: null });
       expect((await supplierRow(bare)).admin_paused_at).not.toBeNull();
@@ -2232,13 +2247,19 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       expect((await supplierRow(paying)).billing_paused_at).not.toBeNull();
       expect((await supplierRow(paying)).admin_paused_at).toBeNull();
       // Reversible: down gives the pause back to billing, up hands it over again.
-      // Two back: the migration of TASK-043 (billing admin) is above the fixes of TASK-042.A.
-      runMigrate("down", postgres.getConnectionUri(), 2);
+      // Down to just below the fixes of TASK-042.A (the migrations above them are counted, not guessed).
+      // Asynchronously: the workers of this process must be able to finish their
+      // transactions, or the migration's `DROP TABLE` waits for their locks forever.
+      await runMigrateAsync(
+        "down",
+        postgres.getConnectionUri(),
+        MIGRATIONS_DOWN_TO_BELOW_BILLING_FIXES,
+      );
       try {
         expect((await supplierRow(bare)).billing_paused_at).not.toBeNull();
         expect((await supplierRow(bare)).admin_paused_at).toBeNull();
       } finally {
-        runMigrate("up", postgres.getConnectionUri());
+        await runMigrateAsync("up", postgres.getConnectionUri());
       }
       // Now somebody can lift it: the administrator.
       const card = (

@@ -1413,7 +1413,7 @@ export class OrderTransitions {
     // the supplier's rating — counted again by the worker once this commits.
     // A test order judges nobody.
     if (ratingFollowsOrderEvent(action) && countsInStatistics(order)) {
-      await ratingChanged(this.queue, tx, order.supplierId);
+      ratingChanged(this.queue, order.supplierId);
     }
   }
 }

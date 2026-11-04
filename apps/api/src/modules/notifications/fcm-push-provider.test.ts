@@ -178,6 +178,14 @@ describe("FcmPushProvider (FCM HTTP v1)", () => {
         });
     const cases: [() => Response, string][] = [
       [error(404, "UNREGISTERED", "Requested entity was not found."), "invalid_token"],
+      // A 404 of the project path (a wrong `FCM_PROJECT_ID`), not of the token.
+      [
+        () =>
+          json(404, {
+            error: { code: 404, status: "NOT_FOUND", message: "Requested entity was not found." },
+          }),
+        "rejected",
+      ],
       [error(403, "SENDER_ID_MISMATCH"), "invalid_token"],
       [
         error(

@@ -58,13 +58,13 @@ describe("push templates (SCREENS 8.4, TASK-051)", () => {
     ).toThrow(PushRenderError);
   });
 
-  it("collapse a value to one line and refuse a text too long", () => {
+  it("collapse a value to one line and cut a text too long instead of refusing it", () => {
     expect(renderPushText("order_closed", "en", { item: "Pads\n\tfront" })).toBe(
       "Order closed: Pads front. Didn't receive it? Let us know",
     );
-    expect(() =>
-      renderPushText("order_closed", "ru", { item: "я".repeat(PUSH_BODY_MAX_LENGTH) }),
-    ).toThrow(/longer than/);
+    const cut = renderPushText("order_closed", "ru", { item: "я".repeat(PUSH_BODY_MAX_LENGTH) });
+    expect([...cut].length).toBe(PUSH_BODY_MAX_LENGTH);
+    expect(cut.endsWith("я…")).toBe(true);
   });
 
   it("render every template in every language with its own placeholders", () => {

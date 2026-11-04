@@ -292,6 +292,8 @@
   "profile.notifications": "Notifications",
   "profile.notificationsOn": "On",
   "profile.notificationsOff": "Off — check the status of your orders in the app",
+  "profile.notificationsWhatsapp": "If a push doesn't arrive, we'll send the important ones to WhatsApp",
+  "profile.notificationsNoWhatsapp": "WhatsApp isn't connected — check important events in the app",
   "profile.notificationsSettings": "Open settings",
   "profile.platformIos": "iPhone or iPad",
   "profile.platformAndroid": "Android phone",

@@ -1,7 +1,14 @@
 import { Controller, Get, Inject, Injectable } from "@nestjs/common";
 import { desc, inArray } from "drizzle-orm";
 import { DatabaseService } from "../../database";
-import { pushTemplate, renderPushText } from "./push-templates";
+import {
+  isMessageTemplateKey,
+  messageTemplate,
+  renderMessageText,
+  type MessageTemplateKey,
+} from "../messaging";
+import { fallbackLangOf } from "./push-fallback";
+import { pushTemplate, renderPushText, type PushTemplateCode } from "./push-templates";
 import { notification, notificationDelivery } from "./schema";
 
 /** Not part of the contract; excluded from the served-routes check (as `/dev/messages`). */
@@ -37,17 +44,32 @@ export class DevPushOutbox {
               ),
             );
     return rows.map((row) => {
+      // TASK-052: a WhatsApp copy is written by its message template (kk/ru).
+      const whatsapp = row.channel === "whatsapp" && isMessageTemplateKey(row.templateCode);
       let text: string | null;
+      let screen: string | null = null;
       try {
-        text = renderPushText(row.templateCode, row.lang, row.payload.variables);
+        if (whatsapp) {
+          const key = row.templateCode as MessageTemplateKey;
+          screen = messageTemplate(key).screen;
+          text = renderMessageText(key, fallbackLangOf(row.lang), row.payload.variables);
+        } else {
+          const code = row.templateCode as PushTemplateCode;
+          screen = pushTemplate(code).screen;
+          text = renderPushText(code, row.lang, row.payload.variables);
+        }
       } catch {
         text = null;
       }
       return {
         id: row.id,
+        channel: row.channel,
+        fallbackOfId: row.fallbackOfId,
+        fallbackDecision: row.fallbackDecision,
+        outboundMessageId: row.outboundMessageId,
         kind: row.eventKind,
         template: row.templateCode,
-        screen: pushTemplate(row.templateCode).screen,
+        screen,
         lang: row.lang,
         text,
         target: row.payload.target,
@@ -80,7 +102,7 @@ export class DevPushesController {
   @Get(DEV_PUSHES_PATH)
   async list() {
     return {
-      note: "Development only: the latest push notifications to users sent through the test provider (newest first), each device as a masked token, and whether the app confirmed them (ackedAt).",
+      note: "Development only: the latest push notifications to users sent through the test provider (newest first), each device as a masked token, and whether the app confirmed them (ackedAt). A row with channel whatsapp is the WhatsApp copy of the push fallbackOfId names (TASK-052); its message is on /dev/messages.",
       notifications: await this.outbox.latest(),
     };
   }

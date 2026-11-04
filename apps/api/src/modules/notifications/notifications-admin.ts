@@ -3,7 +3,8 @@ import { desc, inArray } from "drizzle-orm";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import { DatabaseService } from "../../database";
 import { NotificationNotFoundError, Notifications } from "./notifications.service";
-import { notificationDelivery, type NotificationStatus } from "./schema";
+import { countWithoutWhatsapp } from "../identity";
+import { notification, notificationDelivery, type NotificationStatus } from "./schema";
 
 const STATUSES: readonly NotificationStatus[] = [
   "queued",
@@ -12,6 +13,8 @@ const STATUSES: readonly NotificationStatus[] = [
   "failed",
   "unknown",
   "cancelled",
+  "delivered",
+  "read",
 ];
 
 export class NotificationsCommandError extends Error {
@@ -61,10 +64,23 @@ export class NotificationsAdmin {
               ),
             )
             .orderBy(desc(notificationDelivery.createdAt));
+    const copies =
+      rows.length === 0
+        ? []
+        : await this.database.db
+            .select()
+            .from(notification)
+            .where(
+              inArray(
+                notification.fallbackOfId,
+                rows.map((row) => row.id),
+              ),
+            );
     return {
       provider: this.config.push.provider,
       notifications: rows.map((row) => ({
         id: row.id,
+        channel: row.channel,
         kind: row.eventKind,
         template: row.templateCode,
         lang: row.lang,
@@ -73,6 +89,25 @@ export class NotificationsAdmin {
         createdAt: row.createdAt.toISOString(),
         sentAt: row.sentAt?.toISOString() ?? null,
         ackedAt: row.ackedAt?.toISOString() ?? null,
+        // TASK-052: what became of the WhatsApp copy (on a push), or whose copy this is.
+        fallback:
+          row.channel === "push"
+            ? {
+                decision: row.fallbackDecision ?? "pending",
+                decidedAt: row.fallbackDecidedAt?.toISOString() ?? null,
+                copy: (() => {
+                  const copy = copies.find((item) => item.fallbackOfId === row.id);
+                  return copy
+                    ? {
+                        id: copy.id,
+                        template: copy.templateCode,
+                        status: copy.status,
+                        messageId: copy.outboundMessageId,
+                      }
+                    : null;
+                })(),
+              }
+            : { of: row.fallbackOfId, messageId: row.outboundMessageId },
         deliveries: deliveries
           .filter((delivery) => delivery.notificationId === row.id)
           .map((delivery) => ({
@@ -113,6 +148,14 @@ export class NotificationsAdmin {
       byKind: await this.notifications.countsByKind(),
       deliveries: await this.notifications.deliveryCounts(),
       unacked: await this.notifications.unacked(),
+      // TASK-052: the WhatsApp fallback.
+      fallback: {
+        share: await this.notifications.fallbackShare(),
+        decisions: await this.notifications.fallbackDecisions(),
+        copies: await this.notifications.fallbackCounts(),
+        pushUnreliable: await this.notifications.unreliableCount(),
+        withoutWhatsapp: await countWithoutWhatsapp(this.database.db),
+      },
     };
   }
 }

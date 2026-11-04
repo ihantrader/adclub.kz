@@ -7116,7 +7116,8 @@
                 "low_rating",
                 "payment_failed",
                 "payment_system_down",
-                "billing_plan_missing"
+                "billing_plan_missing",
+                "push_fallback_high"
               ]
             }
           },
@@ -9793,6 +9794,17 @@
           },
           {
             "name": "unconfirmedCar",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          },
+          {
+            "name": "noWhatsapp",
             "in": "query",
             "required": false,
             "schema": {
@@ -20066,6 +20078,9 @@
                 "type": "null"
               }
             ]
+          },
+          "whatsappAvailable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -20076,7 +20091,8 @@
           "cityId",
           "language",
           "registrationCompleted",
-          "phoneShareConsent"
+          "phoneShareConsent",
+          "whatsappAvailable"
         ]
       },
       "AcknowledgeAdminSignalBody": {
@@ -26368,7 +26384,8 @@
           "low_rating",
           "payment_failed",
           "payment_system_down",
-          "billing_plan_missing"
+          "billing_plan_missing",
+          "push_fallback_high"
         ]
       },
       "AdminSignalListQuery": {
@@ -26594,6 +26611,24 @@
             "maximum": 9007199254740991
           },
           "failedPayments": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "criticalPushes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "fallbacks": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "fallbackShare": {
+            "type": "number"
+          },
+          "windowHours": {
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
@@ -27961,6 +27996,72 @@
               "$ref": "#/components/schemas/AdminUserMembership"
             }
           },
+          "notifications": {
+            "type": "object",
+            "properties": {
+              "whatsapp": {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean"
+                  },
+                  "since": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "login_code",
+                          "message"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "available",
+                  "since",
+                  "source"
+                ]
+              },
+              "unackedStreak": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "pushUnreliableSince": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "whatsapp",
+              "unackedStreak",
+              "pushUnreliableSince"
+            ]
+          },
           "counts": {
             "type": "object",
             "properties": {
@@ -28018,6 +28119,7 @@
           "phoneShareConsent",
           "clubAccess",
           "memberships",
+          "notifications",
           "counts"
         ]
       },
@@ -28064,6 +28166,12 @@
             ]
           },
           "unconfirmedCar": {
+            "type": "string",
+            "enum": [
+              "true"
+            ]
+          },
+          "noWhatsapp": {
             "type": "string",
             "enum": [
               "true"

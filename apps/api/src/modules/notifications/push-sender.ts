@@ -18,7 +18,7 @@ import {
   type PushFailureKind,
   type PushSendRequest,
 } from "./push-provider";
-import { PushRenderError, renderPushText } from "./push-templates";
+import { PushRenderError, renderPushText, type PushTemplateCode } from "./push-templates";
 import {
   deviceToken,
   notification,
@@ -247,7 +247,11 @@ export class PushSender implements JobHandler<{ deliveryId: string }> {
       }
       let body: string;
       try {
-        body = renderPushText(parent.templateCode, parent.lang, parent.payload.variables);
+        body = renderPushText(
+          parent.templateCode as PushTemplateCode,
+          parent.lang,
+          parent.payload.variables,
+        );
       } catch (error) {
         return {
           kind: "render_failed",

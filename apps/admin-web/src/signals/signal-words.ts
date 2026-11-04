@@ -29,6 +29,8 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   payment_failed: "Платёж поставщика не прошёл",
   payment_system_down: "Платёжная система недоступна",
   billing_plan_missing: "Нет тарифа для подписки поставщиков",
+  // TASK-052.
+  push_fallback_high: "Push не доходит до пользователей",
 };
 
 /** The kinds in the order of importance of A-HOME. */
@@ -36,6 +38,7 @@ export const KIND_ORDER: readonly AdminSignalKind[] = [
   "whatsapp_outage",
   "payment_system_down",
   "supplier_unreachable",
+  "push_fallback_high",
   "payment_failed",
   "billing_plan_missing",
   "supply_overdue",
@@ -160,6 +163,22 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
         .join(" · ");
     case "billing_plan_missing":
       return payload.since ? `с ${formatMoment(payload.since)}` : "";
+    case "push_fallback_high":
+      return [
+        payload.fallbacks !== undefined && payload.criticalPushes !== undefined
+          ? `в WhatsApp ушло ${String(payload.fallbacks)} из ${count(payload.criticalPushes, "важного push", "важных push", "важных push")}`
+          : null,
+        payload.fallbackShare !== undefined
+          ? `${String(Math.round(payload.fallbackShare * 100))} %`
+          : null,
+        payload.threshold !== undefined ? `порог ${String(payload.threshold)} %` : null,
+        payload.windowHours !== undefined
+          ? `за ${count(payload.windowHours, "час", "часа", "часов")}`
+          : null,
+        payload.since ? `с ${formatMoment(payload.since)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
   }
 }
 
@@ -224,6 +243,8 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "Платёжная система не принимает списания дольше порога. Никому не пишем и никого не ставим на паузу — списания повторяются сами. Сигнал закроется, когда платёжная система ответит.",
   billing_plan_missing:
     "Нет тарифа для поставщиков: подписку нельзя начать и продлить. Задайте тариф в «Биллинг → Тарифы»; сигнал закроется сам.",
+  push_fallback_high:
+    "Большая доля важных уведомлений пользователям уходит резервом в WhatsApp: приложение не подтверждает push. Проверьте провайдера push и последнюю версию приложения. Сигнал закроется сам, когда доля снизится.",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

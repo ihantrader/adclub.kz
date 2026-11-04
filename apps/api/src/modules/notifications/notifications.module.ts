@@ -16,7 +16,18 @@ import { FcmPushProvider } from "./fcm-push-provider";
 import { NotificationsAdmin } from "./notifications-admin";
 import { NotificationsController } from "./notifications.controller";
 import { Notifications } from "./notifications.service";
+import {
+  PushFallbacks,
+  pushFallbackJob,
+  PushFallbackShareWatch,
+  pushFallbackShareJob,
+  PushFallbackSweep,
+} from "./push-fallback";
 import { deviceTokenCleanupJob, pushRecoveryJob, sendPushJob } from "./push-jobs";
+import { DatabaseService } from "../../database";
+import { AccountDirectory, countWithoutWhatsapp } from "../identity";
+import { AdminSignals } from "../signals";
+import { NotificationSubjects } from "./notification-subjects";
 import { PushProvider } from "./push-provider";
 import { InterruptedPushSweep, PushSender } from "./push-sender";
 import { checkPushTemplates } from "./push-templates";
@@ -39,6 +50,7 @@ export class PushMetrics implements OnModuleInit {
   constructor(
     @Inject(Metrics) private readonly metrics: Metrics,
     @Inject(Notifications) private readonly notifications: Notifications,
+    @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
   onModuleInit(): void {
@@ -52,6 +64,12 @@ export class PushMetrics implements OnModuleInit {
       }
       const { sent, unacked } = await this.notifications.unacked();
       this.metrics.setPushUnackedRatio(sent === 0 ? 0 : unacked / sent);
+      for (const row of await this.notifications.fallbackCounts()) {
+        this.metrics.setPushFallbacks(row.kind, row.status, row.count);
+      }
+      this.metrics.setPushFallbackRatio((await this.notifications.fallbackShare()).share);
+      this.metrics.setPushRecipients("push_unreliable", await this.notifications.unreliableCount());
+      this.metrics.setPushRecipients("no_whatsapp", await countWithoutWhatsapp(this.database.db));
     });
   }
 }
@@ -85,12 +103,20 @@ export class NotificationsModule {
       providers: [
         ...providerOf(config),
         Notifications,
+        PushFallbacks,
+        NotificationSubjects,
         NotificationsAdmin,
         PushTemplateCheck,
         ...(options.metrics ? [PushMetrics] : []),
         ...(devPage ? [DevPushOutbox] : []),
       ],
-      exports: [Notifications, NotificationsAdmin, PushProvider],
+      exports: [
+        Notifications,
+        PushFallbacks,
+        NotificationSubjects,
+        NotificationsAdmin,
+        PushProvider,
+      ],
     };
   }
 }
@@ -114,16 +140,20 @@ function providerOf(config: AppConfig) {
 }
 
 /** The push jobs, for the worker process. */
-@Module({ providers: [PushSender] })
+@Module({ providers: [PushSender, PushFallbackShareWatch, AdminSignals, AccountDirectory] })
 export class NotificationJobsModule implements OnModuleInit {
   constructor(
     @Inject(JobRegistry) private readonly registry: JobRegistry,
     @Inject(PushSender) private readonly sender: PushSender,
     @Inject(AppSettings) private readonly settings: AppSettings,
+    @Inject(PushFallbacks) private readonly fallbacks: PushFallbacks,
+    @Inject(PushFallbackShareWatch) private readonly shareWatch: PushFallbackShareWatch,
   ) {}
 
   onModuleInit(): void {
     this.registry.handle(sendPushJob, this.sender);
+    this.registry.sweep(pushFallbackJob, new PushFallbackSweep(this.fallbacks));
+    this.registry.handlePeriodic(pushFallbackShareJob, this.shareWatch);
     this.registry.sweep(pushRecoveryJob, new InterruptedPushSweep());
     this.registry.sweep(deviceTokenCleanupJob, new DeviceTokenCleanup(this.settings));
   }

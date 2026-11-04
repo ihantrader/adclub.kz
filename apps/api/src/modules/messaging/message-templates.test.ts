@@ -16,6 +16,7 @@ import {
   type MessageTemplateDefinition,
   type MessageTemplateRegistry,
 } from "./message-templates";
+import { placeholdersOf as placeholdersOfPush, pushTemplates } from "../notifications";
 
 /** The identifiers of the templates in SCREENS 8.5 (`W-01`, `W-01a`, …). */
 function screensTemplateIds(): string[] {
@@ -54,9 +55,32 @@ describe("the registry of message templates (TASK-024 requirement 2)", () => {
   });
 
   it("holds exactly the templates of SCREENS 8.5", () => {
-    const registry = Object.values(messageTemplates).map((template) => template.screen);
+    const registry = Object.values(messageTemplates)
+      .map((template) => template.screen)
+      .filter((screen) => screen.startsWith("W-"));
     expect([...registry].sort()).toEqual([...screensTemplateIds()].sort());
     expect(registry.length).toBe(11);
+  });
+
+  it("has one user template per push text, with the push's own placeholders (TASK-052)", () => {
+    const users = Object.entries(messageTemplates).filter(([key]) => key.startsWith("user_"));
+    expect(users.map(([key]) => key.slice("user_".length)).sort()).toEqual(
+      Object.keys(pushTemplates).sort(),
+    );
+    for (const [key, template] of users) {
+      const push = pushTemplates[key.slice("user_".length) as keyof typeof pushTemplates];
+      expect([...template.variables].sort(), key).toEqual(placeholdersOfPush(push.texts.ru));
+      expect(template.screen, key).toMatch(/^U-(ORD|REV|SUB)-\d+a?$/);
+      expect(template.buttons, key).toEqual([]);
+      expect(template.category, key).toBe("utility");
+      for (const lang of ["ru", "kk"] as const) {
+        expect(template.texts[lang], key).toMatch(/^Asia Drive Club: /);
+      }
+      // Nothing a push does not carry: no code, QR, telephone, address or employee.
+      for (const name of template.variables) {
+        expect(["supplier", "item", "until", "time", "date", "answerBy", "reason"]).toContain(name);
+      }
+    }
   });
 
   it("tells the last refusal of the window from the others: W-05a has no next attempt", () => {

@@ -86,6 +86,18 @@ export class Metrics {
     "adclub_push_unacked_ratio",
     "Of the pushes sent within push_unacked_window_hours, the share the app has not confirmed (0 when none was sent)",
   );
+  private readonly pushFallbacks = this.registry.gauge(
+    "adclub_push_fallbacks",
+    "WhatsApp copies of critical pushes to users by kind and state (queued, sent, delivered, read, failed, unknown, cancelled), all of them on record",
+  );
+  private readonly pushFallbackRatio = this.registry.gauge(
+    "adclub_push_fallback_ratio",
+    "Of the critical pushes created within push_unacked_window_hours, the share copied to WhatsApp (0 when there were none)",
+  );
+  private readonly pushRecipients = this.registry.gauge(
+    "adclub_push_recipients",
+    "Users whose push is unreliable (state=push_unreliable) and users without WhatsApp (state=no_whatsapp)",
+  );
   private readonly messageQueue = this.registry.gauge(
     "adclub_message_queue_depth",
     "Messages to suppliers by state (queued, sending, sent, delivered, read, failed, cancelled, unknown)",
@@ -202,12 +214,27 @@ export class Metrics {
     this.pushUnackedRatio.set({}, ratio);
   }
 
+  setPushFallbacks(kind: string, status: string, count: number): void {
+    this.pushFallbacks.set({ kind, status }, count);
+  }
+
+  setPushFallbackRatio(ratio: number): void {
+    this.pushFallbackRatio.set({}, ratio);
+  }
+
+  setPushRecipients(state: "push_unreliable" | "no_whatsapp", count: number): void {
+    this.pushRecipients.set({ state }, count);
+  }
+
   /** Push to users, sampled from the database like the messages (the worker sends). */
   collectPushes(collector: MetricCollector): void {
     this.registry.collect("pushes", collector, [
       this.pushNotifications,
       this.pushDeliveries,
       this.pushUnackedRatio,
+      this.pushFallbacks,
+      this.pushFallbackRatio,
+      this.pushRecipients,
     ]);
   }
 

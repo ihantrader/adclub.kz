@@ -72,6 +72,13 @@ export const accountProfileSchema = z.object({
   /** A name and the phone-share consent are both there — whether this account may act as a club member. */
   registrationCompleted: z.boolean(),
   phoneShareConsent: phoneShareConsentSchema.nullable(),
+  /**
+   * SCREENS M-PRO-04 (TASK-052): whether important events are copied to
+   * WhatsApp when a push does not arrive. `false` — the number has no
+   * WhatsApp by the last word about it (the login code was confirmed by SMS,
+   * or a message was refused «not on WhatsApp»): T-PRO-03.
+   */
+  whatsappAvailable: z.boolean(),
 });
 
 export type AccountProfile = z.infer<typeof accountProfileSchema>;

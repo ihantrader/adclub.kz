@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { auditActions, auditEntities } from "@adclub/contracts";
 import {
   dueTimeEvent,
@@ -17,7 +17,7 @@ import { afterCommit, DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue, type Sweeper } from "../../jobs";
 import { AuditLog, type AuditActorRecord } from "../audit";
 import { account, supplier } from "../identity";
-import { Notifications } from "../notifications";
+import { Notifications, NotificationSubjects } from "../notifications";
 import { AppSettings } from "../settings";
 import { applyBillingEventsJob } from "./billing-jobs";
 import { Plans } from "./plans.service";
@@ -100,7 +100,7 @@ interface Outcome {
  * stays on it. `SubscriptionExpiry` (below) applies time's events.
  */
 @Injectable()
-export class SubscriptionEvents {
+export class SubscriptionEvents implements OnModuleInit {
   private readonly logger = new Logger("Billing");
 
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
@@ -112,7 +112,20 @@ export class SubscriptionEvents {
     @Inject(Plans) private readonly plans: Plans,
     @Inject(SupplierBillingEffects) private readonly effects: SupplierBillingEffects,
     @Inject(Notifications) private readonly notifications: Notifications,
+    @Inject(NotificationSubjects) private readonly notificationSubjects: NotificationSubjects,
   ) {}
+
+  onModuleInit(): void {
+    // TASK-052: the WhatsApp copy of P-SUB-01 goes only while the store still
+    // holds the subscription in its grace period (paid meanwhile — nothing).
+    this.notificationSubjects.register("subscription", async (tx, subscriptionId) => {
+      const [row] = await tx
+        .select({ status: subscription.status })
+        .from(subscription)
+        .where(eq(subscription.id, subscriptionId));
+      return row?.status === "grace";
+    });
+  }
 
   /** What a company's status change does to the platform (the pause, the signal); a user's — nothing. */
   async changed(

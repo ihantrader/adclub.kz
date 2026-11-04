@@ -1,16 +1,18 @@
-import { Inject, Injectable } from "@nestjs/common";
-import type { OfferSnapshot } from "@adclub/contracts";
-import { localDateTime, type OrderAction } from "@adclub/domain";
+import { Inject, Injectable, type OnModuleInit } from "@nestjs/common";
+import type { NotificationKind, OfferSnapshot } from "@adclub/contracts";
+import { isActiveOrderStatus, localDateTime, type OrderAction } from "@adclub/domain";
 import type { DbExecutor } from "../../database";
 import { ClubAccess } from "../club-access";
 import {
   Notifications,
+  NotificationSubjects,
   SUPPLIER_WORD,
   type EnqueueNotificationInput,
   type PushLang,
 } from "../notifications";
 import { supplierNameForUser } from "./order-views";
-import type { OrderRow } from "./schema";
+import { customerOrder, type OrderRow } from "./schema";
+import { eq } from "drizzle-orm";
 
 /**
  * The pushes of an order to its user (TASK-051; PRODUCT 15; SCREENS 8.4;
@@ -211,13 +213,65 @@ export function orderPushVariables(
   }
 }
 
+/**
+ * Whether a push about an order still says something true (TASK-052,
+ * ARCHITECTURE 4.80 I871): its WhatsApp copy is not sent for an order that
+ * moved on without a push of its own — cancelled by the user or an
+ * administrator, expired, a reserve whose time has passed, a proposal the
+ * user can no longer answer. The final events (declined, closed, not answered,
+ * the review) are true for good.
+ */
+export function orderPushCurrent(
+  order: Pick<OrderRow, "status" | "expiresAt" | "termAnswerBy">,
+  kind: NotificationKind,
+  now: Date,
+): boolean {
+  switch (kind) {
+    case "order_declined":
+    case "order_closed":
+    case "order_expired_no_response":
+    case "review_text_rejected":
+      return true;
+    case "term_proposed":
+    case "time_proposed":
+      return (
+        order.status === "term_proposed" &&
+        order.termAnswerBy !== null &&
+        order.termAnswerBy.getTime() > now.getTime()
+      );
+    case "reserve_expiring":
+      return (
+        isActiveOrderStatus(order.status) &&
+        order.expiresAt !== null &&
+        order.expiresAt.getTime() > now.getTime()
+      );
+    default:
+      return isActiveOrderStatus(order.status);
+  }
+}
+
 @Injectable()
-export class OrderPushes {
+export class OrderPushes implements OnModuleInit {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
     @Inject(Notifications) private readonly notifications: Notifications,
     @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
+    @Inject(NotificationSubjects) private readonly subjects: NotificationSubjects,
   ) {}
+
+  onModuleInit(): void {
+    this.subjects.register("order", async (tx, orderId, kind) => {
+      const [order] = await tx
+        .select({
+          status: customerOrder.status,
+          expiresAt: customerOrder.expiresAt,
+          termAnswerBy: customerOrder.termAnswerBy,
+        })
+        .from(customerOrder)
+        .where(eq(customerOrder.id, orderId));
+      return order ? orderPushCurrent(order, kind, new Date()) : false;
+    });
+  }
 
   /** After a move of `OrderTransitions.apply`, in its transaction. */
   async afterMove(tx: DbExecutor, order: OrderRow, action: OrderAction): Promise<void> {
@@ -262,6 +316,11 @@ export class OrderPushes {
       recipientAccountId: order.userAccountId,
       lang,
       variables: orderPushVariables(push.template, order, lang, supplierName),
+      // TASK-052: the WhatsApp copy of a critical push has no English template —
+      // a person reading English gets the Russian one, with Russian values.
+      ...(lang === "en"
+        ? { fallbackVariables: orderPushVariables(push.template, order, "ru", supplierName) }
+        : {}),
       target: { screen: "order", params: { orderId: order.id } },
       subject: { type: "order", id: order.id },
       dedupeKey,

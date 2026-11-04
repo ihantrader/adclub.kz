@@ -353,6 +353,46 @@ const notifications = group({
       description:
         "За какое окно метрика считает долю отправленных push, которые приложение не подтвердило.",
     }),
+    push_fallback_max_age_hours: define.duration({
+      unit: "hours",
+      min: 1,
+      max: 168,
+      default: 24,
+      description:
+        "Сколько часов после события его push ещё может уйти в резерв WhatsApp; более старое событие (например, пока worker стоял) не дублируется.",
+    }),
+    push_fallback_per_account_day: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 30,
+      description:
+        "Сколько резервных сообщений WhatsApp одному пользователю уходит за скользящие сутки; сверх — только push, отказ виден в журнале уведомлений.",
+    }),
+    push_unreliable_after: define.integer({
+      unit: "count",
+      min: 1,
+      max: 50,
+      default: 3,
+      description:
+        "После скольких критичных push подряд без подтверждения пользователь считается «push ненадёжен»: следующие критичные уведомления сразу дублируются в WhatsApp. Любое подтверждение снимает отметку.",
+    }),
+    push_fallback_signal_share: define.number({
+      unit: "ratio",
+      min: 0.01,
+      max: 1,
+      default: 0.5,
+      description:
+        "Доля критичных push за окно `push_unacked_window_hours`, ушедших в резерв WhatsApp, при которой администратор получает сигнал.",
+    }),
+    push_fallback_signal_min: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10000,
+      default: 20,
+      description:
+        "Сколько критичных push за окно нужно, чтобы доля резерва считалась: на нескольких уведомлениях доля ничего не говорит.",
+    }),
     whatsapp_batch_window_seconds: define.duration({
       unit: "seconds",
       min: 0,

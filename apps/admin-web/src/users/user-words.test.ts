@@ -13,6 +13,8 @@ import {
   grantUntil,
   userErrorText,
   userFiltersOf,
+  pushReliabilityText,
+  whatsappText,
 } from "./user-words";
 
 describe("the words of «Пользователи» (TASK-036.B)", () => {
@@ -145,5 +147,44 @@ describe("the view of «Пользователи» (TASK-080)", () => {
     expect(ipText(null)).toBe("IP скрыт");
     expect(ipText("127.0.0.*")).toBe("IP скрыт");
     expect(ipText("203.0.113.*")).toBe("203.0.113.*");
+  });
+});
+
+describe("how important events reach a user (TASK-052)", () => {
+  const moment = (iso: string) => iso.slice(0, 10);
+
+  it("says whether there is WhatsApp, since when there is none and what said so", () => {
+    expect(whatsappText({ available: true, since: null, source: null }, moment)).toBe(
+      "есть — важное дублируется, если push не дошёл",
+    );
+    expect(
+      whatsappText(
+        { available: false, since: "2026-11-04T10:00:00Z", source: "login_code" },
+        moment,
+      ),
+    ).toBe("нет с 2026-11-04 (вход по SMS) — резерва нет, события только в приложении");
+    expect(
+      whatsappText({ available: false, since: "2026-11-04T10:00:00Z", source: "message" }, moment),
+    ).toBe("нет с 2026-11-04 (номер не в WhatsApp) — резерва нет, события только в приложении");
+  });
+
+  it("says whether push is confirmed", () => {
+    expect(pushReliabilityText({ unackedStreak: 0, pushUnreliableSince: null }, moment)).toBe(
+      "подтверждается",
+    );
+    expect(pushReliabilityText({ unackedStreak: 2, pushUnreliableSince: null }, moment)).toBe(
+      "подтверждается; без подтверждения подряд: 2",
+    );
+    expect(
+      pushReliabilityText(
+        { unackedStreak: 3, pushUnreliableSince: "2026-11-01T00:00:00Z" },
+        moment,
+      ),
+    ).toBe("не подтверждается с 2026-11-01 — важное сразу уходит в WhatsApp");
+  });
+
+  it("keeps the filter «нет WhatsApp» in the address", () => {
+    expect(userFiltersOf(new URLSearchParams("noWhatsapp=true")).noWhatsapp).toBe("true");
+    expect(userFiltersOf(new URLSearchParams("")).noWhatsapp).toBeUndefined();
   });
 });

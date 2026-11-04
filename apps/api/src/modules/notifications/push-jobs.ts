@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineJob, defineSweeperJob } from "../../jobs";
+import { pushFallbackJob, pushFallbackShareJob } from "./push-fallback";
 
 /**
  * The background jobs of push to the user (ARCHITECTURE 4.12, 4.79). A push
@@ -37,4 +38,10 @@ export const deviceTokenCleanupJob = defineSweeperJob({
   name: "notifications.cleanup-device-tokens",
 });
 
-export const notificationJobCatalog = [sendPushJob, pushRecoveryJob, deviceTokenCleanupJob];
+export const notificationJobCatalog = [
+  sendPushJob,
+  pushRecoveryJob,
+  deviceTokenCleanupJob,
+  pushFallbackJob,
+  pushFallbackShareJob,
+];

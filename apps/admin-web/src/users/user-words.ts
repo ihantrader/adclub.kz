@@ -1,6 +1,7 @@
 import { isApiError } from "@adclub/api-client";
 import type {
   AccountCar,
+  AdminUser,
   AdminUserListQuery,
   CatalogLanguage,
   ClubAccessGrantStatus,
@@ -114,6 +115,39 @@ export function consentText(
 }
 
 /**
+ * «WhatsApp: нет с {дата}» (TASK-052, A-USR-02): what said so — the login
+ * code confirmed by SMS, or a message refused «not on WhatsApp».
+ */
+export function whatsappText(
+  whatsapp: AdminUser["notifications"]["whatsapp"],
+  moment: (iso: string) => string,
+): string {
+  if (whatsapp.available) return "есть — важное дублируется, если push не дошёл";
+  const since = whatsapp.since ? ` с ${moment(whatsapp.since)}` : "";
+  const why =
+    whatsapp.source === "login_code"
+      ? "вход по SMS"
+      : whatsapp.source === "message"
+        ? "номер не в WhatsApp"
+        : null;
+  return `нет${since}${why ? ` (${why})` : ""} — резерва нет, события только в приложении`;
+}
+
+/** «push не подтверждается с {дата}» (TASK-052, A-USR-02). */
+export function pushReliabilityText(
+  notifications: Pick<AdminUser["notifications"], "pushUnreliableSince" | "unackedStreak">,
+  moment: (iso: string) => string,
+): string {
+  if (notifications.pushUnreliableSince) {
+    return `не подтверждается с ${moment(notifications.pushUnreliableSince)} — важное сразу уходит в WhatsApp`;
+  }
+  if (notifications.unackedStreak > 0) {
+    return `подтверждается; без подтверждения подряд: ${String(notifications.unackedStreak)}`;
+  }
+  return "подтверждается";
+}
+
+/**
  * The network of a session in words (X28): a hint with nothing in it — a
  * local address, «0:0::*», «127.0.0.*» — is «IP скрыт», never the mask.
  */
@@ -197,6 +231,7 @@ export function userFiltersOf(query: URLSearchParams): Omit<AdminUserListQuery, 
     expiringDays: Number.isInteger(days) && days >= 1 && days <= 366 ? days : 7,
     noShows: query.get("noShows") === "true" ? "true" : undefined,
     unconfirmedCar: query.get("unconfirmedCar") === "true" ? "true" : undefined,
+    noWhatsapp: query.get("noWhatsapp") === "true" ? "true" : undefined,
   };
 }
 

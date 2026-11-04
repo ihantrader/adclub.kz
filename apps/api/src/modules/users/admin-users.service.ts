@@ -23,7 +23,16 @@ import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
 import { GarageService } from "../garage";
-import { account, ipHint, SessionStore, sessionPage } from "../identity";
+import {
+  account,
+  ipHint,
+  noWhatsappCondition,
+  SessionStore,
+  sessionPage,
+  whatsappAvailable,
+  whatsappWordOf,
+} from "../identity";
+import { Notifications } from "../notifications";
 import { city } from "../suppliers";
 
 /** An administrator acting in the admin panel. */
@@ -110,6 +119,7 @@ export class AdminUsersService {
     @Inject(GarageService) private readonly garage: GarageService,
     @Inject(SessionStore) private readonly sessions: SessionStore,
     @Inject(AuditLog) private readonly audit: AuditLog,
+    @Inject(Notifications) private readonly notifications: Notifications,
   ) {}
 
   async list(query: AdminUserListQuery): Promise<AdminUserPage> {
@@ -136,6 +146,10 @@ export class AdminUsersService {
       conditions.push(
         sql`EXISTS (SELECT 1 FROM account_car AS car WHERE car.account_id = ${account.id} AND car.document_status IS DISTINCT FROM 'shown')`,
       );
+    }
+    if (query.noWhatsapp === "true") {
+      // TASK-052: the last decisive word about the number says «not on WhatsApp».
+      conditions.push(noWhatsappCondition(sql`${account.phone}`));
     }
     const filter = and(...conditions)!;
     const position = sql<string>`to_char(${account.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
@@ -217,7 +231,7 @@ export class AdminUsersService {
     if (!row) {
       throw userNotFound();
     }
-    const [access, memberships, counts] = await Promise.all([
+    const [access, memberships, counts, word, recipient] = await Promise.all([
       this.clubAccess.stateOf(accountId, this.database.db, now),
       this.database.db.execute<{
         supplier_id: string;
@@ -248,7 +262,10 @@ export class AdminUsersService {
           (SELECT count(*)::int FROM account_car WHERE account_id = ${accountId}) AS cars,
           (SELECT count(*)::int FROM session WHERE account_id = ${accountId} AND kind = 'mobile'
             AND revoked_at IS NULL AND expires_at > ${now.toISOString()}::timestamptz) AS sessions`),
+      whatsappWordOf(this.database.db, row.phone),
+      this.notifications.recipientState(accountId),
     ]);
+    const whatsapp = whatsappAvailable(word);
     const counted = counts.rows[0]!;
     return {
       accountId: row.id,
@@ -272,6 +289,15 @@ export class AdminUsersService {
         displayName: member.display_name,
         status: member.status,
       })),
+      notifications: {
+        whatsapp: {
+          available: whatsapp,
+          since: !whatsapp && word ? word.at.toISOString() : null,
+          source: !whatsapp && word ? word.source : null,
+        },
+        unackedStreak: recipient.unackedStreak,
+        pushUnreliableSince: recipient.pushUnreliableSince?.toISOString() ?? null,
+      },
       counts: {
         orders: Number(counted.orders),
         activeOrders: Number(counted.active_orders),

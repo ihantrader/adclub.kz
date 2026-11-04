@@ -8,6 +8,7 @@ import { Metrics, sanitizeForLog } from "../../observability";
 import { AppSettings } from "../settings";
 import { applyButtonPressJob } from "./button-presses";
 import { applyWebhookEventJob } from "./message-jobs";
+import { MessageSubjects } from "./message-subjects";
 import { Messaging, type DeliveryStatus } from "./messaging.service";
 import { messageTemplates } from "./message-templates";
 import { inboundWebhookEvent, messageButtonPress } from "./schema";
@@ -133,6 +134,7 @@ export class WebhookEvents {
     @Inject(JobQueue) private readonly queue: JobQueue,
     @Inject(Messaging) private readonly messaging: Messaging,
     @Inject(Metrics) private readonly metrics: Metrics,
+    @Inject(MessageSubjects) private readonly subjects: MessageSubjects,
   ) {}
 
   /**
@@ -310,13 +312,25 @@ export class WebhookEvents {
       return false;
     }
     const error = status.errors?.[0];
-    const { applied, messageId, settled } = await this.messaging.applyDeliveryStatus(tx, {
+    const applying = await this.messaging.applyDeliveryStatus(tx, {
       providerMessageId: status.id,
       status: status.status as DeliveryStatus,
       at: timestampOf(status.timestamp),
       reason: error?.title ?? error?.message,
       failureCode: error?.code,
     });
+    const { applied, messageId, settled } = applying;
+    if (applied && applying.status && applying.subject) {
+      // The owning module keeps what it keeps about a delivery (TASK-052: the
+      // WhatsApp copy of a push), in this same transaction.
+      await this.subjects.onDelivery(
+        tx,
+        applying.subject.type,
+        applying.subject.id,
+        applying.status,
+        applying.failureKind ?? null,
+      );
+    }
     if (settled === false) {
       // The message is ours but its send has not been settled yet: too soon.
       count("status:not_settled");

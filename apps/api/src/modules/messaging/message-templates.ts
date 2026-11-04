@@ -117,6 +117,10 @@ const SAMPLE = {
   rejected: "3",
   text: "Просим обновить цены до конца недели: часть позиций устарела.",
   link: "https://cabinet.adclub.kz/orders/1042",
+  supplier: "Автомаркет Алматы на Райымбека",
+  until: "18:30, 14 марта",
+  answerBy: "18:30, 13 марта",
+  reason: "в тексте есть номер телефона или ссылка",
 } as const;
 
 const pick = (...names: (keyof typeof SAMPLE)[]): Record<string, string> =>
@@ -292,6 +296,214 @@ export const messageTemplates = {
     },
     sample: pick("text"),
     sentBy: null,
+  },
+
+  // ---------------------------------------------------------------- the user
+  //
+  // The WhatsApp copy of a critical push nobody confirmed (TASK-052; ARCHITECTURE
+  // 9.3 level 3, 4.80): one per push text of SCREENS 8.4, with the push's own
+  // placeholders and nothing more — never a code, a QR, a telephone, an address
+  // or an employee's name; «Поставщик» for a person without club access comes
+  // in `{supplier}` exactly as in the push. SCREENS has no WhatsApp templates
+  // for the user: the texts (U-*) are ours, in the spirit of P-ORD-*, signed by
+  // the club, and wait for the Product Owner's approval and Meta's (with the
+  // first live send). The key is `user_<code of the push template>`.
+
+  /** U-ORD-01 — the copy of P-ORD-01. */
+  user_order_accepted: {
+    screen: "U-ORD-01",
+    providerName: "adclub_user_order_accepted",
+    category: "utility",
+    variables: ["supplier", "item"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: {supplier} принял заявку: {item}. Подробнее — в приложении",
+      kk: "Asia Drive Club: {supplier} өтінімді қабылдады: {item}. Толығырақ — қосымшада",
+    },
+    sample: pick("supplier", "item"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-02 — the copy of P-ORD-02. */
+  user_order_ready: {
+    screen: "U-ORD-02",
+    providerName: "adclub_user_order_ready",
+    category: "utility",
+    variables: ["item", "until"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: можно забирать: {item}. Резерв до {until}. Подробнее — в приложении",
+      kk: "Asia Drive Club: алып кетуге болады: {item}. Резерв {until} дейін. Толығырақ — қосымшада",
+    },
+    sample: pick("item", "until"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-02a — the copy of P-ORD-02a. */
+  user_order_ready_delivery: {
+    screen: "U-ORD-02a",
+    providerName: "adclub_user_order_ready_delivery",
+    category: "utility",
+    variables: ["item"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: заказ готов: {item}. Подробнее — в приложении",
+      kk: "Asia Drive Club: тапсырыс дайын: {item}. Толығырақ — қосымшада",
+    },
+    sample: pick("item"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-03 — the copy of P-ORD-03. */
+  user_reserve_expiring: {
+    screen: "U-ORD-03",
+    providerName: "adclub_user_reserve_expiring",
+    category: "utility",
+    variables: ["time", "item"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: резерв заканчивается в {time}: {item}. Подробнее — в приложении",
+      kk: "Asia Drive Club: резерв сағат {time} аяқталады: {item}. Толығырақ — қосымшада",
+    },
+    sample: pick("time", "item"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-04 — the copy of P-ORD-04. */
+  user_order_declined: {
+    screen: "U-ORD-04",
+    providerName: "adclub_user_order_declined",
+    category: "utility",
+    variables: ["item"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: поставщик отказал по заявке: {item}. Другие предложения — в приложении",
+      kk: "Asia Drive Club: жеткізуші өтінім бойынша бас тартты: {item}. Басқа ұсыныстар — қосымшада",
+    },
+    sample: pick("item"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-05 — the copy of P-ORD-05 (a term). */
+  user_term_proposed: {
+    screen: "U-ORD-05",
+    providerName: "adclub_user_term_proposed",
+    category: "utility",
+    variables: ["date", "answerBy"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: поставщик предлагает срок до {date}. Ответьте в приложении до {answerBy}",
+      kk: "Asia Drive Club: жеткізуші {date} дейінгі мерзімді ұсынады. {answerBy} дейін қосымшада жауап беріңіз",
+    },
+    sample: pick("date", "answerBy"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-05a — the copy of P-ORD-05 (a time of a service). */
+  user_time_proposed: {
+    screen: "U-ORD-05a",
+    providerName: "adclub_user_time_proposed",
+    category: "utility",
+    variables: ["date", "time", "answerBy"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: поставщик предлагает {date} в {time}. Ответьте в приложении до {answerBy}",
+      kk: "Asia Drive Club: жеткізуші {date}, сағат {time} уақытын ұсынады. {answerBy} дейін қосымшада жауап беріңіз",
+    },
+    sample: pick("date", "time", "answerBy"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-06 — the copy of P-ORD-06. */
+  user_order_closed: {
+    screen: "U-ORD-06",
+    providerName: "adclub_user_order_closed",
+    category: "utility",
+    variables: ["item"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: заявка закрыта: {item}. Не получали? Сообщите нам в приложении",
+      kk: "Asia Drive Club: өтінім жабылды: {item}. Алмадыңыз ба? Қосымшада бізге хабарлаңыз",
+    },
+    sample: pick("item"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-07 — the copy of P-ORD-07. */
+  user_order_expired_no_response: {
+    screen: "U-ORD-07",
+    providerName: "adclub_user_order_expired_no_response",
+    category: "utility",
+    variables: [],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: поставщик не ответил вовремя — заявка отменена. Другие предложения — в приложении",
+      kk: "Asia Drive Club: жеткізуші уақытында жауап бермеді — өтінім тоқтатылды. Басқа ұсыныстар — қосымшада",
+    },
+    sample: {},
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-08 — the copy of P-ORD-08. */
+  user_term_confirmed: {
+    screen: "U-ORD-08",
+    providerName: "adclub_user_term_confirmed",
+    category: "utility",
+    variables: ["date"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: поставщик подтвердил срок: до {date}. Подробнее — в приложении",
+      kk: "Asia Drive Club: жеткізуші мерзімді растады: {date} дейін. Толығырақ — қосымшада",
+    },
+    sample: pick("date"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-09 — the copy of P-ORD-09. */
+  user_time_confirmed: {
+    screen: "U-ORD-09",
+    providerName: "adclub_user_time_confirmed",
+    category: "utility",
+    variables: ["date", "time", "supplier"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: ждём вас {date} в {time}, {supplier}. Подробнее — в приложении",
+      kk: "Asia Drive Club: сізді {date}, сағат {time} күтеміз, {supplier}. Толығырақ — қосымшада",
+    },
+    sample: pick("date", "time", "supplier"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-ORD-10 — the copy of P-ORD-10. */
+  user_supply_overdue: {
+    screen: "U-ORD-10",
+    providerName: "adclub_user_supply_overdue",
+    category: "utility",
+    variables: ["item"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: срок поставки прошёл: {item}. Свяжитесь с поставщиком из приложения",
+      kk: "Asia Drive Club: жеткізу мерзімі өтті: {item}. Жеткізушімен қосымша арқылы байланысыңыз",
+    },
+    sample: pick("item"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-REV-01 — the copy of P-REV-01. */
+  user_review_text_rejected: {
+    screen: "U-REV-01",
+    providerName: "adclub_user_review_text_rejected",
+    category: "utility",
+    variables: ["reason"],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: отзыв не опубликован: {reason}. Исправить можно в приложении",
+      kk: "Asia Drive Club: пікір жарияланбады: {reason}. Қосымшада түзетуге болады",
+    },
+    sample: pick("reason"),
+    sentBy: "notifications (PushFallbacks)",
+  },
+  /** U-SUB-01 — the copy of P-SUB-01. */
+  user_payment_failed: {
+    screen: "U-SUB-01",
+    providerName: "adclub_user_payment_failed",
+    category: "utility",
+    variables: [],
+    buttons: [],
+    texts: {
+      ru: "Asia Drive Club: не удалось оплатить подписку. Обновите способ оплаты в магазине приложений, чтобы сохранить доступ",
+      kk: "Asia Drive Club: жазылымды төлеу мүмкін болмады. Қолжетімділікті сақтау үшін қосымшалар дүкенінде төлем тәсілін жаңартыңыз",
+    },
+    sample: {},
+    sentBy: "notifications (PushFallbacks)",
   },
 } as const satisfies Record<string, MessageTemplateDefinition>;
 

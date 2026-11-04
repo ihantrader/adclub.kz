@@ -292,6 +292,8 @@
   "profile.notifications": "Хабарламалар",
   "profile.notificationsOn": "Қосулы",
   "profile.notificationsOff": "Өшірулі — өтінімдер мәртебесін қосымшадан қараңыз",
+  "profile.notificationsWhatsapp": "Push жетпесе, маңыздысын WhatsApp-қа қайталап жібереміз",
+  "profile.notificationsNoWhatsapp": "WhatsApp қосылмаған — маңызды оқиғаларды қосымшадан қараңыз",
   "profile.notificationsSettings": "Баптауларды ашу",
   "profile.platformIos": "iPhone немесе iPad",
   "profile.platformAndroid": "Android телефоны",

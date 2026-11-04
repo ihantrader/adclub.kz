@@ -31,6 +31,7 @@ const ACCESS = [
 const FLAGS = [
   { key: "noShows", label: "Есть неявки" },
   { key: "unconfirmedCar", label: "Есть автомобиль без подтверждённого документа" },
+  { key: "noWhatsapp", label: "Нет WhatsApp" },
 ] as const;
 
 type FlagKey = (typeof FLAGS)[number]["key"];
@@ -88,7 +89,11 @@ export function Users() {
   const [search, setSearch] = useState(query.get("q") ?? "");
   const [days, setDays] = useState(query.get("expiringDays") ?? String(filters.expiringDays));
   const filtered = Boolean(
-    filters.q || filters.clubAccess || filters.noShows || filters.unconfirmedCar,
+    filters.q ||
+    filters.clubAccess ||
+    filters.noShows ||
+    filters.unconfirmedCar ||
+    filters.noWhatsapp,
   );
 
   // The search goes to the address a moment after typing stops.

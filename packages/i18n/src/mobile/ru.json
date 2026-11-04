@@ -292,6 +292,8 @@
   "profile.notifications": "Уведомления",
   "profile.notificationsOn": "Включены",
   "profile.notificationsOff": "Выключены — статус заявок смотрите в приложении",
+  "profile.notificationsWhatsapp": "Если push не дойдёт, важное продублируем в WhatsApp",
+  "profile.notificationsNoWhatsapp": "WhatsApp не подключён — важные события смотрите в приложении",
   "profile.notificationsSettings": "Открыть настройки",
   "profile.platformIos": "iPhone или iPad",
   "profile.platformAndroid": "Телефон на Android",

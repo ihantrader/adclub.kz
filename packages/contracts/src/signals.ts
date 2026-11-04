@@ -69,6 +69,12 @@ import type { CatalogItemListQuery } from "./catalog-items";
  *   because no tariff for suppliers is recorded (the subject is the billing
  *   itself); it closes when a tariff is in effect.
  *
+ * - `push_fallback_high` (TASK-052) — of the critical pushes to users in
+ *   the last `push_unacked_window_hours`, a share above
+ *   `push_fallback_signal_share` was copied to WhatsApp (the app did not
+ *   confirm them, or there was nowhere to push). The subject is push itself;
+ *   it closes by itself when the share is back under the threshold.
+ *
  * Later tasks add the others (a spike of complaints).
  */
 
@@ -83,6 +89,7 @@ export const adminSignalKindSchema = z.enum([
   "payment_failed",
   "payment_system_down",
   "billing_plan_missing",
+  "push_fallback_high",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -103,6 +110,9 @@ export const PAYMENT_CHANNEL_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a2"
 
 /** The billing itself as the subject of `billing_plan_missing` (TASK-042). */
 export const BILLING_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a3";
+
+/** Push to users as the subject of `push_fallback_high` (TASK-052): one open signal. */
+export const PUSH_FALLBACK_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a4";
 
 /**
  * `open` — waiting for a person; `acknowledged` — seen; `closed` — dealt
@@ -180,6 +190,15 @@ export const adminSignalPayloadSchema = z.object({
   graceUntil: z.iso.datetime().optional(),
   amount: z.number().int().optional(),
   failedPayments: z.number().int().optional(),
+  /**
+   * `push_fallback_high` (TASK-052): critical pushes in the window, how many
+   * of them went to WhatsApp and the share (0–1), the window and the
+   * threshold in per cent (`threshold`); `since`/`endedAt` as for the outage.
+   */
+  criticalPushes: z.number().int().optional(),
+  fallbacks: z.number().int().optional(),
+  fallbackShare: z.number().optional(),
+  windowHours: z.number().int().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

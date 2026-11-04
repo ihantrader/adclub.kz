@@ -1,7 +1,13 @@
 import { orderActions } from "@adclub/domain";
 import { describe, expect, it } from "vitest";
 import { pushTemplates, renderPushText } from "../notifications";
-import { orderPushVariables, pushDateText, pushItemText, pushOfMove } from "./order-pushes";
+import {
+  orderPushCurrent,
+  orderPushVariables,
+  pushDateText,
+  pushItemText,
+  pushOfMove,
+} from "./order-pushes";
 import type { OrderRow } from "./schema";
 
 /** The table of TASK-051 requirement 4, move by move. */
@@ -124,5 +130,50 @@ describe("orderPushVariables", () => {
     expect(
       pushItemText({ names: { ru: null, kk: null, en: null }, article: "X1" } as never, "ru"),
     ).toBe("X1");
+  });
+});
+
+/** TASK-052: a WhatsApp copy goes only while its push still says something true. */
+describe("orderPushCurrent", () => {
+  const now = new Date("2026-11-04T10:00:00Z");
+  const later = new Date("2026-11-04T11:00:00Z");
+  const earlier = new Date("2026-11-04T09:00:00Z");
+  const order = (
+    status: string,
+    extra: { expiresAt?: Date | null; termAnswerBy?: Date | null } = {},
+  ) =>
+    ({ status, expiresAt: null, termAnswerBy: null, ...extra }) as Parameters<
+      typeof orderPushCurrent
+    >[0];
+
+  it("keeps «принята» while the order is active, not once it is cancelled", () => {
+    expect(orderPushCurrent(order("accepted"), "order_accepted", now)).toBe(true);
+    expect(orderPushCurrent(order("ready"), "order_accepted", now)).toBe(true);
+    expect(orderPushCurrent(order("cancelled_by_admin"), "order_accepted", now)).toBe(false);
+    expect(orderPushCurrent(order("cancelled_by_user"), "order_confirmed", now)).toBe(false);
+  });
+
+  it("keeps a final event for good", () => {
+    for (const kind of ["order_declined", "order_closed", "order_expired_no_response"] as const) {
+      expect(orderPushCurrent(order("completed"), kind, now)).toBe(true);
+    }
+  });
+
+  it("drops a reserve warning past its time and a proposal past the time to answer", () => {
+    expect(orderPushCurrent(order("ready", { expiresAt: later }), "reserve_expiring", now)).toBe(
+      true,
+    );
+    expect(orderPushCurrent(order("ready", { expiresAt: earlier }), "reserve_expiring", now)).toBe(
+      false,
+    );
+    expect(
+      orderPushCurrent(order("term_proposed", { termAnswerBy: later }), "term_proposed", now),
+    ).toBe(true);
+    expect(
+      orderPushCurrent(order("term_proposed", { termAnswerBy: earlier }), "time_proposed", now),
+    ).toBe(false);
+    expect(orderPushCurrent(order("accepted", { termAnswerBy: later }), "term_proposed", now)).toBe(
+      false,
+    );
   });
 });

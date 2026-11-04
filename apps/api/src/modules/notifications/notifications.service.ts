@@ -5,6 +5,7 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue } from "../../jobs";
 import { account, session } from "../identity";
 import { AppSettings } from "../settings";
+import { fallbackShareOf, PushFallbacks } from "./push-fallback";
 import { sendPushJob } from "./push-jobs";
 import { maskToken } from "./push-provider";
 import {
@@ -18,6 +19,7 @@ import {
   deviceToken,
   notification,
   notificationDelivery,
+  notificationRecipientState,
   type DeliveryStatus,
   type NotificationRow,
   type NotificationStatus,
@@ -44,6 +46,11 @@ export interface EnqueueNotificationInput {
   lang: PushLang;
   /** The values of the template's placeholders; every one is required. */
   variables: Readonly<Record<string, string>>;
+  /**
+   * The values in Russian when `lang` is English: the WhatsApp copy of a
+   * critical push (TASK-052) has no English template. Not needed otherwise.
+   */
+  fallbackVariables?: Readonly<Record<string, string>>;
   /** What a tap opens. */
   target: PushTargetValue;
   /** What it is about (an order, a review, a subscription). */
@@ -102,6 +109,7 @@ export class Notifications {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(JobQueue) private readonly queue: JobQueue,
     @Inject(AppSettings) private readonly settings: AppSettings,
+    @Inject(PushFallbacks) private readonly fallbacks: PushFallbacks,
   ) {}
 
   /** The language a person's push is written in: their account's, Russian without one. */
@@ -135,7 +143,11 @@ export class Notifications {
         channel: "push",
         templateCode: input.template,
         lang: input.lang,
-        payload: { target: input.target, variables: { ...input.variables } },
+        payload: {
+          target: input.target,
+          variables: { ...input.variables },
+          ...(input.fallbackVariables ? { fallbackVariables: { ...input.fallbackVariables } } : {}),
+        },
         subjectType: input.subject.type,
         subjectId: input.subject.id,
       })
@@ -167,6 +179,8 @@ export class Notifications {
       this.logger.log(
         `Push not sent: no device notification=${created.id} kind=${input.kind} template=${input.template}`,
       );
+      // TASK-052: nowhere to push — a critical event goes to WhatsApp at once.
+      await this.fallbacks.consider(tx, created.id);
       return { id: created.id, created: true, devices: 0 };
     }
     const deliveries = await tx
@@ -191,6 +205,9 @@ export class Notifications {
     this.logger.log(
       `Push queued notification=${created.id} kind=${input.kind} template=${input.template} lang=${input.lang} devices=${String(deliveries.length)}`,
     );
+    // TASK-052: a person whose push is unreliable gets a critical event in
+    // WhatsApp at once; anyone else — after the timeout (the sweeper).
+    await this.fallbacks.consider(tx, created.id);
     return { id: created.id, created: true, devices: deliveries.length };
   }
 
@@ -255,14 +272,19 @@ export class Notifications {
    * repeat keeps the first moment.
    */
   async ack(accountId: string, notificationId: string): Promise<Date | null> {
-    const [row] = await this.database.db
-      .update(notification)
-      .set({ ackedAt: sql`coalesce(${notification.ackedAt}, now())`, updatedAt: new Date() })
-      .where(
-        and(eq(notification.id, notificationId), eq(notification.recipientAccountId, accountId)),
-      )
-      .returning({ ackedAt: notification.ackedAt });
-    return row?.ackedAt ?? null;
+    return this.database.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(notification)
+        .set({ ackedAt: sql`coalesce(${notification.ackedAt}, now())`, updatedAt: new Date() })
+        .where(
+          and(eq(notification.id, notificationId), eq(notification.recipientAccountId, accountId)),
+        )
+        .returning({ ackedAt: notification.ackedAt });
+      if (row) {
+        await resetUnackedStreak(tx, accountId);
+      }
+      return row?.ackedAt ?? null;
+    });
   }
 
   /**
@@ -282,11 +304,82 @@ export class Notifications {
           eq(notification.recipientAccountId, accountId),
           eq(notification.subjectType, subject.type),
           eq(notification.subjectId, subject.id),
+          eq(notification.channel, "push"),
           isNull(notification.ackedAt),
         ),
       )
       .returning({ id: notification.id });
+    if (rows.length > 0) {
+      await resetUnackedStreak(executor, accountId);
+    }
     return rows.length;
+  }
+
+  /** How many critical pushes in a row went unconfirmed, and since when push is unreliable (TASK-052). */
+  async recipientState(
+    accountId: string,
+    executor: DbExecutor = this.database.db,
+  ): Promise<{ unackedStreak: number; pushUnreliableSince: Date | null }> {
+    const threshold = await this.settings.get("push_unreliable_after");
+    const [row] = await executor
+      .select()
+      .from(notificationRecipientState)
+      .where(eq(notificationRecipientState.accountId, accountId));
+    const streak = row?.unackedStreak ?? 0;
+    return {
+      unackedStreak: streak,
+      pushUnreliableSince: streak >= threshold ? (row?.unackedSince ?? null) : null,
+    };
+  }
+
+  /** How many people's push is unreliable now (metrics, `push:status`). */
+  async unreliableCount(): Promise<number> {
+    const threshold = await this.settings.get("push_unreliable_after");
+    const [row] = await this.database.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notificationRecipientState)
+      .where(sql`${notificationRecipientState.unackedStreak} >= ${threshold}`);
+    return row?.count ?? 0;
+  }
+
+  /** WhatsApp copies by kind and what became of them (metrics, `push:status`). */
+  async fallbackCounts(): Promise<{ kind: string; status: string; count: number }[]> {
+    const rows = await this.database.db
+      .select({
+        kind: notification.eventKind,
+        status: notification.status,
+        count: sql<string>`count(*)`,
+      })
+      .from(notification)
+      .where(eq(notification.channel, "whatsapp"))
+      .groupBy(notification.eventKind, notification.status);
+    return rows.map((row) => ({ ...row, count: Number(row.count) }));
+  }
+
+  /** Why pushes got no copy, or got one, by decision (`push:status`). */
+  async fallbackDecisions(): Promise<Record<string, number>> {
+    const rows = await this.database.db
+      .select({ decision: notification.fallbackDecision, count: sql<string>`count(*)` })
+      .from(notification)
+      .where(eq(notification.channel, "push"))
+      .groupBy(notification.fallbackDecision);
+    return Object.fromEntries(rows.map((row) => [row.decision ?? "pending", Number(row.count)]));
+  }
+
+  /** The share of critical pushes in the window copied to WhatsApp (metrics, signal). */
+  async fallbackShare(): Promise<{
+    criticalPushes: number;
+    fallbacks: number;
+    share: number;
+    windowHours: number;
+  }> {
+    const values = await this.settings.values();
+    const share = await fallbackShareOf(
+      this.database.db,
+      values.critical_notification_kinds,
+      values.push_unacked_window_hours,
+    );
+    return { ...share, windowHours: values.push_unacked_window_hours };
   }
 
   /** The latest notifications for the operator and the development page. */
@@ -320,6 +413,7 @@ export class Notifications {
         count: sql<string>`count(*)`,
       })
       .from(notification)
+      .where(eq(notification.channel, "push"))
       .groupBy(notification.eventKind, notification.status);
     return rows.map((row) => ({ ...row, count: Number(row.count) }));
   }
@@ -334,7 +428,7 @@ export class Notifications {
       SELECT count(*)::text AS sent,
              count(*) FILTER (WHERE acked_at IS NULL)::text AS unacked
       FROM notification
-      WHERE status = 'sent' AND sent_at > now() - make_interval(hours => ${windowHours})
+      WHERE channel = 'push' AND status = 'sent' AND sent_at > now() - make_interval(hours => ${windowHours})
     `);
     const row = rows.rows[0];
     return { sent: Number(row?.sent ?? 0), unacked: Number(row?.unacked ?? 0), windowHours };
@@ -402,6 +496,19 @@ export class Notifications {
       return { queued, skipped };
     });
   }
+}
+
+/** Any confirmation of a person's push lifts «push не подтверждается» (TASK-052). */
+async function resetUnackedStreak(executor: DbExecutor, accountId: string): Promise<void> {
+  await executor
+    .update(notificationRecipientState)
+    .set({ unackedStreak: 0, unackedSince: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(notificationRecipientState.accountId, accountId),
+        sql`${notificationRecipientState.unackedStreak} > 0`,
+      ),
+    );
 }
 
 /** Writes the notification's status from its deliveries (after every change of one). */

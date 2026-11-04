@@ -149,6 +149,7 @@ describe("ormTables", () => {
         "device_token",
         "notification",
         "notification_delivery",
+        "notification_recipient_state",
         "item_analog",
         "item_photo",
         "item_photo_file",

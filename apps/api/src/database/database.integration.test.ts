@@ -107,6 +107,77 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keeps one WhatsApp copy per push, its statuses and the decision on the push, and rolls back (push fallback)", async () => {
+    const { rows: account } = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77001239875') RETURNING id",
+    );
+    const accountId = account[0]!.id;
+    const insert = (values: {
+      key: string;
+      channel?: string;
+      status?: string;
+      fallbackOf?: string | null;
+      decision?: string | null;
+    }) =>
+      client.query<{ id: string }>(
+        `INSERT INTO notification (dedupe_key, recipient_account_id, event_kind, channel, template_code,
+           lang, payload, subject_type, status, fallback_of_id, fallback_decision, fallback_decided_at, sent_at)
+         VALUES ($1, $2, 'order_accepted', $3, 'order_accepted', 'ru', '{}', 'order', $4, $5, $6,
+           CASE WHEN $6::text IS NULL THEN NULL ELSE now() END, now()) RETURNING id`,
+        [
+          values.key,
+          accountId,
+          values.channel ?? "push",
+          values.status ?? "sent",
+          values.fallbackOf ?? null,
+          values.decision ?? null,
+        ],
+      );
+    const push = (await insert({ key: "push-1", decision: "sent" })).rows[0]!.id;
+    // A copy is WhatsApp and points at its push; a push never points anywhere.
+    await expect(insert({ key: "copy-x", channel: "whatsapp" })).rejects.toThrow(
+      /notification_fallback_link_check/,
+    );
+    await expect(insert({ key: "push-x", fallbackOf: push })).rejects.toThrow(
+      /notification_fallback_link_check/,
+    );
+    await insert({ key: "copy-1", channel: "whatsapp", fallbackOf: push, status: "delivered" });
+    // One push, one copy.
+    await expect(insert({ key: "copy-2", channel: "whatsapp", fallbackOf: push })).rejects.toThrow(
+      /notification_fallback_of_key/,
+    );
+    // `delivered` and `read` belong to copies; a decision to pushes, from the list.
+    await expect(insert({ key: "push-2", status: "delivered" })).rejects.toThrow(
+      /notification_status_check/,
+    );
+    await expect(insert({ key: "push-3", decision: "whatever" })).rejects.toThrow(
+      /notification_fallback_decision_check/,
+    );
+    // The streak and its start go together.
+    await expect(
+      client.query(
+        "INSERT INTO notification_recipient_state (account_id, unacked_streak) VALUES ($1, 2)",
+        [accountId],
+      ),
+    ).rejects.toThrow(/notification_recipient_state_streak_check/);
+    await client.query(
+      "INSERT INTO notification_recipient_state (account_id, unacked_streak, unacked_since) VALUES ($1, 2, now())",
+      [accountId],
+    );
+
+    // Back: the copies go, the push stays as TASK-051 left it.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "notification_recipient_state")).toBe(false);
+    expect(await columnExists(client, "notification", "fallback_decision")).toBe(false);
+    const { rows: left } = await client.query<{ dedupe_key: string }>(
+      "SELECT dedupe_key FROM notification WHERE recipient_account_id = $1",
+      [accountId],
+    );
+    expect(left.map((row) => row.dedupe_key)).toEqual(["push-1"]);
+    await client.query("DELETE FROM notification WHERE recipient_account_id = $1", [accountId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+  });
+
   it("keeps one token per device and per session, one notification per event, and rolls back (push notifications)", async () => {
     const { rows: account } = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77001239876') RETURNING id",
@@ -201,7 +272,9 @@ describe("PostgreSQL: migrations and readiness", () => {
     ]);
 
     // Back: the cancelled record goes (the full unique key returns), the live one stays.
-    // The `up` above brought back the later migration too (push notifications): it goes first.
+    // The `up` above brought back the later migrations too (push notifications,
+    // push fallback): they go first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     const { rows: after } = await client.query<{ code: string }>(
@@ -274,8 +347,9 @@ describe("PostgreSQL: migrations and readiness", () => {
     await first(second, "fix-key-2");
 
     // Back: the pause returns to billing, the index goes.
-    // The `up` above brought back the later migrations too (push notifications,
-    // billing admin): they go first.
+    // The `up` above brought back the later migrations too (push fallback, push
+    // notifications, billing admin): they go first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");

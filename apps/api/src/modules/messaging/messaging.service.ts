@@ -222,7 +222,15 @@ export class Messaging {
       reason?: string;
       failureCode?: number;
     },
-  ): Promise<{ applied: boolean; messageId?: string; settled?: boolean }> {
+  ): Promise<{
+    applied: boolean;
+    messageId?: string;
+    settled?: boolean;
+    /** What the message became and what it is about, when applied (`MessageSubject.onDelivery`). */
+    status?: DeliveryStatus;
+    subject?: { type: string; id: string | null };
+    failureKind?: OutboundMessageRow["failureKind"];
+  }> {
     const [row] = await tx
       .select()
       .from(outboundMessage)
@@ -274,7 +282,13 @@ export class Messaging {
         ).slice(0, 500) || "the provider reported a failure";
     }
     await tx.update(outboundMessage).set(patch).where(eq(outboundMessage.id, row.id));
-    return { applied: true, messageId: row.id };
+    return {
+      applied: true,
+      messageId: row.id,
+      status: target,
+      subject: { type: row.subjectType, id: row.subjectId },
+      failureKind: patch.failureKind ?? row.failureKind,
+    };
   }
 
   /** The latest messages for the operator and the development page (no variables — they are gone). */

@@ -25,6 +25,8 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "notifications.send",
   "notifications.recover-interrupted",
   "notifications.cleanup-device-tokens",
+  "notifications.fallback",
+  "notifications.watch-fallback-share",
   "suppliers.send-invitation",
   "orders.apply-deadlines",
   "orders.cleanup-idempotency-keys",
@@ -97,8 +99,12 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "messaging.recover-interrupted", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Tokens of ended sessions off push, old ones deleted (TASK-051).
   { name: "notifications.cleanup-device-tokens", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The WhatsApp fallback of critical pushes nobody confirmed (TASK-052).
+  { name: "notifications.fallback", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Pushes whose sending was interrupted (TASK-051).
   { name: "notifications.recover-interrupted", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The share of critical pushes copied to WhatsApp above the threshold (TASK-052).
+  { name: "notifications.watch-fallback-share", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Deadlines of orders: no answer, the end of a reserve, its warning (TASK-021).
   { name: "orders.apply-deadlines", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Keys of creation requests of orders long finished (TASK-022).

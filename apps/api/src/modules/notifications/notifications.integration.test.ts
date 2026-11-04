@@ -61,6 +61,14 @@ import { deviceTokenCleanupJob, pushRecoveryJob, sendPushJob } from "./push-jobs
 import { PushProvider } from "./push-provider";
 import { InterruptedPushSweep } from "./push-sender";
 import { AppSettings } from "../settings";
+import { MessageChannel, MessagingAdmin, type TestMessageChannel } from "../messaging";
+import { AdminSignals } from "../signals";
+import {
+  PushFallbacks,
+  pushFallbackJob,
+  PushFallbackShareWatch,
+  PushFallbackSweep,
+} from "./push-fallback";
 import type { TestPushProvider } from "./test-push-provider";
 
 /**
@@ -225,7 +233,13 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
       provider.delayMs = 5_000;
       provider.deadTokens.clear();
     }
+    for (const channel of messageChannels()) {
+      channel.mode = "ok";
+      channel.sent.length = 0;
+      channel.refusedPhones.clear();
+    }
     logins.sent.length = 0;
+    logins.failing.clear();
     lastSteps.clear();
     stepCookies.clear();
     await truncateAll(db, [
@@ -291,6 +305,13 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
   }
 
   const sentPushes = () => providers.flatMap((provider) => provider.sent);
+
+  /** The test channels of messages of both workers (TASK-052: the WhatsApp copies). */
+  const messageChannels = () =>
+    [worker1, worker2]
+      .filter(Boolean)
+      .map((context) => context.get(MessageChannel) as TestMessageChannel);
+  const sentMessages = () => messageChannels().flatMap((channel) => channel.sent);
 
   async function waitFor<T>(
     what: string,
@@ -684,7 +705,7 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
 
   async function notificationsOf(where: string, values: unknown[]): Promise<NotificationRowOf[]> {
     const { rows } = await db.query<NotificationRowOf>(
-      `SELECT * FROM notification WHERE ${where} ORDER BY created_at`,
+      `SELECT * FROM notification WHERE channel = 'push' AND (${where}) ORDER BY created_at`,
       values,
     );
     return rows;
@@ -1307,4 +1328,480 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
     expect(logged).not.toContain("APA91b");
     expect(JSON.stringify(await app.get(NotificationsAdmin).list({}))).not.toContain(device);
   }, 120_000);
+
+  // ------------------------------------------------- the WhatsApp fallback (TASK-052)
+
+  interface CopyRow {
+    id: string;
+    event_kind: string;
+    template_code: string;
+    lang: string;
+    status: string;
+    fallback_of_id: string;
+    outbound_message_id: string | null;
+    payload: { variables: Record<string, string> };
+  }
+
+  async function copiesOf(pushId: string): Promise<CopyRow[]> {
+    const { rows } = await db.query<CopyRow>(
+      "SELECT * FROM notification WHERE channel = 'whatsapp' AND fallback_of_id = $1",
+      [pushId],
+    );
+    return rows;
+  }
+
+  async function decisionOf(pushId: string): Promise<string | null> {
+    const { rows } = await db.query<{ fallback_decision: string | null }>(
+      "SELECT fallback_decision FROM notification WHERE id = $1",
+      [pushId],
+    );
+    return rows[0]!.fallback_decision;
+  }
+
+  async function messageOfCopy(copyId: string) {
+    const { rows } = await db.query<{
+      id: string;
+      template: string;
+      phone: string;
+      lang: string;
+      status: string;
+      failure_kind: string | null;
+    }>("SELECT * FROM outbound_message WHERE subject_type = 'notification' AND subject_id = $1", [
+      copyId,
+    ]);
+    return rows;
+  }
+
+  /** The push was sent `minutes` ago (time moved by the row, not waited for). */
+  async function overdue(pushId: string, minutes = 2): Promise<void> {
+    await db.query(
+      `UPDATE notification SET created_at = created_at - make_interval(mins => $2),
+         sent_at = sent_at - make_interval(mins => $2) WHERE id = $1`,
+      [pushId, minutes],
+    );
+  }
+
+  /** One pass of the sweeper `notifications.fallback` in a given process. */
+  async function runFallback(context: INestApplicationContext = app) {
+    return new SweepRunner(context.get(DatabaseService)).run(
+      pushFallbackJob,
+      new PushFallbackSweep(context.get(PushFallbacks)),
+      { signal: new AbortController().signal },
+    );
+  }
+
+  async function profileOf(who: Customer): Promise<{ whatsappAvailable: boolean }> {
+    return ok(who.as("get", "/account/profile"), (body) => body as { whatsappAvailable: boolean });
+  }
+
+  async function settledCopy(copyId: string, status: string): Promise<void> {
+    await waitFor(`copy ${copyId} ${status}`, async () => {
+      const { rows } = await db.query<{ status: string }>(
+        "SELECT status FROM notification WHERE id = $1",
+        [copyId],
+      );
+      return rows[0]?.status === status;
+    });
+  }
+
+  it("copies an unconfirmed critical push once after the timeout — not a confirmed one, never a kind not critical", async () => {
+    await configure({ push_ack_timeout_minutes: 1 });
+    const shop = await company("Автомаркет");
+    const offer = await putOffer(shop);
+    const buyer = await customer();
+    await register(buyer);
+
+    const order = await place(buyer, offer);
+    await act(shop, order.id, "accept");
+    const push = await pushOf(order.id, "order_accepted");
+    expect(push.status).toBe("sent");
+    // Within the timeout — nothing yet.
+    await runFallback();
+    expect(await copiesOf(push.id)).toHaveLength(0);
+    expect(await decisionOf(push.id)).toBeNull();
+
+    // Past it: both workers and the API sweep at once, then once more — one copy.
+    await overdue(push.id);
+    await Promise.all([runFallback(worker1), runFallback(worker2), runFallback()]);
+    await runFallback();
+    const [copy, ...more] = await copiesOf(push.id);
+    expect(more).toHaveLength(0);
+    expect(copy).toMatchObject({
+      event_kind: "order_accepted",
+      template_code: "user_order_accepted",
+      lang: "ru",
+    });
+    expect(await decisionOf(push.id)).toBe("sent");
+    const messages = await messageOfCopy(copy!.id);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ template: "user_order_accepted", phone: buyer.phone });
+    expect(copy!.outbound_message_id).toBe(messages[0]!.id);
+    await settledCopy(copy!.id, "sent");
+    const text = sentMessages().find((message) => message.template === "user_order_accepted")!.text;
+    expect(text).toMatch(
+      /^Asia Drive Club: Автомаркет принял заявку: .*04465-0K090\. Подробнее — в приложении$/,
+    );
+    // A confirmation after the copy cancels nothing (ARCHITECTURE 9.3).
+    await ok(buyer.as("post", `/notifications/${push.id}/ack`), (body) => body);
+    await runFallback();
+    expect(await copiesOf(push.id)).toHaveLength(1);
+
+    // Confirmed before the timeout: never.
+    const confirmed = await place(buyer, offer);
+    await act(shop, confirmed.id, "accept");
+    const seen = await pushOf(confirmed.id, "order_accepted");
+    await ok(buyer.as("post", `/notifications/${seen.id}/ack`), (body) => body);
+    await overdue(seen.id);
+    await runFallback();
+    expect(await copiesOf(seen.id)).toHaveLength(0);
+    expect(await decisionOf(seen.id)).toBe("acked");
+
+    // A kind not in the list (P-ORD-02 «можно забирать»): never.
+    await act(shop, confirmed.id, "ready");
+    const ready = await pushOf(confirmed.id, "order_ready");
+    await overdue(ready.id, 60);
+    await runFallback();
+    expect(await copiesOf(ready.id)).toHaveLength(0);
+    expect(await decisionOf(ready.id)).toBe("not_critical");
+    // …until the administrator puts it on the list: from the next pass.
+    await configure({
+      critical_notification_kinds: ["order_accepted", "order_ready", "order_closed"],
+    });
+    const second = await place(buyer, offer);
+    await act(shop, second.id, "accept");
+    await ok(buyer.as("post", `/orders/${second.id}/notifications/ack`), (body) => body);
+    await act(shop, second.id, "ready");
+    const readyTwo = await pushOf(second.id, "order_ready");
+    // Both move back in time, the earlier one further: their order stays.
+    await overdue((await pushOf(second.id, "order_accepted")).id, 3);
+    await overdue(readyTwo.id);
+    await runFallback();
+    expect(
+      (await copiesOf(readyTwo.id))[0]?.template_code,
+      `decision ${String(await decisionOf(readyTwo.id))}`,
+    ).toBe("user_order_ready");
+  }, 180_000);
+
+  it("copies only the latest event of a subject, at once when there is no device, and nothing on a rolled-back pass", async () => {
+    await configure({ push_ack_timeout_minutes: 1 });
+    const shop = await company("Актуальность");
+    const offer = await putOffer(shop);
+    const buyer = await customer();
+    await register(buyer);
+
+    // Accepted, then ready, then closed while nobody looked: only «закрыта» is told.
+    const order = await place(buyer, offer);
+    await act(shop, order.id, "accept");
+    await act(shop, order.id, "ready");
+    const code = (await userOrder(buyer, order.id)).confirmation!.code;
+    await ok(shop.as("post", "/supplier/orders/close", { code }), (body) => body);
+    const accepted = await pushOf(order.id, "order_accepted");
+    const ready = await pushOf(order.id, "order_ready");
+    const closed = await pushOf(order.id, "order_closed");
+    for (const id of [accepted.id, ready.id, closed.id]) await overdue(id);
+    await runFallback();
+    expect(await decisionOf(accepted.id)).toBe("superseded");
+    expect(await decisionOf(ready.id)).toBe("not_critical");
+    expect((await copiesOf(closed.id)).map((copy) => copy.template_code)).toEqual([
+      "user_order_closed",
+    ]);
+    expect(await copiesOf(accepted.id)).toHaveLength(0);
+
+    // «Готово к выдаче» right after «принята» is not critical: it silences nothing.
+    const quick = await place(buyer, offer);
+    await act(shop, quick.id, "accept");
+    await act(shop, quick.id, "ready");
+    const quickAccepted = await pushOf(quick.id, "order_accepted");
+    const quickReady = await pushOf(quick.id, "order_ready");
+    await overdue(quickAccepted.id, 3);
+    await overdue(quickReady.id, 2);
+    await runFallback();
+    expect((await copiesOf(quickAccepted.id)).map((copy) => copy.template_code)).toEqual([
+      "user_order_accepted",
+    ]);
+    expect(await decisionOf(quickReady.id)).toBe("not_critical");
+
+    // Cancelled by the user meanwhile (no push of its own): «принята» is no longer true.
+    const dropped = await place(buyer, offer);
+    await act(shop, dropped.id, "accept");
+    const droppedAccepted = await pushOf(dropped.id, "order_accepted");
+    await ok(buyer.as("post", `/orders/${dropped.id}/cancel`), (body) => body);
+    await overdue(droppedAccepted.id);
+    await runFallback();
+    expect(await decisionOf(droppedAccepted.id)).toBe("not_current");
+    expect(await copiesOf(droppedAccepted.id)).toHaveLength(0);
+
+    // No device at all: the copy is written with the push, in the event's own transaction.
+    const bare = await customer({ lang: "kk" });
+    const bareOrder = await place(bare, offer);
+    await act(shop, bareOrder.id, "accept");
+    const nowhere = (await notificationsOf("subject_id = $1", [bareOrder.id]))[0]!;
+    expect(nowhere.status).toBe("no_device");
+    const [copy] = await copiesOf(nowhere.id);
+    expect(copy).toMatchObject({ template_code: "user_order_accepted", lang: "kk" });
+    await settledCopy(copy!.id, "sent");
+    expect(
+      sentMessages()
+        .find((message) => message.phone === bare.phone)
+        ?.text.startsWith("Asia Drive Club: Актуальность өтінімді қабылдады: "),
+    ).toBe(true);
+
+    // A pass that is rolled back writes nothing and queues nothing.
+    const third = await place(buyer, offer);
+    await act(shop, third.id, "accept");
+    const pending = await pushOf(third.id, "order_accepted");
+    await overdue(pending.id);
+    const database = app.get(DatabaseService);
+    await database.db
+      .transaction(async (tx) => {
+        await app.get(PushFallbacks).consider(tx, pending.id);
+        throw new Error("rolled back on purpose");
+      })
+      .catch(() => undefined);
+    expect(await copiesOf(pending.id)).toHaveLength(0);
+    expect(await decisionOf(pending.id)).toBeNull();
+    const { rows: queued } = await db.query(
+      "SELECT 1 FROM outbound_message m JOIN notification c ON c.id = m.subject_id WHERE c.fallback_of_id = $1",
+      [pending.id],
+    );
+    expect(queued).toHaveLength(0);
+    await runFallback();
+    expect(await copiesOf(pending.id)).toHaveLength(1);
+  }, 180_000);
+
+  it("marks an unreliable push after three in a row: the next goes at once; a confirmation lifts it; the number is a setting", async () => {
+    await configure({ push_ack_timeout_minutes: 1, push_unreliable_after: 3 });
+    const shop = await company("Ненадёжный");
+    const offer = await putOffer(shop);
+    const buyer = await customer();
+    await register(buyer);
+    const card = () =>
+      ok(asAdmin("get", `/admin/users/${buyer.accountId}`), (body) => {
+        const user = (body as { user: { notifications: Record<string, unknown> } }).user;
+        return user.notifications as { unackedStreak: number; pushUnreliableSince: string | null };
+      });
+
+    async function unconfirmed(): Promise<string> {
+      const order = await place(buyer, offer);
+      await act(shop, order.id, "accept");
+      const push = await pushOf(order.id, "order_accepted");
+      await overdue(push.id);
+      await runFallback();
+      expect(await copiesOf(push.id)).toHaveLength(1);
+      return order.id;
+    }
+
+    for (let i = 0; i < 3; i++) await unconfirmed();
+    expect(await card()).toMatchObject({ unackedStreak: 3 });
+    expect((await card()).pushUnreliableSince).not.toBeNull();
+
+    // The fourth: the copy is there before any timeout, the push goes too.
+    const fourth = await place(buyer, offer);
+    await act(shop, fourth.id, "accept");
+    const [push] = await notificationsOf("subject_id = $1", [fourth.id]);
+    expect(await copiesOf(push!.id)).toHaveLength(1);
+    await pushOf(fourth.id, "order_accepted");
+
+    // Any confirmation lifts the mark.
+    await ok(buyer.as("post", `/notifications/${push!.id}/ack`), (body) => body);
+    expect(await card()).toMatchObject({ unackedStreak: 0, pushUnreliableSince: null });
+    const fifth = await place(buyer, offer);
+    await act(shop, fifth.id, "accept");
+    const [calm] = await notificationsOf("subject_id = $1", [fifth.id]);
+    expect(await copiesOf(calm!.id)).toHaveLength(0);
+
+    // With the setting at one, a single unconfirmed push is enough.
+    await configure({ push_unreliable_after: 1 });
+    await overdue(calm!.id);
+    await runFallback();
+    expect((await card()).pushUnreliableSince).not.toBeNull();
+    const sixth = await place(buyer, offer);
+    await act(shop, sixth.id, "accept");
+    const [fast] = await notificationsOf("subject_id = $1", [sixth.id]);
+    expect(await copiesOf(fast!.id)).toHaveLength(1);
+    const status = (await app.get(NotificationsAdmin).status()) as {
+      fallback: { pushUnreliable: number };
+    };
+    expect(status.fallback.pushUnreliable).toBe(1);
+  }, 240_000);
+
+  it("knows a person without WhatsApp: sign-in by SMS or a refusal of the gateway; a WhatsApp code lifts it", async () => {
+    await configure({ push_ack_timeout_minutes: 1 });
+    const shop = await company("Без WhatsApp");
+    const offer = await putOffer(shop);
+
+    // Signed in by SMS (WhatsApp did not deliver the code).
+    logins.failing.add("whatsapp");
+    const sms = await customer();
+    logins.failing.clear();
+    const viaWhatsapp = await customer();
+    expect(await profileOf(sms)).toMatchObject({ whatsappAvailable: false });
+    expect(await profileOf(viaWhatsapp)).toMatchObject({ whatsappAvailable: true });
+    const listed = await ok(asAdmin("get", "/admin/users?noWhatsapp=true"), (body) =>
+      (body as { users: { accountId: string }[] }).users.map((user) => user.accountId),
+    );
+    expect(listed).toContain(sms.accountId);
+    expect(listed).not.toContain(viaWhatsapp.accountId);
+    expect(await ok(asAdmin("get", `/admin/users/${sms.accountId}`), (body) => body)).toMatchObject(
+      {
+        user: { notifications: { whatsapp: { available: false, source: "login_code" } } },
+      },
+    );
+    // No copy, the push goes as usual (here: no device), the push says why.
+    const order = await place(sms, offer);
+    await act(shop, order.id, "accept");
+    const [push] = await notificationsOf("subject_id = $1", [order.id]);
+    expect(push!.status).toBe("no_device");
+    expect(await decisionOf(push!.id)).toBe("no_whatsapp");
+    expect(await copiesOf(push!.id)).toHaveLength(0);
+    // A login code through WhatsApp lifts the mark.
+    const again = await anotherDevice(sms);
+    expect(await profileOf(again)).toMatchObject({ whatsappAvailable: true });
+
+    // The gateway says the number is not on WhatsApp.
+    const refused = await customer();
+    for (const channel of messageChannels()) channel.refusedPhones.add(refused.phone);
+    const first = await place(refused, offer);
+    await act(shop, first.id, "accept");
+    const [firstPush] = await notificationsOf("subject_id = $1", [first.id]);
+    const [copy] = await copiesOf(firstPush!.id);
+    await settledCopy(copy!.id, "failed");
+    expect((await messageOfCopy(copy!.id))[0]).toMatchObject({
+      status: "failed",
+      failure_kind: "no_whatsapp",
+    });
+    expect(await profileOf(refused)).toMatchObject({ whatsappAvailable: false });
+    expect(
+      await ok(asAdmin("get", `/admin/users/${refused.accountId}`), (body) => body),
+    ).toMatchObject({
+      user: { notifications: { whatsapp: { available: false, source: "message" } } },
+    });
+    const second = await place(refused, offer);
+    await act(shop, second.id, "accept");
+    const [secondPush] = await notificationsOf("subject_id = $1", [second.id]);
+    expect(await decisionOf(secondPush!.id)).toBe("no_whatsapp");
+
+    // The mobile routes are for the app's sessions only.
+    expectError(await shop.as("get", "/account/profile"), 403, "FORBIDDEN");
+    expectError(await asAdmin("get", "/account/profile"), 403, "FORBIDDEN");
+  }, 180_000);
+
+  it("the gateway refuses a copy gone stale, records failed and unknown, retries by the operator, keeps the daily limit", async () => {
+    await configure({ message_send_attempts: 10, message_retry_delay_seconds: 1 });
+    const shop = await company("Шлюз");
+    const offer = await putOffer(shop);
+    const buyer = await customer();
+
+    // The provider is down while the copy waits; the order is closed meanwhile.
+    for (const channel of messageChannels()) channel.mode = "unavailable";
+    const order = await place(buyer, offer);
+    await act(shop, order.id, "accept");
+    const [accepted] = await notificationsOf("subject_id = $1 AND event_kind = $2", [
+      order.id,
+      "order_accepted",
+    ]);
+    const [stale] = await copiesOf(accepted!.id);
+    const code = (await userOrder(buyer, order.id)).confirmation!.code;
+    await ok(shop.as("post", "/supplier/orders/close", { code }), (body) => body);
+    await settledCopy(stale!.id, "cancelled");
+    expect((await messageOfCopy(stale!.id))[0]?.status).toBe("cancelled");
+    for (const channel of messageChannels()) channel.mode = "ok";
+    const [closed] = await notificationsOf("subject_id = $1 AND event_kind = $2", [
+      order.id,
+      "order_closed",
+    ]);
+    const [current] = await copiesOf(closed!.id);
+    await settledCopy(current!.id, "sent");
+    expect(sentMessages().filter((message) => message.phone === buyer.phone)).toHaveLength(1);
+
+    // Refused for good, and an outcome nobody knows — both on the copy; the operator retries.
+    for (const channel of messageChannels()) channel.mode = "rejected";
+    const refused = await place(buyer, offer);
+    await act(shop, refused.id, "accept");
+    const [refusedPush] = await notificationsOf("subject_id = $1", [refused.id]);
+    const [refusedCopy] = await copiesOf(refusedPush!.id);
+    await settledCopy(refusedCopy!.id, "failed");
+    for (const channel of messageChannels()) channel.mode = "outcome_unknown";
+    const lost = await place(buyer, offer);
+    await act(shop, lost.id, "accept");
+    const [lostPush] = await notificationsOf("subject_id = $1", [lost.id]);
+    const [lostCopy] = await copiesOf(lostPush!.id);
+    await settledCopy(lostCopy!.id, "unknown");
+    for (const channel of messageChannels()) channel.mode = "ok";
+    await app.get(MessagingAdmin).retry(lostCopy!.outbound_message_id!);
+    await settledCopy(lostCopy!.id, "sent");
+
+    // The daily limit of one person: a refusal on the push, never an error of the event.
+    await configure({ push_fallback_per_account_day: 4 });
+    const limited = await place(buyer, offer);
+    await act(shop, limited.id, "accept");
+    const [limitedPush] = await notificationsOf("subject_id = $1", [limited.id]);
+    expect(await decisionOf(limitedPush!.id)).toBe("rate_limited");
+    expect(await copiesOf(limitedPush!.id)).toHaveLength(0);
+    expect(appLogText(output.text())).toContain("Push fallback refused: the daily limit");
+  }, 240_000);
+
+  it("carries only what the push carries, «Поставщик» without club access; metrics, push:status and the signal", async () => {
+    const shop = await company("Содержимое");
+    const offer = await putOffer(shop);
+    const lapsed = await customer();
+    const order = await place(lapsed, offer);
+    await ok(
+      asAdmin("post", "/admin/club-access/revoke", { phone: lapsed.phone, reason: "Тест" }),
+      (body) => body,
+    );
+    await act(shop, order.id, "accept");
+    const [push] = await notificationsOf("subject_id = $1", [order.id]);
+    const [copy] = await copiesOf(push!.id);
+    expect(copy!.payload.variables.supplier).toBe("Поставщик");
+    await settledCopy(copy!.id, "sent");
+    const stored = JSON.stringify(
+      (await db.query("SELECT payload FROM notification WHERE channel = 'whatsapp'")).rows,
+    );
+    const texts = JSON.stringify(
+      sentMessages()
+        .filter((message) => message.template.startsWith("user_"))
+        .map((message) => [message.text, message.variables]),
+    );
+    for (const secret of secrets) {
+      if (secret === lapsed.phone) continue; // the number the gateway sends to
+      expect(stored + texts).not.toContain(secret);
+    }
+    for (const word of ["Айгерим", "Тестовая", "Район", "Содержимое"]) {
+      expect(stored + texts).not.toContain(word);
+    }
+    expect(appLogText(output.text())).not.toContain(lapsed.phone);
+
+    const metrics = await http().get("/metrics");
+    expect(metrics.text).toMatch(/adclub_push_fallbacks\{kind="order_accepted",status="sent"\} 1/);
+    expect(metrics.text).toMatch(/adclub_push_fallback_ratio 1/);
+    expect(metrics.text).toMatch(/adclub_push_recipients\{state="no_whatsapp"\} \d/);
+    expect(metrics.text).toMatch(/adclub_push_recipients\{state="push_unreliable"\} \d/);
+    const status = (await app.get(NotificationsAdmin).status()) as {
+      fallback: { share: { criticalPushes: number; fallbacks: number; share: number } };
+    };
+    expect(status.fallback.share).toMatchObject({ criticalPushes: 1, fallbacks: 1, share: 1 });
+    const listed = (await app.get(NotificationsAdmin).list({})) as {
+      notifications: { id: string; fallback: { decision?: string; copy?: { status: string } } }[];
+    };
+    expect(listed.notifications.find((row) => row.id === push!.id)?.fallback).toMatchObject({
+      decision: "sent",
+      copy: { status: "sent" },
+    });
+
+    // The share is above the threshold: one signal; under it — closed by itself.
+    await configure({ push_fallback_signal_min: 1, push_fallback_signal_share: 0.5 });
+    const watch = worker1.get(PushFallbackShareWatch);
+    await watch.run();
+    await watch.run();
+    const signals = app.get(AdminSignals);
+    const open = await signals.openOfKind(app.get(DatabaseService).db, "push_fallback_high");
+    expect(open).toHaveLength(1);
+    expect(open[0]!.payload).toMatchObject({ criticalPushes: 1, fallbacks: 1, fallbackShare: 1 });
+    await configure({ push_fallback_signal_share: 1 });
+    await watch.run();
+    expect(
+      await signals.openOfKind(app.get(DatabaseService).db, "push_fallback_high"),
+    ).toHaveLength(0);
+  }, 180_000);
 });

@@ -9,6 +9,7 @@ import { ApiException } from "../../../common/errors";
 import { DatabaseService, FOREIGN_KEY_VIOLATION, postgresError } from "../../../database";
 import { ActionJournal } from "../action-journal";
 import { AccountStore, type AccountProfileRow } from "./account.store";
+import { whatsappAvailable, whatsappWordOf } from "./whatsapp-reach";
 
 function validationError(path: string, message: string): ApiException {
   return new ApiException(400, "VALIDATION_ERROR", message, { details: [{ path, message }] });
@@ -74,7 +75,7 @@ export class AccountProfileService {
       );
       return updated;
     });
-    return this.toProfile(row);
+    return this.toProfile(row, await this.whatsappOf(row.phone));
   }
 
   async get(accountId: string): Promise<AccountProfile> {
@@ -82,7 +83,7 @@ export class AccountProfileService {
     if (!row) {
       throw new Error("Account of an authenticated session vanished");
     }
-    return this.toProfile(row);
+    return this.toProfile(row, await this.whatsappOf(row.phone));
   }
 
   /** `PATCH /account/profile`. `email: null` also turns the newsletter consent off (`AccountStore`). */
@@ -130,7 +131,7 @@ export class AccountProfileService {
         );
         return updated;
       });
-      return this.toProfile(row);
+      return this.toProfile(row, await this.whatsappOf(row.phone));
     } catch (error) {
       // `city_id` naming a city that doesn't exist.
       if (postgresError(error)?.code === FOREIGN_KEY_VIOLATION) {
@@ -140,7 +141,12 @@ export class AccountProfileService {
     }
   }
 
-  private toProfile(row: AccountProfileRow): AccountProfile {
+  /** M-PRO-04 (TASK-052): the last decisive word about the number. */
+  private async whatsappOf(phone: string): Promise<boolean> {
+    return whatsappAvailable(await whatsappWordOf(this.database.db, phone));
+  }
+
+  private toProfile(row: AccountProfileRow, whatsapp: boolean): AccountProfile {
     return {
       name: row.name,
       phone: row.phone,
@@ -155,6 +161,7 @@ export class AccountProfileService {
         row.consentPhoneShareAt && row.consentVersion
           ? { version: row.consentVersion, at: row.consentPhoneShareAt.toISOString() }
           : null,
+      whatsappAvailable: whatsapp,
     };
   }
 }

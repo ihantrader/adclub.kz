@@ -57,6 +57,14 @@ export type {
   UpdateAccountProfileInput,
 } from "./account/account.store";
 export { AccountProfileService } from "./account/account-profile.service";
+export {
+  countWithoutWhatsapp,
+  lastWhatsappWordKind,
+  noWhatsappCondition,
+  whatsappAvailable,
+  whatsappWordOf,
+} from "./account/whatsapp-reach";
+export type { WhatsappWord } from "./account/whatsapp-reach";
 export { AdminUserStore } from "./admin/admin-user.store";
 export { SupplierMembershipStore } from "./supplier/supplier-membership.store";
 export { SessionStore } from "./session/session.store";

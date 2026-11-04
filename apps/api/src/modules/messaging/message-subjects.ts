@@ -47,6 +47,18 @@ export interface MessageSubject {
    */
   stillSend(tx: DbExecutor, subjectId: string | null, message: MessageFacts): Promise<boolean>;
   onResult(tx: DbExecutor, subjectId: string | null, outcome: MessageOutcome): Promise<void>;
+  /**
+   * Optional: the provider reported a delivery step of a settled message
+   * (`delivered`, `read`, or a failure after it took the message — «the
+   * number is not on WhatsApp» arrives this way). Runs in the transaction
+   * that applies the provider's event (TASK-052).
+   */
+  onDelivery?(
+    tx: DbExecutor,
+    subjectId: string | null,
+    status: "sent" | "delivered" | "read" | "failed",
+    failureKind: MessageFailureKind | "render_failed" | null,
+  ): Promise<void>;
 }
 
 /**
@@ -87,5 +99,15 @@ export class MessageSubjects {
     outcome: MessageOutcome,
   ): Promise<void> {
     await this.subjects.get(type)?.onResult(tx, subjectId, outcome);
+  }
+
+  async onDelivery(
+    tx: DbExecutor,
+    type: string,
+    subjectId: string | null,
+    status: "sent" | "delivered" | "read" | "failed",
+    failureKind: MessageFailureKind | "render_failed" | null,
+  ): Promise<void> {
+    await this.subjects.get(type)?.onDelivery?.(tx, subjectId, status, failureKind);
   }
 }

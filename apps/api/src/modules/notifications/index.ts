@@ -33,8 +33,27 @@ export {
   pushRecoveryJob,
   sendPushJob,
 } from "./push-jobs";
+export {
+  FALLBACK_SUBJECT,
+  fallbackLangOf,
+  fallbackShareOf,
+  fallbackTemplateOf,
+  PushFallbacks,
+  pushFallbackJob,
+  pushFallbackShareJob,
+} from "./push-fallback";
+export { fallbackDecision, fallbackDueAt } from "./fallback-rule";
+export { NotificationSubjects } from "./notification-subjects";
+export type { StillCurrent } from "./notification-subjects";
+export type { FallbackDecision, FallbackInput } from "./fallback-rule";
 export { DEV_PUSHES_PATH } from "./dev-pushes.controller";
-export { deviceToken, notification, notificationDelivery, notificationTables } from "./schema";
+export {
+  deviceToken,
+  notification,
+  notificationDelivery,
+  notificationRecipientState,
+  notificationTables,
+} from "./schema";
 export type {
   DeviceTokenRow,
   NotificationDeliveryRow,

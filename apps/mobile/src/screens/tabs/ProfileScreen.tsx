@@ -150,9 +150,22 @@ export function ProfileScreen({
                   icon="bell"
                   title={t("profile.notifications")}
                   subtitle={
-                    push.permission?.status === "granted"
-                      ? t("profile.notificationsOn")
-                      : t("profile.notificationsOff")
+                    <>
+                      <Text variant="bodyS" color="textMuted">
+                        {push.permission?.status === "granted"
+                          ? t("profile.notificationsOn")
+                          : t("profile.notificationsOff")}
+                      </Text>
+                      {/* The second line (TASK-052): the WhatsApp fallback, from the
+                          server's profile — the last one read when there is no network. */}
+                      {session.profile && (
+                        <Text variant="bodyS" color="textMuted">
+                          {session.profile.whatsappAvailable
+                            ? t("profile.notificationsWhatsapp")
+                            : t("profile.notificationsNoWhatsapp")}
+                        </Text>
+                      )}
+                    </>
                   }
                   trailing={
                     <Text variant="caption" color="accent">

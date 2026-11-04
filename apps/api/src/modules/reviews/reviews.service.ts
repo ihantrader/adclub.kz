@@ -396,6 +396,14 @@ export class ReviewsService {
           recipientAccountId: current.userAccountId,
           lang,
           variables: { reason: mobileText(lang, REJECT_REASON_TEXT[decision.reason]) },
+          // TASK-052: the WhatsApp copy has no English template — Russian values.
+          ...(lang === "en"
+            ? {
+                fallbackVariables: {
+                  reason: mobileText("ru", REJECT_REASON_TEXT[decision.reason]),
+                },
+              }
+            : {}),
           // M-ORD-03 of the order, where «Исправить текст» is.
           target: { screen: "order", params: { orderId: current.orderId } },
           subject: { type: "order", id: current.orderId },

@@ -46,6 +46,8 @@ export const adminUserListQuerySchema = z.object({
   expiringDays: z.coerce.number().int().min(1).max(366).default(USER_ACCESS_EXPIRING_DAYS_DEFAULT),
   noShows: z.enum(["true"]).optional(),
   unconfirmedCar: z.enum(["true"]).optional(),
+  /** `noWhatsapp=true` — the number has no WhatsApp by the last word about it (TASK-052). */
+  noWhatsapp: z.enum(["true"]).optional(),
   limit: z.coerce.number().int().min(1).max(USER_PAGE_MAX_SIZE).default(USER_PAGE_DEFAULT_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });
@@ -114,6 +116,22 @@ export const adminUserSchema = z.object({
   phoneShareConsent: phoneShareConsentSchema.nullable(),
   clubAccess: clubAccessStateSchema,
   memberships: z.array(adminUserMembershipSchema),
+  /**
+   * How important events reach the person (TASK-052): «WhatsApp: нет с
+   * {дата}» — `whatsapp.available` false, `since` and what said so (the login
+   * code by SMS, a message refused); «push не подтверждается с {дата}» —
+   * `pushUnreliableSince` (critical pushes in a row went unconfirmed
+   * `push_unreliable_after` times; `unackedStreak` — how many now).
+   */
+  notifications: z.object({
+    whatsapp: z.object({
+      available: z.boolean(),
+      since: z.iso.datetime().nullable(),
+      source: z.enum(["login_code", "message"]).nullable(),
+    }),
+    unackedStreak: z.number().int(),
+    pushUnreliableSince: z.iso.datetime().nullable(),
+  }),
   counts: z.object({
     orders: z.number().int(),
     activeOrders: z.number().int(),

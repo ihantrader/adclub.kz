@@ -57,6 +57,8 @@ import {
   carParams,
   carTitle,
   consentText,
+  pushReliabilityText,
+  whatsappText,
   deviceText,
   endOfYear,
   GRANT_STATUS_TEXT,
@@ -257,6 +259,11 @@ function Profile({ user }: { user: AdminUser }) {
               <Muted>не давал</Muted>
             )}
           </dd>
+          {/* TASK-052: how important events reach the person. */}
+          <dt>WhatsApp</dt>
+          <dd>{whatsappText(user.notifications.whatsapp, (iso) => formatMoment(iso))}</dd>
+          <dt>Push</dt>
+          <dd>{pushReliabilityText(user.notifications, (iso) => formatMoment(iso))}</dd>
           {user.memberships.length > 0 && (
             <>
               <dt>Работа у поставщиков</dt>

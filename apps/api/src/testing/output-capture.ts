@@ -97,8 +97,10 @@ export function expectNoSecretsWritten(): void {
   }
   const logged = appLogText(raw);
   for (const code of codes) {
+    // Not inside a word, and not the fraction of a decimal: a code such as
+    // `000241` is not leaked by `costUsd=0.000241` (a CI flake of TASK-051).
     expect(logged, "a remembered code was logged").not.toMatch(
-      new RegExp(`(?<![0-9A-Za-z])${escape(code)}(?![0-9A-Za-z])`),
+      new RegExp(`(?<![0-9A-Za-z])(?<![0-9]\\.)${escape(code)}(?![0-9A-Za-z])`),
     );
   }
   expect(raw).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}\.eyJ/);

@@ -43,6 +43,7 @@ PARTIAL — 8/9 AC (AC-7 «на телефоне» — NOT RUN: телефона
   - `schema-drift`, `billing`, `on-order`, `order-notices`, `orders`, `service-orders`, `reviews` — PASS (общий прогон 9 файлов: эти 7 зелёные)
   - `database.integration.test.ts` + `notifications.integration.test.ts` — PASS, 66/66 (после двух исправлений: тест отката новой миграции; ожидание мёртвой очереди под нагрузкой)
   - `session`, `messaging` и прочие модули не менялись — не запускались локально, их прогонит CI
+- CI — запущен прогон `41787389619` (push `a991567` в `main`), результат не ожидался (CLAUDE.md 11)
 
 ## UAT / E2E
 Пройдено в браузере (встроенная панель скрыта, клики и ввод — через DOM и `form_input`), `.claude/launch.json` → `api-test-ai`, `worker`, `supplier-web`, `mobile-web` с временными `DATABASE_URL`/`S3_ENDPOINT` на 5433/9002 и `AI_PROVIDER=test`; тестовый номер `+77010000511` (клубный доступ — `club-access:grant`), сотрудник «Автомаркета» `+77055550101`:

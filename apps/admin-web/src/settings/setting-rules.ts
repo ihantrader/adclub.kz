@@ -334,13 +334,15 @@ export function readOnly(setting: Setting): boolean {
   return setting.editableBy !== "admin";
 }
 
-/** The settings of A-SET-02, by platform: the minimum versions and the update text. */
+/** The settings of A-SET-02, by platform: the minimum versions, the update text and the store pages (TASK-056). */
 export const CLIENT_POLICY_KEYS = {
   ios: "client_min_version_ios",
   android: "client_min_version_android",
   supplierWeb: "client_min_version_supplier_web",
   adminWeb: "client_min_version_admin_web",
   message: "client_update_message",
+  iosStore: "client_store_url_ios",
+  androidStore: "client_store_url_android",
 } as const;
 
 export const CLIENT_POLICY_LABELS: Record<string, string> = {
@@ -349,6 +351,8 @@ export const CLIENT_POLICY_LABELS: Record<string, string> = {
   client_min_version_supplier_web: "Кабинет поставщика",
   client_min_version_admin_web: "Админка",
   client_update_message: "Текст «Нужно обновить»",
+  client_store_url_ios: "Страница в App Store",
+  client_store_url_android: "Страница в Google Play",
 };
 
 /** The groups of A-SET-01: everything but the client policy, which has its own page. */

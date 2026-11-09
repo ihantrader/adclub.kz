@@ -1464,11 +1464,35 @@ const clients = group({
   settings: {
     client_min_version_ios: define.appVersion({
       default: "0.0.0",
-      description: "Минимальная поддерживаемая версия приложения на iOS.",
+      description:
+        "Минимальная поддерживаемая версия сборки приложения на iOS — версия из App Store (ниже неё приложение не обслуживается). OTA-обновление её не меняет; поднимать — через несколько недель после выхода новой версии в сторе.",
     }),
     client_min_version_android: define.appVersion({
       default: "0.0.0",
-      description: "Минимальная поддерживаемая версия приложения на Android.",
+      description:
+        "Минимальная поддерживаемая версия сборки приложения на Android — версия из Google Play (ниже неё приложение не обслуживается). OTA-обновление её не меняет; поднимать — через несколько недель после выхода новой версии в сторе.",
+    }),
+    client_store_url_ios: define.string({
+      maxLength: 500,
+      default: "",
+      allowEmpty: true,
+      pattern: {
+        regex: /^$|^https:\/\/apps\.apple\.com\/[^\s]+$/,
+        message: "Адрес страницы приложения в App Store (https://apps.apple.com/…) или пусто",
+      },
+      description:
+        "Страница приложения в App Store — кнопка «Откройте App Store» экрана «Нужно обновить приложение». Пусто — поиск приложения по названию.",
+    }),
+    client_store_url_android: define.string({
+      maxLength: 500,
+      default: "",
+      allowEmpty: true,
+      pattern: {
+        regex: /^$|^https:\/\/play\.google\.com\/[^\s]+$/,
+        message: "Адрес страницы приложения в Google Play (https://play.google.com/…) или пусто",
+      },
+      description:
+        "Страница приложения в Google Play — кнопка «Откройте Google Play» экрана «Нужно обновить приложение». Пусто — поиск приложения по названию.",
     }),
     client_min_version_supplier_web: define.appVersion({
       default: "0.0.0",

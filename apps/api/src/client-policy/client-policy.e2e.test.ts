@@ -43,6 +43,10 @@ function initialSettings(): ClientPolicySettings {
       "admin-web": "0.5.0",
     },
     updateMessage: { ...defaultClientUpdateMessages, ru: "Обновите приложение" },
+    storeUrls: {
+      ios: null,
+      android: "https://play.google.com/store/apps/details?id=kz.adclub.app",
+    },
   };
 }
 
@@ -136,8 +140,11 @@ describe("client policy and version guard over HTTP", () => {
       expect(response.status).toBe(200);
       expect(clientPolicyResponseSchema.parse(response.body)).toEqual({
         platforms: {
-          ios: { minSupportedVersion: "1.2.0" },
-          android: { minSupportedVersion: "2.0.0" },
+          ios: { minSupportedVersion: "1.2.0", storeUrl: null },
+          android: {
+            minSupportedVersion: "2.0.0",
+            storeUrl: "https://play.google.com/store/apps/details?id=kz.adclub.app",
+          },
           "supplier-web": { minSupportedVersion: "0.0.0" },
           "admin-web": { minSupportedVersion: "0.5.0" },
         },

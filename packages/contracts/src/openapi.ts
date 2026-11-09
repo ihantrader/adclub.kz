@@ -167,6 +167,7 @@ import { CLIENT_HEADER, clientPlatformSchema } from "./client";
 import {
   clientPolicyResponseSchema,
   clubInfoResponseSchema,
+  mobilePlatformPolicySchema,
   platformPolicySchema,
 } from "./client-policy";
 import {
@@ -293,6 +294,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ClientPolicyResponse: clientPolicyResponseSchema,
   ClubInfoResponse: clubInfoResponseSchema,
   PlatformPolicy: platformPolicySchema,
+  MobilePlatformPolicy: mobilePlatformPolicySchema,
   HealthCheckResponse: healthCheckResponseSchema,
   ReadinessResponse: readinessResponseSchema,
   DependencyCheck: dependencyCheckSchema,

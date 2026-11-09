@@ -27,6 +27,7 @@
     "openapi:generate": "tsx scripts/openapi.ts generate",
     "openapi:check": "tsx scripts/openapi.ts check",
     "openapi:compat": "tsx scripts/check-openapi-compat.ts",
+    "release:mobile:snapshot": "tsx scripts/mobile-release-snapshot.ts",
     "price-imports:samples": "tsx scripts/price-import-samples.ts"
   },
   "dependencies": {

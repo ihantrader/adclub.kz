@@ -6,6 +6,8 @@ import { AppSettings } from "../modules/settings";
 export interface ClientPolicySettings {
   minSupportedVersions: Record<ClientPlatform, string>;
   updateMessage: Record<Lang, string>;
+  /** The app's page in each store (TASK-056); `null` — not set, the app searches the store. */
+  storeUrls: { ios: string | null; android: string | null };
 }
 
 /**
@@ -38,6 +40,10 @@ export class SettingsClientPolicySource extends ClientPolicySource {
         "admin-web": v.client_min_version_admin_web,
       },
       updateMessage: v.client_update_message,
+      storeUrls: {
+        ios: v.client_store_url_ios === "" ? null : v.client_store_url_ios,
+        android: v.client_store_url_android === "" ? null : v.client_store_url_android,
+      },
     };
   }
 }

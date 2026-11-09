@@ -21,7 +21,12 @@ export class ClientPolicyService {
       platforms: Object.fromEntries(
         clientPlatforms.map((platform) => [
           platform,
-          { minSupportedVersion: settings.minSupportedVersions[platform] },
+          platform === "ios" || platform === "android"
+            ? {
+                minSupportedVersion: settings.minSupportedVersions[platform],
+                storeUrl: settings.storeUrls[platform],
+              }
+            : { minSupportedVersion: settings.minSupportedVersions[platform] },
         ]),
       ),
       message: settings.updateMessage[lang],

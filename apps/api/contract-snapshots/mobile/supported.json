@@ -1,0 +1,12 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "releasedOn": "2026-11-09",
+      "platforms": [
+        "ios",
+        "android"
+      ]
+    }
+  ]
+}

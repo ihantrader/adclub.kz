@@ -8,6 +8,17 @@ export const platformPolicySchema = z.object({
 export type PlatformPolicy = z.infer<typeof platformPolicySchema>;
 
 /**
+ * The policy of the mobile app on one platform (TASK-056): the minimum and
+ * the app's page in the store, which M-START-03 opens — `null` until it is
+ * set (`client_store_url_*`), and the app searches the store by name.
+ */
+export const mobilePlatformPolicySchema = platformPolicySchema.extend({
+  storeUrl: z.string().nullable(),
+});
+
+export type MobilePlatformPolicy = z.infer<typeof mobilePlatformPolicySchema>;
+
+/**
  * `GET /meta/client-policy` (ARCHITECTURE 7.4). Public and always
  * available, whatever the caller's version. `message` is localized by
  * `Accept-Language` and is what a client shows on its "update required"
@@ -15,8 +26,8 @@ export type PlatformPolicy = z.infer<typeof platformPolicySchema>;
  */
 export const clientPolicyResponseSchema = z.object({
   platforms: z.object({
-    ios: platformPolicySchema,
-    android: platformPolicySchema,
+    ios: mobilePlatformPolicySchema,
+    android: mobilePlatformPolicySchema,
     "supplier-web": platformPolicySchema,
     "admin-web": platformPolicySchema,
   }),

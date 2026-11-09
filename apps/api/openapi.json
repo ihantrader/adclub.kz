@@ -32180,10 +32180,10 @@
             "type": "object",
             "properties": {
               "ios": {
-                "$ref": "#/components/schemas/PlatformPolicy"
+                "$ref": "#/components/schemas/MobilePlatformPolicy"
               },
               "android": {
-                "$ref": "#/components/schemas/PlatformPolicy"
+                "$ref": "#/components/schemas/MobilePlatformPolicy"
               },
               "supplier-web": {
                 "$ref": "#/components/schemas/PlatformPolicy"
@@ -35827,6 +35827,24 @@
         },
         "required": [
           "seenUntil"
+        ]
+      },
+      "MobilePlatformPolicy": {
+        "type": "object",
+        "properties": {
+          "minSupportedVersion": {
+            "type": "string"
+          },
+          "storeUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "minSupportedVersion",
+          "storeUrl"
         ]
       },
       "MySubscription": {

@@ -91,7 +91,11 @@ export function fallbackDecision(input: FallbackInput): FallbackDecision {
   if (input.ackedAt) return { kind: "skip", reason: "acked", timedOut: false };
   if (input.superseded) return { kind: "skip", reason: "superseded", timedOut: false };
   if (!input.current) return { kind: "skip", reason: "not_current", timedOut: false };
-  if (input.now.getTime() - input.createdAt.getTime() > input.maxAgeHours * HOUR) {
+  // «Stale» is counted from the moment the push fell due, not from the event:
+  // a timeout as long as the window (both are settings) must not turn every
+  // due push into a stale one (review at the acceptance of TASK-052).
+  const dueAt = fallbackDueAt(input);
+  if (input.now.getTime() - dueAt.getTime() > input.maxAgeHours * HOUR) {
     return { kind: "skip", reason: "stale", timedOut: false };
   }
   let cause: FallbackCause;

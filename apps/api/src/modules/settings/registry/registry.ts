@@ -359,7 +359,7 @@ const notifications = group({
       max: 168,
       default: 24,
       description:
-        "Сколько часов после события его push ещё может уйти в резерв WhatsApp; более старое событие (например, пока worker стоял) не дублируется.",
+        "Сколько часов после срока подтверждения push ещё может уйти в резерв WhatsApp; более старое событие (например, пока worker стоял) не дублируется.",
     }),
     push_fallback_per_account_day: define.integer({
       unit: "count",

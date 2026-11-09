@@ -93,7 +93,26 @@ const CASES: [string, Partial<FallbackInput>, FallbackDecision | "wait"][] = [
   ["the subject moved on (an order cancelled)", { current: false }, skip("not_current")],
   ["moved on, no device", { current: false, status: "no_device" }, skip("not_current")],
   ["superseded, no device", { superseded: true, status: "no_device" }, skip("superseded")],
-  ["older than the window", { createdAt: minutesAgo(24 * 60 + 1) }, skip("stale")],
+  [
+    "older than the window after it fell due",
+    { createdAt: minutesAgo(24 * 60 + 12), sentAt: minutesAgo(24 * 60 + 11) },
+    skip("stale"),
+  ],
+  [
+    "the window counts from the due moment, not the event",
+    { createdAt: minutesAgo(24 * 60 + 5), sentAt: minutesAgo(24 * 60 + 5) },
+    send("timeout"),
+  ],
+  [
+    "a timeout as long as the window does not make a due push stale",
+    { createdAt: minutesAgo(24 * 60 + 1), sentAt: minutesAgo(24 * 60 + 1), timeoutMinutes: 1440 },
+    send("timeout"),
+  ],
+  [
+    "no device older than the window",
+    { status: "no_device", sentAt: null, createdAt: minutesAgo(24 * 60 + 11) },
+    skip("stale"),
+  ],
   ["the limit of the day reached", { fallbacksToday: 30 }, skip("rate_limited", true)],
   ["just under the limit", { fallbacksToday: 29 }, send("timeout")],
   [

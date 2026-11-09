@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { PUSH_FALLBACK_SUBJECT_ID, type AdminSignalPayload } from "@adclub/contracts";
 import { maskPhone } from "@adclub/domain";
-import { and, asc, eq, gt, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import {
   definePeriodicJob,
@@ -258,6 +258,9 @@ export class PushFallbacks implements OnModuleInit {
         and(
           eq(notification.recipientAccountId, row.recipientAccountId),
           eq(notification.channel, "whatsapp"),
+          // A copy the gateway cancelled (the push was confirmed or replaced
+          // before it went) cost nothing and does not count towards the limit.
+          ne(notification.status, "cancelled"),
           gt(notification.createdAt, new Date(now.getTime() - DAY_MS)),
         ),
       );

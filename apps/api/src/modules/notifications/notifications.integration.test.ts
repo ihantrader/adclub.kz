@@ -1731,8 +1731,17 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
     await app.get(MessagingAdmin).retry(lostCopy!.outbound_message_id!);
     await settledCopy(lostCopy!.id, "sent");
 
-    // The daily limit of one person: a refusal on the push, never an error of the event.
+    // The daily limit of one person: a refusal on the push, never an error of the
+    // event. Four copies exist, but the cancelled one cost nothing and does not
+    // count — so with a limit of 4 one more copy still goes, and only then
+    // the limit holds.
     await configure({ push_fallback_per_account_day: 4 });
+    const fourth = await place(buyer, offer);
+    await act(shop, fourth.id, "accept");
+    const [fourthPush] = await notificationsOf("subject_id = $1", [fourth.id]);
+    expect(await decisionOf(fourthPush!.id)).toBe("sent");
+    const [fourthCopy] = await copiesOf(fourthPush!.id);
+    await settledCopy(fourthCopy!.id, "sent");
     const limited = await place(buyer, offer);
     await act(shop, limited.id, "accept");
     const [limitedPush] = await notificationsOf("subject_id = $1", [limited.id]);

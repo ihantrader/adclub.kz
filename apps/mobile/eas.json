@@ -5,7 +5,7 @@
   },
   "build": {
     "base": {
-      "image": "latest"
+      "node": "24.11.1"
     },
     "development": {
       "extends": "base",

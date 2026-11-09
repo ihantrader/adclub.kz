@@ -1,4 +1,4 @@
-import { createSign } from "node:crypto";
+import { createPrivateKey, createSign } from "node:crypto";
 import {
   connect,
   constants,
@@ -86,8 +86,11 @@ const FAILURE_BY_REASON: Readonly<Record<string, PushFailureKind>> = {
   BadDeviceToken: "invalid_token",
   Unregistered: "invalid_token",
   ExpiredToken: "invalid_token",
-  // A token of another app (or of the sandbox, on production): for us it is dead.
-  DeviceTokenNotForTopic: "invalid_token",
+  // The token does not belong to our topic: the bundle id in `APNS_BUNDLE_ID`
+  // is wrong, or a sandbox build talks to a production server. That is our
+  // configuration, not a dead device — treating it as one would switch every
+  // iPhone off until its next cold start (review at the acceptance, I894).
+  DeviceTokenNotForTopic: "rejected",
   TooManyRequests: "unavailable",
   InternalServerError: "unavailable",
   ServiceUnavailable: "unavailable",
@@ -138,13 +141,25 @@ export class ApnsPushProvider extends PushProvider {
     this.origin = (credentials.origin ?? APNS_ORIGINS[credentials.environment]).replace(/\/+$/, "");
     this.now = options.now ?? Date.now;
     // A key that cannot sign is a configuration error: the process refuses to
-    // start, instead of every push looking like an outage of Apple.
+    // start, instead of every push looking like an outage of Apple. The key
+    // must be the P-256 one of the `.p8` file: any other key signs too, but
+    // Apple then refuses every token as `InvalidProviderToken` (I894).
+    let keyType: string | undefined;
+    let curve: string | undefined;
     try {
+      const key = createPrivateKey(credentials.privateKey);
+      keyType = key.asymmetricKeyType;
+      curve = key.asymmetricKeyDetails?.namedCurve;
       this.token();
     } catch (error) {
       throw new Error("APNS_PRIVATE_KEY cannot sign a provider token (is it the .p8 key, PEM?)", {
         cause: error,
       });
+    }
+    if (keyType !== "ec" || curve !== "prime256v1") {
+      throw new Error(
+        `APNS_PRIVATE_KEY is a ${keyType ?? "?"}${curve ? ` ${curve}` : ""} key, not the P-256 (ES256) key of the .p8 file`,
+      );
     }
   }
 

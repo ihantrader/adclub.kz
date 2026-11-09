@@ -2,17 +2,24 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   compareVersions,
+  mobileContractOf,
+  mobileOperations,
+  mobileSnapshotText,
   readSupported,
   snapshotFileOf,
   snapshotProblems,
+  SNAPSHOTS_DIR,
   SUPPORTED_FILE,
 } from "./contract-snapshots";
 
 /**
  * The contract snapshots of published app versions (TASK-056 AC-5): every
- * listed version has its snapshot, every snapshot is listed, versions grow.
+ * listed version has its snapshot, every snapshot is listed, versions grow;
+ * a snapshot holds only what the app can call (I894).
  */
 
 const dirs: string[] = [];
@@ -66,5 +73,92 @@ describe("contract snapshots (ARCHITECTURE 7.2, 4.81)", () => {
     expect(compareVersions("1.10.0", "1.9.0")).toBe(1);
     expect(compareVersions("1.0.0", "1.0.0")).toBe(0);
     expect(compareVersions("0.9.9", "1.0.0")).toBe(-1);
+  });
+});
+
+describe("the mobile part of the contract (I894)", () => {
+  it("keeps the routes of guests and users, not those of the cabinet, the admin panel and the web sign-in", () => {
+    const operations = mobileOperations();
+    expect(operations).toContain("GET /catalog/categories");
+    expect(operations).toContain("POST /orders");
+    expect(operations).toContain("GET /meta/client-policy");
+    expect(operations).toContain("POST /auth/login-code/verify");
+    expect(operations).toContain("GET /auth/me");
+    expect([...operations].filter((op) => op.includes(" /admin/"))).toEqual([]);
+    expect([...operations].filter((op) => op.includes(" /supplier/"))).toEqual([]);
+    expect([...operations].filter((op) => op.includes(" /auth/sign-in/"))).toEqual([]);
+    expect(operations).not.toContain("POST /supplier-leads");
+  });
+
+  it("drops the operations the app cannot call and the components only they reference", () => {
+    const document = {
+      openapi: "3.1.0",
+      paths: {
+        "/catalog/categories": {
+          get: { responses: { 200: { $ref: "#/components/responses/Tree" } } },
+          parameters: [{ $ref: "#/components/parameters/Lang" }],
+        },
+        "/admin/catalog/categories": {
+          get: { responses: { 200: { $ref: "#/components/responses/AdminTree" } } },
+          post: { responses: { 201: { $ref: "#/components/responses/AdminTree" } } },
+        },
+        "/orders": {
+          post: { responses: { 201: { $ref: "#/components/schemas/Order" } } },
+          // Not a route of the contract: dropped with its path.
+          put: { responses: {} },
+        },
+      },
+      components: {
+        schemas: {
+          Node: { type: "object", properties: { child: { $ref: "#/components/schemas/Node" } } },
+          Order: { type: "object", properties: { node: { $ref: "#/components/schemas/Node" } } },
+          AdminNode: { type: "object" },
+          Unused: { type: "object" },
+        },
+        responses: {
+          Tree: {
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Node" } } },
+          },
+          AdminTree: {
+            content: { "application/json": { schema: { $ref: "#/components/schemas/AdminNode" } } },
+          },
+        },
+        parameters: { Lang: { name: "Accept-Language", in: "header" } },
+        securitySchemes: { bearer: { type: "http", scheme: "bearer" } },
+      },
+    };
+    const reduced = mobileContractOf(document);
+    expect(Object.keys(reduced.paths)).toEqual(["/catalog/categories", "/orders"]);
+    expect(Object.keys(reduced.paths["/catalog/categories"])).toEqual(["get", "parameters"]);
+    expect(Object.keys(reduced.paths["/orders"])).toEqual(["post"]);
+    expect(Object.keys(reduced.components.schemas)).toEqual(["Node", "Order"]);
+    expect(Object.keys(reduced.components.responses)).toEqual(["Tree"]);
+    expect(Object.keys(reduced.components.parameters)).toEqual(["Lang"]);
+    expect(reduced.components.securitySchemes).toEqual(document.components.securitySchemes);
+    // The input is left alone.
+    expect(Object.keys(document.paths)).toHaveLength(3);
+  });
+
+  it("the committed snapshots hold the mobile part only, and the current document reduces to a superset of 1.0.0's paths", () => {
+    const current = JSON.parse(
+      readFileSync(resolve(SNAPSHOTS_DIR, "..", "..", "openapi.json"), "utf8"),
+    ) as Record<string, unknown>;
+    const reduced = mobileContractOf(current);
+    const reducedPaths = Object.keys(reduced.paths as object);
+    expect(reducedPaths.some((path) => path.startsWith("/admin/"))).toBe(false);
+    expect(reducedPaths.some((path) => path.startsWith("/supplier/"))).toBe(false);
+    for (const { version } of readSupported().versions) {
+      const snapshot = JSON.parse(
+        readFileSync(resolve(SNAPSHOTS_DIR, snapshotFileOf(version)), "utf8"),
+      ) as { paths: Record<string, unknown> };
+      const snapshotPaths = Object.keys(snapshot.paths);
+      expect(snapshotPaths.some((path) => path.startsWith("/admin/"))).toBe(false);
+      // Removing a route is a breaking change oasdiff reports; the list test is cheaper to read.
+      for (const path of snapshotPaths) expect(reducedPaths).toContain(path);
+    }
+    // The text of a snapshot is deterministic.
+    const text = JSON.stringify(current);
+    expect(mobileSnapshotText(text)).toBe(mobileSnapshotText(text));
+    expect(mobileSnapshotText(text).endsWith("}\n")).toBe(true);
   });
 });

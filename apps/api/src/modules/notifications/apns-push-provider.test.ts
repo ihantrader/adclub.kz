@@ -284,8 +284,13 @@ describe("ApnsPushProvider (TASK-056, ARCHITECTURE 4.81)", () => {
     expect((await failure(apns().send(REQUEST, signal()))).kind).toBe("invalid_token");
     answers.push(error(400, "BadDeviceToken"));
     expect((await failure(apns().send(REQUEST, signal()))).kind).toBe("invalid_token");
+  });
+
+  it("DeviceTokenNotForTopic is our configuration, not a dead token (I894)", async () => {
+    // A wrong APNS_BUNDLE_ID or a sandbox build against a production server
+    // must not deactivate every iPhone until its next cold start.
     answers.push(error(400, "DeviceTokenNotForTopic"));
-    expect((await failure(apns().send(REQUEST, signal()))).kind).toBe("invalid_token");
+    expect((await failure(apns().send(REQUEST, signal()))).kind).toBe("rejected");
   });
 
   it("429 and 503 are «try again later»", async () => {
@@ -382,6 +387,19 @@ describe("ApnsPushProvider (TASK-056, ARCHITECTURE 4.81)", () => {
           privateKey: `-----BEGIN PRIVATE KEY-----\n${"A".repeat(120)}\n-----END PRIVATE KEY-----\n`,
         }),
     ).toThrow(/APNS_PRIVATE_KEY cannot sign/);
+  });
+
+  it("refuses to start with a key that signs but is not P-256 (I894)", () => {
+    // An RSA key signs a token too — Apple then answers InvalidProviderToken
+    // to every push, which would look like a broken configuration at runtime
+    // instead of at start.
+    const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
+      type: "pkcs8",
+      format: "pem",
+    }) as string;
+    expect(() => new ApnsPushProvider({ ...credentials(), privateKey: rsa })).toThrow(
+      /is a rsa key, not the P-256/,
+    );
   });
 
   it("never puts the device token or the text in a failure message", async () => {

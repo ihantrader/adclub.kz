@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { apiRoutes, type ApiRouteDefinition } from "@adclub/contracts";
 import { z } from "zod";
 
 /**
@@ -14,7 +15,108 @@ import { z } from "zod";
  * release command (`pnpm release:mobile:snapshot <version>`); a version
  * leaves it only after `client_min_version_*` of both platforms has passed
  * it (the procedure — ARCHITECTURE 4.81).
+ *
+ * A snapshot holds the part of the contract the app can call
+ * (`mobileContractOf`, I894): the routes open to guests or serving the
+ * `user` context, without the web sign-in steps and the partner form, and
+ * only the components they reference. The admin panel and the supplier
+ * cabinet ship together with the server, so a change to their routes must
+ * never be held back by a published app version.
  */
+
+type JsonObject = Record<string, unknown>;
+
+/** The routes only the web clients call, although they need no session. */
+const WEB_ONLY_PATHS = [/^\/auth\/sign-in\//, /^\/supplier-leads$/];
+
+/** `METHOD /path` of every route the mobile app may call. */
+export function mobileOperations(): Set<string> {
+  const operations = new Set<string>();
+  for (const route of Object.values(apiRoutes) as ApiRouteDefinition[]) {
+    const forGuests = route.auth === undefined || route.auth === "optional";
+    const forUsers = route.contexts?.includes("user") ?? false;
+    if (!forGuests && !forUsers) continue;
+    if (WEB_ONLY_PATHS.some((pattern) => pattern.test(route.path))) continue;
+    operations.add(`${route.method.toUpperCase()} ${route.path}`);
+  }
+  return operations;
+}
+
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Every `#/components/<section>/<name>` reference inside `value`, recursively. */
+function collectRefs(value: unknown, into: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectRefs(item, into);
+    return;
+  }
+  if (!isObject(value)) return;
+  for (const [key, inner] of Object.entries(value)) {
+    if (key === "$ref" && typeof inner === "string" && inner.startsWith("#/components/")) {
+      into.add(inner.slice("#/components/".length));
+    } else {
+      collectRefs(inner, into);
+    }
+  }
+}
+
+/**
+ * The OpenAPI document reduced to what the mobile app can call (see above):
+ * the operations of `mobileOperations()`, the components they reach
+ * (transitively), the security schemes as they are; everything else of the
+ * document stays. A pure function of the document — the release command
+ * writes its result, the compatibility check reduces the current document
+ * the same way before comparing.
+ */
+export function mobileContractOf<T extends JsonObject>(document: T): T {
+  const wanted = mobileOperations();
+  const paths = isObject(document.paths) ? document.paths : {};
+  const keptPaths: JsonObject = {};
+  for (const [path, item] of Object.entries(paths)) {
+    if (!isObject(item)) continue;
+    const kept: JsonObject = {};
+    for (const [key, operation] of Object.entries(item)) {
+      const isMethod = /^[a-z]+$/.test(key) && key !== "parameters";
+      if (!isMethod || wanted.has(`${key.toUpperCase()} ${path}`)) kept[key] = operation;
+    }
+    if (Object.keys(kept).some((key) => key !== "parameters")) keptPaths[path] = kept;
+  }
+
+  const components = isObject(document.components) ? document.components : {};
+  const reached = new Set<string>();
+  collectRefs(keptPaths, reached);
+  // Components reference components: follow until nothing new is reached.
+  for (;;) {
+    const before = reached.size;
+    for (const ref of [...reached]) {
+      const [section, name] = ref.split("/");
+      const sectionObject = section ? components[section] : undefined;
+      if (isObject(sectionObject) && name !== undefined) collectRefs(sectionObject[name], reached);
+    }
+    if (reached.size === before) break;
+  }
+  const keptComponents: JsonObject = {};
+  for (const [section, members] of Object.entries(components)) {
+    if (section === "securitySchemes" || !isObject(members)) {
+      keptComponents[section] = members;
+      continue;
+    }
+    const keptMembers: JsonObject = {};
+    for (const [name, member] of Object.entries(members)) {
+      if (reached.has(`${section}/${name}`)) keptMembers[name] = member;
+    }
+    if (Object.keys(keptMembers).length > 0) keptComponents[section] = keptMembers;
+  }
+  return { ...document, paths: keptPaths, components: keptComponents };
+}
+
+/** The text of a snapshot: the reduced document, 2-space indented, one trailing newline. */
+export function mobileSnapshotText(documentText: string): string {
+  const document = JSON.parse(documentText) as JsonObject;
+  return `${JSON.stringify(mobileContractOf(document), null, 2)}\n`;
+}
 
 export const SNAPSHOTS_DIR = resolve(__dirname, "..", "..", "contract-snapshots", "mobile");
 export const SUPPORTED_FILE = "supported.json";

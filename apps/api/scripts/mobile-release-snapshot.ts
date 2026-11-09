@@ -1,7 +1,8 @@
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   compareVersions,
+  mobileSnapshotText,
   readSupported,
   snapshotFileOf,
   snapshotProblems,
@@ -13,15 +14,20 @@ import {
 
 /**
  * The contract snapshot of a mobile release (ARCHITECTURE 7.2, 4.81;
- * TASK-056): copies `apps/api/openapi.json` as it is now to
- * `contract-snapshots/mobile/<version>.openapi.json` and adds the version to
- * `supported.json`. From then on CI keeps the server compatible with it.
+ * TASK-056): writes the part of `apps/api/openapi.json` the app can call
+ * (`mobileContractOf`) to `contract-snapshots/mobile/<version>.openapi.json`
+ * and adds the version to `supported.json`. From then on CI keeps the
+ * server compatible with it.
  *
  * Usage (from the repository root):
- *   pnpm release:mobile:snapshot <version> [--released-on YYYY-MM-DD] [--platforms ios,android]
+ *   pnpm release:mobile:snapshot <version> [--released-on YYYY-MM-DD] [--platforms ios,android] [--refresh]
  *
  * The version must be the one in `apps/mobile/app.json` — the snapshot is of
- * the release being cut — and higher than every version already listed. Run
+ * the release being cut — and higher than every version already listed.
+ * `--refresh` rewrites the snapshot of the LAST listed version instead: a
+ * version cut but not yet in the stores keeps gaining API surface, and the
+ * snapshot must be of the build that actually ships (I894); a version below
+ * the last one is never rewritten — people run it. Run
  * `pnpm --filter @adclub/api openapi:check` first: the snapshot is of the
  * document in the repository.
  */
@@ -64,15 +70,30 @@ function main(argv: string[]): number {
   }
   const list = readSupported();
   const last = list.versions.at(-1);
-  if (list.versions.some((entry) => entry.version === version)) {
-    console.error(`${version} already has a snapshot.`);
-    return 1;
+  const refresh = argv.includes("--refresh");
+  const listed = list.versions.find((entry) => entry.version === version);
+  if (refresh) {
+    if (!last || last.version !== version) {
+      console.error(
+        last
+          ? `--refresh rewrites only the last listed version (${last.version}); ${version} is not it.`
+          : `--refresh: nothing is listed yet — cut ${version} without it.`,
+      );
+      return 1;
+    }
+  } else {
+    if (listed) {
+      console.error(
+        `${version} already has a snapshot. Not in the stores yet? --refresh rewrites it from the current document.`,
+      );
+      return 1;
+    }
+    if (last && compareVersions(last.version, version) >= 0) {
+      console.error(`${version} is not higher than the last supported version ${last.version}.`);
+      return 1;
+    }
   }
-  if (last && compareVersions(last.version, version) >= 0) {
-    console.error(`${version} is not higher than the last supported version ${last.version}.`);
-    return 1;
-  }
-  const platforms = (option(argv, "--platforms") ?? "ios,android")
+  const platforms = (option(argv, "--platforms") ?? listed?.platforms.join(",") ?? "ios,android")
     .split(",")
     .map((platform) => platform.trim());
   const parsed = supportedVersionSchema.safeParse({
@@ -88,22 +109,22 @@ function main(argv: string[]): number {
   }
   const entry: SupportedVersion = parsed.data;
   const target = join(SNAPSHOTS_DIR, snapshotFileOf(version));
-  if (existsSync(target)) {
+  if (!refresh && existsSync(target)) {
     console.error(`${snapshotFileOf(version)} already exists.`);
     return 1;
   }
-  copyFileSync(SPEC, target);
-  writeFileSync(
-    join(SNAPSHOTS_DIR, SUPPORTED_FILE),
-    `${JSON.stringify({ versions: [...list.versions, entry] }, null, 2)}\n`,
-  );
+  writeFileSync(target, mobileSnapshotText(readFileSync(SPEC, "utf8")));
+  const versions = refresh
+    ? list.versions.map((item) => (item.version === version ? entry : item))
+    : [...list.versions, entry];
+  writeFileSync(join(SNAPSHOTS_DIR, SUPPORTED_FILE), `${JSON.stringify({ versions }, null, 2)}\n`);
   const problems = snapshotProblems();
   if (problems.length > 0) {
     console.error(`The snapshot folder is not consistent:\n  - ${problems.join("\n  - ")}`);
     return 1;
   }
   console.log(
-    `Snapshot ${snapshotFileOf(version)} written; ${SUPPORTED_FILE} lists ${String(list.versions.length + 1)} version(s). Commit both.`,
+    `Snapshot ${snapshotFileOf(version)} ${refresh ? "refreshed" : "written"}; ${SUPPORTED_FILE} lists ${String(versions.length)} version(s). Commit both.`,
   );
   return 0;
 }

@@ -3,6 +3,7 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import {
+  mobileSnapshotText,
   readSupported,
   snapshotFileOf,
   snapshotProblems,
@@ -18,9 +19,13 @@ import {
  * Usage: tsx scripts/check-openapi-compat.ts
  *   [--base <git-rev>]           the same file at a git revision (default: origin/main) —
  *                                catches a break inside one app version;
- *   [--base-file <path>]         a document on disk, e.g. one contract snapshot;
+ *   [--base-file <path>]         a document on disk, e.g. one contract snapshot (a file
+ *                                inside `contract-snapshots/mobile` is compared with the
+ *                                mobile part of the current document, as `--snapshots` does);
  *   [--snapshots]                every snapshot of a supported app version
  *                                (`contract-snapshots/mobile/supported.json`), one after another;
+ *                                a snapshot holds only what the app can call (`mobileContractOf`),
+ *                                so the current document is reduced the same way first;
  *   [--trailers-since <git-rev>] with --base-file / --snapshots: where the commits that
  *                                may acknowledge a break start (CI: the pushed range).
  *
@@ -88,12 +93,24 @@ function acknowledgementsSince(since: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/** `full` — the whole document; `mobile` — the part the app can call, as in a snapshot. */
+type Scope = "full" | "mobile";
+
 /** One comparison of the working tree's document with `baseText`. */
-function compare(baseText: string, label: string, trailersSince: string | undefined): Verdict {
+function compare(
+  baseText: string,
+  label: string,
+  trailersSince: string | undefined,
+  scope: Scope,
+): Verdict {
   const workDir = mkdtempSync(join(tmpdir(), "openapi-compat-"));
   try {
     writeFileSync(join(workDir, "base.json"), baseText);
-    copyFileSync(join(repoRoot, SPEC_REPO_PATH), join(workDir, "revision.json"));
+    const current = readFileSync(join(repoRoot, SPEC_REPO_PATH), "utf8");
+    writeFileSync(
+      join(workDir, "revision.json"),
+      scope === "mobile" ? mobileSnapshotText(current) : current,
+    );
     copyFileSync(
       resolve(__dirname, "..", "openapi-compat-levels.txt"),
       join(workDir, "levels.txt"),
@@ -171,11 +188,16 @@ function againstRevision(base: string): number {
     );
     return 0;
   }
-  const verdict = compare(baseSpec.stdout, base, base);
+  const verdict = compare(baseSpec.stdout, base, base, "full");
   return verdict === "compatible" || verdict === "acknowledged" ? 0 : 1;
 }
 
-function againstFile(path: string, label: string, trailersSince: string | undefined): Verdict {
+function againstFile(
+  path: string,
+  label: string,
+  trailersSince: string | undefined,
+  scope: Scope,
+): Verdict {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -183,7 +205,12 @@ function againstFile(path: string, label: string, trailersSince: string | undefi
     console.error(`Cannot read the base document ${path}.`);
     return "error";
   }
-  return compare(text, label, trailersSince);
+  return compare(text, label, trailersSince, scope);
+}
+
+/** A file inside the snapshot folder is a snapshot: compared with the mobile part. */
+function scopeOf(path: string): Scope {
+  return relative(SNAPSHOTS_DIR, path).startsWith("..") ? "full" : "mobile";
 }
 
 /** Every supported app version: the server must keep each of them working. */
@@ -205,6 +232,7 @@ function againstSnapshots(trailersSince: string | undefined): number {
       join(SNAPSHOTS_DIR, snapshotFileOf(version)),
       `the contract snapshot of mobile ${version}`,
       trailersSince,
+      "mobile",
     );
     if (verdict === "breaking" || verdict === "error") failed.push(version);
     if (verdict === "acknowledged") {
@@ -234,7 +262,7 @@ function main(): number {
   const baseFile = option(argv, "--base-file");
   if (baseFile) {
     const path = resolve(process.cwd(), baseFile);
-    const verdict = againstFile(path, relative(repoRoot, path), trailersSince);
+    const verdict = againstFile(path, relative(repoRoot, path), trailersSince, scopeOf(path));
     return verdict === "compatible" || verdict === "acknowledged" ? 0 : 1;
   }
   return againstRevision(option(argv, "--base") ?? "origin/main");

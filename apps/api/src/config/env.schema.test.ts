@@ -74,7 +74,7 @@ describe("loadConfig", () => {
         webhookSecret: expect.any(String),
       },
       // Push to the user (TASK-051): the test provider without a service account.
-      push: { provider: "test", testMode: "ok", fcm: undefined },
+      push: { provider: "test", testMode: "ok", fcm: undefined, apns: undefined },
       // No index without MEILISEARCH_URL: the search runs on PostgreSQL.
       search: { url: undefined, apiKey: undefined, index: "catalog_items" },
       ignoredVariables: [],
@@ -571,32 +571,59 @@ describe("loadConfig", () => {
       }
     }
 
-    it("runs the test provider without a service account, and FCM with a whole one", () => {
+    const APNS = {
+      APNS_KEY_ID: "ABC123DEFG",
+      APNS_TEAM_ID: "TEAM123456",
+      APNS_PRIVATE_KEY: KEY,
+      APNS_BUNDLE_ID: "kz.adclub.app",
+      APNS_ENVIRONMENT: "production",
+    };
+
+    it("runs the test provider without keys, and live with both FCM and APNs whole", () => {
       expect(loadConfig(VALID_ENV).push).toEqual({
         provider: "test",
         testMode: "ok",
         fcm: undefined,
+        apns: undefined,
       });
-      const fcm = loadConfig({ ...VALID_ENV, ...FCM }).push;
-      expect(fcm.provider).toBe("fcm");
-      // The key's `\n` written in the variable become real line breaks.
-      expect(fcm.fcm?.privateKey).toContain("\n");
-      expect(fcm.fcm?.privateKey).not.toContain("\\n");
-      expect(fcm.fcm?.baseUrl).toBe("https://fcm.googleapis.com");
+      // One platform only is not enough to send for real.
+      expect(loadConfig({ ...VALID_ENV, ...FCM }).push.provider).toBe("test");
+      const live = loadConfig({ ...VALID_ENV, ...FCM, ...APNS }).push;
+      expect(live.provider).toBe("live");
+      // The keys' `\n` written in the variables become real line breaks.
+      expect(live.fcm?.privateKey).toContain("\n");
+      expect(live.fcm?.privateKey).not.toContain("\\n");
+      expect(live.fcm?.baseUrl).toBe("https://fcm.googleapis.com");
+      expect(live.apns).toEqual({
+        keyId: "ABC123DEFG",
+        teamId: "TEAM123456",
+        privateKey: expect.stringContaining("\n") as unknown,
+        bundleId: "kz.adclub.app",
+        environment: "production",
+        origin: undefined,
+      });
+      expect(live.apns?.privateKey).not.toContain("\\n");
     });
 
-    it("names what FCM lacks, without printing the key", () => {
-      const message = refusal({
-        ...VALID_ENV,
-        PUSH_PROVIDER: "fcm",
-        FCM_PRIVATE_KEY: KEY,
-      })!;
-      expect(message).toContain("FCM_PROJECT_ID: required when PUSH_PROVIDER=fcm");
-      expect(message).toContain("FCM_CLIENT_EMAIL: required when PUSH_PROVIDER=fcm");
-      expect(message).not.toContain("AAAA");
+    it("names what live lacks — FCM or APNs — without printing a key", () => {
+      const withoutApns = refusal({ ...VALID_ENV, PUSH_PROVIDER: "live", ...FCM })!;
+      for (const name of Object.keys(APNS)) {
+        expect(withoutApns).toContain(`${name}: required when PUSH_PROVIDER=live`);
+      }
+      const withoutFcm = refusal({ ...VALID_ENV, PUSH_PROVIDER: "live", ...APNS })!;
+      expect(withoutFcm).toContain("FCM_PROJECT_ID: required when PUSH_PROVIDER=live");
+      expect(withoutFcm).toContain("FCM_CLIENT_EMAIL: required when PUSH_PROVIDER=live");
+      expect(withoutFcm).not.toContain("APNS_KEY_ID");
+      expect(`${withoutApns}${withoutFcm}`).not.toContain("AAAA");
     });
 
-    it("refuses production on the test provider, and another FCM address outside development", () => {
+    it("refuses TASK-051's fcm with its new name", () => {
+      expect(refusal({ ...VALID_ENV, PUSH_PROVIDER: "fcm", ...FCM, ...APNS })).toContain(
+        "PUSH_PROVIDER=fcm was renamed to live",
+      );
+    });
+
+    it("refuses production on the test provider and on the APNs sandbox, and other addresses outside development", () => {
       const production = {
         ...VALID_ENV,
         NODE_ENV: "production",
@@ -604,10 +631,31 @@ describe("loadConfig", () => {
       expect(refusal(production)).toContain(
         "PUSH_PROVIDER: the test push provider is not allowed when NODE_ENV=production",
       );
-      expect(refusal({ ...production, ...FCM }) ?? "").not.toMatch(/PUSH_PROVIDER|FCM_/);
+      expect(refusal({ ...production, ...FCM, ...APNS }) ?? "").not.toMatch(
+        /PUSH_PROVIDER|FCM_|APNS_/,
+      );
+      expect(refusal({ ...production, ...FCM, ...APNS, APNS_ENVIRONMENT: "sandbox" })).toContain(
+        "APNS_ENVIRONMENT: sandbox is not allowed when NODE_ENV=production",
+      );
+      // Staging may reach development builds (sandbox).
+      expect(
+        refusal({
+          ...VALID_ENV,
+          NODE_ENV: "staging",
+          ...FCM,
+          ...APNS,
+          APNS_ENVIRONMENT: "sandbox",
+        }) ?? "",
+      ).not.toContain("APNS_ENVIRONMENT");
       expect(
         refusal({ ...VALID_ENV, NODE_ENV: "staging", ...FCM, FCM_API_BASE_URL: "http://x.test" }),
       ).toContain("FCM_API_BASE_URL: not allowed");
+      expect(
+        refusal({ ...VALID_ENV, NODE_ENV: "staging", ...APNS, APNS_API_URL: "https://x.test" }),
+      ).toContain("APNS_API_URL: not allowed");
+      expect(refusal({ ...VALID_ENV, ...FCM, ...APNS, APNS_KEY_ID: "short" })).toContain(
+        "APNS_KEY_ID",
+      );
     });
 
     it("takes a test mode and refuses one it does not know", () => {

@@ -142,12 +142,18 @@ export type MessageTestMode = (typeof messageTestModes)[number];
 
 /**
  * Where push notifications to the user go (TASK-051, ARCHITECTURE 9.3,
- * 4.79). `fcm` is Firebase Cloud Messaging HTTP v1 (Android, and iOS through
- * APNs) and needs a service account; `test` is an in-process stand-in that
- * sends nothing (development, tests and CI), refused in production.
+ * 4.79, 4.81). `live` sends for real by the device's platform — Android
+ * through Firebase Cloud Messaging HTTP v1 (`FCM_*`), iOS straight to APNs
+ * (`APNS_*`, TASK-056) — and needs both; `test` is an in-process stand-in
+ * that sends nothing (development, tests and CI), refused in production.
+ * TASK-051's `fcm` is refused with the new name: it sent iOS through FCM,
+ * which an iPhone's APNs token cannot take (I866).
  */
-export const pushProviders = ["test", "fcm"] as const;
+export const pushProviders = ["test", "live"] as const;
 export type PushProviderName = (typeof pushProviders)[number];
+
+/** The APNs environment the server sends to: `sandbox` — development builds only. */
+export const apnsEnvironments = ["sandbox", "production"] as const;
 
 /**
  * What the test push provider does (`PUSH_TEST_MODE`): `ok` — accepts and
@@ -414,11 +420,19 @@ export const envSchema = z.object({
   // Where the Cloud API is; development only (an address nothing answers
   // at, to watch retries and the dead letter queue without the network).
   WHATSAPP_API_BASE_URL: blankAsUndefined(z.url()),
-  // Push to the user (ARCHITECTURE 9.3, 4.79; TASK-051). Unset provider:
-  // `fcm` when the service account is fully given, `test` otherwise.
+  // Push to the user (ARCHITECTURE 9.3, 4.79, 4.81; TASK-051, TASK-056).
+  // Unset provider: `live` when both FCM and APNs are fully given, `test`
+  // otherwise.
   PUSH_PROVIDER: z.preprocess(
     (value) => (value === "" ? undefined : value),
-    z.enum(pushProviders).optional(),
+    z
+      .enum(pushProviders, {
+        error: (issue) =>
+          issue.input === "fcm"
+            ? "PUSH_PROVIDER=fcm was renamed to live (TASK-056): iOS now goes to APNs, so APNS_* are needed too"
+            : undefined,
+      })
+      .optional(),
   ),
   PUSH_TEST_MODE: z.preprocess(
     (value) => (value === "" ? undefined : value),
@@ -437,6 +451,36 @@ export const envSchema = z.object({
   FCM_PRIVATE_KEY: blankAsUndefined(z.string().trim().min(100)),
   // Where FCM is; development only.
   FCM_API_BASE_URL: blankAsUndefined(z.url()),
+  // APNs for iPhones (TASK-056): the `.p8` key of the Apple Developer team
+  // (its id, the team's id and the PEM, line breaks may be written as `\n`),
+  // the app's bundle identifier (the `apns-topic`) and the environment —
+  // `sandbox` reaches development builds only, TestFlight and the store need
+  // `production`.
+  APNS_KEY_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Z0-9]{10}$/),
+  ),
+  APNS_TEAM_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Z0-9]{10}$/),
+  ),
+  APNS_PRIVATE_KEY: blankAsUndefined(z.string().trim().min(100)),
+  APNS_BUNDLE_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/),
+  ),
+  APNS_ENVIRONMENT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(apnsEnvironments).optional(),
+  ),
+  // Where APNs is; development only (a local HTTP/2 server).
+  APNS_API_URL: blankAsUndefined(z.url()),
   // A supplier's card subscription (ARCHITECTURE 9.4.2, 4.77; TASK-042).
   // Unset provider: `test`, which production refuses.
   PAYMENT_PROVIDER: z.preprocess(
@@ -575,9 +619,9 @@ export type AppConfig = {
   };
   push: {
     provider: PushProviderName;
-    /** What the test provider does (ignored by `fcm`). */
+    /** What the test provider does (ignored by `live`). */
     testMode: PushTestMode;
-    /** The service account of FCM; `undefined` with the test provider. */
+    /** The service account of FCM (Android); `undefined` with the test provider. */
     fcm:
       | {
           projectId: string;
@@ -587,6 +631,19 @@ export type AppConfig = {
           /** FCM itself (`https://fcm.googleapis.com` unless development says otherwise). */
           baseUrl: string;
           tokenUrl: string;
+        }
+      | undefined;
+    /** The `.p8` key of APNs (iOS, TASK-056); `undefined` with the test provider. */
+    apns:
+      | {
+          keyId: string;
+          teamId: string;
+          /** PEM, with real line breaks. */
+          privateKey: string;
+          bundleId: string;
+          environment: (typeof apnsEnvironments)[number];
+          /** APNs itself unless development says otherwise. */
+          origin: string | undefined;
         }
       | undefined;
   };
@@ -699,29 +756,45 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       `WHATSAPP_API_BASE_URL: not allowed when NODE_ENV=${parsed.NODE_ENV} (messages would leave for another address)`,
     );
   }
-  // Push to the user (TASK-051): FCM needs its service account whole; the
-  // test provider sends nothing, which production refuses.
-  const fcmConfigured =
-    parsed.FCM_PROJECT_ID !== undefined &&
-    parsed.FCM_CLIENT_EMAIL !== undefined &&
-    parsed.FCM_PRIVATE_KEY !== undefined;
-  const pushProvider: PushProviderName = parsed.PUSH_PROVIDER ?? (fcmConfigured ? "fcm" : "test");
-  if (pushProvider === "fcm") {
-    for (const name of ["FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"] as const) {
+  // Push to the user (TASK-051, TASK-056): `live` needs FCM's service account
+  // and APNs' key whole — a server that reaches one platform only would
+  // leave the other one's people silently without push; the test provider
+  // sends nothing, which production refuses.
+  const fcmVariables = ["FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"] as const;
+  const apnsVariables = [
+    "APNS_KEY_ID",
+    "APNS_TEAM_ID",
+    "APNS_PRIVATE_KEY",
+    "APNS_BUNDLE_ID",
+    "APNS_ENVIRONMENT",
+  ] as const;
+  const fcmConfigured = fcmVariables.every((name) => parsed[name] !== undefined);
+  const apnsConfigured = apnsVariables.every((name) => parsed[name] !== undefined);
+  const pushProvider: PushProviderName =
+    parsed.PUSH_PROVIDER ?? (fcmConfigured && apnsConfigured ? "live" : "test");
+  if (pushProvider === "live") {
+    for (const name of [...fcmVariables, ...apnsVariables]) {
       if (!parsed[name]) {
-        environmentIssues.push(`${name}: required when PUSH_PROVIDER=fcm`);
+        environmentIssues.push(`${name}: required when PUSH_PROVIDER=live`);
       }
     }
   }
   if (parsed.NODE_ENV === "production" && pushProvider === "test") {
     environmentIssues.push(
-      "PUSH_PROVIDER: the test push provider is not allowed when NODE_ENV=production (configure FCM_*)",
+      "PUSH_PROVIDER: the test push provider is not allowed when NODE_ENV=production (configure FCM_* and APNS_*)",
     );
   }
-  if (parsed.FCM_API_BASE_URL && !isLocal) {
+  if (parsed.NODE_ENV === "production" && parsed.APNS_ENVIRONMENT === "sandbox") {
     environmentIssues.push(
-      `FCM_API_BASE_URL: not allowed when NODE_ENV=${parsed.NODE_ENV} (pushes would leave for another address)`,
+      "APNS_ENVIRONMENT: sandbox is not allowed when NODE_ENV=production (it reaches development builds only)",
     );
+  }
+  for (const name of ["FCM_API_BASE_URL", "APNS_API_URL"] as const) {
+    if (parsed[name] && !isLocal) {
+      environmentIssues.push(
+        `${name}: not allowed when NODE_ENV=${parsed.NODE_ENV} (pushes would leave for another address)`,
+      );
+    }
   }
   // Cards of suppliers (TASK-042): the test provider charges nobody, so
   // production refuses it. `card_kz` starts (the application must), but until
@@ -840,13 +913,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       provider: pushProvider,
       testMode: parsed.PUSH_TEST_MODE,
       fcm:
-        pushProvider === "fcm" && fcmConfigured
+        pushProvider === "live" && fcmConfigured
           ? {
               projectId: parsed.FCM_PROJECT_ID!,
               clientEmail: parsed.FCM_CLIENT_EMAIL!,
               privateKey: parsed.FCM_PRIVATE_KEY!.replaceAll("\\n", "\n"),
               baseUrl: (parsed.FCM_API_BASE_URL ?? FCM_PUBLIC_URL).replace(/\/+$/, ""),
               tokenUrl: GOOGLE_OAUTH_TOKEN_URL,
+            }
+          : undefined,
+      apns:
+        pushProvider === "live" && apnsConfigured
+          ? {
+              keyId: parsed.APNS_KEY_ID!,
+              teamId: parsed.APNS_TEAM_ID!,
+              privateKey: parsed.APNS_PRIVATE_KEY!.replaceAll("\\n", "\n"),
+              bundleId: parsed.APNS_BUNDLE_ID!,
+              environment: parsed.APNS_ENVIRONMENT!,
+              origin: parsed.APNS_API_URL?.replace(/\/+$/, ""),
             }
           : undefined,
     },

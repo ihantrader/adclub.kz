@@ -107,6 +107,35 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("lets APNs take a delivery, and rolls back keeping the delivery (push to iOS, TASK-056)", async () => {
+    const { rows: account } = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77001239874') RETURNING id",
+    );
+    const { rows: pushRows } = await client.query<{ id: string }>(
+      `INSERT INTO notification (dedupe_key, recipient_account_id, event_kind, channel, template_code,
+         lang, payload, subject_type, status)
+       VALUES ('apns-1', $1, 'order_accepted', 'push', 'order_accepted', 'ru', '{}', 'order', 'queued')
+       RETURNING id`,
+      [account[0]!.id],
+    );
+    const deliver = (provider: string) =>
+      client.query<{ id: string }>(
+        `INSERT INTO notification_delivery (notification_id, token_mask, platform, status, provider)
+         VALUES ($1, 'abcdef…1234', 'ios', 'queued', $2) RETURNING id`,
+        [pushRows[0]!.id, provider],
+      );
+    const delivery = (await deliver("apns")).rows[0]!.id;
+    await expect(deliver("expo")).rejects.toThrow(/notification_delivery_provider_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    const { rows: kept } = await client.query<{ provider: string | null }>(
+      "SELECT provider FROM notification_delivery WHERE id = $1",
+      [delivery],
+    );
+    expect(kept).toEqual([{ provider: null }]);
+    await expect(deliver("apns")).rejects.toThrow(/notification_delivery_provider_check/);
+  });
+
   it("keeps one WhatsApp copy per push, its statuses and the decision on the push, and rolls back (push fallback)", async () => {
     const { rows: account } = await client.query<{ id: string }>(
       "INSERT INTO account (phone) VALUES ('+77001239875') RETURNING id",
@@ -273,7 +302,8 @@ describe("PostgreSQL: migrations and readiness", () => {
 
     // Back: the cancelled record goes (the full unique key returns), the live one stays.
     // The `up` above brought back the later migrations too (push notifications,
-    // push fallback): they go first.
+    // push fallback, push to iOS): they go first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
@@ -347,8 +377,9 @@ describe("PostgreSQL: migrations and readiness", () => {
     await first(second, "fix-key-2");
 
     // Back: the pause returns to billing, the index goes.
-    // The `up` above brought back the later migrations too (push fallback, push
-    // notifications, billing admin): they go first.
+    // The `up` above brought back the later migrations too (push to iOS, push
+    // fallback, push notifications, billing admin): they go first.
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
     expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");

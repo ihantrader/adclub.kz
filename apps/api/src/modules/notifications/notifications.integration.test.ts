@@ -1149,6 +1149,35 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
     expect(left.find((row) => row.token === tokenB)?.deactivated_reason).toBe("session_ended");
   }, 180_000);
 
+  it("takes ten registrations of different tokens by one session at once: no 500, one token kept (I866)", async () => {
+    const buyer = await customer();
+    const tokens = Array.from({ length: 10 }, () => newToken());
+    const before = output.text().length;
+    const answers = await Promise.all(
+      tokens.map(
+        (value, index) =>
+          buyer.as("put", "/notifications/device-token", {
+            platform: index % 2 === 0 ? "ios" : "android",
+            token: value,
+          }) as PromiseLike<Response>,
+      ),
+    );
+    expect(answers.map((answer) => answer.status)).toEqual(tokens.map(() => 200));
+    const { rows } = await db.query<{ token: string; deactivated_at: Date | null }>(
+      "SELECT token, deactivated_at FROM device_token WHERE account_id = $1",
+      [buyer.accountId],
+    );
+    // The session has one device: the last token written.
+    expect(rows).toHaveLength(1);
+    expect(tokens).toContain(rows[0]!.token);
+    expect(rows[0]!.deactivated_at).toBeNull();
+    // Nothing went wrong on the way: no error log, nothing for the monitoring.
+    const logged = appLogText(output.text().slice(before));
+    expect(logged).not.toContain("device_token_session_key");
+    // An unexpected error is what the filter logs and the monitoring receives.
+    expect(output.text().slice(before)).not.toContain("ExceptionFilter");
+  }, 60_000);
+
   it("retries an unavailable provider and dead-letters, refuses once, leaves «unknown», recovers an interruption", async () => {
     await configure({ push_send_attempts: 2, push_retry_delay_seconds: 1 });
     const shop = await company("Провайдер");

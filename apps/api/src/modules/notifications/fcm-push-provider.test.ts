@@ -106,19 +106,18 @@ describe("FcmPushProvider (FCM HTTP v1)", () => {
     const message = (
       JSON.parse(String(calls[1]!.init.body)) as { message: Record<string, unknown> }
     ).message;
+    // Data only (TASK-056): `expo-notifications` draws it and runs the background task.
     expect(message).toEqual({
       token: REQUEST.token,
-      notification: { body: REQUEST.body },
       data: {
+        message: REQUEST.body,
+        channelId: "default",
         notificationId: REQUEST.data.notificationId,
         target: JSON.stringify(REQUEST.data.target),
       },
       android: { priority: "high", collapse_key: REQUEST.collapseKey },
-      apns: {
-        headers: { "apns-priority": "10", "apns-collapse-id": REQUEST.collapseKey },
-        payload: { aps: { "content-available": 1 } },
-      },
     });
+    expect(message).not.toHaveProperty("notification");
   });
 
   it("reuses the token until shortly before it expires, then exchanges a new one", async () => {

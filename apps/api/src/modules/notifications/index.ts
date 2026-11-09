@@ -10,9 +10,16 @@ export {
 export type { EnqueueNotificationInput, QueuedNotification } from "./notifications.service";
 export { NotificationsAdmin, NotificationsCommandError } from "./notifications-admin";
 export { maskToken, PushDeliveryError, PushProvider } from "./push-provider";
-export type { PushFailureKind, PushSendRequest, PushSendResult } from "./push-provider";
+export type {
+  PushChannelName,
+  PushFailureKind,
+  PushSendRequest,
+  PushSendResult,
+} from "./push-provider";
 export { TestPushProvider } from "./test-push-provider";
 export { FcmPushProvider } from "./fcm-push-provider";
+export { ApnsPushProvider } from "./apns-push-provider";
+export { PlatformPushRouter } from "./platform-push-router";
 export {
   checkPushTemplates,
   isPushTemplateCode,

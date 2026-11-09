@@ -55,4 +55,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791700000000_billing-admin",
   "1791750000000_push-notifications",
   "1791800000000_push-fallback",
+  "1791850000000_push-apns",
 ];

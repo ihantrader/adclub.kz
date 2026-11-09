@@ -4,6 +4,7 @@ import type { PushTestMode } from "../../config";
 import {
   PushDeliveryError,
   PushProvider,
+  type PushChannelName,
   type PushSendRequest,
   type PushSendResult,
 } from "./push-provider";
@@ -19,7 +20,9 @@ import {
  */
 @Injectable()
 export class TestPushProvider extends PushProvider {
-  readonly provider = "test" as const;
+  providerFor(): PushChannelName {
+    return "test";
+  }
   mode: PushTestMode = "ok";
   /** How long a `slow` send takes, milliseconds. */
   delayMs = 5_000;

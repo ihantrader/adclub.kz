@@ -1,5 +1,12 @@
 import type { PushPlatform, PushTargetValue } from "@adclub/contracts";
-import type { PushProviderName } from "../../config";
+
+/**
+ * Who took one delivery (`notification_delivery.provider`): the test
+ * stand-in, FCM (Android) or APNs (iOS, TASK-056). With
+ * `PUSH_PROVIDER=live` the platform of the device decides between the two
+ * real ones (`PlatformPushRouter`).
+ */
+export type PushChannelName = "test" | "fcm" | "apns";
 
 /**
  * The one way a push leaves the platform (PRODUCT 15; ARCHITECTURE 9.3,
@@ -61,7 +68,8 @@ export class PushDeliveryError extends Error {
 
 /** The provider behind the port. `signal` is aborted when the send takes longer than the job allows. */
 export abstract class PushProvider {
-  abstract readonly provider: PushProviderName;
+  /** Who takes a push to a device of this platform — written on the delivery. */
+  abstract providerFor(platform: PushPlatform): PushChannelName;
 
   abstract send(request: PushSendRequest, signal: AbortSignal): Promise<PushSendResult>;
 }

@@ -4,6 +4,7 @@ import {
   Injectable,
   Module,
   type DynamicModule,
+  type OnModuleDestroy,
   type OnModuleInit,
 } from "@nestjs/common";
 import type { AppConfig } from "../../config";
@@ -12,7 +13,9 @@ import { Metrics } from "../../observability";
 import { AppSettings } from "../settings";
 import { DeviceTokenCleanup } from "./device-token-cleanup";
 import { DevPushesController, DevPushOutbox } from "./dev-pushes.controller";
+import { ApnsPushProvider } from "./apns-push-provider";
 import { FcmPushProvider } from "./fcm-push-provider";
+import { PlatformPushRouter } from "./platform-push-router";
 import { NotificationsAdmin } from "./notifications-admin";
 import { NotificationsController } from "./notifications.controller";
 import { Notifications } from "./notifications.service";
@@ -93,7 +96,7 @@ export interface NotificationsModuleOptions {
 @Module({})
 export class NotificationsModule {
   static forRoot(config: AppConfig, options: NotificationsModuleOptions): DynamicModule {
-    const testProvider = config.push.provider !== "fcm" || !config.push.fcm;
+    const testProvider = config.push.provider !== "live" || !config.push.fcm || !config.push.apns;
     const devPage = options.http && options.devOutbox === true && testProvider;
     return {
       module: NotificationsModule,
@@ -121,10 +124,30 @@ export class NotificationsModule {
   }
 }
 
+/** Closes the connection to APNs when the process shuts down. */
+@Injectable()
+export class ApnsConnectionCloser implements OnModuleDestroy {
+  constructor(@Inject(ApnsPushProvider) private readonly apns: ApnsPushProvider) {}
+
+  onModuleDestroy(): void {
+    this.apns.close();
+  }
+}
+
 function providerOf(config: AppConfig) {
-  const fcm = config.push.fcm;
-  if (config.push.provider === "fcm" && fcm) {
-    return [{ provide: PushProvider, useFactory: () => new FcmPushProvider(fcm) }];
+  const { fcm, apns } = config.push;
+  if (config.push.provider === "live" && fcm && apns) {
+    // TASK-056: the device's platform decides — Android to FCM, iOS to APNs.
+    return [
+      { provide: ApnsPushProvider, useFactory: () => new ApnsPushProvider(apns) },
+      ApnsConnectionCloser,
+      {
+        provide: PushProvider,
+        useFactory: (apnsProvider: ApnsPushProvider) =>
+          new PlatformPushRouter({ android: new FcmPushProvider(fcm), ios: apnsProvider }),
+        inject: [ApnsPushProvider],
+      },
+    ];
   }
   return [
     {

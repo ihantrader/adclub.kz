@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   PushDeliveryError,
   PushProvider,
+  type PushChannelName,
   type PushFailureKind,
   type PushSendRequest,
   type PushSendResult,
@@ -10,7 +11,7 @@ import {
 
 /**
  * Firebase Cloud Messaging HTTP v1 behind `PushProvider` (ARCHITECTURE 9.3,
- * 4.79): Android directly, iOS through APNs, one request per device —
+ * 4.79): Android (iOS goes to APNs directly, TASK-056), one request per device —
  * `POST /v1/projects/{project}/messages:send` with an OAuth2 access token of
  * the project's service account. Plain `fetch` and `node:crypto` are enough,
  * so the project carries no Firebase SDK (the choice of the AI gateway and
@@ -83,7 +84,9 @@ const FAILURE_BY_ERROR_CODE: Readonly<Record<string, PushFailureKind>> = {
 };
 
 export class FcmPushProvider extends PushProvider {
-  readonly provider = "fcm" as const;
+  providerFor(): PushChannelName {
+    return "fcm";
+  }
   private accessToken: { value: string; renewAt: number } | null = null;
   /** One exchange at a time: concurrent sends wait for the same token. */
   private pendingToken: Promise<string> | null = null;
@@ -201,23 +204,25 @@ export class FcmPushProvider extends PushProvider {
   }
 }
 
-/** The FCM message of one delivery: the text, the data the app opens, high priority. */
+/**
+ * The FCM message of one delivery (Android; iOS goes to APNs directly,
+ * TASK-056): **data only**, high priority. A message with a `notification`
+ * block is drawn by the system while the app is in the background and never
+ * reaches the app's code; a data-only one reaches `expo-notifications`, which
+ * draws it itself from `message` in the channel `channelId` and runs the
+ * background task that confirms the push (ARCHITECTURE 4.81, I862).
+ */
 export function messageOf(request: PushSendRequest): Record<string, unknown> {
   return {
     token: request.token,
-    notification: { body: request.body },
     // FCM data values are strings.
     data: {
+      message: request.body,
+      channelId: "default",
       notificationId: request.data.notificationId,
       target: JSON.stringify(request.data.target),
     },
     android: { priority: "high", collapse_key: request.collapseKey },
-    apns: {
-      headers: { "apns-priority": "10", "apns-collapse-id": request.collapseKey },
-      // Wakes the app in the background where iOS allows, so it can confirm
-      // the push and refresh its copy of the orders.
-      payload: { aps: { "content-available": 1 } },
-    },
   };
 }
 

@@ -1,10 +1,9 @@
 import type { NotificationKind, PushPlatform, PushTargetValue } from "@adclub/contracts";
 import { sql } from "drizzle-orm";
 import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { PushProviderName } from "../../config";
 import { account, session } from "../identity";
 import { outboundMessage, type MessageTemplateKey } from "../messaging";
-import type { PushFailureKind } from "./push-provider";
+import type { PushChannelName, PushFailureKind } from "./push-provider";
 import type { PushLang, PushTemplateCode } from "./push-templates";
 
 /**
@@ -140,7 +139,7 @@ export const notificationDelivery = pgTable("notification_delivery", {
   attempts: integer("attempts").notNull().default(0),
   maxAttempts: integer("max_attempts").notNull().default(5),
   claimedUntil: timestamp("claimed_until", { withTimezone: true }),
-  provider: text("provider").$type<PushProviderName>(),
+  provider: text("provider").$type<PushChannelName>(),
   providerMessageId: text("provider_message_id"),
   failureKind: text("failure_kind").$type<PushFailureKind | "render_failed">(),
   lastError: text("last_error"),

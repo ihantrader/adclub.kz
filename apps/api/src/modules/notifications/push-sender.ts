@@ -94,7 +94,7 @@ export class PushSender implements JobHandler<{ deliveryId: string }> {
     }
     await this.recordSent(row, providerMessageId);
     this.logger.log(
-      `Push sent delivery=${row.id} notification=${row.notificationId} platform=${row.platform} token=${row.tokenMask} provider=${this.provider.provider}`,
+      `Push sent delivery=${row.id} notification=${row.notificationId} platform=${row.platform} token=${row.tokenMask} provider=${this.provider.providerFor(row.platform)}`,
     );
   }
 
@@ -158,7 +158,11 @@ export class PushSender implements JobHandler<{ deliveryId: string }> {
       await this.tried(async () => {
         await this.database.db
           .update(notificationDelivery)
-          .set({ providerMessageId, provider: this.provider.provider, updatedAt: new Date() })
+          .set({
+            providerMessageId,
+            provider: this.provider.providerFor(row.platform),
+            updatedAt: new Date(),
+          })
           .where(
             and(eq(notificationDelivery.id, row.id), eq(notificationDelivery.status, "sending")),
           );
@@ -312,7 +316,7 @@ export class PushSender implements JobHandler<{ deliveryId: string }> {
           .update(notificationDelivery)
           .set({
             status: "sent",
-            provider: this.provider.provider,
+            provider: this.provider.providerFor(row.platform),
             providerMessageId: outcome.providerMessageId,
             sentAt: now,
             settledAt: now,
@@ -327,7 +331,7 @@ export class PushSender implements JobHandler<{ deliveryId: string }> {
           .update(notificationDelivery)
           .set({
             status: outcome.status,
-            provider: this.provider.provider,
+            provider: this.provider.providerFor(row.platform),
             failureKind: outcome.status === "failed" ? outcome.failure : null,
             lastError: outcome.reason.slice(0, 500),
             settledAt: now,

@@ -222,6 +222,15 @@ export class Notifications {
     body: RegisterPushTokenBody,
   ): Promise<void> {
     await this.database.db.transaction(async (tx) => {
+      // One registration of a session at a time (I866): two tokens sent at
+      // once by the same session both passed the delete and the second insert
+      // broke `device_token_session_key` — a 500. Under the lock the later
+      // one replaces the earlier: the last token written is the device's.
+      await tx
+        .select({ id: session.id })
+        .from(session)
+        .where(eq(session.id, current.sessionId))
+        .for("update");
       const now = new Date();
       await tx
         .delete(deviceToken)

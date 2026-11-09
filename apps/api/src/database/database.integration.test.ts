@@ -73,6 +73,19 @@ describe("PostgreSQL: migrations and readiness", () => {
     throw new Error("The migrations did not walk back down");
   }
 
+  /**
+   * Rolls back every migration from the newest down to `name` itself — after
+   * a `runMigrate("up")` in the middle of a test, without counting how many
+   * later migrations the `up` brought back (that number grows with every task).
+   */
+  async function rollBackThrough(name: string): Promise<void> {
+    const applied = async () =>
+      (await client.query<{ name: string }>('SELECT name FROM "pgmigrations"')).rows.some(
+        (row) => row.name === name,
+      );
+    await walkDownPast(applied);
+  }
+
   afterAll(async () => {
     await client?.end().catch(() => undefined);
     await container?.stop().catch(() => undefined);
@@ -105,6 +118,77 @@ describe("PostgreSQL: migrations and readiness", () => {
   it("records the applied migrations in the tracking table (status)", async () => {
     const { rows } = await client.query<{ name: string }>('SELECT name FROM "pgmigrations"');
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
+  });
+
+  it("calls search_text by its schema, so a dump restores, and rolls back (TASK-055)", async () => {
+    const body = async () =>
+      (
+        await client.query<{ src: string }>(
+          "SELECT prosrc AS src FROM pg_proc WHERE proname = 'search_key'",
+        )
+      ).rows[0]!.src;
+    const key = async () =>
+      (await client.query<{ key: string }>("SELECT search_key('Тежегіш ҚАЛЫП') AS key")).rows[0]!
+        .key;
+    expect(await body()).toContain("public.search_text(");
+    expect(await key()).toBe("тежегиш калып");
+    // The function is what a pg_restore with an empty search_path calls.
+    await client.query("SET search_path = ''");
+    try {
+      expect(
+        (await client.query<{ key: string }>("SELECT public.search_key('Қалып') AS key")).rows[0]!
+          .key,
+      ).toBe("калып");
+    } finally {
+      await client.query("RESET search_path");
+    }
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await body()).not.toContain("public.search_text(");
+    expect(await key()).toBe("тежегиш калып");
+  });
+
+  it("keeps testers' numbers beside the one store review number, one per phone, and rolls back (TASK-055)", async () => {
+    const enable = (phone: string, scope: string) =>
+      client.query(
+        `INSERT INTO review_login (phone, code_hash, valid_until, reason, scope)
+         VALUES ($1, 'hash', now() + interval '1 day', 'test', $2)`,
+        [phone, scope],
+      );
+    await enable("+77070000301", "store_review");
+    await enable("+77070000302", "tester");
+    await enable("+77070000303", "tester");
+    await expect(enable("+77070000304", "store_review")).rejects.toThrow(
+      /review_login_one_store_review/,
+    );
+    await expect(enable("+77070000302", "tester")).rejects.toThrow(/review_login_one_per_phone/);
+    await expect(enable("+77070000305", "reviewer")).rejects.toThrow(/review_login_scope_check/);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The testers' numbers end; the store review one stays the only enabled one.
+    const { rows } = await client.query<{ phone: string }>(
+      "SELECT phone FROM review_login WHERE disabled_at IS NULL",
+    );
+    expect(rows).toEqual([{ phone: "+77070000301" }]);
+    expect(await columnExists(client, "review_login", "scope")).toBe(false);
+    await expect(
+      client.query(
+        `INSERT INTO review_login (phone, code_hash, valid_until, reason)
+         VALUES ('+77070000306', 'hash', now() + interval '1 day', 'test')`,
+      ),
+    ).rejects.toThrow(/review_login_one_enabled/);
+    await client.query("DELETE FROM review_login");
+  });
+
+  it("records the runs of the backups and the restore check, and rolls back (TASK-055)", async () => {
+    await client.query(
+      `INSERT INTO ops_run (kind, ok, started_at, details)
+       VALUES ('db_backup', true, now(), '{"bytes": 1}'), ('restore_check', false, now(), '{}')`,
+    );
+    await expect(
+      client.query("INSERT INTO ops_run (kind, ok, started_at) VALUES ('nightly', true, now())"),
+    ).rejects.toThrow(/ops_run_kind_check/);
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "ops_run")).toBe(false);
   });
 
   it("lets APNs take a delivery, and rolls back keeping the delivery (push to iOS, TASK-056)", async () => {
@@ -301,12 +385,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     ]);
 
     // Back: the cancelled record goes (the full unique key returns), the live one stays.
-    // The `up` above brought back the later migrations too (push notifications,
-    // push fallback, push to iOS): they go first.
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The `up` above brought back the later migrations too: they go first.
+    await rollBackThrough("1791700000000_billing-admin");
     const { rows: after } = await client.query<{ code: string }>(
       "SELECT code FROM plan WHERE valid_from = $1",
       [start],
@@ -377,13 +457,8 @@ describe("PostgreSQL: migrations and readiness", () => {
     await first(second, "fix-key-2");
 
     // Back: the pause returns to billing, the index goes.
-    // The `up` above brought back the later migrations too (push to iOS, push
-    // fallback, push notifications, billing admin): they go first.
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
-    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    // The `up` above brought back the later migrations too: they go first.
+    await rollBackThrough("1791650000000_supplier-billing-fixes");
     expect(await pauseOf(bare)).toEqual({ admin: false, billing: true, status: "paused" });
     expect(await indexExists(client, "payment_attempt_first_unbound_key")).toBe(false);
     await client.query("DELETE FROM payment_attempt WHERE idempotency_key LIKE 'fix-key-%'");

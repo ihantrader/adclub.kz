@@ -6,7 +6,7 @@ import { ConfigValidationError, DEV_ADMIN_WEB_RELEASE_VERSION, loadConfig } from
 const VALID_ENV = {
   NODE_ENV: "development",
   PORT: "3000",
-  DATABASE_URL: "postgres://adclub:adclub@localhost:5432/adclub",
+  DATABASE_URL: "postgres://adclub:a-database-password@localhost:5432/adclub",
   REDIS_URL: "redis://localhost:6379",
   S3_ENDPOINT: "http://localhost:9000",
   S3_ACCESS_KEY: "adclub",
@@ -902,6 +902,80 @@ describe("loadConfig", () => {
         /PAYMENT_PROVIDER/,
       );
       expect(loadConfig({ ...VALID_ENV, PAYMENT_PROVIDER: "" }).payments.provider).toBe("test");
+    });
+  });
+
+  describe("development values of secrets outside development and test (TASK-055)", () => {
+    const DEPLOYED_ENV = {
+      ...VALID_ENV,
+      NODE_ENV: "staging",
+      LOGIN_CODE_HASH_SECRET: "a-staging-secret-of-at-least-32-chars!",
+      SESSION_TOKEN_SECRET: "a-staging-session-secret-of-32-chars!!",
+      ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-chars",
+      PAYMENT_TOKEN_ENCRYPTION_KEY: "a-staging-payment-key-of-at-least-32-chars",
+      ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+    };
+    const refusal = (env: Record<string, string>): string => {
+      try {
+        loadConfig(env);
+        return "";
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigValidationError);
+        return (error as Error).message;
+      }
+    };
+
+    it("starts with values of its own", () => {
+      expect(refusal(DEPLOYED_ENV)).toBe("");
+      expect(refusal({ ...DEPLOYED_ENV, NODE_ENV: "production" })).not.toMatch(/development value/);
+    });
+
+    it("refuses every secret set to a value public in this repository, naming it without the value", () => {
+      const cases: [string, string][] = [
+        ["LOGIN_CODE_HASH_SECRET", "adclub-dev-only-login-code-hash-secret"],
+        ["SESSION_TOKEN_SECRET", "adclub-dev-only-session-token-secret-value"],
+        ["ADMIN_TOTP_ENCRYPTION_KEY", "adclub-dev-only-admin-totp-encryption-key"],
+        ["PAYMENT_TOKEN_ENCRYPTION_KEY", "adclub-dev-only-payment-token-encryption-key"],
+        ["PAYMENT_WEBHOOK_SECRET", "adclub-dev-only-payment-webhook-secret"],
+        ["WHATSAPP_APP_SECRET", "adclub-dev-only-whatsapp-app-secret"],
+        ["WHATSAPP_WEBHOOK_VERIFY_TOKEN", "adclub-dev-only-webhook-verify-token"],
+        ["MEILI_MASTER_KEY", "adclub-dev-master-key"],
+        ["MEILISEARCH_API_KEY", "adclub-dev-master-key"],
+        ["S3_SECRET_KEY", "adclub-dev-secret"],
+      ];
+      for (const nodeEnv of ["staging", "production"]) {
+        for (const [name, value] of cases) {
+          const message = refusal({ ...DEPLOYED_ENV, NODE_ENV: nodeEnv, [name]: value });
+          expect(message, name).toContain(`${name}: a development value is not allowed`);
+          expect(message, name).not.toContain(value);
+        }
+      }
+    });
+
+    it("refuses the development password in the database and Redis addresses", () => {
+      const database = refusal({
+        ...DEPLOYED_ENV,
+        DATABASE_URL: "postgres://adclub:adclub@postgres:5432/adclub",
+      });
+      expect(database).toContain("DATABASE_URL: the password is a development value");
+      expect(database).not.toContain("adclub@");
+      expect(
+        refusal({ ...DEPLOYED_ENV, REDIS_URL: "redis://:adclub-dev-secret@redis:6379" }),
+      ).toContain("REDIS_URL: the password is a development value");
+    });
+
+    it("lets development and tests run on them", () => {
+      for (const nodeEnv of ["development", "test"]) {
+        expect(
+          refusal({
+            ...VALID_ENV,
+            NODE_ENV: nodeEnv,
+            DATABASE_URL: "postgres://adclub:adclub@localhost:5432/adclub",
+            S3_SECRET_KEY: "adclub-dev-secret",
+            MEILI_MASTER_KEY: "adclub-dev-master-key",
+          }),
+        ).toBe("");
+      }
     });
   });
 });

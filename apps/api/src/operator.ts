@@ -87,8 +87,14 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                code, without WhatsApp or SMS, until then (a
  *                                date — through that day, Almaty time); an
  *                                enabled one is replaced
- *   review-login:disable [--reason <text>]   end it now
- *   review-login:status          enabled, expired, disabled or none, and the history
+ *                                --tester: a tester's number instead (TASK-055) —
+ *                                the app, the cabinet and the admin panel (with
+ *                                its second factor), outside production only, up
+ *                                to 10 numbers, at most 31 days each
+ *   review-login:disable [--phone <phone>] [--reason <text>]   end it now
+ *                                (with --phone: that number's, a tester's too)
+ *   review-login:status          enabled, expired, disabled or none, the testers'
+ *                                numbers enabled now, and the history
  *
  * Settings (ARCHITECTURE 4.11) — any setting, sign-in security ones
  * included (D-053); every change is recorded with `by=operator`:
@@ -269,8 +275,8 @@ const USAGE = `Usage: operator <command> [arguments]
   club-access:grant <phone> --until <YYYY-MM-DD | ISO time> --reason <text>
   club-access:revoke <phone> --reason <text>
   club-access:status <phone>
-  review-login:enable <phone> --code <6 digits> --until <YYYY-MM-DD | ISO time> --reason <text>
-  review-login:disable [--reason <text>]
+  review-login:enable <phone> --code <6 digits> --until <YYYY-MM-DD | ISO time> --reason <text> [--tester]
+  review-login:disable [--phone <phone>] [--reason <text>]
   review-login:status
   subscription:status <phone>
   billing:plan:add --audience user|supplier --code <code> --price <tenge> --from <YYYY-MM-DD | ISO time> --announce-days <n> --reason <text> [--to <YYYY-MM-DD | ISO time>]
@@ -495,6 +501,8 @@ async function run(
       ref: { type: "string" },
       linked: { type: "boolean" },
       unlinked: { type: "boolean" },
+      tester: { type: "boolean" },
+      phone: { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -764,9 +772,10 @@ async function run(
         code: required(values.code, "--code"),
         validUntil: grantEnd(required(values.until, "--until")),
         reason: required(values.reason, "--reason"),
+        tester: Boolean(values.tester),
       });
     case "review-login:disable":
-      return reviewLogins.disable(values.reason);
+      return reviewLogins.disable(values.reason, values.phone);
     case "review-login:status":
       return reviewLogins.status();
     case "subscription:status":

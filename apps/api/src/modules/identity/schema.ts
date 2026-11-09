@@ -78,6 +78,8 @@ export const reviewLogin = pgTable("review_login", {
   codeHash: text("code_hash").notNull(),
   validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
   reason: text("reason").notNull(),
+  /** `store_review` — the app only (TASK-077); `tester` — every client, outside production (TASK-055). */
+  scope: text("scope").$type<"store_review" | "tester">().notNull().default("store_review"),
   enabledAt: timestamp("enabled_at", { withTimezone: true }).notNull().defaultNow(),
   disabledAt: timestamp("disabled_at", { withTimezone: true }),
   disabledReason: text("disabled_reason"),

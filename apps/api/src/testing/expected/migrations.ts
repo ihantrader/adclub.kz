@@ -56,4 +56,7 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791750000000_push-notifications",
   "1791800000000_push-fallback",
   "1791850000000_push-apns",
+  "1791900000000_ops-runs",
+  "1791950000000_staging-testers",
+  "1792000000000_search-key-restorable",
 ];

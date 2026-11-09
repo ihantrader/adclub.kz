@@ -662,6 +662,73 @@ export type AppConfig = {
   ignoredVariables: string[];
 };
 
+/**
+ * Every value of a secret that is public in this repository (TASK-055):
+ * the development stand-ins above, `.env.example` and `compose.dev.yml`
+ * (`adclub-dev-master-key`, `adclub-dev-secret`, the password `adclub`).
+ */
+export const DEVELOPMENT_SECRET_VALUES: ReadonlySet<string> = new Set([
+  DEV_LOGIN_CODE_HASH_SECRET,
+  DEV_SESSION_TOKEN_SECRET,
+  DEV_ADMIN_TOTP_ENCRYPTION_KEY,
+  DEV_PAYMENT_TOKEN_ENCRYPTION_KEY,
+  DEV_PAYMENT_WEBHOOK_SECRET,
+  DEV_WHATSAPP_APP_SECRET,
+  DEV_WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+  "adclub-dev-master-key",
+  "adclub-dev-secret",
+  "adclub",
+]);
+
+/** The variables that hold a secret value as a whole. */
+const SECRET_VARIABLES = [
+  "LOGIN_CODE_HASH_SECRET",
+  "SESSION_TOKEN_SECRET",
+  "ADMIN_TOTP_ENCRYPTION_KEY",
+  "PAYMENT_TOKEN_ENCRYPTION_KEY",
+  "PAYMENT_WEBHOOK_SECRET",
+  "WHATSAPP_APP_SECRET",
+  "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+  "METRICS_TOKEN",
+  "MEILI_MASTER_KEY",
+  "MEILISEARCH_API_KEY",
+  "S3_SECRET_KEY",
+] as const;
+
+/** The variables that are addresses with a password in them. */
+const SECRET_URL_VARIABLES = ["DATABASE_URL", "REDIS_URL"] as const;
+
+/**
+ * Names (never values) of the secrets set to a development value; checked
+ * outside development and test, where the process then refuses to start.
+ */
+function developmentSecretIssues(env: NodeJS.ProcessEnv, nodeEnv: NodeEnv): string[] {
+  const issues: string[] = [];
+  const known = (value: string | undefined): boolean =>
+    value !== undefined && DEVELOPMENT_SECRET_VALUES.has(value.trim());
+  for (const name of SECRET_VARIABLES) {
+    if (known(env[name])) {
+      issues.push(`${name}: a development value is not allowed when NODE_ENV=${nodeEnv}`);
+    }
+  }
+  for (const name of SECRET_URL_VARIABLES) {
+    const value = env[name];
+    if (value === undefined) continue;
+    let password: string;
+    try {
+      password = decodeURIComponent(new URL(value).password);
+    } catch {
+      continue;
+    }
+    if (known(password)) {
+      issues.push(
+        `${name}: the password is a development value, not allowed when NODE_ENV=${nodeEnv}`,
+      );
+    }
+  }
+  return issues;
+}
+
 export class ConfigValidationError extends Error {
   constructor(issues: string[]) {
     super(`Invalid configuration:\n${issues.map((issue) => `  - ${issue}`).join("\n")}`);
@@ -829,6 +896,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     environmentIssues.push(
       `METRICS_TOKEN: required when METRICS_ENABLED=true and NODE_ENV=${parsed.NODE_ENV}`,
     );
+  }
+  // A deployed environment never runs on a value anybody can read in this
+  // repository (TASK-055, ARCHITECTURE 4.82): the stand-ins of development
+  // and tests, the values of `.env.example` and of `compose.dev.yml`.
+  if (!isLocal) {
+    environmentIssues.push(...developmentSecretIssues(env, parsed.NODE_ENV));
   }
   if (environmentIssues.length > 0) {
     throw new ConfigValidationError(environmentIssues);

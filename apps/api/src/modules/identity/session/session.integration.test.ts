@@ -1243,6 +1243,83 @@ describe("sessions over HTTP (PostgreSQL + Redis)", () => {
       expect(status.history.map((row) => row.disabledReason)).toEqual([null, "replaced"]);
       expect(JSON.stringify(status)).not.toContain(REVIEW_CODE);
     });
+
+    describe("testers' numbers outside production (TASK-055)", () => {
+      const TESTER = "+77070000171";
+      const TESTER_CODE = "802461";
+
+      beforeEach(() => {
+        rememberCode(TESTER_CODE);
+      });
+
+      it("open the app, the cabinet and the admin panel with the constant code, sending nothing", async () => {
+        const reviewLogins = app.get(ReviewLogins);
+        const enabled = await reviewLogins.enable({
+          phone: TESTER,
+          code: TESTER_CODE,
+          validUntil: tomorrow(),
+          reason: "staging tester",
+          tester: true,
+        });
+        expect(enabled.scope).toBe("tester");
+        // The cabinet and the admin panel check the code first, then the role:
+        // the refusal after the code says the constant code was the code.
+        for (const [client, refusal] of [
+          ["supplier-web/0.1.0", "NOT_SUPPLIER_MEMBER"],
+          ["admin-web/0.1.0", "NOT_ADMIN"],
+        ] as const) {
+          channels.sent.length = 0;
+          await redis.del(`rl:login-code:resend:${TESTER}`);
+          expect((await requestCode(TESTER, client)).status).toBe(200);
+          expect(channels.sent).toHaveLength(0);
+          expectError(await verify(TESTER, "000000", { client }), 400, "LOGIN_CODE_INVALID");
+          expectError(await verify(TESTER, TESTER_CODE, { client }), 403, refusal);
+        }
+        // The app signs in as with the store review number.
+        await redis.del(`rl:login-code:resend:${TESTER}`);
+        expect((await requestCode(TESTER, ANDROID)).status).toBe(200);
+        const signedIn = await verify(TESTER, TESTER_CODE, { client: ANDROID });
+        expect(signedIn.status).toBe(200);
+        remember(loginCodeVerifiedResponseSchema.parse(signedIn.body).session);
+        expect(channels.sent).toHaveLength(0);
+
+        // Its own number is disabled by number; the store review one is untouched.
+        expect((await reviewLogins.disable("done", TESTER)).disabled).toBe(enabled.id);
+        await redis.del(`rl:login-code:resend:${TESTER}`);
+        expect((await requestCode(TESTER, "supplier-web/0.1.0")).status).toBe(200);
+        expect(channels.sent).toHaveLength(1);
+      });
+
+      it("are at most ten, for at most 31 days, beside the store review number", async () => {
+        const reviewLogins = app.get(ReviewLogins);
+        const tester = (n: number, overrides: { validUntil?: Date } = {}) =>
+          reviewLogins.enable({
+            phone: `+7707000${String(200 + n).padStart(4, "0")}`,
+            code: TESTER_CODE,
+            validUntil: overrides.validUntil ?? tomorrow(),
+            reason: "staging tester",
+            tester: true,
+          });
+        await expect(
+          tester(0, { validUntil: new Date(Date.now() + 32 * 86_400_000) }),
+        ).rejects.toThrow(/at most 31 days/);
+        for (let n = 0; n < 10; n += 1) await tester(n);
+        await expect(tester(10)).rejects.toThrow(/At most 10/);
+        // Re-enabling one of them replaces it, it does not count twice.
+        expect((await tester(3)).replaced).not.toBeNull();
+        // The store review number is its own, one at a time.
+        await reviewLogins.enable({
+          phone: REVIEW_PHONE,
+          code: REVIEW_CODE,
+          validUntil: tomorrow(),
+          reason: "App Store review",
+        });
+        const status = await reviewLogins.status();
+        expect(status.state).toBe("enabled");
+        expect(status.testers).toHaveLength(10);
+        expect(JSON.stringify(status)).not.toContain(TESTER_CODE);
+      });
+    });
   });
 
   describe("CORS", () => {

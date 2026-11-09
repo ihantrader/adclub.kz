@@ -37,6 +37,7 @@ export interface RequestLoginCodeInput {
   /**
    * The request comes from the mobile app: the number of an enabled sign-in
    * for store review gets no message, its constant code is the code (TASK-077).
+   * A tester's number (TASK-055) is that for every client outside production.
    */
   reviewAllowed?: boolean;
 }
@@ -150,12 +151,11 @@ export class LoginCodeService {
       }
 
       try {
-        // The store review number, from the app, while enabled: nothing is
+        // A constant-code number while enabled — the store review one from
+        // the app, a tester's outside production (TASK-055): nothing is
         // sent, after the same limits as any other request.
-        const review = input.reviewAllowed
-          ? await this.reviewLogins.activeFor(phone, new Date())
-          : undefined;
-        if (review) {
+        const review = await this.reviewLogins.activeFor(phone, new Date());
+        if (review && this.reviewLogins.opens(review.scope, input.reviewAllowed === true)) {
           return await this.issueForReview(phone, masked, review, settings);
         }
         return await this.issue(phone, masked, ipSubject, input.channel, settings);
@@ -214,13 +214,14 @@ export class LoginCodeService {
         if (challenge.expiresAt.getTime() <= now.getTime()) {
           return { decision: { kind: "expire" }, result: { kind: "expired" } };
         }
-        // A store review challenge (TASK-077): only for the mobile app, and
-        // only while its sign-in is enabled and in term — else it is spent.
+        // A constant-code challenge (TASK-077, TASK-055): only for the
+        // clients its scope opens, and only while its sign-in is enabled and
+        // in term — else it is spent.
         const review = challenge.review;
         if (
           challenge.reviewLoginId !== null &&
-          (!input.reviewAllowed ||
-            !review ||
+          (!review ||
+            !this.reviewLogins.opens(review.scope, input.reviewAllowed === true) ||
             review.disabledAt !== null ||
             review.validUntil.getTime() <= now.getTime())
         ) {

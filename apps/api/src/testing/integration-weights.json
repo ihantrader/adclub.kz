@@ -34,5 +34,6 @@
   "src/modules/users/admin-users.integration.test.ts": 13,
   "src/modules/vehicle-document/vehicle-document.integration.test.ts": 40,
   "src/modules/vehicles/vehicles.integration.test.ts": 25,
-  "src/observability/observability.integration.test.ts": 11
+  "src/observability/observability.integration.test.ts": 11,
+  "src/rate-limit/trust-proxy.integration.test.ts": 15
 }

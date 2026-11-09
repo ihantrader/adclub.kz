@@ -26,7 +26,13 @@ export interface ActiveChallenge {
   nextAttemptAt: Date | null;
   reviewLoginId: string | null;
   /** The `review_login` row of a store review challenge, as it is now. */
-  review: { id: string; codeHash: string; validUntil: Date; disabledAt: Date | null } | null;
+  review: {
+    id: string;
+    codeHash: string;
+    validUntil: Date;
+    disabledAt: Date | null;
+    scope: "store_review" | "tester";
+  } | null;
 }
 
 /**
@@ -135,6 +141,7 @@ export class LoginCodeStore {
           reviewCodeHash: reviewLogin.codeHash,
           reviewValidUntil: reviewLogin.validUntil,
           reviewDisabledAt: reviewLogin.disabledAt,
+          reviewScope: reviewLogin.scope,
         })
         .from(otpChallenge)
         .leftJoin(reviewLogin, eq(reviewLogin.id, otpChallenge.reviewLoginId))
@@ -161,12 +168,16 @@ export class LoginCodeStore {
               nextAttemptAt: row.nextAttemptAt,
               reviewLoginId: row.reviewLoginId,
               review:
-                row.reviewLoginId && row.reviewCodeHash !== null && row.reviewValidUntil !== null
+                row.reviewLoginId &&
+                row.reviewCodeHash !== null &&
+                row.reviewValidUntil !== null &&
+                row.reviewScope !== null
                   ? {
                       id: row.reviewLoginId,
                       codeHash: row.reviewCodeHash,
                       validUntil: row.reviewValidUntil,
                       disabledAt: row.reviewDisabledAt,
+                      scope: row.reviewScope,
                     }
                   : null,
             }

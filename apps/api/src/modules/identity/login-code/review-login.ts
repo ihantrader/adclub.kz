@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { auditActions, auditEntities } from "@adclub/contracts";
 import { maskPhone, normalizeKzMobilePhone } from "@adclub/domain";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql, type SQL } from "drizzle-orm";
 import { APP_CONFIG, type AppConfig } from "../../../config";
 import { DatabaseService, type DbExecutor } from "../../../database";
 import { ActionJournal } from "../action-journal";
@@ -13,12 +13,26 @@ import { hashLoginCode } from "./login-code.crypto";
 /** The code reviewers type: always six digits, whatever `login_code_length` says. */
 export const REVIEW_LOGIN_CODE_LENGTH = 6;
 
+/**
+ * Who a constant code is for:
+ * - `store_review` — App Store and Google Play reviewers (TASK-077): the app
+ *   only, one number at a time, in every environment;
+ * - `tester` — the people who try staging (TASK-055): the app, the cabinet
+ *   and the admin panel (an administrator still needs the second factor),
+ *   never in production, at most `MAX_ENABLED_TESTERS` numbers for at most
+ *   `TESTER_MAX_TERM_DAYS` days each.
+ */
+export type ReviewLoginScope = "store_review" | "tester";
+export const MAX_ENABLED_TESTERS = 10;
+export const TESTER_MAX_TERM_DAYS = 31;
+
 /** The enabled sign-in for store review, if it is still in term. */
 export interface ActiveReviewLogin {
   id: string;
   phone: string;
   codeHash: string;
   validUntil: Date;
+  scope: ReviewLoginScope;
 }
 
 export interface ReviewLoginStatus {
@@ -32,8 +46,11 @@ export interface ReviewLoginStatus {
     disabledAt: string | null;
     disabledReason: string | null;
   } | null;
+  /** Testers' numbers enabled now (TASK-055), masked. */
+  testers: { id: string; phoneMasked: string; validUntil: string; enabledAt: string }[];
   history: {
     id: string;
+    scope: ReviewLoginScope;
     phoneMasked: string;
     validUntil: string;
     enabledAt: string;
@@ -43,19 +60,21 @@ export interface ReviewLoginStatus {
 }
 
 const LOCK = "review-login";
+const DAY_MS = 86_400_000;
 
 /**
- * The sign-in for store review (TASK-077; PRODUCT 5; ARCHITECTURE 4.73):
- * a number and a constant code that App Store and Google Play reviewers
- * are given, because no WhatsApp or SMS reaches them. Only the operator
- * command enables, disables and shows it — it is sign-in security (D-053);
- * the API has no route for it. The code is stored as an HMAC bound to the
- * row (as a login code is bound to its challenge), the term is required,
- * and nothing is enabled by default.
+ * The sign-in with a constant code (TASK-077; PRODUCT 5; ARCHITECTURE 4.73,
+ * 4.82): a number and a code that App Store and Google Play reviewers are
+ * given, because no WhatsApp or SMS reaches them — and, outside production,
+ * testers' numbers for an environment whose channels reach nobody (staging).
+ * Only the operator command enables, disables and shows it — it is sign-in
+ * security (D-053); the API has no route for it. The code is stored as an
+ * HMAC bound to the row (as a login code is bound to its challenge), the
+ * term is required, and nothing is enabled by default.
  *
- * What it opens is decided by `LoginCodeService`: only the mobile app, only
+ * What it opens is decided by `opens` (used by `LoginCodeService`): only
  * while enabled and in term, with the ordinary limits and the ordinary
- * counting of wrong codes. The account behind it is an ordinary user.
+ * counting of wrong codes. The account behind it is an ordinary one.
  */
 @Injectable()
 export class ReviewLogins {
@@ -68,6 +87,15 @@ export class ReviewLogins {
     @Inject(ActionJournal) private readonly audit: ActionJournal,
   ) {}
 
+  /**
+   * Whether a constant code of this scope signs in the session being opened:
+   * the store review one — the mobile app only; a tester's — any client,
+   * outside production.
+   */
+  opens(scope: ReviewLoginScope, mobileSession: boolean): boolean {
+    return scope === "store_review" ? mobileSession : this.config.nodeEnv !== "production";
+  }
+
   /** The enabled, in-term sign-in for this number, if any. */
   async activeFor(phone: string, now: Date): Promise<ActiveReviewLogin | undefined> {
     const [row] = await this.database.db
@@ -76,6 +104,7 @@ export class ReviewLogins {
         phone: reviewLogin.phone,
         codeHash: reviewLogin.codeHash,
         validUntil: reviewLogin.validUntil,
+        scope: reviewLogin.scope,
       })
       .from(reviewLogin)
       .where(
@@ -93,7 +122,16 @@ export class ReviewLogins {
     code: string;
     validUntil: Date;
     reason: string;
-  }): Promise<{ id: string; phoneMasked: string; validUntil: string; replaced: string | null }> {
+    /** A tester's number (TASK-055) rather than the store review one. */
+    tester?: boolean;
+  }): Promise<{
+    id: string;
+    scope: ReviewLoginScope;
+    phoneMasked: string;
+    validUntil: string;
+    replaced: string | null;
+  }> {
+    const scope: ReviewLoginScope = input.tester ? "tester" : "store_review";
     const phone = normalizeKzMobilePhone(input.phone);
     if (!phone) {
       throw new OperatorCommandError("Not a Kazakhstan mobile number (+7 7xx xxx xx xx)");
@@ -105,6 +143,18 @@ export class ReviewLogins {
     if (input.validUntil.getTime() <= now.getTime()) {
       throw new OperatorCommandError("--until must be in the future");
     }
+    if (scope === "tester") {
+      if (this.config.nodeEnv === "production") {
+        throw new OperatorCommandError(
+          "Testers' numbers are for staging and development; production has real channels",
+        );
+      }
+      if (input.validUntil.getTime() > now.getTime() + TESTER_MAX_TERM_DAYS * DAY_MS) {
+        throw new OperatorCommandError(
+          `--until: a tester's number is enabled for at most ${TESTER_MAX_TERM_DAYS} days`,
+        );
+      }
+    }
     const reason = input.reason.trim();
     if (!reason) {
       throw new OperatorCommandError("--reason must not be empty");
@@ -113,13 +163,34 @@ export class ReviewLogins {
     const masked = maskPhone(phone);
     const replaced = await this.database.db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${LOCK}, 0))`);
-      const previous = await this.endCurrent(tx, now, "replaced");
+      // The number's own enabled row, whatever its scope, is replaced; the
+      // store review number is one at a time.
+      const samePhone = await this.endCurrent(tx, now, "replaced", eq(reviewLogin.phone, phone));
+      const storeReview =
+        scope === "store_review"
+          ? await this.endCurrent(tx, now, "replaced", eq(reviewLogin.scope, "store_review"))
+          : undefined;
+      const previous = storeReview ?? samePhone;
+      if (scope === "tester") {
+        const [{ enabled }] = (
+          await tx.execute<{ enabled: number }>(
+            sql`SELECT count(*)::int AS enabled FROM review_login
+                WHERE scope = 'tester' AND disabled_at IS NULL AND valid_until > ${now}`,
+          )
+        ).rows as [{ enabled: number }];
+        if (enabled >= MAX_ENABLED_TESTERS) {
+          throw new OperatorCommandError(
+            `At most ${MAX_ENABLED_TESTERS} testers' numbers are enabled at a time; disable one first (review-login:disable --phone <phone>)`,
+          );
+        }
+      }
       await tx.insert(reviewLogin).values({
         id,
         phone,
         codeHash: hashLoginCode(this.config.loginCode.hashSecret, id, input.code),
         validUntil: input.validUntil,
         reason,
+        scope,
         enabledAt: now,
       });
       await this.audit.record(
@@ -135,7 +206,7 @@ export class ReviewLogins {
               validUntil: previous.validUntil.toISOString(),
             },
           }),
-          after: { phoneMasked: masked, validUntil: input.validUntil.toISOString() },
+          after: { phoneMasked: masked, validUntil: input.validUntil.toISOString(), scope },
           reason,
         },
         tx,
@@ -143,22 +214,38 @@ export class ReviewLogins {
       return previous;
     });
     this.logger.log(
-      `Store review sign-in enabled id=${id} phone=${masked} until=${input.validUntil.toISOString()}${replaced ? ` replaced=${replaced.id}` : ""}`,
+      `Constant-code sign-in enabled id=${id} scope=${scope} phone=${masked} until=${input.validUntil.toISOString()}${replaced ? ` replaced=${replaced.id}` : ""}`,
     );
     return {
       id,
+      scope,
       phoneMasked: masked,
       validUntil: input.validUntil.toISOString(),
       replaced: replaced?.id ?? null,
     };
   }
 
-  async disable(reasonInput: string | undefined): Promise<{ disabled: string | null }> {
+  /**
+   * Ends the store review sign-in, or — with a number — that number's
+   * sign-in of either scope (a tester's).
+   */
+  async disable(
+    reasonInput: string | undefined,
+    phoneInput?: string,
+  ): Promise<{ disabled: string | null }> {
     const reason = reasonInput?.trim() || "disabled by the operator";
+    let which: SQL = eq(reviewLogin.scope, "store_review");
+    if (phoneInput !== undefined) {
+      const phone = normalizeKzMobilePhone(phoneInput);
+      if (!phone) {
+        throw new OperatorCommandError("Not a Kazakhstan mobile number (+7 7xx xxx xx xx)");
+      }
+      which = eq(reviewLogin.phone, phone);
+    }
     const now = new Date();
     const ended = await this.database.db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${LOCK}, 0))`);
-      const current = await this.endCurrent(tx, now, reason);
+      const current = await this.endCurrent(tx, now, reason, which);
       if (current) {
         await this.audit.record(
           {
@@ -179,7 +266,7 @@ export class ReviewLogins {
     });
     if (ended) {
       this.logger.log(
-        `Store review sign-in disabled id=${ended.id} phone=${maskPhone(ended.phone)}`,
+        `Constant-code sign-in disabled id=${ended.id} phone=${maskPhone(ended.phone)}`,
       );
     }
     return { disabled: ended?.id ?? null };
@@ -190,9 +277,10 @@ export class ReviewLogins {
       .select()
       .from(reviewLogin)
       .orderBy(desc(reviewLogin.enabledAt))
-      .limit(10);
+      .limit(30);
     const now = Date.now();
-    const current = rows.find((row) => row.disabledAt === null) ?? rows[0];
+    const storeReview = rows.filter((row) => row.scope === "store_review");
+    const current = storeReview.find((row) => row.disabledAt === null) ?? storeReview[0];
     const state: ReviewLoginStatus["state"] = !current
       ? "none"
       : current.disabledAt !== null
@@ -213,8 +301,20 @@ export class ReviewLogins {
             disabledReason: current.disabledReason,
           }
         : null,
-      history: rows.map((row) => ({
+      testers: rows
+        .filter(
+          (row) =>
+            row.scope === "tester" && row.disabledAt === null && row.validUntil.getTime() > now,
+        )
+        .map((row) => ({
+          id: row.id,
+          phoneMasked: maskPhone(row.phone),
+          validUntil: row.validUntil.toISOString(),
+          enabledAt: row.enabledAt.toISOString(),
+        })),
+      history: rows.slice(0, 10).map((row) => ({
         id: row.id,
+        scope: row.scope,
         phoneMasked: maskPhone(row.phone),
         validUntil: row.validUntil.toISOString(),
         enabledAt: row.enabledAt.toISOString(),
@@ -225,18 +325,19 @@ export class ReviewLogins {
   }
 
   /**
-   * Ends the enabled row, if any, and the codes it had opened: a challenge
-   * of an ended sign-in never accepts the code again.
+   * Ends the enabled row matching `which`, if any, and the codes it had
+   * opened: a challenge of an ended sign-in never accepts the code again.
    */
   private async endCurrent(
     tx: DbExecutor,
     now: Date,
     reason: string,
+    which: SQL,
   ): Promise<{ id: string; phone: string; validUntil: Date } | undefined> {
     const [current] = await tx
       .update(reviewLogin)
       .set({ disabledAt: now, disabledReason: reason, updatedAt: now })
-      .where(isNull(reviewLogin.disabledAt))
+      .where(and(isNull(reviewLogin.disabledAt), which))
       .returning({
         id: reviewLogin.id,
         phone: reviewLogin.phone,

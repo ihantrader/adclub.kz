@@ -23,6 +23,7 @@ import { ClubAccessModule } from "./modules/club-access";
 import { BillingModule } from "./modules/billing";
 import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
+import { OpsRunMetricsModule } from "./modules/operations";
 import { SearchIndexMetricsModule } from "./modules/search-index";
 import { SignalsModule } from "./modules/signals";
 import { AdminHomeModule } from "./modules/admin-home";
@@ -131,6 +132,8 @@ export class AppModule implements NestModule {
         ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess }),
         // The API serves GET /metrics, so it samples the search index's state.
         ...(config.metrics.enabled ? [SearchIndexMetricsModule] : []),
+        // …and what the backups and the restore check did (TASK-055).
+        ...(config.metrics.enabled ? [OpsRunMetricsModule] : []),
         orders,
         reviews,
         // The rating of suppliers (TASK-050): its admin view and the list's column.

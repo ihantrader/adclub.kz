@@ -134,7 +134,8 @@ export class SignInService {
     const settings = await this.settingsSource.getSettings();
 
     const { verified, completed } = await this.loginCodes.verifyCodeAnd<CodeOutcome>(
-      // A store review code opens only the mobile session (TASK-077).
+      // A store review code opens only the mobile session (TASK-077); a
+      // tester's opens any outside production (TASK-055, ReviewLogins.opens).
       { phone: input.phone, code: input.code, reviewAllowed: kind === "mobile" },
       async (confirmed, tx) => {
         const base = {

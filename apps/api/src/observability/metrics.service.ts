@@ -335,6 +335,25 @@ export class Metrics {
     ]);
   }
 
+  private readonly opsLastSuccess = this.registry.gauge(
+    "adclub_ops_last_success_timestamp_seconds",
+    "When a backup or the restore check last succeeded, Unix seconds, by kind (from ops_run)",
+  );
+  private readonly opsLastRunOk = this.registry.gauge(
+    "adclub_ops_last_run_ok",
+    "Whether the last backup or restore check of a kind succeeded (1) or failed (0) (from ops_run)",
+  );
+
+  setOpsRun(kind: string, lastOk: boolean | null, lastSuccess: number | null): void {
+    if (lastOk !== null) this.opsLastRunOk.set({ kind }, lastOk ? 1 : 0);
+    if (lastSuccess !== null) this.opsLastSuccess.set({ kind }, lastSuccess);
+  }
+
+  /** The backups and the restore check (TASK-055), sampled from the database the ops scripts write. */
+  collectOps(collector: MetricCollector): void {
+    this.registry.collect("ops", collector, [this.opsLastSuccess, this.opsLastRunOk]);
+  }
+
   /** The charges of suppliers' cards, sampled from the database (the worker charges, the API serves). */
   collectPayments(collector: MetricCollector): void {
     this.registry.collect("payments", collector, [this.paymentAttempts, this.paymentRetryQueue]);

@@ -158,6 +158,7 @@ describe("ormTables", () => {
         "search_index_state",
         "offer",
         "offer_model_price",
+        "ops_run",
         "club_access_grant",
         "customer_order",
         "order_event",

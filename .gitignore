@@ -20,3 +20,8 @@ Thumbs.db
 
 # local agent settings (shared config in .claude is committed)
 .claude/settings.local.json
+
+# Firebase config files: EAS file environment variables, downloaded by eas-cli
+# into the project root on a build — never in git
+google-services.json
+GoogleService-Info.plist

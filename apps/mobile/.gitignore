@@ -18,6 +18,10 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Firebase and store credentials (EAS file environment variables, never in git)
+google-services.json
+GoogleService-Info.plist
+
 # Metro
 .metro-health-check*
 

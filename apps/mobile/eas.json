@@ -21,6 +21,13 @@
       "channel": "preview",
       "environment": "preview"
     },
+    "preview-apk": {
+      "extends": "preview",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "extends": "base",
       "distribution": "store",

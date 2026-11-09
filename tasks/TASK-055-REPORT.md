@@ -190,6 +190,12 @@ deploy: release 49d0b09 is live (admin panel 0.1.0)
 - Пока секретов SSH в GitHub нет, `deploy-staging` проходит с notice и ничего не деплоит.
 - Миграция `staging-testers` откатом выключает строки тестировщиков (их коды перестают работать) — намеренно.
 
+## Commits and CI
+- `e2fb17b` — TASK-055: release step, testers' numbers, refusal of dev secrets, backup runs
+- `5f7072d` — TASK-055: staging stack — images, compose, Caddy, secrets, backups, deploy
+- Push в `main`; прогон CI **42685734018** (CI, `5f7072d`, на момент отчёта — `queued`; результат не дожидался — TASK-076). В нём впервые выполняется задача `images` (публикация в GHCR); после зелёного прогона запустится `deploy-staging` и, пока секретов SSH нет, завершится с notice «Staging is not configured yet».
+- gitleaks 8.24.3 по обоим коммитам — «no leaks found»; `staging.env.sops` в коммите — только `ENC[…]`.
+
 ## Remaining Work (часть B — нужно от Product Owner)
 1. **ps.kz:** VM staging (Ubuntu 24.04 LTS, 2 vCPU, 8 ГБ, 80 ГБ), публичный IPv4, вход по SSH для первичной настройки; два бакета S3 (`adclub-staging-files`, `adclub-staging-backups` — или другие имена, правка `staging.env`), ключ доступа S3, адрес S3 API и регион; есть ли версионирование бакетов по S3 API.
 2. **DNS `adclub.kz`:** A-записи `api.staging`, `cabinet.staging`, `admin.staging` → IPv4 VM (или другие имена — правка `staging.env`); почтовый ящик для Let's Encrypt (`ACME_EMAIL`, сейчас `ops@adclub.kz`).

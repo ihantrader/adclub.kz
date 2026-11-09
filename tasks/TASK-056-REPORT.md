@@ -106,7 +106,7 @@ The server breaks published app version(s): 1.0.0.
 - AC-7 — PASS — `pending-logout.test.ts`: холодный старт открывает заявку при чтении сессии 1,5 с; выход без сети: `retry`, затем при сети — `done` и запрос с токеном; ack: 4xx — `drop`, 5xx/нет сети — `retry` (повтор один раз на возврат — цикл по очереди в `push-provider.tsx`); интеграционный тест: десять одновременных регистраций разных токенов одной сессии — все 200, одна строка `device_token`, нет `ExceptionFilter` (то, что уходит в мониторинг) и `device_token_session_key` в выводе.
 - AC-8 — PASS — ARCHITECTURE 0.90: 4.81 (I880–I892, процедура выпуска — I891), обновлены 7.2, 7.4, 9.3, 4.79 (I854, I855, I862, I866), I878, 15.1, 14; CLAUDE.md блок 0 «Сборки и выпуск в dev»; `.env.example`; `expected/migrations.ts` (маршрутов `/admin`, задач и таблиц не добавлено — `admin-routes.ts`, `background-jobs.ts`, `orm-tables.ts` не менялись).
 - AC-9 — BLOCKED — сборок EAS, TestFlight, Google Play и проверок на устройствах нет: нет учётных записей (ниже).
-- AC-10 — PASS — локальные проверки выше; push в `main` без ожидания CI; id прогона — ниже.
+- AC-10 — PASS — локальные проверки выше; push в `main` (коммиты `d225f81`, `07c056d`, `1153972`, `5dc9706`) без ожидания CI; прогон CI — `42629569920` (результат не ждал: впервые выполнит iOS-prebuild задачи `mobile-native` и шаг снимков).
 
 ## Errors & Fixes
 - `registry.test.ts` («ключи раздела 14») упал после правки ARCHITECTURE 14: фраза с `client_min_version_ios|android` в обратных кавычках сбила разбор строки таблицы — переписал словами.

@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 Обновлено: 2026-11-09, после приёмки части A TASK-056 (приложение выпускаемое: конфигурация сборки, OTA, снимки контракта, APNs, фоновый ack); часть B — первые сборки — ждёт учётных записей Apple и Google.
-Актуальные версии документов: PRODUCT.md 1.5 (D-062…D-064) · ARCHITECTURE.md 0.91 (утверждён; разделы 4.1–4.81 — решения реализации) · PROJECT_PLAN.md 2.16 · SCREENS.md 1.9 · DESIGN.md 0.4.
+Актуальные версии документов: PRODUCT.md 1.5 (D-062…D-064) · ARCHITECTURE.md 0.91 (утверждён; разделы 4.1–4.81 — решения реализации) · PROJECT_PLAN.md 2.17 · SCREENS.md 1.9 · DESIGN.md 0.4.
 
 ---
 
@@ -287,6 +287,7 @@
 | TASK-051 | DONE | PASS WITH NOTES | Push пользователю: порт провайдера (тестовый и FCM HTTP v1 на `fetch`), токены устройств за сессией, журнал `notification` и ack, события SCREENS 8.4 и P-ORD-10, M-PUSH-01 и M-PRO-04, открытие заявки из push; живая отправка и iOS-токен — TASK-056, резерв WhatsApp — TASK-052; ARCHITECTURE 0.86–0.87 |
 | TASK-052 | DONE | PASS WITH NOTES | Резерв WhatsApp для пользователя (ARCHITECTURE 4.80): критичный push без ack через `push_ack_timeout_minutes`, без устройства или с отказом — одна копия WhatsApp через шлюз (`fallback_of_id`, субъект `notification`), только пока событие актуально; шаблоны U-* kk/ru; `push_unreliable`; «нет WhatsApp» из `phone_verification` и исходов шлюза; M-PRO-04/T-PRO-03; отбор и карточка админки; метрики, `push:status`, сигнал. Живой отправки нет (тестовый канал). Приёмка — I879. |
 | TASK-056 | PARTIAL | PASS WITH NOTES (часть A) | Сборки для сторов (ARCHITECTURE 4.81): версия установленной сборки для сервера (`expo-application`, `appVersionOf`), OTA `expo-updates` только внутри версии стора, «1.0.0 · обновление a1b2c3d» в M-PRO-06, `kz.adclub.app`, `UIBackgroundModes`, `app.config.js`, `eas.json` (development / preview / production, без секретов), `native:check` и задача CI `mobile-native`, APNs напрямую (`ApnsPushProvider` на `node:http2`, JWT ES256) с выбором по платформе (`PlatformPushRouter`, `PUSH_PROVIDER=test|live`), FCM только `data`, фоновый ack (`expo-task-manager`, только собственная сборка), снимки контракта `apps/api/contract-snapshots/mobile/` + `supported.json` и шаг CI, `client_store_url_ios|android` → M-START-03, долги I866. Часть B (сборки EAS, TestFlight, внутренний трек, живые APNs/FCM, OTA на телефоне) — BLOCKED: нет учётных записей Apple Developer и Google Play Console; Expo создана 09.11.2026 |
+| TASK-055 | IN PROGRESS | — | Окружение staging и деплой: образы и GHCR, стек staging на VM Servercore (compose, прокси с TLS и CSP, `TRUST_PROXY`, закрытые `/dev/*`), миграции до деплоя, секреты sops + age, резервные копии и проверка восстановления, `infra/MIGRATION.md`, деплой из CI, таблица лимитов по IP при CGNAT, адрес staging в EAS; часть B — при доступе к серверу, DNS и ключу age |
 
 
 ## 3. DECISIONS

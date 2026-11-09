@@ -1,0 +1,66 @@
+# The rehearsal of the staging stack on a developer's machine (TASK-055):
+# added to compose.staging.yml by infra/scripts/rehearsal.sh. Only what a
+# laptop lacks differs — the ports of the proxy and MinIO in place of the
+# provider's S3 (two buckets: files and backups). Its credentials are the
+# rehearsal's own generated secrets (S3_ACCESS_KEY / S3_SECRET_KEY), never the
+# development ones: NODE_ENV=staging refuses those.
+services:
+  proxy:
+    ports: !override
+      - "8080:80"
+      - "8443:8443"
+      - "8444:8444"
+      - "8445:8445"
+
+  minio:
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    restart: unless-stopped
+    user: root
+    env_file:
+      - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}
+        required: false
+    environment:
+      MINIO_SKIP_CLIENT: "yes"
+      FILES_BUCKET: ${S3_BUCKET}
+      BACKUPS_BUCKET: ${BACKUP_S3_BUCKET}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        export MINIO_ROOT_USER="$$S3_ACCESS_KEY" MINIO_ROOT_PASSWORD="$$S3_SECRET_KEY"
+        (
+          until curl -fsS http://127.0.0.1:9000/minio/health/cluster >/dev/null 2>&1; do sleep 1; done
+          mc alias set local http://127.0.0.1:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+          mc mb --ignore-existing "local/$$FILES_BUCKET" "local/$$BACKUPS_BUCKET"
+          touch /tmp/buckets-ready
+        ) &
+        exec /opt/bitnami/scripts/minio/run.sh
+    volumes:
+      - minio-data:/bitnami/minio/data
+    networks: [adclub]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/buckets-ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  api:
+    depends_on:
+      minio:
+        condition: service_healthy
+  worker:
+    depends_on:
+      minio:
+        condition: service_healthy
+  ops:
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  minio-data:

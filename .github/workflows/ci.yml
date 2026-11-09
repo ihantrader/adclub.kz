@@ -163,6 +163,75 @@ jobs:
       - name: expo config, expo prebuild (android, ios), expo-doctor
         run: pnpm --filter mobile native:check
 
+  # The images of the staging stack (TASK-055, ARCHITECTURE 4.82), on a push
+  # to main only: api (API, worker, operator command, release step), ops
+  # (backups, restore check, sops), and the two web clients built for the
+  # staging API address. Tags: sha-<7 hex> (what deploys) and main; never
+  # `latest`. Code without data — GHCR outside Kazakhstan is allowed (8.5).
+  # .github/workflows/deploy-staging.yml deploys them once this run is green.
+  images:
+    name: images
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: adclub-api
+            dockerfile: infra/docker/api.Dockerfile
+            app: api
+          - image: adclub-ops
+            dockerfile: infra/docker/ops.Dockerfile
+            app: ""
+          - image: adclub-supplier-web-staging
+            dockerfile: infra/docker/web.Dockerfile
+            app: supplier-web
+          - image: adclub-admin-web-staging
+            dockerfile: infra/docker/web.Dockerfile
+            app: admin-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tags and version
+        id: meta
+        env:
+          APP: ${{ matrix.app }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+        run: |
+          short="${GITHUB_SHA::7}"
+          version=""
+          if [ -n "$APP" ]; then version="$(jq -r .version "apps/$APP/package.json")"; fi
+          {
+            echo "tags=${IMAGE}:sha-${short},${IMAGE}:main"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
+            APP=${{ matrix.app }}
+            VITE_API_URL=${{ vars.STAGING_API_URL || 'https://api.staging.adclub.kz' }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
   ci:
     name: ci
     needs: [checks, integration, mobile-native]

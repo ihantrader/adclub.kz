@@ -1,0 +1,91 @@
+name: Deploy staging
+
+# Staging is deployed by every push to main whose CI run is green, the
+# images job included (TASK-055; ARCHITECTURE 4.82, 15.5) — no manual
+# approval for staging. A rollback is this workflow run by hand with the
+# commit to go back to (its images are in GHCR by their sha- tag).
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit to deploy (full SHA) — e.g. the previous release, to roll back"
+        required: true
+
+# One deployment at a time, in the order they were started; none is cancelled.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: deploy-staging
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push') }}
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      packages: read
+    env:
+      SHA: ${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}
+      HOST: ${{ secrets.STAGING_SSH_HOST }}
+      DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+    steps:
+      # Until the VM exists (TASK-055 part B) there is nowhere to deploy: the
+      # job says so and succeeds, it does not turn every run red.
+      - name: Is staging configured
+        id: configured
+        run: |
+          # The commit goes into a command on the VM: a full SHA and nothing else.
+          if ! printf '%s' "$SHA" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error::Not a full commit SHA: the sha input must be 40 hex characters"
+            exit 1
+          fi
+          if [ -z "$HOST" ]; then
+            echo "::notice::Staging is not configured yet (secrets STAGING_SSH_HOST, STAGING_SSH_USER, STAGING_SSH_KEY, STAGING_SSH_KNOWN_HOSTS, SOPS_AGE_KEY) — nothing deployed"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: SSH key and the VM's host key
+        if: steps.configured.outputs.ready == 'true'
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/staging
+          chmod 600 ~/.ssh/staging
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Upload infra/ of the release
+        if: steps.configured.outputs.ready == 'true'
+        run: |
+          tar -czf - infra/docker infra/scripts infra/secrets |
+            ssh -i ~/.ssh/staging "$DEPLOY_USER@$HOST" \
+              "mkdir -p /opt/adclub/releases/$SHA && tar -xzf - -C /opt/adclub/releases/$SHA"
+
+      # The age key and a token to pull from GHCR go on stdin, never on a
+      # command line; deploy.sh fails the job on any failed step.
+      - name: Deploy (migrations first, then api and worker; /ready through the proxy)
+        if: steps.configured.outputs.ready == 'true'
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          printf '%s\n%s\n' "$SOPS_AGE_KEY" "$GHCR_TOKEN" |
+            ssh -i ~/.ssh/staging "$DEPLOY_USER@$HOST" \
+              "ADCLUB_REGISTRY_USER=$REGISTRY_USER bash /opt/adclub/releases/$SHA/infra/scripts/deploy.sh --sha $SHA --secrets-from-stdin"

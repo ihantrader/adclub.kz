@@ -1,0 +1,92 @@
+# The front proxy of a deployed environment (TASK-055, ARCHITECTURE 4.82):
+# Caddy with automatic TLS (Let's Encrypt on staging; its own local CA for
+# `localhost` in the rehearsal), HTTP -> HTTPS, HSTS, compression, the
+# security headers, X-Forwarded-For/-Proto to the API, and nothing of the
+# development pages outside.
+#
+# The site addresses come from the environment (compose.staging.yml):
+#   API_SITE      api.staging.adclub.kz        (rehearsal: localhost:8443)
+#   CABINET_SITE  cabinet.staging.adclub.kz    (rehearsal: localhost:8444)
+#   ADMIN_SITE    admin.staging.adclub.kz      (rehearsal: localhost:8445)
+#   ACME_EMAIL    the address Let's Encrypt writes to about the certificates
+#   HSTS_MAX_AGE  31536000 on staging; 0 in the rehearsal, so a browser does
+#                 not pin `localhost` (every port of it) to HTTPS
+#   BODY_MAX_SIZE the largest request body: the largest upload — prices
+#                 (`import_max_file_mb`, 20), photos (`photo_max_size_mb`),
+#                 registration certificates (`vehicle_document_max_size_mb`)
+{
+	email {$ACME_EMAIL:ops@adclub.kz}
+	# No admin API: the configuration changes only with a deployment.
+	admin off
+	# Only HTTP/1.1 and HTTP/2 from the edge.
+	servers {
+		protocols h1 h2
+	}
+	log default {
+		output stdout
+		format json
+		level WARN
+	}
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age={$HSTS_MAX_AGE:31536000}"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+		-X-Powered-By
+	}
+	encode zstd gzip
+}
+
+{$API_SITE} {
+	import security
+
+	# Development pages and the API documentation are never served outside
+	# a developer's machine (TASK-055): the codes of /dev/login-codes, the
+	# messages of /dev/messages, the pushes of /dev/pushes, the test card
+	# page of /dev/payment/*, Swagger UI and the generated contract.
+	@closed path /dev /dev/* /docs /docs/* /openapi.json
+	respond @closed 404
+
+	request_body {
+		max_size {$BODY_MAX_SIZE:25MB}
+	}
+
+	# The API answers JSON (and files it signs); a page of it never runs anything.
+	header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+
+	# Caddy sets X-Forwarded-For to the address the connection came from and
+	# drops what the client wrote (it trusts no proxy in front of it), and
+	# X-Forwarded-Proto to https. The API trusts exactly this one hop
+	# (TRUST_PROXY = this container's address).
+	reverse_proxy api:3000 {
+		health_uri /health
+		health_interval 10s
+	}
+}
+
+{$CABINET_SITE} {
+	import security
+
+	# Static documents of the club (terms, privacy policy): files on the
+	# server (DOCS_DIR), replaced without a release (TASK-055).
+	handle_path /docs/* {
+		root * /srv/docs
+		header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle {
+		reverse_proxy supplier-web:8080
+	}
+}
+
+{$ADMIN_SITE} {
+	import security
+	header X-Robots-Tag "noindex, nofollow"
+	reverse_proxy admin-web:8080
+}

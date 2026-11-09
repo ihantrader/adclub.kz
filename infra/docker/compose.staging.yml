@@ -1,0 +1,282 @@
+# The staging stack (TASK-055; ARCHITECTURE 15.1, 4.82): one VM in Almaty
+# with PostgreSQL, Redis, Meilisearch, the API, the worker, the two web
+# clients, the front proxy (Caddy, automatic TLS) and the `ops` tools; files
+# and backups in the provider's S3 buckets. Standard images and Docker Compose
+# only — nothing of the provider's own.
+#
+# Never run by hand with bare `docker compose`: infra/scripts/deploy.sh brings
+# it up (images by commit, secrets decrypted, migrations first), and
+# infra/scripts/compose.sh runs any other command against it with the same
+# variables:
+#
+#   --env-file infra/docker/staging.env     addresses and names (committed, no secrets)
+#   --env-file <release>/release.env        the images of the release and the
+#                                           admin panel version (written by deploy.sh)
+#   ADCLUB_ENV_FILE                         the decrypted secrets (staging.env.sops),
+#                                           present only while deploy.sh runs
+#
+# The rehearsal on a developer's machine adds compose.staging.local.yml.
+
+name: ${COMPOSE_PROJECT_NAME:-adclub-staging}
+
+x-logging: &logging # Logs stay on the VM (ARCHITECTURE 15.3, 8.5): Docker's JSON files, rotated.
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-secrets: &secrets
+  # The decrypted staging.env.sops; absent between deployments — the
+  # containers keep what they were started with.
+  - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}
+    required: false
+
+x-app-environment: &app-environment
+  NODE_ENV: staging
+  TZ: UTC
+  LOG_LEVEL: log
+  PORT: "3000"
+  # Exactly one trusted hop: the proxy, by its fixed address below.
+  TRUST_PROXY: ${PROXY_IP:-172.30.0.10}
+  MEILISEARCH_URL: http://meilisearch:7700
+  S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is not set}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is not set}
+  SUPPLIER_WEB_ORIGINS: ${SUPPLIER_WEB_ORIGINS:?SUPPLIER_WEB_ORIGINS is not set}
+  ADMIN_WEB_ORIGINS: ${ADMIN_WEB_ORIGINS:?ADMIN_WEB_ORIGINS is not set}
+  # From the label of the admin-web image of this release (deploy.sh).
+  ADMIN_WEB_RELEASE_VERSION: ${ADMIN_WEB_RELEASE_VERSION:?ADMIN_WEB_RELEASE_VERSION is not set}
+  # Test providers on staging: nothing reaches people (ARCHITECTURE 4.82).
+  LOGIN_CODE_CHANNELS: test
+  LOGIN_CODE_DEV_OUTBOX: "false"
+  MESSAGE_PROVIDER: test
+  PUSH_PROVIDER: ${PUSH_PROVIDER:-test}
+  PAYMENT_PROVIDER: test
+  MONITORING_ENVIRONMENT: staging
+
+services:
+  postgres:
+    image: postgres:16.11-bookworm
+    restart: unless-stopped
+    env_file: *secrets
+    environment:
+      POSTGRES_USER: adclub
+      POSTGRES_DB: adclub
+      TZ: UTC
+    # Sized for the 8 GB VM shared with the rest of the stack.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=2GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - log_min_duration_statement=2000
+      - -c
+      - timezone=UTC
+    shm_size: 512mb
+    mem_limit: 2560m
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [adclub]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adclub -d adclub"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  redis:
+    image: redis:7.4.7-bookworm
+    restart: unless-stopped
+    env_file: *secrets
+    # AOF: rate limit counters and cached settings survive a restart.
+    # The password goes into a config file readable by redis only — on the
+    # command line every user of the VM would read it in `ps`.
+    command:
+      - sh
+      - -c
+      - |
+        umask 077
+        printf 'appendonly yes\nrequirepass %s\n' "$$REDIS_PASSWORD" > /tmp/redis.conf
+        chown redis:redis /tmp/redis.conf
+        exec docker-entrypoint.sh redis-server /tmp/redis.conf
+    mem_limit: 512m
+    volumes:
+      - redis-data:/data
+    networks: [adclub]
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11.3
+    restart: unless-stopped
+    env_file: *secrets
+    environment:
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    mem_limit: 1g
+    volumes:
+      - meilisearch-data:/meili_data
+    networks: [adclub]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  # The release step: run once by deploy.sh before api and worker are
+  # replaced; a failure stops the deployment (ARCHITECTURE 15.5).
+  migrate:
+    image: ${API_IMAGE:?API_IMAGE is not set}
+    profiles: [release]
+    restart: "no"
+    env_file: *secrets
+    environment:
+      TZ: UTC
+    command: ["node", "dist/release.js", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [adclub]
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE is not set}
+    restart: unless-stopped
+    env_file: *secrets
+    environment: *app-environment
+    command: ["node", "dist/main.js"]
+    mem_limit: 1g
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks: [adclub]
+    logging: *logging
+
+  worker:
+    image: ${API_IMAGE:?API_IMAGE is not set}
+    restart: unless-stopped
+    env_file: *secrets
+    environment: *app-environment
+    command: ["node", "dist/worker.js"]
+    mem_limit: 1g
+    # The worker serves no HTTP; it is alive while its process runs (what it
+    # does is seen in the metrics: queue depth, periodic jobs' last success).
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    stop_grace_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks: [adclub]
+    logging: *logging
+
+  supplier-web:
+    image: ${SUPPLIER_WEB_IMAGE:?SUPPLIER_WEB_IMAGE is not set}
+    restart: unless-stopped
+    mem_limit: 128m
+    networks: [adclub]
+    logging: *logging
+
+  admin-web:
+    image: ${ADMIN_WEB_IMAGE:?ADMIN_WEB_IMAGE is not set}
+    restart: unless-stopped
+    mem_limit: 128m
+    networks: [adclub]
+    logging: *logging
+
+  proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      API_SITE: ${API_SITE:?API_SITE is not set}
+      CABINET_SITE: ${CABINET_SITE:?CABINET_SITE is not set}
+      ADMIN_SITE: ${ADMIN_SITE:?ADMIN_SITE is not set}
+      ACME_EMAIL: ${ACME_EMAIL:-ops@adclub.kz}
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-31536000}
+      BODY_MAX_SIZE: ${BODY_MAX_SIZE:-25MB}
+    ports:
+      - "80:80"
+      - "443:443"
+    mem_limit: 256m
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DOCS_DIR:-./proxy/docs}:/srv/docs:ro
+      # Certificates and the ACME account: kept across deployments.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [api, supplier-web, admin-web]
+    networks:
+      adclub:
+        ipv4_address: ${PROXY_IP:-172.30.0.10}
+    logging: *logging
+
+  ops:
+    image: ${OPS_IMAGE:?OPS_IMAGE is not set}
+    restart: unless-stopped
+    env_file: *secrets
+    environment:
+      TZ: UTC
+      S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is not set}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is not set}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-${S3_ENDPOINT}}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-${S3_REGION:-us-east-1}}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET is not set}
+      BACKUP_PREFIX: ${BACKUP_PREFIX:-staging}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [adclub]
+    logging: *logging
+
+networks:
+  adclub:
+    # A fixed name: the restore check starts its temporary PostgreSQL in it.
+    name: ${COMPOSE_PROJECT_NAME:-adclub-staging}
+    ipam:
+      config:
+        - subnet: ${STACK_SUBNET:-172.30.0.0/24}
+          # Containers get addresses from the upper half only, so the
+          # proxy's fixed address below it is never taken first.
+          ip_range: ${STACK_IP_RANGE:-172.30.0.128/25}
+
+volumes:
+  postgres-data:
+  redis-data:
+  meilisearch-data:
+  caddy-data:
+  caddy-config:

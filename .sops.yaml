@@ -1,0 +1,9 @@
+# Who can decrypt the secrets of the deployed environments (TASK-055;
+# ARCHITECTURE 4.82): public age keys only. The private keys: the Product
+# Owner's — in their password manager; CI's — the GitHub secret SOPS_AGE_KEY.
+# After a change of the recipients: sops updatekeys infra/secrets/staging.env.sops
+creation_rules:
+  - path_regex: infra/secrets/staging\.env\.sops$
+    age: >-
+      age1h4ws0egut82s2d0xrnwp652j6myqkjfvvnlqzfegyu78lmqrz4hsvmalf4,
+      age1lg5hw2ejqhdya5w9zx3eeuhz6gussnm2aukg9tavp2p9w55sg95s0a7lq9

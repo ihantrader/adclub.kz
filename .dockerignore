@@ -1,0 +1,24 @@
+# The build context of the images (infra/docker/*.Dockerfile, TASK-055):
+# sources and manifests only — never secrets, builds, dependencies or history.
+**/node_modules
+**/dist
+**/.turbo
+.git
+.github
+.claude
+.dev-https
+.dev-staging
+.env
+.env.*
+infra/secrets
+infra/docker/*.Dockerfile
+tasks
+design
+ai-eval
+search-eval
+*.md
+
+# The mobile app is not in any image; its manifest stays, because the
+# workspace's lockfile is checked against every package of the workspace.
+apps/mobile/**
+!apps/mobile/package.json

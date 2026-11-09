@@ -6,6 +6,10 @@
 # local HTTPS for checking the cabinet on a phone (pnpm dev:lan): CA key and certificates
 .dev-https/
 
+# the staging rehearsal on this machine (infra/scripts/rehearsal.sh): its age
+# key, encrypted secrets and releases
+.dev-staging/
+
 # dependencies / build
 node_modules/
 dist/

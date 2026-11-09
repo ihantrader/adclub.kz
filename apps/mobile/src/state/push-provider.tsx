@@ -20,13 +20,15 @@ import {
   type PushMessage,
   type PushPermission,
 } from "../push/push-logic";
+import { openFromColdStart } from "../push/cold-start";
+import { ackOutcomeOf, withoutPendingAck, withPendingAck } from "../push/push-ack";
 import type { DevicePushToken } from "../push/push-port";
 import type { PushTarget } from "../start/start-decision";
 import { apiClient } from "../services/api";
 import { pushPort } from "../services/push";
 import { useT } from "./language";
 import { useOrdersCopy } from "./orders-provider";
-import { pushOffersStore, sessionStore } from "./stores";
+import { pendingAcksStore, pushOffersStore, sessionStore } from "./stores";
 
 /**
  * Push on the device (TASK-051; SCREENS M-PUSH-01, M-PRO-04, 5.1 rule 6;
@@ -64,8 +66,6 @@ export function PushProvider({ children }: { children: ReactNode }) {
   const [offer, setOffer] = useState(false);
   const registered = useRef<string | null>(null);
   const listeners = useRef(new Set<(orderId: string) => void>());
-  /** Confirmations that could not be sent (no network): tried again on the next return. */
-  const unsent = useRef(new Set<string>());
   const refreshOrders = orders.refresh;
 
   const readPermission = useCallback(async () => {
@@ -74,9 +74,22 @@ export function PushProvider({ children }: { children: ReactNode }) {
     return next;
   }, []);
 
+  // A confirmation is sent at once; one that found no network (or a 5xx)
+  // waits for the next start or return — the queue is shared with the
+  // background task — and one the server refused (4xx) is not asked again
+  // (TASK-056, I866: it used to be repeated on every return).
   const ack = useCallback((notificationId: string | null) => {
     if (!notificationId || sessionStore.get().status !== "signed_in") return;
-    apiClient.ackNotification({ notificationId }).catch(() => unsent.current.add(notificationId));
+    apiClient.ackNotification({ notificationId }).then(
+      () => pendingAcksStore.set(withoutPendingAck(pendingAcksStore.get(), notificationId)),
+      (error: unknown) => {
+        pendingAcksStore.set(
+          ackOutcomeOf(error) === "retry"
+            ? withPendingAck(pendingAcksStore.get(), notificationId)
+            : withoutPendingAck(pendingAcksStore.get(), notificationId),
+        );
+      },
+    );
   }, []);
 
   const register = useCallback(
@@ -102,10 +115,9 @@ export function PushProvider({ children }: { children: ReactNode }) {
       if (now?.status === "granted" && signedIn) {
         await register(await pushPort.deviceToken());
       }
-      for (const id of [...unsent.current]) {
-        unsent.current.delete(id);
-        ack(id);
-      }
+      // Each waiting confirmation is tried once per return.
+      await pendingAcksStore.ready;
+      for (const id of [...pendingAcksStore.get()]) ack(id);
     };
     void sync();
     const subscription = AppState.addEventListener("change", (next) => {
@@ -145,12 +157,18 @@ export function PushProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Opened from a push (a cold start): the start decision opens the tab
     // under it, and the order itself once the navigator is ready.
+    // The push waits for the session itself, however long reading it takes —
+    // it used to be dropped when the read outlasted the splash's second (I866).
     if (startRead.current) return;
     startRead.current = true;
-    void pushPort.initialOpened().then((message) => {
-      if (!message) return;
-      setStartTarget(message.target);
-      handle(message, true);
+    void openFromColdStart({
+      initial: () => pushPort.initialOpened(),
+      sessionRead: sessionStore.ready,
+      signedIn: () => sessionStore.get().status === "signed_in",
+      open: (message) => {
+        setStartTarget(message.target);
+        handle(message, true);
+      },
     });
   }, [handle]);
 

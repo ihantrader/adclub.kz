@@ -16,6 +16,8 @@ import { useToast } from "../design-system";
 import { INITIAL_GARAGE } from "../garage/garage";
 import { accountGarage } from "../services/account-garage";
 import { apiClient, sessionEndedNotice } from "../services/api";
+import { finishPendingLogoutSoon } from "../services/pending-logout";
+import { useOnline } from "../services/use-network";
 import {
   completeRegistration as apiCompleteRegistration,
   getAccountProfile,
@@ -23,12 +25,14 @@ import {
 } from "../services/account-api";
 import { selectionOf, type CitySelection } from "./city";
 import { useT } from "./language";
+import { logoutNeedsRetry, withPendingLogouts } from "./pending-logout";
 import { runProfileSync } from "./profile-sync";
 import {
   cityStore,
   clearSession,
   garageStore,
   languageStore,
+  pendingLogoutStore,
   profileSyncStore,
   sessionStore,
 } from "./stores";
@@ -208,6 +212,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => subscription.remove();
   }, [refresh]);
 
+  // A sign-out made offline is finished at start, on every return and when
+  // the network comes back (TASK-056, I866).
+  const online = useOnline();
+  useEffect(() => {
+    if (online) void finishPendingLogoutSoon();
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") void finishPendingLogoutSoon();
+    });
+    return () => subscription.remove();
+  }, [online]);
+
   // The city or the language changed on this device (the catalog's switch,
   // M-PRO-01): one place sends it, instead of every screen that can change
   // either (I432). A pass that applied the account's values finds nothing to
@@ -254,8 +269,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOut: async () => {
         try {
           await apiClient.logout();
-        } catch {
-          // The device forgets the session either way (PRODUCT 6.7).
+        } catch (error) {
+          // The device forgets the session either way (PRODUCT 6.7). When the
+          // server never heard of it (no network), the sign-out is finished
+          // later — until then the session and its push token live on the
+          // server (TASK-056, I866). The tokens as they are now: the attempt
+          // may have exchanged them first.
+          const leaving = sessionStore.get();
+          if (leaving.status === "signed_in" && logoutNeedsRetry(error)) {
+            pendingLogoutStore.set(
+              withPendingLogouts(pendingLogoutStore.get(), [
+                {
+                  sessionId: leaving.session.sessionId,
+                  accessToken: leaving.session.accessToken,
+                  refreshToken: leaving.session.refreshToken,
+                },
+              ]),
+            );
+          }
         }
         clearSession();
         // The account's own cars are not the next guest's to see (edge case

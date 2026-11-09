@@ -14,13 +14,26 @@ module.exports = [
   },
   {
     // Metro loads its config, and Expo its config plugins, as CommonJS Node modules.
-    files: ["metro.config.js", "plugins/**/*.js"],
+    files: ["metro.config.js", "app.config.js", "plugins/**/*.js"],
     languageOptions: {
       sourceType: "commonjs",
-      globals: { require: "readonly", module: "writable", __dirname: "readonly" },
+      globals: {
+        require: "readonly",
+        module: "writable",
+        __dirname: "readonly",
+        process: "readonly",
+      },
     },
     rules: {
       "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    // Node scripts of the app's tooling (TASK-056: the native configuration check).
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      sourceType: "module",
+      globals: { process: "readonly", console: "readonly" },
     },
   },
 ];

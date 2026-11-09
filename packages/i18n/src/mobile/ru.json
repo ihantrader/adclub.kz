@@ -288,6 +288,7 @@
   "profile.appearanceLight": "Светлая",
   "profile.appearanceSystem": "Как в системе",
   "profile.version": "Версия приложения",
+  "profile.versionWithUpdate": "{version} · обновление {update}",
   "profile.devices": "Устройства",
   "profile.notifications": "Уведомления",
   "profile.notificationsOn": "Включены",

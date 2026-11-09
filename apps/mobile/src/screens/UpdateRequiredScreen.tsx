@@ -8,6 +8,8 @@ import { useT } from "../state/language";
 interface UpdateRequiredScreenProps {
   /** Text of the server's client policy; empty — the app's own fallback text. */
   message: string;
+  /** The app's page in this platform's store (`client_store_url_*`, TASK-056); `null` — the store's search. */
+  storeUrl: string | null;
   onCheckAgain: () => Promise<unknown>;
   /**
    * «Показать активные заявки» (TASK-030, D-027): given only when the person
@@ -18,11 +20,11 @@ interface UpdateRequiredScreenProps {
 }
 
 /**
- * Where the store opens, by the platform. Until the app is published there
- * is no listing to link to: the store's search for the app's name — one
- * constant to replace with the listing when it exists.
+ * Where the store opens when the server names no page of the app (TASK-056:
+ * `client_store_url_*` in the client policy): the store's search for the
+ * app's name.
  */
-const STORE_URL =
+const STORE_SEARCH_URL =
   Platform.OS === "ios"
     ? "https://apps.apple.com/search?term=Asia%20Drive%20Club"
     : "https://play.google.com/store/search?q=Asia%20Drive%20Club&c=apps";
@@ -38,13 +40,15 @@ const STORE_URL =
  */
 export function UpdateRequiredScreen({
   message,
+  storeUrl,
   onCheckAgain,
   onShowOrders,
 }: UpdateRequiredScreenProps) {
   const t = useT();
   const { theme } = useTheme();
   const [storeFailed, setStoreFailed] = useState(false);
-  const openStore = () => Linking.openURL(STORE_URL).catch(() => setStoreFailed(true));
+  const openStore = () =>
+    Linking.openURL(storeUrl ?? STORE_SEARCH_URL).catch(() => setStoreFailed(true));
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.bg }]}>
       {/* Scrolls when the server's text and a large system font do not fit (TASK-030.A). */}

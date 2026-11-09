@@ -129,7 +129,16 @@ export function DocumentsScreen({
                     {t("profile.version")}
                   </Text>
                 }
-                trailing={<Text variant="bodyS">{appInfo.version}</Text>}
+                trailing={
+                  <Text variant="bodyS">
+                    {appInfo.update
+                      ? t("profile.versionWithUpdate", {
+                          version: appInfo.version,
+                          update: appInfo.update,
+                        })
+                      : appInfo.version}
+                  </Text>
+                }
               />
             </ListGroup>
           )}

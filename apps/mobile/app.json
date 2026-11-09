@@ -6,13 +6,23 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
+      "bundleIdentifier": "kz.adclub.app",
       "supportsTablet": true,
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["whatsapp", "whatsapp-smb"]
+        "LSApplicationQueriesSchemes": ["whatsapp", "whatsapp-smb"],
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
+      "package": "kz.adclub.app",
       "adaptiveIcon": {
         "backgroundColor": "#0F1012",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -58,7 +68,9 @@
           "microphonePermission": false
         }
       ],
-      "./plugins/with-whatsapp-queries.js"
+      "./plugins/with-whatsapp-queries.js",
+      "expo-updates",
+      "expo-task-manager"
     ],
     "locales": {
       "ru": "./locales/ru.json",

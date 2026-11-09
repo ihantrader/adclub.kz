@@ -288,6 +288,7 @@
   "profile.appearanceLight": "Light",
   "profile.appearanceSystem": "Match system",
   "profile.version": "App version",
+  "profile.versionWithUpdate": "{version} · update {update}",
   "profile.devices": "Devices",
   "profile.notifications": "Notifications",
   "profile.notificationsOn": "On",

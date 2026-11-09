@@ -11,6 +11,7 @@ import {
   type OrdersCopyStore,
   type ValueStorage,
 } from "../orders/order-copy";
+import { parsePendingAcks, type PendingAcks } from "../push/push-ack";
 import { parsePushOffers, type PushOffers } from "../push/push-logic";
 import { INITIAL_FIRST_RUN, parseFirstRun, type FirstRunState } from "../start/first-run";
 import { INITIAL_CITY_STATE, parseCityState, type CityState } from "./city";
@@ -20,6 +21,7 @@ import {
   type DeviceStorage,
   type DeviceStore,
 } from "./device-store";
+import { parsePendingLogouts, type PendingLogout } from "./pending-logout";
 import { parseProfileSync, type ProfileSyncState } from "./profile-sync";
 import {
   createSessionStore,
@@ -38,10 +40,19 @@ const storage: DeviceStorage = {
  * lives in the platform's secure storage, not in `AsyncStorage` with the
  * rest of the device's preferences (TASK-029). `SecureStore` accepts only
  * keys of `[A-Za-z0-9._-]`; `adclub.mobile.session` is one.
+ *
+ * Readable after the first unlock since the phone started (TASK-056): an
+ * iPhone wakes the app for a push in the background, usually locked, and an
+ * item readable only while unlocked (the default) read back as «no session»
+ * there — the background confirmation never went, and the woken process
+ * believed the person a guest. This device only: never in a backup.
  */
 const secureStorage: DeviceStorage = {
   read: (key) => SecureStore.getItemAsync(key),
-  write: (key, value) => SecureStore.setItemAsync(key, value),
+  write: (key, value) =>
+    SecureStore.setItemAsync(key, value, {
+      keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+    }),
 };
 
 /**
@@ -95,6 +106,7 @@ export function clearSession(): void {
   sessionStore.set(SIGNED_OUT);
   accountGarageStore.set(null);
   profileSyncStore.set(null);
+  pendingAcksStore.set([]);
   void SecureStore.deleteItemAsync(SESSION_STORE_KEY).catch(() => undefined);
   void ordersCopyStore.clear();
   forgetOpenedOrders();
@@ -173,6 +185,30 @@ export const pushOffersStore: DeviceStore<PushOffers> = createDeviceStore(storag
   key: "adclub.mobile.push-offers",
   initial: {},
   parse: parsePushOffers,
+});
+
+/**
+ * Confirmations of pushes that could not be sent (no network, 5xx — TASK-056,
+ * I866): the background task and the open app both leave them here, and the
+ * app sends them at its next start or return. Ids only, not a secret.
+ */
+export const PENDING_ACKS_KEY = "adclub.mobile.pending-acks";
+
+export const pendingAcksStore: DeviceStore<PendingAcks> = createDeviceStore(storage, {
+  key: PENDING_ACKS_KEY,
+  initial: [],
+  parse: parsePendingAcks,
+});
+
+/**
+ * A sign-out the server has not heard of yet (signed out without a network,
+ * TASK-056, I866): the tokens of each ended session, kept in the secure
+ * storage until its `POST /auth/logout` goes through.
+ */
+export const pendingLogoutStore: DeviceStore<PendingLogout[]> = createDeviceStore(secureStorage, {
+  key: "adclub.mobile.pending-logouts",
+  initial: [],
+  parse: parsePendingLogouts,
 });
 
 /** Resolves once every store of the device has really been read, however long it takes. */

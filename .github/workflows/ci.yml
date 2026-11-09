@@ -69,6 +69,18 @@ jobs:
           fi
           pnpm --filter @adclub/api openapi:compat --base "$BASE_REV"
 
+      # ARCHITECTURE 7.2, 4.81 (TASK-056): the server keeps every published
+      # app version working — compared with the contract snapshot of each
+      # version in contract-snapshots/mobile/supported.json, one after another.
+      - name: API contract keeps every supported app version working
+        env:
+          BASE_REV: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if [ -z "$BASE_REV" ] || [ "$BASE_REV" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REV="HEAD~1"
+          fi
+          pnpm --filter @adclub/api openapi:compat --snapshots --trailers-since "$BASE_REV"
+
       - name: Verify API and worker shut down gracefully on SIGTERM (Linux)
         run: pnpm --filter api run verify:graceful-shutdown
 
@@ -127,9 +139,33 @@ jobs:
       - name: Integration tests, part ${{ matrix.shard }} of ${{ strategy.job-total }}
         run: pnpm --filter @adclub/api test:integration:shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
+  # The native configuration of the app without an Expo account (TASK-056,
+  # ARCHITECTURE 4.81): `expo config`, `expo prebuild --no-install` for
+  # Android and iOS (Linux generates both; no pod install, no Gradle), the
+  # generated manifest and Info.plist read for push, the background task and
+  # OTA, and expo-doctor. The generated android/ and ios/ are thrown away.
+  mobile-native:
+    name: mobile native config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: expo config, expo prebuild (android, ios), expo-doctor
+        run: pnpm --filter mobile native:check
+
   ci:
     name: ci
-    needs: [checks, integration]
+    needs: [checks, integration, mobile-native]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -137,8 +173,9 @@ jobs:
         env:
           CHECKS: ${{ needs.checks.result }}
           INTEGRATION: ${{ needs.integration.result }}
+          MOBILE_NATIVE: ${{ needs.mobile-native.result }}
         run: |
-          echo "checks=$CHECKS integration=$INTEGRATION"
-          if [ "$CHECKS" != "success" ] || [ "$INTEGRATION" != "success" ]; then
+          echo "checks=$CHECKS integration=$INTEGRATION mobile-native=$MOBILE_NATIVE"
+          if [ "$CHECKS" != "success" ] || [ "$INTEGRATION" != "success" ] || [ "$MOBILE_NATIVE" != "success" ]; then
             exit 1
           fi

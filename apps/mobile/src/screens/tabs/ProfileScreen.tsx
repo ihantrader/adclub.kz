@@ -219,7 +219,10 @@ export function ProfileScreen({
 
         <Section>
           <Text variant="caption" color="textMuted">
-            {t("profile.version")}: {appInfo.version}
+            {t("profile.version")}:{" "}
+            {appInfo.update
+              ? t("profile.versionWithUpdate", { version: appInfo.version, update: appInfo.update })
+              : appInfo.version}
           </Text>
           {ShowcaseScreen && (
             <Button variant="text" size="m" tone="neutral" onPress={() => setShowcase(true)}>

@@ -38,7 +38,7 @@ const REFRESH_TIMEOUT_MS = 8_000;
 export const ATTEMPT_TIMEOUT_MS = 8_000;
 
 /** The exchange itself, independent of the wrapped `fetch` — never recurses through it. */
-async function exchangeRefreshToken(refreshToken: string): Promise<ExchangeResult> {
+export async function exchangeRefreshToken(refreshToken: string): Promise<ExchangeResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
   try {

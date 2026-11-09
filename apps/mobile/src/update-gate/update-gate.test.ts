@@ -10,11 +10,12 @@ function policy(
   ios: string,
   android: string,
   message = "Обновите приложение",
+  storeUrl: string | null = null,
 ): ClientPolicyResponse {
   return {
     platforms: {
-      ios: { minSupportedVersion: ios },
-      android: { minSupportedVersion: android },
+      ios: { minSupportedVersion: ios, storeUrl: null },
+      android: { minSupportedVersion: android, storeUrl },
       "supplier-web": { minSupportedVersion: "0.0.0" },
       "admin-web": { minSupportedVersion: "0.0.0" },
     },
@@ -49,7 +50,7 @@ describe("update screen at start-up", () => {
     const state = await gate.check();
 
     expect(shouldShowUpdateScreen(state)).toBe(true);
-    expect(state).toEqual({ status: "update-required", message: "Жаңартыңыз" });
+    expect(state).toEqual({ status: "update-required", message: "Жаңартыңыз", storeUrl: null });
   });
 
   it("shows no update screen when the version is at or above the minimum", async () => {
@@ -139,6 +140,7 @@ describe("update screen while the app is open", () => {
     expect(gate.getState()).toEqual({
       status: "update-required",
       message: "Минимальная версия повышена",
+      storeUrl: null,
     });
     expect(listener).toHaveBeenCalled();
   });
@@ -191,6 +193,50 @@ describe("update screen while the app is open", () => {
     resolvePolicy(jsonResponse(200, policy("1.0.0", "1.0.0")));
 
     expect((await pending).status).toBe("update-required");
+  });
+});
+
+describe("the store page of M-START-03 (TASK-056)", () => {
+  const PLAY = "https://play.google.com/store/apps/details?id=kz.adclub.app";
+
+  it("carries the store page the policy names for this platform", async () => {
+    const { gate } = appWith(
+      vi
+        .fn<FetchLike>()
+        .mockResolvedValue(jsonResponse(200, policy("1.0.0", "2.0.0", "Обновите", PLAY))),
+      android,
+    );
+    expect(await gate.check()).toEqual({
+      status: "update-required",
+      message: "Обновите",
+      storeUrl: PLAY,
+    });
+  });
+
+  it("keeps the page of the last policy for a 426, and forgets it once the policy clears it", async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(jsonResponse(200, policy("1.0.0", "1.0.0", "Обновите", PLAY)))
+      .mockResolvedValueOnce(
+        jsonResponse(426, {
+          code: "CLIENT_UPDATE_REQUIRED",
+          message: "Минимальная версия повышена",
+          details: { platform: "android", clientVersion: "1.4.2", minSupportedVersion: "2.0.0" },
+          retryable: false,
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, policy("1.0.0", "2.0.0", "Обновите", null)));
+    const { gate, api } = appWith(fetchImpl, android);
+    expect((await gate.check()).status).toBe("supported");
+    await expect(api.getReadiness()).rejects.toBeInstanceOf(ApiError);
+    expect(gate.getState()).toMatchObject({ status: "update-required", storeUrl: PLAY });
+    expect(await gate.check()).toMatchObject({ status: "update-required", storeUrl: null });
+  });
+
+  it("opens only an https page; anything else means the store's search", () => {
+    expect(
+      evaluateClientPolicy(policy("1.0.0", "2.0.0", "Обновите", "javascript:alert(1)"), android),
+    ).toMatchObject({ storeUrl: null });
   });
 });
 

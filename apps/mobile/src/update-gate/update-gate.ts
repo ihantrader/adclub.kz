@@ -1,5 +1,9 @@
 import { isApiError } from "@adclub/api-client";
-import { clientPolicyResponseSchema, type ClientInfo } from "@adclub/contracts";
+import {
+  clientPolicyResponseSchema,
+  type ClientInfo,
+  type ClientPolicyResponse,
+} from "@adclub/contracts";
 import { isVersionBelowMinimum } from "@adclub/domain";
 
 /**
@@ -16,7 +20,11 @@ export type UpdateGateState =
   | { status: "checking" }
   | { status: "supported" }
   | { status: "unverified" }
-  | { status: "update-required"; message: string };
+  /**
+   * `storeUrl` — the app's page in this platform's store (TASK-056,
+   * `client_store_url_*`); `null` — not set, M-START-03 searches the store.
+   */
+  | { status: "update-required"; message: string; storeUrl: string | null };
 
 export function shouldShowUpdateScreen(
   state: UpdateGateState,
@@ -33,14 +41,37 @@ export function evaluateClientPolicy(policy: unknown, client: ClientInfo): Updat
 
   const { minSupportedVersion } = parsed.data.platforms[client.platform];
   if (isVersionBelowMinimum(client.version, minSupportedVersion)) {
-    return { status: "update-required", message: parsed.data.message };
+    return {
+      status: "update-required",
+      message: parsed.data.message,
+      storeUrl: storePageOf(parsed.data, client),
+    };
   }
   return { status: "supported" };
 }
 
-function updateRequiredFrom(error: unknown): UpdateGateState | null {
+/**
+ * The app's store page of the client's platform — the mobile platforms have
+ * one. Only an `https://` page is opened; anything else is «not set» (the
+ * store's search).
+ */
+function storePageOf(policy: ClientPolicyResponse, client: ClientInfo): string | null {
+  const url =
+    client.platform === "ios" || client.platform === "android"
+      ? policy.platforms[client.platform].storeUrl
+      : null;
+  return url && /^https:\/\/\S+$/.test(url) ? url : null;
+}
+
+/** The store page a readable policy names (`undefined` — unreadable), kept for a 426 that carries none. */
+function storeUrlOf(policy: unknown, client: ClientInfo): string | null | undefined {
+  const parsed = clientPolicyResponseSchema.safeParse(policy);
+  return parsed.success ? storePageOf(parsed.data, client) : undefined;
+}
+
+function updateRequiredFrom(error: unknown, storeUrl: string | null): UpdateGateState | null {
   return isApiError(error) && error.code === "CLIENT_UPDATE_REQUIRED"
-    ? { status: "update-required", message: error.message }
+    ? { status: "update-required", message: error.message, storeUrl }
     : null;
 }
 
@@ -53,6 +84,8 @@ function updateRequiredFrom(error: unknown): UpdateGateState | null {
 export class UpdateGate {
   private state: UpdateGateState = { status: "checking" };
   private revision = 0;
+  /** What the last readable policy said about the store page. */
+  private storeUrl: string | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -70,7 +103,7 @@ export class UpdateGate {
   };
 
   handleApiError = (error: unknown): void => {
-    const next = updateRequiredFrom(error);
+    const next = updateRequiredFrom(error, this.storeUrl);
     if (next) {
       this.setState(next);
     }
@@ -84,13 +117,16 @@ export class UpdateGate {
 
     let next: UpdateGateState;
     try {
-      next = evaluateClientPolicy(await this.fetchPolicy(), this.client);
+      const policy = await this.fetchPolicy();
+      const named = storeUrlOf(policy, this.client);
+      if (named !== undefined) this.storeUrl = named;
+      next = evaluateClientPolicy(policy, this.client);
     } catch (error) {
       // No explicit answer keeps an earlier explicit "update required"
       // (a retry that fails offline must not unlock an outdated app) and
       // otherwise lets the user in.
       next =
-        updateRequiredFrom(error) ??
+        updateRequiredFrom(error, this.storeUrl) ??
         (this.state.status === "update-required" ? this.state : { status: "unverified" });
     }
 

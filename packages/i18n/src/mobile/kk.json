@@ -288,6 +288,7 @@
   "profile.appearanceLight": "Ашық",
   "profile.appearanceSystem": "Жүйе бойынша",
   "profile.version": "Қолданба нұсқасы",
+  "profile.versionWithUpdate": "{version} · жаңарту {update}",
   "profile.devices": "Құрылғылар",
   "profile.notifications": "Хабарламалар",
   "profile.notificationsOn": "Қосулы",

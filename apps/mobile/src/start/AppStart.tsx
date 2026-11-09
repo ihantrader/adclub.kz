@@ -5,6 +5,7 @@ import { LanguageScreen } from "../screens/LanguageScreen";
 import { SplashScreen } from "../screens/SplashScreen";
 import { UpdateRequiredScreen } from "../screens/UpdateRequiredScreen";
 import { updateGate } from "../services/api";
+import { checkForOtaUpdate } from "../services/ota-updates";
 import { useNetworkStatus } from "../services/use-network";
 import { useGarage } from "../state/garage-provider";
 import { useLanguage } from "../state/language";
@@ -60,8 +61,12 @@ export function AppStart() {
   // minimum lowered again takes it away (SCREENS 5.1, M-START-03).
   useEffect(() => {
     void updateGate.check();
+    // TASK-056: an OTA update, downloaded quietly for the next start.
+    void checkForOtaUpdate();
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next === "active") void updateGate.check();
+      if (next !== "active") return;
+      void updateGate.check();
+      void checkForOtaUpdate();
     });
     return () => subscription.remove();
   }, []);
@@ -114,6 +119,7 @@ export function AppStart() {
       return (
         <UpdateRequiredScreen
           message={gate.status === "update-required" ? gate.message : ""}
+          storeUrl={gate.status === "update-required" ? gate.storeUrl : null}
           onCheckAgain={updateGate.check}
           {...(session.status === "signed_in" && savedActiveOrders
             ? { onShowOrders: () => setReadOnlyOrders(true) }

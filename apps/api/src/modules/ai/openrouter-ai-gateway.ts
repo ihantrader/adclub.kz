@@ -3,6 +3,7 @@ import {
   AiGateway,
   AiGatewayError,
   dashboardOutputSchema,
+  maintenanceDraftOutputSchema,
   partPhotoOutputSchema,
   priceMatchOutputSchema,
   reviewCheckOutputSchema,
@@ -11,6 +12,7 @@ import {
   type AiFailureKind,
   type AiResult,
   type AiUsage,
+  type MaintenanceDraftInput,
   type PhotoInput,
   type PriceMatchInput,
   type ReviewCheckInput,
@@ -285,6 +287,31 @@ const REVIEW_CHECK_FORMAT = {
   },
 } as const;
 
+const MAINTENANCE_DRAFT_SYSTEM = `You draft the scheduled maintenance plan of a car for a car parts and services platform in Kazakhstan. Use the maker's public maintenance schedule for the CIS / Kazakhstan market as far as you know it (normal operating conditions); when unsure of an interval, give the maker's usual one for this engine type — never invent exotic work.
+
+Return the elements of the plan up to the given mileage (horizonKm): each is one piece of work — a part or a fluid to change (kind "part") or a service to do (kind "service").
+- title — a short name of the work in Russian («Моторное масло», «Масляный фильтр», «Замена моторного масла», «Тормозная жидкость»), at most 60 characters;
+- categoryCode — the code of ONE of the given subcategories it is picked from: of kind goods for a part, of kind services for a service; null when none of the given subcategories is it (then suggestedCategory says in Russian what subcategory it would be, otherwise suggestedCategory is null). Never use a code that is not in the list;
+- conditions — what the item must be, by the characteristics of that subcategory, using only their given codes: for a list — options with the codes of the fitting variants (any of them); for a number — min and/or max; for yes/no — value. Leave the other fields of a condition null or empty. Only conditions the maker prescribes (the oil's viscosity grade and approval, for example); an empty list when nothing is prescribed;
+- intervalKm — every how many km (1000…120000) and/or intervalMonths — every how many months (1…120); at least one of them; null for the one the maker does not give;
+- firstKm — when the first time is earlier than the interval (a break-in change), otherwise null;
+- serviceCodes — the services it belongs to, as «ТО-1», «ТО-2», …, where ТО-N is the N-th scheduled service (by the plan's shortest interval);
+- quantity — how many pieces when it is more than one (4 spark plugs), otherwise null.
+
+Do not list checks and inspections that are not a part or a service of the given list unless the maker schedules them as a separate service. Answer in the schema only.`;
+
+/** The longest answer of a draft (a reasoning model thinks within it). */
+const MAINTENANCE_DRAFT_MAX_TOKENS = 12_000;
+
+const MAINTENANCE_DRAFT_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "maintenance_plan_draft",
+    strict: true,
+    schema: strictJsonSchema(maintenanceDraftOutputSchema),
+  },
+} as const;
+
 export interface OpenRouterOptions {
   /** Tests give their own HTTP layer; nothing in development, tests or CI calls the real service. */
   fetch?: typeof fetch;
@@ -463,6 +490,33 @@ export class OpenRouterAiGateway extends AiGateway {
           {
             role: "user",
             content: `Check this review:\n${JSON.stringify({ score: input.score, text: input.text })}`,
+          },
+        ],
+      },
+      signal,
+    );
+  }
+
+  /** The car as the vehicle catalog names it and our subcategories (TASK-061); nothing personal. */
+  async draftMaintenancePlan(
+    input: MaintenanceDraftInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    return this.complete(
+      {
+        model,
+        max_tokens: MAINTENANCE_DRAFT_MAX_TOKENS,
+        response_format: MAINTENANCE_DRAFT_FORMAT,
+        messages: [
+          { role: "system", content: MAINTENANCE_DRAFT_SYSTEM },
+          {
+            role: "user",
+            content: `Draft the maintenance plan:\n${JSON.stringify({
+              vehicle: input.vehicle,
+              horizonKm: input.horizonKm,
+              subcategories: input.categories,
+            })}`,
           },
         ],
       },

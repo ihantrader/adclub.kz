@@ -38,6 +38,8 @@ const KIND_OF_SCHEMA: Record<string, StatusKind | "not a badge"> = {
   cardBindingStatusSchema: "not a badge",
   supplierInvitationStatusSchema: "invitation",
   translationQueueStateSchema: "translation",
+  maintenancePlanStatusSchema: "maintenancePlan",
+  maintenanceItemStatusSchema: "maintenanceItem",
   // A match of a recognized vehicle document, not the state of a record.
   vehicleDocumentMatchStatusSchema: "not a badge",
 };

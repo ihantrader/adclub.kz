@@ -177,6 +177,8 @@ describe("ormTables", () => {
         "vehicle_import_row",
         "account_car",
         "mileage_log",
+        "maintenance_plan",
+        "maintenance_plan_item",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

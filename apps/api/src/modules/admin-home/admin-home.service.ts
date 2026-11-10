@@ -13,6 +13,7 @@ import { AdminSignals } from "../signals";
 import { CatalogRequestsService } from "../price-imports";
 import { ComplaintsService, ReviewsService } from "../reviews";
 import { SupplierLeadsService } from "../suppliers";
+import { MaintenancePlansService } from "../maintenance";
 
 /** The catalog cards, in the order their totals are read. */
 const CATALOG_CARDS = [
@@ -46,30 +47,41 @@ export class AdminHomeService {
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
     @Inject(ComplaintsService) private readonly complaints: ComplaintsService,
     @Inject(AdminBilling) private readonly billing: AdminBilling,
+    @Inject(MaintenancePlansService) private readonly maintenance: MaintenancePlansService,
   ) {}
 
   async summary(): Promise<AdminHome> {
-    const [outage, signals, budget, leads, quality, queue, requests, held, complaints, unpaid] =
-      await Promise.all([
-        this.signals.currentOfKind("whatsapp_outage"),
-        this.signals.currentCounts(),
-        this.ai.budget(),
-        this.leads.list(supplierLeadListQuerySchema.parse({ status: "new", limit: 1 })),
-        Promise.all(
-          CATALOG_CARDS.map((card) =>
-            this.items
-              .page(
-                catalogItemListQuerySchema.parse({ ...adminHomeCatalogFilters[card], limit: 1 }),
-              )
-              .then((page) => page.total),
-          ),
+    const [
+      outage,
+      signals,
+      budget,
+      leads,
+      quality,
+      queue,
+      requests,
+      held,
+      complaints,
+      unpaid,
+      drafts,
+    ] = await Promise.all([
+      this.signals.currentOfKind("whatsapp_outage"),
+      this.signals.currentCounts(),
+      this.ai.budget(),
+      this.leads.list(supplierLeadListQuerySchema.parse({ status: "new", limit: 1 })),
+      Promise.all(
+        CATALOG_CARDS.map((card) =>
+          this.items
+            .page(catalogItemListQuerySchema.parse({ ...adminHomeCatalogFilters[card], limit: 1 }))
+            .then((page) => page.total),
         ),
-        this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
-        this.requests.waiting(),
-        this.reviews.heldCount(),
-        this.complaints.newCount(),
-        this.billing.unpaidSuppliers(),
-      ]);
+      ),
+      this.translations.queueList(translationQueueQuerySchema.parse({ limit: 1 })),
+      this.requests.waiting(),
+      this.reviews.heldCount(),
+      this.complaints.newCount(),
+      this.billing.unpaidSuppliers(),
+      this.maintenance.aiDraftsWaiting(),
+    ]);
     const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
       channelOutage: outage
@@ -91,6 +103,7 @@ export class AdminHomeService {
       catalogRequests: requests,
       reviewsHeld: held,
       complaintsNew: complaints,
+      maintenanceDrafts: drafts,
       supplierPaymentsFailed: unpaid,
       catalog: {
         withoutPhoto: withoutPhoto!,

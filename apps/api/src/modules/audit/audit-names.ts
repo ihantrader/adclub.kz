@@ -124,6 +124,10 @@ const NAMERS: Record<string, Namer> = {
   catalog_request: (list) =>
     sql`SELECT id, concat_ws(' · ', payload->>'article', payload->>'name') AS name
         FROM catalog_request WHERE id = ANY(${ids(list)})`,
+  // TASK-061: a plan by its name, an element by its Russian title.
+  maintenance_plan: (list) =>
+    sql`SELECT id, name FROM maintenance_plan WHERE id = ANY(${ids(list)})`,
+  maintenance_plan_item: translated("maintenance_plan_item"),
 };
 
 /**
@@ -162,6 +166,9 @@ export const AUDIT_REFERENCE_FIELDS: Record<string, string> = {
   adminId: "admin_user",
   grantId: "club_access_grant",
   importId: "price_import",
+  planId: "maintenance_plan",
+  // The order of a plan's elements (TASK-061): a list of them.
+  itemIds: "maintenance_plan_item",
 };
 
 /** A translation's entry names the thing it is of (`after.entityType`): the kind to name it as. */
@@ -203,17 +210,31 @@ export function namedKind(entry: NamedEntry): string {
   return entry.entityType;
 }
 
-/** The ids `before`/`after` refer to, by the kind of thing (one level deep). */
+/**
+ * The ids `before`/`after` refer to, by the kind of thing: a field of the
+ * entry, a list of ids under a known field (the order of a plan's elements),
+ * and the fields of an object one level down (the area of a maintenance
+ * plan, `scope: { makeId, modelId, … }`, TASK-061).
+ */
 export function referencesOf(entry: NamedEntry): [kind: string, id: string][] {
   const found: [string, string][] = [];
-  for (const side of [entry.before, entry.after]) {
-    if (typeof side !== "object" || side === null || Array.isArray(side)) continue;
-    for (const [key, value] of Object.entries(side as Record<string, unknown>)) {
+  const take = (fields: Record<string, unknown>, nested: boolean) => {
+    for (const [key, value] of Object.entries(fields)) {
       const kind = AUDIT_REFERENCE_FIELDS[key];
       if (kind && typeof value === "string" && UUID.test(value)) {
         found.push([kind, value]);
+      } else if (kind && Array.isArray(value)) {
+        for (const id of value) {
+          if (typeof id === "string" && UUID.test(id)) found.push([kind, id]);
+        }
+      } else if (nested && typeof value === "object" && value !== null && !Array.isArray(value)) {
+        take(value as Record<string, unknown>, false);
       }
     }
+  };
+  for (const side of [entry.before, entry.after]) {
+    if (typeof side !== "object" || side === null || Array.isArray(side)) continue;
+    take(side as Record<string, unknown>, true);
   }
   return found;
 }

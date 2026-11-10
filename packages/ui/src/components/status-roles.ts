@@ -10,6 +10,8 @@ import type {
   CompatibilityRecordStatus,
   ItemAnalogStatus,
   ItemPhotoStatus,
+  MaintenanceItemStatus,
+  MaintenancePlanStatus,
   OrderStatusValue,
   PriceImportStatus,
   ReviewStatusValue,
@@ -191,6 +193,17 @@ export const statusRoles = {
     active: done,
     removed: over,
   } satisfies Record<"active" | "removed", StatusRole>,
+  // A maintenance plan and its element (TASK-061): a draft and what AI proposed wait for the administrator.
+  maintenancePlan: {
+    draft: waits,
+    active: done,
+    archived: over,
+  } satisfies Record<MaintenancePlanStatus, StatusRole>,
+  maintenanceItem: {
+    proposed: waits,
+    active: done,
+    archived: over,
+  } satisfies Record<MaintenanceItemStatus, StatusRole>,
 } as const;
 
 export type StatusKind = keyof typeof statusRoles;

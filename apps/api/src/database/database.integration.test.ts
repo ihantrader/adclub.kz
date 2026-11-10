@@ -120,6 +120,92 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds maintenance plans with their rules in the base, and rolls back (TASK-061)", async () => {
+    const make = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_make DEFAULT VALUES RETURNING id",
+    );
+    const makeId = make.rows[0]!.id;
+    const otherMake = (
+      await client.query<{ id: string }>("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const model = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+      [makeId],
+    );
+    const modelId = model.rows[0]!.id;
+    const node = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level) VALUES ('consumables_061', 'goods', 1) RETURNING id",
+    );
+    const sub = await client.query<{ id: string }>(
+      "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('oils_061', 'goods', 2, $1, 1) RETURNING id",
+      [node.rows[0]!.id],
+    );
+    const plan = (makeOf: string, modelOf: string | null, status = "draft") =>
+      client.query<{ id: string }>(
+        `INSERT INTO maintenance_plan (make_id, model_id, name, source, status, confirmed_at)
+         VALUES ($1, $2, 'p', 'manual', $3, CASE WHEN $3 = 'active' THEN now() END) RETURNING id`,
+        [makeOf, modelOf, status],
+      );
+    // The levels agree: a model of another make is refused by the base.
+    await expect(plan(otherMake, modelId)).rejects.toThrow(/maintenance_plan_model_fkey/);
+    // One active plan per area (NULL equal to NULL); drafts — any number.
+    const active = await plan(makeId, null, "active");
+    await plan(makeId, null);
+    await expect(plan(makeId, null, "active")).rejects.toThrow(/maintenance_plan_active_scope_key/);
+    const planId = active.rows[0]!.id;
+    const item = (fields: string, values: unknown[]) =>
+      client.query(
+        `INSERT INTO maintenance_plan_item (plan_id, kind, interval_km, ${fields})
+         VALUES ($1, 'part', 10000, ${values.map((_, index) => `$${String(index + 2)}`).join(", ")})`,
+        [planId, ...values],
+      );
+    await item("target_kind, target_category_id, target_category_kind", [
+      "category",
+      sub.rows[0]!.id,
+      "goods",
+    ]);
+    // A part is picked from goods, not services; a rule by items has items; no rule — only proposed.
+    await expect(
+      item("target_kind, target_category_id, target_category_kind", [
+        "category",
+        sub.rows[0]!.id,
+        "services",
+      ]),
+    ).rejects.toThrow(/maintenance_plan_item_category/);
+    await expect(item("target_kind, target_item_ids", ["items", "{}"])).rejects.toThrow(
+      /maintenance_plan_item_target_check/,
+    );
+    await expect(item("status", ["active"])).rejects.toThrow(/maintenance_plan_item_target_check/);
+    await item("status", ["proposed"]);
+    // Intervals within reason, the first time before the interval.
+    await expect(item("first_km, status", [10_000, "proposed"])).rejects.toThrow(
+      /maintenance_plan_item_interval_check/,
+    );
+    await expect(
+      client.query(
+        "INSERT INTO maintenance_plan_item (plan_id, kind, interval_km, status) VALUES ($1, 'part', 500, 'proposed')",
+        [planId],
+      ),
+    ).rejects.toThrow(/maintenance_plan_item_interval_check/);
+    // A title is a text of the catalog's translations; the AI call has its kind.
+    await client.query(
+      "INSERT INTO translation (entity_type, entity_id, field, lang, text, origin, is_manually_edited) VALUES ('maintenance_plan_item', $1, 'name', 'ru', 'Масло', 'source', true)",
+      [planId],
+    );
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "maintenance_plan_item")).toBe(false);
+    expect(await tableExists(client, "maintenance_plan")).toBe(false);
+    expect(
+      (await client.query("SELECT 1 FROM translation WHERE entity_type = 'maintenance_plan_item'"))
+        .rowCount,
+    ).toBe(0);
+    await client.query("DELETE FROM category WHERE level = 2");
+    await client.query("DELETE FROM category");
+    await client.query("DELETE FROM vehicle_model");
+    await client.query("DELETE FROM vehicle_make");
+  });
+
   it("keeps the mileage journal of a car with its rules, goes with the car, and rolls back (TASK-058)", async () => {
     // Names live in the spelling tables; the rows themselves are enough here.
     const make = await client.query<{ id: string }>(

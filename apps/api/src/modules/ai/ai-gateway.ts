@@ -34,7 +34,8 @@ export type AiJobKind =
   | "assistant_turn"
   | "photo_search"
   | "attr_fill"
-  | "review_check";
+  | "review_check"
+  | "maintenance_plan_draft";
 
 /**
  * What a provider reported for one call. `costUsd` is what the provider
@@ -342,6 +343,84 @@ export const reviewCheckOutputSchema = z.object({
 
 export type ReviewCheckOutput = z.infer<typeof reviewCheckOutputSchema>;
 
+// ------------------------------------------------- maintenance plan draft
+
+/** A characteristic of a subcategory the rules may name, with its variants for a list. */
+export interface MaintenanceDraftAttribute {
+  code: string;
+  name: string;
+  type: "enum" | "number" | "boolean" | "text";
+  unit: string | null;
+  /** The variants of a list: their codes and names. */
+  options: readonly { code: string; name: string }[];
+}
+
+/** A subcategory of the catalog the elements may point at. */
+export interface MaintenanceDraftCategory {
+  code: string;
+  kind: "goods" | "services";
+  name: string;
+  attributes: readonly MaintenanceDraftAttribute[];
+}
+
+/**
+ * The area of a draft maintenance plan (TASK-061) and the catalog its rules
+ * are mapped onto: the car as the vehicle catalog names it — no person, no
+ * garage — and the active subcategories with their filters.
+ */
+export interface MaintenanceDraftInput {
+  vehicle: {
+    make: string;
+    model: string | null;
+    generation: string | null;
+    yearFrom: number | null;
+    yearTo: number | null;
+    engine: {
+      code: string;
+      displacementL: number | null;
+      fuel: string | null;
+      powerHp: number | null;
+    } | null;
+  };
+  /** The mileage the draft covers, km. */
+  horizonKm: number;
+  categories: readonly MaintenanceDraftCategory[];
+}
+
+/**
+ * The elements of the draft: the work in Russian, a part or a service, the
+ * subcategory by its code (`null` — none of ours fits; then `suggestedCategory`
+ * says what it would be), conditions on its characteristics by their codes,
+ * the intervals and the service codes. Everything is checked against the
+ * catalog by the caller: a code the catalog has not is dropped and noted.
+ */
+export const maintenanceDraftOutputSchema = z.object({
+  items: z.array(
+    z.object({
+      title: z.string(),
+      kind: z.enum(["part", "service"]),
+      categoryCode: z.string().nullable(),
+      suggestedCategory: z.string().nullable(),
+      conditions: z.array(
+        z.object({
+          attribute: z.string(),
+          options: z.array(z.string()),
+          min: z.number().nullable(),
+          max: z.number().nullable(),
+          value: z.boolean().nullable(),
+        }),
+      ),
+      intervalKm: z.number().int().nullable(),
+      intervalMonths: z.number().int().nullable(),
+      firstKm: z.number().int().nullable(),
+      serviceCodes: z.array(z.string()),
+      quantity: z.number().int().nullable(),
+    }),
+  ),
+});
+
+export type MaintenanceDraftOutput = z.infer<typeof maintenanceDraftOutputSchema>;
+
 /**
  * The provider behind the interface. `model` is the one `AiService` chose
  * from the settings of the operation; `signal` is aborted when the call
@@ -370,6 +449,12 @@ export abstract class AiGateway {
 
   abstract checkReview(
     input: ReviewCheckInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult>;
+
+  abstract draftMaintenancePlan(
+    input: MaintenanceDraftInput,
     model: string,
     signal: AbortSignal,
   ): Promise<AiResult>;
@@ -446,3 +531,15 @@ export const reviewCheckOperation: AiOperation<ReviewCheckInput, ReviewCheckOutp
   outputSchema: reviewCheckOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.checkReview(input, model, signal),
 };
+
+/** A draft maintenance plan of an area (TASK-061): `ai_job.kind` is `maintenance_plan_draft`. */
+export const maintenanceDraftOperation: AiOperation<MaintenanceDraftInput, MaintenanceDraftOutput> =
+  {
+    kind: "maintenance_plan_draft",
+    models: {
+      primary: "ai_model_maintenance_plan_primary",
+      fallback: "ai_model_maintenance_plan_fallback",
+    },
+    outputSchema: maintenanceDraftOutputSchema,
+    invoke: (gateway, input, model, signal) => gateway.draftMaintenancePlan(input, model, signal),
+  };

@@ -579,6 +579,20 @@ const ai = group({
       description:
         "Запасная модель проверки отзывов: используется, когда основная недоступна. Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
+    ai_model_maintenance_plan_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-3.1-flash-lite",
+      description:
+        "Модель OpenRouter для черновика регламента ТО (TASK-061): по марке, модели, поколению и двигателю и по перечню подкатегорий справочника предлагает работы с интервалами на 60 000 км; черновик подтверждает администратор, ИИ ничего не активирует. Умолчание — дешёвая модель с широкими знаниями; замер на наборе примеров (D-058) — отдельной задачей. Меняется без релиза, действует не позже чем через 30 секунд.",
+    }),
+    ai_model_maintenance_plan_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "openai/gpt-4.1-mini",
+      description:
+        "Запасная модель черновика регламента ТО: используется, когда основная недоступна. Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
     ai_model_vehicle_document_primary: define.string({
       maxLength: 100,
       pattern: MODEL_ID,
@@ -1645,6 +1659,21 @@ const adminPanel = group({
       max: DAY,
       default: HOUR,
       description: "Окно предела «Показать номер».",
+    }),
+    maintenance_draft_per_admin_day: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000,
+      default: 10,
+      description:
+        "Сколько черновиков регламента ТО (кнопка «Сгенерировать черновик ИИ») один администратор может запросить за окно (TASK-061). Расход держит и общий дневной бюджет ИИ.",
+    }),
+    maintenance_draft_per_admin_day_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: DAY,
+      description: "Окно предела черновиков регламента ТО (по умолчанию — сутки).",
     }),
   },
 });

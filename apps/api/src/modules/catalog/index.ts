@@ -4,7 +4,15 @@ export { CatalogAdminService } from "./catalog-admin.service";
 export type { CatalogActor } from "./catalog-admin.service";
 export { CatalogBrandsService, spellingKey } from "./catalog-brands.service";
 export { adminActor } from "./catalog-admin.controller";
-export { loadTexts, localize, normalizeText, plainTexts, textsOf } from "./catalog-texts";
+export {
+  describeTexts,
+  loadTexts,
+  localize,
+  normalizeText,
+  plainTexts,
+  textsOf,
+} from "./catalog-texts";
+export type { StoredTexts } from "./catalog-texts";
 export { decodeCursor, encodeCursor, escapeLike, TIME_POSITION } from "./catalog-paging";
 export { itemNameMatches } from "./item-name-search";
 export { CatalogItemsService } from "./catalog-items.service";

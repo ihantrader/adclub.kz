@@ -252,6 +252,8 @@ export const aiTestModes = [
   // the three as unreadable.
   "not_dashboard",
   "no_article",
+  // A draft maintenance plan (TASK-061): an answer of another shape.
+  "invalid_output",
 ] as const;
 export type AiTestMode = (typeof aiTestModes)[number];
 

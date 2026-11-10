@@ -523,6 +523,7 @@ export * from "./photo-recognition";
 export * from "./price-imports";
 export * from "./price-review";
 export * from "./notifications";
+export * from "./maintenance";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

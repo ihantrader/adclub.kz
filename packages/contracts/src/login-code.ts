@@ -177,6 +177,8 @@ export const rateLimitNameSchema = z.enum([
    */
   "admin_search_per_account",
   "phone_reveal_per_account",
+  /** AI drafts of maintenance plans asked by one administrator (TASK-061). */
+  "maintenance_draft_per_admin_day",
   /**
    * Reading a vehicle registration certificate (TASK-057, D-064): a guest's
    * trial recognitions per device (PRODUCT 6.6, `guest_limits`), and per

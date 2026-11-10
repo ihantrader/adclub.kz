@@ -7,6 +7,8 @@ export {
   dashboardOperation,
   dashboardOutputSchema,
   FALLBACK_WORTHY,
+  maintenanceDraftOperation,
+  maintenanceDraftOutputSchema,
   partPhotoOperation,
   partPhotoOutputSchema,
   priceMatchOperation,
@@ -26,6 +28,10 @@ export type {
   AiResult,
   AiUsage,
   DashboardOutput,
+  MaintenanceDraftAttribute,
+  MaintenanceDraftCategory,
+  MaintenanceDraftInput,
+  MaintenanceDraftOutput,
   PartPhotoOutput,
   PhotoInput,
   PriceMatchCandidate,
@@ -61,3 +67,4 @@ export { aiJob, aiTables } from "./schema";
 export type { AiJobRow } from "./schema";
 export { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 export { TEST_DASHBOARDS, TEST_PART_PHOTOS } from "./test-photos";
+export { testMaintenanceDraft } from "./test-maintenance-plans";

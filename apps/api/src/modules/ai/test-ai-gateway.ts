@@ -5,6 +5,7 @@ import {
   AiGateway,
   AiGatewayError,
   type AiResult,
+  type MaintenanceDraftInput,
   type PhotoInput,
   type PriceMatchInput,
   type PriceMatchRow,
@@ -21,6 +22,7 @@ import {
   TEST_PART_PHOTO_UNREADABLE,
   TEST_PART_PHOTOS,
 } from "./test-photos";
+import { testMaintenanceDraft } from "./test-maintenance-plans";
 import { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 
 const TRANSLITERATION: Readonly<Record<string, string>> = {
@@ -462,6 +464,56 @@ export class TestAiGateway extends AiGateway {
       1_000_000;
     return {
       output: this.mode === "incomplete" ? { found: violations } : { violations },
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
+  }
+
+  /** Every draft asked for: the subcategories sent and the model, never more (TASK-061). */
+  readonly maintenanceDraftRequests: { categories: number; model: string }[] = [];
+
+  /**
+   * The draft of `testMaintenanceDraft` (data of code). `invalid_output` and
+   * `incomplete` — an answer of another shape (`invalid_output`).
+   */
+  async draftMaintenancePlan(
+    input: MaintenanceDraftInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    this.maintenanceDraftRequests.push({ categories: input.categories.length, model });
+    if (model.startsWith(MISSING_MODEL_PREFIX) || this.failingModels.has(model)) {
+      throw new AiGatewayError("model_unavailable", `The test AI provider has no model ${model}`);
+    }
+    switch (this.mode) {
+      case "unavailable":
+        throw new AiGatewayError("unavailable", "The test AI provider is unavailable");
+      case "rejected":
+        throw new AiGatewayError("rejected", "The test AI provider refuses the request");
+      case "no_private_provider":
+        throw new AiGatewayError(
+          "no_private_provider",
+          "No provider of this model keeps requests unstored, so nothing was sent",
+        );
+      case "slow":
+        await this.wait(this.delayMs, signal);
+        break;
+      default:
+        break;
+    }
+    const draft = testMaintenanceDraft(input);
+    const tokensIn = 400 + input.categories.length * 60;
+    const tokensOut = draft.items.length * 80;
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    const invalid = this.mode === "invalid_output" || this.mode === "incomplete";
+    return {
+      output: invalid ? { elements: draft.items } : draft,
       model,
       usage: {
         tokensIn,

@@ -11,6 +11,7 @@ import {
   FALLBACK_WORTHY,
   NOT_BILLED,
   dashboardOperation,
+  maintenanceDraftOperation,
   partPhotoOperation,
   priceMatchOperation,
   reviewCheckOperation,
@@ -20,6 +21,8 @@ import {
   type AiOperation,
   type AiResult,
   type DashboardOutput,
+  type MaintenanceDraftInput,
+  type MaintenanceDraftOutput,
   type PartPhotoOutput,
   type PhotoInput,
   type PriceMatchInput,
@@ -168,6 +171,14 @@ export class AiService {
   /** The text of a review checked before it is published (TASK-049). */
   checkReview(input: ReviewCheckInput, meta: AiCallMeta): Promise<AiCallResult<ReviewCheckOutput>> {
     return this.call(reviewCheckOperation, input, meta);
+  }
+
+  /** A draft maintenance plan of an area (TASK-061); nothing is activated by it. */
+  draftMaintenancePlan(
+    input: MaintenanceDraftInput,
+    meta: AiCallMeta,
+  ): Promise<AiCallResult<MaintenanceDraftOutput>> {
+    return this.call(maintenanceDraftOperation, input, meta);
   }
 
   /**

@@ -372,6 +372,12 @@ export const adminHomeSchema = z.object({
   /** TASK-049 (5, «Жалобы · новых N»): `GET /admin/complaints?status=new`. */
   complaintsNew: z.number().int(),
   /**
+   * TASK-061 («Регламенты: черновиков ИИ ждут подтверждения · N»): AI drafts
+   * of maintenance plans not activated yet —
+   * `GET /admin/maintenance/plans?status=draft&source=ai_draft` (`total`).
+   */
+  maintenanceDrafts: z.number().int(),
+  /**
    * TASK-043 (6, «Платежи поставщиков не прошли · N»): the suppliers whose
    * bank refused or who are on the billing pause —
    * `GET /admin/billing/suppliers?groups=declined,paused` (`total`).

@@ -56,6 +56,12 @@ import { BillingModule, BillingOperator, Plans, SupplierCards } from "./modules/
 import { SignalsModule } from "./modules/signals";
 import { SearchEval, ShowcaseModule } from "./modules/showcase";
 import {
+  DevMaintenanceSeed,
+  DevMaintenanceSeedError,
+  MaintenanceDrafts,
+  MaintenanceModule,
+} from "./modules/maintenance";
+import {
   SearchIndexUnavailableError,
   SearchIndexWriter,
   SearchReindexBusyError,
@@ -201,6 +207,14 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                (TASK-014); a second run creates nothing
  *   dev:compatibility:seed       both seeds above, then compatibility of the
  *                                example items (TASK-015); idempotent
+ *   dev:maintenance:seed         active example maintenance plans of Geely, the
+ *                                Coolray 1.5T and the Chery Tiggo 7 Pro (TASK-061);
+ *                                idempotent
+ *   maintenance:draft --make <id> [--model <id>] [--generation <id>] [--engine <id>]
+ *                     --confirm-spend <usd> [--model-id <model>]
+ *                                a draft maintenance plan made by the AI provider
+ *                                configured (TASK-061): money, so the stated spend
+ *                                must fit in the day's budget; nothing is activated
  *   dev:suppliers:seed           the cities of Kazakhstan and an example supplier
  *                                worked through the funnel, plus a new request
  *                                (TASK-016); idempotent
@@ -234,6 +248,7 @@ class OperatorModule {
     const catalog = CatalogModule.forRoot({ http: false });
     const compatibility = CompatibilityModule.forRoot({ http: false });
     const clubAccess = ClubAccessModule.forRoot({ http: false });
+    const showcase = ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess });
     return {
       module: OperatorModule,
       imports: [
@@ -258,7 +273,8 @@ class OperatorModule {
           clubAccess,
           signals: SignalsModule.forRoot({ http: false }),
         }),
-        ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess }),
+        showcase,
+        MaintenanceModule.forRoot({ http: false, catalog, showcase }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -326,6 +342,8 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:catalog:arrange
   dev:vehicles:seed
   dev:compatibility:seed
+  dev:maintenance:seed
+  maintenance:draft --make <id> [--model <id>] [--generation <id>] [--engine <id>] --confirm-spend <usd> [--model-id <model>]
   dev:suppliers:seed
   dev:messages:webhook --message <id> [--status <status>] [--button confirm|decline|<payload>] [--from <phone>] [--twice] [--bad-signature]
   dev:jobs:fail [--note <text>] [--on-query]
@@ -443,6 +461,8 @@ interface Services {
   photoEval: PhotoEval;
   searchIndex: SearchIndexWriter;
   searchEval: SearchEval;
+  maintenanceSeed: DevMaintenanceSeed;
+  maintenanceDrafts: MaintenanceDrafts;
   devCommands: boolean;
 }
 
@@ -471,6 +491,8 @@ async function run(
     photoEval,
     searchIndex,
     searchEval,
+    maintenanceSeed,
+    maintenanceDrafts,
     devCommands,
   }: Services,
   argv: string[],
@@ -515,6 +537,11 @@ async function run(
       unlinked: { type: "boolean" },
       tester: { type: "boolean" },
       phone: { type: "string" },
+      make: { type: "string" },
+      model: { type: "string" },
+      generation: { type: "string" },
+      engine: { type: "string" },
+      "model-id": { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -933,6 +960,52 @@ async function run(
         vehicles: await vehicleSeed.run(),
         compatibility: await compatibilitySeed.run(),
       };
+    case "dev:maintenance:seed":
+      return maintenanceSeed.run();
+    case "maintenance:draft": {
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.3");
+      }
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const outcome = await maintenanceDrafts.draft(
+        {
+          scope: {
+            makeId: required(values.make, "--make"),
+            modelId: values.model ?? null,
+            generationId: values.generation ?? null,
+            engineId: values.engine ?? null,
+          },
+        },
+        { role: "operator" },
+        values["model-id"] === undefined ? {} : { model: values["model-id"] },
+      );
+      return {
+        planId: outcome.response.plan.id,
+        name: outcome.response.plan.name,
+        aiJobId: outcome.aiJobId,
+        model: outcome.model,
+        usedFallback: outcome.usedFallback,
+        dropped: outcome.dropped,
+        unmapped: outcome.unmapped,
+        items: outcome.response.items.map((item) => ({
+          title: item.title.ru?.text ?? null,
+          kind: item.kind,
+          intervalKm: item.intervalKm,
+          intervalMonths: item.intervalMonths,
+          firstKm: item.firstKm,
+          serviceCodes: item.serviceCodes,
+          rule: item.targetLabel,
+          note: item.note,
+        })),
+      };
+    }
     case "dev:suppliers:seed":
       return supplierSeed.run();
     case "dev:member:remove":
@@ -976,6 +1049,8 @@ async function main(): Promise<void> {
         photoEval: app.get(PhotoEval),
         searchIndex: app.get(SearchIndexWriter),
         searchEval: app.get(SearchEval),
+        maintenanceSeed: app.get(DevMaintenanceSeed),
+        maintenanceDrafts: app.get(MaintenanceDrafts),
         devCommands: hasDevJobs(config),
       },
       process.argv.slice(2),
@@ -994,6 +1069,7 @@ main().catch((error: unknown) => {
     error instanceof DevVehicleSeedError ||
     error instanceof DevCompatibilitySeedError ||
     error instanceof DevSupplierSeedError ||
+    error instanceof DevMaintenanceSeedError ||
     error instanceof JobAdminError ||
     error instanceof MessagingCommandError ||
     error instanceof NotificationsCommandError ||

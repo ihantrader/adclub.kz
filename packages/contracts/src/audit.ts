@@ -362,6 +362,23 @@ export const auditActions = {
   complaintCreated: "complaint.created",
   complaintTaken: "complaint.taken",
   complaintResolved: "complaint.resolved",
+  /**
+   * Maintenance plans (TASK-061): a plan created (by hand, as a copy, or as
+   * an AI draft — `after.source`), changed, activated, archived, back to a
+   * draft; an element added, changed, confirmed (`active`), archived, and
+   * the order of the elements (on the plan).
+   */
+  maintenancePlanCreated: "maintenance_plan.created",
+  maintenancePlanChanged: "maintenance_plan.changed",
+  maintenancePlanActivated: "maintenance_plan.activated",
+  maintenancePlanArchived: "maintenance_plan.archived",
+  maintenancePlanRestored: "maintenance_plan.restored",
+  maintenancePlanItemsReordered: "maintenance_plan.items_reordered",
+  maintenancePlanItemCreated: "maintenance_plan_item.created",
+  maintenancePlanItemChanged: "maintenance_plan_item.changed",
+  maintenancePlanItemConfirmed: "maintenance_plan_item.confirmed",
+  maintenancePlanItemArchived: "maintenance_plan_item.archived",
+  maintenancePlanItemRestored: "maintenance_plan_item.restored",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -418,6 +435,9 @@ export const auditEntities = {
   review: "review",
   /** A complaint about an order (TASK-049). */
   complaint: "complaint",
+  /** A maintenance plan and one of its elements (TASK-061). */
+  maintenancePlan: "maintenance_plan",
+  maintenancePlanItem: "maintenance_plan_item",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

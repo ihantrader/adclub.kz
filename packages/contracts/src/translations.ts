@@ -27,6 +27,8 @@ export const translationEntityTypeSchema = z.enum([
   "attribute",
   "attribute_option",
   "catalog_item",
+  // The title of an element of a maintenance plan (TASK-061).
+  "maintenance_plan_item",
 ]);
 
 export type TranslationEntityType = z.infer<typeof translationEntityTypeSchema>;
@@ -69,6 +71,8 @@ export const translationMaxLengths = {
   attribute: { name: ATTRIBUTE_NAME_MAX_LENGTH, unit: ATTRIBUTE_UNIT_MAX_LENGTH },
   attribute_option: { name: ATTRIBUTE_OPTION_NAME_MAX_LENGTH },
   catalog_item: { name: CATALOG_ITEM_NAME_MAX_LENGTH },
+  // MAINTENANCE_TITLE_MAX_LENGTH of maintenance.ts (not imported: no cycle of modules).
+  maintenance_plan_item: { name: 120 },
 } as const satisfies Record<TranslationEntityType, Partial<Record<TranslationField, number>>>;
 
 export const translationEntityPathSchema = z.object({

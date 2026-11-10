@@ -33,6 +33,8 @@ const CONTEXTS: Record<string, string> = {
     "the unit of measure of a characteristic of automotive products (an abbreviation)",
   "attribute_option:name": "one option of a list characteristic of automotive products",
   "catalog_item:name": "the name of a catalog item: an automotive spare part, a fluid or a service",
+  "maintenance_plan_item:name":
+    "the short name of a piece of scheduled car maintenance work: a part or fluid to change, or a service",
 };
 
 export function translateContextOf(

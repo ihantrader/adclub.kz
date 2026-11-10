@@ -33,7 +33,13 @@ import type {
  * and foreign keys that hold two levels; ARCHITECTURE 5.2, 5.4, 4.15).
  */
 
-export type TranslationEntityType = "category" | "attribute" | "attribute_option" | "catalog_item";
+export type TranslationEntityType =
+  | "category"
+  | "attribute"
+  | "attribute_option"
+  | "catalog_item"
+  // The title of an element of a maintenance plan (TASK-061).
+  | "maintenance_plan_item";
 export type TranslationField = "name" | "unit";
 export type TranslationOrigin = "source" | "manual" | "ai";
 

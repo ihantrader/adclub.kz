@@ -303,6 +303,23 @@ import { clientPlatformSchema } from "./client";
  * - `PLAN_NOT_CANCELLABLE` (409): the record has started already, or is
  *   cancelled already — only a change still ahead is cancelled.
  *
+ * Maintenance plans (TASK-061, ARCHITECTURE 4.84):
+ * - `MAINTENANCE_VERSION_CONFLICT` (409): the plan or the element was
+ *   changed by someone else; `details` is `MaintenanceVersionConflictDetails`.
+ * - `MAINTENANCE_PLAN_ACTIVE_EXISTS` (409): the area already has an active
+ *   plan — archive it (or change the area) first; `details.existingPlanId`.
+ * - `MAINTENANCE_PLAN_NOT_READY` (409): the plan can't be activated —
+ *   no elements, or elements proposed or leading nowhere; `details` is
+ *   `MaintenanceNotReadyDetails`.
+ * - `MAINTENANCE_PLAN_STATE` (409): not in this status — an active plan's
+ *   area doesn't change, an archived plan's elements don't change.
+ * - `MAINTENANCE_DRAFT_IN_PROGRESS` (409): AI is already making a draft of
+ *   this area.
+ * - `MAINTENANCE_TARGET_INVALID` (400): the rule names what the catalog
+ *   has not; `details` is `MaintenanceTargetInvalidDetails`.
+ * - `MAINTENANCE_SCOPE_INVALID` (400): the levels of the area don't agree;
+ *   `details` is `MaintenanceScopeInvalidDetails`.
+ *
  * Price list imports (TASK-046, ARCHITECTURE 4.66):
  * - `PRICE_IMPORT_FILE_INVALID` (400): the uploaded file can't be read as a
  *   price list — the content is looked at, not the name; `details` is
@@ -537,6 +554,14 @@ export const errorCodeSchema = z.enum([
   // Tariffs in the admin panel (TASK-043, ARCHITECTURE 4.78).
   "PLAN_VERSION_CONFLICT",
   "PLAN_NOT_CANCELLABLE",
+  // Maintenance plans (TASK-061, ARCHITECTURE 4.84).
+  "MAINTENANCE_VERSION_CONFLICT",
+  "MAINTENANCE_PLAN_ACTIVE_EXISTS",
+  "MAINTENANCE_PLAN_NOT_READY",
+  "MAINTENANCE_PLAN_STATE",
+  "MAINTENANCE_DRAFT_IN_PROGRESS",
+  "MAINTENANCE_TARGET_INVALID",
+  "MAINTENANCE_SCOPE_INVALID",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

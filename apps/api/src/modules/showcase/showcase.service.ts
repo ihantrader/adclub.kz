@@ -157,11 +157,17 @@ export class ShowcaseService {
 
   // ----------------------------------------------------------------- list
 
+  /**
+   * `only` (never from a request): the list kept to these items — a rule of a
+   * maintenance plan by particular items (TASK-061) counts what the list of
+   * their subcategory would show of them, by this very code.
+   */
   async list(
     categoryId: string,
     query: ShowcaseListQuery,
     viewer: Viewer,
     lang: CatalogLanguage,
+    only?: { itemIds: readonly string[] },
   ): Promise<ShowcaseListResponse> {
     const executor = this.database.db;
     const now = new Date();
@@ -221,7 +227,10 @@ export class ShowcaseService {
       )
     ).filter((result) => offered.has(result.itemId));
     const resultOf = new Map(results.map((result) => [result.itemId, result]));
-    const listed = results.filter((result) => result.listed).map((result) => result.itemId);
+    const kept = only ? new Set(only.itemIds) : null;
+    const listed = results
+      .filter((result) => result.listed && (kept === null || kept.has(result.itemId)))
+      .map((result) => result.itemId);
     const items =
       listed.length === 0
         ? []

@@ -17,6 +17,7 @@
   "src/modules/identity/cleanup/sign-in-data-cleanup.integration.test.ts": 29,
   "src/modules/identity/login-code/login-code.integration.test.ts": 30,
   "src/modules/identity/session/session.integration.test.ts": 32,
+  "src/modules/maintenance/maintenance.integration.test.ts": 40,
   "src/modules/messaging/messaging.integration.test.ts": 109,
   "src/modules/offers/offers.integration.test.ts": 23,
   "src/modules/orders/on-order.integration.test.ts": 124,

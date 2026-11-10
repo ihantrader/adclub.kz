@@ -1,5 +1,5 @@
 import type { CatalogLanguage } from "@adclub/contracts";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { languagesOf, loadTexts, nameKey, textsOf } from "./catalog-texts";
 import {
@@ -122,6 +122,16 @@ export async function nameNeighbours(
     }
     case "catalog_item": {
       const [self] = await executor.select().from(catalogItem).where(eq(catalogItem.id, entityId));
+      return self ? { status: self.status, neighbours: [], scope: null } : undefined;
+    }
+    case "maintenance_plan_item": {
+      // The title of an element of a maintenance plan (TASK-061): a neighbour
+      // of nobody — two elements may well be called the same. Read by SQL:
+      // the catalog does not depend on the maintenance module.
+      const result = await executor.execute<{ status: string }>(
+        sql`SELECT status FROM maintenance_plan_item WHERE id = ${entityId}`,
+      );
+      const self = result.rows[0];
       return self ? { status: self.status, neighbours: [], scope: null } : undefined;
     }
   }

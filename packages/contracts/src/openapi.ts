@@ -60,6 +60,7 @@ import * as priceImportContract from "./price-imports";
 import * as priceReviewContract from "./price-review";
 import * as searchContract from "./search";
 import * as vehicleContract from "./vehicles";
+import * as maintenanceContract from "./maintenance";
 import {
   accessContextSchema,
   administratorListResponseSchema,
@@ -297,6 +298,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(searchContract),
   ...moduleComponentSchemas(priceImportContract),
   ...moduleComponentSchemas(priceReviewContract),
+  ...moduleComponentSchemas(maintenanceContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,

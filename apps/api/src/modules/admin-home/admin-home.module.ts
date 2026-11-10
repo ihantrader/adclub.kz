@@ -14,6 +14,8 @@ export interface AdminHomeModuleOptions {
   reviews: DynamicModule;
   /** The suppliers whose payments failed (TASK-043). */
   billing: DynamicModule;
+  /** AI drafts of maintenance plans waiting (TASK-061). */
+  maintenance: DynamicModule;
 }
 
 /**
@@ -34,6 +36,7 @@ export class AdminHomeModule {
         options.priceImports,
         options.reviews,
         options.billing,
+        options.maintenance,
       ],
       controllers: [AdminHomeController],
       providers: [AdminHomeService],

@@ -412,3 +412,29 @@ export { announcedPlan, earliestPlanStart, planInEffect } from "./subscription/p
 export type { PlanRecord } from "./subscription/plans";
 export { purchaseLinkVerdict } from "./subscription/purchase-link";
 export type { PurchaseLinkFacts, PurchaseLinkVerdict } from "./subscription/purchase-link";
+export {
+  ageMonthsFromYear,
+  dueMaintenance,
+  MAINTENANCE_KM_MAX,
+  MAINTENANCE_KM_MIN,
+  MAINTENANCE_LEVELS,
+  MAINTENANCE_MONTHS_MAX,
+  MAINTENANCE_MONTHS_MIN,
+  maintenanceIntervalsProblem,
+  maintenancePlanFor,
+  maintenanceScopeMatches,
+} from "./maintenance/maintenance-plan";
+export type {
+  DueAnswer,
+  DueElement,
+  DueQuery,
+  DueReason,
+  MaintenanceCar,
+  MaintenanceElement,
+  MaintenanceLastDone,
+  MaintenanceLevel,
+  MaintenanceScope,
+  PlanCandidate,
+  PlanChoice,
+  ScopeMatch,
+} from "./maintenance/maintenance-plan";

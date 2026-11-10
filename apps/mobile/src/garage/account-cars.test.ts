@@ -18,6 +18,7 @@ function accountCar(overrides: Partial<AccountCar> = {}): AccountCar {
     vin: null,
     plate: null,
     document: null,
+    mileage: null,
     isPrimary: false,
     createdAt: "2026-10-03T10:00:00.000Z",
     updatedAt: "2026-10-03T10:00:00.000Z",

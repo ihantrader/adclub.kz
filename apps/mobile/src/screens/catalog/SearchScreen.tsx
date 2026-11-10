@@ -1,8 +1,9 @@
 import type { CatalogSearchCategory, CatalogSearchItem } from "@adclub/contracts";
 import { layout } from "@adclub/ui-core";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from "react-native";
 import {
+  AiBadge,
   Banner,
   Button,
   CategoryIcon,
@@ -30,6 +31,7 @@ import {
   type FilterState,
 } from "../../catalog/filters";
 import { joinDot } from "../../catalog/format";
+import { stillRecognizedArticle, type PartPhotoFound } from "../../catalog/part-photo";
 import { rememberSearch, tidyQuery } from "../../catalog/recent-searches";
 import { vehicleQuery } from "../../catalog/vehicle-query";
 import { carTitle } from "../../garage/garage";
@@ -51,6 +53,12 @@ import { ItemRow } from "./parts";
 const SUGGEST_AFTER_MS = 300;
 
 export interface SearchScreenProps {
+  /** The article a photo gave (M-CAT-06, TASK-058): searched at once, marked «распознан». */
+  photo?: PartPhotoFound;
+  /** «Ввести артикул» after a photo that gave none: the line, empty and focused. */
+  typeArticle?: number;
+  /** The camera in the line (M-CAT-06). */
+  onPhoto: () => void;
   onBack: () => void;
   onOpenItem: (item: { id: string; name: string }) => void;
   /** A node opens its subcategories, a subcategory its list. */
@@ -82,7 +90,15 @@ export interface SearchScreenProps {
  *   другого автомобиля из гаража»: the car switch of the header.
  * - Offline: «Нужна сеть» — the search is the server's.
  */
-export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: SearchScreenProps) {
+export function SearchScreen({
+  photo,
+  typeArticle,
+  onPhoto,
+  onBack,
+  onOpenItem,
+  onOpenCategory,
+  onAddCar,
+}: SearchScreenProps) {
   const { t, tn } = useLanguage();
   const { theme } = useTheme();
   const online = useOnline();
@@ -99,8 +115,47 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
   const [category, setCategory] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
+  // What the last photo gave (TASK-058): the article, the other ones, the analogs.
+  const [recognized, setRecognized] = useState<PartPhotoFound | null>(null);
+
+  // A new photo: its article goes into the line and is searched at once.
+  // «Ввести артикул» (a new stamp): the line empty and focused — the field is
+  // made anew (`fieldKey`), so its `autoFocus` applies again. Each is told
+  // apart from the last one seen: the navigator may keep the other parameter.
+  const [seen, setSeen] = useState<{ photo?: PartPhotoFound; typeArticle?: number }>({});
+  const [fieldKey, setFieldKey] = useState(0);
+  if (photo !== seen.photo || typeArticle !== seen.typeArticle) {
+    const newPhoto = photo !== undefined && photo !== seen.photo;
+    const newTyping = typeArticle !== undefined && typeArticle !== seen.typeArticle;
+    setSeen({
+      ...(photo ? { photo } : {}),
+      ...(typeArticle !== undefined ? { typeArticle } : {}),
+    });
+    if (newTyping || newPhoto) {
+      setCategory(null);
+      setFilters(EMPTY_FILTERS);
+    }
+    if (newTyping) {
+      setRecognized(null);
+      setText("");
+      setSubmitted(null);
+      setFieldKey((key) => key + 1);
+    } else if (newPhoto) {
+      const tidy = tidyQuery(photo.article);
+      setRecognized(photo);
+      setText(tidy);
+      setSubmitted(tidy);
+    }
+  }
+  // The recognised article is a query run: it joins the recent ones (not while rendering).
+  useEffect(() => {
+    if (photo)
+      recentSearchesStore.set(rememberSearch(recentSearchesStore.get(), tidyQuery(photo.article)));
+  }, [photo]);
 
   const typed = tidyQuery(text);
+  // «распознан» until the person edits the line (SCREENS 9.3).
+  const fromPhoto = recognized !== null && stillRecognizedArticle(text, recognized.article);
   // The search that was run, while the query is still the one it was run for:
   // editing the query goes back to the suggestions.
   const submitted = ran !== null && ran === typed ? ran : null;
@@ -163,16 +218,62 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
       <CatalogHeader onAddCar={onAddCar} />
       <View style={styles.field}>
         <SearchField
+          key={fieldKey}
           label={t("search.label")}
           placeholder={t("search.placeholder")}
           value={text}
           onChangeText={setText}
           clearLabel={t("search.clearField")}
-          autoFocus
+          autoFocus={recognized === null}
           autoCorrect={false}
           autoCapitalize="none"
           onSubmitEditing={() => run(text)}
+          action={{
+            icon: "camera",
+            label: t("partPhoto.open"),
+            onPress: onPhoto,
+            disabled: !online,
+          }}
         />
+        {fromPhoto && recognized && (
+          <View style={styles.recognized}>
+            <View style={styles.recognizedLine}>
+              <AiBadge>{t("search.recognized")}</AiBadge>
+              <Text variant="caption" color="textMuted" style={styles.recognizedText}>
+                {t("search.recognizedArticle")}
+              </Text>
+            </View>
+            {recognized.candidates.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.chipRow}
+              >
+                {recognized.candidates.map((candidate) => (
+                  <Chip
+                    key={candidate}
+                    onPress={() => {
+                      // Another article of the label — still what the photo read.
+                      setRecognized({
+                        article: candidate,
+                        candidates: [
+                          recognized.article,
+                          ...recognized.candidates.filter((other) => other !== candidate),
+                        ],
+                        analogs: [],
+                        total: -1,
+                      });
+                      run(candidate);
+                    }}
+                  >
+                    {t("search.orArticle", { article: candidate })}
+                  </Chip>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        )}
       </View>
     </>
   );
@@ -398,9 +499,37 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
           onEndReached={() => results.hasMore && results.loadMore()}
           ListHeaderComponent={resultsHead()}
           ListFooterComponent={
-            moreIndicator ? (
-              <ActivityIndicator style={styles.more} color={theme.colors.accent} />
-            ) : null
+            <>
+              {moreIndicator ? (
+                <ActivityIndicator style={styles.more} color={theme.colors.accent} />
+              ) : null}
+              {/* TASK-058: the analogs of the article a photo gave, while it is that article. */}
+              {fromPhoto && !results.hasMore && recognized && recognized.analogs.length > 0 ? (
+                <View style={styles.analogs}>
+                  <Text variant="title" accessibilityRole="header">
+                    {t("search.analogs")}
+                  </Text>
+                  {recognized.analogs.map((item, index) => (
+                    <ItemRow
+                      key={item.id}
+                      first={index === 0}
+                      last={index === recognized.analogs.length - 1}
+                      name={item.name.text}
+                      brand={item.brand?.name ?? null}
+                      article={item.article}
+                      photo={item.photo}
+                      icon={iconOf(item)}
+                      keyAttributes={item.keyAttributes}
+                      compatibility={item.compatibility}
+                      carName={carName}
+                      offers={item.offers}
+                      cityName={answer?.city?.name.text ?? null}
+                      onPress={() => openItem(item)}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </>
           }
           renderItem={({ item, index }) => (
             <ItemRow
@@ -500,6 +629,27 @@ export function SearchScreen({ onBack, onOpenItem, onOpenCategory, onAddCar }: S
         ),
       };
     }
+    // TASK-058: the article a photo gave is not in the catalog.
+    if (fromPhoto && answer?.empty === "no_items") {
+      return {
+        icon: "search" as const,
+        title: t("search.articleNotInCatalog"),
+        text: t("search.articleNotInCatalogText", { article: submitted ?? "" }),
+        action: (
+          <Button
+            variant="secondary"
+            size="m"
+            onPress={() => {
+              setRecognized(null);
+              setText("");
+              setSubmitted(null);
+            }}
+          >
+            {t("search.searchByText")}
+          </Button>
+        ),
+      };
+    }
     if (answer?.empty === "city_required") {
       return {
         icon: "mapPin" as const,
@@ -562,5 +712,9 @@ const styles = StyleSheet.create({
   head: { gap: 12, paddingBottom: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chipRow: { flexDirection: "row", gap: 8 },
+  recognized: { gap: 8, paddingTop: 8 },
+  recognizedLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  recognizedText: { flex: 1 },
+  analogs: { gap: 0, paddingTop: layout.blockGap },
   more: { paddingVertical: layout.cardPadding },
 });

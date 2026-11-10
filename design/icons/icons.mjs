@@ -19,6 +19,8 @@ export const ui = {
   // The date field's calendar (TASK-079).
   calendar: "calendar-blank",
   calendarX: "calendar-x",
+  // A part by its photo in the search line (M-CAT-06, TASK-058).
+  camera: "camera",
   // The scanner without a camera (S-SCAN-01, TASK-033).
   cameraSlash: "camera-slash",
   // The car of the garage, «нет автомобиля», the catalog header and the car

@@ -10,6 +10,7 @@ import { RegisterScreen } from "../screens/auth/RegisterScreen";
 import { FirstRunCarScreen } from "../screens/FirstRunCarScreen";
 import { FirstRunCityScreen } from "../screens/FirstRunCityScreen";
 import { CarDocumentScreen } from "../screens/garage/CarDocumentScreen";
+import { CarMileageScreen } from "../screens/garage/CarMileageScreen";
 import { CarStepScreen } from "../screens/garage/CarStepScreen";
 import { CarSummaryScreen } from "../screens/garage/CarSummaryScreen";
 import { CheckoutScreen } from "../screens/orders/CheckoutScreen";
@@ -89,6 +90,7 @@ export function RootNavigator({ start }: { start: RootStart }) {
           options={{ gestureEnabled: false, animationTypeForReplace: "push" }}
         />
         <Stack.Screen name="car-document" component={CarDocumentScreen} />
+        <Stack.Screen name="car-mileage" component={CarMileageScreen} />
         <Stack.Screen name="car-step" component={CarStepScreen} />
         <Stack.Screen name="car-summary" component={CarSummaryScreen} />
         {/* Sign-in (TASK-029, SCREENS M-AUTH-01…03): pushed above whichever tab asked for it (`useSignIn`). */}

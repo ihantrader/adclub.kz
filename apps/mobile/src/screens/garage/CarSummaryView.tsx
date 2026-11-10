@@ -190,6 +190,7 @@ export function CarSummaryView({
       vin: checked.vin,
       plate: checked.plate,
       document,
+      mileage: car?.mileage ?? null,
     });
   };
 

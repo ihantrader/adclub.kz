@@ -54,6 +54,7 @@ import { AccessMark, USERS_CRUMB } from "./Users";
 import {
   accessText,
   carDocumentText,
+  carMileageText,
   carParams,
   carTitle,
   consentText,
@@ -680,6 +681,13 @@ function Garage({ accountId }: { accountId: string }) {
                       <span className="nowrap">{formatKzPlate(car.plate)}</span>
                     ) : (
                       <Muted>не указан</Muted>
+                    )}
+                  </span>
+                  <span className="ac-text-body-s" data-testid="car-mileage">
+                    {car.mileage ? (
+                      carMileageText(car.mileage, (iso) => formatMoment(iso))
+                    ) : (
+                      <Muted>{carMileageText(null, formatMoment)}</Muted>
                     )}
                   </span>
                   <span className="badges">

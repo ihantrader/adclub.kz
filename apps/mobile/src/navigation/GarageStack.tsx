@@ -86,6 +86,7 @@ function GarageCarScreen({
       }
       onEdit={(step) => carPicker.edit(car, step)}
       onConfirm={() => carPicker.confirm(car)}
+      onMileage={() => carPicker.mileage(car)}
     />
   );
 }

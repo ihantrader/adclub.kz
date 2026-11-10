@@ -1,5 +1,6 @@
 import type { ComplaintReasonValue, OrderFulfillment } from "@adclub/contracts";
 import type { NavigatorScreenParams } from "@react-navigation/native";
+import type { PartPhotoFound } from "../catalog/part-photo";
 import type { CarColorId } from "../garage/car-color";
 import type { CarDraft } from "../garage/car-picker";
 import type { CarRecognition } from "../garage/document-flow";
@@ -28,8 +29,14 @@ export type CatalogStackParams = {
    * subcategory of services (TASK-019): shown by a city, at a model's price.
    */
   "catalog-items": { categoryId: string; title?: string; kind?: "goods" | "services" };
-  /** M-CAT-04: the search (TASK-044), for the car and the city of the header. */
-  "catalog-search": undefined;
+  /**
+   * M-CAT-04: the search (TASK-044), for the car and the city of the header.
+   * `photo` — the article a photo gave (M-CAT-06, TASK-058): put into the
+   * line marked «распознан» and searched at once.
+   */
+  "catalog-search": { photo?: PartPhotoFound; typeArticle?: number } | undefined;
+  /** M-CAT-06 (TASK-058): the camera for the article of a part. */
+  "catalog-part-photo": undefined;
   /**
    * M-CAT-07. `notice` — why the card was opened by «Повторить заказ»
    * instead of the checkout (TASK-030): the offer was withdrawn, or the
@@ -187,6 +194,8 @@ export type RootParams = {
   tabs: NavigatorScreenParams<TabParams> | undefined;
   /** M-GAR-04. */
   "car-document": CarDocumentParams;
+  /** M-GAR-07 and M-GAR-05 for the mileage (TASK-058): the car whose reading is written. */
+  "car-mileage": { carId: string };
   /** M-GAR-03. */
   "car-step": CarStepParams;
   /** M-GAR-03, final step. */

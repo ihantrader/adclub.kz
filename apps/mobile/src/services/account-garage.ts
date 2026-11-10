@@ -19,6 +19,7 @@ export const accountGarage: AccountGarage = createAccountGarage({
     },
     makePrimary: (carId) => apiClient.setPrimaryGarageCar({ carId }),
     transfer: (body) => apiClient.transferGarage(body),
+    recordMileage: (carId, body) => apiClient.recordGarageCarMileage({ carId }, body),
   },
   copy: accountGarageStore,
   guest: garageStore,

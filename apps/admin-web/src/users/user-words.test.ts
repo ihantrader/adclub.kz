@@ -7,6 +7,7 @@ import {
   ipText,
   accessText,
   carDocumentText,
+  carMileageText,
   carText,
   deviceText,
   endOfYear,
@@ -69,6 +70,20 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
     expect(carDocumentText(null, day)).toBe("Без отметки о документе");
   });
 
+  it("says the current mileage of a car and where it came from (TASK-058)", () => {
+    const day = (iso: string) => iso.slice(0, 10);
+    expect(
+      carMileageText(
+        { valueKm: 45_200, source: "photo", recordedAt: "2026-11-10T08:00:00.000Z" },
+        day,
+      ),
+    ).toBe("Пробег 45\u00a0200 км · с фото · 2026-11-10");
+    expect(
+      carMileageText({ valueKm: 950, source: "text", recordedAt: "2026-11-10T08:00:00.000Z" }, day),
+    ).toBe("Пробег 950 км · вручную · 2026-11-10");
+    expect(carMileageText(null, day)).toBe("Пробег не указан");
+  });
+
   it("names a device, a car and a refusal in words", () => {
     expect(deviceText({ deviceName: "iPhone 15", platform: "ios", clientVersion: "1.4.2" })).toBe(
       "iPhone 15 · iPhone · версия 1.4.2",
@@ -92,6 +107,7 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
         vin: null,
         plate: null,
         document: null,
+        mileage: null,
         isPrimary: true,
         createdAt: "2026-10-10T10:00:00.000Z",
         updatedAt: "2026-10-10T10:00:00.000Z",

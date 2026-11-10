@@ -36,6 +36,7 @@ export {
   useToast,
 } from "./feedback";
 export { CodeCells, Keypad, PhoneField, SearchEntry, SearchField, TextField } from "./fields";
+export type { SearchFieldAction } from "./fields";
 export {
   DataState,
   OfflineBanner,

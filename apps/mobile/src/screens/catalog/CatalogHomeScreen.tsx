@@ -37,6 +37,8 @@ export interface CatalogHomeScreenProps {
   onCompleteEngine: (car: GarageCar) => void;
   /** «Артикул или название» opens the search (M-CAT-04, TASK-044). */
   onOpenSearch: () => void;
+  /** The camera of the line: a part by a photo of its article (M-CAT-06, TASK-058). */
+  onOpenPartPhoto: () => void;
 }
 
 /**
@@ -56,6 +58,7 @@ export function CatalogHomeScreen({
   onAddCar,
   onCompleteEngine,
   onOpenSearch,
+  onOpenPartPhoto,
 }: CatalogHomeScreenProps) {
   const t = useT();
   const online = useOnline();
@@ -116,6 +119,7 @@ export function CatalogHomeScreen({
               onPress={onOpenSearch}
               disabled={!online}
               disabledHint={t("search.needsNetwork")}
+              action={{ icon: "camera", label: t("partPhoto.open"), onPress: onOpenPartPhoto }}
             />
           </View>
         </>

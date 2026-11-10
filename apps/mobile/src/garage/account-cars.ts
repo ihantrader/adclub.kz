@@ -66,6 +66,17 @@ export function toTransferBody(guest: GarageState): TransferGarageBody {
   return {
     cars: guest.cars.map((car) => ({
       ...toSaveBody(car),
+      // TASK-058: the guest's reading becomes one entry of the account car's journal.
+      ...(car.mileage && (car.mileage.source === "text" || car.mileage.source === "photo")
+        ? {
+            mileage: {
+              valueKm: car.mileage.valueKm,
+              source: car.mileage.source,
+              recordedAt: car.mileage.recordedAt,
+              recognizedKm: car.mileage.recognizedKm ?? null,
+            },
+          }
+        : {}),
       isPrimary: car.id === guest.primaryId,
     })),
   };
@@ -88,6 +99,8 @@ export function fromAccountCar(car: AccountCar): GarageCar {
     vin: car.vin,
     plate: car.plate,
     document: car.document,
+    // An older server says nothing about the mileage: no reading.
+    mileage: car.mileage ?? null,
     addedAt: car.createdAt,
   };
 }

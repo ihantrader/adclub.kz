@@ -12,6 +12,7 @@ import {
   type GarageCar,
   type GarageState,
 } from "../garage/garage";
+import { withGuestMileage, type MileageReading } from "../garage/mileage";
 import { accountGarage } from "../services/account-garage";
 import { accountGarageStore, garageStore, sessionStore } from "./stores";
 
@@ -40,6 +41,12 @@ export interface GarageContextValue {
   update: (car: GarageCar) => Promise<GarageCar>;
   remove: (carId: string) => Promise<void>;
   makePrimary: (carId: string) => Promise<void>;
+  /**
+   * A reading of the mileage the person confirmed (TASK-058): the account's
+   * car on the server, a guest's on the device — the same rule; a lower one
+   * without `confirmLower` rejects with `GARAGE_MILEAGE_LOWER`.
+   */
+  recordMileage: (carId: string, reading: MileageReading, confirmLower: boolean) => Promise<void>;
   /** Reads the account's garage again (signed in); a guest has nothing to read. */
   sync: () => Promise<SyncResult>;
   /** An id for a car about to be added. */
@@ -84,6 +91,28 @@ export function GarageProvider({ children }: { children: ReactNode }) {
     if (signedInAccount() !== null) return accountGarage.makePrimary(carId);
     garageStore.set(setPrimary(garageStore.get(), carId));
   }, []);
+  const recordMileage = useCallback(
+    async (carId: string, reading: MileageReading, confirmLower: boolean) => {
+      if (signedInAccount() !== null) {
+        await accountGarage.recordMileage(carId, {
+          valueKm: reading.valueKm,
+          source: reading.source,
+          ...(reading.source === "photo"
+            ? {
+                recognizedKm: reading.recognizedKm ?? null,
+                recognitionId: reading.recognitionId ?? null,
+              }
+            : {}),
+          ...(confirmLower ? { confirmLower: true } : {}),
+        });
+        return;
+      }
+      garageStore.set(
+        withGuestMileage(garageStore.get(), carId, reading, confirmLower, new Date()),
+      );
+    },
+    [],
+  );
   const duplicateOf = useCallback((car: GarageCar) => findDuplicate(shownGarage(), car), []);
   const sync = useCallback(() => accountGarage.sync(), []);
 
@@ -98,10 +127,11 @@ export function GarageProvider({ children }: { children: ReactNode }) {
       update,
       remove,
       makePrimary,
+      recordMileage,
       sync,
       nextId: () => newCarId(Date.now()),
     }),
-    [state, remote, duplicateOf, add, update, remove, makePrimary, sync],
+    [state, remote, duplicateOf, add, update, remove, makePrimary, recordMileage, sync],
   );
 
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>;

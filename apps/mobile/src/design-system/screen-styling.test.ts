@@ -29,6 +29,13 @@ const screens = sourceFiles(join(src, "screens"))
     text: withoutComments(readFileSync(path, "utf8")),
   }));
 
+/**
+ * The frame and the hint drawn over the live camera picture — white on any
+ * theme, like the QR is black on white: the certificate (M-GAR-04) and the
+ * camera the dashboard and a part share (TASK-058).
+ */
+const CAMERA_OVERLAYS = ["screens/garage/CarDocumentScreen.tsx", "screens/CameraPanel.tsx"];
+
 describe("a screen does not style itself (TASK-078)", () => {
   it("sets no font size, family or line height of its own — text is a `Text` variant", () => {
     for (const file of screens) {
@@ -43,7 +50,7 @@ describe("a screen does not style itself (TASK-078)", () => {
     for (const file of screens) {
       // The one exception: the frame and the hint drawn over the live camera
       // picture (M-GAR-04) are white on any theme, like the QR is black on white.
-      if (file.path === "screens/garage/CarDocumentScreen.tsx") continue;
+      if (CAMERA_OVERLAYS.includes(file.path)) continue;
       expect(file.text, file.path).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/);
       expect(file.text, file.path).not.toMatch(/\brgba?\(/);
     }
@@ -52,7 +59,7 @@ describe("a screen does not style itself (TASK-078)", () => {
   it("draws no field, button or chip of its own: no `borderWidth` of a field in a screen", () => {
     for (const file of screens) {
       // The frame over the live camera picture is the same exception as its colour.
-      if (file.path === "screens/garage/CarDocumentScreen.tsx") continue;
+      if (CAMERA_OVERLAYS.includes(file.path)) continue;
       // A hairline between rows is the one line a screen may draw (D-068).
       const borders = file.text.match(/borderWidth:\s*[^,}\n]+/g) ?? [];
       for (const border of borders) {

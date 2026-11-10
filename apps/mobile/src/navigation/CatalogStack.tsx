@@ -10,6 +10,7 @@ import { CatalogHomeScreen } from "../screens/catalog/CatalogHomeScreen";
 import { ItemListScreen } from "../screens/catalog/ItemListScreen";
 import { ItemScreen } from "../screens/catalog/ItemScreen";
 import { NeedsCarScreen } from "../screens/catalog/NeedsCarScreen";
+import { PartPhotoScreen } from "../screens/catalog/PartPhotoScreen";
 import { SearchScreen } from "../screens/catalog/SearchScreen";
 import { SubcategoriesScreen } from "../screens/catalog/SubcategoriesScreen";
 import { useGarage } from "../state/garage-provider";
@@ -50,6 +51,7 @@ function CatalogStack() {
       <Stack.Screen name="catalog-items" component={CatalogItems} />
       <Stack.Screen name="catalog-item" component={CatalogItem} />
       <Stack.Screen name="catalog-search" component={CatalogSearch} />
+      <Stack.Screen name="catalog-part-photo" component={CatalogPartPhoto} />
     </Stack.Navigator>
   );
 }
@@ -96,6 +98,7 @@ function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, 
       onAddCar={addCar}
       onCompleteEngine={completeEngine}
       onOpenSearch={() => navigation.navigate("catalog-search")}
+      onOpenPartPhoto={() => navigation.navigate("catalog-part-photo")}
     />
   );
 }
@@ -143,11 +146,17 @@ function CatalogItems({
 }
 
 function CatalogSearch({
+  route,
   navigation,
 }: NativeStackScreenProps<CatalogStackParams, "catalog-search">) {
   const { addCar } = useGarageJump();
   return (
     <SearchScreen
+      {...(route.params?.photo ? { photo: route.params.photo } : {})}
+      {...(route.params?.typeArticle !== undefined
+        ? { typeArticle: route.params.typeArticle }
+        : {})}
+      onPhoto={() => navigation.navigate("catalog-part-photo")}
       onBack={navigation.goBack}
       onOpenItem={(item) =>
         navigation.navigate("catalog-item", { itemId: item.id, title: item.name })
@@ -165,6 +174,32 @@ function CatalogSearch({
             })
       }
       onAddCar={addCar}
+    />
+  );
+}
+
+/**
+ * M-CAT-06 (TASK-058): the camera opens over the search or the main screen;
+ * an article goes back to the search beneath it, or replaces the camera with
+ * the search when it was opened from the main screen — «назад» from the
+ * results never returns to the camera.
+ */
+function CatalogPartPhoto({
+  navigation,
+}: NativeStackScreenProps<CatalogStackParams, "catalog-part-photo">) {
+  const toSearch = (params: CatalogStackParams["catalog-search"]) => {
+    const routes = navigation.getState().routes;
+    if (routes[routes.length - 2]?.name === "catalog-search") {
+      navigation.popTo("catalog-search", params);
+    } else {
+      navigation.replace("catalog-search", params);
+    }
+  };
+  return (
+    <PartPhotoScreen
+      onBack={navigation.goBack}
+      onFound={(found) => toSearch({ photo: found })}
+      onTypeArticle={() => toSearch({ typeArticle: Date.now() })}
     />
   );
 }

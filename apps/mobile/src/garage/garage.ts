@@ -63,6 +63,22 @@ export interface CarDocumentMark {
   proof?: string;
 }
 
+/**
+ * The current mileage of a car (TASK-058; M-GAR-06, M-GAR-07): what the
+ * person confirmed — typed, or read off a photo of the dashboard and
+ * checked. A guest keeps it with the car on the device and the transfer
+ * brings it into the account (`recognizedKm` — what the photo read, kept
+ * next to it); the account's own cars carry the last reading of the journal.
+ */
+export interface CarMileage {
+  valueKm: number;
+  source: "text" | "photo" | "voice" | "prompt";
+  /** ISO 8601. */
+  recordedAt: string;
+  /** What the photo read, before the person checked it; a guest's own reading only. */
+  recognizedKm?: number | null;
+}
+
 export interface GarageCar {
   /** Made on this device; the account gets its own on transfer (TASK-029). */
   id: string;
@@ -85,6 +101,8 @@ export interface GarageCar {
   plate: string | null;
   /** `null` — a car added before TASK-057: no mark at all. */
   document: CarDocumentMark | null;
+  /** `null` — no reading yet (or a car stored before TASK-058). */
+  mileage: CarMileage | null;
   /** ISO 8601; the order the guest added cars in. */
   addedAt: string;
 }
@@ -98,6 +116,22 @@ function parseDocument(raw: unknown): CarDocumentMark | null {
     status: value.status,
     at: value.at,
     ...(typeof value.proof === "string" ? { proof: value.proof } : {}),
+  };
+}
+
+const MILEAGE_SOURCES = ["text", "photo", "voice", "prompt"] as const;
+
+function parseMileage(raw: unknown): CarMileage | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.valueKm !== "number" || !Number.isInteger(value.valueKm)) return null;
+  if (!(MILEAGE_SOURCES as readonly unknown[]).includes(value.source)) return null;
+  if (typeof value.recordedAt !== "string") return null;
+  return {
+    valueKm: value.valueKm,
+    source: value.source as CarMileage["source"],
+    recordedAt: value.recordedAt,
+    ...(typeof value.recognizedKm === "number" ? { recognizedKm: value.recognizedKm } : {}),
   };
 }
 
@@ -144,6 +178,8 @@ function parseCar(raw: unknown): GarageCar | null {
     vin: typeof value.vin === "string" && value.vin !== "" ? value.vin : null,
     plate: typeof value.plate === "string" && value.plate !== "" ? value.plate : null,
     document: parseDocument(value.document),
+    // Absent in a garage stored before TASK-058: no reading.
+    mileage: parseMileage(value.mileage),
     addedAt: typeof value.addedAt === "string" ? value.addedAt : new Date(0).toISOString(),
   };
   return car;

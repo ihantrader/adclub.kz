@@ -216,6 +216,7 @@ export type IconName =
   | "bell"
   | "calendar"
   | "calendarX"
+  | "camera"
   | "cameraSlash"
   | "car"
   | "category"

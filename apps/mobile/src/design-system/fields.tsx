@@ -183,10 +183,42 @@ export interface SearchFieldProps extends Omit<TextInputProps, "value" | "onChan
   value: string;
   onChangeText: (value: string) => void;
   clearLabel: string;
+  /** A button at the right edge (M-CAT-06: the camera, TASK-058) — after «clear». */
+  action?: SearchFieldAction;
+}
+
+/** An icon button inside a search field: what it does is said to a screen reader. */
+export interface SearchFieldAction {
+  icon: "camera";
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}
+
+function FieldAction({ action }: { action: SearchFieldAction }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={action.label}
+      accessibilityState={{ disabled: action.disabled }}
+      disabled={action.disabled}
+      onPress={action.onPress}
+      style={styles.clear}
+    >
+      <Icon name={action.icon} size={24} color={action.disabled ? "textDisabled" : "accent"} />
+    </Pressable>
+  );
 }
 
 /** Search: 48 high, search icon on the left, clear on the right; active — an `accent` frame (DESIGN.md 7.7). */
-export function SearchField({ label, value, onChangeText, clearLabel, ...rest }: SearchFieldProps) {
+export function SearchField({
+  label,
+  value,
+  onChangeText,
+  clearLabel,
+  action,
+  ...rest
+}: SearchFieldProps) {
   const { theme } = useTheme();
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
@@ -236,6 +268,7 @@ export function SearchField({ label, value, onChangeText, clearLabel, ...rest }:
           <Icon name="x" size={20} color="textMuted" />
         </Pressable>
       )}
+      {action && <FieldAction action={action} />}
     </View>
   );
 }
@@ -248,6 +281,8 @@ export interface SearchEntryProps {
   /** Without a network the search cannot work: the entry says so instead of opening (TASK-078). */
   disabled?: boolean;
   disabledHint?: string;
+  /** A button at the right edge, apart from opening the search (M-CAT-06: the camera). */
+  action?: SearchFieldAction;
 }
 
 /**
@@ -261,9 +296,10 @@ export function SearchEntry({
   onPress,
   disabled,
   disabledHint,
+  action,
 }: SearchEntryProps) {
   const { theme } = useTheme();
-  return (
+  const entry = (
     <Pressable
       accessibilityRole="search"
       accessibilityLabel={label}
@@ -275,6 +311,7 @@ export function SearchEntry({
         styles.control,
         styles.search,
         styles.entry,
+        action && styles.entryWithAction,
         {
           backgroundColor: disabled
             ? theme.colors.fill
@@ -300,6 +337,25 @@ export function SearchEntry({
         </Text>
       )}
     </Pressable>
+  );
+  if (!action) return entry;
+  // The button sits inside the frame but is a control of its own: a
+  // pressable inside the entry would be hidden from a screen reader.
+  return (
+    <View style={styles.entryRow}>
+      {entry}
+      <View
+        style={[
+          styles.entryAction,
+          {
+            backgroundColor: disabled ? theme.colors.fill : theme.colors.surface,
+            borderColor: disabled ? theme.colors.border : theme.colors.borderField,
+          },
+        ]}
+      >
+        <FieldAction action={{ ...action, disabled: action.disabled ?? disabled }} />
+      </View>
+    </View>
   );
 }
 
@@ -495,6 +551,22 @@ const styles = StyleSheet.create({
   search: { paddingLeft: 12, paddingRight: 0 },
   entry: { paddingRight: 12 },
   entryText: { flex: 1 },
+  // An entry with a button: one frame, the entry's right side open to the button.
+  entryRow: { flexDirection: "row" },
+  entryWithAction: {
+    flex: 1,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    borderRightWidth: 0,
+  },
+  entryAction: {
+    minHeight: size.field,
+    justifyContent: "center",
+    borderWidth: line.width,
+    borderLeftWidth: 0,
+    borderTopRightRadius: radius.s,
+    borderBottomRightRadius: radius.s,
+  },
   clear: {
     width: size.touchTarget,
     height: size.touchTarget,

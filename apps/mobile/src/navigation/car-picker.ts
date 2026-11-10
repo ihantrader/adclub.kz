@@ -41,6 +41,14 @@ export function useCarPicker() {
         const root = navigation.getParent<NativeStackNavigationProp<RootParams>>(ROOT_NAVIGATOR);
         root?.push("car-document", { origin: "app", carId: car.id });
       },
+      /** «Указать пробег» / «Обновить» (M-GAR-06 → M-GAR-07, TASK-058). */
+      mileage: (car: GarageCar) => {
+        const root = navigation.getParent<NativeStackNavigationProp<RootParams>>(ROOT_NAVIGATOR);
+        if (!root) return;
+        const routes = root.getState().routes;
+        if (routes[routes.length - 1]?.name === "car-mileage") return;
+        root.push("car-mileage", { carId: car.id });
+      },
     };
   }, [navigation, add]);
 }

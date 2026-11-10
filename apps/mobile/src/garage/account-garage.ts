@@ -1,6 +1,7 @@
 import type {
   AccountCar,
   AddGarageCarBody,
+  RecordCarMileageBody,
   SaveGarageCarBody,
   TransferGarageBody,
   TransferGarageResponse,
@@ -91,6 +92,7 @@ export interface AccountGarageApi {
   remove(carId: string): Promise<void>;
   makePrimary(carId: string): Promise<AccountCar>;
   transfer(body: TransferGarageBody): Promise<TransferGarageResponse>;
+  recordMileage(carId: string, body: RecordCarMileageBody): Promise<AccountCar>;
 }
 
 /** A value kept on the device — `DeviceStore` without its subscription. */
@@ -125,6 +127,8 @@ export interface AccountGarage {
   update(car: GarageCar): Promise<GarageCar>;
   makePrimary(carId: string): Promise<void>;
   remove(carId: string): Promise<void>;
+  /** A reading the person confirmed (TASK-058); a lower one without `confirmLower` — `GARAGE_MILEAGE_LOWER`. */
+  recordMileage(carId: string, body: RecordCarMileageBody): Promise<GarageCar>;
 }
 
 export function createAccountGarage(deps: AccountGarageDeps): AccountGarage {
@@ -216,6 +220,13 @@ export function createAccountGarage(deps: AccountGarageDeps): AccountGarage {
       fromAccountCar(
         await change(
           () => deps.api.update(car.id, toSaveBody(car)),
+          (garage, answer) => withAccountCar(garage, answer),
+        ),
+      ),
+    recordMileage: async (carId, body) =>
+      fromAccountCar(
+        await change(
+          () => deps.api.recordMileage(carId, body),
           (garage, answer) => withAccountCar(garage, answer),
         ),
       ),

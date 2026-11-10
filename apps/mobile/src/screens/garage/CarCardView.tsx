@@ -23,6 +23,7 @@ import { formatKzPlate } from "@adclub/domain";
 import { findCarColor } from "../../garage/car-color";
 import type { CarStep } from "../../garage/car-picker";
 import { checkDocumentFields } from "../../garage/document-flow";
+import { formatKm } from "../../garage/mileage";
 import {
   CAR_LEVELS,
   carParameters,
@@ -59,6 +60,8 @@ export interface CarCardViewProps {
   onEdit: (step: CarStep) => void;
   /** «Подтвердить техпаспортом» (TASK-057): the camera for this car. */
   onConfirm: () => void;
+  /** «Указать пробег» / «Обновить» (TASK-058): M-GAR-07 for this car. */
+  onMileage: () => void;
   onDeleted: () => void;
   onBack: () => void;
 }
@@ -76,7 +79,14 @@ export interface CarCardViewProps {
  * the button waits for the server, a refusal is said and changes nothing,
  * and without a network they are off with «Нужна сеть».
  */
-export function CarCardView({ car, onEdit, onConfirm, onDeleted, onBack }: CarCardViewProps) {
+export function CarCardView({
+  car,
+  onEdit,
+  onConfirm,
+  onMileage,
+  onDeleted,
+  onBack,
+}: CarCardViewProps) {
   const t = useT();
   const toast = useToast();
   const { theme } = useTheme();
@@ -190,6 +200,35 @@ export function CarCardView({ car, onEdit, onConfirm, onDeleted, onBack }: CarCa
               {...(car.color === null ? { action: complete } : {})}
               navigates
               onPress={() => (offline ? needsNetwork() : setColorSheet(true))}
+            />
+          </ListGroup>
+        </Section>
+
+        {/* TASK-058: the current mileage — «Пробег: 45 200 км · {когда}» — and «Обновить». */}
+        <Section title={t("car.mileage")}>
+          <ListGroup>
+            <ValueRow
+              first
+              label={t("car.mileage")}
+              value={
+                car.mileage
+                  ? t("car.mileageValue", {
+                      value: formatKm(car.mileage.valueKm),
+                      date: documentDate(car.mileage.recordedAt),
+                    })
+                  : null
+              }
+              placeholder={t("car.mileageNone")}
+              {...(car.mileage
+                ? {
+                    hint: t(
+                      car.mileage.source === "photo" ? "car.mileageFromPhoto" : "car.mileageByHand",
+                    ),
+                  }
+                : {})}
+              action={t(car.mileage ? "car.mileageUpdate" : "car.mileageSet")}
+              navigates
+              onPress={() => (offline ? needsNetwork() : onMileage())}
             />
           </ListGroup>
         </Section>

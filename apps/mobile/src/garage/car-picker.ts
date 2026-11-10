@@ -7,6 +7,7 @@ import type { CarColorId } from "./car-color";
 import {
   CAR_LEVELS,
   type CarDocumentMark,
+  type CarMileage,
   type CarLevel,
   type CarLevelValue,
   type GarageCar,
@@ -449,6 +450,8 @@ export function draftToCar(
     vin?: string | null;
     plate?: string | null;
     document?: CarDocumentMark | null;
+    /** TASK-058: an edited car keeps its reading — the steps never change it. */
+    mileage?: CarMileage | null;
   },
 ): GarageCar | null {
   if (!draft.make || !draft.model) return null;
@@ -473,6 +476,7 @@ export function draftToCar(
     vin: options.vin ?? null,
     plate: options.plate ?? null,
     document: options.document ?? null,
+    mileage: options.mileage ?? null,
     addedAt: options.addedAt,
   };
 }

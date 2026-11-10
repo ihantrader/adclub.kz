@@ -1,5 +1,11 @@
 import { VEHICLE_DOCUMENT_MAX_SIDE_PX } from "@adclub/contracts";
-import type { VehicleDocumentAttempts, VehicleDocumentResponse } from "@adclub/contracts";
+import type {
+  DashboardResponse,
+  PartPhotoQuery,
+  PartPhotoResponse,
+  VehicleDocumentAttempts,
+  VehicleDocumentResponse,
+} from "@adclub/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { randomUUID } from "expo-crypto";
 import { File, Paths } from "expo-file-system";
@@ -132,7 +138,28 @@ export async function recognizeDocument(bytes: Uint8Array): Promise<VehicleDocum
   return apiClient.recognizeVehicleDocument(bytes, { query, contentType: "image/jpeg" });
 }
 
-/** How many recognitions are left (T-GAR-04). */
+/**
+ * The mileage off a photo of the dashboard (TASK-058, M-GAR-07): the same
+ * trial limit of a guest as the certificate; nothing is saved by it.
+ */
+export async function recognizeDashboard(bytes: Uint8Array): Promise<DashboardResponse> {
+  const query = signedIn() ? {} : { deviceId: await deviceId() };
+  return apiClient.recognizeDashboard(bytes, { query, contentType: "image/jpeg" });
+}
+
+/**
+ * A part by a photo of its article (TASK-058, M-CAT-06), found for the car
+ * and the city of the catalog — as `GET /catalog/search` would.
+ */
+export async function recognizePartPhoto(
+  bytes: Uint8Array,
+  search: Omit<PartPhotoQuery, "deviceId">,
+): Promise<PartPhotoResponse> {
+  const query = signedIn() ? search : { ...search, deviceId: await deviceId() };
+  return apiClient.recognizePartPhoto(bytes, { query, contentType: "image/jpeg" });
+}
+
+/** How many recognitions are left (T-GAR-04) — one count for the certificate, the dashboard and a part. */
 export async function documentAttempts(): Promise<VehicleDocumentAttempts> {
   const query = signedIn() ? {} : { deviceId: await deviceId() };
   return apiClient.getVehicleDocumentAttempts({ query });

@@ -251,6 +251,28 @@ export function carDocumentText(
 }
 
 /**
+ * The current mileage of a car (TASK-058, A-USR-02 «Гараж»): «Пробег 45 200
+ * км · с фото · 10.11.2026, 13:05» — the last reading the person confirmed,
+ * and where it came from; none yet — «Пробег не указан».
+ */
+export function carMileageText(
+  mileage: AccountCar["mileage"],
+  moment: (iso: string) => string,
+): string {
+  if (!mileage) return "Пробег не указан";
+  const value = String(mileage.valueKm).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+  const source =
+    mileage.source === "photo"
+      ? "с фото"
+      : mileage.source === "voice"
+        ? "голосом"
+        : mileage.source === "prompt"
+          ? "по запросу приложения"
+          : "вручную";
+  return `Пробег ${value} км · ${source} · ${moment(mileage.recordedAt)}`;
+}
+
+/**
  * The end of a chosen day in Almaty, as a grant's `validUntil` (the date is
  * inclusive, as the operator command takes it); `null` — not a date.
  */

@@ -42,6 +42,7 @@ function car(id: string, model: string, overrides: Partial<GarageCar> = {}): Gar
     vin: null,
     plate: null,
     document: null,
+    mileage: null,
     addedAt: "2026-10-01T10:00:00.000Z",
     ...overrides,
   };
@@ -69,6 +70,7 @@ function fakeServer() {
       vin: body.vin ?? null,
       plate: body.plate ?? null,
       document: null,
+      mileage: null,
       isPrimary,
       createdAt: at,
       updatedAt: at,
@@ -120,6 +122,18 @@ function fakeServer() {
       if (index < 0) throw notFound();
       const [removed] = cars.splice(index, 1);
       if (removed?.isPrimary && cars[0]) cars[0].isPrimary = true;
+    },
+    async recordMileage(carId, body) {
+      guard("recordMileage");
+      const row = cars.find((item) => item.id === carId);
+      if (!row) throw notFound();
+      clock += 1000;
+      row.mileage = {
+        valueKm: body.valueKm,
+        source: body.source,
+        recordedAt: new Date(clock).toISOString(),
+      };
+      return { ...row };
     },
     async makePrimary(carId) {
       guard("makePrimary");
@@ -369,6 +383,17 @@ describe("the garage of a signed-in person lives in the account (TASK-029.B)", (
     await settle();
     expect(server.cars).toHaveLength(1);
     expect(titles(phone.shown())).toEqual(["Atlas"]);
+  });
+
+  it("puts the reading the server recorded into the copy (TASK-058)", async () => {
+    const server = fakeServer();
+    const phone = device(server);
+    const atlas = await phone.garage.add(car("d1", "Atlas"), "k1");
+    await settle();
+    const saved = await phone.garage.recordMileage(atlas.id, { valueKm: 45_200, source: "text" });
+    await settle();
+    expect(saved.mileage?.valueKm).toBe(45_200);
+    expect(phone.shown().cars[0]!.mileage?.valueKm).toBe(45_200);
   });
 
   it("takes a removal of a car already gone as done", async () => {

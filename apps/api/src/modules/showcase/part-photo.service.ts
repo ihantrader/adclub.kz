@@ -32,13 +32,15 @@ function shareOf(value: number): number {
 }
 
 /**
- * A barcode the model took for an article despite being told not to: 8 or
- * 13 digits with a valid EAN check digit. A real article of the catalog is
- * never one (an article of ten or twelve digits passes — only these two
- * lengths with their check digit are dropped).
+ * A barcode the model took for an article despite being told not to: 13
+ * digits with a valid EAN-13 check digit. Only this length is dropped: an
+ * eight-digit all-numeric article is the norm for GM, Daewoo and Chevrolet
+ * parts, and one in ten of them would pass the EAN-8 check by chance, while
+ * EAN-8 itself is printed on tiny retail items, not on parts packaging
+ * (acceptance of TASK-058).
  */
 export function isEanBarcode(normalized: string): boolean {
-  if (!/^\d+$/u.test(normalized) || (normalized.length !== 13 && normalized.length !== 8)) {
+  if (!/^\d{13}$/u.test(normalized)) {
     return false;
   }
   const digits = [...normalized].map(Number);

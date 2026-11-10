@@ -64,6 +64,7 @@ const FAILURE_TEXT: Record<
       | "mileage.failedText"
       | "mileage.unavailableText"
       | "mileage.limitText"
+      | "mileage.limitTextGuest"
       | "mileage.offlineText"
       | "doc.invalidText";
     retake: boolean;
@@ -251,6 +252,12 @@ export function CarMileageScreen({
   const offline = garage.remote && !online;
   const busy = phase.kind === "busy";
   const failed = phase.kind === "failed" ? FAILURE_TEXT[phase.failure] : null;
+  // A guest's trial does not come back by itself: the way on is to sign in.
+  const guestLimit =
+    phase.kind === "failed" &&
+    phase.failure === "limit" &&
+    attempts?.scope !== "account" &&
+    !garage.remote;
   const attemptsNote =
     attempts?.scope === "guest" && !(phase.kind === "failed" && phase.failure === "limit") ? (
       <Text variant="caption" color="textMuted" style={styles.center}>
@@ -404,7 +411,7 @@ export function CarMileageScreen({
             <EmptyState
               icon={phase.failure === "offline" ? "wifiOff" : "alertTriangle"}
               title={t(failed.title)}
-              text={t(failed.text)}
+              text={t(guestLimit ? "mileage.limitTextGuest" : failed.text)}
             />
           )}
         </View>

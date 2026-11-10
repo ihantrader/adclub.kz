@@ -185,7 +185,10 @@ describe("the articles of a part", () => {
     expect(isEanBarcode("4027816350743")).toBe(true);
     expect(isEanBarcode("4027816350741")).toBe(false);
     expect(isEanBarcode("4050068800")).toBe(false);
-    expect(isEanBarcode("96385074")).toBe(true);
+    // Eight digits are an article (GM 96473723), never a barcode — even when
+    // the last digit happens to satisfy the EAN-8 check, as in 96385074.
+    expect(isEanBarcode("96385074")).toBe(false);
+    expect(isEanBarcode("96473723")).toBe(false);
   });
 
   it("reads O as 0 and I as 1 when asked", () => {

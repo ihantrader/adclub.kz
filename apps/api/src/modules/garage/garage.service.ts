@@ -154,6 +154,8 @@ interface DocumentMark {
  * recognition signed, «документ не подтверждён» for a car chosen from the
  * list. One VIN is one car within a garage.
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class GarageService {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
@@ -531,9 +533,14 @@ export class GarageService {
   ): Promise<void> {
     if (!isMileageInRange(mileage.valueKm)) return;
     const recordedAt = new Date(Math.min(Date.parse(mileage.recordedAt), Date.now()));
-    // The same value again adds nothing — a repeated transfer, even from a
-    // device whose clock runs ahead (its moment is then «now», new each time).
-    if (await this.store.hasMileageValue(carId, mileage.valueKm, tx)) return;
+    // The same value within a day of the same moment adds nothing — a repeated
+    // transfer, even from a device whose clock runs ahead (its moment is then
+    // «now», new each time). The same value months later is a new reading
+    // (acceptance of TASK-058: a journal that once held 50 000 must not swallow
+    // a genuine 50 000 a year on).
+    if (await this.store.hasMileageValueNear(carId, mileage.valueKm, recordedAt, DAY_MS, tx)) {
+      return;
+    }
     // A reading lower than the account car's current one would become current
     // without anyone answering «Меньше, чем в прошлый раз…»: only an older one
     // is taken, as history; a later and lower one is left on the device.

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { accountCar, mileageLog, type AccountCarRow, type MileageLogRow } from "./schema";
 
@@ -194,12 +194,30 @@ export class GarageStore {
     return new Map(rows.map((row) => [row.carId, row]));
   }
 
-  /** Whether the car's journal already holds this value (a transfer repeated). */
-  async hasMileageValue(carId: string, valueKm: number, executor: DbExecutor): Promise<boolean> {
+  /**
+   * Whether the car's journal already holds this value within `windowMs` of
+   * `around` — a transfer repeated (its moment is clamped to «now», so a
+   * device whose clock runs ahead sends a new moment each time). The same
+   * value months apart is a genuine new reading.
+   */
+  async hasMileageValueNear(
+    carId: string,
+    valueKm: number,
+    around: Date,
+    windowMs: number,
+    executor: DbExecutor,
+  ): Promise<boolean> {
     const [row] = await executor
       .select({ id: mileageLog.id })
       .from(mileageLog)
-      .where(and(eq(mileageLog.carId, carId), eq(mileageLog.valueKm, valueKm)))
+      .where(
+        and(
+          eq(mileageLog.carId, carId),
+          eq(mileageLog.valueKm, valueKm),
+          gte(mileageLog.recordedAt, new Date(around.getTime() - windowMs)),
+          lte(mileageLog.recordedAt, new Date(around.getTime() + windowMs)),
+        ),
+      )
       .limit(1);
     return row !== undefined;
   }

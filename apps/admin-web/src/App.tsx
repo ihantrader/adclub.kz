@@ -15,6 +15,8 @@ import { ItemCreate } from "./catalog/ItemMain";
 import { Items } from "./catalog/Items";
 import { Proposals } from "./catalog/Proposals";
 import { RequestCard, Requests } from "./catalog/Requests";
+import { MaintenancePlanCard } from "./catalog/maintenance/PlanCard";
+import { MaintenancePlans } from "./catalog/maintenance/Plans";
 import { Home } from "./home/Home";
 import { Extensions } from "./orders/Extensions";
 import { OrderCard } from "./orders/OrderCard";
@@ -215,6 +217,10 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
       return <Requests />;
     case "catalogRequest":
       return id ? <RequestCard key={id} requestId={id} /> : null;
+    case "catalogMaintenance":
+      return <MaintenancePlans />;
+    case "maintenancePlan":
+      return id ? <MaintenancePlanCard key={id} planId={id} /> : null;
     case "vehicles":
       return <Makes />;
     case "vehicleEngines":

@@ -22,6 +22,8 @@ export const routePaths = {
   catalogProposals: "/catalog/proposals",
   // Requests of suppliers to add an item (TASK-047, A-MOD-01).
   catalogRequests: "/catalog/requests",
+  // Maintenance plans (TASK-061): the list; a plan — `/catalog/maintenance/<id>`.
+  catalogMaintenance: "/catalog/maintenance",
   // The vehicle catalog (TASK-035.B): makes, engines, the reference lists, imports.
   vehicles: "/vehicles",
   vehicleEngines: "/vehicles/engines",
@@ -66,6 +68,7 @@ export type RouteKey =
   | "catalogItem"
   | "catalogFill"
   | "catalogRequest"
+  | "maintenancePlan"
   | "vehicleMake"
   | "vehicleModel"
   | "vehicleGeneration"
@@ -82,6 +85,7 @@ const ITEM_PATH = new RegExp(`^/catalog/items/(${UUID})$`, "i");
 const FILL_PATH = new RegExp(`^/catalog/fill/(${UUID})$`, "i");
 const VEHICLE_PATHS: [RouteKey, RegExp][] = [
   ["catalogRequest", new RegExp(`^/catalog/requests/(${UUID})$`, "i")],
+  ["maintenancePlan", new RegExp(`^/catalog/maintenance/(${UUID})$`, "i")],
   ["vehicleMake", new RegExp(`^/vehicles/makes/(${UUID})$`, "i")],
   ["vehicleModel", new RegExp(`^/vehicles/models/(${UUID})$`, "i")],
   ["vehicleGeneration", new RegExp(`^/vehicles/generations/(${UUID})$`, "i")],
@@ -185,6 +189,11 @@ export function itemFromRequestPath(requestId: string): string {
   return withQuery(routePaths.catalogItemNew, { requestId });
 }
 
+/** The card of a maintenance plan (TASK-061). */
+export function maintenancePlanPath(planId: string): string {
+  return `/catalog/maintenance/${planId}`;
+}
+
 /** The fill of a subcategory (A-CAT-03). */
 export function catalogFillPath(categoryId: string): string {
   return `/catalog/fill/${categoryId}`;
@@ -230,7 +239,9 @@ export function menuOf(route: RouteKey): StaticRoute {
     route === "catalogFill" ||
     route === "catalogProposals" ||
     route === "catalogRequests" ||
-    route === "catalogRequest"
+    route === "catalogRequest" ||
+    route === "catalogMaintenance" ||
+    route === "maintenancePlan"
   ) {
     return "catalog";
   }

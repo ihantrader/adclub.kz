@@ -12,6 +12,7 @@ import {
 import {
   catalogItemPath,
   catalogRequestPath,
+  maintenancePlanPath,
   complaintPath,
   orderPath,
   routePaths,
@@ -155,6 +156,18 @@ const ACTIONS: Record<string, string> = {
   "catalog_request.created": "Поставщик запросил добавить позицию",
   "catalog_request.approved": "Запрос на позицию закрыт: позиция в справочнике",
   "catalog_request.rejected": "Запрос на позицию отклонён",
+  // TASK-061.
+  "maintenance_plan.created": "Создан регламент ТО",
+  "maintenance_plan.changed": "Изменён регламент ТО",
+  "maintenance_plan.activated": "Регламент ТО активирован",
+  "maintenance_plan.archived": "Регламент ТО убран в архив",
+  "maintenance_plan.restored": "Регламент ТО восстановлен как черновик",
+  "maintenance_plan.items_reordered": "Изменён порядок элементов регламента",
+  "maintenance_plan_item.created": "Добавлен элемент регламента",
+  "maintenance_plan_item.changed": "Изменён элемент регламента",
+  "maintenance_plan_item.confirmed": "Подтверждён элемент регламента",
+  "maintenance_plan_item.archived": "Убран элемент регламента",
+  "maintenance_plan_item.restored": "Восстановлен элемент регламента",
   // TASK-049.
   "review.created": "Пользователь оставил отзыв",
   "review.checked": "Отзыв проверен автоматически",
@@ -222,6 +235,8 @@ const ENTITIES: Record<string, string> = {
   account: "Пользователь",
   price_import: "Загрузка прайса",
   catalog_request: "Запрос на позицию",
+  maintenance_plan: "Регламент ТО",
+  maintenance_plan_item: "Элемент регламента",
   review: "Отзыв",
   complaint: "Жалоба",
 };
@@ -476,6 +491,13 @@ export function entityLink(
     // A request to add an item opens its card; a price list — its company's «Прайс» (TASK-047).
     case "catalog_request":
       return UUID.test(entityId) ? catalogRequestPath(entityId) : null;
+    // A maintenance plan opens its card; an element — the card of its plan (TASK-061).
+    case "maintenance_plan":
+      return UUID.test(entityId) ? maintenancePlanPath(entityId) : null;
+    case "maintenance_plan_item": {
+      const planId = named(payload, "planId");
+      return planId && UUID.test(planId) ? maintenancePlanPath(planId) : null;
+    }
     case "price_import": {
       const supplierId = named(payload, "supplierId");
       return supplierId && UUID.test(supplierId) ? supplierPath(supplierId, "price") : null;
@@ -537,6 +559,18 @@ export interface ChangeContext {
  * fields of the entries the admin panel writes in it.
  */
 const FIELD_TEXT: Record<string, string> = {
+  // TASK-061: maintenance plans.
+  planId: "Регламент",
+  title: "Название работы",
+  intervalKm: "Каждые, км",
+  intervalMonths: "Каждые, мес",
+  firstKm: "Первый раз, км",
+  firstMonths: "Первый раз, мес",
+  serviceCodes: "Коды ТО",
+  target: "Правило подбора",
+  quantity: "Количество",
+  scope: "Область",
+  itemIds: "Порядок элементов",
   // TASK-049: reviews and complaints.
   score: "Оценка",
   withText: "С текстом",
@@ -742,6 +776,8 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
   admin_signal: { open: "Новый", acknowledged: "В работе", closed: "Закрыт" },
   offer: { active: "В продаже", withdrawn: "Снято с продажи", suspended: "Приостановлено" },
   catalog_request: { new: "Новый", approved: "Добавлено", rejected: "Отклонено" },
+  maintenance_plan: { draft: "Черновик", active: "Действует", archived: "В архиве" },
+  maintenance_plan_item: { proposed: "Предложено ИИ", active: "Подтверждено", archived: "Убрано" },
   subscription: SUBSCRIPTION_STATUS_TEXT,
   review: {
     checking: "Проверяется",

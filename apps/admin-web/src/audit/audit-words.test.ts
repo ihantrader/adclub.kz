@@ -53,6 +53,25 @@ describe("the words of the journal", () => {
     expect(actionText("something.new")).toBe("something.new");
   });
 
+  it("says maintenance plans in words and links them to their card (TASK-061)", () => {
+    const plan = "44444444-4444-4444-8444-444444444444";
+    const element = "55555555-5555-4555-8555-555555555555";
+    expect(actionText("maintenance_plan.activated")).toBe("Регламент ТО активирован");
+    expect(actionText("maintenance_plan_item.confirmed")).toBe("Подтверждён элемент регламента");
+    expect(entityTitle({ entityType: "maintenance_plan", entityName: "Geely Coolray" })).toBe(
+      "Регламент ТО: Geely Coolray",
+    );
+    expect(entityLink("maintenance_plan", plan)).toBe(`/catalog/maintenance/${plan}`);
+    expect(entityLink("maintenance_plan_item", element, { after: { planId: plan } })).toBe(
+      `/catalog/maintenance/${plan}`,
+    );
+    expect(entityLink("maintenance_plan_item", element)).toBeNull();
+    expect(valueText("proposed", "status", { entityType: "maintenance_plan_item" })).toBe(
+      "Предложено ИИ",
+    );
+    expect(valueText("active", "status", { entityType: "maintenance_plan" })).toBe("Действует");
+  });
+
   it("says reviews and complaints in words (TASK-049)", () => {
     expect(reasonText("review.text_rejected", "personal_data")).toBe("личные данные");
     expect(reasonText("review.hidden", "Проверено")).toBe("Проверено");

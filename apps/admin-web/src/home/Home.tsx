@@ -71,6 +71,15 @@ export function homeCards(home: AdminHome): HomeCard[] {
       href: withQuery(routePaths.catalogRequests, { status: "new" }),
     },
     {
+      // TASK-061: AI drafts of maintenance plans not activated yet — the list's `total`.
+      key: "maintenance",
+      icon: "wrench",
+      title: "Регламенты: черновиков ИИ ждут подтверждения",
+      value: home.maintenanceDrafts,
+      note: "ИИ составил регламент ТО по открытым данным: проверить элементы, подтвердить и активировать",
+      href: withQuery(routePaths.catalogMaintenance, { status: "draft", source: "ai_draft" }),
+    },
+    {
       key: "complaints",
       icon: "alertTriangle",
       title: "Новые жалобы",

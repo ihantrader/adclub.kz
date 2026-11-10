@@ -11,6 +11,7 @@ const TABS = [
   { key: "items", label: "Позиции", href: routePaths.catalogItems },
   { key: "proposals", label: "Предложения совместимости", href: routePaths.catalogProposals },
   { key: "requests", label: "Запросы на позиции", href: routePaths.catalogRequests },
+  { key: "maintenance", label: "Регламенты ТО", href: routePaths.catalogMaintenance },
 ] as const;
 
 export type CatalogTab = (typeof TABS)[number]["key"];
@@ -24,6 +25,7 @@ export function catalogTabs(active: CatalogTab) {
 export const CATALOG_CRUMB = { label: "Справочник", href: routePaths.catalog };
 export const ITEMS_CRUMB = { label: "Позиции", href: routePaths.catalogItems };
 export const REQUESTS_CRUMB = { label: "Запросы на позиции", href: routePaths.catalogRequests };
+export const MAINTENANCE_CRUMB = { label: "Регламенты ТО", href: routePaths.catalogMaintenance };
 
 export { AppLink, follow } from "../layout/layout";
 

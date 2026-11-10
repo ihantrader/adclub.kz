@@ -36,6 +36,7 @@ import {
   kzBinCheckDigit,
   nextBankRetry,
   normalizeArticle,
+  renewalPeriod,
 } from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
@@ -958,12 +959,17 @@ describe("a supplier's card subscription (PostgreSQL + Redis + workers)", () => 
       ]);
       expect(provider().charges).toHaveLength(2);
       const renewed = (await subOf(of))!;
-      // The new term is the same day number next month — from the old date, not from today.
-      const { rows } = await db.query<{ ok: boolean }>(
-        `SELECT ($1::timestamptz AT TIME ZONE 'Asia/Almaty')::date + interval '1 month' = ($2::timestamptz AT TIME ZONE 'Asia/Almaty')::date AS ok`,
-        [due, renewed.current_period_end],
+      // The new term is the next month's anchor day counted from the old end,
+      // not from today. In the first hour after midnight in Almaty the old end
+      // (an hour ago) falls on yesterday while the anchor day of the first
+      // charge is today's — the domain rule, not «old date + 1 month», decides.
+      const { rows: anchors } = await db.query<{ anchor_day: number }>(
+        "SELECT anchor_day FROM payment_attempt WHERE supplier_id = $1 AND kind = 'first'",
+        [of.supplierId],
       );
-      expect(rows[0]!.ok).toBe(true);
+      const expectedEnd = renewalPeriod(due, anchors[0]!.anchor_day, new Date()).end;
+      expect(renewed.current_period_end.getTime()).toBe(expectedEnd.getTime());
+      expect(expectedEnd.getTime()).toBeGreaterThan(due.getTime());
       expect(renewed.status).toBe("active");
       expect(first.id).toBe(renewed.id);
     });

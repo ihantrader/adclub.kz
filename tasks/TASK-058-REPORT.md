@@ -64,7 +64,7 @@ COMPLETED
   - `database/database.integration.test.ts` (цикл миграций, добавлен тест `mileage_log` с откатом) — PASS 62/62
   - `vehicle-document/vehicle-document.integration.test.ts` (сервис переписан на общий путь) — PASS 17/17 при отдельном запуске. В общем прогоне с четырьмя другими наборами два его хука `beforeEach` упали по таймауту 60 с: пять наборов Testcontainers шли параллельно на одной машине. Отдельно — зелёный.
   - `garage/garage.integration.test.ts`, `showcase/catalog-search.integration.test.ts`, `database/schema-drift.integration.test.ts` — PASS
-- CI: не ждал (TASK-076), прогон — см. ниже.
+- CI: не ждал (TASK-076). Прогон кода задачи — **42768070308** (`gh run view 42768070308`; коммиты `c33a7a8`, `9eb8f9a`, `b728fa6`); после него этот отчёт дополнен идентификатором отдельным коммитом.
 
 ## UAT / E2E
 Пройдено во встроенном браузере: `mobile-web` + `api-test-ai` (API смотрел на dev-контейнеры этой машины), `admin-web`. Панель была скрыта, поэтому скриншотов нет; каждый шаг проверен по тексту и DOM страницы. «Из галереи» получал файл образца через перехват `input[type=file]`; образцы раздавал локальный статический сервер.

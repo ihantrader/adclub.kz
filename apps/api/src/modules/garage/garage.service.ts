@@ -6,18 +6,28 @@ import {
   type CarDocumentInput,
   type CarLevels,
   type GarageCarsResponse,
+  type RecordCarMileageBody,
   type SaveGarageCarBody,
   type TransferGarageBody,
   type TransferGarageResponse,
 } from "@adclub/contracts";
-import { checkVin, normalizeKzPlate, normalizeVin } from "@adclub/domain";
-import { DatabaseService } from "../../database";
+import {
+  checkVin,
+  isMileageInRange,
+  mileageVerdict,
+  normalizeKzPlate,
+  normalizeVin,
+} from "@adclub/domain";
+import { and, eq } from "drizzle-orm";
+import { DatabaseService, type DbExecutor } from "../../database";
+import { aiJob } from "../ai";
 import { AppSettings } from "../settings";
 import { DocumentProofs } from "../vehicle-document";
 import {
   garageCarNotFound,
   garageFieldInvalid,
   garageLimitReached,
+  garageMileageLower,
   garageVinTaken,
   isVehicleReferenceViolation,
   isVinTakenViolation,
@@ -25,7 +35,7 @@ import {
 } from "./garage-errors";
 import { sameLevels } from "./garage-merge";
 import { GarageStore, type NewAccountCar } from "./garage.store";
-import type { AccountCarRow } from "./schema";
+import type { AccountCarRow, MileageLogRow } from "./schema";
 
 /**
  * The levels and the modification of a car as columns. The modification is
@@ -56,7 +66,7 @@ function levelsOf(
   };
 }
 
-function toAccountCar(row: AccountCarRow): AccountCar {
+function toAccountCar(row: AccountCarRow, mileage?: MileageLogRow): AccountCar {
   const color = (CAR_COLOR_IDS as readonly string[]).includes(row.color ?? "")
     ? (row.color as AccountCar["color"])
     : null;
@@ -82,6 +92,13 @@ function toAccountCar(row: AccountCarRow): AccountCar {
       row.documentStatus && row.documentAt
         ? { status: row.documentStatus, at: row.documentAt.toISOString() }
         : null,
+    mileage: mileage
+      ? {
+          valueKm: mileage.valueKm,
+          source: mileage.source,
+          recordedAt: mileage.recordedAt.toISOString(),
+        }
+      : null,
     isPrimary: row.isPrimary,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -147,9 +164,89 @@ export class GarageService {
     @Inject(DocumentProofs) private readonly proofs: DocumentProofs,
   ) {}
 
+  /** Cars as every answer gives them: with the current reading of the journal (TASK-058). */
+  private async views(
+    rows: readonly AccountCarRow[],
+    executor?: DbExecutor,
+  ): Promise<AccountCar[]> {
+    const mileage = await this.store.latestMileage(
+      rows.map((row) => row.id),
+      executor,
+    );
+    return rows.map((row) => toAccountCar(row, mileage.get(row.id)));
+  }
+
+  /**
+   * A reading the person confirmed (TASK-058, M-GAR-07): the one rule of
+   * `mileageVerdict` decides — lower than the last only with
+   * `confirmLower`, the same as the last writes nothing. A photo's reading
+   * keeps what the recognition read next to it; the recognition is linked
+   * only when it was this account's own reading of a dashboard — an id of
+   * anyone else's call, of another kind or of none is simply not linked.
+   * The account row is locked, so two devices of one person writing at once
+   * are two readings in order, and the later one is current.
+   */
+  async recordMileage(
+    accountId: string,
+    carId: string,
+    body: RecordCarMileageBody,
+  ): Promise<AccountCar> {
+    return this.database.db.transaction(async (tx) => {
+      await this.store.lockAccount(accountId, tx);
+      const car = await this.store.findOwned(accountId, carId, tx);
+      if (!car) throw garageCarNotFound();
+      const last = (await this.store.latestMileage([carId], tx)).get(carId);
+      const verdict = mileageVerdict(body.valueKm, last?.valueKm ?? null, body.confirmLower);
+      if (!verdict.ok) {
+        if (verdict.reason === "lower") throw garageMileageLower(verdict.lastKm);
+        throw garageFieldInvalid("valueKm", "A reading is a whole number from 0 to 2 000 000 km");
+      }
+      if (verdict.change === "new") {
+        const photo = body.source === "photo";
+        await this.store.insertMileage(
+          {
+            carId,
+            valueKm: body.valueKm,
+            source: body.source,
+            recognizedKm: photo ? (body.recognizedKm ?? null) : null,
+            aiJobId:
+              photo && body.recognitionId
+                ? await this.ownDashboardReading(accountId, body.recognitionId, tx)
+                : null,
+            recordedAt: new Date(),
+            recordedBy: accountId,
+          },
+          tx,
+        );
+      }
+      return (await this.views([car], tx))[0]!;
+    });
+  }
+
+  /** The id of an AI call when it is this account's own reading of a dashboard; otherwise `null`. */
+  private async ownDashboardReading(
+    accountId: string,
+    jobId: string,
+    executor: DbExecutor,
+  ): Promise<string | null> {
+    const [job] = await executor
+      .select({ id: aiJob.id })
+      .from(aiJob)
+      .where(
+        and(
+          eq(aiJob.id, jobId),
+          eq(aiJob.kind, "dashboard_ocr"),
+          eq(aiJob.initiatorType, "account"),
+          eq(aiJob.initiatorId, accountId),
+          eq(aiJob.status, "succeeded"),
+        ),
+      );
+    return job?.id ?? null;
+  }
+
   async list(accountId: string): Promise<GarageCarsResponse> {
     const rows = await this.store.listByAccount(accountId);
-    return { cars: rows.map(toAccountCar) };
+    return { cars: await this.views(rows) };
   }
 
   /**
@@ -216,7 +313,7 @@ export class GarageService {
         await this.store.lockAccount(accountId, tx);
         if (body.idempotencyKey) {
           const earlier = await this.store.findByIdempotencyKey(accountId, body.idempotencyKey, tx);
-          if (earlier) return toAccountCar(earlier);
+          if (earlier) return (await this.views([earlier], tx))[0]!;
         }
         const count = await this.store.count(accountId, tx);
         if (count >= limit) {
@@ -282,7 +379,7 @@ export class GarageService {
     if (!row) {
       throw garageCarNotFound();
     }
-    return toAccountCar(row);
+    return (await this.views([row]))[0]!;
   }
 
   async remove(accountId: string, carId: string): Promise<void> {
@@ -317,7 +414,7 @@ export class GarageService {
       }
       return updated;
     });
-    return toAccountCar(row);
+    return (await this.views([row]))[0]!;
   }
 
   /**
@@ -395,6 +492,9 @@ export class GarageService {
             transferred += 1;
             resolvedId = inserted.id;
           }
+          if (car.mileage) {
+            await this.transferMileage(accountId, resolvedId, car.mileage, tx);
+          }
           if (!hadPrimary && primaryCandidateId === null && car.isPrimary) {
             primaryCandidateId = resolvedId;
           }
@@ -409,8 +509,54 @@ export class GarageService {
         }
 
         const finalRows = await this.store.listByAccount(accountId, tx);
-        return { cars: finalRows.map(toAccountCar), transferred };
+        return { cars: await this.views(finalRows, tx), transferred };
       }),
+    );
+  }
+
+  /**
+   * The reading a guest gave a car on the device, as one entry of the
+   * journal of the account's car (TASK-058): at the moment the device
+   * recorded it (never later than now), with what the recognition read; a
+   * repeat of the transfer finds the same entry and writes nothing. A
+   * reading out of range is left out — a sign-in never fails over it — and
+   * so is one the account's car already has a later reading than: the
+   * journal keeps it as history, the current one stays.
+   */
+  private async transferMileage(
+    accountId: string,
+    carId: string,
+    mileage: NonNullable<TransferGarageBody["cars"][number]["mileage"]>,
+    tx: DbExecutor,
+  ): Promise<void> {
+    if (!isMileageInRange(mileage.valueKm)) return;
+    const recordedAt = new Date(Math.min(Date.parse(mileage.recordedAt), Date.now()));
+    // The same value again adds nothing — a repeated transfer, even from a
+    // device whose clock runs ahead (its moment is then «now», new each time).
+    if (await this.store.hasMileageValue(carId, mileage.valueKm, tx)) return;
+    // A reading lower than the account car's current one would become current
+    // without anyone answering «Меньше, чем в прошлый раз…»: only an older one
+    // is taken, as history; a later and lower one is left on the device.
+    const current = (await this.store.latestMileage([carId], tx)).get(carId);
+    if (current && mileage.valueKm < current.valueKm && recordedAt > current.recordedAt) return;
+    const recognized =
+      mileage.source === "photo" &&
+      mileage.recognizedKm !== null &&
+      mileage.recognizedKm !== undefined &&
+      isMileageInRange(mileage.recognizedKm)
+        ? mileage.recognizedKm
+        : null;
+    await this.store.insertMileage(
+      {
+        carId,
+        valueKm: mileage.valueKm,
+        source: mileage.source,
+        recognizedKm: recognized,
+        aiJobId: null,
+        recordedAt,
+        recordedBy: accountId,
+      },
+      tx,
     );
   }
 

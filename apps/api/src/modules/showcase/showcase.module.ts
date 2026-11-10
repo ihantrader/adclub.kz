@@ -1,6 +1,9 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { SearchIndexModule } from "../search-index";
+import { DocumentAttempts, PhotoRecognitions } from "../vehicle-document";
 import { CatalogSearchService } from "./catalog-search.service";
+import { PartPhotoController } from "./part-photo.controller";
+import { PartPhotoService } from "./part-photo.service";
 import { SearchEval } from "./search-eval";
 import { ShowcaseController } from "./showcase.controller";
 import { ShowcaseService } from "./showcase.service";
@@ -29,8 +32,15 @@ export class ShowcaseModule {
     return {
       module: ShowcaseModule,
       imports: [options.catalog, options.compatibility, options.clubAccess, SearchIndexModule],
-      controllers: options.http ? [ShowcaseController] : [],
-      providers: [ShowcaseService, CatalogSearchService, SearchEval],
+      controllers: options.http ? [ShowcaseController, PartPhotoController] : [],
+      // A part by its photo (TASK-058) only where the routes are served: it
+      // reads photos through the attempts of the certificate (Redis, AI).
+      providers: [
+        ShowcaseService,
+        CatalogSearchService,
+        SearchEval,
+        ...(options.http ? [DocumentAttempts, PhotoRecognitions, PartPhotoService] : []),
+      ],
       exports: [ShowcaseService, CatalogSearchService, SearchEval],
     };
   }

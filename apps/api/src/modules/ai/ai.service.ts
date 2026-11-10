@@ -10,6 +10,8 @@ import {
   AiGatewayError,
   FALLBACK_WORTHY,
   NOT_BILLED,
+  dashboardOperation,
+  partPhotoOperation,
   priceMatchOperation,
   reviewCheckOperation,
   translateOperation,
@@ -17,6 +19,9 @@ import {
   type AiFailureKind,
   type AiOperation,
   type AiResult,
+  type DashboardOutput,
+  type PartPhotoOutput,
+  type PhotoInput,
   type PriceMatchInput,
   type PriceMatchOutput,
   type ReviewCheckInput,
@@ -143,6 +148,16 @@ export class AiService {
     meta: AiCallMeta,
   ): Promise<AiCallResult<VehicleDocumentOutput>> {
     return this.call(vehicleDocumentOperation, input, meta);
+  }
+
+  /** The mileage off a photo of the dashboard (TASK-058); the photo itself is never recorded. */
+  readDashboard(input: PhotoInput, meta: AiCallMeta): Promise<AiCallResult<DashboardOutput>> {
+    return this.call(dashboardOperation, input, meta);
+  }
+
+  /** The article off a photo of a part (TASK-058); the photo itself is never recorded. */
+  readPartPhoto(input: PhotoInput, meta: AiCallMeta): Promise<AiCallResult<PartPhotoOutput>> {
+    return this.call(partPhotoOperation, input, meta);
   }
 
   /** Rows of a price list matched with their candidates (TASK-047). */

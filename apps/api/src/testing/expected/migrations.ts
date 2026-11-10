@@ -59,4 +59,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1791900000000_ops-runs",
   "1791950000000_staging-testers",
   "1792000000000_search-key-restorable",
+  "1792050000000_mileage-log",
 ];

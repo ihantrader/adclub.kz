@@ -219,6 +219,7 @@ import {
   garageCarsResponseSchema,
   accountCarSchema,
   addGarageCarBodySchema,
+  recordCarMileageBodySchema,
   saveGarageCarBodySchema,
   transferGarageBodySchema,
   transferGarageResponseSchema,
@@ -230,6 +231,12 @@ import {
   vehicleDocumentQuerySchema,
   vehicleDocumentResponseSchema,
 } from "./vehicle-document";
+import {
+  dashboardQuerySchema,
+  dashboardResponseSchema,
+  partPhotoQuerySchema,
+  partPhotoResponseSchema,
+} from "./photo-recognition";
 import {
   activeOrdersResponseSchema,
   adminCloseOrderBodySchema,
@@ -1065,6 +1072,48 @@ export const apiRoutes = {
     pathParams: garageCarIdPathSchema,
     responses: {
       200: { description: "The car is now primary", schema: accountCarSchema },
+    },
+  }),
+  // The mileage journal of a car (TASK-058): only a reading the person confirmed.
+  recordGarageCarMileage: defineRoute({
+    operationId: "recordGarageCarMileage",
+    method: "POST",
+    path: "/garage/cars/{carId}/mileage",
+    summary:
+      "Record the mileage of a car the person confirmed (M-GAR-07): typed, or read off the dashboard and checked; a lower reading needs confirmLower",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageCarIdPathSchema,
+    requestBody: { description: "The reading", schema: recordCarMileageBodySchema },
+    responses: {
+      200: {
+        description: "The car with its current mileage",
+        schema: accountCarSchema,
+      },
+    },
+  }),
+  // The mileage read off a photo of the dashboard (TASK-058): counted with
+  // the certificate (one trial limit of a guest), stored nowhere.
+  recognizeDashboard: defineRoute({
+    operationId: "recognizeDashboard",
+    method: "POST",
+    path: "/garage/dashboard",
+    summary:
+      "Read the total mileage off a photo of the dashboard (SCREENS M-GAR-07): the photo is stored nowhere, nothing is written",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    query: dashboardQuerySchema,
+    upload: {
+      description: "The photo itself (JPEG, PNG or WebP)",
+      contentTypes: VEHICLE_DOCUMENT_CONTENT_TYPES,
+      maxBytes: VEHICLE_DOCUMENT_MAX_BYTES,
+    },
+    responses: {
+      200: { description: "The mileage the odometer shows", schema: dashboardResponseSchema },
     },
   }),
   transferGarage: defineRoute({
@@ -4289,6 +4338,31 @@ export const apiRoutes = {
     query: catalogSearchQuerySchema,
     responses: {
       200: { description: "A page of found items", schema: catalogSearchResponseSchema },
+    },
+  }),
+  // A part found by a photo of its article (TASK-058, M-CAT-06): counted with
+  // the certificate (one trial limit of a guest), stored nowhere.
+  recognizePartPhoto: defineRoute({
+    operationId: "recognizePartPhoto",
+    method: "POST",
+    path: "/catalog/part-photo",
+    summary:
+      "Read the article off a photo of a part or its box and find it as the search does (M-CAT-06): the photo is stored nowhere; open to guests",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    query: partPhotoQuerySchema,
+    upload: {
+      description: "The photo itself (JPEG, PNG or WebP)",
+      contentTypes: VEHICLE_DOCUMENT_CONTENT_TYPES,
+      maxBytes: VEHICLE_DOCUMENT_MAX_BYTES,
+    },
+    responses: {
+      200: {
+        description: "The article read and the items of the catalog with it",
+        schema: partPhotoResponseSchema,
+      },
     },
   }),
   getShowcaseItem: defineRoute({

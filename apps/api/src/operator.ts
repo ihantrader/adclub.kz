@@ -44,6 +44,7 @@ import {
   saveDocumentEvalRun,
   VehicleDocumentEval,
 } from "./modules/vehicle-document";
+import { PhotoEval, PhotoEvalBudgetError, savePhotoEvalRun } from "./modules/photo-eval";
 import {
   CompatibilityModule,
   DevCompatibilitySeed,
@@ -146,6 +147,12 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                another document, time and the price of a scan;
  *                                written to `ai-eval/vehicle-document/results/`.
  *                                The spend is stated as for translations.
+ *   ai:eval:dashboard --models <a,b,…> --confirm-spend <usd> [--label <text>]
+ *   ai:eval:part-photo --models <a,b,…> --confirm-spend <usd> [--label <text>]
+ *                                the same for the photos of TASK-058: the mileage
+ *                                off a drawn dashboard (`ai-eval/dashboard`) and the
+ *                                article off a drawn label (`ai-eval/part-photo`);
+ *                                written to `ai-eval/<set>/results/`.
  *
  * The search index of the catalog (TASK-045; ARCHITECTURE 10, 4.65):
  *   search:status                the index: documents, whether it answers, the outbox
@@ -263,6 +270,7 @@ class OperatorModule {
         ...identityOperatorProviders,
         TranslationEval,
         VehicleDocumentEval,
+        PhotoEval,
       ],
     };
   }
@@ -305,6 +313,8 @@ const USAGE = `Usage: operator <command> [arguments]
   ai:eval:translate --models <a,b,...> --confirm-spend <usd> [--glossary] [--batch-size <n>] [--label <text>]
   ai:eval:recheck <result file name>
   ai:eval:vehicle-document --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  ai:eval:dashboard --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  ai:eval:part-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
   search:status
   search:reindex
   search:reconcile
@@ -430,6 +440,7 @@ interface Services {
   translations: TranslationQueue;
   translationEval: TranslationEval;
   documentEval: VehicleDocumentEval;
+  photoEval: PhotoEval;
   searchIndex: SearchIndexWriter;
   searchEval: SearchEval;
   devCommands: boolean;
@@ -457,6 +468,7 @@ async function run(
     translations,
     translationEval,
     documentEval,
+    photoEval,
     searchIndex,
     searchEval,
     devCommands,
@@ -734,6 +746,57 @@ async function run(
         })),
       };
     }
+    case "ai:eval:dashboard":
+    case "ai:eval:part-photo": {
+      if (!devCommands) {
+        throw new OperatorCommandError(`${command} is available in development and tests only`);
+      }
+      const models = required(values.models, "--models")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0);
+      if (models.length === 0) {
+        throw new OperatorCommandError("--models lists no model");
+      }
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.5");
+      }
+      // As for the certificate: the daily budget is what stops the run, so
+      // the stated spend must fit in what is left of it.
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const kind = command === "ai:eval:dashboard" ? "dashboard" : "part-photo";
+      const run = await photoEval.run(kind, {
+        models,
+        ...(values.label === undefined ? {} : { label: values.label }),
+      });
+      const path = savePhotoEvalRun(
+        run,
+        `${run.startedAt.slice(0, 10)}-${values.label ?? "models"}`,
+      );
+      return {
+        saved: path,
+        dataVersion: run.dataVersion,
+        samples: run.samples,
+        // What each model read is in the saved file; here only the numbers.
+        results: run.results.map((result) => ({
+          model: result.model,
+          passes: result.score.passes,
+          score: { ...result.score, misses: result.score.misses.length },
+          costUsd: result.costUsd,
+          costPerScanUsd: result.costPerScanUsd,
+          latencyMs: result.latencyMs,
+          failures: result.failures.length,
+          failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
+        })),
+      };
+    }
     case "dev:jobs:fail": {
       if (!devJobs) {
         throw new OperatorCommandError("dev:jobs:fail is available in development and tests only");
@@ -910,6 +973,7 @@ async function main(): Promise<void> {
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),
         documentEval: app.get(VehicleDocumentEval),
+        photoEval: app.get(PhotoEval),
         searchIndex: app.get(SearchIndexWriter),
         searchEval: app.get(SearchEval),
         devCommands: hasDevJobs(config),
@@ -934,6 +998,7 @@ main().catch((error: unknown) => {
     error instanceof MessagingCommandError ||
     error instanceof NotificationsCommandError ||
     error instanceof DocumentEvalBudgetError ||
+    error instanceof PhotoEvalBudgetError ||
     error instanceof SearchReindexBusyError ||
     error instanceof SearchIndexUnavailableError
   ) {

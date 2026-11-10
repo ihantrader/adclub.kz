@@ -7,10 +7,10 @@ import {
   type VehicleDocumentResponse,
 } from "@adclub/contracts";
 import type { Request } from "express";
-import { ApiException } from "../../common/errors";
+import { photoReaderOf } from "./photo-reader";
 import { ZodValidationPipe } from "../../common/validation";
 import { OptionalSession, OptionalSessionRoute, type AuthenticatedSession } from "../identity";
-import type { DocumentReader } from "./document-attempts";
+
 import { VehicleDocumentService } from "./vehicle-document.service";
 
 /**
@@ -33,7 +33,7 @@ export class VehicleDocumentController {
     @Req() request: Request,
   ): Promise<VehicleDocumentResponse> {
     const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-    return this.documents.recognize(readerOf(session, query, request), body);
+    return this.documents.recognize(photoReaderOf(session, query.deviceId, request), body);
   }
 
   @OptionalSessionRoute(apiRoutes.getVehicleDocumentAttempts)
@@ -42,22 +42,6 @@ export class VehicleDocumentController {
     @OptionalSession() session: AuthenticatedSession | null,
     @Req() request: Request,
   ): Promise<VehicleDocumentAttempts> {
-    return this.documents.left(readerOf(session, query, request));
+    return this.documents.left(photoReaderOf(session, query.deviceId, request));
   }
-}
-
-function readerOf(
-  session: AuthenticatedSession | null,
-  query: VehicleDocumentQuery,
-  request: Request,
-): DocumentReader {
-  if (session) {
-    return { kind: "account", accountId: session.accountId };
-  }
-  if (!query.deviceId) {
-    throw new ApiException(400, "VALIDATION_ERROR", "A guest names the device", {
-      details: [{ path: "deviceId", message: "Required for a guest" }],
-    });
-  }
-  return { kind: "guest", deviceId: query.deviceId, ip: request.ip };
 }

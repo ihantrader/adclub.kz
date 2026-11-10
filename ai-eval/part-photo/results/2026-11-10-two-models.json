@@ -1,0 +1,566 @@
+{
+  "kind": "part-photo",
+  "startedAt": "2026-11-10T05:32:31.585Z",
+  "finishedAt": "2026-11-10T05:34:22.025Z",
+  "dataVersion": 1,
+  "samples": 23,
+  "label": "two-models",
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "google/gemini-3.1-flash-lite",
+      "answeredBy": ["google/gemini-3.1-flash-lite"],
+      "calls": 23,
+      "failures": [],
+      "costUsd": 0.011751,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000511,
+      "tokensIn": 38249,
+      "tokensOut": 1460,
+      "latencyMs": {
+        "min": 1015,
+        "median": 1432,
+        "max": 4274
+      },
+      "score": {
+        "article": {
+          "correct": 17,
+          "total": 17,
+          "share": 1
+        },
+        "secondArticle": {
+          "correct": 1,
+          "total": 1,
+          "share": 1
+        },
+        "falseArticle": {
+          "correct": 0,
+          "total": 23,
+          "share": 0
+        },
+        "noArticle": {
+          "correct": 4,
+          "total": 4,
+          "share": 1
+        },
+        "guessedHidden": 1,
+        "passes": true,
+        "misses": []
+      },
+      "answers": {
+        "geely-box-clean": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465-0K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "geely-box-glare": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465-0K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "geely-box-tilt": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465-0K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "trw-label-clean": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 1
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "trw-label-two-articles": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 1
+            },
+            {
+              "text": "04465-0K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "geely-sticker-no-dash": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "044650K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "PAD KIT FR"
+        },
+        "geely-rear-zeros": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "4050068800",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные задние"
+        },
+        "febi-barcode-batch-date": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "FEB35074",
+              "confidence": 1
+            }
+          ],
+          "brand": "FEBI",
+          "labelText": "Фильтр масляный"
+        },
+        "geely-filter-barcode": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "11818-0249",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Фильтр воздушный"
+        },
+        "geely-sensor-lowres": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "64642-0212",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Датчик"
+        },
+        "mann-filter-clean": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "MAN67527",
+              "confidence": 1
+            }
+          ],
+          "brand": "MANN",
+          "labelText": "Oil filter"
+        },
+        "sachs-shock-glare": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "SAC28522",
+              "confidence": 1
+            }
+          ],
+          "brand": "SACHS",
+          "labelText": "Амортизатор"
+        },
+        "ngk-plug-dark": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "NGK26258",
+              "confidence": 1
+            }
+          ],
+          "brand": "NGK",
+          "labelText": "Spark plug"
+        },
+        "trw-label-tilt": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 1
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "geely-box-spaces": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465 0K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки"
+        },
+        "geely-box-occluded": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "trw-label-blur": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 1
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "mann-filter-lowres": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "MAN67527",
+              "confidence": 1
+            }
+          ],
+          "brand": "MANN",
+          "labelText": "Oil filter"
+        },
+        "febi-label-tilt": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "FEB35074",
+              "confidence": 1
+            }
+          ],
+          "brand": "FEBI",
+          "labelText": "Фильтр масляный"
+        },
+        "no-article-oil-can": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": "SHELL",
+          "labelText": "Моторное масло 5W-30"
+        },
+        "no-article-brand-box": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": "GEELY",
+          "labelText": "Genuine parts"
+        },
+        "no-article-only-barcode": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": null,
+          "labelText": "Упаковка"
+        },
+        "not-a-part": {
+          "kind": "unreadable",
+          "articles": [],
+          "brand": null,
+          "labelText": null
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "answeredBy": ["openai/gpt-4.1-mini"],
+      "calls": 23,
+      "failures": [],
+      "costUsd": 0.017151,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000746,
+      "tokensIn": 39611,
+      "tokensOut": 818,
+      "latencyMs": {
+        "min": 1951,
+        "median": 2602,
+        "max": 5646
+      },
+      "score": {
+        "article": {
+          "correct": 17,
+          "total": 17,
+          "share": 1
+        },
+        "secondArticle": {
+          "correct": 1,
+          "total": 1,
+          "share": 1
+        },
+        "falseArticle": {
+          "correct": 0,
+          "total": 23,
+          "share": 0
+        },
+        "noArticle": {
+          "correct": 4,
+          "total": 4,
+          "share": 1
+        },
+        "guessedHidden": 1,
+        "passes": true,
+        "misses": []
+      },
+      "answers": {
+        "geely-box-clean": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465-0K090",
+              "confidence": 0.98
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "geely-box-glare": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465-0K090",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "geely-box-tilt": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465-0K090",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "trw-label-clean": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 1
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "trw-label-two-articles": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 1
+            },
+            {
+              "text": "04465-0K090",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "geely-sticker-no-dash": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "044650K090",
+              "confidence": 0.95
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "PAD KIT FR"
+        },
+        "geely-rear-zeros": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "4050068800",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные задние"
+        },
+        "febi-barcode-batch-date": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "FEB35074",
+              "confidence": 1
+            }
+          ],
+          "brand": "FEBI",
+          "labelText": "Фильтр масляный"
+        },
+        "geely-filter-barcode": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "11818-0249",
+              "confidence": 1
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Фильтр воздушный"
+        },
+        "geely-sensor-lowres": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "64642-0212",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Датчик"
+        },
+        "mann-filter-clean": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "MAN67527",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "MANN",
+          "labelText": "Oil filter"
+        },
+        "sachs-shock-glare": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "SAC28522",
+              "confidence": 1
+            }
+          ],
+          "brand": "SACHS",
+          "labelText": "Амортизатор"
+        },
+        "ngk-plug-dark": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "NGK26258",
+              "confidence": 1
+            }
+          ],
+          "brand": "NGK",
+          "labelText": "Spark plug"
+        },
+        "trw-label-tilt": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "geely-box-spaces": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04465 0K090",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки"
+        },
+        "geely-box-occluded": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "04     0",
+              "confidence": 0.6
+            }
+          ],
+          "brand": "GEELY",
+          "labelText": "Колодки тормозные передние"
+        },
+        "trw-label-blur": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "GDB3534",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "TRW",
+          "labelText": "Brake pad set"
+        },
+        "mann-filter-lowres": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "MAN67527",
+              "confidence": 0.99
+            }
+          ],
+          "brand": "MANN",
+          "labelText": "Oil filter"
+        },
+        "febi-label-tilt": {
+          "kind": "article_found",
+          "articles": [
+            {
+              "text": "FEB35074",
+              "confidence": 1
+            }
+          ],
+          "brand": "FEBI",
+          "labelText": "Фильтр маслянный"
+        },
+        "no-article-oil-can": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": "SHELL",
+          "labelText": "Моторное масло 5W-30 · 4 л"
+        },
+        "no-article-brand-box": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": "GEELY",
+          "labelText": "Genuine parts · Made in China"
+        },
+        "no-article-only-barcode": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": null,
+          "labelText": "Упаковка"
+        },
+        "not-a-part": {
+          "kind": "no_article",
+          "articles": [],
+          "brand": null,
+          "labelText": null
+        }
+      }
+    }
+  ]
+}

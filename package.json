@@ -19,6 +19,8 @@
     "icons": "node scripts/icons.mjs",
     "dev:lan": "node scripts/dev-lan.mjs",
     "vehicle-document:samples": "node scripts/vehicle-document-samples.mjs",
+    "dashboard:samples": "node scripts/dashboard-samples.mjs",
+    "part-photo:samples": "node scripts/part-photo-samples.mjs",
     "release:mobile:snapshot": "pnpm --filter @adclub/api release:mobile:snapshot"
   },
   "devDependencies": {

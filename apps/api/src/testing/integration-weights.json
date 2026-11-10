@@ -11,6 +11,7 @@
   "src/modules/catalog/translation.integration.test.ts": 50,
   "src/modules/compatibility/compatibility.integration.test.ts": 21,
   "src/modules/garage/garage.integration.test.ts": 9,
+  "src/modules/garage/photo-recognition.integration.test.ts": 45,
   "src/modules/identity/access.integration.test.ts": 18,
   "src/modules/identity/account/account-profile.integration.test.ts": 5,
   "src/modules/identity/cleanup/sign-in-data-cleanup.integration.test.ts": 29,

@@ -45,4 +45,27 @@ export const accountCar = pgTable("account_car", {
 
 export type AccountCarRow = typeof accountCar.$inferSelect;
 
-export const garageTables = [accountCar];
+/**
+ * Drizzle mirror of `mileage_log` (`infra/migrations/…_mileage-log.sql` —
+ * the source of truth; ARCHITECTURE 5.8, 4.83; TASK-058): the readings a
+ * person confirmed, with what the recognition read next to them.
+ * `ai_job_id` is a plain uuid here for the same cross-module reason as the
+ * vehicle ids above (the migration carries the foreign key).
+ */
+export const mileageLog = pgTable("mileage_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  carId: uuid("car_id")
+    .notNull()
+    .references(() => accountCar.id, { onDelete: "cascade" }),
+  valueKm: integer("value_km").notNull(),
+  source: text("source").$type<"text" | "photo" | "voice" | "prompt">().notNull(),
+  recognizedKm: integer("recognized_km"),
+  aiJobId: uuid("ai_job_id"),
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+  recordedBy: uuid("recorded_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type MileageLogRow = typeof mileageLog.$inferSelect;
+
+export const garageTables = [accountCar, mileageLog];

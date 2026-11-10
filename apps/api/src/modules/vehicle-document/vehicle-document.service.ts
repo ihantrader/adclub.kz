@@ -9,18 +9,10 @@ import type {
   VehicleModificationView,
 } from "@adclub/contracts";
 import { engineVolumeCc, normalizeKzPlate, normalizeVin } from "@adclub/domain";
-import { ApiException } from "../../common/errors";
-import {
-  AiBudgetExhaustedError,
-  AiGatewayError,
-  AiService,
-  type AiInitiator,
-  type VehicleDocumentOutput,
-} from "../ai";
-import { AppSettings } from "../settings";
+import { AiService, type VehicleDocumentOutput } from "../ai";
 import { VehicleReadService } from "../vehicles";
-import { DocumentAttempts, type DocumentReader } from "./document-attempts";
-import { DocumentImageRejected, prepareDocumentImage } from "./document-image";
+import type { DocumentReader } from "./document-attempts";
+import { PhotoRecognitions } from "./photo-recognitions";
 import {
   matchColor,
   matchEngines,
@@ -113,85 +105,21 @@ export class VehicleDocumentService {
 
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
+    @Inject(PhotoRecognitions) private readonly photos: PhotoRecognitions,
     @Inject(AiService) private readonly ai: AiService,
-    @Inject(AppSettings) private readonly settings: AppSettings,
-    @Inject(DocumentAttempts) private readonly attempts: DocumentAttempts,
     @Inject(VehicleReadService) private readonly vehicles: VehicleReadService,
     @Inject(DocumentProofs) private readonly proofs: DocumentProofs,
   ) {}
 
   left(reader: DocumentReader): Promise<VehicleDocumentAttempts> {
-    return this.attempts.left(reader);
+    return this.photos.left(reader);
   }
 
   async recognize(reader: DocumentReader, body: Buffer): Promise<VehicleDocumentResponse> {
-    const maxBytes = (await this.settings.get("vehicle_document_max_size_mb")) * 1024 * 1024;
-    if (body.byteLength > maxBytes) {
-      throw new ApiException(
-        413,
-        "PAYLOAD_TOO_LARGE",
-        `The photo is larger than the limit of ${String(Math.round(maxBytes / (1024 * 1024)))} MB`,
-      );
-    }
-    const counted = await this.attempts.count(reader);
-    let image;
-    try {
-      image = await prepareDocumentImage(body);
-    } catch (error) {
-      await this.attempts.giveBack(counted.keys);
-      if (error instanceof DocumentImageRejected) {
-        throw new ApiException(
-          400,
-          "VEHICLE_DOCUMENT_INVALID",
-          "The photo is not a picture the server reads",
-          {
-            details: { reason: error.reason },
-          },
-        );
-      }
-      throw error;
-    }
-
-    if (reader.kind === "guest") {
-      const [spent, budget] = await Promise.all([
-        this.ai.guestSpentToday(),
-        this.settings.get("guest_ai_daily_budget_usd"),
-      ]);
-      if (spent >= budget) {
-        await this.attempts.giveBack(counted.keys);
-        throw this.unavailable("budget", counted.attempts);
-      }
-    }
-
-    const initiator: AiInitiator =
-      reader.kind === "account"
-        ? { type: "account", id: reader.accountId }
-        : { type: "guest_device", id: reader.deviceId };
-    let output: VehicleDocumentOutput;
-    try {
-      const result = await this.ai.readVehicleDocument(
-        { image: image.bytes, contentType: "image/jpeg" },
-        // The size of the picture only: what it shows is never recorded.
-        {
-          initiator,
-          inputRef: { bytes: image.bytes.byteLength, width: image.width, height: image.height },
-        },
-      );
-      output = result.output;
-    } catch (error) {
-      if (error instanceof AiBudgetExhaustedError) {
-        await this.attempts.giveBack(counted.keys);
-        throw this.unavailable("budget", counted.attempts);
-      }
-      if (error instanceof AiGatewayError) {
-        // Down, refused, no private provider, an unusable answer: none of it
-        // is the person's doing, so the attempt is given back (requirement 1).
-        await this.attempts.giveBack(counted.keys);
-        throw this.unavailable("provider", counted.attempts);
-      }
-      throw error;
-    }
-
+    const reading = await this.photos.read(reader, body, (input, meta) =>
+      this.ai.readVehicleDocument(input, meta),
+    );
+    const output: VehicleDocumentOutput = reading.call.output;
     const fields = documentFields(output, new Date().getFullYear());
     const kind = documentKind(output, fields);
     // The kind and which fields came back — never their values.
@@ -207,7 +135,7 @@ export class VehicleDocumentService {
         fields: NO_FIELDS,
         match: NO_MATCH,
         documentProof: null,
-        attempts: counted.attempts,
+        attempts: reading.attempts,
       };
     }
     return {
@@ -215,7 +143,7 @@ export class VehicleDocumentService {
       fields,
       match: await this.match(fields),
       documentProof: this.proofs.issue(new Date()),
-      attempts: counted.attempts,
+      attempts: reading.attempts,
     };
   }
 
@@ -258,17 +186,5 @@ export class VehicleDocumentService {
       generationIds.map((id) => this.vehicles.modifications(id, "ru", undefined)),
     );
     return answers.flatMap((answer) => answer.modifications);
-  }
-
-  private unavailable(
-    reason: "provider" | "budget",
-    attempts: VehicleDocumentAttempts,
-  ): ApiException {
-    return new ApiException(
-      503,
-      "VEHICLE_DOCUMENT_UNAVAILABLE",
-      "The certificate can't be read now; choose the car from the list",
-      { details: { reason, attempts: this.attempts.refunded(attempts) }, retryable: true },
-    );
   }
 }

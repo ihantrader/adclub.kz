@@ -30,6 +30,19 @@ export function garageVinTaken(carId: string | null): ApiException {
   );
 }
 
+/**
+ * A reading below the last one of the journal, not confirmed (TASK-058):
+ * the app asks «Меньше, чем в прошлый раз ({N} км). Всё верно?».
+ */
+export function garageMileageLower(lastKm: number): ApiException {
+  return new ApiException(
+    409,
+    "GARAGE_MILEAGE_LOWER",
+    "The reading is lower than the last one; send it again with confirmLower if it is right",
+    { details: { lastKm } },
+  );
+}
+
 /** The database refused a second car with one VIN in one garage (a race the service lost). */
 export function isVinTakenViolation(error: unknown): boolean {
   const pgError = postgresError(error);

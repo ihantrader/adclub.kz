@@ -257,6 +257,15 @@ export type { RegistrationFacts } from "./account/registration";
 export { CAR_IDENTITY_LEVELS, carIdentity, sameCar, sameCarIdentity } from "./garage/same-car";
 export type { CarIdentity, CarIdentityLevel, CarLevelRef, CarLevelsLike } from "./garage/same-car";
 export { sameCarCases } from "./garage/same-car-cases";
+export {
+  isMileageInRange,
+  KM_PER_MILE,
+  MILEAGE_MAX_KM,
+  mileageVerdict,
+  milesToKm,
+  parseMileageInput,
+} from "./garage/mileage";
+export type { MileageVerdict } from "./garage/mileage";
 export type { SameCarCase, SameCarCaseCar, SameCarCaseLevel } from "./garage/same-car-cases";
 export { latestVehicleYear, VEHICLE_YEAR_TIME_ZONE } from "./vehicle/vehicle-years";
 export {

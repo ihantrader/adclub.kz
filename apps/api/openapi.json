@@ -13975,6 +13975,187 @@
         }
       }
     },
+    "/catalog/part-photo": {
+      "post": {
+        "operationId": "recognizePartPhoto",
+        "summary": "Read the article off a photo of a part or its box and find it as the search does (M-CAT-06): the photo is stored nowhere; open to guests",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "cityId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleModificationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleMakeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleModelId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleGenerationId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleBodyTypeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleEngineId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleTransmissionTypeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleDriveTypeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "vehicleYear",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1900,
+              "maximum": 2100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {},
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The photo itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The article read and the items of the catalog with it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartPhotoResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/catalog/search": {
       "get": {
         "operationId": "searchCatalog",
@@ -14521,6 +14702,70 @@
         }
       }
     },
+    "/garage/cars/{carId}/mileage": {
+      "post": {
+        "operationId": "recordGarageCarMileage",
+        "summary": "Record the mileage of a car the person confirmed (M-GAR-07): typed, or read off the dashboard and checked; a lower reading needs confirmLower",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "carId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The reading",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCarMileageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The car with its current mileage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCar"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/garage/cars/{carId}/primary": {
       "post": {
         "operationId": "setPrimaryGarageCar",
@@ -14561,6 +14806,87 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccountCar"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/garage/dashboard": {
+      "post": {
+        "operationId": "recognizeDashboard",
+        "summary": "Read the total mileage off a photo of the dashboard (SCREENS M-GAR-07): the photo is stored nowhere, nothing is written",
+        "tags": [
+          "garage"
+        ],
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {},
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The photo itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The mileage the odometer shows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
                 }
               }
             }
@@ -19989,6 +20315,16 @@
               }
             ]
           },
+          "mileage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarMileage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "isPrimary": {
             "type": "boolean"
           },
@@ -20018,6 +20354,7 @@
           "vin",
           "plate",
           "document",
+          "mileage",
           "isPrimary",
           "createdAt",
           "updatedAt"
@@ -30399,6 +30736,29 @@
           "drive"
         ]
       },
+      "CarMileage": {
+        "type": "object",
+        "properties": {
+          "valueKm": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "source": {
+            "$ref": "#/components/schemas/MileageSource"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "valueKm",
+          "source",
+          "recordedAt"
+        ]
+      },
       "CardBindingFailure": {
         "anyOf": [
           {
@@ -34835,6 +35195,78 @@
           "access"
         ]
       },
+      "DashboardResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "dashboard",
+              "not_dashboard",
+              "unreadable"
+            ]
+          },
+          "mileageKm": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "km",
+                  "mi"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tripMeterSeen": {
+            "type": "boolean"
+          },
+          "recognitionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/VehicleDocumentAttempts"
+          }
+        },
+        "required": [
+          "kind",
+          "mileageKm",
+          "unit",
+          "confidence",
+          "tripMeterSeen",
+          "recognitionId",
+          "attempts"
+        ]
+      },
       "DayHours": {
         "type": "object",
         "properties": {
@@ -35281,6 +35713,7 @@
           "REGISTRATION_INCOMPLETE",
           "GARAGE_LIMIT_REACHED",
           "GARAGE_VIN_TAKEN",
+          "GARAGE_MILEAGE_LOWER",
           "VEHICLE_DOCUMENT_INVALID",
           "VEHICLE_DOCUMENT_UNAVAILABLE",
           "PRICE_IMPORT_FILE_INVALID",
@@ -35370,6 +35803,19 @@
         },
         "required": [
           "cars"
+        ]
+      },
+      "GarageMileageLowerDetails": {
+        "type": "object",
+        "properties": {
+          "lastKm": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "lastKm"
         ]
       },
       "GrantClubAccessBody": {
@@ -35827,6 +36273,15 @@
         },
         "required": [
           "seenUntil"
+        ]
+      },
+      "MileageSource": {
+        "type": "string",
+        "enum": [
+          "text",
+          "photo",
+          "voice",
+          "prompt"
         ]
       },
       "MobilePlatformPolicy": {
@@ -38256,6 +38711,101 @@
           "leadDays"
         ]
       },
+      "PartPhotoArticle": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "normalized": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "text",
+          "normalized",
+          "confidence"
+        ]
+      },
+      "PartPhotoResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "article_found",
+              "no_article",
+              "unreadable"
+            ]
+          },
+          "article": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartPhotoArticle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartPhotoArticle"
+            }
+          },
+          "brandHint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogSearchItem"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "empty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogSearchEmptyReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "analogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogSearchItem"
+            }
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/VehicleDocumentAttempts"
+          }
+        },
+        "required": [
+          "kind",
+          "article",
+          "candidates",
+          "brandHint",
+          "items",
+          "total",
+          "empty",
+          "analogs",
+          "attempts"
+        ]
+      },
       "PayNowResponse": {
         "type": "object",
         "properties": {
@@ -40542,6 +41092,54 @@
         "required": [
           "status",
           "checks"
+        ]
+      },
+      "RecordCarMileageBody": {
+        "type": "object",
+        "properties": {
+          "valueKm": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000000
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "text",
+              "photo"
+            ]
+          },
+          "recognizedKm": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recognitionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmLower": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valueKm",
+          "source"
         ]
       },
       "RefreshSessionBody": {
@@ -47374,6 +47972,45 @@
           "signInStep"
         ]
       },
+      "TransferCarMileage": {
+        "type": "object",
+        "properties": {
+          "valueKm": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "text",
+              "photo"
+            ]
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "recognizedKm": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "valueKm",
+          "source",
+          "recordedAt"
+        ]
+      },
       "TransferGarageBody": {
         "type": "object",
         "properties": {
@@ -47434,6 +48071,16 @@
                   "anyOf": [
                     {
                       "$ref": "#/components/schemas/CarDocumentInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mileage": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TransferCarMileage"
                     },
                     {
                       "type": "null"

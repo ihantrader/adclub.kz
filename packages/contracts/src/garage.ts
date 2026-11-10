@@ -96,6 +96,62 @@ export type CarDocumentInput = z.infer<typeof carDocumentInputSchema>;
 const vinField = z.string().max(40).nullable().optional();
 const plateField = z.string().max(20).nullable().optional();
 
+/**
+ * The mileage of a car (TASK-058; SCREENS M-GAR-05, M-GAR-06, M-GAR-07): the
+ * kilometres a person confirmed — typed, or read off a photo of the
+ * dashboard and checked. `voice` and `prompt` wait for TASK-060 and
+ * TASK-069; nothing writes them yet.
+ */
+export const MILEAGE_SOURCES = ["text", "photo", "voice", "prompt"] as const;
+
+export const mileageSourceSchema = z.enum(MILEAGE_SOURCES);
+
+export type MileageSource = z.infer<typeof mileageSourceSchema>;
+
+/** The highest reading the server takes (`MILEAGE_MAX_KM` of `@adclub/domain`). */
+const mileageKmField = z.number().int().min(0).max(2_000_000);
+
+/** The last reading of a car's journal: what the card says («Пробег: 45 200 км · {когда}»). */
+export const carMileageSchema = z.object({
+  valueKm: z.number().int(),
+  source: mileageSourceSchema,
+  recordedAt: z.iso.datetime(),
+});
+
+export type CarMileage = z.infer<typeof carMileageSchema>;
+
+/**
+ * `POST /garage/cars/{carId}/mileage` (M-GAR-07): a reading the person
+ * confirmed. `source: photo` carries what the recognition read
+ * (`recognizedKm`) and the id it answered (`recognitionId` of
+ * `POST /garage/dashboard`), kept next to the confirmed value — the result
+ * of AI and the person's word stay apart (SCREENS 9.3). `confirmLower` — the
+ * person answered «Всё верно» to «Меньше, чем в прошлый раз…»; without it a
+ * lower reading is `GARAGE_MILEAGE_LOWER`.
+ */
+export const recordCarMileageBodySchema = z.object({
+  valueKm: mileageKmField,
+  source: z.enum(["text", "photo"]),
+  recognizedKm: z.number().int().min(0).max(2_000_000).nullable().optional(),
+  recognitionId: z.uuid().nullable().optional(),
+  confirmLower: z.boolean().optional(),
+});
+
+export type RecordCarMileageBody = z.infer<typeof recordCarMileageBodySchema>;
+
+/** `details` of `GARAGE_MILEAGE_LOWER`: the last reading, for «… ({N} км). Всё верно?». */
+export const garageMileageLowerDetailsSchema = z.object({ lastKm: z.number().int() });
+
+/** The reading of a guest car in a transfer: as the device kept it. */
+export const transferCarMileageSchema = z.object({
+  valueKm: z.number().int(),
+  source: z.enum(["text", "photo"]),
+  recordedAt: z.iso.datetime(),
+  recognizedKm: z.number().int().nullable().optional(),
+});
+
+export type TransferCarMileage = z.infer<typeof transferCarMileageSchema>;
+
 /** One car of the account's garage, as every read of it answers. */
 export const accountCarSchema = z.object({
   id: z.uuid(),
@@ -108,6 +164,8 @@ export const accountCarSchema = z.object({
   /** Compact, `123ABC02`; shown as on the plate, `123 ABC 02`. */
   plate: z.string().nullable(),
   document: carDocumentSchema.nullable(),
+  /** The last reading of the journal (TASK-058); `null` — none yet. */
+  mileage: carMileageSchema.nullable(),
   /** The car the catalog filters by (M-GAR-01 «Основной»). */
   isPrimary: z.boolean(),
   createdAt: z.iso.datetime(),
@@ -200,6 +258,13 @@ export const transferGarageBodySchema = z.object({
          * the list. A VIN or a plate that is not one is left out the same way.
          */
         document: carDocumentInputSchema.nullable().optional(),
+        /**
+         * The reading a guest gave the car on the device (TASK-058): it becomes
+         * one entry of the journal of the account's car; a repeat of the
+         * transfer adds no second one. A reading out of range is left out,
+         * never a reason to fail a sign-in.
+         */
+        mileage: transferCarMileageSchema.nullable().optional(),
         isPrimary: z.boolean(),
       }),
     )

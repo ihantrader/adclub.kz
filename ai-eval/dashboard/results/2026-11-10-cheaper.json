@@ -1,0 +1,422 @@
+{
+  "kind": "dashboard",
+  "startedAt": "2026-11-10T05:34:36.889Z",
+  "finishedAt": "2026-11-10T05:36:24.942Z",
+  "dataVersion": 1,
+  "samples": 23,
+  "label": "cheaper",
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "openai/gpt-4.1-nano",
+      "answeredBy": ["openai/gpt-4.1-nano"],
+      "calls": 23,
+      "failures": [],
+      "costUsd": 0.005772,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000251,
+      "tokensIn": 55266,
+      "tokensOut": 625,
+      "latencyMs": {
+        "min": 1952,
+        "median": 2324,
+        "max": 4501
+      },
+      "score": {
+        "value": {
+          "correct": 15,
+          "total": 17,
+          "share": 0.882
+        },
+        "refusal": {
+          "correct": 3,
+          "total": 3,
+          "share": 1
+        },
+        "falseValues": {
+          "correct": 0,
+          "total": 3,
+          "share": 0
+        },
+        "guessedHidden": 0,
+        "passes": false,
+        "misses": [
+          {
+            "sampleId": "lcd-45200-clean",
+            "what": "пробег",
+            "expected": "45200 км",
+            "got": "not_dashboard -"
+          },
+          {
+            "sampleId": "light-7350-clean",
+            "what": "пробег",
+            "expected": "7350 км",
+            "got": "not_dashboard -"
+          }
+        ]
+      },
+      "answers": {
+        "lcd-45200-clean": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "lcd-45200-glare": {
+          "kind": "dashboard",
+          "totalMileage": 45200,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": true
+        },
+        "lcd-45200-tilt": {
+          "kind": "dashboard",
+          "totalMileage": 45200,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": false
+        },
+        "white-128450-clean": {
+          "kind": "dashboard",
+          "totalMileage": 128450,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": false
+        },
+        "white-128450-lowres": {
+          "kind": "dashboard",
+          "totalMileage": 128450,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": false
+        },
+        "amber-32000-clean": {
+          "kind": "dashboard",
+          "totalMileage": 32000,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "light-7350-clean": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "thin-210987-clean": {
+          "kind": "dashboard",
+          "totalMileage": 210987,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": false
+        },
+        "white-64310-occluded": {
+          "kind": "dashboard",
+          "totalMileage": 64310,
+          "unit": "km",
+          "confidence": 0.9,
+          "tripMeterSeen": false
+        },
+        "amber-91200-digits-covered": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "white-28087mi-clean": {
+          "kind": "dashboard",
+          "totalMileage": 28087,
+          "unit": "mi",
+          "confidence": 0.95,
+          "tripMeterSeen": false
+        },
+        "lcd-61500mi-glare": {
+          "kind": "dashboard",
+          "totalMileage": 61500,
+          "unit": "mi",
+          "confidence": 0.95,
+          "tripMeterSeen": true
+        },
+        "white-89400-trip-big": {
+          "kind": "dashboard",
+          "totalMileage": 89400,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": true
+        },
+        "amber-156020-trip": {
+          "kind": "dashboard",
+          "totalMileage": 156020,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": true
+        },
+        "lcd-503120-trip-tilt": {
+          "kind": "dashboard",
+          "totalMileage": 503120,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": true
+        },
+        "light-45200-blur": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "white-ignition-off": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "thin-18750-lowres": {
+          "kind": "dashboard",
+          "totalMileage": 18750,
+          "unit": "km",
+          "confidence": 0.95,
+          "tripMeterSeen": false
+        },
+        "amber-12-new-car": {
+          "kind": "dashboard",
+          "totalMileage": 12,
+          "unit": "km",
+          "confidence": 0.9,
+          "tripMeterSeen": false
+        },
+        "light-73004-glare": {
+          "kind": "dashboard",
+          "totalMileage": 73004,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": true
+        },
+        "not-dashboard-car": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "not-dashboard-phone-note": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        },
+        "not-dashboard-part-box": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 0,
+          "tripMeterSeen": false
+        }
+      }
+    },
+    {
+      "model": "google/gemma-3-27b-it",
+      "answeredBy": ["google/gemma-3-27b-it"],
+      "calls": 23,
+      "failures": [],
+      "costUsd": 0.001201,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.000052,
+      "tokensIn": 13064,
+      "tokensOut": 818,
+      "latencyMs": {
+        "min": 1219,
+        "median": 1717,
+        "max": 5565
+      },
+      "score": {
+        "value": {
+          "correct": 17,
+          "total": 17,
+          "share": 1
+        },
+        "refusal": {
+          "correct": 3,
+          "total": 3,
+          "share": 1
+        },
+        "falseValues": {
+          "correct": 0,
+          "total": 3,
+          "share": 0
+        },
+        "guessedHidden": 1,
+        "passes": true,
+        "misses": []
+      },
+      "answers": {
+        "lcd-45200-clean": {
+          "kind": "dashboard",
+          "totalMileage": 45200,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "lcd-45200-glare": {
+          "kind": "dashboard",
+          "totalMileage": 45200,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "lcd-45200-tilt": {
+          "kind": "dashboard",
+          "totalMileage": 45200,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "white-128450-clean": {
+          "kind": "dashboard",
+          "totalMileage": 128450,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "white-128450-lowres": {
+          "kind": "dashboard",
+          "totalMileage": 128450,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "amber-32000-clean": {
+          "kind": "dashboard",
+          "totalMileage": 32000,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "light-7350-clean": {
+          "kind": "dashboard",
+          "totalMileage": 7350,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "thin-210987-clean": {
+          "kind": "dashboard",
+          "totalMileage": 210987,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "white-64310-occluded": {
+          "kind": "dashboard",
+          "totalMileage": 64310,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "amber-91200-digits-covered": {
+          "kind": "unreadable",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "white-28087mi-clean": {
+          "kind": "dashboard",
+          "totalMileage": 28087,
+          "unit": "mi",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "lcd-61500mi-glare": {
+          "kind": "dashboard",
+          "totalMileage": 61500,
+          "unit": "mi",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "white-89400-trip-big": {
+          "kind": "dashboard",
+          "totalMileage": 89400,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": true
+        },
+        "amber-156020-trip": {
+          "kind": "dashboard",
+          "totalMileage": 156020,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": true
+        },
+        "lcd-503120-trip-tilt": {
+          "kind": "dashboard",
+          "totalMileage": 503120,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": true
+        },
+        "light-45200-blur": {
+          "kind": "dashboard",
+          "totalMileage": 45200,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "white-ignition-off": {
+          "kind": "unreadable",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "thin-18750-lowres": {
+          "kind": "dashboard",
+          "totalMileage": 18750,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "amber-12-new-car": {
+          "kind": "dashboard",
+          "totalMileage": 12,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "light-73004-glare": {
+          "kind": "dashboard",
+          "totalMileage": 73004,
+          "unit": "km",
+          "confidence": 1,
+          "tripMeterSeen": true
+        },
+        "not-dashboard-car": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "not-dashboard-phone-note": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 1,
+          "tripMeterSeen": false
+        },
+        "not-dashboard-part-box": {
+          "kind": "not_dashboard",
+          "totalMileage": null,
+          "unit": null,
+          "confidence": 1,
+          "tripMeterSeen": false
+        }
+      }
+    }
+  ]
+}

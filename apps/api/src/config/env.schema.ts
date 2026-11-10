@@ -247,6 +247,11 @@ export const aiTestModes = [
   // or every photo is some other document.
   "unreadable",
   "other_document",
+  // The dashboard and a part (TASK-058): every photo of a dashboard is not
+  // one; no article on any label. `unreadable` above reads every photo of
+  // the three as unreadable.
+  "not_dashboard",
+  "no_article",
 ] as const;
 export type AiTestMode = (typeof aiTestModes)[number];
 

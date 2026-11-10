@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   AiGateway,
   AiGatewayError,
+  dashboardOutputSchema,
+  partPhotoOutputSchema,
   priceMatchOutputSchema,
   reviewCheckOutputSchema,
   translateOutputSchema,
@@ -9,6 +11,7 @@ import {
   type AiFailureKind,
   type AiResult,
   type AiUsage,
+  type PhotoInput,
   type PriceMatchInput,
   type ReviewCheckInput,
   type TranslateGlossaryEntry,
@@ -186,6 +189,56 @@ const VEHICLE_DOCUMENT_FORMAT = {
   },
 } as const;
 
+const DASHBOARD_SYSTEM = `You read the total mileage off a photo of a car's instrument cluster (dashboard), taken by the car's owner in Kazakhstan.
+
+Decide kind first:
+- dashboard — an instrument cluster whose total odometer reading is legible;
+- not_dashboard — anything that is not an instrument cluster: a car from outside, a box, a document, a note or a screen with numbers on it;
+- unreadable — an instrument cluster whose odometer can't be read: the ignition is off and the display is dark, the digits are covered, cut off, blurred or under a glare.
+
+Only when kind is dashboard:
+- totalMileage — the TOTAL odometer reading (often labelled ODO), as a whole number without spaces. Never the trip meter (TRIP, TRIP A/B, a reading with a decimal point that restarts), even when the trip meter is shown larger; never the speed, the range, the temperature or the time;
+- unit — km or mi, as the display shows it (mi when it says mi or miles; km otherwise);
+- tripMeterSeen — true when a trip meter is visible next to the total.
+Otherwise totalMileage and unit are null and tripMeterSeen is false.
+
+confidence is how sure you are of the whole answer, from 0 to 1. A digit that can't be told for sure makes the reading unreadable — never guess a digit.`;
+
+/** The longest answer reading a dashboard may produce (a reasoning model thinks within it). */
+const DASHBOARD_MAX_TOKENS = 2_000;
+
+const DASHBOARD_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "dashboard_mileage",
+    strict: true,
+    schema: strictJsonSchema(dashboardOutputSchema),
+  },
+} as const;
+
+const PART_PHOTO_SYSTEM = `You read the manufacturer's part number (article) off a photo of a car part, its box or its label, for a search in a car parts catalog in Kazakhstan.
+
+Decide kind first:
+- article_found — a part number is legible;
+- no_article — a part, a box or a label without a legible part number (only a brand, a name, a volume, a barcode);
+- unreadable — nothing can be read, or the photo is not of a part or its packaging.
+
+articles — every part number you can read, the part's own number first, then any other part number on the label (for example the original number it replaces, «OE», «Replaces», «Заменяет»), each copied exactly as printed with its dashes and spaces, with confidence from 0 to 1. A part number is the manufacturer's code of the part: letters and digits, often with dashes (04465-0K090, GDB3534, 11818-0249). It is NEVER the barcode (EAN, 8 or 13 digits under bars), a batch or lot number, a date, a quantity, a price, a phone number or a size. Tell the digit 0 from the letter O and the digit 1 from the letter I by their shape; if a character can't be told for sure, leave that number out — never guess a character. Empty when kind is not article_found.
+
+brand — the brand of the part as written on the label, or null. labelText — the name of the part as written, at most a short line, or null.`;
+
+/** The longest answer reading a part's label may produce. */
+const PART_PHOTO_MAX_TOKENS = 2_000;
+
+const PART_PHOTO_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "part_article",
+    strict: true,
+    schema: strictJsonSchema(partPhotoOutputSchema),
+  },
+} as const;
+
 const PRICE_MATCH_SYSTEM = `You match rows of a car parts supplier's price list with items of a catalog. Each row comes with what the file says (article, brand, name — any of them may be missing, names may be abbreviated, in Russian, Kazakh or English, with the supplier's own codes) and one to three candidate items of the catalog found by a search.
 
 For every row decide which candidate is the same product, or that none is:
@@ -299,6 +352,59 @@ export class OpenRouterAiGateway extends AiGateway {
         response_format: VEHICLE_DOCUMENT_FORMAT,
         messages: [
           { role: "system", content: VEHICLE_DOCUMENT_SYSTEM },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Read this photo." },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      },
+      signal,
+    );
+  }
+
+  /** The dashboard (TASK-058): the photo inline, as the certificate, to a private endpoint only. */
+  async readDashboard(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    return this.readPhoto(
+      input,
+      model,
+      signal,
+      DASHBOARD_SYSTEM,
+      DASHBOARD_FORMAT,
+      DASHBOARD_MAX_TOKENS,
+    );
+  }
+
+  /** A part or its box (TASK-058): the photo inline, as the certificate, to a private endpoint only. */
+  async readPartPhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    return this.readPhoto(
+      input,
+      model,
+      signal,
+      PART_PHOTO_SYSTEM,
+      PART_PHOTO_FORMAT,
+      PART_PHOTO_MAX_TOKENS,
+    );
+  }
+
+  private readPhoto(
+    input: PhotoInput,
+    model: string,
+    signal: AbortSignal,
+    system: string,
+    format: unknown,
+    maxTokens: number,
+  ): Promise<AiResult> {
+    const dataUrl = `data:${input.contentType};base64,${Buffer.from(input.image).toString("base64")}`;
+    return this.complete(
+      {
+        model,
+        max_tokens: maxTokens,
+        response_format: format,
+        messages: [
+          { role: "system", content: system },
           {
             role: "user",
             content: [

@@ -214,6 +214,52 @@ export const vehicleDocumentOutputSchema = z.object({
 
 export type VehicleDocumentOutput = z.infer<typeof vehicleDocumentOutputSchema>;
 
+// ------------------------------------------------- photos of TASK-058
+
+/**
+ * A photo the person took for the app to read (TASK-058): the dashboard of
+ * their car or a part with its box. Made smaller and stripped by the server
+ * exactly as the certificate (`prepareDocumentImage`), in memory for this
+ * one call, never recorded beyond its size.
+ */
+export type PhotoInput = VehicleDocumentInput;
+
+/**
+ * What the model answers about a photo of the dashboard: the total mileage
+ * the odometer shows — never the trip meter, which is only noted
+ * (`tripMeterSeen`) — and the unit it counts in. `kind`: `dashboard` — the
+ * total was read; `not_dashboard` — not a dashboard; `unreadable` — a
+ * dashboard whose total can't be read (off, glare, covered). A number that
+ * is not clearly legible is `null`, never a guess.
+ */
+export const dashboardOutputSchema = z.object({
+  kind: z.enum(["dashboard", "not_dashboard", "unreadable"]),
+  totalMileage: z.number().int().nullable(),
+  unit: z.enum(["km", "mi"]).nullable(),
+  // No bounds in the schema (strict structured output of some endpoints
+  // refuses them); the server keeps it within 0…1.
+  confidence: z.number(),
+  tripMeterSeen: z.boolean(),
+});
+
+export type DashboardOutput = z.infer<typeof dashboardOutputSchema>;
+
+/**
+ * What the model answers about a photo of a part or its box: the
+ * manufacturer's articles it reads, likeliest first, each with how sure it
+ * is — not a barcode, a batch, a date or a price — the brand on the label
+ * and a short line of the label's text. `kind`: `article_found`,
+ * `no_article` (a label without an article), `unreadable`.
+ */
+export const partPhotoOutputSchema = z.object({
+  kind: z.enum(["article_found", "no_article", "unreadable"]),
+  articles: z.array(z.object({ text: z.string(), confidence: z.number() })),
+  brand: z.string().nullable(),
+  labelText: z.string().nullable(),
+});
+
+export type PartPhotoOutput = z.infer<typeof partPhotoOutputSchema>;
+
 // ----------------------------------------------------- price list matching
 
 /** A catalog item a row may be: what the model is shown of it. */
@@ -312,6 +358,10 @@ export abstract class AiGateway {
     signal: AbortSignal,
   ): Promise<AiResult>;
 
+  abstract readDashboard(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult>;
+
+  abstract readPartPhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult>;
+
   abstract matchPrices(
     input: PriceMatchInput,
     model: string,
@@ -363,6 +413,22 @@ export const vehicleDocumentOperation: AiOperation<VehicleDocumentInput, Vehicle
   },
   outputSchema: vehicleDocumentOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.readVehicleDocument(input, model, signal),
+};
+
+/** The mileage off a photo of the dashboard (TASK-058): `ai_job.kind` is `dashboard_ocr`. */
+export const dashboardOperation: AiOperation<PhotoInput, DashboardOutput> = {
+  kind: "dashboard_ocr",
+  models: { primary: "ai_model_dashboard_primary", fallback: "ai_model_dashboard_fallback" },
+  outputSchema: dashboardOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.readDashboard(input, model, signal),
+};
+
+/** The article off a photo of a part (TASK-058): `ai_job.kind` is `part_photo`. */
+export const partPhotoOperation: AiOperation<PhotoInput, PartPhotoOutput> = {
+  kind: "part_photo",
+  models: { primary: "ai_model_part_photo_primary", fallback: "ai_model_part_photo_fallback" },
+  outputSchema: partPhotoOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.readPartPhoto(input, model, signal),
 };
 
 /** Matching price list rows with catalog candidates (TASK-047): `ai_job.kind` is `price_match`. */

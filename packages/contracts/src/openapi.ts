@@ -18,7 +18,17 @@ import {
   transferGarageResponseSchema,
   carDocumentSchema,
   carDocumentInputSchema,
+  carMileageSchema,
+  garageMileageLowerDetailsSchema,
+  mileageSourceSchema,
+  recordCarMileageBodySchema,
+  transferCarMileageSchema,
 } from "./garage";
+import {
+  dashboardResponseSchema,
+  partPhotoArticleSchema,
+  partPhotoResponseSchema,
+} from "./photo-recognition";
 import {
   vehicleDocumentAttemptsSchema,
   vehicleDocumentResponseSchema,
@@ -476,6 +486,15 @@ const componentSchemas: Record<string, z.ZodType> = {
   VehicleDocumentAttempts: vehicleDocumentAttemptsSchema,
   VehicleDocumentResponse: vehicleDocumentResponseSchema,
   VehicleDocumentUnavailableDetails: vehicleDocumentUnavailableDetailsSchema,
+  // The mileage of a car, the dashboard and a part by photo (TASK-058).
+  CarMileage: carMileageSchema,
+  MileageSource: mileageSourceSchema,
+  RecordCarMileageBody: recordCarMileageBodySchema,
+  GarageMileageLowerDetails: garageMileageLowerDetailsSchema,
+  TransferCarMileage: transferCarMileageSchema,
+  DashboardResponse: dashboardResponseSchema,
+  PartPhotoArticle: partPhotoArticleSchema,
+  PartPhotoResponse: partPhotoResponseSchema,
   // Push to the user (TASK-051).
   NotificationKind: notificationKindSchema,
   PushTarget: pushTargetSchema,

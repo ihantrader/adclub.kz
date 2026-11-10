@@ -120,6 +120,55 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keeps the mileage journal of a car with its rules, goes with the car, and rolls back (TASK-058)", async () => {
+    // Names live in the spelling tables; the rows themselves are enough here.
+    const make = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_make DEFAULT VALUES RETURNING id",
+    );
+    const model = await client.query<{ id: string }>(
+      "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+      [make.rows[0]!.id],
+    );
+    const account = await client.query<{ id: string }>(
+      "INSERT INTO account (phone) VALUES ('+77001230058') RETURNING id",
+    );
+    const car = await client.query<{ id: string }>(
+      `INSERT INTO account_car (account_id, make_id, make_label, model_id, model_label)
+       VALUES ($1, $2, 'Geely', $3, 'Atlas') RETURNING id`,
+      [account.rows[0]!.id, make.rows[0]!.id, model.rows[0]!.id],
+    );
+    const write = (valueKm: number, source: string, recognizedKm: number | null, at: string) =>
+      client.query(
+        `INSERT INTO mileage_log (car_id, value_km, source, recognized_km, recorded_at, recorded_by)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [car.rows[0]!.id, valueKm, source, recognizedKm, at, account.rows[0]!.id],
+      );
+    await write(45_200, "photo", 45_200, "2026-11-10T08:00:00Z");
+    await write(30_000, "text", null, "2026-11-11T08:00:00Z");
+    // One reading of one moment once; within the range; a typed one has nothing recognised.
+    await expect(write(30_000, "text", null, "2026-11-11T08:00:00Z")).rejects.toThrow(
+      /mileage_log_car_reading_key/,
+    );
+    await expect(write(2_000_001, "text", null, "2026-11-12T08:00:00Z")).rejects.toThrow(
+      /mileage_log_value_check/,
+    );
+    await expect(write(1, "text", 1, "2026-11-12T08:00:00Z")).rejects.toThrow(
+      /mileage_log_text_check/,
+    );
+    await expect(write(1, "guess", null, "2026-11-12T08:00:00Z")).rejects.toThrow(
+      /mileage_log_source_check/,
+    );
+    // The journal goes with the car.
+    await client.query("DELETE FROM account_car WHERE id = $1", [car.rows[0]!.id]);
+    expect((await client.query("SELECT 1 FROM mileage_log")).rowCount).toBe(0);
+    await client.query("DELETE FROM account WHERE id = $1", [account.rows[0]!.id]);
+    await client.query("DELETE FROM vehicle_model");
+    await client.query("DELETE FROM vehicle_make");
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "mileage_log")).toBe(false);
+  });
+
   it("calls search_text by its schema, so a dump restores, and rolls back (TASK-055)", async () => {
     const body = async () =>
       (

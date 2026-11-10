@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
-import { accountCar, type AccountCarRow } from "./schema";
+import { accountCar, mileageLog, type AccountCarRow, type MileageLogRow } from "./schema";
 
 export interface NewAccountCar {
   accountId: string;
@@ -173,6 +173,51 @@ export class GarageStore {
       .update(accountCar)
       .set({ isPrimary: true, updatedAt: new Date() })
       .where(and(eq(accountCar.id, carId), eq(accountCar.accountId, accountId)))
+      .returning();
+    return row;
+  }
+
+  /**
+   * The current reading of each car (TASK-058): its latest by `recorded_at`
+   * (two readings of one moment — the one written last).
+   */
+  async latestMileage(
+    carIds: readonly string[],
+    executor: DbExecutor = this.database.db,
+  ): Promise<Map<string, MileageLogRow>> {
+    if (carIds.length === 0) return new Map();
+    const rows = await executor
+      .selectDistinctOn([mileageLog.carId])
+      .from(mileageLog)
+      .where(inArray(mileageLog.carId, [...carIds]))
+      .orderBy(mileageLog.carId, desc(mileageLog.recordedAt), desc(mileageLog.createdAt));
+    return new Map(rows.map((row) => [row.carId, row]));
+  }
+
+  /** Whether the car's journal already holds this value (a transfer repeated). */
+  async hasMileageValue(carId: string, valueKm: number, executor: DbExecutor): Promise<boolean> {
+    const [row] = await executor
+      .select({ id: mileageLog.id })
+      .from(mileageLog)
+      .where(and(eq(mileageLog.carId, carId), eq(mileageLog.valueKm, valueKm)))
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * A reading of the journal. The same car, moment and value again — a
+   * transfer repeated — writes nothing (`undefined`).
+   */
+  async insertMileage(
+    input: Omit<MileageLogRow, "id" | "createdAt">,
+    executor: DbExecutor,
+  ): Promise<MileageLogRow | undefined> {
+    const [row] = await executor
+      .insert(mileageLog)
+      .values({ ...input, createdAt: sql`clock_timestamp()` })
+      .onConflictDoNothing({
+        target: [mileageLog.carId, mileageLog.recordedAt, mileageLog.valueKm],
+      })
       .returning();
     return row;
   }

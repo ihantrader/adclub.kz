@@ -4,7 +4,11 @@ export {
   AiBudgetExhaustedError,
   AiGateway,
   AiGatewayError,
+  dashboardOperation,
+  dashboardOutputSchema,
   FALLBACK_WORTHY,
+  partPhotoOperation,
+  partPhotoOutputSchema,
   priceMatchOperation,
   priceMatchOutputSchema,
   reviewCheckOperation,
@@ -21,6 +25,9 @@ export type {
   AiOperationModels,
   AiResult,
   AiUsage,
+  DashboardOutput,
+  PartPhotoOutput,
+  PhotoInput,
   PriceMatchCandidate,
   PriceMatchInput,
   PriceMatchOutput,
@@ -53,3 +60,4 @@ export {
 export { aiJob, aiTables } from "./schema";
 export type { AiJobRow } from "./schema";
 export { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
+export { TEST_DASHBOARDS, TEST_PART_PHOTOS } from "./test-photos";

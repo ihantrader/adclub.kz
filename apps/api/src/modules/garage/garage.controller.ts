@@ -3,6 +3,7 @@ import {
   addGarageCarBodySchema,
   apiRoutes,
   garageCarIdPathSchema,
+  recordCarMileageBodySchema,
   saveGarageCarBodySchema,
   transferGarageBodySchema,
   type AccountCar,
@@ -10,6 +11,7 @@ import {
   type GarageCarIdPath,
   type GarageCarRemovedResponse,
   type GarageCarsResponse,
+  type RecordCarMileageBody,
   type SaveGarageCarBody,
   type TransferGarageBody,
   type TransferGarageResponse,
@@ -61,6 +63,15 @@ export class GarageController {
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AccountCar> {
     return this.garage.setPrimary(session.accountId, params.carId);
+  }
+
+  @SessionRoute(apiRoutes.recordGarageCarMileage)
+  recordMileage(
+    @Param(new ZodValidationPipe(garageCarIdPathSchema)) params: GarageCarIdPath,
+    @Body(new ZodValidationPipe(recordCarMileageBodySchema)) body: RecordCarMileageBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AccountCar> {
+    return this.garage.recordMileage(session.accountId, params.carId, body);
   }
 
   @SessionRoute(apiRoutes.transferGarage)

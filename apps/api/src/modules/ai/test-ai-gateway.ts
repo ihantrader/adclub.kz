@@ -5,6 +5,7 @@ import {
   AiGateway,
   AiGatewayError,
   type AiResult,
+  type PhotoInput,
   type PriceMatchInput,
   type PriceMatchRow,
   type ReviewCheckInput,
@@ -12,6 +13,14 @@ import {
   type TranslateItem,
   type VehicleDocumentInput,
 } from "./ai-gateway";
+import {
+  TEST_DASHBOARD_NOT_DASHBOARD,
+  TEST_DASHBOARD_UNREADABLE,
+  TEST_DASHBOARDS,
+  TEST_PART_PHOTO_NO_ARTICLE,
+  TEST_PART_PHOTO_UNREADABLE,
+  TEST_PART_PHOTOS,
+} from "./test-photos";
 import { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 
 const TRANSLITERATION: Readonly<Record<string, string>> = {
@@ -136,6 +145,8 @@ export class TestAiGateway extends AiGateway {
   failingModels = new Set<string>();
   /** Every certificate photo received: its size and the model, never the picture (TASK-057). */
   readonly documentRequests: { bytes: number; model: string }[] = [];
+  /** Every photo of the dashboard or a part received (TASK-058): its size and the model, never the picture. */
+  readonly photoRequests: { kind: "dashboard" | "part"; bytes: number; model: string }[] = [];
   /** Every batch of price list rows received: how many rows and the model (TASK-047). */
   readonly priceMatchRequests: { rows: number; model: string }[] = [];
   /** An answer for one row instead of the closest candidate; `undefined` — the default. */
@@ -255,6 +266,86 @@ export class TestAiGateway extends AiGateway {
         costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
       },
     };
+  }
+
+  /**
+   * The failures every photo of TASK-058 shares with the certificate: an
+   * unknown model, the provider down or refusing, a slow answer.
+   */
+  private async photoFailures(model: string, signal: AbortSignal): Promise<void> {
+    if (model.startsWith(MISSING_MODEL_PREFIX) || this.failingModels.has(model)) {
+      throw new AiGatewayError("model_unavailable", `The test AI provider has no model ${model}`);
+    }
+    switch (this.mode) {
+      case "unavailable":
+        throw new AiGatewayError("unavailable", "The test AI provider is unavailable");
+      case "rejected":
+        throw new AiGatewayError("rejected", "The test AI provider refuses the request");
+      case "no_private_provider":
+        throw new AiGatewayError(
+          "no_private_provider",
+          "No provider of this model keeps requests unstored, so nothing was sent",
+        );
+      case "slow":
+        await this.wait(this.delayMs, signal);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** A picture is about a thousand tokens for a vision model; the price is make-believe. */
+  private photoResult(output: unknown, model: string): AiResult {
+    const tokensIn = 1_100;
+    const tokensOut = 60;
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    return {
+      output,
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
+  }
+
+  /**
+   * Reads a synthetic dashboard by its control strip (`test-photos.ts`); a
+   * photo without a strip is `unreadable`. Modes: `unreadable`,
+   * `not_dashboard`, and the failures of every photo.
+   */
+  async readDashboard(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    this.photoRequests.push({ kind: "dashboard", bytes: input.image.length, model });
+    await this.photoFailures(model, signal);
+    let output: unknown;
+    if (this.mode === "unreadable") output = TEST_DASHBOARD_UNREADABLE;
+    else if (this.mode === "not_dashboard") output = TEST_DASHBOARD_NOT_DASHBOARD;
+    else {
+      const code = await readSampleMarker(input.image);
+      output = (code === null ? undefined : TEST_DASHBOARDS[code]) ?? TEST_DASHBOARD_UNREADABLE;
+    }
+    return this.photoResult({ ...(output as object) }, model);
+  }
+
+  /**
+   * Reads a synthetic label by its control strip (`test-photos.ts`); a photo
+   * without a strip is `unreadable`. Modes: `unreadable`, `no_article`, and
+   * the failures of every photo.
+   */
+  async readPartPhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    this.photoRequests.push({ kind: "part", bytes: input.image.length, model });
+    await this.photoFailures(model, signal);
+    let output: unknown;
+    if (this.mode === "unreadable") output = TEST_PART_PHOTO_UNREADABLE;
+    else if (this.mode === "no_article") output = TEST_PART_PHOTO_NO_ARTICLE;
+    else {
+      const code = await readSampleMarker(input.image);
+      output = (code === null ? undefined : TEST_PART_PHOTOS[code]) ?? TEST_PART_PHOTO_UNREADABLE;
+    }
+    return this.photoResult(structuredClone(output), model);
   }
 
   /**

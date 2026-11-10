@@ -343,6 +343,13 @@ import { clientPlatformSchema } from "./client";
  *   `garage_max_cars` allows.
  * - `GARAGE_VIN_TAKEN` (409, TASK-057): another car of this garage already
  *   has this VIN — one VIN is one car; `details.carId` is that car.
+ * - `GARAGE_MILEAGE_LOWER` (409, TASK-058): the reading is below the last
+ *   one of the car's journal; `details.lastKm` is that one — ask «Меньше,
+ *   чем в прошлый раз ({N} км). Всё верно?» and send again with
+ *   `confirmLower: true`.
+ *
+ * The codes of the certificate below are those of every photo the app
+ * reads (TASK-058): the dashboard and a part as well.
  *
  * A photographed vehicle registration certificate (TASK-057, D-064):
  * - `VEHICLE_DOCUMENT_INVALID` (400): the bytes are not a picture the
@@ -504,6 +511,8 @@ export const errorCodeSchema = z.enum([
   "REGISTRATION_INCOMPLETE",
   "GARAGE_LIMIT_REACHED",
   "GARAGE_VIN_TAKEN",
+  // The mileage journal of a car (TASK-058).
+  "GARAGE_MILEAGE_LOWER",
   // A photographed vehicle registration certificate (TASK-057, D-064).
   "VEHICLE_DOCUMENT_INVALID",
   "VEHICLE_DOCUMENT_UNAVAILABLE",

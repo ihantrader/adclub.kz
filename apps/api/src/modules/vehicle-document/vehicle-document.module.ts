@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { DocumentAttempts } from "./document-attempts";
 import { DocumentProofs } from "./document-proofs";
+import { PhotoRecognitions } from "./photo-recognitions";
 import { VehicleDocumentController } from "./vehicle-document.controller";
 import { VehicleDocumentService } from "./vehicle-document.service";
 
@@ -21,7 +22,7 @@ export class VehicleDocumentModule {
       module: VehicleDocumentModule,
       imports: [options.vehicles],
       controllers: [VehicleDocumentController],
-      providers: [DocumentAttempts, DocumentProofs, VehicleDocumentService],
+      providers: [DocumentAttempts, DocumentProofs, PhotoRecognitions, VehicleDocumentService],
       exports: [DocumentProofs],
     };
   }

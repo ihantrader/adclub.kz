@@ -17,7 +17,8 @@ services:
     restart: unless-stopped
     user: root
     env_file:
-      - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}
+      # Only the S3 pair (deploy.sh writes the subset), not every secret.
+      - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}.minio
         required: false
     environment:
       MINIO_SKIP_CLIENT: "yes"

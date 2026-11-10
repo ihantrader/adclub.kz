@@ -73,13 +73,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+mkdir -p "$ADCLUB_HOME"
+# One deployment at a time: CI's `concurrency` covers CI runs only; deploy.sh
+# or --rollback started by hand on the VM meanwhile would interleave the
+# steps and record a release other than the one running.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"${ADCLUB_HOME}/deploy.lock"
+  flock -n 9 || die "another deployment is running (${ADCLUB_HOME}/deploy.lock)"
+fi
+
 if [[ "$rollback" == 1 ]]; then
   # After a deployment that failed once its containers were replaced (step 6
-  # or 7), the stack runs the attempt, not `current`: going back means `current`.
-  # Otherwise — the release before `current`.
+  # or 7), the stack runs the attempt, not `current`: going back means `current`
+  # — also when the attempt was `current` itself (a re-deploy to recreate the
+  # containers): they may be half replaced, deploying `current` again puts
+  # them right. Otherwise — the release before `current`.
   attempted="$(cat "${ADCLUB_HOME}/attempted" 2>/dev/null || true)"
   current="$(cat "${ADCLUB_HOME}/current" 2>/dev/null || true)"
-  if [[ -n "$attempted" && -n "$current" && "$attempted" != "$current" ]]; then
+  if [[ -n "$attempted" && -n "$current" ]]; then
     sha="$current"
   else
     [[ -f "${ADCLUB_HOME}/previous" ]] || die "no previous release to roll back to"
@@ -137,7 +148,7 @@ mkdir -p "$secrets_dir"
 chmod 700 "$secrets_dir" 2>/dev/null || true
 secrets_file="$(mktemp "${secrets_dir}/${ADCLUB_ENV_NAME}.env.XXXXXX")"
 chmod 600 "$secrets_file"
-cleanup() { rm -f "$secrets_file"; }
+cleanup() { rm -f "$secrets_file" "${secrets_file}".*; }
 trap cleanup EXIT
 sops_file="${ADCLUB_SECRETS_SOPS:-${release_dir}/infra/secrets/${ADCLUB_ENV_NAME}.env.sops}"
 [[ -f "$sops_file" ]] || die "no ${sops_file}"
@@ -148,6 +159,19 @@ docker run --rm -i -e SOPS_AGE_KEY --entrypoint sops "$OPS_IMAGE" \
   --decrypt --input-type dotenv --output-type dotenv /dev/stdin <"$sops_file" >"$secrets_file" ||
   die "cannot decrypt ${sops_file##*/} (is the age key one of .sops.yaml?)"
 log "secrets decrypted ($(grep -c '=' "$secrets_file") variables)"
+# Each data service gets only its own secret; the full file goes to api,
+# worker and the release step only (compose.staging.yml, x-secrets-*).
+scoped() { # <suffix> <variable names, a regex alternation>
+  (
+    umask 077
+    grep -E "^($2)=" "$secrets_file" >"${secrets_file}.$1" || true
+  )
+}
+scoped postgres 'POSTGRES_PASSWORD'
+scoped redis 'REDIS_PASSWORD'
+scoped meilisearch 'MEILI_MASTER_KEY'
+scoped ops 'DATABASE_URL|S3_ACCESS_KEY|S3_SECRET_KEY|BACKUP_S3_ACCESS_KEY|BACKUP_S3_SECRET_KEY'
+scoped minio 'S3_ACCESS_KEY|S3_SECRET_KEY'
 
 # --- the release's compose -------------------------------------------------------
 {

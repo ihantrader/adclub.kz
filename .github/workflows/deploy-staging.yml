@@ -28,6 +28,8 @@ jobs:
           (github.event.workflow_run.conclusion == 'success' &&
            github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
+    # A stale host key or a wrong key must fail, not wait for the 6-hour default.
+    timeout-minutes: 30
     environment: staging
     permissions:
       contents: read
@@ -74,7 +76,7 @@ jobs:
         if: steps.configured.outputs.ready == 'true'
         run: |
           tar -czf - infra/docker infra/scripts infra/secrets |
-            ssh -i ~/.ssh/staging "$DEPLOY_USER@$HOST" \
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -i ~/.ssh/staging "$DEPLOY_USER@$HOST" \
               "mkdir -p /opt/adclub/releases/$SHA && tar -xzf - -C /opt/adclub/releases/$SHA"
 
       # The age key and a token to pull from GHCR go on stdin, never on a
@@ -87,5 +89,5 @@ jobs:
           REGISTRY_USER: ${{ github.actor }}
         run: |
           printf '%s\n%s\n' "$SOPS_AGE_KEY" "$GHCR_TOKEN" |
-            ssh -i ~/.ssh/staging "$DEPLOY_USER@$HOST" \
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -i ~/.ssh/staging "$DEPLOY_USER@$HOST" \
               "ADCLUB_REGISTRY_USER=$REGISTRY_USER bash /opt/adclub/releases/$SHA/infra/scripts/deploy.sh --sha $SHA --secrets-from-stdin"

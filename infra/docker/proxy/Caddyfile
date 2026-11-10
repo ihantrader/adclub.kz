@@ -49,7 +49,7 @@
 	# a developer's machine (TASK-055): the codes of /dev/login-codes, the
 	# messages of /dev/messages, the pushes of /dev/pushes, the test card
 	# page of /dev/payment/*, Swagger UI and the generated contract.
-	@closed path /dev /dev/* /docs /docs/* /openapi.json
+	@closed path /dev /dev/* /docs /docs/* /openapi.json /openapi.json/*
 	respond @closed 404
 
 	request_body {

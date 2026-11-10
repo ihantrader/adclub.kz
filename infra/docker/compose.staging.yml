@@ -26,9 +26,25 @@ x-logging: &logging # Logs stay on the VM (ARCHITECTURE 15.3, 8.5): Docker's JSO
     max-file: "5"
 
 x-secrets: &secrets
-  # The decrypted staging.env.sops; absent between deployments — the
-  # containers keep what they were started with.
+  # The decrypted staging.env.sops — the whole of it goes only to api, worker
+  # and the release step; absent between deployments — the containers keep
+  # what they were started with.
   - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}
+    required: false
+
+# Each data service sees only its own secret (review of TASK-055): deploy.sh
+# writes these subsets of the decrypted file next to it.
+x-secrets-postgres: &secrets-postgres
+  - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}.postgres
+    required: false
+x-secrets-redis: &secrets-redis
+  - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}.redis
+    required: false
+x-secrets-meilisearch: &secrets-meilisearch
+  - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}.meilisearch
+    required: false
+x-secrets-ops: &secrets-ops
+  - path: ${ADCLUB_ENV_FILE:-/run/adclub/staging.env}.ops
     required: false
 
 x-app-environment: &app-environment
@@ -58,7 +74,7 @@ services:
   postgres:
     image: postgres:16.11-bookworm
     restart: unless-stopped
-    env_file: *secrets
+    env_file: *secrets-postgres
     environment:
       POSTGRES_USER: adclub
       POSTGRES_DB: adclub
@@ -103,7 +119,7 @@ services:
   redis:
     image: redis:7.4.7-bookworm
     restart: unless-stopped
-    env_file: *secrets
+    env_file: *secrets-redis
     # AOF: rate limit counters and cached settings survive a restart.
     # The password goes into a config file readable by redis only — on the
     # command line every user of the VM would read it in `ps`.
@@ -129,7 +145,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.11.3
     restart: unless-stopped
-    env_file: *secrets
+    env_file: *secrets-meilisearch
     environment:
       MEILI_ENV: production
       MEILI_NO_ANALYTICS: "true"
@@ -245,7 +261,7 @@ services:
   ops:
     image: ${OPS_IMAGE:?OPS_IMAGE is not set}
     restart: unless-stopped
-    env_file: *secrets
+    env_file: *secrets-ops
     environment:
       TZ: UTC
       S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is not set}

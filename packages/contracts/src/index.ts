@@ -524,6 +524,7 @@ export * from "./price-imports";
 export * from "./price-review";
 export * from "./notifications";
 export * from "./maintenance";
+export * from "./assistant";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

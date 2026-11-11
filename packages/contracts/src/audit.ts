@@ -379,6 +379,14 @@ export const auditActions = {
   maintenancePlanItemConfirmed: "maintenance_plan_item.confirmed",
   maintenancePlanItemArchived: "maintenance_plan_item.archived",
   maintenancePlanItemRestored: "maintenance_plan_item.restored",
+  /**
+   * The assistant (TASK-062): a complaint about an answer made (by the user
+   * or a guest's device; `after`: the reason, the dialog) and resolved
+   * (`reason` — the internal comment). The texts of the dialog are never in
+   * the journal.
+   */
+  assistantComplaintCreated: "assistant_complaint.created",
+  assistantComplaintResolved: "assistant_complaint.resolved",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
@@ -438,6 +446,8 @@ export const auditEntities = {
   /** A maintenance plan and one of its elements (TASK-061). */
   maintenancePlan: "maintenance_plan",
   maintenancePlanItem: "maintenance_plan_item",
+  /** A complaint about an answer of the assistant (TASK-062). */
+  assistantComplaint: "assistant_complaint",
 } as const;
 
 export type AuditEntityType = (typeof auditEntities)[keyof typeof auditEntities];

@@ -324,6 +324,14 @@ import { clientPlatformSchema } from "./client";
  * - `MAINTENANCE_SCOPE_INVALID` (400): the levels of the area don't agree;
  *   `details` is `MaintenanceScopeInvalidDetails`.
  *
+ * The assistant (TASK-062, ARCHITECTURE 4.85):
+ * - `ASSISTANT_DIALOG_FULL` (409): the dialog has had `assistant_max_turns`
+ *   turns — «Начните новый диалог» (send without `dialogId`).
+ * - `ASSISTANT_TURN_IN_PROGRESS` (409): a turn of this dialog is still
+ *   running (two messages at once); the dialog is whole, send again after it.
+ * - `ASSISTANT_COMPLAINT_CONFLICT` (409): another administrator resolved
+ *   the complaint first; `details` is `AssistantComplaintConflictDetails`.
+ *
  * Price list imports (TASK-046, ARCHITECTURE 4.66):
  * - `PRICE_IMPORT_FILE_INVALID` (400): the uploaded file can't be read as a
  *   price list — the content is looked at, not the name; `details` is
@@ -566,6 +574,10 @@ export const errorCodeSchema = z.enum([
   "MAINTENANCE_DRAFT_IN_PROGRESS",
   "MAINTENANCE_TARGET_INVALID",
   "MAINTENANCE_SCOPE_INVALID",
+  // The assistant (TASK-062, ARCHITECTURE 4.85).
+  "ASSISTANT_DIALOG_FULL",
+  "ASSISTANT_TURN_IN_PROGRESS",
+  "ASSISTANT_COMPLAINT_CONFLICT",
   // The request itself (TASK-009.A, ARCHITECTURE 7.1).
   "MALFORMED_REQUEST",
   "METHOD_NOT_ALLOWED",

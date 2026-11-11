@@ -266,6 +266,16 @@ export {
   parseMileageInput,
 } from "./garage/mileage";
 export type { MileageVerdict } from "./garage/mileage";
+export { MILEAGE_MIN_KM, mileageInText } from "./assistant/mileage-in-text";
+export {
+  ASSISTANT_DIAGNOSIS_PHRASES,
+  ASSISTANT_MESSAGE_MAX_LENGTH,
+  ASSISTANT_TEXT_MAX_LENGTH,
+  claimsDiagnosis,
+  cleanAssistantText,
+  normalizeAssistantMessage,
+} from "./assistant/assistant-text";
+export type { CleanedAssistantText } from "./assistant/assistant-text";
 export type { SameCarCase, SameCarCaseCar, SameCarCaseLevel } from "./garage/same-car-cases";
 export { latestVehicleYear, VEHICLE_YEAR_TIME_ZONE } from "./vehicle/vehicle-years";
 export {

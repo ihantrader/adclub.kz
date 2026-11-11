@@ -41,6 +41,22 @@ import {
   updateMaintenancePlanBodySchema,
 } from "./maintenance";
 import {
+  adminAssistantComplaintListQuerySchema,
+  adminAssistantComplaintPageSchema,
+  adminAssistantComplaintResponseSchema,
+  assistantComplaintBodySchema,
+  assistantComplaintPathSchema,
+  assistantComplaintResponseSchema,
+  assistantDeviceQuerySchema,
+  assistantDialogPathSchema,
+  assistantDialogResponseSchema,
+  assistantLimitsSchema,
+  assistantMessageBodySchema,
+  assistantMessagePathSchema,
+  assistantMessageResponseSchema,
+  resolveAssistantComplaintBodySchema,
+} from "./assistant";
+import {
   adminAttributeListResponseSchema,
   adminAttributeOptionResponseSchema,
   adminAttributeResponseSchema,
@@ -5748,6 +5764,132 @@ export const apiRoutes = {
     requestBody: { description: "The status", schema: setMaintenanceItemStatusBodySchema },
     responses: {
       200: { description: "The plan", schema: adminMaintenancePlanResponseSchema },
+    },
+  }),
+  // ------------------------------------------------ the assistant (TASK-062)
+  sendAssistantMessage: defineRoute({
+    operationId: "sendAssistantMessage",
+    method: "POST",
+    path: "/assistant/messages",
+    summary:
+      "One turn of the AI Pilot assistant (M-AI-01): the person's message, the model looks things up only with tools over the catalog, the answer is its text and the cards the server builds from the catalog; the first message without dialogId opens a dialog and spends one of the day's (a guest's trial) dialogs; open to guests by deviceId",
+    tag: "assistant",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    rateLimit: {
+      limit: "assistant_guest_per_ip",
+      perAccount: "assistant_messages_per_account",
+      whenUnavailable: "refuse",
+    },
+    requestBody: {
+      description: "The message, the dialog, the car",
+      schema: assistantMessageBodySchema,
+    },
+    responses: {
+      200: {
+        description: "The answer of the turn and what is left",
+        schema: assistantMessageResponseSchema,
+      },
+    },
+  }),
+  getAssistantDialog: defineRoute({
+    operationId: "getAssistantDialog",
+    method: "GET",
+    path: "/assistant/dialogs/{dialogId}",
+    summary:
+      "The current dialog with the assistant, as it was shown — only one's own (the account, or the same device of a guest); another's is 404",
+    tag: "assistant",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    pathParams: assistantDialogPathSchema,
+    query: assistantDeviceQuerySchema,
+    responses: {
+      200: { description: "The dialog", schema: assistantDialogResponseSchema },
+    },
+  }),
+  getAssistantLimits: defineRoute({
+    operationId: "getAssistantLimits",
+    method: "GET",
+    path: "/assistant/limits",
+    summary:
+      "How many dialogs with the assistant are left (a guest's trial ones on the device, a person's of the Almaty day), nothing spent",
+    tag: "assistant",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    query: assistantDeviceQuerySchema,
+    responses: {
+      200: { description: "What is left", schema: assistantLimitsSchema },
+    },
+  }),
+  complainAboutAssistantMessage: defineRoute({
+    operationId: "complainAboutAssistantMessage",
+    method: "POST",
+    path: "/assistant/messages/{messageId}/complaint",
+    summary:
+      "«Пожаловаться на ответ» (M-AI-01): once per answer of one's own dialog — a second time answers the first complaint",
+    tag: "assistant",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    pathParams: assistantMessagePathSchema,
+    requestBody: { description: "The reason and a text", schema: assistantComplaintBodySchema },
+    responses: {
+      200: { description: "The complaint", schema: assistantComplaintResponseSchema },
+    },
+  }),
+  listAdminAssistantComplaints: defineRoute({
+    operationId: "listAdminAssistantComplaints",
+    method: "GET",
+    path: "/admin/assistant/complaints",
+    summary:
+      "Complaints about answers of the assistant: new or resolved, newest first, with the dialog, its cost and the counts by status",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminAssistantComplaintListQuerySchema,
+    responses: {
+      200: { description: "The complaints", schema: adminAssistantComplaintPageSchema },
+    },
+  }),
+  getAdminAssistantComplaint: defineRoute({
+    operationId: "getAdminAssistantComplaint",
+    method: "GET",
+    path: "/admin/assistant/complaints/{complaintId}",
+    summary:
+      "One complaint about an answer of the assistant with the whole dialog: the messages, the tool calls with their arguments and cut results, the cost of each turn",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: assistantComplaintPathSchema,
+    responses: {
+      200: {
+        description: "The complaint and the dialog",
+        schema: adminAssistantComplaintResponseSchema,
+      },
+    },
+  }),
+  resolveAdminAssistantComplaint: defineRoute({
+    operationId: "resolveAdminAssistantComplaint",
+    method: "POST",
+    path: "/admin/assistant/complaints/{complaintId}/resolve",
+    summary:
+      "«Решить» a complaint about an answer of the assistant with an internal comment; another version — ASSISTANT_COMPLAINT_CONFLICT with the complaint as it is now",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: assistantComplaintPathSchema,
+    requestBody: {
+      description: "The version seen and the comment",
+      schema: resolveAssistantComplaintBodySchema,
+    },
+    responses: {
+      200: { description: "The resolved complaint", schema: adminAssistantComplaintResponseSchema },
     },
   }),
 } as const;

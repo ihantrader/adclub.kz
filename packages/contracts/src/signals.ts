@@ -74,6 +74,10 @@ import type { CatalogItemListQuery } from "./catalog-items";
  *   `push_fallback_signal_share` was copied to WhatsApp (the app did not
  *   confirm them, or there was nowhere to push). The subject is push itself;
  *   it closes by itself when the share is back under the threshold.
+ * - `assistant_budget_exhausted` (TASK-062) — the day's AI budget
+ *   (`ai_daily_budget_usd`) is spent and the assistant answers «AI Pilot
+ *   сейчас недоступен…». The subject is the assistant itself; raised at most
+ *   once an Almaty day; the administrator closes it.
  *
  * Later tasks add the others (a spike of complaints).
  */
@@ -90,6 +94,7 @@ export const adminSignalKindSchema = z.enum([
   "payment_system_down",
   "billing_plan_missing",
   "push_fallback_high",
+  "assistant_budget_exhausted",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -110,6 +115,9 @@ export const PAYMENT_CHANNEL_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a2"
 
 /** The billing itself as the subject of `billing_plan_missing` (TASK-042). */
 export const BILLING_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a3";
+
+/** The assistant as the subject of `assistant_budget_exhausted` (TASK-062): one open signal. */
+export const ASSISTANT_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a5";
 
 /** Push to users as the subject of `push_fallback_high` (TASK-052): one open signal. */
 export const PUSH_FALLBACK_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a4";
@@ -371,6 +379,11 @@ export const adminHomeSchema = z.object({
   reviewsHeld: z.number().int(),
   /** TASK-049 (5, «Жалобы · новых N»): `GET /admin/complaints?status=new`. */
   complaintsNew: z.number().int(),
+  /**
+   * TASK-062 («Жалобы на помощника · N»): complaints about answers of the
+   * assistant not resolved — `GET /admin/assistant/complaints?status=new` (`total`).
+   */
+  assistantComplaintsNew: z.number().int(),
   /**
    * TASK-061 («Регламенты: черновиков ИИ ждут подтверждения · N»): AI drafts
    * of maintenance plans not activated yet —

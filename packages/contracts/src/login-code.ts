@@ -189,6 +189,16 @@ export const rateLimitNameSchema = z.enum([
   "vehicle_document_per_ip",
   "vehicle_document_per_account",
   /**
+   * The assistant (TASK-062; SCREENS M-AI-02): a guest's trial dialogs per
+   * device, for good (`guest_limits.assistant_dialogs`), and messages per
+   * hour from a guest's address; a person's dialogs of the Almaty day
+   * (`assistant_daily_dialogs_per_user`) and messages per hour.
+   */
+  "assistant_dialogs_per_device",
+  "assistant_guest_per_ip",
+  "assistant_daily_dialogs_per_user",
+  "assistant_messages_per_account",
+  /**
    * Price list uploads of one company (TASK-046) in a rolling hour —
    * counted in the database by the uploads themselves, not by the guard.
    */

@@ -61,6 +61,7 @@ import * as priceReviewContract from "./price-review";
 import * as searchContract from "./search";
 import * as vehicleContract from "./vehicles";
 import * as maintenanceContract from "./maintenance";
+import * as assistantContract from "./assistant";
 import {
   accessContextSchema,
   administratorListResponseSchema,
@@ -299,6 +300,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(priceImportContract),
   ...moduleComponentSchemas(priceReviewContract),
   ...moduleComponentSchemas(maintenanceContract),
+  ...moduleComponentSchemas(assistantContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,
@@ -732,6 +734,11 @@ export function buildOpenApiDocument(routes: readonly ApiRouteDefinition[]): Ope
       {
         name: "orders",
         description: "The user's own orders (context `user`, the mobile app)",
+      },
+      {
+        name: "assistant",
+        description:
+          "The AI Pilot assistant: answers only with items of the catalog the server checked (open to guests by device)",
       },
       { name: "admin", description: "Admin panel (context `admin`)" },
     ],

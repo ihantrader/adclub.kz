@@ -77,12 +77,9 @@ export async function dialogCarOf(
     return {
       vehicle,
       resolved,
-      // The garage keeps the words the person chose; the engine as the catalog names it.
-      words: {
-        ...(await carWordsOf(executor, resolved)),
-        make: row.makeLabel,
-        model: row.modelLabel,
-      },
+      // The catalog's words only: the garage labels are free text a client sent, unchecked,
+      // and must not reach the model's rules (prompt injection, personal data).
+      words: await carWordsOf(executor, resolved),
       carId: row.id,
       mileageKm: reading?.valueKm ?? null,
     };

@@ -110,6 +110,23 @@ export class Metrics {
     "adclub_webhook_event_kinds",
     "What the retained webhook deliveries held, by kind (statuses, button presses, unknown shapes), from inbound_webhook_event",
   );
+  private readonly assistantTurns = this.registry.counter(
+    "adclub_assistant_turns_total",
+    "Turns of the AI Pilot assistant by the kind of the answer (answer, question, off_topic, unavailable)",
+  );
+  private readonly assistantGroundingDropped = this.registry.counter(
+    "adclub_assistant_grounding_dropped_total",
+    "Item ids of the model the assistant's grounding dropped: not returned by a tool in the dialog, or not on sale now for the car and city",
+  );
+  private readonly assistantDialogCost = this.registry.histogram(
+    "adclub_assistant_dialog_cost_usd",
+    "The cost of a finished dialog with the assistant, USD (the AI calls of all its turns)",
+    [0.002, 0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12, 0.2],
+  );
+  private readonly assistantUnavailable = this.registry.counter(
+    "adclub_assistant_unavailable_total",
+    "Turns of the assistant answered «недоступен», by reason (provider, budget, guest_budget)",
+  );
   private readonly searchFallbacks = this.registry.counter(
     "adclub_search_index_fallbacks_total",
     "Searches answered from PostgreSQL because the search index could not answer, by reason (unavailable, missing, refused)",
@@ -259,6 +276,22 @@ export class Metrics {
 
   setTranslationTasks(state: string, count: number): void {
     this.translationTasks.set({ state }, count);
+  }
+
+  countAssistantTurn(kind: string): void {
+    this.assistantTurns.increment({ kind });
+  }
+
+  countAssistantGroundingDropped(count: number): void {
+    if (count > 0) this.assistantGroundingDropped.increment({}, count);
+  }
+
+  observeAssistantDialogCost(usd: number): void {
+    this.assistantDialogCost.observe({}, usd);
+  }
+
+  countAssistantUnavailable(reason: string): void {
+    this.assistantUnavailable.increment({ reason });
   }
 
   countSearchFallback(reason: "unavailable" | "missing" | "refused"): void {

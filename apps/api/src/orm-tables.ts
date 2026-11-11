@@ -1,3 +1,4 @@
+import { assistantTables } from "./modules/assistant";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { jobsTables } from "./jobs";
 import { aiTables } from "./modules/ai";
@@ -49,6 +50,7 @@ export const ormTables: readonly PgTable[] = [
   ...searchIndexTables,
   ...priceImportTables,
   ...reviewTables,
+  ...assistantTables,
   ...ratingTables,
   ...billingTables,
   ...operationsTables,

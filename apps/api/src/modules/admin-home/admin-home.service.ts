@@ -14,6 +14,7 @@ import { CatalogRequestsService } from "../price-imports";
 import { ComplaintsService, ReviewsService } from "../reviews";
 import { SupplierLeadsService } from "../suppliers";
 import { MaintenancePlansService } from "../maintenance";
+import { AssistantAdminService } from "../assistant";
 
 /** The catalog cards, in the order their totals are read. */
 const CATALOG_CARDS = [
@@ -48,6 +49,7 @@ export class AdminHomeService {
     @Inject(ComplaintsService) private readonly complaints: ComplaintsService,
     @Inject(AdminBilling) private readonly billing: AdminBilling,
     @Inject(MaintenancePlansService) private readonly maintenance: MaintenancePlansService,
+    @Inject(AssistantAdminService) private readonly assistant: AssistantAdminService,
   ) {}
 
   async summary(): Promise<AdminHome> {
@@ -63,6 +65,7 @@ export class AdminHomeService {
       complaints,
       unpaid,
       drafts,
+      assistantComplaints,
     ] = await Promise.all([
       this.signals.currentOfKind("whatsapp_outage"),
       this.signals.currentCounts(),
@@ -81,6 +84,7 @@ export class AdminHomeService {
       this.complaints.newCount(),
       this.billing.unpaidSuppliers(),
       this.maintenance.aiDraftsWaiting(),
+      this.assistant.newCount(),
     ]);
     const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
@@ -103,6 +107,7 @@ export class AdminHomeService {
       catalogRequests: requests,
       reviewsHeld: held,
       complaintsNew: complaints,
+      assistantComplaintsNew: assistantComplaints,
       maintenanceDrafts: drafts,
       supplierPaymentsFailed: unpaid,
       catalog: {

@@ -24,6 +24,7 @@ import { BillingModule } from "./modules/billing";
 import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
 import { MaintenanceModule } from "./modules/maintenance";
+import { AssistantModule } from "./modules/assistant";
 import { OpsRunMetricsModule } from "./modules/operations";
 import { SearchIndexMetricsModule } from "./modules/search-index";
 import { SignalsModule } from "./modules/signals";
@@ -81,6 +82,14 @@ export class AppModule implements NestModule {
     const showcase = ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess });
     // One maintenance module: the home screen counts its AI drafts (TASK-061).
     const maintenance = MaintenanceModule.forRoot({ http: true, catalog, showcase, vehicles });
+    // One assistant module: the home screen counts its complaints (TASK-062).
+    const assistant = AssistantModule.forRoot({
+      http: true,
+      catalog,
+      showcase,
+      maintenance,
+      signals,
+    });
     const billing = BillingModule.forRoot(config, {
       http: true,
       clubAccess,
@@ -136,6 +145,7 @@ export class AppModule implements NestModule {
         signals,
         showcase,
         maintenance,
+        assistant,
         // The API serves GET /metrics, so it samples the search index's state.
         ...(config.metrics.enabled ? [SearchIndexMetricsModule] : []),
         // …and what the backups and the restore check did (TASK-055).
@@ -154,6 +164,7 @@ export class AppModule implements NestModule {
           reviews,
           billing,
           maintenance,
+          assistant,
         }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers }),
         priceImports,

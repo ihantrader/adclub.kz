@@ -5,6 +5,8 @@ import {
   AiGateway,
   AiGatewayError,
   type AiResult,
+  type AssistantStepInput,
+  type AssistantStepOutput,
   type MaintenanceDraftInput,
   type PhotoInput,
   type PriceMatchInput,
@@ -22,6 +24,7 @@ import {
   TEST_PART_PHOTO_UNREADABLE,
   TEST_PART_PHOTOS,
 } from "./test-photos";
+import { testAssistantStep } from "./test-assistant";
 import { testMaintenanceDraft } from "./test-maintenance-plans";
 import { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 
@@ -514,6 +517,66 @@ export class TestAiGateway extends AiGateway {
     const invalid = this.mode === "invalid_output" || this.mode === "incomplete";
     return {
       output: invalid ? { elements: draft.items } : draft,
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
+  }
+
+  /** Every step of the assistant asked: the messages and tools exactly as sent (TASK-062 — what reaches a model). */
+  readonly assistantRequests: { input: AssistantStepInput; model: string }[] = [];
+  /** Models with no endpoint that keeps nothing (D-057) — the assistant tries its fallback (TASK-062). */
+  noPrivateModels = new Set<string>();
+  /** A step to answer instead of the scripted one; `undefined` — the script (`test-assistant.ts`). */
+  assistantOverride: ((input: AssistantStepInput) => AssistantStepOutput | undefined) | undefined;
+
+  /**
+   * The scripted assistant (`testAssistantStep`): the scenarios of PRODUCT
+   * 8.3 by the words of the message, with the very tools a real model calls.
+   */
+  async assistantStep(
+    input: AssistantStepInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    this.assistantRequests.push({ input: structuredClone(input), model });
+    if (model.startsWith(MISSING_MODEL_PREFIX) || this.failingModels.has(model)) {
+      throw new AiGatewayError("model_unavailable", `The test AI provider has no model ${model}`);
+    }
+    if (this.noPrivateModels.has(model)) {
+      throw new AiGatewayError(
+        "no_private_provider",
+        "No provider of this model keeps requests unstored and serves tools, so nothing was sent",
+      );
+    }
+    switch (this.mode) {
+      case "unavailable":
+        throw new AiGatewayError("unavailable", "The test AI provider is unavailable");
+      case "rejected":
+        throw new AiGatewayError("rejected", "The test AI provider refuses the request");
+      case "no_private_provider":
+        throw new AiGatewayError(
+          "no_private_provider",
+          "No provider of this model keeps requests unstored, so nothing was sent",
+        );
+      case "slow":
+        await this.wait(this.delayMs, signal);
+        break;
+      default:
+        break;
+    }
+    const output = this.assistantOverride?.(input) ?? testAssistantStep(input, this.mode);
+    const chars = JSON.stringify(input.messages).length + JSON.stringify(input.tools).length;
+    const tokensIn = Math.ceil(chars / 4);
+    const tokensOut = 20 + Math.ceil(JSON.stringify(output).length / 4);
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    return {
+      output,
       model,
       usage: {
         tokensIn,

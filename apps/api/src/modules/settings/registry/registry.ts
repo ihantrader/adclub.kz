@@ -511,11 +511,76 @@ const guestAssistant = group({
     assistant_symptom_disclaimer: define.localizedText({
       maxLength: 500,
       default: {
-        kk: "Көмекші қателесуі мүмкін. Ақаудың нақты себебін тек автосервис анықтайды.",
-        ru: "Помощник может ошибаться. Точную причину неисправности определит только автосервис.",
-        en: "The assistant may be wrong. Only a car service can find the exact cause of the problem.",
+        // SCREENS T-AI-01 (TASK-062).
+        kk: "Бұл диагноз емес. Нақты себебін тек автосервис анықтайды.",
+        ru: "Это не диагноз. Точную причину определит сервис.",
+        en: "This is not a diagnosis. Only a car service can find the exact cause.",
       },
       description: "Оговорка, которую сервер добавляет к ответу помощника на описание симптома.",
+    }),
+    assistant_max_tool_calls: define.integer({
+      unit: "count",
+      min: 1,
+      max: 50,
+      default: 12,
+      description:
+        "Сколько вызовов инструментов (поиск по каталогу, карточка, регламент, дерево категорий) модель может сделать за один ход помощника (TASK-062); больше — ход заканчивается ответом «не удалось подобрать» без карточек.",
+    }),
+    assistant_turn_seconds: define.duration({
+      unit: "seconds",
+      min: 5,
+      max: 300,
+      default: 45,
+      description:
+        "Сколько секунд может длиться один ход помощника целиком — все шаги модели и инструменты (TASK-062); дольше — «AI Pilot сейчас недоступен», ход не засчитывается.",
+    }),
+    assistant_guest_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 20,
+      description:
+        "Сколько сообщений помощнику гости могут отправить с одного адреса (сети IPv6 /64) за окно (TASK-062) — против обхода пробного лимита устройства новым устройством.",
+    }),
+    assistant_guest_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела сообщений помощнику гостей с одного адреса.",
+    }),
+    assistant_messages_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 60,
+      description:
+        "Сколько сообщений помощнику вошедший пользователь может отправить за окно (TASK-062) — против зацикливания, не против обычного разговора; диалоги в сутки держит assistant_daily_dialogs_per_user.",
+    }),
+    assistant_messages_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: HOUR,
+      description: "Окно предела сообщений помощнику одной учётной записи.",
+    }),
+    assistant_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 3650,
+      default: 90,
+      description:
+        "Через сколько дней тексты сообщений диалогов с помощником обезличиваются — заменяются пометкой (TASK-062; ARCHITECTURE 11.1). Записи, намерения и позиции ответов остаются для статистики.",
+    }),
+    assistant_diagnostics_category: define.string({
+      maxLength: 64,
+      pattern: {
+        regex: /^$|^[a-z][a-z0-9_]{0,63}$/,
+        message: "Код подкатегории справочника (например computer_diagnostics) или пусто",
+      },
+      default: "computer_diagnostics",
+      description:
+        "Код подкатегории услуги диагностики: при симптоме помощник добавляет её карточку, если в городе пользователя такая услуга продаётся (TASK-062). Пусто — карточки диагностики нет.",
     }),
   },
 });
@@ -592,6 +657,20 @@ const ai = group({
       default: "openai/gpt-4.1-mini",
       description:
         "Запасная модель черновика регламента ТО: используется, когда основная недоступна. Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
+    ai_model_assistant_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-3.1-flash-lite",
+      description:
+        "Модель OpenRouter для помощника AI Pilot (TASK-062): шаг диалога с инструментами (поиск по каталогу, карточка позиции, регламент ТО); должна поддерживать вызов инструментов, запросы уходят только провайдерам без хранения (D-057). Выбрана замером на наборе ai-eval/assistant (D-058, ARCHITECTURE 4.85 I970): намерение 94 %, допустимые позиции 97 %, ни одного «диагноза», около $0.0025 за диалог, медиана хода 4,4 с. Меняется без релиза, действует не позже чем через 30 секунд.",
+    }),
+    ai_model_assistant_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "openai/gpt-4.1-mini",
+      description:
+        "Запасная модель помощника: используется, когда основная недоступна, не нашла эндпоинта без хранения или ответила пусто. Другой поставщик; на замере у порога (намерение 88–94 %, позиции 94 %), без единой ошибки, около $0.0015 за диалог. Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
     ai_model_vehicle_document_primary: define.string({
       maxLength: 100,

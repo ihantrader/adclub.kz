@@ -421,6 +421,57 @@ export const maintenanceDraftOutputSchema = z.object({
 
 export type MaintenanceDraftOutput = z.infer<typeof maintenanceDraftOutputSchema>;
 
+// ------------------------------------------------- the assistant (TASK-062)
+
+/**
+ * A call of a tool the model asked for: the id the provider gave it, the
+ * tool's name and its arguments as the JSON text the model wrote (checked
+ * by the caller against the tool's own schema — a model writes them, so
+ * they are untrusted).
+ */
+export interface AssistantToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/**
+ * The messages of one step of the assistant (ARCHITECTURE 4.85), in the
+ * shape every chat model with tools takes: the rules and the car (system),
+ * what the person said, what the model answered and asked of the tools, and
+ * what the tools returned to it. Nothing personal is ever in them — the
+ * caller builds them from the levels of the car, the city, the mileage and
+ * the person's own words only.
+ */
+export type AssistantChatMessage =
+  | { role: "system"; content: string }
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string | null; toolCalls: readonly AssistantToolCall[] }
+  | { role: "tool"; toolCallId: string; content: string };
+
+/** A tool the model may call: its name, what it is for and the JSON Schema of its arguments. */
+export interface AssistantToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface AssistantStepInput {
+  messages: readonly AssistantChatMessage[];
+  tools: readonly AssistantToolSpec[];
+}
+
+/**
+ * One step of the model: its text (`null` — none) and the tools it calls
+ * (empty — none). A step that calls nothing ends the turn with its text.
+ */
+export const assistantStepOutputSchema = z.object({
+  text: z.string().nullable(),
+  toolCalls: z.array(z.object({ id: z.string(), name: z.string(), arguments: z.string() })),
+});
+
+export type AssistantStepOutput = z.infer<typeof assistantStepOutputSchema>;
+
 /**
  * The provider behind the interface. `model` is the one `AiService` chose
  * from the settings of the operation; `signal` is aborted when the call
@@ -458,6 +509,13 @@ export abstract class AiGateway {
     model: string,
     signal: AbortSignal,
   ): Promise<AiResult>;
+
+  /** One step of the assistant's dialog with tools (TASK-062). */
+  abstract assistantStep(
+    input: AssistantStepInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult>;
 }
 
 /**
@@ -478,6 +536,16 @@ export interface AiOperationModels {
 export interface AiOperation<Input, Output> {
   kind: AiJobKind;
   models: AiOperationModels;
+  /**
+   * The failures after which the fallback model is tried; left out —
+   * `FALLBACK_WORTHY`. The assistant (TASK-062) also tries it after
+   * `no_private_provider`: a person waits on the screen, and the other
+   * model may well have an endpoint that keeps nothing (D-057 still holds —
+   * nothing was sent to one that keeps data) — and after an empty or garbled
+   * answer, which the other model of another provider rarely repeats
+   * (measured: one of 34 dialogs of the primary, TASK-062).
+   */
+  fallbackOn?: readonly AiFailureKind[];
   outputSchema: z.ZodType<Output>;
   invoke(gateway: AiGateway, input: Input, model: string, signal: AbortSignal): Promise<AiResult>;
 }
@@ -543,3 +611,12 @@ export const maintenanceDraftOperation: AiOperation<MaintenanceDraftInput, Maint
     outputSchema: maintenanceDraftOutputSchema,
     invoke: (gateway, input, model, signal) => gateway.draftMaintenancePlan(input, model, signal),
   };
+
+/** One step of the assistant (TASK-062): `ai_job.kind` is `assistant_turn` (ARCHITECTURE 5.12). */
+export const assistantStepOperation: AiOperation<AssistantStepInput, AssistantStepOutput> = {
+  kind: "assistant_turn",
+  models: { primary: "ai_model_assistant_primary", fallback: "ai_model_assistant_fallback" },
+  fallbackOn: ["unavailable", "model_unavailable", "no_private_provider", "invalid_output"],
+  outputSchema: assistantStepOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.assistantStep(input, model, signal),
+};

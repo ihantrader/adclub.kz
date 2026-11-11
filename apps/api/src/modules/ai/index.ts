@@ -4,6 +4,8 @@ export {
   AiBudgetExhaustedError,
   AiGateway,
   AiGatewayError,
+  assistantStepOperation,
+  assistantStepOutputSchema,
   dashboardOperation,
   dashboardOutputSchema,
   FALLBACK_WORTHY,
@@ -27,6 +29,11 @@ export type {
   AiOperationModels,
   AiResult,
   AiUsage,
+  AssistantChatMessage,
+  AssistantStepInput,
+  AssistantStepOutput,
+  AssistantToolCall,
+  AssistantToolSpec,
   DashboardOutput,
   MaintenanceDraftAttribute,
   MaintenanceDraftCategory,
@@ -57,6 +64,11 @@ export type {
   AiStatus,
 } from "./ai.service";
 export { OpenRouterAiGateway } from "./openrouter-ai-gateway";
+export {
+  TEST_ASSISTANT_INVENT_MARKER,
+  TEST_ASSISTANT_INVENTED_ID,
+  testAssistantStep,
+} from "./test-assistant";
 export {
   MISSING_MODEL_PREFIX,
   TEST_REVIEW_MARKERS,

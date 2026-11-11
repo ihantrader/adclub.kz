@@ -12,6 +12,8 @@ import {
   type AiFailureKind,
   type AiResult,
   type AiUsage,
+  type AssistantChatMessage,
+  type AssistantStepInput,
   type MaintenanceDraftInput,
   type PhotoInput,
   type PriceMatchInput,
@@ -312,6 +314,65 @@ const MAINTENANCE_DRAFT_FORMAT = {
   },
 } as const;
 
+/**
+ * The longest answer of one step of the assistant (TASK-062): a short text
+ * or a few tool calls — the assistant chooses from a short list, it does not
+ * write essays (ARCHITECTURE 11.5).
+ */
+const ASSISTANT_MAX_TOKENS = 2_000;
+
+/** A step of the assistant answers a message, possibly with calls of tools (the OpenAI shape). */
+const assistantAnswerSchema = z.object({
+  model: z.string().optional(),
+  usage: usageSchema.optional(),
+  choices: z
+    .array(
+      z.object({
+        finish_reason: z.string().nullish(),
+        message: z
+          .object({
+            content: z.string().nullish(),
+            tool_calls: z
+              .array(
+                z.object({
+                  id: z.string(),
+                  function: z.object({ name: z.string(), arguments: z.string().nullish() }),
+                }),
+              )
+              .nullish(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+  error: z.object({ message: z.string().optional(), code: z.unknown().optional() }).optional(),
+});
+
+/** Our messages in the shape of `/chat/completions` (OpenAI-compatible tools). */
+function chatMessageOf(message: AssistantChatMessage): Record<string, unknown> {
+  switch (message.role) {
+    case "system":
+    case "user":
+      return { role: message.role, content: message.content };
+    case "tool":
+      return { role: "tool", tool_call_id: message.toolCallId, content: message.content };
+    case "assistant":
+      return {
+        role: "assistant",
+        content: message.content ?? "",
+        ...(message.toolCalls.length > 0
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: "function",
+                function: { name: call.name, arguments: call.arguments },
+              })),
+            }
+          : {}),
+      };
+  }
+}
+
 export interface OpenRouterOptions {
   /** Tests give their own HTTP layer; nothing in development, tests or CI calls the real service. */
   fetch?: typeof fetch;
@@ -524,6 +585,108 @@ export class OpenRouterAiGateway extends AiGateway {
     );
   }
 
+  /**
+   * One step of the assistant (TASK-062): the messages so far and the tools,
+   * in the OpenAI shape of tools that OpenRouter speaks. `tool_choice:
+   * "auto"`: `"required"` would hold a model to a tool at every step, but
+   * Gemini refuses it with the search tool's schema (measured, TASK-062), so
+   * the rules ask for `ask_user` or `propose` and the pipeline reminds a
+   * model that answered in free text once (`AssistantPipeline`); with
+   * `require_parameters` (`PRIVATE_ROUTING`) the request only reaches an
+   * endpoint that keeps nothing (D-057) and serves tools — none such is the
+   * 404 of OpenRouter, and the fallback model is tried.
+   */
+  async assistantStep(
+    input: AssistantStepInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    const parsed = await this.post(
+      {
+        model,
+        max_tokens: ASSISTANT_MAX_TOKENS,
+        messages: input.messages.map(chatMessageOf),
+        tools: input.tools.map((tool) => ({
+          type: "function",
+          function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+        })),
+        tool_choice: "auto",
+      },
+      signal,
+    );
+    const answer = assistantAnswerSchema.safeParse(parsed.body);
+    if (!answer.success) {
+      throw new AiGatewayError("invalid_output", "OpenRouter answered in an unknown shape");
+    }
+    if (answer.data.error) {
+      throw failureOf(parsed.status, answer.data.error.message);
+    }
+    const usage = usageOf(answer.data.usage);
+    const unusable = (message: string, kind: AiFailureKind = "invalid_output"): AiGatewayError =>
+      new AiGatewayError(kind, message, { usage });
+    const choice = answer.data.choices?.[0];
+    if (!choice) {
+      throw unusable("OpenRouter answered without a choice");
+    }
+    if (choice.finish_reason === "length") {
+      throw unusable("The answer was cut off (max_tokens)");
+    }
+    if (choice.finish_reason === "content_filter") {
+      throw unusable("The model refused the request", "rejected");
+    }
+    const content = choice.message?.content?.trim() || null;
+    const toolCalls = (choice.message?.tool_calls ?? []).map((call) => ({
+      id: call.id,
+      name: call.function.name,
+      arguments: call.function.arguments?.trim() || "{}",
+    }));
+    if (content === null && toolCalls.length === 0) {
+      throw unusable("The answer has neither text nor tool calls");
+    }
+    return {
+      output: { text: content, toolCalls },
+      model: answer.data.model ?? model,
+      usage,
+    };
+  }
+
+  /**
+   * The request with the routing requirement and the attribution headers;
+   * anything but a 2xx is classified (`failureOf`). The body is parsed JSON
+   * (`undefined` — not JSON).
+   */
+  private async post(
+    body: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<{ status: number; body: unknown }> {
+    let response: Response;
+    try {
+      response = await this.fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        signal,
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json",
+          // Attribution of the account's own traffic; no request content.
+          "http-referer": "https://adclub.kz",
+          "x-title": "adclub.kz",
+        },
+        body: JSON.stringify({ ...body, provider: PRIVATE_ROUTING }),
+      });
+    } catch (error) {
+      if (signal.aborted && signal.reason instanceof AiGatewayError) {
+        // The caller's own time limit: it knows why.
+        throw signal.reason;
+      }
+      throw new AiGatewayError("unavailable", "OpenRouter could not be reached", { cause: error });
+    }
+    const parsed = safeJson(await response.text());
+    if (!response.ok) {
+      throw failureOf(response.status, messageOf(parsed));
+    }
+    return { status: response.status, body: parsed };
+  }
+
   /** One call: the request with the routing requirement, the answer parsed, failures classified. */
   private async complete(body: Record<string, unknown>, signal: AbortSignal): Promise<AiResult> {
     const model = String(body.model);
@@ -599,6 +762,15 @@ export class OpenRouterAiGateway extends AiGateway {
     }
     return { output, model: answer.data.model ?? model, usage };
   }
+}
+
+/** What the provider reported: a cost of 0 or none is unknown, never free (see `complete`). */
+function usageOf(reported: z.infer<typeof usageSchema> | undefined): AiUsage {
+  return {
+    tokensIn: reported?.prompt_tokens ?? 0,
+    tokensOut: reported?.completion_tokens ?? 0,
+    costUsd: reported?.cost === undefined || reported.cost === 0 ? null : reported.cost,
+  };
 }
 
 /** The glossary as a block before the texts; nothing at all when there is none. */

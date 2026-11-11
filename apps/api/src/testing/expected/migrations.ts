@@ -62,4 +62,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1792050000000_mileage-log",
   "1792100000000_maintenance-plans",
   "1792150000000_maintenance-plan-follows-vehicles",
+  "1792200000000_assistant",
 ];

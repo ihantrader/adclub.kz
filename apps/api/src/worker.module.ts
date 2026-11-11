@@ -18,6 +18,7 @@ import { OrderJobsModule } from "./modules/orders";
 import { SearchIndexJobsModule } from "./modules/search-index";
 import { PriceImportJobsModule } from "./modules/price-imports";
 import { ReviewJobsModule } from "./modules/reviews";
+import { AssistantJobsModule } from "./modules/assistant";
 import { RatingJobsModule } from "./modules/ratings";
 import { BillingJobsModule } from "./modules/billing";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
@@ -70,6 +71,7 @@ export class WorkerModule {
         SearchIndexJobsModule,
         PriceImportJobsModule,
         ReviewJobsModule,
+        AssistantJobsModule,
         RatingJobsModule,
         BillingJobsModule.forRoot(config),
         ...(hasDevJobs(config) ? [DevJobsModule] : []),

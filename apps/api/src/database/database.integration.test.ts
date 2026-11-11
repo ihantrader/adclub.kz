@@ -120,6 +120,78 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("holds the dialogs of the assistant with their rules, goes with the account, and rolls back (TASK-062)", async () => {
+    const accountId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77470000962') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const dialog = async (owner: string, values: unknown[]) =>
+      (
+        await client.query<{ id: string }>(
+          `INSERT INTO assistant_dialog (${owner}, language, vehicle, car_words) VALUES (${values
+            .map((_, index) => `$${String(index + 1)}`)
+            .join(", ")}, 'ru', '{}', '{"make":"Geely"}') RETURNING id`,
+          values,
+        )
+      ).rows[0]!.id;
+    // Exactly one owner: an account or a device.
+    const own = await dialog("account_id", [accountId]);
+    const guest = await dialog("device_id", ["11111111-1111-4111-8111-111111111111"]);
+    await expect(
+      dialog("account_id, device_id", [accountId, "11111111-1111-4111-8111-111111111111"]),
+    ).rejects.toThrow(/assistant_dialog_owner_check/);
+    await expect(
+      client.query(
+        "INSERT INTO assistant_dialog (language, vehicle, car_words) VALUES ('ru', '{}', '{}')",
+      ),
+    ).rejects.toThrow(/assistant_dialog_owner_check/);
+    const message = async (dialogId: string, role: string, kind: string | null = null) =>
+      (
+        await client.query<{ id: string }>(
+          "INSERT INTO assistant_message (dialog_id, role, text, kind) VALUES ($1, $2, 'x', $3) RETURNING id",
+          [dialogId, role, kind],
+        )
+      ).rows[0]!.id;
+    await expect(message(own, "system")).rejects.toThrow(/assistant_message_role_check/);
+    await expect(message(own, "assistant", "diagnosis")).rejects.toThrow(
+      /assistant_message_kind_check/,
+    );
+    const answer = await message(own, "assistant", "answer");
+    await message(guest, "assistant", "unavailable");
+    // One complaint per answer; resolved only with the time and the comment.
+    await client.query(
+      "INSERT INTO assistant_complaint (message_id, dialog_id, reason) VALUES ($1, $2, 'wrong_item')",
+      [answer, own],
+    );
+    await expect(
+      client.query(
+        "INSERT INTO assistant_complaint (message_id, dialog_id, reason) VALUES ($1, $2, 'other')",
+        [answer, own],
+      ),
+    ).rejects.toThrow(/assistant_complaint_message_key/);
+    await expect(
+      client.query("UPDATE assistant_complaint SET status = 'resolved' WHERE message_id = $1", [
+        answer,
+      ]),
+    ).rejects.toThrow(/assistant_complaint_resolved_check/);
+    // The account's dialogs, their messages and complaints go with it.
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+    expect(
+      (await client.query("SELECT 1 FROM assistant_dialog WHERE id = $1", [own])).rowCount,
+    ).toBe(0);
+    expect((await client.query("SELECT 1 FROM assistant_complaint")).rowCount).toBe(0);
+    expect(
+      (await client.query("SELECT 1 FROM assistant_message WHERE dialog_id = $1", [guest]))
+        .rowCount,
+    ).toBe(1);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(await tableExists(client, "assistant_complaint")).toBe(false);
+    expect(await tableExists(client, "assistant_message")).toBe(false);
+    expect(await tableExists(client, "assistant_dialog")).toBe(false);
+  });
+
   it("moves maintenance plans with a moved model or generation, and rolls back (TASK-061.A)", async () => {
     const insertId = async (text: string, values: unknown[] = []) =>
       (await client.query<{ id: string }>(text, values)).rows[0]!.id;

@@ -8,6 +8,7 @@ import {
   AiBudgetExhaustedError,
   AiGateway,
   AiGatewayError,
+  assistantStepOperation,
   FALLBACK_WORTHY,
   NOT_BILLED,
   dashboardOperation,
@@ -20,6 +21,8 @@ import {
   type AiFailureKind,
   type AiOperation,
   type AiResult,
+  type AssistantStepInput,
+  type AssistantStepOutput,
   type DashboardOutput,
   type MaintenanceDraftInput,
   type MaintenanceDraftOutput,
@@ -189,6 +192,14 @@ export class AiService {
     return this.call(maintenanceDraftOperation, input, meta);
   }
 
+  /** One step of the assistant's dialog with tools (TASK-062); the texts are never recorded. */
+  assistantStep(
+    input: AssistantStepInput,
+    meta: AiCallMeta,
+  ): Promise<AiCallResult<AssistantStepOutput>> {
+    return this.call(assistantStepOperation, input, meta);
+  }
+
   /**
    * What the calls made for guests have cost since the start of the Almaty
    * day, holds of running ones included — checked against
@@ -255,7 +266,9 @@ export class AiService {
         };
       }
       failure = attempt.error;
-      const more = index < models.length - 1 && FALLBACK_WORTHY.includes(failure.kind);
+      const more =
+        index < models.length - 1 &&
+        (operation.fallbackOn ?? FALLBACK_WORTHY).includes(failure.kind);
       this.logger.warn(
         `AI attempt failed job=${jobId} kind=${operation.kind} model=${model} fallback=${String(isFallback)} error=${failure.kind}: ${this.safeText(failure)}${more ? " — trying the fallback model" : ""}`,
       );

@@ -45,6 +45,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "prices.expire-reviews",
   "reviews.check",
   "reviews.expire-checks",
+  "assistant.anonymize-messages",
   "ratings.recompute-supplier",
   "ratings.reconcile",
   "billing.apply-events",
@@ -68,6 +69,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   cron: string;
   timezone: string;
 }[] = [
+  // The texts of old dialogs with the assistant made impersonal (TASK-062).
+  { name: "assistant.anonymize-messages", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The daily charge of company subscriptions: at `billing_notify_hour` (10 by default) (TASK-042).
   { name: "billing.charge-due", cron: "0 10 * * *", timezone: "Asia/Almaty" },
   // Pages of the payment provider nobody came back from, and the tokens of failed trips (TASK-042).

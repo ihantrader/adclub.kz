@@ -16,6 +16,8 @@ export interface AdminHomeModuleOptions {
   billing: DynamicModule;
   /** AI drafts of maintenance plans waiting (TASK-061). */
   maintenance: DynamicModule;
+  /** Complaints about answers of the assistant (TASK-062). */
+  assistant: DynamicModule;
 }
 
 /**
@@ -37,6 +39,7 @@ export class AdminHomeModule {
         options.reviews,
         options.billing,
         options.maintenance,
+        options.assistant,
       ],
       controllers: [AdminHomeController],
       providers: [AdminHomeService],

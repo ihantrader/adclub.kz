@@ -45,6 +45,7 @@ import {
   VehicleDocumentEval,
 } from "./modules/vehicle-document";
 import { PhotoEval, PhotoEvalBudgetError, savePhotoEvalRun } from "./modules/photo-eval";
+import { AssistantEval, AssistantModule, saveAssistantEvalRun } from "./modules/assistant";
 import {
   CompatibilityModule,
   DevCompatibilitySeed,
@@ -159,6 +160,12 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                off a drawn dashboard (`ai-eval/dashboard`) and the
  *                                article off a drawn label (`ai-eval/part-photo`);
  *                                written to `ai-eval/<set>/results/`.
+ *   ai:eval:assistant --models <a,b,…> --confirm-spend <usd> [--label <text>] [--only <id,id>]
+ *                                play every scenario of `ai-eval/assistant` through the
+ *                                assistant's pipeline with each model (TASK-062): the
+ *                                intent, only allowed items, grounding drops, claims of a
+ *                                diagnosis, off-topic refusals, turns, time and the cost of
+ *                                a dialog; written to `ai-eval/assistant/results/`.
  *
  * The search index of the catalog (TASK-045; ARCHITECTURE 10, 4.65):
  *   search:status                the index: documents, whether it answers, the outbox
@@ -251,6 +258,7 @@ class OperatorModule {
     const compatibility = CompatibilityModule.forRoot({ http: false });
     const clubAccess = ClubAccessModule.forRoot({ http: false });
     const showcase = ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess });
+    const maintenance = MaintenanceModule.forRoot({ http: false, catalog, showcase, vehicles });
     return {
       module: OperatorModule,
       imports: [
@@ -276,7 +284,15 @@ class OperatorModule {
           signals: SignalsModule.forRoot({ http: false }),
         }),
         showcase,
-        MaintenanceModule.forRoot({ http: false, catalog, showcase, vehicles }),
+        maintenance,
+        // The model comparison of the assistant plays its very pipeline (TASK-062).
+        AssistantModule.forRoot({
+          http: false,
+          pipelineOnly: true,
+          catalog,
+          showcase,
+          maintenance,
+        }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),
@@ -332,6 +348,7 @@ const USAGE = `Usage: operator <command> [arguments]
   ai:eval:recheck <result file name>
   ai:eval:vehicle-document --models <a,b,...> --confirm-spend <usd> [--label <text>]
   ai:eval:dashboard --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  ai:eval:assistant --models <a,b,...> --confirm-spend <usd> [--label <text>] [--only <id,id>]
   ai:eval:part-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
   search:status
   search:reindex
@@ -461,6 +478,7 @@ interface Services {
   translationEval: TranslationEval;
   documentEval: VehicleDocumentEval;
   photoEval: PhotoEval;
+  assistantEval: AssistantEval;
   searchIndex: SearchIndexWriter;
   searchEval: SearchEval;
   maintenanceSeed: DevMaintenanceSeed;
@@ -491,6 +509,7 @@ async function run(
     translationEval,
     documentEval,
     photoEval,
+    assistantEval,
     searchIndex,
     searchEval,
     maintenanceSeed,
@@ -544,6 +563,7 @@ async function run(
       generation: { type: "string" },
       engine: { type: "string" },
       "model-id": { type: "string" },
+      only: { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -773,6 +793,48 @@ async function run(
           failures: result.failures.length,
           failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
         })),
+      };
+    }
+    case "ai:eval:assistant": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "ai:eval:assistant is available in development and tests only",
+        );
+      }
+      const models = required(values.models, "--models")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0);
+      if (models.length === 0) {
+        throw new OperatorCommandError("--models lists no model");
+      }
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.5");
+      }
+      // As for the photos: the daily budget is what stops the run.
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const run = await assistantEval.run({
+        models,
+        ...(values.label === undefined ? {} : { label: values.label }),
+        ...(values.only === undefined
+          ? {}
+          : { only: values.only.split(",").map((id) => id.trim()) }),
+      });
+      const path = saveAssistantEvalRun(
+        run,
+        `${run.startedAt.slice(0, 10)}-${values.label ?? "models"}`,
+      );
+      return {
+        saved: path,
+        dataVersion: run.dataVersion,
+        results: run.results.map((result) => ({ model: result.model, ...result.summary })),
       };
     }
     case "ai:eval:dashboard":
@@ -1049,6 +1111,7 @@ async function main(): Promise<void> {
         translationEval: app.get(TranslationEval),
         documentEval: app.get(VehicleDocumentEval),
         photoEval: app.get(PhotoEval),
+        assistantEval: app.get(AssistantEval),
         searchIndex: app.get(SearchIndexWriter),
         searchEval: app.get(SearchEval),
         maintenanceSeed: app.get(DevMaintenanceSeed),

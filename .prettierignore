@@ -8,6 +8,8 @@ apps/api/contract-snapshots/mobile/supported.json
 # results of a model comparison, kept as they are produced so a regenerated
 # run is byte-identical to the one in the repository
 ai-eval/translate/results/
+# written by `pnpm --filter api operator ai:eval:assistant` (TASK-062), kept as produced
+ai-eval/assistant/results/
 dist/
 coverage/
 .turbo/

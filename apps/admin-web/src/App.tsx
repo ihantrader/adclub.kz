@@ -23,6 +23,7 @@ import { OrderCard } from "./orders/OrderCard";
 import { Orders } from "./orders/Orders";
 import { ComplaintCard, Complaints } from "./reviews/Complaints";
 import { Reviews } from "./reviews/Reviews";
+import { AssistantComplaintCard, AssistantComplaints } from "./assistant/AssistantComplaints";
 import { useLocation, useRoute, type RouteKey } from "./router";
 
 import { Shell } from "./screens/Shell";
@@ -273,6 +274,10 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
       return <Complaints />;
     case "complaint":
       return id ? <ComplaintCard key={id} complaintId={id} /> : null;
+    case "assistantComplaints":
+      return <AssistantComplaints />;
+    case "assistantComplaint":
+      return id ? <AssistantComplaintCard key={id} complaintId={id} /> : null;
     default:
       return <Home />;
   }

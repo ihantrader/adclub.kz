@@ -46,6 +46,8 @@ export const routePaths = {
   // Reviews and complaints (TASK-049): A-REV-01, A-REV-02.
   reviews: "/reviews",
   complaints: "/complaints",
+  // The assistant (TASK-062): complaints about its answers.
+  assistantComplaints: "/assistant/complaints",
 } as const;
 
 export type StaticRoute = keyof typeof routePaths;
@@ -77,7 +79,8 @@ export type RouteKey =
   | "supplierLead"
   | "order"
   | "user"
-  | "complaint";
+  | "complaint"
+  | "assistantComplaint";
 
 const HISTORY_PATH = /^\/settings\/([a-z][a-z0-9_]{0,63})\/history$/;
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -95,7 +98,13 @@ const VEHICLE_PATHS: [RouteKey, RegExp][] = [
   ["order", new RegExp(`^/orders/(${UUID})$`, "i")],
   ["user", new RegExp(`^/users/(${UUID})$`, "i")],
   ["complaint", new RegExp(`^/complaints/(${UUID})$`, "i")],
+  ["assistantComplaint", new RegExp(`^/assistant/complaints/(${UUID})$`, "i")],
 ];
+
+/** A complaint about an answer of the assistant with its dialog (TASK-062). */
+export function assistantComplaintPath(complaintId: string): string {
+  return `/assistant/complaints/${complaintId}`;
+}
 
 /** The card of a complaint (A-REV-02, TASK-049). */
 export function complaintPath(complaintId: string): string {
@@ -275,6 +284,9 @@ export function menuOf(route: RouteKey): StaticRoute {
   }
   if (route === "complaints" || route === "complaint") {
     return "reviews";
+  }
+  if (route === "assistantComplaint") {
+    return "assistantComplaints";
   }
   return route;
 }

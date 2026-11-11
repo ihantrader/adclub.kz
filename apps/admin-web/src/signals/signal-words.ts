@@ -31,6 +31,8 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   billing_plan_missing: "Нет тарифа для подписки поставщиков",
   // TASK-052.
   push_fallback_high: "Push не доходит до пользователей",
+  // TASK-062.
+  assistant_budget_exhausted: "Дневной бюджет ИИ исчерпан: помощник недоступен",
 };
 
 /** The kinds in the order of importance of A-HOME. */
@@ -39,6 +41,7 @@ export const KIND_ORDER: readonly AdminSignalKind[] = [
   "payment_system_down",
   "supplier_unreachable",
   "push_fallback_high",
+  "assistant_budget_exhausted",
   "payment_failed",
   "billing_plan_missing",
   "supply_overdue",
@@ -162,6 +165,7 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
         .filter(Boolean)
         .join(" · ");
     case "billing_plan_missing":
+    case "assistant_budget_exhausted":
       return payload.since ? `с ${formatMoment(payload.since)}` : "";
     case "push_fallback_high":
       return [
@@ -217,7 +221,9 @@ export function subjectLink(
           ? paymentsPath(["awaiting_provider"])
           : signal.kind === "billing_plan_missing"
             ? routePaths.billingPlans
-            : null;
+            : signal.kind === "assistant_budget_exhausted"
+              ? routePaths.settings
+              : null;
   }
 }
 
@@ -243,6 +249,8 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "Платёжная система не принимает списания дольше порога. Никому не пишем и никого не ставим на паузу — списания повторяются сами. Сигнал закроется, когда платёжная система ответит.",
   billing_plan_missing:
     "Нет тарифа для поставщиков: подписку нельзя начать и продлить. Задайте тариф в «Биллинг → Тарифы»; сигнал закроется сам.",
+  assistant_budget_exhausted:
+    "Расход на ИИ за сутки дошёл до ai_daily_budget_usd: AI Pilot отвечает «недоступен», каталог и поиск работают. Поднимите бюджет в «Настройки → ИИ» или дождитесь следующих суток (по Алматы). Сигнал — не больше одного в сутки.",
   push_fallback_high:
     "Большая доля важных уведомлений пользователям уходит резервом в WhatsApp: приложение не подтверждает push. Проверьте провайдера push и последнюю версию приложения. Сигнал закроется сам, когда доля снизится.",
 };

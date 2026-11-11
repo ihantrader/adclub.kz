@@ -14,6 +14,8 @@ const KIND_OF_SCHEMA: Record<string, StatusKind | "not a badge"> = {
   supplierStateSchema: "supplier",
   reviewStatusSchema: "review",
   complaintStatusSchema: "complaint",
+  // A complaint about an answer of the assistant (TASK-062): new or resolved, as a complaint.
+  assistantComplaintStatusSchema: "complaint",
   adminSignalStatusSchema: "signal",
   vehicleImportStatusSchema: "vehicleImport",
   priceImportStatusSchema: "priceImport",

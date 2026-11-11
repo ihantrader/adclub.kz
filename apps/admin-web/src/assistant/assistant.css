@@ -1,0 +1,9 @@
+/* «Помощник» (TASK-062): the arguments and results of tools are long JSON — they wrap, the page never scrolls sideways. */
+.assistant-tool {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.assistant-tool code {
+  white-space: pre-wrap;
+}

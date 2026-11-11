@@ -3,6 +3,7 @@ import { monthName } from "@adclub/i18n";
 import { formatMoment } from "../format";
 import { ORDER_STATUS_TEXT } from "../orders/order-words";
 import { COMPLAINT_REASON_TEXT, HOLD_KIND_TEXT, REJECT_REASON_TEXT } from "../reviews/review-words";
+import { ASSISTANT_REASON_TEXT } from "../assistant/assistant-words";
 import {
   SUBSCRIPTION_BY_TEXT,
   SUBSCRIPTION_EVENT_TEXT,
@@ -13,6 +14,7 @@ import {
   catalogItemPath,
   catalogRequestPath,
   maintenancePlanPath,
+  assistantComplaintPath,
   complaintPath,
   orderPath,
   routePaths,
@@ -180,6 +182,9 @@ const ACTIONS: Record<string, string> = {
   "complaint.created": "Пользователь подал жалобу",
   "complaint.taken": "Жалоба взята в работу",
   "complaint.resolved": "Жалоба решена",
+  // TASK-062.
+  "assistant_complaint.created": "Пожаловались на ответ помощника",
+  "assistant_complaint.resolved": "Жалоба на помощника решена",
 };
 
 /** The actions the filter offers, in the order of the dictionary. */
@@ -239,6 +244,7 @@ const ENTITIES: Record<string, string> = {
   maintenance_plan_item: "Элемент регламента",
   review: "Отзыв",
   complaint: "Жалоба",
+  assistant_complaint: "Жалоба на помощника",
 };
 
 /** The kinds of objects the filter offers. */
@@ -514,6 +520,9 @@ export function entityLink(
     }
     case "complaint":
       return UUID.test(entityId) ? complaintPath(entityId) : null;
+    // TASK-062: a complaint about the assistant opens its card with the dialog.
+    case "assistant_complaint":
+      return UUID.test(entityId) ? assistantComplaintPath(entityId) : null;
     case "account":
       return UUID.test(entityId) ? userPath(entityId) : null;
     // TASK-040: a subscription opens «Клубный доступ» of its user, as a grant does.
@@ -788,6 +797,7 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
     text_rejected: "Текст отклонён",
   },
   complaint: { new: "Новая", in_progress: "В работе", resolved: "Решена" },
+  assistant_complaint: { new: "Новая", resolved: "Решена" },
   supplier_invitation: INVITATION_TEXT,
   catalog_item_photo: {
     proposed: "Предложено",
@@ -835,8 +845,9 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
     manual: "вручную",
     missing_in_import: "нет в прайсе",
     out_of_stock_in_import: "нет в наличии по прайсу",
-    // The reasons of a complaint (TASK-049).
+    // The reasons of a complaint (TASK-049) and of one about the assistant (TASK-062).
     ...COMPLAINT_REASON_TEXT,
+    ...ASSISTANT_REASON_TEXT,
   },
   rejectedReason: REJECT_REASON_TEXT,
   // The reasons a check gave, «source:kind» (TASK-049).

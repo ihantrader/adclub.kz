@@ -88,6 +88,15 @@ export function homeCards(home: AdminHome): HomeCard[] {
       href: withQuery(routePaths.complaints, { status: "new" }),
     },
     {
+      // TASK-062: complaints about answers of the assistant not resolved — the list's `total`.
+      key: "assistant",
+      icon: "alertTriangle",
+      title: "Жалобы на помощника",
+      value: home.assistantComplaintsNew,
+      note: "Пользователи пожаловались на ответ AI Pilot: посмотреть диалог и решить",
+      href: routePaths.assistantComplaints,
+    },
+    {
       // TASK-043: the companies of «Неуспешные» whose bank refused or that are paused —
       // the `total` of the list the card opens (the signal of each is there too).
       key: "payments",

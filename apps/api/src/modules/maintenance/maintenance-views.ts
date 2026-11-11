@@ -7,7 +7,7 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { describeTexts, loadTexts, textsOf } from "../catalog";
 import { account, adminUser } from "../identity";
-import { describeScopes, sameScopeWhere, scopeOf } from "./maintenance-scope";
+import { describeScopes, generatingNow, sameScopeWhere, scopeOf } from "./maintenance-scope";
 import { describeTargets, targetOf } from "./maintenance-targets";
 import {
   maintenancePlan,
@@ -73,7 +73,7 @@ export async function describePlans(
       name: row.name,
       source: row.source,
       status: row.status,
-      generating: row.generatingSince !== null,
+      generating: generatingNow(row),
       itemCount: own.length,
       proposedCount: own.filter((entry) => entry.status === "proposed").length,
       copiedFromId: row.copiedFromId,

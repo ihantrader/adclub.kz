@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { AdminMaintenancePlanResponse, DraftMaintenancePlanBody } from "@adclub/contracts";
+import {
+  MAINTENANCE_PLAN_ITEMS_MAX,
+  type AdminMaintenancePlanResponse,
+  type DraftMaintenancePlanBody,
+} from "@adclub/contracts";
 import { and, asc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import {
@@ -18,18 +22,22 @@ import {
   vehicleModelSpelling,
   vehicleOption,
 } from "../vehicles";
-import { aiUnavailable, draftInProgress } from "./maintenance-errors";
+import { aiUnavailable, draftInProgress, planState } from "./maintenance-errors";
 import { mapDraft, type DraftCatalogCategory } from "./maintenance-draft-mapping";
 import { MaintenancePlansService, type MaintenanceActor } from "./maintenance-plans.service";
-import { resolveScope, sameScopeWhere } from "./maintenance-scope";
+import { resolveScope, sameScopeWhere, STALE_GENERATION_MS } from "./maintenance-scope";
 import { planResponse } from "./maintenance-views";
 import { maintenancePlan, maintenancePlanItem } from "./schema";
 
 /** The mileage a draft covers (TASK-061 requirement 3). */
 export const MAINTENANCE_DRAFT_HORIZON_KM = 60_000;
 
-/** A draft «being generated» longer than this is a process that died: its row is dropped. */
-const STALE_GENERATION_MS = 3 * 60_000;
+/**
+ * The longest an administrator waits for a draft: both models together
+ * (TASK-061 requirement 3, TASK-061.A). A row «being generated» much longer
+ * than this is a process that died (`STALE_GENERATION_MS`).
+ */
+export const MAINTENANCE_DRAFT_DEADLINE_MS = 60_000;
 
 const GENERATING_KEY = "maintenance_plan_generating_scope_key";
 
@@ -124,6 +132,7 @@ export class MaintenanceDrafts {
           horizonKm: input.horizonKm,
         },
         ...(options.model === undefined ? {} : { model: options.model }),
+        deadlineMs: MAINTENANCE_DRAFT_DEADLINE_MS,
       });
     } catch (error) {
       await executor.delete(maintenancePlan).where(eq(maintenancePlan.id, planId));
@@ -137,9 +146,16 @@ export class MaintenanceDrafts {
     }
 
     const mapped = mapDraft(result.output, categories);
+    // A plan holds at most MAINTENANCE_PLAN_ITEMS_MAX elements: the rest of an over-long answer is dropped.
+    const elements = mapped.elements.slice(0, MAINTENANCE_PLAN_ITEMS_MAX);
+    const dropped = mapped.dropped + (mapped.elements.length - elements.length);
     const response = await executor.transaction(async (tx) => {
       const plan = await this.plans.lockPlan(tx, planId);
-      for (const element of mapped.elements) {
+      if (plan.generatingSince === null) {
+        // Archived as a dead draft meanwhile: it stays as the administrator left it.
+        throw planState("The draft was archived while AI was making it");
+      }
+      for (const element of elements) {
         await this.plans.insertElement(tx, plan, actor, element);
       }
       const [written] = await tx
@@ -151,14 +167,14 @@ export class MaintenanceDrafts {
       return planResponse(tx, written!);
     });
     this.logger.log(
-      `Maintenance draft made plan=${planId} elements=${String(mapped.elements.length)} unmapped=${String(mapped.unmapped)} dropped=${String(mapped.dropped)} model=${result.model}`,
+      `Maintenance draft made plan=${planId} elements=${String(elements.length)} unmapped=${String(mapped.unmapped)} dropped=${String(dropped)} model=${result.model}`,
     );
     return {
       response,
       aiJobId: result.jobId,
       model: result.model,
       usedFallback: result.usedFallback,
-      dropped: mapped.dropped,
+      dropped,
       unmapped: mapped.unmapped,
     };
   }

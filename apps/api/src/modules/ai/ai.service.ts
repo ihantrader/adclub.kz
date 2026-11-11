@@ -61,6 +61,14 @@ export interface AiCallMeta {
    * of the operation from the settings (D-056).
    */
   model?: string;
+  /**
+   * The longest the whole call may take, both models together (TASK-061.A:
+   * an administrator waits for a maintenance draft on the screen). Each
+   * attempt is cut at what is left of it as well as at the usual timeout; no
+   * time left — the fallback is not tried. Left out — only the per-attempt
+   * timeout.
+   */
+  deadlineMs?: number;
 }
 
 export interface AiCallResult<Output> {
@@ -214,8 +222,18 @@ export class AiService {
     let tried = 0;
     for (const [index, model] of models.entries()) {
       const isFallback = index > 0;
+      const left =
+        meta.deadlineMs === undefined ? Infinity : meta.deadlineMs - (Date.now() - startedAt);
+      if (left <= 0) {
+        // No time left for this model: the failure of the one before stands.
+        failure ??= new AiGatewayError(
+          "unavailable",
+          `The AI call took longer than ${String(meta.deadlineMs)} ms in all`,
+        );
+        break;
+      }
       tried = index;
-      const attempt = await this.attempt(operation, input, model);
+      const attempt = await this.attempt(operation, input, model, left);
       // An answer that came and was refused still cost money: its usage is
       // recorded either way, so the day's budget counts it (4.19 I175).
       result = attempt.result ?? result;
@@ -336,19 +354,18 @@ export class AiService {
     operation: AiOperation<Input, Output>,
     input: Input,
     model: string,
+    limitMs: number = Infinity,
   ): Promise<
     | { ok: true; output: Output; result: AiResult }
     | { ok: false; error: AiGatewayError; result: AiResult | undefined }
   > {
     const controller = new AbortController();
+    const timeoutMs = Math.min(this.options.timeoutMs, limitMs);
     const timer = setTimeout(() => {
       controller.abort(
-        new AiGatewayError(
-          "unavailable",
-          `The AI call took longer than ${this.options.timeoutMs} ms`,
-        ),
+        new AiGatewayError("unavailable", `The AI call took longer than ${timeoutMs} ms`),
       );
-    }, this.options.timeoutMs);
+    }, timeoutMs);
     try {
       let result: AiResult;
       try {

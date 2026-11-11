@@ -175,6 +175,19 @@ export async function assertTarget(
   }
 }
 
+/**
+ * Whether the rule of each element leads to the catalog as it is now — its
+ * problems, empty when it does (TASK-061.A; ARCHITECTURE 4.84 I947). The one
+ * rule for the administrator (the card, «Проверить», activation) and the
+ * client (`GET /maintenance/plan`: an element with a problem sells nothing).
+ */
+export async function targetProblems(
+  executor: DbExecutor,
+  rows: readonly MaintenancePlanItemRow[],
+): Promise<MaintenanceItemProblem[][]> {
+  return (await describeTargets(executor, rows)).map((target) => target.problems);
+}
+
 export interface DescribedTarget {
   label: string | null;
   problems: MaintenanceItemProblem[];

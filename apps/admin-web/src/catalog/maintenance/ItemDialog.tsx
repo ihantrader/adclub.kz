@@ -13,9 +13,10 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../../api";
 import { useLoad } from "../../use-load";
 import { whoChanged } from "../shared";
-import { AttributeConditions } from "./AttributeConditions";
+import { AttributeConditions, usableAttributes } from "./AttributeConditions";
 import {
   codesOf,
+  currentConditions,
   isMaintenanceConflict,
   maintenanceErrorText,
   numberOf,
@@ -94,8 +95,14 @@ export function ItemDialog({
   const [fixTranslation, setFixTranslation] = useState(false);
   const [error, setError] = useState<{ text: string; conflict: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // The conditions dropped on opening because the catalog no longer has them (TASK-061.A).
+  const [cleaned, setCleaned] = useState<{ itemId: string | null; removed: string[] }>({
+    itemId: null,
+    removed: [],
+  });
   if (editing !== shown) {
     setShown(editing);
+    setCleaned({ itemId: null, removed: [] });
     setDraft(draftOf(editing === "new" ? null : editing));
     setFixTranslation(false);
     setError(null);
@@ -118,7 +125,11 @@ export function ItemDialog({
           label: `${node.names.ru?.text ?? node.code} · ${child.names.ru?.text ?? child.code}${child.status === "active" ? "" : " (скрыта)"}`,
         })),
     );
-  const [attributes, setAttributes] = useState<{ categoryId: string; list: AdminAttribute[] }>({
+  const [attributes, setAttributes] = useState<{
+    categoryId: string;
+    list: AdminAttribute[];
+    failed?: boolean;
+  }>({
     categoryId: "",
     list: [],
   });
@@ -128,12 +139,35 @@ export function ItemDialog({
     apiClient.listAdminAttributes({ categoryId: draft.categoryId }).then(
       (answer) =>
         !cancelled && setAttributes({ categoryId: draft.categoryId, list: answer.attributes }),
-      () => !cancelled && setAttributes({ categoryId: draft.categoryId, list: [] }),
+      () => !cancelled && setAttributes({ categoryId: draft.categoryId, list: [], failed: true }),
     );
     return () => {
       cancelled = true;
     };
   }, [draft.categoryId, attributes.categoryId]);
+
+  if (
+    item?.target?.kind === "category" &&
+    cleaned.itemId !== item.id &&
+    draft.categoryId === item.target.categoryId &&
+    attributes.categoryId === draft.categoryId &&
+    !attributes.failed
+  ) {
+    const usable = new Set(usableAttributes(attributes.list).map((entry) => entry.id));
+    const result = currentConditions(
+      draft.attributes,
+      attributes.list.map((entry) => ({
+        id: entry.id,
+        name: entry.names.ru?.text ?? entry.code,
+        usable: usable.has(entry.id),
+        activeOptionIds: entry.options
+          .filter((option) => option.status === "active")
+          .map((option) => option.id),
+      })),
+    );
+    setCleaned({ itemId: item.id, removed: result.removed });
+    if (result.removed.length > 0) set({ attributes: result.kept });
+  }
 
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<AdminCatalogItemListEntry[]>([]);
@@ -388,6 +422,18 @@ export function ItemDialog({
               options={subcategories}
               onChange={(categoryId) => set({ categoryId, attributes: [] })}
             />
+            {cleaned.removed.length > 0 && (
+              <Banner tone="warning">
+                <div className="cell-stack">
+                  {cleaned.removed.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                  <span className="ac-text-caption">
+                    Сохраните элемент, чтобы правило стало таким
+                  </span>
+                </div>
+              </Banner>
+            )}
             {draft.categoryId && attributes.categoryId === draft.categoryId && (
               <AttributeConditions
                 attributes={attributes.list}

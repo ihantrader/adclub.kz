@@ -4,6 +4,7 @@ import { MaintenanceAnswers } from "./maintenance-answers.service";
 import { MaintenanceController } from "./maintenance.controller";
 import { MaintenanceDrafts } from "./maintenance-draft.service";
 import { MaintenancePlansService } from "./maintenance-plans.service";
+import { MaintenanceVehicleMoves } from "./maintenance-vehicle-moves";
 
 export interface MaintenanceModuleOptions {
   /** Serve the client and admin routes (the API process only). */
@@ -15,6 +16,8 @@ export interface MaintenanceModuleOptions {
    */
   catalog: DynamicModule;
   showcase: DynamicModule;
+  /** The vehicle catalog a plan follows when a model or a generation is moved (TASK-061.A). */
+  vehicles: DynamicModule;
 }
 
 /**
@@ -28,13 +31,14 @@ export class MaintenanceModule {
   static forRoot(options: MaintenanceModuleOptions): DynamicModule {
     return {
       module: MaintenanceModule,
-      imports: [options.catalog, options.showcase],
+      imports: [options.catalog, options.showcase, options.vehicles],
       controllers: options.http ? [MaintenanceController] : [],
       providers: [
         MaintenancePlansService,
         MaintenanceDrafts,
         MaintenanceAnswers,
         DevMaintenanceSeed,
+        MaintenanceVehicleMoves,
       ],
       exports: [MaintenancePlansService, MaintenanceDrafts, MaintenanceAnswers, DevMaintenanceSeed],
     };

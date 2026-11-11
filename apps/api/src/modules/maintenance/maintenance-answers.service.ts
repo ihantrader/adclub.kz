@@ -13,8 +13,8 @@ import type {
   ShowcaseListQuery,
 } from "@adclub/contracts";
 import {
-  ageMonthsFromYear,
   dueMaintenance,
+  maintenanceAgeMonths,
   maintenancePlanFor,
   maintenanceScopeMatches,
   type MaintenanceElement,
@@ -26,7 +26,7 @@ import { catalogItem, loadTexts, localize, textsOf } from "../catalog";
 import { resolveVehicle } from "../compatibility";
 import { ShowcaseService, type Viewer } from "../showcase";
 import { planCandidatesWhere, scopeOf } from "./maintenance-scope";
-import { describeTargets } from "./maintenance-targets";
+import { targetProblems } from "./maintenance-targets";
 import { maintenancePlan, maintenancePlanItem, type MaintenancePlanItemRow } from "./schema";
 
 /** The time zone the age of a car is counted in (ARCHITECTURE 13.3). */
@@ -91,6 +91,7 @@ function listVehicleQuery(car: ResolvedCompatibilityVehicle): Partial<ShowcaseLi
 }
 
 const NO_CATALOG = (row: MaintenancePlanItemRow): MaintenanceCatalog => ({
+  unavailable: false,
   count: 0,
   minPrice: null,
   currency: "KZT",
@@ -99,6 +100,22 @@ const NO_CATALOG = (row: MaintenancePlanItemRow): MaintenanceCatalog => ({
   filters: row.targetAttributes,
   itemIds: row.targetItemIds,
 });
+
+/**
+ * A rule that leads nowhere now: nothing is sold by it and nothing is
+ * opened — not the subcategory without the condition that is gone (the
+ * client list skips a filter it no longer knows, which would widen it).
+ */
+const UNAVAILABLE: MaintenanceCatalog = {
+  unavailable: true,
+  count: 0,
+  minPrice: null,
+  currency: "KZT",
+  cityRequired: false,
+  categoryId: null,
+  filters: [],
+  itemIds: [],
+};
 
 /**
  * «Что положено автомобилю» (TASK-061 requirement 3; ARCHITECTURE 4.84):
@@ -124,6 +141,8 @@ export class MaintenanceAnswers {
     lang: CatalogLanguage,
   ): Promise<MaintenancePlanAnswer> {
     const executor = this.database.db;
+    // The city is checked first: an inactive one is a 400 whatever the plan has (TASK-061.A).
+    await this.showcase.chosenCity(executor, query.cityId, lang);
     const given = vehicleOfQuery(query);
     const empty: Pick<
       MaintenancePlanAnswer,
@@ -197,6 +216,7 @@ export class MaintenanceAnswers {
       .from(maintenancePlan)
       .where(eq(maintenancePlan.id, planId));
     if (!plan) throw new ApiException(404, "NOT_FOUND", "No such maintenance plan");
+    await this.showcase.chosenCity(executor, body.cityId, "ru");
     const car = await resolveVehicle(executor, body.vehicle);
     const scope = maintenanceScopeMatches(scopeOf(plan), car);
     const rows = await executor
@@ -213,11 +233,11 @@ export class MaintenanceAnswers {
     const due = this.due(rows, car, query);
     const viewer = await this.showcase.viewer(null);
     const items = await this.dueItems(executor, due.items, car, body.cityId, viewer, "ru");
-    const targets = await describeTargets(
-      executor,
-      items.map(({ row }) => row),
+    const totals = await Promise.all(
+      items.map(({ row, problems }) =>
+        problems.length > 0 ? 0 : this.catalogTotal(executor, row),
+      ),
     );
-    const totals = await Promise.all(items.map(({ row }) => this.catalogTotal(executor, row)));
     return {
       scope: {
         result: scope.result,
@@ -229,7 +249,7 @@ export class MaintenanceAnswers {
         ...item,
         status: row.status,
         catalogTotal: totals[index]!,
-        problems: targets[index]!.problems,
+        problems: items[index]!.problems,
       })),
       serviceKm: due.serviceKm,
       nextServiceKm: due.nextServiceKm,
@@ -241,12 +261,12 @@ export class MaintenanceAnswers {
     car: ResolvedCompatibilityVehicle,
     query: { mileageKm?: number; serviceCode?: string },
   ) {
-    const year = car.year ?? car.yearFrom;
+    // A lower bound of the age: the year, or the youngest car of the generation (4.84 I949).
+    const ageMonths = maintenanceAgeMonths(car, almatyMonth(new Date()));
     return dueMaintenance(rows.map(elementOf), {
       ...(query.mileageKm === undefined ? {} : { mileageKm: query.mileageKm }),
       ...(query.serviceCode === undefined ? {} : { serviceCode: query.serviceCode }),
-      // The year gives a lower bound of the age (a range of years — its first).
-      ...(year === null ? {} : { ageMonths: ageMonthsFromYear(year, almatyMonth(new Date())) }),
+      ...(ageMonths === null ? {} : { ageMonths }),
     });
   }
 
@@ -257,20 +277,31 @@ export class MaintenanceAnswers {
     cityId: string | undefined,
     viewer: Viewer,
     lang: CatalogLanguage,
-  ): Promise<{ item: MaintenanceDueItem; row: MaintenancePlanItemRow }[]> {
+  ): Promise<
+    { item: MaintenanceDueItem; row: MaintenancePlanItemRow; problems: MaintenanceItemProblem[] }[]
+  > {
     const rows = due.map((entry) => entry.element.row);
-    const titles = await loadTexts(
-      executor,
-      "maintenance_plan_item",
-      rows.map((row) => row.id),
-    );
+    const [titles, problems] = await Promise.all([
+      loadTexts(
+        executor,
+        "maintenance_plan_item",
+        rows.map((row) => row.id),
+      ),
+      // The one rule of «leads to the catalog now» — the administrator's problems (4.84 I947).
+      targetProblems(executor, rows),
+    ]);
     const catalogs = await Promise.all(
-      rows.map((row) => this.sold(executor, row, car, cityId, viewer, lang)),
+      rows.map((row, index) =>
+        problems[index]!.length > 0
+          ? UNAVAILABLE
+          : this.sold(executor, row, car, cityId, viewer, lang),
+      ),
     );
     return due.map((entry, index) => {
       const row = entry.element.row;
       return {
         row,
+        problems: problems[index]!,
         item: {
           id: row.id,
           title: localize(textsOf(titles, row.id, "name"), lang) ?? { text: "", isFallback: true },

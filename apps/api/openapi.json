@@ -37942,6 +37942,9 @@
       "MaintenanceCatalog": {
         "type": "object",
         "properties": {
+          "unavailable": {
+            "type": "boolean"
+          },
           "count": {
             "anyOf": [
               {
@@ -38001,6 +38004,7 @@
           }
         },
         "required": [
+          "unavailable",
           "count",
           "minPrice",
           "currency",
@@ -38670,6 +38674,21 @@
           "ai_draft",
           "manual",
           "official"
+        ]
+      },
+      "MaintenancePlanStateDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "last_active_element",
+              "items_limit"
+            ]
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "MaintenancePlanStatus": {

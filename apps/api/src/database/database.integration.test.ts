@@ -120,6 +120,66 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("moves maintenance plans with a moved model or generation, and rolls back (TASK-061.A)", async () => {
+    const insertId = async (text: string, values: unknown[] = []) =>
+      (await client.query<{ id: string }>(text, values)).rows[0]!.id;
+    const makeA = await insertId("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id");
+    const makeB = await insertId("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id");
+    const model = await insertId("INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id", [
+      makeA,
+    ]);
+    const otherModel = await insertId(
+      "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+      [makeB],
+    );
+    const generation = await insertId(
+      "INSERT INTO vehicle_generation (model_id, name, name_key, year_from) VALUES ($1, 'I', 'i', 2016) RETURNING id",
+      [model],
+    );
+    const plan = await insertId(
+      "INSERT INTO maintenance_plan (make_id, model_id, generation_id, name, source) VALUES ($1, $2, $3, 'p', 'manual') RETURNING id",
+      [makeA, model, generation],
+    );
+    const levels = async () =>
+      (
+        await client.query<{ make_id: string; model_id: string; version: number }>(
+          "SELECT make_id, model_id, version FROM maintenance_plan WHERE id = $1",
+          [plan],
+        )
+      ).rows[0]!;
+    // The model goes to another make: the plan follows (the keys agree at the end).
+    await client.query("UPDATE vehicle_model SET make_id = $1 WHERE id = $2", [makeB, model]);
+    expect(await levels()).toMatchObject({ make_id: makeB, model_id: model, version: 2 });
+    // The generation goes to a model of the first make: model and make follow.
+    await client.query("UPDATE vehicle_model SET make_id = $1 WHERE id = $2", [makeA, otherModel]);
+    await client.query("UPDATE vehicle_generation SET model_id = $1 WHERE id = $2", [
+      otherModel,
+      generation,
+    ]);
+    expect(await levels()).toMatchObject({ make_id: makeA, model_id: otherModel, version: 3 });
+    // A plan whose levels disagree is still refused, at the end of its statement.
+    await expect(
+      client.query(
+        "INSERT INTO maintenance_plan (make_id, model_id, name, source) VALUES ($1, $2, 'q', 'manual')",
+        [makeB, otherModel],
+      ),
+    ).rejects.toThrow(/maintenance_plan_model_fkey/);
+    await client.query("DELETE FROM maintenance_plan");
+    await client.query("DELETE FROM vehicle_generation");
+    await client.query("DELETE FROM vehicle_model");
+    await client.query("DELETE FROM vehicle_make");
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    const deferrable = await client.query<{ condeferrable: boolean }>(
+      "SELECT condeferrable FROM pg_constraint WHERE conname = 'maintenance_plan_model_fkey'",
+    );
+    expect(deferrable.rows[0]?.condeferrable).toBe(false);
+    const triggers = await client.query(
+      "SELECT 1 FROM pg_trigger WHERE tgname LIKE 'maintenance_plan_follow_%'",
+    );
+    expect(triggers.rowCount).toBe(0);
+  });
+
   it("holds maintenance plans with their rules in the base, and rolls back (TASK-061)", async () => {
     const make = await client.query<{ id: string }>(
       "INSERT INTO vehicle_make DEFAULT VALUES RETURNING id",

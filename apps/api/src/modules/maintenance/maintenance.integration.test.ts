@@ -1020,6 +1020,332 @@ describe("maintenance plans (PostgreSQL + Redis)", () => {
     expect(other.scope.result).toBe("does_not_fit");
   });
 
+  it("a plan follows a moved model or generation, active, draft or archived, with its journal (TASK-061.A)", async () => {
+    const w = await world();
+    const coolrayGeneration = await idOf(
+      "SELECT id FROM vehicle_generation WHERE model_id = $1 ORDER BY year_from LIMIT 1",
+      [w.coolray],
+    );
+    const active = await activate(
+      await addItem(
+        (await createPlan(scope({ makeId: w.geely, modelId: w.coolray }))).plan.id,
+        oilElement(w),
+      ),
+    );
+    const draft = await createPlan(
+      scope({ makeId: w.geely, modelId: w.coolray, engineId: w.engine }),
+    );
+    const toArchive = await createPlan(
+      scope({ makeId: w.geely, modelId: w.coolray, generationId: coolrayGeneration }),
+    );
+    const archived = await ok(
+      asAdmin("post", `/admin/maintenance/plans/${toArchive.plan.id}/status`, {
+        expectedVersion: toArchive.plan.version,
+        status: "archived",
+      }),
+      plan,
+    );
+    const versionOf = async (table: string, id: string) =>
+      Number(
+        (await db.query<{ version: number }>(`SELECT version FROM ${table} WHERE id = $1`, [id]))
+          .rows[0]!.version,
+      );
+
+    // The model was made under the wrong make: «Автомобили» moves it — no 500.
+    const moved = await asAdmin("patch", `/admin/vehicles/models/${w.coolray}`, {
+      expectedVersion: await versionOf("vehicle_model", w.coolray),
+      makeId: w.chery,
+    });
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    const levels = async (id: string) =>
+      (
+        await db.query<{ make_id: string; model_id: string; version: number }>(
+          "SELECT make_id, model_id, version FROM maintenance_plan WHERE id = $1",
+          [id],
+        )
+      ).rows[0]!;
+    for (const [before, status] of [
+      [active, "active"],
+      [draft, "draft"],
+      [archived, "archived"],
+    ] as const) {
+      const row = await levels(before.plan.id);
+      expect(row, status).toMatchObject({ make_id: w.chery, model_id: w.coolray });
+      expect(row.version, status).toBe(before.plan.version + 1);
+    }
+    // The car of the new make gets the active plan.
+    const answer = maintenancePlanAnswerSchema.parse(
+      (
+        await http()
+          .get(
+            `/maintenance/plan?vehicleMakeId=${w.chery}&vehicleModelId=${w.coolray}&mileageKm=10000`,
+          )
+          .set("X-Client", IOS)
+      ).body,
+    );
+    expect(answer.plan?.id).toBe(active.plan.id);
+    const journal = auditLogPageSchema.parse(
+      (
+        await asAdmin(
+          "get",
+          `/admin/audit-log?entityType=maintenance_plan&action=maintenance_plan.changed`,
+        )
+      ).body,
+    );
+    expect(journal.entries).toHaveLength(3);
+    expect(journal.entries.find((entry) => entry.entityId === active.plan.id)).toMatchObject({
+      before: { scope: { makeId: w.geely, modelId: w.coolray } },
+      after: { scope: { makeId: w.chery, modelId: w.coolray }, followed: "vehicle_model" },
+    });
+
+    // The generation goes to a model of another make: model and make of the plan follow.
+    const back = await asAdmin("patch", `/admin/vehicles/generations/${coolrayGeneration}`, {
+      expectedVersion: await versionOf("vehicle_generation", coolrayGeneration),
+      modelId: w.atlas,
+    });
+    expect(back.status, JSON.stringify(back.body)).toBe(200);
+    expect(await levels(archived.plan.id)).toMatchObject({ make_id: w.geely, model_id: w.atlas });
+    expect(await levels(active.plan.id)).toMatchObject({ make_id: w.chery, model_id: w.coolray });
+    // An engine has no parent to move; archiving a level changes no ids.
+    const modelArchived = await db.query(
+      "UPDATE vehicle_model SET status = 'archived', archived_at = now() WHERE id = $1",
+      [w.coolray],
+    );
+    expect(modelArchived.rowCount).toBe(1);
+    expect(await levels(active.plan.id)).toMatchObject({ make_id: w.chery, model_id: w.coolray });
+  });
+
+  it("a rule that no longer leads to the catalog sells nothing, and its element stays editable (TASK-061.A)", async () => {
+    const w = await world();
+    const { cityId } = await sell(w);
+    const general = await activate(
+      await addItem((await createPlan(scope({ makeId: w.geely }), "Geely")).plan.id, oilElement(w)),
+    );
+    const car = `vehicleMakeId=${w.geely}&vehicleModelId=${w.coolray}&vehicleEngineId=${w.engine}&vehicleYear=2024`;
+    const oil = async () =>
+      maintenancePlanAnswerSchema
+        .parse(
+          (
+            await http()
+              .get(`/maintenance/plan?${car}&mileageKm=10000&cityId=${cityId}`)
+              .set("X-Client", IOS)
+          ).body,
+        )
+        .items.find((item) => item.kind === "part")!;
+    const checked = async () =>
+      (
+        await ok(
+          asAdmin("post", `/admin/maintenance/plans/${general.plan.id}/check`, {
+            vehicle: { makeId: w.geely, modelId: w.coolray, engineId: w.engine, year: 2024 },
+            mileageKm: 10_000,
+            cityId,
+          }),
+          (body) => maintenancePlanCheckResponseSchema.parse(body),
+        )
+      ).items.find((item) => item.kind === "part")!;
+    expect((await oil()).catalog).toMatchObject({ unavailable: false, count: 1 });
+
+    const unavailable = {
+      unavailable: true,
+      count: 0,
+      minPrice: null,
+      categoryId: null,
+      filters: [],
+      itemIds: [],
+    };
+    // «Вязкость» no longer in the filters: the list would skip the condition — the answer doesn't widen.
+    await db.query("UPDATE attribute SET is_filterable = false WHERE id = $1", [w.viscosity]);
+    expect((await oil()).catalog).toMatchObject(unavailable);
+    expect(await checked()).toMatchObject({
+      problems: ["attribute_unavailable"],
+      catalogTotal: 0,
+      catalog: unavailable,
+    });
+    // Archived — the same.
+    await db.query(
+      "UPDATE attribute SET is_filterable = true, status = 'archived', archived_at = now() WHERE id = $1",
+      [w.viscosity],
+    );
+    expect((await oil()).catalog).toMatchObject(unavailable);
+    const card = await ok(asAdmin("get", `/admin/maintenance/plans/${general.plan.id}`), plan);
+    const element = card.items.find((item) => item.kind === "part")!;
+    expect(element.problems).toEqual(["attribute_unavailable"]);
+
+    // The element keeps every other field editable: the stale rule is sent back as it is.
+    const edited = await ok(
+      asAdmin("patch", `/admin/maintenance/items/${element.id}`, {
+        expectedVersion: element.version,
+        intervalKm: 15_000,
+        target: element.target,
+      }),
+      plan,
+    );
+    const after = edited.items.find((item) => item.id === element.id)!;
+    expect(after.intervalKm).toBe(15_000);
+    // A new rule is checked: the archived characteristic is refused.
+    expectError(
+      await asAdmin("patch", `/admin/maintenance/items/${element.id}`, {
+        expectedVersion: after.version,
+        target: {
+          kind: "category",
+          categoryId: w.oils,
+          attributes: [{ attributeId: w.viscosity, optionIds: [w.v5w30] }],
+        },
+      }),
+      400,
+      "MAINTENANCE_TARGET_INVALID",
+    );
+    // The condition dropped (what the dialog does): the rule is valid again and sells.
+    const cleaned = await ok(
+      asAdmin("patch", `/admin/maintenance/items/${element.id}`, {
+        expectedVersion: after.version,
+        target: {
+          kind: "category",
+          categoryId: w.oils,
+          attributes: [{ attributeId: w.approval, optionIds: [w.apiSp] }],
+        },
+      }),
+      plan,
+    );
+    expect(cleaned.items.find((item) => item.id === element.id)!.problems).toEqual([]);
+    expect((await oil()).catalog.unavailable).toBe(false);
+
+    // An archived variant of the rule.
+    await db.query(
+      "UPDATE attribute_option SET status = 'archived', archived_at = now() WHERE id = $1",
+      [w.apiSp],
+    );
+    expect((await oil()).catalog).toMatchObject(unavailable);
+    await db.query(
+      "UPDATE attribute_option SET status = 'active', archived_at = NULL WHERE id = $1",
+      [w.apiSp],
+    );
+    // A hidden subcategory: the interval still changes.
+    await db.query("UPDATE category SET status = 'hidden' WHERE id = $1", [w.oils]);
+    expect((await oil()).catalog).toMatchObject(unavailable);
+    const hidden = (
+      await ok(asAdmin("get", `/admin/maintenance/plans/${general.plan.id}`), plan)
+    ).items.find((item) => item.id === element.id)!;
+    expect(hidden.problems).toContain("category_unavailable");
+    const intervalChanged = await asAdmin("patch", `/admin/maintenance/items/${element.id}`, {
+      expectedVersion: hidden.version,
+      intervalKm: 12_000,
+      target: hidden.target,
+    });
+    expect(intervalChanged.status, JSON.stringify(intervalChanged.body)).toBe(200);
+  });
+
+  it("the last element of an active plan stays, a plan holds 100 elements, the city is checked first (TASK-061.A)", async () => {
+    const w = await world();
+    const created = await createPlan(scope({ makeId: w.geely }));
+    const active = await activate(await addItem(created.plan.id, oilElement(w)));
+    const only = active.items[0]!;
+    const refused = await asAdmin("post", `/admin/maintenance/items/${only.id}/status`, {
+      expectedVersion: only.version,
+      status: "archived",
+    });
+    expectError(refused, 409, "MAINTENANCE_PLAN_STATE");
+    expect(refused.body.details).toEqual({ reason: "last_active_element" });
+    // With another one — it goes.
+    const two = await addItem(created.plan.id, { ...oilElement(w), title: { ru: "Масло 2" } });
+    await ok(
+      asAdmin("post", `/admin/maintenance/items/${only.id}/status`, {
+        expectedVersion: two.items.find((item) => item.id === only.id)!.version,
+        status: "archived",
+      }),
+      plan,
+    );
+    // A draft may be emptied as before.
+    const other = await createPlan(scope({ makeId: w.chery }));
+    const draftItem = (await addItem(other.plan.id, oilElement(w))).items[0]!;
+    await ok(
+      asAdmin("post", `/admin/maintenance/items/${draftItem.id}/status`, {
+        expectedVersion: draftItem.version,
+        status: "archived",
+      }),
+      plan,
+    );
+
+    // 100 elements: the 101st is refused (and so is restoring an archived one over it).
+    const values = Array.from(
+      { length: 99 },
+      (_, index) => `($1, ${String(index + 1)}, 'part', 10000, 'proposed')`,
+    );
+    await db.query(
+      `INSERT INTO maintenance_plan_item (plan_id, position, kind, interval_km, status) VALUES ${values.join(", ")}`,
+      [other.plan.id],
+    );
+    await addItem(other.plan.id, oilElement(w));
+    const full = await asAdmin(
+      "post",
+      `/admin/maintenance/plans/${other.plan.id}/items`,
+      oilElement(w),
+    );
+    expectError(full, 409, "MAINTENANCE_PLAN_STATE");
+    expect(full.body.details).toEqual({ reason: "items_limit" });
+    const restore = await asAdmin("post", `/admin/maintenance/items/${draftItem.id}/status`, {
+      expectedVersion: draftItem.version + 1,
+      status: "active",
+    });
+    expectError(restore, 409, "MAINTENANCE_PLAN_STATE");
+
+    // An inactive city is a 400 whatever the plan has, even with nothing due.
+    const city = await idOf(
+      "INSERT INTO city (code, name_ru, name_kk, name_en, status, archived_at) VALUES ('gone-061a', 'Г', 'Г', 'G', 'archived', now()) RETURNING id",
+    );
+    for (const path of [
+      `/maintenance/plan?vehicleMakeId=${w.chery}&cityId=${city}`,
+      `/maintenance/plan?vehicleMakeId=${w.geely}&cityId=${city}`,
+    ]) {
+      expectError(await http().get(path).set("X-Client", IOS), 400, "VALIDATION_ERROR");
+    }
+  });
+
+  it("a draft AI never finished is not listed nor counted, and is archived like any draft (TASK-061.A)", async () => {
+    const w = await world();
+    const stale = await idOf(
+      `INSERT INTO maintenance_plan (make_id, name, source, status, generating_since)
+       VALUES ($1, 'stale', 'ai_draft', 'draft', now() - interval '10 minutes') RETURNING id`,
+      [w.geely],
+    );
+    const fresh = await idOf(
+      `INSERT INTO maintenance_plan (make_id, name, source, status, generating_since)
+       VALUES ($1, 'fresh', 'ai_draft', 'draft', now()) RETURNING id`,
+      [w.chery],
+    );
+    const page = await ok(
+      asAdmin("get", "/admin/maintenance/plans?status=draft&source=ai_draft"),
+      (body) => adminMaintenancePlanPageSchema.parse(body),
+    );
+    expect(page.plans.map((entry) => entry.id)).toEqual([fresh]);
+    expect(page.total).toBe(1);
+    expect(page.plans[0]!.generating).toBe(true);
+    // Opened by its link it is a plain draft: archived like any.
+    const card = await ok(asAdmin("get", `/admin/maintenance/plans/${stale}`), plan);
+    expect(card.plan.generating).toBe(false);
+    await ok(
+      asAdmin("post", `/admin/maintenance/plans/${stale}/status`, {
+        expectedVersion: card.plan.version,
+        status: "archived",
+      }),
+      plan,
+    );
+    expect(
+      (await db.query("SELECT generating_since FROM maintenance_plan WHERE id = $1", [stale]))
+        .rows[0],
+    ).toEqual({ generating_since: null });
+    // The one being made right now is still not editable.
+    const making = await ok(asAdmin("get", `/admin/maintenance/plans/${fresh}`), plan);
+    expectError(
+      await asAdmin("post", `/admin/maintenance/plans/${fresh}/status`, {
+        expectedVersion: making.plan.version,
+        status: "archived",
+      }),
+      409,
+      "MAINTENANCE_PLAN_STATE",
+    );
+  });
+
   it("opens the admin routes to administrators only, the answer to guests and users", async () => {
     const w = await world();
     const created = await createPlan(scope({ makeId: w.geely }));

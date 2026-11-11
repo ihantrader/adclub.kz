@@ -1,4 +1,8 @@
-import type { MaintenanceNotReadyDetails } from "@adclub/contracts";
+import {
+  MAINTENANCE_PLAN_ITEMS_MAX,
+  type MaintenanceNotReadyDetails,
+  type MaintenancePlanStateDetails,
+} from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
 
 /** Contract errors of maintenance plans (ARCHITECTURE 4.84). */
@@ -40,6 +44,26 @@ export function notReady(details: MaintenanceNotReadyDetails): ApiException {
 
 export function planState(message: string): ApiException {
   return new ApiException(409, "MAINTENANCE_PLAN_STATE", message);
+}
+
+/** The last active element of an active plan stays: clients would get an empty plan (TASK-061.A). */
+export function lastElement(): ApiException {
+  return new ApiException(
+    409,
+    "MAINTENANCE_PLAN_STATE",
+    "The last element of an active plan is not removed; archive the plan instead",
+    { details: { reason: "last_active_element" } satisfies MaintenancePlanStateDetails },
+  );
+}
+
+/** A plan holds at most `MAINTENANCE_PLAN_ITEMS_MAX` elements that are not archived. */
+export function itemsLimit(): ApiException {
+  return new ApiException(
+    409,
+    "MAINTENANCE_PLAN_STATE",
+    `A plan holds at most ${String(MAINTENANCE_PLAN_ITEMS_MAX)} elements`,
+    { details: { reason: "items_limit" } satisfies MaintenancePlanStateDetails },
+  );
 }
 
 export function draftInProgress(): ApiException {

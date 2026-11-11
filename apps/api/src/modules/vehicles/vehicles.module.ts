@@ -13,6 +13,7 @@ import { VehicleImportService } from "./import/vehicle-import.service";
 import { VehicleAdminController } from "./vehicle-admin.controller";
 import { VehicleHierarchyService } from "./vehicle-hierarchy.service";
 import { VehicleModificationsService } from "./vehicle-modifications.service";
+import { VehicleMoves } from "./vehicle-moves";
 import { VehicleOptionsService } from "./vehicle-options.service";
 import { VehicleReadService } from "./vehicle-read.service";
 import { VehiclesController } from "./vehicles.controller";
@@ -39,6 +40,7 @@ export class VehiclesModule {
       providers: [
         VehicleOptionsService,
         VehicleHierarchyService,
+        VehicleMoves,
         VehicleModificationsService,
         VehicleReadService,
         VehicleImportService,
@@ -48,6 +50,7 @@ export class VehiclesModule {
       exports: [
         VehicleOptionsService,
         VehicleHierarchyService,
+        VehicleMoves,
         VehicleModificationsService,
         VehicleReadService,
         VehicleImportService,

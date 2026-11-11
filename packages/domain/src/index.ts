@@ -414,6 +414,7 @@ export { purchaseLinkVerdict } from "./subscription/purchase-link";
 export type { PurchaseLinkFacts, PurchaseLinkVerdict } from "./subscription/purchase-link";
 export {
   ageMonthsFromYear,
+  maintenanceAgeMonths,
   dueMaintenance,
   MAINTENANCE_KM_MAX,
   MAINTENANCE_KM_MIN,

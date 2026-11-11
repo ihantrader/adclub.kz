@@ -23,6 +23,21 @@ describe("referencesOf", () => {
     ]);
   });
 
+  it("names the items of an element's rule as catalog items, not elements (TASK-061.A)", () => {
+    expect(
+      referencesOf({
+        entityType: "maintenance_plan_item",
+        entityId: PLAN,
+        before: { target: { kind: "items", itemIds: [ITEM_A] } },
+        after: { target: { kind: "items", itemIds: [ITEM_B] }, planId: PLAN },
+      }),
+    ).toEqual([
+      ["catalog_item", ITEM_A],
+      ["catalog_item", ITEM_B],
+      ["maintenance_plan", PLAN],
+    ]);
+  });
+
   it("goes no deeper than one level and ignores what is not an id", () => {
     expect(
       referencesOf({

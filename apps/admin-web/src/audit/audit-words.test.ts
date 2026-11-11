@@ -70,6 +70,14 @@ describe("the words of the journal", () => {
       "Предложено ИИ",
     );
     expect(valueText("active", "status", { entityType: "maintenance_plan" })).toBe("Действует");
+    // TASK-061.A: the plan followed a moved model.
+    expect(changeLines({}, { followed: "vehicle_model" })).toEqual([
+      {
+        field: "Справочник автомобилей",
+        before: "—",
+        after: "модель перенесена к другой марке",
+      },
+    ]);
   });
 
   it("says reviews and complaints in words (TASK-049)", () => {

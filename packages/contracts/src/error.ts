@@ -312,7 +312,11 @@ import { clientPlatformSchema } from "./client";
  *   no elements, or elements proposed or leading nowhere; `details` is
  *   `MaintenanceNotReadyDetails`.
  * - `MAINTENANCE_PLAN_STATE` (409): not in this status — an active plan's
- *   area doesn't change, an archived plan's elements don't change.
+ *   area doesn't change, an archived plan's elements don't change; with
+ *   `details.reason` (`MaintenancePlanStateDetails`, TASK-061.A):
+ *   `last_active_element` — the last element of an active plan is not
+ *   removed (archive the plan), `items_limit` — the plan has
+ *   `MAINTENANCE_PLAN_ITEMS_MAX` elements already.
  * - `MAINTENANCE_DRAFT_IN_PROGRESS` (409): AI is already making a draft of
  *   this area.
  * - `MAINTENANCE_TARGET_INVALID` (400): the rule names what the catalog

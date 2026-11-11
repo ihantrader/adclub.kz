@@ -80,7 +80,7 @@ export class AppModule implements NestModule {
     // One client catalog: maintenance plans count what is sold by it (TASK-061).
     const showcase = ShowcaseModule.forRoot({ http: true, catalog, compatibility, clubAccess });
     // One maintenance module: the home screen counts its AI drafts (TASK-061).
-    const maintenance = MaintenanceModule.forRoot({ http: true, catalog, showcase });
+    const maintenance = MaintenanceModule.forRoot({ http: true, catalog, showcase, vehicles });
     const billing = BillingModule.forRoot(config, {
       http: true,
       clubAccess,

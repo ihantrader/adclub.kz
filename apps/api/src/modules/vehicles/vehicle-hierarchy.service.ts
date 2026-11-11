@@ -23,6 +23,7 @@ import { latestVehicleYear } from "@adclub/domain";
 import { and, asc, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { AuditLog } from "../audit";
+import { VehicleMoves } from "./vehicle-moves";
 import {
   Changes,
   decodeCursor,
@@ -215,6 +216,7 @@ export class VehicleHierarchyService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditLog) private readonly audit: AuditLog,
+    @Inject(VehicleMoves) private readonly moves: VehicleMoves,
   ) {}
 
   // ---------------------------------------------------------------- makes
@@ -483,6 +485,14 @@ export class VehicleHierarchyService {
         .where(eq(vehicleModel.id, row.id))
         .returning();
       await writeModelSpellings(tx, row.id, makeId, spellings);
+      if (changes.has("makeId")) {
+        // Rows naming the model followed it in the base; their modules record it (4.84 I946).
+        await this.moves.followed(
+          tx,
+          { level: "model", id: row.id, from: { makeId: row.makeId }, to: { makeId } },
+          actor,
+        );
+      }
       await this.audit.record(
         {
           action: auditActions.vehicleModelChanged,
@@ -680,6 +690,22 @@ export class VehicleHierarchyService {
         })
         .where(eq(vehicleGeneration.id, row.id))
         .returning();
+      if (changes.has("modelId")) {
+        const [from, to] = await Promise.all([
+          this.findModel(tx, row.modelId),
+          this.findModel(tx, wanted.modelId),
+        ]);
+        await this.moves.followed(
+          tx,
+          {
+            level: "generation",
+            id: row.id,
+            from: { makeId: from.makeId, modelId: from.id },
+            to: { makeId: to.makeId, modelId: to.id },
+          },
+          actor,
+        );
+      }
       await this.audit.record(
         {
           action: auditActions.vehicleGenerationChanged,

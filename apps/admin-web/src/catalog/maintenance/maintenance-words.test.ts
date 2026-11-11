@@ -4,6 +4,9 @@ import {
   activePlanOf,
   catalogCountText,
   codesOf,
+  conditionNumberOf,
+  conditionText,
+  currentConditions,
   firstText,
   intervalText,
   maintenanceErrorText,
@@ -45,6 +48,7 @@ describe("maintenance words", () => {
   it("the counts of a check", () => {
     expect(catalogCountText(3, 1, false)).toBe("в справочнике 3 · в продаже 1");
     expect(catalogCountText(0, 0, false)).toBe("в справочнике 0 · в продаже 0");
+    expect(catalogCountText(0, 0, false, true)).toBe("правило не действует · в продаже 0");
     expect(catalogCountText(2, null, true)).toBe("в справочнике 2 · в продаже — выберите город");
   });
 
@@ -55,7 +59,72 @@ describe("maintenance words", () => {
     expect(numberOf("10к")).toBeUndefined();
   });
 
+  it("reads a «от/до» bound as typed: a comma or a point, a minus, a unit (TASK-061.A)", () => {
+    expect(conditionNumberOf("4,5")).toBe(4.5);
+    expect(conditionNumberOf("4.5")).toBe(4.5);
+    expect(conditionNumberOf("4,5 л")).toBe(4.5);
+    expect(conditionNumberOf(" 4 ")).toBe(4);
+    expect(conditionNumberOf("-1")).toBe(-1);
+    expect(conditionNumberOf("−1,5")).toBe(-1.5);
+    expect(conditionNumberOf("4,")).toBe(4);
+    expect(conditionNumberOf(",5")).toBe(0.5);
+    expect(conditionNumberOf("1 000")).toBe(1000);
+    expect(conditionNumberOf("")).toBeNull();
+    expect(conditionNumberOf("   ")).toBeNull();
+    expect(conditionNumberOf("-")).toBeUndefined();
+    expect(conditionNumberOf("л")).toBeUndefined();
+    expect(conditionNumberOf("4,5,6")).toBeUndefined();
+    expect(conditionNumberOf("4-5")).toBeUndefined();
+    expect(conditionText(4.5)).toBe("4,5");
+    expect(conditionText(-1)).toBe("-1");
+    expect(conditionText(undefined)).toBe("");
+  });
+
+  it("drops the conditions the catalog no longer has, and says so (TASK-061.A)", () => {
+    const attributes = [
+      { id: "visc", name: "Вязкость", usable: false, activeOptionIds: ["0w20"] },
+      { id: "spec", name: "Допуск", usable: true, activeOptionIds: ["sp"] },
+      { id: "vol", name: "Объём", usable: true, activeOptionIds: [] },
+    ];
+    expect(
+      currentConditions(
+        [
+          { attributeId: "visc", optionIds: ["0w20"] },
+          { attributeId: "spec", optionIds: ["sp", "sn"] },
+          { attributeId: "vol", min: 4 },
+          { attributeId: "gone", value: true },
+        ],
+        attributes,
+      ),
+    ).toEqual({
+      kept: [
+        { attributeId: "spec", optionIds: ["sp"] },
+        { attributeId: "vol", min: 4 },
+      ],
+      removed: [
+        "Условие «Вязкость» больше не действует — убрано",
+        "Часть вариантов условия «Допуск» в архиве — убраны",
+        "Условие по характеристике больше не действует — убрано",
+      ],
+    });
+    expect(
+      currentConditions([{ attributeId: "spec", optionIds: ["sn"] }], attributes).removed,
+    ).toEqual(["Варианты условия «Допуск» в архиве — условие убрано"]);
+    expect(currentConditions([{ attributeId: "vol", max: 5 }], attributes)).toEqual({
+      kept: [{ attributeId: "vol", max: 5 }],
+      removed: [],
+    });
+  });
+
   it("the refusals of the server", () => {
+    expect(
+      maintenanceErrorText(
+        refusal(409, "MAINTENANCE_PLAN_STATE", { reason: "last_active_element" }),
+      ),
+    ).toMatch(/последний элемент действующего плана/);
+    expect(
+      maintenanceErrorText(refusal(409, "MAINTENANCE_PLAN_STATE", { reason: "items_limit" })),
+    ).toMatch(/100 элементов/);
     const active = refusal(409, "MAINTENANCE_PLAN_ACTIVE_EXISTS", { existingPlanId: "p1" });
     expect(activePlanOf(active)).toBe("p1");
     expect(maintenanceErrorText(active)).toMatch(/уже есть действующий план/);

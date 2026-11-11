@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   auditActions,
   auditEntities,
+  MAINTENANCE_PLAN_ITEMS_MAX,
   type AdminMaintenancePlanPage,
   type AdminMaintenancePlanResponse,
   type ConfirmMaintenanceItemsResponse,
@@ -36,6 +37,8 @@ import {
 import { vehicleEngineSpelling, vehicleMakeSpelling, vehicleModelSpelling } from "../vehicles";
 import {
   activeExists,
+  itemsLimit,
+  lastElement,
   notFound,
   notReady,
   planState,
@@ -44,6 +47,8 @@ import {
 } from "./maintenance-errors";
 import {
   describeScopes,
+  generatingNow,
+  notStaleGenerationWhere,
   resolveScope,
   sameScope,
   sameScopeWhere,
@@ -137,6 +142,7 @@ export class MaintenancePlansService {
       query.status ? eq(maintenancePlan.status, query.status) : undefined,
       query.source ? eq(maintenancePlan.source, query.source) : undefined,
       query.q ? this.wordsWhere(query.q) : undefined,
+      notStaleGenerationWhere(),
     ];
     const filters = and(...conditions);
     const after = query.cursor ? decodeCursor(query.cursor) : null;
@@ -173,12 +179,18 @@ export class MaintenancePlansService {
     return planResponse(executor, await this.findPlan(executor, planId));
   }
 
-  /** AI drafts not activated yet — the card of the home screen. */
+  /** AI drafts not activated yet — the card of the home screen (the list it opens counts the same: a draft whose generation died is in neither). */
   async aiDraftsWaiting(): Promise<number> {
     const [row] = await this.database.db
       .select({ total: count() })
       .from(maintenancePlan)
-      .where(and(eq(maintenancePlan.status, "draft"), eq(maintenancePlan.source, "ai_draft")));
+      .where(
+        and(
+          eq(maintenancePlan.status, "draft"),
+          eq(maintenancePlan.source, "ai_draft"),
+          notStaleGenerationWhere(),
+        ),
+      );
     return row?.total ?? 0;
   }
 
@@ -265,7 +277,7 @@ export class MaintenancePlansService {
   ): Promise<AdminMaintenancePlanResponse> {
     return this.database.db.transaction(async (tx) => {
       const plan = await this.lockPlan(tx, planId, body.expectedVersion);
-      if (plan.generatingSince) throw planState("AI is still making this draft");
+      if (generatingNow(plan)) throw planState("AI is still making this draft");
       const before = scopeOf(plan);
       const scope = body.scope ? await resolveScope(tx, body.scope) : before;
       const scopeChanged = !sameScope(before, scope);
@@ -312,7 +324,7 @@ export class MaintenancePlansService {
       return await this.database.db.transaction(async (tx) => {
         const plan = await this.lockPlan(tx, planId, body.expectedVersion);
         if (plan.status === body.status) return planResponse(tx, plan);
-        if (plan.generatingSince) throw planState("AI is still making this draft");
+        if (generatingNow(plan)) throw planState("AI is still making this draft");
         const now = new Date();
         if (body.status === "active") {
           if (plan.status === "archived") {
@@ -341,7 +353,12 @@ export class MaintenancePlansService {
           return planResponse(tx, updated);
         }
         if (body.status === "archived") {
-          const updated = await this.bump(tx, plan, { status: "archived", archivedAt: now });
+          // A draft AI never finished (its process died) is archived like any other.
+          const updated = await this.bump(tx, plan, {
+            status: "archived",
+            archivedAt: now,
+            generatingSince: null,
+          });
           await this.record(
             tx,
             auditActions.maintenancePlanArchived,
@@ -521,6 +538,7 @@ export class MaintenancePlansService {
         status: "active",
       });
       await assertTarget(tx, body.kind, body.target);
+      await this.assertRoomFor(tx, plan.id, 1);
       await this.insertElement(tx, plan, actor, element);
       return planResponse(tx, await this.bump(tx, plan, {}));
     });
@@ -611,7 +629,6 @@ export class MaintenancePlansService {
         note: body.note === undefined ? item.note : body.note?.trim() ? body.note.trim() : null,
       };
       this.assertIntervals(next);
-      if (body.target) await assertTarget(tx, item.kind, body.target);
       const current = await loadTexts(tx, "maintenance_plan_item", [item.id]);
       const texts = textsOf(current, item.id, "name");
       const before = plainTexts(texts);
@@ -629,6 +646,10 @@ export class MaintenancePlansService {
         body.target !== undefined &&
         JSON.stringify(storedTarget(item.kind, body.target)) !==
           JSON.stringify(storedTarget(item.kind, targetBefore));
+      // Only a new rule is checked: an element whose rule went stale under it
+      // (a subcategory hidden, a variant archived) keeps its other fields
+      // editable — the card says what is wrong with the rule (TASK-061.A).
+      if (targetChanged) await assertTarget(tx, item.kind, body.target!);
       const changes: Record<string, unknown> = {};
       const previous: Record<string, unknown> = {};
       for (const key of Object.keys(next) as (keyof typeof next)[]) {
@@ -702,6 +723,21 @@ export class MaintenancePlansService {
         if (!target)
           throw validationError("target", "The element has no rule yet; give it one first");
         await assertTarget(tx, item.kind, target);
+        await this.assertRoomFor(tx, plan.id, item.status === "archived" ? 1 : 0);
+      }
+      if (body.status === "archived" && plan.status === "active" && item.status === "active") {
+        // Clients see only active elements: the last one gone would leave an empty plan (TASK-061.A).
+        const [left] = await tx
+          .select({ total: count() })
+          .from(maintenancePlanItem)
+          .where(
+            and(
+              eq(maintenancePlanItem.planId, plan.id),
+              eq(maintenancePlanItem.status, "active"),
+              ne(maintenancePlanItem.id, item.id),
+            ),
+          );
+        if ((left?.total ?? 0) === 0) throw lastElement();
       }
       await tx
         .update(maintenancePlanItem)
@@ -877,7 +913,19 @@ export class MaintenancePlansService {
   private assertEditable(plan: MaintenancePlanRow): void {
     if (plan.status === "archived")
       throw planState("The elements of an archived plan don't change");
-    if (plan.generatingSince) throw planState("AI is still making this draft");
+    if (generatingNow(plan)) throw planState("AI is still making this draft");
+  }
+
+  /** Room for `more` elements that are not archived (`MAINTENANCE_PLAN_ITEMS_MAX`, TASK-061.A). */
+  private async assertRoomFor(tx: DbExecutor, planId: string, more: number): Promise<void> {
+    if (more === 0) return;
+    const [row] = await tx
+      .select({ total: count() })
+      .from(maintenancePlanItem)
+      .where(
+        and(eq(maintenancePlanItem.planId, planId), ne(maintenancePlanItem.status, "archived")),
+      );
+    if ((row?.total ?? 0) + more > MAINTENANCE_PLAN_ITEMS_MAX) throw itemsLimit();
   }
 
   private wordsWhere(q: string): SQL {

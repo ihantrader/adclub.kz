@@ -823,6 +823,7 @@ function PlanCheck({ planId, codes }: { planId: string; codes: string[] }) {
                           item.catalogTotal,
                           item.catalog.count,
                           item.catalog.cityRequired,
+                          item.catalog.unavailable,
                         )}
                       </span>
                       {item.catalog.minPrice !== null && (

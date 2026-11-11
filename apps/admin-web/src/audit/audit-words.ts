@@ -570,6 +570,7 @@ const FIELD_TEXT: Record<string, string> = {
   target: "Правило подбора",
   quantity: "Количество",
   scope: "Область",
+  followed: "Справочник автомобилей",
   itemIds: "Порядок элементов",
   // TASK-049: reviews and complaints.
   score: "Оценка",
@@ -803,6 +804,11 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
 
 /** The values of other coded fields, whatever the object. */
 const VALUE_WORDS: Record<string, Record<string, string>> = {
+  // TASK-061.A: a plan followed a move in the vehicle catalog.
+  followed: {
+    vehicle_model: "модель перенесена к другой марке",
+    vehicle_generation: "поколение перенесено к другой модели",
+  },
   state: { draft: "Черновик", active: "Активен", paused: "Пауза", blocked: "Блокировка" },
   type: { ...SUPPLIER_TYPE_TEXT, part: "Запчасть", generic: "Товар", service: "Услуга" },
   source: {

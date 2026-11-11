@@ -302,12 +302,28 @@ export function dueMaintenance<Element extends MaintenanceElement>(
 }
 
 /**
- * The age of a car in months as far as its year tells — a lower bound:
- * from the end of the year it was made (a 2024 car in November 2026 is at
- * least 22 months old). Before the year ends — 0.
+ * The age of a car in full months as far as its year tells — a lower bound:
+ * from the end of the year it was made to the start of the month now (a 2024
+ * car in November 2026 is at least 22 months old: January 2025 … October
+ * 2026; the month now is not over). Before the year ends — 0.
  */
 export function ageMonthsFromYear(year: number, now: { year: number; month: number }): number {
-  return Math.max(0, (now.year - year - 1) * 12 + now.month);
+  return Math.max(0, (now.year - year - 1) * 12 + now.month - 1);
+}
+
+/**
+ * The lower bound of a car's age, full months (TASK-061.A; ARCHITECTURE 4.84
+ * I949): by its year; without one — by the youngest car its generation can
+ * be (`yearTo`; a generation still made — this year), so an element «by
+ * age» is never due earlier than it is for every car it could be; nothing
+ * known of the years — `null` (no element is due by age).
+ */
+export function maintenanceAgeMonths(
+  car: { year: number | null; yearFrom: number | null; yearTo: number | null },
+  now: { year: number; month: number },
+): number | null {
+  const year = car.year ?? car.yearTo ?? (car.yearFrom === null ? null : now.year);
+  return year === null ? null : ageMonthsFromYear(year, now);
 }
 
 /** What keeps an element's intervals out (business rules); `null` — they are in order. */

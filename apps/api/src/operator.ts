@@ -246,6 +246,8 @@ class OperatorModule {
   static forRoot(config: AppConfig) {
     // One of each: the search (`search:eval`) reads the catalog through these very instances.
     const catalog = CatalogModule.forRoot({ http: false });
+    // One vehicle catalog: maintenance plans follow its moves (TASK-061.A).
+    const vehicles = VehiclesModule.forRoot({ http: false });
     const compatibility = CompatibilityModule.forRoot({ http: false });
     const clubAccess = ClubAccessModule.forRoot({ http: false });
     const showcase = ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess });
@@ -264,7 +266,7 @@ class OperatorModule {
         MessagingModule.forRoot(config, { http: false }),
         NotificationsModule.forRoot(config, { http: false }),
         catalog,
-        VehiclesModule.forRoot({ http: false }),
+        vehicles,
         compatibility,
         SuppliersModule.forRoot({ http: false }),
         clubAccess,
@@ -274,7 +276,7 @@ class OperatorModule {
           signals: SignalsModule.forRoot({ http: false }),
         }),
         showcase,
-        MaintenanceModule.forRoot({ http: false, catalog, showcase }),
+        MaintenanceModule.forRoot({ http: false, catalog, showcase, vehicles }),
         JobsModule.forRoot({
           role: "producer",
           catalog: backgroundJobCatalog(config),

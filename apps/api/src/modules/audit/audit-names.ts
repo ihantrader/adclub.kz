@@ -171,6 +171,15 @@ export const AUDIT_REFERENCE_FIELDS: Record<string, string> = {
   itemIds: "maintenance_plan_item",
 };
 
+/**
+ * Fields one level down that mean another kind than at the top: the rule of a
+ * plan's element (`target: { kind: "items", itemIds }`) lists catalog items,
+ * not elements (TASK-061.A).
+ */
+const NESTED_REFERENCE_FIELDS: Record<string, string> = {
+  itemIds: "catalog_item",
+};
+
 /** A translation's entry names the thing it is of (`after.entityType`): the kind to name it as. */
 const TRANSLATED_KINDS: Record<string, string> = {
   category: "catalog_category",
@@ -220,7 +229,7 @@ export function referencesOf(entry: NamedEntry): [kind: string, id: string][] {
   const found: [string, string][] = [];
   const take = (fields: Record<string, unknown>, nested: boolean) => {
     for (const [key, value] of Object.entries(fields)) {
-      const kind = AUDIT_REFERENCE_FIELDS[key];
+      const kind = (!nested && NESTED_REFERENCE_FIELDS[key]) || AUDIT_REFERENCE_FIELDS[key];
       if (kind && typeof value === "string" && UUID.test(value)) {
         found.push([kind, value]);
       } else if (kind && Array.isArray(value)) {

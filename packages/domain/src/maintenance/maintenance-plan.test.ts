@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ageMonthsFromYear,
   dueMaintenance,
+  maintenanceAgeMonths,
   maintenanceIntervalsProblem,
   maintenancePlanFor,
   maintenanceScopeMatches,
@@ -282,11 +283,30 @@ describe("dueMaintenance", () => {
 
 describe("ageMonthsFromYear", () => {
   it.each([
-    [2024, { year: 2026, month: 11 }, 23],
+    [2024, { year: 2026, month: 11 }, 22],
+    [2024, { year: 2025, month: 12 }, 11],
     [2026, { year: 2026, month: 11 }, 0],
-    [2025, { year: 2026, month: 1 }, 1],
-  ])("%i in %o", (year, now, expected) => {
+    [2025, { year: 2026, month: 1 }, 0],
+    [2025, { year: 2026, month: 2 }, 1],
+    [2016, { year: 2026, month: 11 }, 118],
+  ])("%i in %o — full months", (year, now, expected) => {
     expect(ageMonthsFromYear(year, now)).toBe(expected);
+  });
+});
+
+describe("maintenanceAgeMonths", () => {
+  const now = { year: 2026, month: 11 };
+  it.each([
+    // The year of the car decides.
+    [{ year: 2024, yearFrom: 2016, yearTo: 2022 }, 22],
+    // Without it — the youngest car of the generation (Atlas I 2016–2022: from 2022).
+    [{ year: null, yearFrom: 2016, yearTo: 2022 }, 46],
+    // A generation still made — this year: no age at all.
+    [{ year: null, yearFrom: 2023, yearTo: null }, 0],
+    // Nothing known of the years.
+    [{ year: null, yearFrom: null, yearTo: null }, null],
+  ] as const)("%o", (car, expected) => {
+    expect(maintenanceAgeMonths(car, now)).toBe(expected);
   });
 });
 

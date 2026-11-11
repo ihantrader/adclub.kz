@@ -148,3 +148,27 @@ export function planCandidatesWhere(car: MaintenanceCar & { makeId: string }): S
     sql`(${maintenancePlan.engineId} IS NULL OR EXISTS (SELECT 1 FROM ${vehicleEngine} WHERE ${vehicleEngine.id} = ${maintenancePlan.engineId} AND ${vehicleEngine.status} = 'active'))`,
   )!;
 }
+
+/**
+ * A draft AI is still making (TASK-061.A; ARCHITECTURE 4.84 I951). The call
+ * is cut at `MAINTENANCE_DRAFT_DEADLINE_MS` (both models together), so a row
+ * «being generated» longer than this is one whose process died: it is no
+ * longer «generating» — not listed, not counted, archived like any draft, and
+ * the next draft of its area removes it.
+ */
+export const STALE_GENERATION_MS = 3 * 60_000;
+
+export function generatingNow(
+  row: Pick<MaintenancePlanRow, "generatingSince">,
+  now: Date = new Date(),
+): boolean {
+  return (
+    row.generatingSince !== null &&
+    now.getTime() - row.generatingSince.getTime() < STALE_GENERATION_MS
+  );
+}
+
+/** The rows of the list: everything but a draft whose generation died. */
+export function notStaleGenerationWhere(now: Date = new Date()): SQL {
+  return sql`(${maintenancePlan.generatingSince} IS NULL OR ${maintenancePlan.generatingSince} > ${new Date(now.getTime() - STALE_GENERATION_MS)})`;
+}

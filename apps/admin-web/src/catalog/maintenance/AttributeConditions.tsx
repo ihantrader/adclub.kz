@@ -1,5 +1,7 @@
 import type { AdminAttribute, ShowcaseAttributeFilter } from "@adclub/contracts";
 import { Chip, ChipRow, Select, TextField } from "@adclub/ui";
+import { useState } from "react";
+import { conditionNumberOf, conditionText } from "./maintenance-words";
 
 /**
  * The conditions of a rule on the characteristics of its subcategory
@@ -17,10 +19,68 @@ export function usableAttributes(attributes: readonly AdminAttribute[]): AdminAt
   );
 }
 
-const numberOrUndefined = (text: string): number | undefined => {
-  const value = Number(text.replace(",", ".").replace(/\s/gu, ""));
-  return text.trim() === "" || !Number.isFinite(value) ? undefined : value;
-};
+type Bounds = { min?: number; max?: number };
+
+/**
+ * «от / до» of a number (TASK-061.A): each field keeps the text as typed —
+ * «4,», «-» are numbers half-typed — and it is read when the field is left
+ * or Enter is pressed (saving leaves the field first). Not a number — the
+ * field says so and the bound is not set.
+ */
+function NumberCondition({
+  label,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  min: number | undefined;
+  max: number | undefined;
+  onChange: (bounds: Bounds | null) => void;
+}) {
+  const [texts, setTexts] = useState({ min: conditionText(min), max: conditionText(max) });
+  const [bad, setBad] = useState({ min: false, max: false });
+  // A bound changed from outside (another subcategory, a reset): the field follows it.
+  const [seen, setSeen] = useState({ min, max });
+  if (seen.min !== min || seen.max !== max) {
+    setSeen({ min, max });
+    setTexts({
+      min: conditionNumberOf(texts.min) === (min ?? null) ? texts.min : conditionText(min),
+      max: conditionNumberOf(texts.max) === (max ?? null) ? texts.max : conditionText(max),
+    });
+  }
+  const commit = (side: "min" | "max") => {
+    const value = conditionNumberOf(texts[side]);
+    setBad((now) => ({ ...now, [side]: value === undefined }));
+    const bounds: Bounds = {
+      ...(min === undefined ? {} : { min }),
+      ...(max === undefined ? {} : { max }),
+    };
+    if (value === null || value === undefined) delete bounds[side];
+    else bounds[side] = value;
+    onChange(bounds.min === undefined && bounds.max === undefined ? null : bounds);
+  };
+  const field = (side: "min" | "max", text: string) => (
+    <TextField
+      label={text}
+      value={texts[side]}
+      inputMode="decimal"
+      placeholder="Любое"
+      error={bad[side] ? "Не число — условие не задано" : undefined}
+      onChange={(next) => setTexts((now) => ({ ...now, [side]: next }))}
+      onBlur={() => commit(side)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit(side);
+      }}
+    />
+  );
+  return (
+    <div className="row-actions">
+      {field("min", `${label}: от`)}
+      {field("max", "до")}
+    </div>
+  );
+}
 
 /** The filter of one characteristic after a change; `null` — no condition on it. */
 export function withCondition(
@@ -88,36 +148,14 @@ export function AttributeConditions({
         }
         if (attribute.valueType === "number") {
           const unit = attribute.unit?.ru?.text;
-          const label = unit ? `${name}, ${unit}` : name;
           return (
-            <div key={attribute.id} className="row-actions">
-              <TextField
-                label={`${label}: от`}
-                value={current?.min?.toString() ?? ""}
-                inputMode="decimal"
-                placeholder="Любое"
-                onChange={(text) => {
-                  const min = numberOrUndefined(text);
-                  set({
-                    ...(min === undefined ? {} : { min }),
-                    ...(current?.max === undefined ? {} : { max: current.max }),
-                  });
-                }}
-              />
-              <TextField
-                label="до"
-                value={current?.max?.toString() ?? ""}
-                inputMode="decimal"
-                placeholder="Любое"
-                onChange={(text) => {
-                  const max = numberOrUndefined(text);
-                  set({
-                    ...(current?.min === undefined ? {} : { min: current.min }),
-                    ...(max === undefined ? {} : { max }),
-                  });
-                }}
-              />
-            </div>
+            <NumberCondition
+              key={attribute.id}
+              label={unit ? `${name}, ${unit}` : name}
+              min={current?.min}
+              max={current?.max}
+              onChange={(bounds) => set(bounds)}
+            />
           );
         }
         return (

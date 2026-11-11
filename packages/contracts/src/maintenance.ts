@@ -123,7 +123,8 @@ const intervalMonthsSchema = z.number().int().min(1).max(120);
  * `no_rule` — no rule (AI named a subcategory the catalog has not);
  * `category_unavailable` — the subcategory is hidden or archived (or of
  * the other kind); `attribute_unavailable` — a condition names a
- * characteristic that is no longer an active filter of the subcategory;
+ * characteristic that is no longer an active filter of the subcategory, or a
+ * variant that is archived;
  * `item_unavailable` — an item of the rule is archived or gone.
  */
 export const maintenanceItemProblemSchema = z.enum([
@@ -341,8 +342,14 @@ export type MaintenanceDueReason = z.infer<typeof maintenanceDueReasonSchema>;
  * that list (`attributes` = `filters` as JSON); a rule by items gives
  * `itemIds` (of them, `count` are sold). A service without a city —
  * `count: null`, `cityRequired: true` (services are shown by a city only).
+ * A rule that no longer leads to the catalog as it is (a hidden
+ * subcategory, a characteristic that is no longer a filter, an archived
+ * variant or item — what the administrator sees as `problems`) —
+ * `unavailable: true`, `count: 0` and nothing to open: never a wider list
+ * than the rule (TASK-061.A).
  */
 export const maintenanceCatalogSchema = z.object({
+  unavailable: z.boolean(),
   count: z.number().int().nullable(),
   minPrice: z.number().int().nullable(),
   currency: z.literal("KZT"),
@@ -457,6 +464,12 @@ export type MaintenancePlanCheckResponse = z.infer<typeof maintenancePlanCheckRe
 export const maintenanceVersionConflictDetailsSchema = z.object({
   currentVersion: z.number().int(),
 });
+
+/** `details` of `MAINTENANCE_PLAN_STATE` (409), when the refusal has a reason of its own. */
+export const maintenancePlanStateDetailsSchema = z.object({
+  reason: z.enum(["last_active_element", "items_limit"]),
+});
+export type MaintenancePlanStateDetails = z.infer<typeof maintenancePlanStateDetailsSchema>;
 
 /** `details` of `MAINTENANCE_PLAN_ACTIVE_EXISTS` (409): the active plan of the area. */
 export const maintenanceActiveExistsDetailsSchema = z.object({

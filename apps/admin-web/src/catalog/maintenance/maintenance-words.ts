@@ -98,7 +98,10 @@ export function catalogCountText(
   catalogTotal: number,
   sold: number | null,
   cityRequired: boolean,
+  unavailable = false,
 ): string {
+  // The rule leads nowhere: the server sells nothing by it (TASK-061.A).
+  if (unavailable) return "правило не действует · в продаже 0";
   const total = `в справочнике ${catalogTotal.toLocaleString("ru-RU")}`;
   if (cityRequired) return `${total} · в продаже — выберите город`;
   return `${total} · в продаже ${(sold ?? 0).toLocaleString("ru-RU")}`;
@@ -124,6 +127,80 @@ export function numberOf(text: string): number | null | undefined {
   if (compact === "") return null;
   if (!/^\d+$/u.test(compact)) return undefined;
   return Number(compact);
+}
+
+/**
+ * A bound of a «от/до» condition as typed (TASK-061.A): the field keeps the
+ * text — «4,», «-», «4,5 л» are half-typed numbers — and it is read only when
+ * the field is left or the element saved. A comma or a point, a minus (also
+ * «−»), spaces between digits, a unit after the number. `null` — empty (no
+ * bound), `undefined` — not a number.
+ */
+export function conditionNumberOf(text: string): number | null | undefined {
+  const compact = text
+    .replace(/[\s\u00a0\u202f]/gu, "")
+    .replace(/−/gu, "-")
+    .replace(/[^\d.,-]+$/u, "");
+  if (compact === "") return text.trim() === "" ? null : undefined;
+  if (!/^-?(\d+([.,]\d*)?|[.,]\d+)$/u.test(compact)) return undefined;
+  const value = Number(compact.replace(",", "."));
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/** A bound as the field shows it: «4,5», «-1», «4». */
+export function conditionText(value: number | undefined): string {
+  return value === undefined ? "" : String(value).replace(".", ",");
+}
+
+/** What a characteristic of a subcategory is to the dialog. */
+export interface ConditionAttribute {
+  id: string;
+  name: string;
+  /** An active filter now (what the dialog can show and the server accepts). */
+  usable: boolean;
+  /** Its variants that are active now. */
+  activeOptionIds: readonly string[];
+}
+
+/**
+ * The conditions of an element as the catalog has them now (TASK-061.A):
+ * a condition on a characteristic that is no longer an active filter is
+ * dropped, an archived variant is dropped from its list (the list with
+ * none left — the whole condition). `removed` says it in words, so the
+ * administrator saves the element knowing it: «Условие «Вязкость» больше не
+ * действует — убрано».
+ */
+export function currentConditions<
+  Filter extends { attributeId: string; optionIds?: readonly string[] },
+>(
+  filters: readonly Filter[],
+  attributes: readonly ConditionAttribute[],
+): { kept: Filter[]; removed: string[] } {
+  const byId = new Map(attributes.map((entry) => [entry.id, entry]));
+  const kept: Filter[] = [];
+  const removed: string[] = [];
+  for (const filter of filters) {
+    const attribute = byId.get(filter.attributeId);
+    const name = attribute ? `«${attribute.name}»` : "по характеристике";
+    if (!attribute?.usable) {
+      removed.push(`Условие ${name} больше не действует — убрано`);
+      continue;
+    }
+    if (filter.optionIds) {
+      const active = filter.optionIds.filter((id) => attribute.activeOptionIds.includes(id));
+      if (active.length === 0) {
+        removed.push(`Варианты условия ${name} в архиве — условие убрано`);
+        continue;
+      }
+      if (active.length < filter.optionIds.length) {
+        removed.push(`Часть вариантов условия ${name} в архиве — убраны`);
+        kept.push({ ...filter, optionIds: active });
+        continue;
+      }
+    }
+    kept.push(filter);
+  }
+  return { kept, removed };
 }
 
 function detail<T>(error: unknown, key: string): T | undefined {
@@ -176,8 +253,14 @@ export function maintenanceErrorText(error: unknown): string {
       return "У этой области уже есть действующий план — сначала уберите его в архив";
     case "MAINTENANCE_PLAN_NOT_READY":
       return "План нельзя активировать: не все элементы подтверждены и ведут в справочник";
-    case "MAINTENANCE_PLAN_STATE":
+    case "MAINTENANCE_PLAN_STATE": {
+      const reason = detail<string>(error, "reason");
+      if (reason === "last_active_element") {
+        return "Это последний элемент действующего плана: без него клиенты получат пустой план. Уберите в архив весь план или сначала добавьте другой элемент";
+      }
+      if (reason === "items_limit") return "В плане уже 100 элементов — больше добавить нельзя";
       return "Сейчас это сделать нельзя: обновите страницу";
+    }
     case "MAINTENANCE_DRAFT_IN_PROGRESS":
       return "ИИ уже составляет черновик для этой области — дождитесь его";
     case "MAINTENANCE_TARGET_INVALID":

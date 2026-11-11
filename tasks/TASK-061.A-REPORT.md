@@ -43,7 +43,7 @@ COMPLETED
 - `pnpm --filter @adclub/api openapi:compat --snapshots` — PASS («Compatible with every supported app version: 1.0.0»)
 - `vitest.integration` `maintenance.integration.test.ts` — PASS (12 тестов, из них 4 новых)
 - `vitest.integration` `database.integration.test.ts` + `vehicles.integration.test.ts` — PASS (85 тестов, включая новый тест миграции и её отката)
-- CI — не ожидался (CLAUDE.md 11); прогон: 43002494489 (https://github.com/ihantrader/adclub.kz/actions/runs/43002494489), запущен на 
+- CI — не ожидался (CLAUDE.md 11); прогон: 43002494489 (https://github.com/ihantrader/adclub.kz/actions/runs/43002494489), запущен на c8df714 (до коммита отчёта)
 
 ## UAT / E2E
 Пройдено в встроенном браузере (админка `admin-web` + `api-test-ai` на dev-контейнерах 5433/9002 — временная правка `env` в `.claude/launch.json`, возвращена), вход своим тестовым номером `+77010000900` (после `admin:reset-totp` этого номера):

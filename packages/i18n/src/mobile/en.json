@@ -802,6 +802,7 @@
   "assistant.notOnPlatform": "Not on the platform yet: {items}",
   "assistant.carGone": "This car is no longer in the garage — choose another one",
   "assistant.otherCar": "This dialog is about {car}",
+  "assistant.dialogCarRemoved": "This dialog is about a removed car",
   "assistant.ask": "Ask AI Pilot",
   "assistant.askText": "Picks goods and services for {car}",
   "assistant.limitTrialTitle": "Your trial requests are used up",

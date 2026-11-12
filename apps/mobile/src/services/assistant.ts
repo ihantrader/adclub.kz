@@ -32,6 +32,10 @@ export async function sendAssistantMessage(input: {
   car: GarageCar;
   cityId: string | undefined;
   dialogId: string | null;
+  /** The key of the new dialog this send opens (`dialogId` null; TASK-063.B). */
+  openKey?: string;
+  /** `false` — the dialog's car is gone from the garage: no mileage of another car. */
+  withMileage?: boolean;
   quickReply?: boolean;
   signal?: AbortSignal;
 }): Promise<AssistantMessageResponse> {
@@ -43,8 +47,9 @@ export async function sendAssistantMessage(input: {
       car,
       ...guest,
       ...(input.dialogId ? { dialogId: input.dialogId } : {}),
+      ...(!input.dialogId && input.openKey ? { openKey: input.openKey } : {}),
       ...(input.cityId ? { cityId: input.cityId } : {}),
-      ...(mileageKm !== undefined ? { mileageKm } : {}),
+      ...(mileageKm !== undefined && input.withMileage !== false ? { mileageKm } : {}),
       ...(input.quickReply ? { quickReply: true } : {}),
     },
     input.signal ? { signal: input.signal } : {},

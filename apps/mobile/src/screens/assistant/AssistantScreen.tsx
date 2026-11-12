@@ -5,6 +5,7 @@ import {
   type AssistantLimits,
   type AssistantMessageResponse,
 } from "@adclub/contracts";
+import { randomUUID } from "expo-crypto";
 import { layout } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -45,6 +46,7 @@ import {
 import {
   answerCarOf,
   createAssistantTurns,
+  loadDialog,
   mileageOfferOf,
   type Turn,
 } from "../../assistant/assistant-turns";
@@ -165,7 +167,7 @@ export function AssistantScreen({
   const { begin: gateBegin, settle: gateSettle, cancel: gateCancel } = gate;
   const scroll = useRef<ScrollView>(null);
   // The epoch, the attempts and the opening of a new dialog (`assistant-turns.ts`).
-  const [turns] = useState(createAssistantTurns);
+  const [turns] = useState(() => createAssistantTurns(randomUUID));
   // The dialog was left before its answer came: read it again before anything else.
   const stale = useRef(false);
   const loadedFor = useRef<string | null>(null);
@@ -193,36 +195,33 @@ export function AssistantScreen({
 
   /** The dialog as the server keeps it; 404 — gone: an empty one. */
   // `null` — not read, or read for a dialog the screen has left (another epoch).
+  // The epoch is checked when the answer comes and again when the indicator
+  // lets it be shown; an answer of another epoch leaves the indicator to the
+  // newer load (`loadDialog`, TASK-063.B).
   const reload = useCallback(
     async (id: string) => {
-      const turn = turns.begin();
-      const ticket = gateBegin();
-      try {
-        const answer = await readAssistantDialog(id);
-        if (!turns.current(turn)) {
-          gateCancel();
-          return null;
-        }
-        gateSettle(ticket, () => {
+      const answer = await loadDialog(
+        turns,
+        { begin: gateBegin, settle: gateSettle },
+        () => readAssistantDialog(id),
+        (read) => {
           shownDialog.current = id;
-          setEntries(answer.messages);
-          setLimits(answer.limits);
+          setEntries(read.messages);
+          setLimits(read.limits);
           setStopped(null);
           stale.current = false;
-        });
-        return answer.messages.length;
-      } catch (error) {
-        gateCancel();
-        if (!turns.current(turn)) return null;
-        if (assistantFailureOf(error, true).kind === "dialog_gone") {
-          remember(signedInAccount(), null);
-          shownDialog.current = null;
-          setEntries([]);
-        }
-        return null;
-      }
+        },
+        (error) => {
+          if (assistantFailureOf(error, true).kind === "dialog_gone") {
+            remember(signedInAccount(), null);
+            shownDialog.current = null;
+            setEntries([]);
+          }
+        },
+      );
+      return answer ? answer.messages.length : null;
     },
-    [gateBegin, gateCancel, gateSettle, remember, turns],
+    [gateBegin, gateSettle, remember, turns],
   );
 
   /** A pause between readings; `false` — the screen was left meanwhile. */
@@ -258,12 +257,15 @@ export function AssistantScreen({
   );
 
   /** Moves the screen to a new epoch: whatever was asked before is dropped when it comes. */
+  // The reading in the indicator is of the epoch left: cancelled, so its
+  // answer, held for the indicator's minimum, is never shown (TASK-063.B).
   const advance = useCallback(() => {
     turns.advance();
+    gateCancel();
     dropTimers();
     shownDialog.current = null;
     stale.current = false;
-  }, [dropTimers, turns]);
+  }, [dropTimers, gateCancel, turns]);
 
   // Who uses the app changed: signing in opens the account's new dialog
   // (the guest's stays the guest's); the text in the field stays.
@@ -400,14 +402,20 @@ export function AssistantScreen({
     // The car of the request: the dialog's (the server keeps it), else the header's.
     const stored = forDialog ? storedDialog() : null;
     const known = stored?.dialogId === forDialog ? stored : null;
-    const forCar = (known ? answerCarOf(cars, known.carId) : null) ?? car;
+    const dialogCar = known ? answerCarOf(cars, known.carId) : null;
+    const forCar = dialogCar ?? car;
     const carId = known?.carId ?? forCar.id;
+    // The dialog's car is gone from the garage: the server keeps the dialog's
+    // car, and the header's mileage is not its (TASK-063.B).
+    const withMileage = known === null || dialogCar !== null;
     try {
       const response = await sendAssistantMessage({
         text: message,
         car: forCar,
         cityId,
         dialogId: forDialog,
+        ...(target.kind === "open" ? { openKey: target.openKey } : {}),
+        withMileage,
         quickReply,
       });
       opening?.(response.dialogId);
@@ -422,6 +430,9 @@ export function AssistantScreen({
         return;
       }
       applied(response, message, carId, turn);
+      // Sent again with the key of a send whose answer was lost: that send's
+      // exchange is in the dialog too, so the dialog is read whole (TASK-063.B).
+      if (target.kind === "open" && target.resent) void reload(response.dialogId);
     } catch (error) {
       opening?.(null);
       if (!turns.awaited(turn)) return;
@@ -627,9 +638,9 @@ export function AssistantScreen({
                   </Button>
                 }
               >
-                {t("assistant.otherCar", {
-                  car: answerCar ? carTitle(answerCar) : t("garage.add"),
-                })}
+                {answerCar
+                  ? t("assistant.otherCar", { car: carTitle(answerCar) })
+                  : t("assistant.dialogCarRemoved")}
               </Banner>
             )}
             {entries.map((entry) =>

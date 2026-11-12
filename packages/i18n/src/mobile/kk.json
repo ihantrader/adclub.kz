@@ -802,6 +802,7 @@
   "assistant.notOnPlatform": "Платформада әзірге жоқ: {items}",
   "assistant.carGone": "Бұл автомобиль гаражда енді жоқ — басқасын таңдаңыз",
   "assistant.otherCar": "Бұл диалог {car} үшін",
+  "assistant.dialogCarRemoved": "Бұл диалог өшірілген автомобиль үшін",
   "assistant.ask": "AI Pilot-тан сұрау",
   "assistant.askText": "{car} үшін тауарлар мен қызметтерді таңдайды",
   "assistant.limitTrialTitle": "Сынақ сұраулары таусылды",

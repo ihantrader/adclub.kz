@@ -802,6 +802,7 @@
   "assistant.notOnPlatform": "На платформе пока нет: {items}",
   "assistant.carGone": "Этого автомобиля больше нет в гараже — выберите другой",
   "assistant.otherCar": "Этот диалог — для {car}",
+  "assistant.dialogCarRemoved": "Этот диалог — для удалённого автомобиля",
   "assistant.ask": "Спросить AI Pilot",
   "assistant.askText": "Подберёт товары и услуги для {car}",
   "assistant.limitTrialTitle": "Пробные запросы закончились",

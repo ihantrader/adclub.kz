@@ -189,6 +189,51 @@ describe("createApiClient", () => {
     expect(error.message).toContain("20 ms");
   });
 
+  it("waits longer for a route that waits for a model (TASK-063.B)", async () => {
+    const answerIn = (ms: number): FetchLike => {
+      return (_input, init) =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () =>
+              resolve(
+                jsonResponse(200, {
+                  platforms: {},
+                  updateMessage: { kk: "", ru: "", en: "" },
+                }),
+              ),
+            ms,
+          );
+          init.signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new Error("aborted"));
+          });
+        });
+    };
+    let calls = 0;
+    const hanging: FetchLike = (_input, init) => {
+      calls += 1;
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    };
+    const client = clientWith(hanging, { timeoutMs: 20, modelTimeoutMs: 80 });
+    const body = {
+      text: "Нужно масло",
+      car: { makeId: CATEGORY_ID },
+      deviceId: ITEM_ID,
+    };
+    const started = Date.now();
+    const error = await captureError(client.sendAssistantMessage(body));
+    expect(error.message).toContain("80 ms");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(70);
+    // Sent once: a model's request is never sent again by the client.
+    expect(calls).toBe(1);
+
+    // An ordinary route keeps the ordinary limit.
+    const ordinary = clientWith(answerIn(50), { timeoutMs: 20, modelTimeoutMs: 80 });
+    expect((await captureError(ordinary.getClientPolicy())).message).toContain("20 ms");
+  });
+
   it("propagates a caller's cancellation without reporting it as an API error", async () => {
     const onError = vi.fn();
     const hangingFetch: FetchLike = (_input, init) =>

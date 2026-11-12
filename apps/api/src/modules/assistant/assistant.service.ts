@@ -133,13 +133,21 @@ export class AssistantService {
     const viewer = await this.showcase.viewer(session);
     const maxTurns = await this.settings.get("assistant_max_turns");
 
-    // The dialog: the one named, or a new one for this car.
+    // The dialog: the one named, the open one this key opened (an earlier
+    // send whose answer was lost, TASK-063.B), or a new one for this car.
+    const opened =
+      body.dialogId === undefined && body.openKey !== undefined
+        ? await this.dialogByKey(body.openKey, asker)
+        : undefined;
+    const dialogId = body.dialogId ?? (opened?.closedAt === null ? opened.id : undefined);
+    // A key whose dialog was closed since (another new dialog) opens anew, without it.
+    const openKey = opened === undefined ? (body.openKey ?? null) : null;
     let dialog: AssistantDialogRow;
     let car: DialogCar;
     let cityId: string | null;
     let city: Awaited<ReturnType<ShowcaseService["chosenCity"]>>;
-    if (body.dialogId) {
-      dialog = await this.ownDialog(body.dialogId, asker);
+    if (dialogId) {
+      dialog = await this.ownDialog(dialogId, asker);
       if (dialog.closedAt !== null || dialog.turns >= maxTurns) {
         throw new ApiException(409, "ASSISTANT_DIALOG_FULL", "Start a new dialog");
       }
@@ -159,14 +167,14 @@ export class AssistantService {
       cityId = body.cityId ?? null;
       city = await this.showcase.chosenCity(executor, body.cityId, lang);
       await this.limits.assertDialogLeft(asker);
-      dialog = await this.openDialog(asker, car, cityId, lang);
+      dialog = await this.openDialog(asker, car, cityId, lang, openKey);
     }
 
     // One turn of a dialog at a time, within its turns and only while it is
     // open — checked by the claim itself, so a turn finishing meanwhile or a
     // new dialog closing this one can't be raced past. A new dialog is
     // opened with its first turn's claim already taken (`openDialog`).
-    if (body.dialogId) {
+    if (dialogId) {
       const staleSeconds = await this.staleClaimSeconds();
       const [claimed] = await executor
         .update(assistantDialog)
@@ -456,6 +464,7 @@ export class AssistantService {
     car: DialogCar,
     cityId: string | null,
     lang: CatalogLanguage,
+    openKey: string | null,
   ): Promise<AssistantDialogRow> {
     const owner =
       asker.kind === "account"
@@ -477,21 +486,51 @@ export class AssistantService {
       )
       .returning({ id: assistantDialog.id, turns: assistantDialog.turns });
     await this.observeCosts(closed.filter((row) => row.turns > 0).map((row) => row.id));
+    try {
+      const [row] = await this.database.db
+        .insert(assistantDialog)
+        .values({
+          accountId: asker.kind === "account" ? asker.accountId : null,
+          deviceId: asker.kind === "guest" ? asker.deviceId : null,
+          language: lang,
+          vehicle: car.vehicle,
+          carWords: car.words,
+          carId: car.carId,
+          cityId,
+          openKey,
+          // Milliseconds: the claim is released by its own value, read back as a Date.
+          turnStartedAt: sql`date_trunc('milliseconds', now())`,
+        })
+        .returning();
+      return row!;
+    } catch (error) {
+      // Another send with the same key opened it a moment ago and its first
+      // turn is running: this one waits for it like any second turn.
+      if (keyTaken(error)) {
+        throw new ApiException(
+          409,
+          "ASSISTANT_TURN_IN_PROGRESS",
+          "A turn of this dialog is running",
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** The asker's dialog opened with this key, if any (TASK-063.B). */
+  private async dialogByKey(
+    openKey: string,
+    asker: Asker,
+  ): Promise<AssistantDialogRow | undefined> {
+    const owner =
+      asker.kind === "account"
+        ? eq(assistantDialog.accountId, asker.accountId)
+        : and(isNull(assistantDialog.accountId), eq(assistantDialog.deviceId, asker.deviceId));
     const [row] = await this.database.db
-      .insert(assistantDialog)
-      .values({
-        accountId: asker.kind === "account" ? asker.accountId : null,
-        deviceId: asker.kind === "guest" ? asker.deviceId : null,
-        language: lang,
-        vehicle: car.vehicle,
-        carWords: car.words,
-        carId: car.carId,
-        cityId,
-        // Milliseconds: the claim is released by its own value, read back as a Date.
-        turnStartedAt: sql`date_trunc('milliseconds', now())`,
-      })
-      .returning();
-    return row!;
+      .select()
+      .from(assistantDialog)
+      .where(and(eq(assistantDialog.openKey, openKey), owner));
+    return row;
   }
 
   /** The person's message and the answer as shown, the turn counted when it was served. */
@@ -629,4 +668,16 @@ export class AssistantService {
       GROUP BY d.id`);
     for (const row of rows.rows) this.metrics.observeAssistantDialogCost(Number(row.cost));
   }
+}
+
+/** The insert broke the one-dialog-per-key index (`assistant_dialog_open_key_key`). */
+function keyTaken(error: unknown): boolean {
+  for (let current: unknown = error; current; current = (current as { cause?: unknown }).cause) {
+    const candidate = current as { code?: unknown; constraint?: unknown };
+    if (candidate.code === "23505" && candidate.constraint === "assistant_dialog_open_key_key") {
+      return true;
+    }
+    if (current === (current as { cause?: unknown }).cause) break;
+  }
+  return false;
 }

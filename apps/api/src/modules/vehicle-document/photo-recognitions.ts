@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { VehicleDocumentAttempts } from "@adclub/contracts";
+import { MODEL_REQUEST_SERVER_MAX_SECONDS, type VehicleDocumentAttempts } from "@adclub/contracts";
 import { ApiException } from "../../common/errors";
 import {
   AiBudgetExhaustedError,
@@ -15,6 +15,13 @@ import { DocumentAttempts, type DocumentReader } from "./document-attempts";
 import { DocumentImageRejected, prepareDocumentImage } from "./document-image";
 
 /** One reading of a photo: the checked answer of the model and the attempts left after it. */
+/**
+ * The longest a photo waits for the models, both together (TASK-063.B): the
+ * rest of `MODEL_REQUEST_SERVER_MAX_SECONDS` is for preparing the picture
+ * and, for a part, the catalog search — the app waits only so long.
+ */
+const PHOTO_MODEL_DEADLINE_MS = (MODEL_REQUEST_SERVER_MAX_SECONDS - 15) * 1000;
+
 export interface PhotoReading<Output> {
   call: AiCallResult<Output>;
   attempts: VehicleDocumentAttempts;
@@ -106,6 +113,7 @@ export class PhotoRecognitions {
         {
           initiator,
           inputRef: { bytes: image.bytes.byteLength, width: image.width, height: image.height },
+          deadlineMs: PHOTO_MODEL_DEADLINE_MS,
         },
       );
       return { call, attempts: counted.attempts };

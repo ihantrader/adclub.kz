@@ -71,6 +71,14 @@ export type AssistantCar = z.infer<typeof assistantCarSchema>;
 export const assistantMessageBodySchema = z.object({
   /** Left out — the first message of a new dialog. */
   dialogId: z.uuid().optional(),
+  /**
+   * The client's key of the new dialog this message opens (TASK-063.B), with
+   * `dialogId` left out: if the owner already has an open dialog opened with
+   * this key — an earlier send whose answer was lost on the way — the
+   * message goes into it instead of opening (and spending) another one.
+   * Ignored with `dialogId`.
+   */
+  openKey: z.uuid().optional(),
   /** A guest's device (required for a guest; ignored with a session). */
   deviceId: z.uuid().optional(),
   text: z.string().min(1).max(ASSISTANT_MESSAGE_MAX_CHARS),

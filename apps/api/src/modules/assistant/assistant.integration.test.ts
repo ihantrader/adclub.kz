@@ -384,11 +384,13 @@ describe("the AI Pilot assistant (PostgreSQL + Redis)", () => {
       mileageKm?: number;
       ip?: string;
       lang?: string;
+      openKey?: string;
     } = {},
   ): Promise<Response> {
     const body = {
       text,
       ...(options.dialogId ? { dialogId: options.dialogId } : {}),
+      ...(options.openKey ? { openKey: options.openKey } : {}),
       ...(options.token || options.device === null ? {} : { deviceId: options.device ?? DEVICE }),
       car: options.car ?? coolray(w),
       ...(options.city === false ? {} : { cityId: w.cityId }),
@@ -1230,6 +1232,48 @@ describe("the AI Pilot assistant (PostgreSQL + Redis)", () => {
     expect(await count("assistant_dialog", "id = $1 AND closed_at IS NULL", [third.dialogId])).toBe(
       1,
     );
+  });
+
+  it("a send sent again with its open key goes into the dialog it opened: one dialog spent (TASK-063.B)", async () => {
+    const w = await world();
+    await settings.set({
+      guest_limits: { photo_recognitions: 3, voice_requests: 5, assistant_dialogs: 5 },
+    });
+    const key = "77777777-7777-4777-8777-777777777777";
+    // The first send opened a dialog; its answer never reached the app.
+    const lost = await answer(w, "Нужно масло", { openKey: key });
+    expect(lost.limits.dialogsLeft).toBe(4);
+    // Sent again with the same key: the same dialog, its second turn, nothing more spent.
+    const again = await answer(w, "4 л", { openKey: key });
+    expect(again.dialogId).toBe(lost.dialogId);
+    expect(again.limits).toMatchObject({ dialogsLeft: 4, turnsLeft: 6 });
+    expect(await count("assistant_dialog", "device_id = $1", [DEVICE])).toBe(1);
+
+    // A key another device used is not that device's: refused, nothing opened or spent.
+    const other = "55555555-5555-4555-8555-555555555555";
+    expectError(
+      await ask(w, "Нужно масло", { openKey: key, device: other }),
+      409,
+      "ASSISTANT_TURN_IN_PROGRESS",
+    );
+    expect(await count("assistant_dialog", "device_id = $1", [other])).toBe(0);
+
+    // Two sends with one new key at once: one dialog; the other waits like a second turn.
+    gateway.mode = "slow";
+    gateway.delayMs = 500;
+    const both = "88888888-8888-4888-8888-888888888888";
+    const [a, b] = await Promise.all([
+      ask(w, "Нужно масло", { openKey: both }),
+      ask(w, "Нужно масло", { openKey: both }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(await count("assistant_dialog", "open_key = $1", [both])).toBe(1);
+    gateway.mode = "ok";
+
+    // A new dialog opened since closes the keyed one: the key opens anew, without it.
+    const fresh = await answer(w, "Нужно масло", { openKey: key });
+    expect(fresh.dialogId).not.toBe(lost.dialogId);
+    expect(await count("assistant_dialog", "open_key = $1", [key])).toBe(1);
   });
 
   it("an answer out of topic drops nothing: the items the model named are not counted as dropped", async () => {

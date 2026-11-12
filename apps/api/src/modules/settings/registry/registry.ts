@@ -1,4 +1,8 @@
-import { notificationKinds, type SettingEditableBy } from "@adclub/contracts";
+import {
+  MODEL_REQUEST_SERVER_MAX_SECONDS,
+  notificationKinds,
+  type SettingEditableBy,
+} from "@adclub/contracts";
 import { z } from "zod";
 import { define, type SettingDefinition } from "./setting-definition";
 
@@ -529,10 +533,11 @@ const guestAssistant = group({
     assistant_turn_seconds: define.duration({
       unit: "seconds",
       min: 5,
-      max: 300,
+      // The app waits for a turn only so long (TASK-063.B, `waitsForModel`).
+      max: MODEL_REQUEST_SERVER_MAX_SECONDS,
       default: 45,
       description:
-        "Сколько секунд может длиться один ход помощника целиком — все шаги модели и инструменты (TASK-062); дольше — «AI Pilot сейчас недоступен», ход не засчитывается.",
+        "Сколько секунд может длиться один ход помощника целиком — все шаги модели и инструменты (TASK-062); дольше — «AI Pilot сейчас недоступен», ход не засчитывается. Не больше 75: дольше приложение ответа не ждёт (TASK-063.B).",
     }),
     assistant_guest_per_ip: define.integer({
       unit: "count",

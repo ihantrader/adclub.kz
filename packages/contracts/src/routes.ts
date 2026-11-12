@@ -676,8 +676,30 @@ export interface ApiRouteDefinition {
     perMember?: RateLimitName;
     whenUnavailable: "refuse" | "allow";
   };
+  /**
+   * The answer waits for a language model (TASK-063.B; ARCHITECTURE 4.86
+   * I989): the server may take up to `MODEL_REQUEST_SERVER_MAX_SECONDS`
+   * on it, so a client waits `MODEL_REQUEST_CLIENT_WAIT_MS` for one attempt
+   * instead of its usual limit, and never sends it again by itself — a
+   * second send is a second paid call (a second turn of the assistant, a
+   * second recognition). Not part of the OpenAPI document.
+   */
+  waitsForModel?: true;
   responses: Readonly<Record<number, ApiResponseDefinition>>;
 }
+
+/**
+ * The longest the server works on a request that waits for a model
+ * (`waitsForModel`): the bound of the setting `assistant_turn_seconds` and
+ * the deadline of a photo recognition, both models together (TASK-063.B).
+ */
+export const MODEL_REQUEST_SERVER_MAX_SECONDS = 75;
+
+/**
+ * How long a client waits for one attempt of a `waitsForModel` request:
+ * the server's longest plus a margin for the upload and the network.
+ */
+export const MODEL_REQUEST_CLIENT_WAIT_MS = (MODEL_REQUEST_SERVER_MAX_SECONDS + 30) * 1000;
 
 function defineRoute<const Route extends ApiRouteDefinition>(route: Route): Route {
   if (route.requestBody && route.upload) {
@@ -1138,6 +1160,7 @@ export const apiRoutes = {
     operationId: "recognizeDashboard",
     method: "POST",
     path: "/garage/dashboard",
+    waitsForModel: true,
     summary:
       "Read the total mileage off a photo of the dashboard (SCREENS M-GAR-07): the photo is stored nowhere, nothing is written",
     tag: "garage",
@@ -1184,6 +1207,7 @@ export const apiRoutes = {
     operationId: "recognizeVehicleDocument",
     method: "POST",
     path: "/garage/vehicle-document",
+    waitsForModel: true,
     summary:
       "Read a car off a photo of a Kazakhstan registration certificate (SCREENS M-GAR-04): the photo is stored nowhere, nothing is added to the garage",
     tag: "garage",
@@ -4384,6 +4408,7 @@ export const apiRoutes = {
     operationId: "recognizePartPhoto",
     method: "POST",
     path: "/catalog/part-photo",
+    waitsForModel: true,
     summary:
       "Read the article off a photo of a part or its box and find it as the search does (M-CAT-06): the photo is stored nowhere; open to guests",
     tag: "catalog",
@@ -5771,6 +5796,7 @@ export const apiRoutes = {
     operationId: "sendAssistantMessage",
     method: "POST",
     path: "/assistant/messages",
+    waitsForModel: true,
     summary:
       "One turn of the AI Pilot assistant (M-AI-01): the person's message, the model looks things up only with tools over the catalog, the answer is its text and the cards the server builds from the catalog; the first message without dialogId opens a dialog and spends one of the day's (a guest's trial) dialogs; open to guests by deviceId",
     tag: "assistant",
@@ -5931,6 +5957,30 @@ export const uploadRoutePaths: readonly string[] = Object.freeze([
       .map((route: ApiRouteDefinition) => route.path),
   ),
 ]);
+
+/**
+ * Whether a request waits for a model (`waitsForModel`), by its method and
+ * URL — for a `fetch` wrapper that sees only those (the mobile app's
+ * attempts, TASK-063.B). The URL may be absolute and carry a query; the
+ * routes that wait for a model have no path parameters, so their paths are
+ * compared as they are.
+ */
+export function waitsForModel(method: string, url: string): boolean {
+  const path = pathOfUrl(url);
+  return modelRoutes.some((route) => route.method === method.toUpperCase() && route.path === path);
+}
+
+function pathOfUrl(url: string): string {
+  const noQuery = url.split(/[?#]/, 1)[0] ?? "";
+  const scheme = /^[a-z][a-z0-9+.-]*:\/\/[^/]*/i.exec(noQuery);
+  const path = scheme ? noQuery.slice(scheme[0].length) : noQuery;
+  return path === "" ? "/" : path;
+}
+
+/** Every route that waits for a model. */
+export const modelRoutes: readonly ApiRouteDefinition[] = Object.freeze(
+  Object.values(apiRoutes).filter((route: ApiRouteDefinition) => route.waitsForModel === true),
+);
 
 /** Path parameters a caller passes to a route (`never` for routes without them). */
 export type ApiRoutePathParams<Route extends ApiRouteDefinition> = Route extends {

@@ -1,4 +1,4 @@
-import type { SessionTokens } from "@adclub/contracts";
+import { MODEL_REQUEST_CLIENT_WAIT_MS, type SessionTokens } from "@adclub/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { StoredSession } from "../state/session-store";
 import {
@@ -281,6 +281,74 @@ describe("the time of one attempt (TASK-029.B)", () => {
       const stopped = expect(cancelled).rejects.toThrow("aborted");
       caller.abort();
       await stopped;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits longer for a request that waits for a model, and sends it once (TASK-063.B)", async () => {
+    vi.useFakeTimers();
+    try {
+      const sent: string[] = [];
+      const fetch = createSessionAwareFetch({
+        attemptTimeoutMs: 8_000,
+        modelAttemptTimeoutMs: MODEL_REQUEST_CLIENT_WAIT_MS,
+        fetch: (input, init) => {
+          sent.push(`${init.method ?? "GET"} ${input}`);
+          // The server is slow: 30 s for anything.
+          return new Promise<Response>((resolve, reject) => {
+            const timer = setTimeout(() => resolve(answer(200)), 30_000);
+            init.signal?.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          });
+        },
+        currentSession: () => null,
+        renewSession: () => undefined,
+        endSession: () => undefined,
+        exchange: () => Promise.resolve({ kind: "unavailable" }),
+      });
+
+      // The assistant's turn: answered after 30 s, more than an ordinary attempt's 8 s.
+      const turn = fetch("http://api.test/assistant/messages", { method: "POST" });
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect((await turn).status).toBe(200);
+
+      // A recognition that gets no answer at all: given up after the model's time, never sent again.
+      const never = createSessionAwareFetch({
+        attemptTimeoutMs: 8_000,
+        modelAttemptTimeoutMs: MODEL_REQUEST_CLIENT_WAIT_MS,
+        fetch: (input, init) => {
+          sent.push(`${init.method ?? "GET"} ${input}`);
+          return new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          });
+        },
+        currentSession: () => null,
+        renewSession: () => undefined,
+        endSession: () => undefined,
+        exchange: () => Promise.resolve({ kind: "unavailable" }),
+      });
+      const photo = never("http://api.test/catalog/part-photo?deviceId=x", { method: "POST" });
+      const gaveUp = expect(photo).rejects.toThrow("aborted");
+      await vi.advanceTimersByTimeAsync(MODEL_REQUEST_CLIENT_WAIT_MS - 1);
+      let settled = false;
+      void photo.catch(() => (settled = true));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      await gaveUp;
+      await vi.advanceTimersByTimeAsync(MODEL_REQUEST_CLIENT_WAIT_MS * 2);
+      expect(sent.filter((line) => line.includes("part-photo"))).toHaveLength(1);
+
+      // Everything else keeps the ordinary 8 s.
+      const ordinary = fetch("http://api.test/assistant/dialogs/abc", { method: "GET" });
+      const cut = expect(ordinary).rejects.toThrow("aborted");
+      await vi.advanceTimersByTimeAsync(8_001);
+      await cut;
     } finally {
       vi.useRealTimers();
     }

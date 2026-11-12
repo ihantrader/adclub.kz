@@ -27,6 +27,11 @@ export interface ApiClientOptions {
   getLanguage?: () => string | undefined;
   /** Per-request timeout; a timed-out request fails with `NETWORK_ERROR`. Default 10 s. */
   timeoutMs?: number;
+  /**
+   * The timeout of a route that waits for a model (`waitsForModel`,
+   * TASK-063.B) instead of `timeoutMs`; left out — `timeoutMs` for every route.
+   */
+  modelTimeoutMs?: number;
   /** Called with every `ApiError` before it's thrown — the hook for app-wide reactions such as `CLIENT_UPDATE_REQUIRED`. */
   onError?: (error: ApiError) => void;
   /**
@@ -148,7 +153,7 @@ async function readJson(response: Response): Promise<{ ok: true; value: unknown 
  */
 export function createApiClient(options: ApiClientOptions): ApiClient {
   const baseUrl = options.baseUrl.replace(/\/+$/, "");
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const defaultTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // Wrapped rather than stored: calling a detached `window.fetch` with
   // another `this` throws "Illegal invocation" in browsers.
   const fetchImpl: FetchLike = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
@@ -212,6 +217,10 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       headers["Accept-Language"] = language;
     }
 
+    const timeoutMs =
+      route.waitsForModel && options.modelTimeoutMs !== undefined
+        ? options.modelTimeoutMs
+        : defaultTimeoutMs;
     const controller = new AbortController();
     const callerSignal = requestOptions.signal;
     const abortFromCaller = () => controller.abort();

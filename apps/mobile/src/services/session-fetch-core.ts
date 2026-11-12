@@ -1,4 +1,4 @@
-import { sessionTokensSchema, type SessionTokens } from "@adclub/contracts";
+import { sessionTokensSchema, waitsForModel, type SessionTokens } from "@adclub/contracts";
 import type { FetchLike } from "@adclub/api-client";
 import type { StoredSession } from "../state/session-store";
 
@@ -56,6 +56,14 @@ export interface SessionFetchDeps {
    * lost connection.
    */
   attemptTimeoutMs?: number;
+  /**
+   * The time of one attempt of a request that waits for a model
+   * (`waitsForModel` of the contract, TASK-063.B) instead of
+   * `attemptTimeoutMs`. Such a request is never sent again after a timeout
+   * or a lost connection — only after the server refused its token before
+   * doing anything (`ACCESS_TOKEN_EXPIRED`).
+   */
+  modelAttemptTimeoutMs?: number;
 }
 
 /** What an exchange said, from the HTTP answer (`unavailable` for anything that is not a verdict). */
@@ -110,7 +118,10 @@ function withBearer(init: RequestInit, token: string): RequestInit {
 export function createSessionAwareFetch(deps: SessionFetchDeps): FetchLike {
   /** One attempt: its own time limit, and the caller's signal still cancels it. */
   function attempt(input: string, init: RequestInit): Promise<Response> {
-    const limit = deps.attemptTimeoutMs;
+    const limit =
+      deps.modelAttemptTimeoutMs !== undefined && waitsForModel(init.method ?? "GET", input)
+        ? deps.modelAttemptTimeoutMs
+        : deps.attemptTimeoutMs;
     if (limit === undefined) return deps.fetch(input, init);
     const controller = new AbortController();
     const outer = init.signal ?? undefined;

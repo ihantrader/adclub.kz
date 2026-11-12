@@ -7,6 +7,7 @@ import { UpdateGate } from "../update-gate";
 import {
   ATTEMPT_TIMEOUT_MS,
   createSessionAwareFetch,
+  MODEL_ATTEMPT_TIMEOUT_MS,
   type SessionFetchCallbacks,
 } from "./session-fetch";
 
@@ -53,5 +54,8 @@ export const apiClient = createApiClient({
   // is limited to 8 s (`ATTEMPT_TIMEOUT_MS`); this covers a whole call — an
   // attempt, a token exchange (8 s at most) and the retry.
   timeoutMs: 3 * ATTEMPT_TIMEOUT_MS,
+  // A request that waits for a model (TASK-063.B): one long attempt, and
+  // room for an exchange and the retry its refused token allows.
+  modelTimeoutMs: MODEL_ATTEMPT_TIMEOUT_MS + 2 * ATTEMPT_TIMEOUT_MS,
   onError: updateGate.handleApiError,
 });

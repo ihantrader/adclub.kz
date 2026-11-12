@@ -31,6 +31,8 @@ export const assistantDialog = pgTable("assistant_dialog", {
   charged: boolean("charged").notNull().default(false),
   chargedAt: timestamp("charged_at", { withTimezone: true }),
   turnStartedAt: timestamp("turn_started_at", { withTimezone: true }),
+  // The client's key of the new dialog (TASK-063.B): a lost answer's send sent again finds it.
+  openKey: uuid("open_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   closedAt: timestamp("closed_at", { withTimezone: true }),

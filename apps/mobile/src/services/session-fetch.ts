@@ -1,4 +1,9 @@
-import { apiRoutes, CLIENT_HEADER, formatClientHeader } from "@adclub/contracts";
+import {
+  apiRoutes,
+  CLIENT_HEADER,
+  formatClientHeader,
+  MODEL_REQUEST_CLIENT_WAIT_MS,
+} from "@adclub/contracts";
 import type { FetchLike } from "@adclub/api-client";
 import { apiUrl, clientInfo } from "../config/environment";
 import { clearSession, sessionStore } from "../state/stores";
@@ -36,6 +41,14 @@ const REFRESH_TIMEOUT_MS = 8_000;
  * retry short (TASK-029.B).
  */
 export const ATTEMPT_TIMEOUT_MS = 8_000;
+
+/**
+ * One attempt of a request that waits for a model — the assistant's turn,
+ * the photo recognitions (`waitsForModel` of the contract, TASK-063.B): the
+ * server may work on it up to `MODEL_REQUEST_SERVER_MAX_SECONDS`, so it is
+ * waited for that long and a margin, and never sent again by itself.
+ */
+export const MODEL_ATTEMPT_TIMEOUT_MS = MODEL_REQUEST_CLIENT_WAIT_MS;
 
 /** The exchange itself, independent of the wrapped `fetch` — never recurses through it. */
 export async function exchangeRefreshToken(refreshToken: string): Promise<ExchangeResult> {
@@ -87,5 +100,6 @@ export function createSessionAwareFetch(callbacks: SessionFetchCallbacks): Fetch
     },
     exchange: exchangeRefreshToken,
     attemptTimeoutMs: ATTEMPT_TIMEOUT_MS,
+    modelAttemptTimeoutMs: MODEL_ATTEMPT_TIMEOUT_MS,
   });
 }

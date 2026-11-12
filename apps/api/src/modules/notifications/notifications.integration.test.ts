@@ -1636,12 +1636,15 @@ describe("push to the user (PostgreSQL + Redis, API and two workers)", () => {
     expect(await card()).toMatchObject({ unackedStreak: 0, pushUnreliableSince: null });
     const fifth = await place(buyer, offer);
     await act(shop, fifth.id, "accept");
-    const [calm] = await notificationsOf("subject_id = $1", [fifth.id]);
-    expect(await copiesOf(calm!.id)).toHaveLength(0);
+    // Settled first (TASK-063.B): a push still queued has no send time to
+    // move back — the worker would send it after `overdue` with a fresh one,
+    // and the timeout would not have passed yet.
+    const calm = await pushOf(fifth.id, "order_accepted");
+    expect(await copiesOf(calm.id)).toHaveLength(0);
 
     // With the setting at one, a single unconfirmed push is enough.
     await configure({ push_unreliable_after: 1 });
-    await overdue(calm!.id);
+    await overdue(calm.id);
     await runFallback();
     expect((await card()).pushUnreliableSince).not.toBeNull();
     const sixth = await place(buyer, offer);

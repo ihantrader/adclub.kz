@@ -10,6 +10,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -41,6 +42,12 @@ import {
   type AssistantLimitSheet,
   type DialogEntry,
 } from "../../assistant/assistant-rules";
+import {
+  answerCarOf,
+  createAssistantTurns,
+  mileageOfferOf,
+  type Turn,
+} from "../../assistant/assistant-turns";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { carTitle } from "../../garage/garage";
 import { lowerThanLast, formatKm } from "../../garage/mileage";
@@ -93,10 +100,6 @@ function signedInAccount(): string | null {
   return session.status === "signed_in" ? session.session.accountId : null;
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * M-AI-01 (TASK-063; ARCHITECTURE 4.86): the dialog with AI Pilot for the
  * main car of the garage.
@@ -113,6 +116,11 @@ function wait(ms: number): Promise<void> {
  * dialog is read again on the next opening or sending; a message refused
  * because a turn is still running reads it again a few times
  * (`TURN_POLLS`). A message that got no answer stays in the field.
+ *
+ * The order of requests — the epoch every reading and answer is checked
+ * against, one new dialog a send, late answers — is `createAssistantTurns`
+ * (TASK-063.A); what an answer says about a car is said of the dialog's
+ * car (`answerCarOf`), not the header's.
  */
 export function AssistantScreen({
   draft,
@@ -145,21 +153,26 @@ export function AssistantScreen({
   const [limitSheet, setLimitSheet] = useState<AssistantLimitSheet | null>(null);
   const [complaintFor, setComplaintFor] = useState<string | null>(null);
   const [complained, setComplained] = useState<ReadonlySet<string>>(new Set());
-  const [savedMileage, setSavedMileage] = useState<ReadonlySet<string>>(new Set());
+  const [mileageState, setMileageState] = useState<ReadonlyMap<string, "saving" | "saved">>(
+    new Map(),
+  );
   const [lower, setLower] = useState<{ km: number; last: number; messageId: string } | null>(null);
   const [sheet, setSheet] = useState<"car" | null>(null);
   const [confirmCar, setConfirmCar] = useState<string | null>(null);
   const gate = useLoadingGate();
+  // The same functions for the life of the screen: `reload` stays one, and
+  // the focus effect reads the dialog once, not again on every change of `gate`.
+  const { begin: gateBegin, settle: gateSettle, cancel: gateCancel } = gate;
   const scroll = useRef<ScrollView>(null);
-  // A send in flight, numbered: «Остановить» and a new dialog stop waiting for it.
-  const attempt = useRef(0);
+  // The epoch, the attempts and the opening of a new dialog (`assistant-turns.ts`).
+  const [turns] = useState(createAssistantTurns);
   // The dialog was left before its answer came: read it again before anything else.
   const stale = useRef(false);
   const loadedFor = useRef<string | null>(null);
-  // The current dialog of this screen, numbered: a new dialog or another
-  // person moves it on, and an answer that comes late for an earlier one
-  // never brings that dialog back.
-  const epoch = useRef(0);
+  // The dialog the shown messages are of: an answer of it adds to them.
+  const shownDialog = useRef<string | null>(null);
+  // The timers of the readings after ASSISTANT_TURN_IN_PROGRESS: off when the screen is left.
+  const timers = useRef(new Set<{ timer: ReturnType<typeof setTimeout>; done: () => void }>());
   const pendingRef = useRef<Pending | null>(null);
   const shownCount = useRef(0);
   useEffect(() => {
@@ -168,6 +181,7 @@ export function AssistantScreen({
   }, [pending, entries]);
 
   const dialogId = current?.dialogId ?? null;
+  const dialogCarId = current?.carId ?? null;
   const cityId = cityIdOf(selection);
 
   const remember = useCallback(
@@ -178,12 +192,19 @@ export function AssistantScreen({
   );
 
   /** The dialog as the server keeps it; 404 — gone: an empty one. */
+  // `null` — not read, or read for a dialog the screen has left (another epoch).
   const reload = useCallback(
     async (id: string) => {
-      const ticket = gate.begin();
+      const turn = turns.begin();
+      const ticket = gateBegin();
       try {
         const answer = await readAssistantDialog(id);
-        gate.settle(ticket, () => {
+        if (!turns.current(turn)) {
+          gateCancel();
+          return null;
+        }
+        gateSettle(ticket, () => {
+          shownDialog.current = id;
           setEntries(answer.messages);
           setLimits(answer.limits);
           setStopped(null);
@@ -191,16 +212,58 @@ export function AssistantScreen({
         });
         return answer.messages.length;
       } catch (error) {
-        gate.cancel();
+        gateCancel();
+        if (!turns.current(turn)) return null;
         if (assistantFailureOf(error, true).kind === "dialog_gone") {
           remember(signedInAccount(), null);
+          shownDialog.current = null;
           setEntries([]);
         }
         return null;
       }
     },
-    [gate, remember],
+    [gateBegin, gateCancel, gateSettle, remember, turns],
   );
+
+  /** A pause between readings; `false` — the screen was left meanwhile. */
+  const pause = useCallback(
+    (ms: number) =>
+      new Promise<boolean>((resolve) => {
+        const entry = {
+          timer: setTimeout(() => {
+            timers.current.delete(entry);
+            resolve(true);
+          }, ms),
+          done: () => resolve(false),
+        };
+        timers.current.add(entry);
+      }),
+    [],
+  );
+  /** Stops the pauses in progress; `true` — there were some. */
+  const dropTimers = useCallback(() => {
+    const some = timers.current.size > 0;
+    for (const entry of timers.current) {
+      clearTimeout(entry.timer);
+      entry.done();
+    }
+    timers.current.clear();
+    return some;
+  }, []);
+  useEffect(
+    () => () => {
+      dropTimers();
+    },
+    [dropTimers],
+  );
+
+  /** Moves the screen to a new epoch: whatever was asked before is dropped when it comes. */
+  const advance = useCallback(() => {
+    turns.advance();
+    dropTimers();
+    shownDialog.current = null;
+    stale.current = false;
+  }, [dropTimers, turns]);
 
   // Who uses the app changed: signing in opens the account's new dialog
   // (the guest's stays the guest's); the text in the field stays.
@@ -209,8 +272,7 @@ export function AssistantScreen({
     if (owner.current === accountId) return;
     const signedIn = owner.current === null && accountId !== null;
     owner.current = accountId;
-    attempt.current += 1;
-    epoch.current += 1;
+    advance();
     const unanswered = pendingRef.current;
     if (unanswered) setText((typed) => (typed === "" ? unanswered.text : typed));
     setPending(null);
@@ -220,27 +282,40 @@ export function AssistantScreen({
     setNotice(null);
     loadedFor.current = null;
     if (signedIn) remember(accountId, null);
-  }, [accountId, remember]);
+  }, [accountId, advance, remember]);
 
   // The current dialog when the screen opens or the dialog changes.
   useEffect(() => {
     if (dialogId === null) {
       loadedFor.current = null;
+      const turn = turns.begin();
       void readAssistantLimits()
-        .then(setLimits)
+        .then((read) => {
+          if (turns.current(turn)) setLimits(read);
+        })
         .catch(() => undefined);
       return;
     }
     if (loadedFor.current === dialogId) return;
     loadedFor.current = dialogId;
     void reload(dialogId);
-  }, [dialogId, reload]);
+  }, [dialogId, reload, turns]);
 
   // Back on the screen: an answer that came while it was closed is read.
+  // Leaving it stops the readings after ASSISTANT_TURN_IN_PROGRESS; the
+  // dialog is read again on coming back instead.
   useFocusEffect(
     useCallback(() => {
       if (stale.current && dialogId) void reload(dialogId);
     }, [dialogId, reload]),
+  );
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        if (dropTimers()) stale.current = true;
+      },
+      [dropTimers],
+    ),
   );
 
   // A text to put into the field (the person sends it): each new stamp once.
@@ -251,21 +326,25 @@ export function AssistantScreen({
   }
 
   const startNewDialog = useCallback(() => {
-    attempt.current += 1;
-    epoch.current += 1;
+    advance();
     remember(signedInAccount(), null);
     setEntries([]);
     setPending(null);
     setStopped(null);
     setNotice(null);
-    stale.current = false;
-  }, [remember]);
+  }, [advance, remember]);
 
-  const applied = (response: AssistantMessageResponse, sent: string, carId: string) => {
-    remember(signedInAccount(), { dialogId: response.dialogId, carId });
+  const applied = (response: AssistantMessageResponse, sent: string, carId: string, turn: Turn) => {
+    if (turns.mayRemember(turn)) {
+      remember(signedInAccount(), { dialogId: response.dialogId, carId });
+    }
     loadedFor.current = response.dialogId;
+    // An answer of the shown dialog adds to it (after «Остановить» the
+    // reading before the send has shown the earlier exchange).
+    const same = shownDialog.current === response.dialogId;
+    shownDialog.current = response.dialogId;
     setEntries((now) => [
-      ...(response.dialogId === dialogId ? now : []),
+      ...(same ? now : []),
       {
         id: `local-${response.message.id}`,
         role: "user",
@@ -288,11 +367,8 @@ export function AssistantScreen({
   const send = async (raw: string, quickReply = false) => {
     const message = raw.trim();
     if (message === "" || pending !== null || !online) return;
-    const mine = ++attempt.current;
-    const ofEpoch = epoch.current;
+    const turn = turns.begin();
     const who = signedInAccount();
-    const forCar = car;
-    let forDialog = dialogId;
     let before = shownCount.current;
     setNotice(null);
     setPending({ text: message });
@@ -300,11 +376,33 @@ export function AssistantScreen({
     const back = () => {
       if (!quickReply) setText((typed) => (typed === "" ? message : typed));
     };
-    try {
-      if (stale.current && forDialog) {
-        before = (await reload(forDialog)) ?? before;
-        forDialog = currentDialogOf(assistantDialogsStore.get(), who)?.dialogId ?? null;
+    const storedDialog = () => currentDialogOf(assistantDialogsStore.get(), who);
+    // One new dialog a send: a send still opening one (also after
+    // «Остановить») is waited for, and this one goes into its dialog.
+    let target = await turns.dialogFor(turn, storedDialog()?.dialogId ?? null);
+    if (!turns.current(turn)) {
+      if (target.kind === "open") target.settle(null);
+      return;
+    }
+    if (target.kind === "dialog" && stale.current) {
+      // An answer came while it was not waited for: the dialog first.
+      before = (await reload(target.dialogId)) ?? before;
+      if (!turns.current(turn)) return;
+      const now = storedDialog()?.dialogId ?? null;
+      if (now === null) target = await turns.dialogFor(turn, null);
+      if (!turns.current(turn)) {
+        if (target.kind === "open") target.settle(null);
+        return;
       }
+    }
+    const opening = target.kind === "open" ? target.settle : null;
+    const forDialog = target.kind === "dialog" ? target.dialogId : null;
+    // The car of the request: the dialog's (the server keeps it), else the header's.
+    const stored = forDialog ? storedDialog() : null;
+    const known = stored?.dialogId === forDialog ? stored : null;
+    const forCar = (known ? answerCarOf(cars, known.carId) : null) ?? car;
+    const carId = known?.carId ?? forCar.id;
+    try {
       const response = await sendAssistantMessage({
         text: message,
         car: forCar,
@@ -312,20 +410,21 @@ export function AssistantScreen({
         dialogId: forDialog,
         quickReply,
       });
-      if (mine !== attempt.current) {
-        // Stopped meanwhile: the dialog is known now, its answer is read on the
-        // next opening or sending — unless the person has moved on to another
-        // dialog, or another person uses the app now.
-        if (ofEpoch !== epoch.current || who !== signedInAccount()) return;
-        if (forDialog === null) {
-          remember(who, { dialogId: response.dialogId, carId: forCar.id });
+      opening?.(response.dialogId);
+      if (!turns.current(turn)) return;
+      if (!turns.awaited(turn)) {
+        // Stopped meanwhile: the dialog is known now, its answer is read on
+        // the next opening or sending.
+        if (forDialog === null && turns.mayRemember(turn)) {
+          remember(who, { dialogId: response.dialogId, carId });
         }
         stale.current = true;
         return;
       }
-      applied(response, message, forCar.id);
+      applied(response, message, carId, turn);
     } catch (error) {
-      if (mine !== attempt.current) return;
+      opening?.(null);
+      if (!turns.awaited(turn)) return;
       const failure = assistantFailureOf(error, forDialog !== null);
       setPending(null);
       back();
@@ -334,9 +433,9 @@ export function AssistantScreen({
           // The turn before is still running (after «Остановить»): read the dialog a few times.
           if (!forDialog) return;
           for (let poll = 0; poll < TURN_POLLS; poll += 1) {
-            await wait(TURN_POLL_MS);
-            if (mine !== attempt.current) return;
+            if (!(await pause(TURN_POLL_MS)) || !turns.current(turn)) return;
             const now = await reload(forDialog);
+            if (!turns.current(turn)) return;
             if (now !== null && now > before) return;
           }
           stale.current = true;
@@ -354,7 +453,8 @@ export function AssistantScreen({
           setNotice({ kind: "car_gone" });
           return;
         case "dialog_gone":
-          remember(signedInAccount(), null);
+          remember(who, null);
+          shownDialog.current = null;
           setEntries([]);
           return;
         case "guest_trial":
@@ -370,17 +470,31 @@ export function AssistantScreen({
 
   // The input comes back at once; the message stays shown, muted, until the dialog is read again.
   const stop = () => {
-    attempt.current += 1;
+    turns.stop();
     stale.current = true;
     setStopped(pending);
     setPending(null);
   };
 
+  // The car the answers of the shown dialog were given for (not the header's).
+  const answerCar = useMemo(() => answerCarOf(cars, dialogCarId), [cars, dialogCarId]);
+
   const updateMileage = async (messageId: string, km: number, confirmLower = false) => {
+    const target = answerCar;
+    if (!target || mileageState.get(messageId) === "saving") return;
+    const mark = (state: "saving" | "saved" | null) =>
+      setMileageState((now) => {
+        const next = new Map(now);
+        if (state) next.set(messageId, state);
+        else next.delete(messageId);
+        return next;
+      });
+    mark("saving");
     try {
-      await recordMileage(car.id, { valueKm: km, source: "text" }, confirmLower);
-      setSavedMileage((now) => new Set(now).add(messageId));
+      await recordMileage(target.id, { valueKm: km, source: "text" }, confirmLower);
+      mark("saved");
     } catch (error) {
+      mark(null);
       const last = lowerThanLast(error);
       if (last !== null) {
         setLower({ km, last, messageId });
@@ -407,7 +521,6 @@ export function AssistantScreen({
   const live = liveQuestionId(entries);
   const counter = assistantCounter(limits);
   const firstReply = entries.find((entry) => entry.role === "assistant")?.id ?? null;
-  const dialogCar = current ? cars.find((item) => item.id === current.carId) : undefined;
   const otherCar = entries.length > 0 && current !== null && current.carId !== car.id;
   const empty = entries.length === 0 && pending === null && stopped === null;
   const loading = gate.indicator && entries.length === 0;
@@ -515,7 +628,7 @@ export function AssistantScreen({
                 }
               >
                 {t("assistant.otherCar", {
-                  car: dialogCar ? carTitle(dialogCar) : t("garage.add"),
+                  car: answerCar ? carTitle(answerCar) : t("garage.add"),
                 })}
               </Banner>
             )}
@@ -526,21 +639,17 @@ export function AssistantScreen({
                 <ReplyBlock
                   key={entry.id}
                   reply={entry}
-                  carName={carTitle(car)}
-                  modelName={car.model.label}
+                  carName={answerCar ? carTitle(answerCar) : null}
+                  modelName={answerCar?.model.label ?? null}
                   live={entry.id === live && pending === null}
                   online={online}
                   first={entry.id === firstReply}
                   complained={complained.has(entry.id)}
-                  mileage={
-                    entry.mileageSuggestion
-                      ? savedMileage.has(entry.id)
-                        ? "saved"
-                        : car.mileage?.valueKm === entry.mileageSuggestion.km
-                          ? null
-                          : "ask"
-                      : null
-                  }
+                  mileage={mileageOfferOf(
+                    entry.mileageSuggestion,
+                    answerCar,
+                    mileageState.get(entry.id) ?? null,
+                  )}
                   onQuickReply={(option) => void send(option, true)}
                   onOpenCard={(card: AssistantCard) =>
                     onOpenItem({ id: card.id, name: card.name.text })

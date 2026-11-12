@@ -42,16 +42,17 @@ export function Avatar({ state }: { state: Parameters<typeof AiPilot>[0]["state"
 
 export interface ReplyBlockProps {
   reply: AssistantReply;
-  carName: string;
-  modelName: string;
+  /** The dialog's car (not the header's); `null` — it is not in the garage any more. */
+  carName: string | null;
+  modelName: string | null;
   /** The question of this answer takes quick replies (the last answer only, online). */
   live: boolean;
   online: boolean;
   /** T-AI-02, once a dialog, above its first answer. */
   first: boolean;
   complained: boolean;
-  /** The mileage suggestion: `saved` once written. */
-  mileage: "ask" | "saved" | null;
+  /** The mileage suggestion (`mileageOfferOf`): `saving` while written, `saved` once written. */
+  mileage: "ask" | "saving" | "saved" | null;
   onQuickReply: (option: string) => void;
   onOpenCard: (card: AssistantCard) => void;
   onComplain: () => void;
@@ -84,7 +85,7 @@ export function ReplyBlock({
   const row = (card: AssistantCard, index: number, count: number) => (
     <ItemRow
       key={card.id}
-      {...(card.type === "service" ? { serviceModel: modelName } : {})}
+      {...(card.type === "service" && modelName ? { serviceModel: modelName } : {})}
       first={index === 0}
       last={index === count - 1}
       name={card.name.text}
@@ -132,14 +133,15 @@ export function ReplyBlock({
         )}
       </View>
 
-      {reply.groups.map((group) => {
+      {reply.groups.map((group, groupIndex) => {
         const groupCards = group.itemIds.flatMap((id) => {
           const card = cards.get(id);
           return card ? [card] : [];
         });
         if (groupCards.length === 0) return null;
         return (
-          <View key={group.title} style={styles.group}>
+          // By place, not title: two groups may be titled alike.
+          <View key={`group-${groupIndex}`} style={styles.group}>
             <View style={styles.groupHead}>
               <Text variant="bodyStrong" style={styles.flex}>
                 {group.title}
@@ -179,7 +181,7 @@ export function ReplyBlock({
           {reply.disclaimer}
         </Banner>
       )}
-      {reply.mileageSuggestion && mileage === "ask" && (
+      {reply.mileageSuggestion && (mileage === "ask" || mileage === "saving") && (
         <View style={styles.mileage}>
           <Text variant="bodyS" style={styles.flex}>
             {t("assistant.mileageAsk", { km: formatKm(reply.mileageSuggestion.km) })}
@@ -187,7 +189,8 @@ export function ReplyBlock({
           <Button
             variant="secondary"
             size="m"
-            disabled={!online}
+            disabled={!online || mileage === "saving"}
+            loading={mileage === "saving"}
             onPress={() => onUpdateMileage(reply.mileageSuggestion!.km)}
           >
             {t("assistant.mileageUpdate")}

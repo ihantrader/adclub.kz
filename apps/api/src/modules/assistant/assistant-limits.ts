@@ -42,7 +42,8 @@ export type Charge = { kind: "account"; dialogId: string } | { kind: "guest"; ke
  * a count, no content), a signed-in person's per Almaty day
  * (`assistant_daily_dialogs_per_user`, the charged dialogs of the account
  * in the database, under a lock of the account so two first messages at
- * once can't both pass the last one). A dialog is counted with its first
+ * once can't both pass the last one; counted by the moment it was charged,
+ * `charged_at` — TASK-063). A dialog is counted with its first
  * turn that goes to the model, and given back when the provider could not
  * serve it (`refund`) — that is not the person's doing. Without Redis a
  * guest is not served (every turn costs money; an uncounted one is not
@@ -124,7 +125,7 @@ export class AssistantLimitsService {
             and(
               eq(assistantDialog.accountId, asker.accountId),
               eq(assistantDialog.charged, true),
-              gte(assistantDialog.createdAt, ALMATY_DAY_START),
+              gte(assistantDialog.chargedAt, ALMATY_DAY_START),
             ),
           );
         if ((row?.used ?? 0) >= limit) {
@@ -135,7 +136,7 @@ export class AssistantLimitsService {
         }
         await tx
           .update(assistantDialog)
-          .set({ charged: true, updatedAt: sql`now()` })
+          .set({ charged: true, chargedAt: sql`now()`, updatedAt: sql`now()` })
           .where(eq(assistantDialog.id, dialogId));
         return { kind: "account", dialogId } as const;
       });
@@ -155,7 +156,7 @@ export class AssistantLimitsService {
     try {
       await this.database.db
         .update(assistantDialog)
-        .set({ charged: true, updatedAt: sql`now()` })
+        .set({ charged: true, chargedAt: sql`now()`, updatedAt: sql`now()` })
         .where(eq(assistantDialog.id, dialogId));
     } catch (error) {
       // Counted in Redis but not marked: given back, or a trial dialog would be lost for good.
@@ -172,7 +173,7 @@ export class AssistantLimitsService {
     }
     await this.database.db
       .update(assistantDialog)
-      .set({ charged: false, updatedAt: sql`now()` })
+      .set({ charged: false, chargedAt: null, updatedAt: sql`now()` })
       .where(eq(assistantDialog.id, dialogId));
   }
 
@@ -184,7 +185,7 @@ export class AssistantLimitsService {
         and(
           eq(assistantDialog.accountId, accountId),
           eq(assistantDialog.charged, true),
-          gte(assistantDialog.createdAt, ALMATY_DAY_START),
+          gte(assistantDialog.chargedAt, ALMATY_DAY_START),
         ),
       );
     return row?.used ?? 0;

@@ -29,6 +29,7 @@ export const assistantDialog = pgTable("assistant_dialog", {
   cityId: uuid("city_id").references(() => city.id),
   turns: integer("turns").notNull().default(0),
   charged: boolean("charged").notNull().default(false),
+  chargedAt: timestamp("charged_at", { withTimezone: true }),
   turnStartedAt: timestamp("turn_started_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

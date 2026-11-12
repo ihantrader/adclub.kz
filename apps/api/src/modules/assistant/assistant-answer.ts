@@ -31,6 +31,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
  */
 const SYMPTOM_NODES = new Set(["brakes", "suspension", "engine"]);
 
+/** The page of a subcategory's list the cards are checked in (the list's own largest page). */
+export const CARDS_PAGE = 50;
+
 /** How the turn ended, as the pipeline hands it over. */
 export type TurnEnd =
   | { kind: "ask"; args: AskUserArgs }
@@ -132,8 +135,9 @@ export class AssistantAnswers {
         text: OFF_TOPIC_TEXT[lang],
         reply: { ...EMPTY, question: null },
         itemIds: [],
-        dropped: [...(end.args.itemIds ?? []), ...(end.args.groups ?? []).flatMap((g) => g.itemIds)]
-          .length,
+        // Not grounding: an answer out of topic shows no item at all, so
+        // nothing the model named counts as dropped (TASK-063).
+        dropped: 0,
       };
     }
 
@@ -236,23 +240,27 @@ export class AssistantAnswers {
       ...vehicleQueryOf(context.vehicle),
       ...(context.cityId ? { cityId: context.cityId } : {}),
       sort: "cheaper" as const,
-      limit: 50,
+      limit: CARDS_PAGE,
     };
     for (const [categoryId, itemIds] of byCategory) {
-      let list;
-      try {
-        list = await this.showcase.list(categoryId, query, context.viewer, context.lang, {
-          itemIds,
-        });
-      } catch (error) {
-        if (error instanceof ApiException && error.status === 404) continue;
-        throw error;
-      }
-      for (const item of list.items) {
-        cards.set(item.id, {
-          ...item,
-          category: { id: list.category.id, kind: list.category.kind, name: list.category.name },
-        });
+      // Every named item is checked: the list's page is CARDS_PAGE, so more
+      // of one subcategory go in pages of it (TASK-063).
+      for (let start = 0; start < itemIds.length; start += CARDS_PAGE) {
+        let list;
+        try {
+          list = await this.showcase.list(categoryId, query, context.viewer, context.lang, {
+            itemIds: itemIds.slice(start, start + CARDS_PAGE),
+          });
+        } catch (error) {
+          if (error instanceof ApiException && error.status === 404) break;
+          throw error;
+        }
+        for (const item of list.items) {
+          cards.set(item.id, {
+            ...item,
+            category: { id: list.category.id, kind: list.category.kind, name: list.category.name },
+          });
+        }
       }
     }
     return cards;

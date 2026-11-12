@@ -120,6 +120,52 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("counts an assistant dialog by the moment it was charged, keeps the old ones, and rolls back (TASK-063)", async () => {
+    const accountId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77470000963') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const insert = (charged: boolean, chargedAt: string | null) =>
+      client.query<{ id: string }>(
+        `INSERT INTO assistant_dialog (account_id, language, vehicle, car_words, charged, charged_at)
+         VALUES ($1, 'ru', '{}', '{"make":"Geely"}', $2, $3) RETURNING id`,
+        [accountId, charged, chargedAt],
+      );
+    // Charged and the moment of it go together.
+    await expect(insert(true, null)).rejects.toThrow(/assistant_dialog_charged_at_check/);
+    await expect(insert(false, "2026-11-12T05:00:00Z")).rejects.toThrow(
+      /assistant_dialog_charged_at_check/,
+    );
+    await insert(true, "2026-11-12T05:00:00Z");
+    await insert(false, null);
+
+    expect(runMigrate("down", container.getConnectionUri())).toContain("Migrations complete");
+    expect(
+      (
+        await client.query(
+          "SELECT 1 FROM information_schema.columns WHERE table_name = 'assistant_dialog' AND column_name = 'charged_at'",
+        )
+      ).rowCount,
+    ).toBe(0);
+    // A dialog charged before the migration keeps the moment it was opened.
+    const old = (
+      await client.query<{ id: string }>(
+        `INSERT INTO assistant_dialog (account_id, language, vehicle, car_words, charged, created_at)
+         VALUES ($1, 'ru', '{}', '{"make":"Geely"}', true, '2026-11-10T08:00:00Z') RETURNING id`,
+        [accountId],
+      )
+    ).rows[0]!.id;
+    expect(runMigrate("up", container.getConnectionUri())).toContain("Migrations complete");
+    const backfilled = await client.query<{ charged_at: Date }>(
+      "SELECT charged_at FROM assistant_dialog WHERE id = $1",
+      [old],
+    );
+    expect(backfilled.rows[0]!.charged_at.toISOString()).toBe("2026-11-10T08:00:00.000Z");
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+    await rollBackThrough("1792250000000_assistant-charged-at");
+  });
+
   it("holds the dialogs of the assistant with their rules, goes with the account, and rolls back (TASK-062)", async () => {
     const accountId = (
       await client.query<{ id: string }>(

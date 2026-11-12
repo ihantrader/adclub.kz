@@ -36,7 +36,10 @@ import { truncateAll } from "../../testing/database";
 import { captureOutput, rememberCode, rememberSecret } from "../../testing/output-capture";
 import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
-import { TEST_ASSISTANT_INVENTED_ID, TestAiGateway } from "../ai";
+import { TEST_ASSISTANT_INVENTED_ID, TestAiGateway, type AssistantStepOutput } from "../ai";
+import { resolveVehicle } from "../compatibility";
+import { ShowcaseService } from "../showcase";
+import { AssistantAnswers, CARDS_PAGE } from "./assistant-answer";
 import { DevCatalogSeed } from "../catalog";
 import { DevCompatibilitySeed } from "../compatibility";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
@@ -1053,4 +1056,215 @@ describe("the AI Pilot assistant (PostgreSQL + Redis)", () => {
         .assistantComplaintsNew,
     ).toBe(0);
   });
+
+  // ------------------------------------- TASK-063: the acceptance of TASK-062 (I971)
+
+  it("an account's day counts the dialogs charged that day: opened yesterday, answered today — today's", async () => {
+    const w = await world();
+    await settings.set({ assistant_daily_dialogs_per_user: 2 });
+    const token = await sessionToken(USER_PHONE, IOS);
+    // Opened, the provider down: given back, nothing charged.
+    gateway.mode = "unavailable";
+    const opened = await answer(w, "Нужно масло", { token });
+    let row = await db.query<{ charged: boolean; charged_at: Date | null }>(
+      "SELECT charged, charged_at FROM assistant_dialog WHERE id = $1",
+      [opened.dialogId],
+    );
+    expect(row.rows[0]).toEqual({ charged: false, charged_at: null });
+    // The dialog was opened yesterday; its first answer comes today.
+    await db.query(
+      "UPDATE assistant_dialog SET created_at = now() - interval '1 day' WHERE id = $1",
+      [opened.dialogId],
+    );
+    gateway.mode = "ok";
+    const answered = await answer(w, "Нужно масло", { token, dialogId: opened.dialogId });
+    expect(answered.limits.dialogsLeft).toBe(1);
+    row = await db.query("SELECT charged, charged_at FROM assistant_dialog WHERE id = $1", [
+      opened.dialogId,
+    ]);
+    expect(row.rows[0]!.charged).toBe(true);
+    expect(Date.now() - row.rows[0]!.charged_at!.getTime()).toBeLessThan(60_000);
+    // A dialog charged yesterday is yesterday's, whenever it was opened.
+    await db.query(
+      "UPDATE assistant_dialog SET charged_at = now() - interval '1 day' WHERE id = $1",
+      [opened.dialogId],
+    );
+    expect(
+      (
+        await ok(call(token, IOS, "get", "/assistant/limits"), (body) =>
+          assistantLimitsSchema.parse(body),
+        )
+      ).dialogsLeft,
+    ).toBe(2);
+    // The database keeps the two together.
+    await expect(
+      db.query("UPDATE assistant_dialog SET charged_at = NULL WHERE id = $1", [opened.dialogId]),
+    ).rejects.toThrow(/assistant_dialog_charged_at_check/u);
+  });
+
+  it("the guests' budget is checked before every step: spent midway — «guest_budget», the trial dialog not spent", async () => {
+    const w = await world();
+    // Spent after the first step of the turn: the pretend price of one step is more than this.
+    await settings.set({ guest_ai_daily_budget_usd: 0.000_001 });
+    const reply = await answer(w, "Нужно масло");
+    expect(reply.message).toMatchObject({
+      kind: "unavailable",
+      unavailable: { reason: "guest_budget" },
+    });
+    expect(reply.limits.dialogsLeft).toBe(3);
+    expect(gateway.assistantRequests).toHaveLength(1);
+    expect(await count("ai_job", "kind = 'assistant_turn'")).toBe(1);
+    // A person is not held by the guests' budget.
+    const token = await sessionToken(USER_PHONE, IOS);
+    expect((await answer(w, "Нужно масло", { token })).message.kind).toBe("question");
+  });
+
+  it("an answer of the model nothing can be made of keeps the dialog counted; the provider failing gives it back", async () => {
+    const w = await world();
+    // Both models answer in a shape that is not a step (`invalid_output`).
+    gateway.assistantOverride = () => ({ text: 42 }) as unknown as AssistantStepOutput;
+    const crooked = await answer(w, "Нужно масло");
+    expect(crooked.message).toMatchObject({
+      kind: "unavailable",
+      unavailable: { reason: "provider" },
+    });
+    expect(crooked.limits.dialogsLeft).toBe(2);
+    const jobs = await db.query<{ error_kind: string }>(
+      "SELECT error_kind FROM ai_job WHERE kind = 'assistant_turn'",
+    );
+    expect(jobs.rows.map((job) => job.error_kind)).toEqual(["invalid_output"]);
+    // The same for a person's day.
+    await settings.set({ assistant_daily_dialogs_per_user: 3 });
+    const token = await sessionToken(USER_PHONE, IOS);
+    expect((await answer(w, "Нужно масло", { token })).limits.dialogsLeft).toBe(2);
+    // No usable answer, no more turns of it: the turn itself is not counted.
+    expect(crooked.limits.turnsLeft).toBe(8);
+
+    // Unavailable, no private provider, the time of the turn: given back.
+    gateway.assistantOverride = undefined;
+    gateway.mode = "unavailable";
+    expect((await answer(w, "Нужно масло", { device: OTHER_DEVICE })).limits.dialogsLeft).toBe(3);
+    gateway.mode = "no_private_provider";
+    expect((await answer(w, "Нужно масло", { device: OTHER_DEVICE })).limits.dialogsLeft).toBe(3);
+    gateway.mode = "slow";
+    gateway.delayMs = 7_000;
+    await settings.set({ assistant_turn_seconds: 5 });
+    const slow = await answer(w, "Нужно масло", { device: OTHER_DEVICE });
+    expect(slow.message.unavailable).toEqual({ reason: "provider" });
+    expect(slow.limits.dialogsLeft).toBe(3);
+  });
+
+  it("every named item is checked, more than one page of a subcategory included", async () => {
+    const w = await world();
+    const categoryId = await idOf("SELECT id FROM category WHERE code = 'engine_oils'");
+    const shell = await idOf(
+      "SELECT brand_id AS id FROM brand_spelling WHERE is_name AND text = 'Shell'",
+    );
+    const ids: string[] = [];
+    for (let index = 0; index < CARDS_PAGE + 7; index += 1) {
+      const created = await ok(
+        asAdmin("post", "/admin/catalog/items", {
+          type: "part",
+          categoryId,
+          brandId: shell,
+          article: `T063-${String(index)}`,
+          names: { ru: `Масло проба ${String(index)}` },
+        }),
+        (body) => body as { item: { id: string; status: string; version: number } },
+        201,
+      );
+      if (created.item.status !== "active") {
+        await ok(
+          asAdmin("post", `/admin/catalog/items/${created.item.id}/status`, {
+            expectedVersion: created.item.version,
+            status: "active",
+          }),
+          (body) => body,
+        );
+      }
+      await ok(
+        call(w.member, SUPPLIER_WEB, "post", "/supplier/offers", {
+          itemId: created.item.id,
+          price: 5_000 + index,
+          availability: "in_stock",
+          leadDays: 0,
+          pickup: true,
+          delivery: false,
+        }),
+        (body) => body,
+        201,
+      );
+      ids.push(created.item.id);
+    }
+    const showcase = app.get(ShowcaseService);
+    const cards = await app.get(AssistantAnswers).cards([...ids, w.helix], {
+      vehicle: coolray(w),
+      resolved: await resolveVehicle(app.get(DatabaseService).db, coolray(w)),
+      cityId: w.cityId,
+      viewer: await showcase.viewer(null),
+      lang: "ru",
+    });
+    expect(cards.size).toBe(CARDS_PAGE + 8);
+    expect([...ids, w.helix].every((id) => cards.has(id))).toBe(true);
+  });
+
+  it("two new dialogs of one person at once both answer; the next new one closes both", async () => {
+    const w = await world();
+    gateway.mode = "slow";
+    gateway.delayMs = 500;
+    const [a, b] = await Promise.all([ask(w, "Нужно масло"), ask(w, "Нужно масло")]);
+    expect([a.status, b.status], JSON.stringify([a.body, b.body])).toEqual([200, 200]);
+    const first = assistantMessageResponseSchema.parse(a.body);
+    const second = assistantMessageResponseSchema.parse(b.body);
+    expect(first.dialogId).not.toBe(second.dialogId);
+    expect(first.message.kind).toBe("question");
+    expect(second.message.kind).toBe("question");
+    // Each goes on.
+    gateway.mode = "ok";
+    await answer(w, "4 л", { dialogId: first.dialogId });
+    await answer(w, "4 л", { dialogId: second.dialogId });
+    const third = await answer(w, "Нужно ТО-2, пробег 20 000");
+    expect(await count("assistant_dialog", "device_id = $1 AND closed_at IS NULL", [DEVICE])).toBe(
+      1,
+    );
+    expect(await count("assistant_dialog", "id = $1 AND closed_at IS NULL", [third.dialogId])).toBe(
+      1,
+    );
+  });
+
+  it("an answer out of topic drops nothing: the items the model named are not counted as dropped", async () => {
+    const w = await world();
+    gateway.assistantOverride = () => ({
+      text: null,
+      toolCalls: [
+        {
+          id: "call-1",
+          name: "propose",
+          arguments: JSON.stringify({
+            intent: "other",
+            text: "Погода хорошая",
+            itemIds: [w.helix, TEST_ASSISTANT_INVENTED_ID],
+          }),
+        },
+      ],
+    });
+    const before = await metricValue("adclub_assistant_grounding_dropped_total");
+    const reply = await answer(w, "Какая завтра погода?");
+    expect(reply.message).toMatchObject({ kind: "off_topic", cards: [] });
+    const stored = await db.query<{ dropped_items: number }>(
+      "SELECT dropped_items FROM assistant_message WHERE id = $1",
+      [reply.message.id],
+    );
+    expect(stored.rows[0]!.dropped_items).toBe(0);
+    expect(await metricValue("adclub_assistant_grounding_dropped_total")).toBe(before);
+  });
+
+  async function metricValue(name: string): Promise<number> {
+    const response = await http().get("/metrics");
+    expect(response.status).toBe(200);
+    const line = String(response.text)
+      .split("\n")
+      .find((entry) => entry.startsWith(`${name} `) || entry.startsWith(`${name}{`));
+    return line ? Number(line.split(" ").at(-1)) : 0;
+  }
 });

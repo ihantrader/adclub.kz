@@ -43,7 +43,13 @@ export type TurnOutcome =
     } & BuiltReply)
   | {
       ok: false;
-      reason: "provider" | "budget";
+      reason: "provider" | "budget" | "guest_budget";
+      /**
+       * The dialog stays counted: the model answered, but nothing usable
+       * (`invalid_output`, the fallback model's too) — not the provider
+       * failing to serve (TASK-063; ARCHITECTURE 4.85 I971).
+       */
+      keepCharge: boolean;
       toolCalls: StoredToolCall[];
       foundIds: string[];
       aiJobIds: string[];
@@ -60,6 +66,12 @@ export interface TurnInput {
   initiator: AiInitiator;
   /** Ask this one model and no fallback (the model comparison, `ai:eval:assistant`). */
   model?: string;
+  /**
+   * Whether the guests' daily budget (`guest_ai_daily_budget_usd`) is spent
+   * — asked before every step of a guest's turn, not once a turn (TASK-063):
+   * spent midway, the turn ends as `guest_budget`.
+   */
+  guestBudgetSpent?: () => Promise<boolean>;
 }
 
 /**
@@ -128,7 +140,24 @@ export class AssistantPipeline {
       }
       const left = deadline - Date.now();
       if (left <= 0) {
-        return { ok: false, reason: "provider", toolCalls, foundIds: [...foundNow], aiJobIds };
+        return {
+          ok: false,
+          reason: "provider",
+          keepCharge: false,
+          toolCalls,
+          foundIds: [...foundNow],
+          aiJobIds,
+        };
+      }
+      if (input.guestBudgetSpent && (await input.guestBudgetSpent())) {
+        return {
+          ok: false,
+          reason: "guest_budget",
+          keepCharge: false,
+          toolCalls,
+          foundIds: [...foundNow],
+          aiJobIds,
+        };
       }
       let output;
       try {
@@ -149,6 +178,7 @@ export class AssistantPipeline {
           return {
             ok: false,
             reason: error instanceof AiBudgetExhaustedError ? "budget" : "provider",
+            keepCharge: error instanceof AiGatewayError && error.kind === "invalid_output",
             toolCalls,
             foundIds: [...foundNow],
             aiJobIds,

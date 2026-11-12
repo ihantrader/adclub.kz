@@ -136,12 +136,16 @@ export class AssistantService {
     // The dialog: the one named, or a new one for this car.
     let dialog: AssistantDialogRow;
     let car: DialogCar;
+    let cityId: string | null;
+    let city: Awaited<ReturnType<ShowcaseService["chosenCity"]>>;
     if (body.dialogId) {
       dialog = await this.ownDialog(body.dialogId, asker);
       if (dialog.closedAt !== null || dialog.turns >= maxTurns) {
         throw new ApiException(409, "ASSISTANT_DIALOG_FULL", "Start a new dialog");
       }
       car = await this.carOfDialog(dialog, body.mileageKm);
+      cityId = body.cityId ?? dialog.cityId;
+      city = await this.showcase.chosenCity(executor, cityId ?? undefined, lang);
     } else {
       car = await dialogCarOf(
         executor,
@@ -149,44 +153,54 @@ export class AssistantService {
         asker.kind === "account" ? asker.accountId : null,
         body.mileageKm,
       );
-      // The city and the dialogs left are checked before anything is stored.
-      await this.showcase.chosenCity(executor, body.cityId, lang);
+      // The city and the dialogs left are checked before anything is stored;
+      // nothing that can fail stands between the claimed new dialog and the
+      // turn that releases its claim.
+      cityId = body.cityId ?? null;
+      city = await this.showcase.chosenCity(executor, body.cityId, lang);
       await this.limits.assertDialogLeft(asker);
-      dialog = await this.openDialog(asker, car, body.cityId ?? null, lang);
+      dialog = await this.openDialog(asker, car, cityId, lang);
     }
-    const cityId = body.cityId ?? dialog.cityId;
-    const city = await this.showcase.chosenCity(executor, cityId ?? undefined, lang);
 
     // One turn of a dialog at a time, within its turns and only while it is
     // open — checked by the claim itself, so a turn finishing meanwhile or a
-    // new dialog closing this one can't be raced past.
-    const staleSeconds =
-      (await this.settings.get("assistant_turn_seconds")) + TURN_CLAIM_MARGIN_SECONDS;
-    const [claimed] = await executor
-      .update(assistantDialog)
-      // Milliseconds: the claim is released by its own value, read back as a Date.
-      .set({ turnStartedAt: sql`date_trunc('milliseconds', now())`, updatedAt: sql`now()` })
-      .where(
-        and(
-          eq(assistantDialog.id, dialog.id),
-          isNull(assistantDialog.closedAt),
-          lt(assistantDialog.turns, maxTurns),
-          or(
-            isNull(assistantDialog.turnStartedAt),
-            lt(assistantDialog.turnStartedAt, sql`now() - make_interval(secs => ${staleSeconds})`),
+    // new dialog closing this one can't be raced past. A new dialog is
+    // opened with its first turn's claim already taken (`openDialog`).
+    if (body.dialogId) {
+      const staleSeconds = await this.staleClaimSeconds();
+      const [claimed] = await executor
+        .update(assistantDialog)
+        // Milliseconds: the claim is released by its own value, read back as a Date.
+        .set({ turnStartedAt: sql`date_trunc('milliseconds', now())`, updatedAt: sql`now()` })
+        .where(
+          and(
+            eq(assistantDialog.id, dialog.id),
+            isNull(assistantDialog.closedAt),
+            lt(assistantDialog.turns, maxTurns),
+            or(
+              isNull(assistantDialog.turnStartedAt),
+              lt(
+                assistantDialog.turnStartedAt,
+                sql`now() - make_interval(secs => ${staleSeconds})`,
+              ),
+            ),
           ),
-        ),
-      )
-      .returning();
-    if (!claimed) {
-      const now = await this.dialogRow(dialog.id);
-      if (!now || now.closedAt !== null || now.turns >= maxTurns) {
-        throw new ApiException(409, "ASSISTANT_DIALOG_FULL", "Start a new dialog");
+        )
+        .returning();
+      if (!claimed) {
+        const now = await this.dialogRow(dialog.id);
+        if (!now || now.closedAt !== null || now.turns >= maxTurns) {
+          throw new ApiException(409, "ASSISTANT_DIALOG_FULL", "Start a new dialog");
+        }
+        throw new ApiException(
+          409,
+          "ASSISTANT_TURN_IN_PROGRESS",
+          "A turn of this dialog is running",
+        );
       }
-      throw new ApiException(409, "ASSISTANT_TURN_IN_PROGRESS", "A turn of this dialog is running");
+      dialog = claimed;
     }
-    dialog = claimed;
-    const claim = claimed.turnStartedAt!;
+    const claim = dialog.turnStartedAt!;
     let charge: Charge | null = null;
     try {
       if (!dialog.charged) {
@@ -197,38 +211,33 @@ export class AssistantService {
           ? { type: "account", id: asker.accountId }
           : { type: "guest_device", id: asker.deviceId };
 
-      let outcome: TurnOutcome;
       let unavailableReason: "provider" | "budget" | "guest_budget" | null = null;
-      if (asker.kind === "guest" && (await this.guestBudgetSpent())) {
-        outcome = { ok: false, reason: "budget", toolCalls: [], foundIds: [], aiJobIds: [] };
-        unavailableReason = "guest_budget";
-        await this.recordUnavailable(dialog, "guest_budget");
-      } else {
-        const history = await executor
-          .select()
-          .from(assistantMessage)
-          .where(eq(assistantMessage.dialogId, dialog.id))
-          .orderBy(asc(assistantMessage.createdAt), desc(assistantMessage.role));
-        outcome = await this.pipeline.turn({
-          dialogId: dialog.id,
-          context: {
-            vehicle: car.vehicle,
-            resolved: car.resolved,
-            cityId: city?.id ?? null,
-            viewer,
-            lang,
-          },
-          car: car.words,
-          cityName: city?.name.text ?? null,
-          mileageKm: car.mileageKm,
-          history,
-          text,
-          initiator,
-        });
-        if (!outcome.ok) {
-          unavailableReason = outcome.reason;
-          await this.recordUnavailable(dialog, outcome.reason);
-        }
+      const history = await executor
+        .select()
+        .from(assistantMessage)
+        .where(eq(assistantMessage.dialogId, dialog.id))
+        .orderBy(asc(assistantMessage.createdAt), desc(assistantMessage.role));
+      const outcome: TurnOutcome = await this.pipeline.turn({
+        dialogId: dialog.id,
+        context: {
+          vehicle: car.vehicle,
+          resolved: car.resolved,
+          cityId: city?.id ?? null,
+          viewer,
+          lang,
+        },
+        car: car.words,
+        cityName: city?.name.text ?? null,
+        mileageKm: car.mileageKm,
+        history,
+        text,
+        initiator,
+        // A guest's every step waits for the guests' daily budget (PRODUCT 6.6).
+        ...(asker.kind === "guest" ? { guestBudgetSpent: () => this.guestBudgetSpent() } : {}),
+      });
+      if (!outcome.ok) {
+        unavailableReason = outcome.reason;
+        await this.recordUnavailable(dialog, outcome.reason);
       }
 
       const stored = await this.store(
@@ -239,8 +248,10 @@ export class AssistantService {
         lang,
         cityId ?? null,
       );
-      if (!outcome.ok && charge) {
-        // Not the person's doing: the dialog is given back.
+      if (!outcome.ok && !outcome.keepCharge && charge) {
+        // Not the person's doing: the dialog is given back. An answer the
+        // model gave but nothing could be made of (`invalid_output`) stays
+        // counted — the call was served and paid for (TASK-063).
         await this.limits.refund(charge, dialog.id);
         charge = null;
       }
@@ -427,10 +438,18 @@ export class AssistantService {
     };
   }
 
+  /** How old a turn's claim is when it is taken to have died with its process. */
+  private async staleClaimSeconds(): Promise<number> {
+    return (await this.settings.get("assistant_turn_seconds")) + TURN_CLAIM_MARGIN_SECONDS;
+  }
+
   /**
-   * A new dialog of the asker; their dialogs still open are closed by it
-   * (SCREENS M-AI-01: «хранится только текущий диалог»), and the cost of each
-   * is observed as a finished dialog's.
+   * A new dialog of the asker, opened with its first turn's claim taken;
+   * their dialogs still open are closed by it (SCREENS M-AI-01: «хранится
+   * только текущий диалог»), and the cost of each is observed as a finished
+   * dialog's — but not one whose turn is running now: two new dialogs of
+   * one person at once both get their answer, and the next new one closes
+   * both (TASK-063; ARCHITECTURE 4.85 I971).
    */
   private async openDialog(
     asker: Asker,
@@ -442,10 +461,20 @@ export class AssistantService {
       asker.kind === "account"
         ? eq(assistantDialog.accountId, asker.accountId)
         : and(isNull(assistantDialog.accountId), eq(assistantDialog.deviceId, asker.deviceId));
+    const staleSeconds = await this.staleClaimSeconds();
     const closed = await this.database.db
       .update(assistantDialog)
       .set({ closedAt: sql`now()`, updatedAt: sql`now()` })
-      .where(and(owner, isNull(assistantDialog.closedAt)))
+      .where(
+        and(
+          owner,
+          isNull(assistantDialog.closedAt),
+          or(
+            isNull(assistantDialog.turnStartedAt),
+            lt(assistantDialog.turnStartedAt, sql`now() - make_interval(secs => ${staleSeconds})`),
+          ),
+        ),
+      )
       .returning({ id: assistantDialog.id, turns: assistantDialog.turns });
     await this.observeCosts(closed.filter((row) => row.turns > 0).map((row) => row.id));
     const [row] = await this.database.db
@@ -458,6 +487,8 @@ export class AssistantService {
         carWords: car.words,
         carId: car.carId,
         cityId,
+        // Milliseconds: the claim is released by its own value, read back as a Date.
+        turnStartedAt: sql`date_trunc('milliseconds', now())`,
       })
       .returning();
     return row!;

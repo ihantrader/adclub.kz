@@ -120,6 +120,36 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("opens one assistant dialog per client key, lets keyless ones be, and rolls back (TASK-063.B)", async () => {
+    const accountId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77470000964') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const insert = (openKey: string | null) =>
+      client.query(
+        `INSERT INTO assistant_dialog (account_id, language, vehicle, car_words, open_key)
+         VALUES ($1, 'ru', '{}', '{"make":"Geely"}', $2)`,
+        [accountId, openKey],
+      );
+    const key = "6f1c2a0e-5b7d-4c3e-9a8f-1d2e3f4a5b6c";
+    await insert(key);
+    await expect(insert(key)).rejects.toThrow(/assistant_dialog_open_key_key/);
+    // Dialogs opened before the key existed have none, and there may be many.
+    await insert(null);
+    await insert(null);
+
+    await client.query("DELETE FROM account WHERE id = $1", [accountId]);
+    await rollBackThrough("1792300000000_assistant-open-key");
+    expect(
+      (
+        await client.query(
+          "SELECT 1 FROM information_schema.columns WHERE table_name = 'assistant_dialog' AND column_name = 'open_key'",
+        )
+      ).rowCount,
+    ).toBe(0);
+  });
+
   it("counts an assistant dialog by the moment it was charged, keeps the old ones, and rolls back (TASK-063)", async () => {
     const accountId = (
       await client.query<{ id: string }>(

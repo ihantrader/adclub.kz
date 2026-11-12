@@ -29,8 +29,9 @@ const files = sourceFiles(src).map((path) => ({
 describe("the rule of motion has one home", () => {
   it("every native stack takes its options from useStackScreenOptions", () => {
     const stacks = files.filter((file) => file.text.includes("<Stack.Navigator"));
-    // The root, the catalog, the garage and the profile (TASK-029).
+    // The root, the catalog, the garage and the profile (TASK-029), the assistant (TASK-063).
     expect(stacks.map((file) => file.path).sort()).toEqual([
+      "navigation/AssistantStack.tsx",
       "navigation/CatalogStack.tsx",
       "navigation/GarageStack.tsx",
       "navigation/ProfileStack.tsx",

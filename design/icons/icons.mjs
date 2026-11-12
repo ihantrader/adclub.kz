@@ -52,6 +52,8 @@ export const ui = {
   eye: "eye",
   fileSpreadsheet: "file-xls",
   filters: "sliders-horizontal",
+  // «Пожаловаться» under an answer of AI Pilot (DESIGN 7.9, TASK-063).
+  flag: "flag",
   // The torch of the scanner, where the browser has one (TASK-033).
   flashlight: "flashlight",
   helpCircle: "question",

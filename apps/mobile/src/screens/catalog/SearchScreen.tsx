@@ -64,6 +64,11 @@ export interface SearchScreenProps {
   /** A node opens its subcategories, a subcategory its list. */
   onOpenCategory: (category: CatalogSearchCategory) => void;
   onAddCar: () => void;
+  /**
+   * «Спросить AI Pilot» of an empty result (TASK-063): the assistant opens
+   * with the query in its field — the person sends it.
+   */
+  onAskAssistant: (query: string) => void;
 }
 
 /**
@@ -98,6 +103,7 @@ export function SearchScreen({
   onOpenItem,
   onOpenCategory,
   onAddCar,
+  onAskAssistant,
 }: SearchScreenProps) {
   const { t, tn } = useLanguage();
   const { theme } = useTheme();
@@ -662,13 +668,8 @@ export function SearchScreen({
         ),
       };
     }
-    // D-062: no «search without the car» — another car of the garage instead.
-    const otherCar =
-      cars.length > 1 ? (
-        <Button variant="secondary" size="m" icon="car" onPress={() => setSheet("car")}>
-          {t("search.otherCar")}
-        </Button>
-      ) : undefined;
+    // D-062: no «search without the car» — another car of the garage instead;
+    // and the assistant with the same words (TASK-063, M-CAT-04).
     return {
       icon: "search" as const,
       title: t("search.emptyTitle", { query }),
@@ -676,7 +677,18 @@ export function SearchScreen({
         answer?.empty === "vehicle"
           ? t("search.emptyVehicle", { car: carName })
           : t("search.emptyTips"),
-      ...(otherCar ? { action: otherCar } : {}),
+      action: (
+        <View style={styles.emptyActions}>
+          <Button variant="secondary" size="m" onPress={() => onAskAssistant(query)}>
+            {t("assistant.ask")}
+          </Button>
+          {cars.length > 1 ? (
+            <Button variant="secondary" size="m" icon="car" onPress={() => setSheet("car")}>
+              {t("search.otherCar")}
+            </Button>
+          ) : null}
+        </View>
+      ),
     };
   }
 }
@@ -711,6 +723,7 @@ const styles = StyleSheet.create({
   find: { paddingTop: 16 },
   head: { gap: 12, paddingBottom: 12 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  emptyActions: { gap: 8, alignSelf: "stretch" },
   chipRow: { flexDirection: "row", gap: 8 },
   recognized: { gap: 8, paddingTop: 8 },
   recognizedLine: { flexDirection: "row", alignItems: "center", gap: 8 },

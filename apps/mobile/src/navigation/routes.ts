@@ -49,6 +49,23 @@ export type CatalogStackParams = {
   };
 };
 
+/**
+ * The AI Pilot tab (TASK-063; SCREENS M-AI-01): the dialog, and above it the
+ * card of an item an answer named (M-CAT-07, the catalog's own screen) and
+ * the camera for an article (M-CAT-06) — «назад» returns to the dialog
+ * where it was.
+ */
+export type AssistantStackParams = {
+  /**
+   * M-AI-01. `draft` — a text to put into the field (the query of an empty
+   * search, «Спросить AI Pilot»; an article off a photo): the person sends
+   * it. `stamp` — a new one each time, so the same text twice is put again.
+   */
+  "assistant-dialog": { draft?: string; stamp?: number } | undefined;
+  "assistant-item": { itemId: string; title?: string };
+  "assistant-part-photo": undefined;
+};
+
 export type GarageStackParams = {
   /** M-GAR-01. */
   "garage-list": undefined;
@@ -70,6 +87,8 @@ export type ProfileStackParams = {
 export type TabParams = {
   catalog: NavigatorScreenParams<CatalogStackParams> | undefined;
   orders: undefined;
+  /** The raised button in the middle of the bar (SCREENS 3.1, stage D). */
+  assistant: NavigatorScreenParams<AssistantStackParams> | undefined;
   garage: NavigatorScreenParams<GarageStackParams> | undefined;
   profile: NavigatorScreenParams<ProfileStackParams> | undefined;
 };

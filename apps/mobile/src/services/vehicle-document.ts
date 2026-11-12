@@ -43,7 +43,8 @@ const deviceIdStore = createDeviceStore<string | null>(
   },
 );
 
-async function deviceId(): Promise<string> {
+/** The device's id — the recognitions' and the assistant's (TASK-063) trial limits count by it. */
+export async function deviceId(): Promise<string> {
   await deviceIdStore.ready;
   const known = deviceIdStore.get();
   if (known) return known;

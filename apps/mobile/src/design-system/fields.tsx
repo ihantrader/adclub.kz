@@ -44,6 +44,11 @@ export interface TextFieldProps extends Omit<TextInputProps, "value" | "onChange
   /** «0 / 1000» at the right of the hint line (TASK-078 M-ORD-05). */
   counter?: { count: number; max: number; text: string };
   trailing?: ReactNode;
+  /**
+   * Several lines that start as one and grow with the text, up to five (the
+   * message to AI Pilot, TASK-063) — not the tall box of a review.
+   */
+  grows?: boolean;
 }
 
 export function TextField({
@@ -58,6 +63,7 @@ export function TextField({
   readOnly,
   counter,
   trailing,
+  grows,
   ...rest
 }: TextFieldProps) {
   const { theme } = useTheme();
@@ -113,7 +119,7 @@ export function TextField({
           style={[
             textStyles.body,
             styles.input,
-            rest.multiline ? styles.inputMultiline : null,
+            rest.multiline ? (grows ? styles.inputGrows : styles.inputMultiline) : null,
             { color: disabled ? colors.textDisabled : colors.text },
           ]}
         />
@@ -548,6 +554,7 @@ const styles = StyleSheet.create({
   },
   controlMultiline: { alignItems: "flex-start" },
   inputMultiline: { minHeight: 120, maxHeight: 240, textAlignVertical: "top" },
+  inputGrows: { minHeight: 24, maxHeight: 120, textAlignVertical: "top" },
   search: { paddingLeft: 12, paddingRight: 0 },
   entry: { paddingRight: 12 },
   entryText: { flex: 1 },

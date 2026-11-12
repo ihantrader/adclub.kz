@@ -240,6 +240,7 @@ export type IconName =
   | "eye"
   | "fileSpreadsheet"
   | "filters"
+  | "flag"
   | "flashlight"
   | "helpCircle"
   | "history"

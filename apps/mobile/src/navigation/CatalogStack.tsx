@@ -78,11 +78,20 @@ function useGarageJump() {
     (car: GarageCar) => carPicker.edit(car, "engine"),
     [carPicker],
   );
-  return { addCar: carPicker.add, openCar, completeEngine };
+  // The AI Pilot tab (TASK-063): `draft` — the words to put into its field.
+  const askAssistant = useCallback(
+    (draft?: string) =>
+      tabs.navigate("assistant", {
+        screen: "assistant-dialog",
+        params: draft !== undefined ? { draft, stamp: Date.now() } : undefined,
+      }),
+    [tabs],
+  );
+  return { addCar: carPicker.add, openCar, completeEngine, askAssistant };
 }
 
 function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, "catalog-home">) {
-  const { addCar, completeEngine } = useGarageJump();
+  const { addCar, completeEngine, askAssistant } = useGarageJump();
   return (
     <CatalogHomeScreen
       onOpenNode={(node) =>
@@ -99,6 +108,7 @@ function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, 
       onCompleteEngine={completeEngine}
       onOpenSearch={() => navigation.navigate("catalog-search")}
       onOpenPartPhoto={() => navigation.navigate("catalog-part-photo")}
+      onAskAssistant={() => askAssistant()}
     />
   );
 }
@@ -149,9 +159,10 @@ function CatalogSearch({
   route,
   navigation,
 }: NativeStackScreenProps<CatalogStackParams, "catalog-search">) {
-  const { addCar } = useGarageJump();
+  const { addCar, askAssistant } = useGarageJump();
   return (
     <SearchScreen
+      onAskAssistant={askAssistant}
       {...(route.params?.photo ? { photo: route.params.photo } : {})}
       {...(route.params?.typeArticle !== undefined
         ? { typeArticle: route.params.typeArticle }

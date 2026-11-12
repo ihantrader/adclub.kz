@@ -2,6 +2,7 @@ import { isLang, type Lang } from "@adclub/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getRandomBytes } from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
+import { NO_DIALOGS, parseStoredDialogs, type StoredDialogs } from "../assistant/assistant-rules";
 import { parseRecentSearches, RECENT_SEARCHES_KEY } from "../catalog/recent-searches";
 import { parseAccountGarageCopy, type AccountGarageCopy } from "../garage/account-garage";
 import { INITIAL_GARAGE, parseGarage, type GarageState } from "../garage/garage";
@@ -107,6 +108,8 @@ export function clearSession(): void {
   accountGarageStore.set(null);
   profileSyncStore.set(null);
   pendingAcksStore.set([]);
+  // The account's current dialog of the assistant (TASK-063): a guest after it never reads it.
+  assistantDialogsStore.set({ ...assistantDialogsStore.get(), account: null });
   void SecureStore.deleteItemAsync(SESSION_STORE_KEY).catch(() => undefined);
   void ordersCopyStore.clear();
   forgetOpenedOrders();
@@ -168,6 +171,18 @@ export const accountGarageStore: DeviceStore<AccountGarageCopy | null> = createD
   storage,
   { key: "adclub.mobile.account-garage", initial: null, parse: parseAccountGarageCopy },
 );
+
+/**
+ * The current dialog of the assistant (TASK-063, SCREENS M-AI-01: «хранится
+ * только текущий диалог»): its id and the car it is for — a guest's and the
+ * signed-in account's apart; the words stay on the server and are read back
+ * with `GET /assistant/dialogs/{id}`.
+ */
+export const assistantDialogsStore: DeviceStore<StoredDialogs> = createDeviceStore(storage, {
+  key: "adclub.mobile.assistant-dialogs",
+  initial: NO_DIALOGS,
+  parse: parseStoredDialogs,
+});
 
 /** The city and the language this device last agreed on with the account (TASK-029.B). */
 export const profileSyncStore: DeviceStore<ProfileSyncState | null> = createDeviceStore(storage, {

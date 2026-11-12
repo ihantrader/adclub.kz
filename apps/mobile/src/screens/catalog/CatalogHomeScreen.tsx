@@ -25,6 +25,8 @@ import { useCategoryTree } from "../../services/use-catalog";
 import { useOnline } from "../../services/use-network";
 import { useCity } from "../../state/city-provider";
 import { useT } from "../../state/language";
+import { carTitle } from "../../garage/garage";
+import { Avatar } from "../assistant/AssistantMessages";
 import { CitySheet } from "../CitySheet";
 import { CatalogHeader } from "./CatalogHeader";
 
@@ -39,6 +41,8 @@ export interface CatalogHomeScreenProps {
   onOpenSearch: () => void;
   /** The camera of the line: a part by a photo of its article (M-CAT-06, TASK-058). */
   onOpenPartPhoto: () => void;
+  /** The entry of the assistant (M-CAT-01, TASK-063): one row with the character. */
+  onAskAssistant: () => void;
 }
 
 /**
@@ -59,6 +63,7 @@ export function CatalogHomeScreen({
   onCompleteEngine,
   onOpenSearch,
   onOpenPartPhoto,
+  onAskAssistant,
 }: CatalogHomeScreenProps) {
   const t = useT();
   const online = useOnline();
@@ -127,6 +132,18 @@ export function CatalogHomeScreen({
     >
       <ScreenBody>
         {hint && <View style={styles.hint}>{hint}</View>}
+        <View style={styles.hint}>
+          <ListGroup>
+            <ListRow
+              first
+              leading={<Avatar state="idle" />}
+              title={t("assistant.ask")}
+              subtitle={t("assistant.askText", { car: carTitle(car) })}
+              navigates
+              onPress={onAskAssistant}
+            />
+          </ListGroup>
+        </View>
         <DataState
           status={status}
           skeleton={<SkeletonList rows={4} label={t("common.loading")} />}

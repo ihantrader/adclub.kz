@@ -142,10 +142,12 @@ export class GarageRemind implements PeriodicJobHandler {
       .select({
         planItemId: maintenanceReminder.planItemId,
         cycle: maintenanceReminder.notifiedCycle,
+        snoozedUntil: maintenanceReminder.snoozedUntil,
       })
       .from(maintenanceReminder)
       .where(eq(maintenanceReminder.carId, carId));
     const cycleOfItem = new Map(pushed.map((row) => [row.planItemId, row.cycle]));
+    const snoozeOfItem = new Map(pushed.map((row) => [row.planItemId, row.snoozedUntil]));
 
     const lang = await this.notifications.languageOf(tx, accountId);
     const car = carLabelOf(entry.car);
@@ -166,6 +168,10 @@ export class GarageRemind implements PeriodicJobHandler {
         const titles = await this.maintenance.titlesOf(tx, [fresh.id], lang);
         const what = titles.get(fresh.id)?.text ?? "";
         const cycle = cycleOf(fresh);
+        // «Напомнить позже» promises a push again after the snooze: the same
+        // replacement then needs a key of its own, or the outbox swallows it.
+        const snoozed = snoozeOfItem.get(fresh.id);
+        const pushKey = snoozed ? `${cycle}:snoozed:${snoozed.toISOString()}` : cycle;
         // A part — «Пора менять масло на …»; a service is named by its own work.
         const service = entry.planRows.find((row) => row.id === fresh.id)?.kind === "service";
         await this.notifications.enqueue(tx, {
@@ -176,7 +182,7 @@ export class GarageRemind implements PeriodicJobHandler {
           variables: { what: service ? what : what.toLocaleLowerCase(lang), car },
           target: { screen: "catalog", params: { carId } },
           subject: { type: "account_car", id: carId },
-          dedupeKey: `maintenance_reminder:${carId}:${fresh.id}:${cycle}`,
+          dedupeKey: `maintenance_reminder:${carId}:${fresh.id}:${pushKey}`,
         });
         await tx
           .update(maintenanceReminder)

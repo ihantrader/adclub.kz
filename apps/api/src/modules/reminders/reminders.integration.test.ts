@@ -742,6 +742,24 @@ describe("reminders about a planned replacement (PostgreSQL + Redis)", () => {
     ).toBe(2);
     expect(sent[1]!.payload.variables.what).not.toBe(sent[0]!.payload.variables.what);
 
+    // «Напомнить позже» on the first one: once the snooze is over, a push again.
+    await ok(
+      owner.as(
+        "post",
+        `/garage/cars/${carId}/reminders/${pushedItem.rows[0]!.plan_item_id}/snooze`,
+      ),
+      (body) => garageReminderCarSchema.parse(body),
+    );
+    await db.query(
+      `UPDATE maintenance_reminder SET snoozed_until = now() - interval '1 minute',
+         notified_at = notified_at - interval '4 days' WHERE car_id = $1`,
+      [carId],
+    );
+    await remind();
+    sent = await pushes(owner.accountId);
+    expect(sent).toHaveLength(3);
+    expect(sent[2]!.payload.variables.what).toBe(sent[0]!.payload.variables.what);
+
     // The mileage question: a car without readings, once per mileage_ask_days.
     const second = await addCar(owner, w);
     await remind();

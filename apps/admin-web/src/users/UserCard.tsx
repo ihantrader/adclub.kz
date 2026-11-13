@@ -55,6 +55,7 @@ import {
   accessText,
   carDocumentText,
   carMileageText,
+  reminderWords,
   carParams,
   carTitle,
   consentText,
@@ -656,6 +657,8 @@ function Garage({ accountId }: { accountId: string }) {
     `garage:${accountId}`,
   );
   const cars = garage.data?.cars ?? [];
+  const remindersOf = (carId: string) =>
+    garage.data?.reminders.find((entry) => entry.carId === carId) ?? null;
   return (
     <div className="user-tab">
       <LoadError error={garage.error} retry={garage.reload} />
@@ -712,12 +715,74 @@ function Garage({ accountId }: { accountId: string }) {
                   <span className="ac-text-caption ac-muted">
                     Добавлен {formatMoment(car.createdAt)}
                   </span>
+                  <CarReminders entry={remindersOf(car.id)} />
                 </li>
               );
             })}
           </ul>
         )}
       </LoadingContent>
+    </div>
+  );
+}
+
+/**
+ * The reminders of a car (TASK-069): what, when it is due, the last
+ * replacement with its source, «отложено до» — the server's count, to look at.
+ */
+function CarReminders({ entry }: { entry: AdminUserGarageResponse["reminders"][number] | null }) {
+  if (!entry) return null;
+  if (!entry.hasPlan) {
+    return (
+      <span className="ac-text-body-s ac-muted" data-testid="car-reminders">
+        Напоминания: нет действующего регламента
+      </span>
+    );
+  }
+  return (
+    <div className="user-car-reminders" data-testid="car-reminders">
+      <span className="ac-text-body-strong">Напоминания о замене</span>
+      {entry.askMileage && (
+        <span className="ac-text-body-s ac-muted">Приложение спрашивает пробег</span>
+      )}
+      <ul>
+        {entry.reminders.map((reminder) => {
+          const words = reminderWords(reminder, (iso) => formatMoment(iso));
+          return (
+            <li key={reminder.planItemId} className="ac-text-body-s">
+              <span className="ac-text-body-strong">{words.title}</span>{" "}
+              <Badge
+                icon={
+                  reminder.state === "due"
+                    ? "alertTriangle"
+                    : reminder.state === "snoozed"
+                      ? "clock"
+                      : "circleCheck"
+                }
+                tone={
+                  reminder.state === "due"
+                    ? "warning"
+                    : reminder.state === "snoozed"
+                      ? "neutral"
+                      : "success"
+                }
+              >
+                {words.state}
+              </Badge>
+              <br />
+              <span>{words.due}</span>
+              <br />
+              <span className="ac-muted">{words.last}</span>
+              {words.snoozed && (
+                <>
+                  <br />
+                  <span className="ac-muted">{words.snoozed}</span>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

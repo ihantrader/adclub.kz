@@ -6,6 +6,7 @@ import type {
   CatalogLanguage,
   ClubAccessGrantStatus,
   ClubAccessState,
+  GarageReminder,
 } from "@adclub/contracts";
 import { actionErrorText, validationText } from "../errors";
 
@@ -270,6 +271,51 @@ export function carMileageText(
           ? "по запросу приложения"
           : "вручную";
   return `Пробег ${value} км · ${source} · ${moment(mileage.recordedAt)}`;
+}
+
+const kmText = (value: number) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+/**
+ * A reminder of a car's element in the admin panel's garage (TASK-069): what,
+ * when it is due, the last replacement with its source and «отложено до» —
+ * all as the server counted it (`GET /admin/users/{id}/garage`).
+ */
+export function reminderWords(
+  reminder: GarageReminder,
+  moment: (iso: string) => string,
+): { title: string; state: string; due: string; last: string; snoozed: string | null } {
+  const state =
+    reminder.state === "due"
+      ? "Пора"
+      : reminder.state === "snoozed"
+        ? "Отложено"
+        : reminder.state === "waiting"
+          ? "Ещё не пора"
+          : "Не посчитать";
+  const due = [
+    reminder.dueKm !== null ? `на ${kmText(reminder.dueKm)} км` : null,
+    reminder.dueAt !== null ? `к ${moment(reminder.dueAt)}` : null,
+  ].filter(Boolean);
+  const { basis } = reminder;
+  const source =
+    basis.source === "order"
+      ? basis.orderNumber !== null
+        ? `по заявке № ${String(basis.orderNumber)}`
+        : "по заявке"
+      : basis.source === "user"
+        ? "отмечена пользователем"
+        : "по графику";
+  const lastAt = [
+    basis.atKm !== null ? `${kmText(basis.atKm)} км` : null,
+    basis.at !== null ? moment(basis.at) : null,
+  ].filter(Boolean);
+  return {
+    title: reminder.title.text,
+    state,
+    due: due.length > 0 ? `Пора: ${due.join(" или ")}` : "Срок не посчитать",
+    last: `Последняя замена ${source}${lastAt.length > 0 ? ` · ${lastAt.join(" · ")}` : ""}`,
+    snoozed: reminder.snoozedUntil ? `Отложено до ${moment(reminder.snoozedUntil)}` : null,
+  };
 }
 
 /**

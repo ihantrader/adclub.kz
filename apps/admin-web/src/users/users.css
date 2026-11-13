@@ -67,6 +67,24 @@
   padding: var(--ac-space-4);
 }
 
+/* TASK-069: the reminders of a car, under its card's lines. */
+.user-car-reminders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  padding-top: var(--ac-space-2);
+  border-top: 1px solid var(--ac-color-border);
+}
+
+.user-car-reminders ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .user-sessions-note {
   margin: 0;
 }

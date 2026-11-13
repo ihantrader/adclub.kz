@@ -8,6 +8,7 @@ import {
   accessText,
   carDocumentText,
   carMileageText,
+  reminderWords,
   carText,
   deviceText,
   endOfYear,
@@ -82,6 +83,84 @@ describe("the words of «Пользователи» (TASK-036.B)", () => {
       carMileageText({ valueKm: 950, source: "text", recordedAt: "2026-11-10T08:00:00.000Z" }, day),
     ).toBe("Пробег 950 км · вручную · 2026-11-10");
     expect(carMileageText(null, day)).toBe("Пробег не указан");
+  });
+
+  it("says a reminder of a car with the source of the last replacement (TASK-069)", () => {
+    const day = (iso: string) => iso.slice(0, 10);
+    const base = {
+      planItemId: "11111111-1111-4111-8111-111111111111",
+      title: { text: "Моторное масло", isFallback: false },
+      kind: "part" as const,
+      intervalKm: 10_000,
+      intervalMonths: 12,
+      elapsedKm: 9_600,
+      elapsedMonths: 7,
+      catalog: null,
+    };
+    expect(
+      reminderWords(
+        {
+          ...base,
+          state: "due",
+          reason: "km",
+          dueKm: 25_000,
+          dueAt: "2027-01-10T08:00:00.000Z",
+          basis: {
+            source: "order",
+            atKm: 15_000,
+            at: "2026-01-10T08:00:00.000Z",
+            orderId: "22222222-2222-4222-8222-222222222222",
+            orderNumber: 1028,
+          },
+          snoozedUntil: null,
+        },
+        day,
+      ),
+    ).toEqual({
+      title: "Моторное масло",
+      state: "Пора",
+      due: "Пора: на 25\u00a0000 км или к 2027-01-10",
+      last: "Последняя замена по заявке № 1028 · 15\u00a0000 км · 2026-01-10",
+      snoozed: null,
+    });
+    const user = reminderWords(
+      {
+        ...base,
+        state: "snoozed",
+        reason: "km",
+        dueKm: null,
+        dueAt: null,
+        basis: {
+          source: "user",
+          atKm: null,
+          at: "2026-11-01T08:00:00.000Z",
+          orderId: null,
+          orderNumber: null,
+        },
+        snoozedUntil: "2026-11-20T08:00:00.000Z",
+      },
+      day,
+    );
+    expect(user).toMatchObject({
+      state: "Отложено",
+      due: "Срок не посчитать",
+      last: "Последняя замена отмечена пользователем · 2026-11-01",
+      snoozed: "Отложено до 2026-11-20",
+    });
+    expect(
+      reminderWords(
+        {
+          ...base,
+          state: "waiting",
+          reason: null,
+          dueKm: 30_000,
+          dueAt: null,
+          basis: { source: "schedule", atKm: 20_000, at: null, orderId: null, orderNumber: null },
+          snoozedUntil: null,
+        },
+        day,
+      ).last,
+    ).toBe("Последняя замена по графику · 20\u00a0000 км");
   });
 
   it("names a device, a car and a refusal in words", () => {

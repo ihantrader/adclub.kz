@@ -102,6 +102,7 @@ const PART_TEXT: Record<string, string> = {
   supply_overdue: "Срок поставки прошёл",
   review_text_rejected: "Отзыв не опубликован",
   maintenance_reminder: "Напоминание о ТО",
+  mileage_request: "Вопрос о пробеге",
   payment_failed: "Проблема с оплатой",
 };
 

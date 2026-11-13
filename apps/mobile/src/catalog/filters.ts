@@ -126,6 +126,30 @@ export interface FilterQuery {
 }
 
 /**
+ * The state of filters a list opens with, from filters the server gave
+ * (TASK-069: «Подобрать» of a reminder — the rule of the maintenance plan,
+ * exactly as `GET /garage/reminders` sends it); the reverse of
+ * `filtersToQuery`.
+ */
+export function filterStateOf(filters: readonly ShowcaseAttributeFilter[]): FilterState {
+  const attributes: Record<string, AttributeFilterValue> = {};
+  for (const filter of filters) {
+    if (filter.optionIds) {
+      attributes[filter.attributeId] = { kind: "options", optionIds: [...filter.optionIds] };
+    } else if (filter.value !== undefined) {
+      attributes[filter.attributeId] = { kind: "boolean", value: filter.value };
+    } else {
+      attributes[filter.attributeId] = {
+        kind: "range",
+        min: filter.min ?? null,
+        max: filter.max ?? null,
+      };
+    }
+  }
+  return { ...EMPTY_FILTERS, attributes };
+}
+
+/**
  * The filters as the list route takes them. An attribute that is no longer
  * an active filterable attribute of the category (archived since the screen
  * was opened) is left out here as well as ignored by the server.

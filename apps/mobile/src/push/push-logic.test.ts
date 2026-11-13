@@ -27,6 +27,14 @@ describe("what a push carries (TASK-051)", () => {
     expect(pushMessageOf({ target: { screen: "subscription" } }).target).toEqual({
       screen: "subscription",
     });
+    // P-REM-01/02 (TASK-069): the catalog's home with this car in its header.
+    expect(
+      pushMessageOf({ target: JSON.stringify({ screen: "catalog", params: { carId: ORDER } }) })
+        .target,
+    ).toEqual({ screen: "catalog", params: { carId: ORDER } });
+    expect(
+      pushMessageOf({ target: { screen: "catalog", params: { carId: "1" } } }).target,
+    ).toBeNull();
   });
 
   it("opens nothing for what it does not understand", () => {

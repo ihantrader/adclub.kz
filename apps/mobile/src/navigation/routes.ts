@@ -1,4 +1,8 @@
-import type { ComplaintReasonValue, OrderFulfillment } from "@adclub/contracts";
+import type {
+  ComplaintReasonValue,
+  OrderFulfillment,
+  ShowcaseAttributeFilter,
+} from "@adclub/contracts";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { PartPhotoFound } from "../catalog/part-photo";
 import type { CarColorId } from "../garage/car-color";
@@ -28,7 +32,13 @@ export type CatalogStackParams = {
    * M-CAT-02: the items of a subcategory. `kind: "services"` — a
    * subcategory of services (TASK-019): shown by a city, at a model's price.
    */
-  "catalog-items": { categoryId: string; title?: string; kind?: "goods" | "services" };
+  "catalog-items": {
+    categoryId: string;
+    title?: string;
+    kind?: "goods" | "services";
+    /** The filters the list opens with: the rule of a reminder's «Подобрать» (TASK-069). */
+    filters?: ShowcaseAttributeFilter[];
+  };
   /**
    * M-CAT-04: the search (TASK-044), for the car and the city of the header.
    * `photo` — the article a photo gave (M-CAT-06, TASK-058): put into the

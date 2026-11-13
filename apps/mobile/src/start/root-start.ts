@@ -36,6 +36,7 @@ export function rootStart(screen: StartScreen, push?: PushTarget | null): RootSt
     case "push":
       if (push?.screen === "order") return { screen: "tabs", tab: "orders" };
       if (push?.screen === "subscription") return { screen: "tabs", tab: "profile" };
+      // A reminder (TASK-069): the catalog's home, its car chosen by `openPushTarget`.
       return { screen: "tabs", tab: "catalog" };
     case "catalog":
       return { screen: "tabs", tab: "catalog" };

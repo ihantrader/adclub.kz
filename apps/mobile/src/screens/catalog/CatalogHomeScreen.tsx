@@ -1,4 +1,4 @@
-import type { CategoryNode, CategorySubcategory } from "@adclub/contracts";
+import type { CategoryNode, CategorySubcategory, GarageReminder } from "@adclub/contracts";
 import { layout, radius } from "@adclub/ui-core";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -29,6 +29,7 @@ import { carTitle } from "../../garage/garage";
 import { Avatar } from "../assistant/AssistantMessages";
 import { CitySheet } from "../CitySheet";
 import { CatalogHeader } from "./CatalogHeader";
+import { HomeHintCard } from "./HomeHintCard";
 
 export interface CatalogHomeScreenProps {
   onOpenNode: (node: CategoryNode) => void;
@@ -43,6 +44,10 @@ export interface CatalogHomeScreenProps {
   onOpenPartPhoto: () => void;
   /** The entry of the assistant (M-CAT-01, TASK-063): one row with the character. */
   onAskAssistant: () => void;
+  /** «Подобрать» of M-REM-01 (TASK-069): the subcategory with the rule's filters. */
+  onPickReminder: (reminder: GarageReminder) => void;
+  /** The camera of M-REM-02: the photo of the dashboard (M-GAR-07). */
+  onMileagePhoto: (car: GarageCar) => void;
 }
 
 /**
@@ -64,6 +69,8 @@ export function CatalogHomeScreen({
   onOpenSearch,
   onOpenPartPhoto,
   onAskAssistant,
+  onPickReminder,
+  onMileagePhoto,
 }: CatalogHomeScreenProps) {
   const t = useT();
   const online = useOnline();
@@ -91,20 +98,15 @@ export function CatalogHomeScreen({
             ? "empty"
             : "ready";
 
-  // One card (M-CAT-01): the engine the compatibility depends on.
-  const hint =
-    car.engine === null ? (
-      <Banner
-        tone="warning"
-        action={
-          <Button variant="text" size="m" onPress={() => onCompleteEngine(car)}>
-            {t("compat.completeCar")}
-          </Button>
-        }
-      >
-        {t("catalog.hintRefineEngine")}
-      </Banner>
-    ) : null;
+  // One card (M-CAT-01, TASK-069): the engine → the mileage question → the reminder.
+  const hint = (
+    <HomeHintCard
+      car={car}
+      onCompleteEngine={onCompleteEngine}
+      onPick={onPickReminder}
+      onMileagePhoto={onMileagePhoto}
+    />
+  );
 
   return (
     <Screen
@@ -131,7 +133,7 @@ export function CatalogHomeScreen({
       }
     >
       <ScreenBody>
-        {hint && <View style={styles.hint}>{hint}</View>}
+        {hint}
         <View style={styles.hint}>
           <ListGroup>
             <ListRow
@@ -167,7 +169,7 @@ export function CatalogHomeScreen({
             text: t("catalog.emptyText"),
           }}
         >
-          <Section title={t("catalog.goods")} first={!hint}>
+          <Section title={t("catalog.goods")} first={car.engine !== null}>
             <View style={styles.tiles}>
               {tileRows(nodes).map((row) => (
                 <View

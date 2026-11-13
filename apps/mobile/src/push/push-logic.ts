@@ -57,6 +57,12 @@ function targetOf(raw: unknown): PushTarget | null {
   if (target.screen === "subscription") {
     return { screen: "subscription" };
   }
+  if (target.screen === "catalog") {
+    const carId = (target.params as { carId?: unknown } | undefined)?.carId;
+    return typeof carId === "string" && UUID.test(carId)
+      ? { screen: "catalog", params: { carId } }
+      : null;
+  }
   return null;
 }
 

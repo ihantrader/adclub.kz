@@ -2,9 +2,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { CatalogCarProvider } from "../catalog/catalog-car-provider";
 import { catalogEntry } from "../catalog/catalog-gate";
+import { onCatalogCarRequest } from "./catalog-car-request";
 import type { GarageCar } from "../garage/garage";
 import { CatalogHomeScreen } from "../screens/catalog/CatalogHomeScreen";
 import { ItemListScreen } from "../screens/catalog/ItemListScreen";
@@ -29,9 +30,17 @@ const Stack = createNativeStackNavigator<CatalogStackParams>();
  * the first car added opens the catalog fresh, at its main screen.
  */
 export function CatalogTab() {
-  const { state } = useGarage();
+  const { state, cars, makePrimary } = useGarage();
   const carPicker = useCarPicker();
   const entry = catalogEntry(state);
+  // A push of a reminder names its car (TASK-069): it becomes the car of the header.
+  useEffect(
+    () =>
+      onCatalogCarRequest((carId) => {
+        if (cars.some((car) => car.id === carId)) void makePrimary(carId).catch(() => undefined);
+      }),
+    [cars, makePrimary],
+  );
 
   if (entry.kind === "needs-car") return <NeedsCarScreen onAddCar={carPicker.add} />;
   return (
@@ -87,11 +96,17 @@ function useGarageJump() {
       }),
     [tabs],
   );
-  return { addCar: carPicker.add, openCar, completeEngine, askAssistant };
+  return {
+    addCar: carPicker.add,
+    openCar,
+    completeEngine,
+    askAssistant,
+    mileage: carPicker.mileage,
+  };
 }
 
 function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, "catalog-home">) {
-  const { addCar, completeEngine, askAssistant } = useGarageJump();
+  const { addCar, completeEngine, askAssistant, mileage } = useGarageJump();
   return (
     <CatalogHomeScreen
       onOpenNode={(node) =>
@@ -109,6 +124,17 @@ function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, 
       onOpenSearch={() => navigation.navigate("catalog-search")}
       onOpenPartPhoto={() => navigation.navigate("catalog-part-photo")}
       onAskAssistant={() => askAssistant()}
+      onPickReminder={(reminder) => {
+        // «Подобрать» (M-REM-01): the answer of the plan for the rule — its subcategory and filters.
+        if (!reminder.catalog?.categoryId) return;
+        navigation.navigate("catalog-items", {
+          categoryId: reminder.catalog.categoryId,
+          title: reminder.title.text,
+          kind: reminder.kind === "service" ? "services" : "goods",
+          filters: reminder.catalog.filters,
+        });
+      }}
+      onMileagePhoto={mileage}
     />
   );
 }
@@ -144,6 +170,7 @@ function CatalogItems({
       categoryId={route.params.categoryId}
       {...(route.params.title ? { title: route.params.title } : {})}
       {...(route.params.kind ? { kind: route.params.kind } : {})}
+      {...(route.params.filters ? { initialFilters: route.params.filters } : {})}
       onBack={navigation.goBack}
       onOpenItem={(item) =>
         navigation.navigate("catalog-item", { itemId: item.id, title: item.name })

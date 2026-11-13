@@ -1,4 +1,4 @@
-import type { ShowcaseListSort } from "@adclub/contracts";
+import type { ShowcaseAttributeFilter, ShowcaseListSort } from "@adclub/contracts";
 import { layout } from "@adclub/ui-core";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,6 +19,7 @@ import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import {
   EMPTY_FILTERS,
   filterCount,
+  filterStateOf,
   filtersToQuery,
   type FilterState,
 } from "../../catalog/filters";
@@ -57,6 +58,8 @@ export interface ItemListScreenProps {
   onBack: () => void;
   /** M-CAT-04: the search icon of the top bar (TASK-044). */
   onSearch?: () => void;
+  /** The filters the list opens with (a reminder's «Подобрать», TASK-069); changed as any. */
+  initialFilters?: ShowcaseAttributeFilter[];
 }
 
 /**
@@ -83,6 +86,7 @@ export function ItemListScreen({
   onCheckCar,
   onBack,
   onSearch,
+  initialFilters,
 }: ItemListScreenProps) {
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -91,7 +95,9 @@ export function ItemListScreen({
   const { car } = useCatalogCar();
   const [citySheet, setCitySheet] = useState(false);
   const [sort, setSort] = useState<ShowcaseListSort>("recommended");
-  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<FilterState>(() =>
+    initialFilters ? filterStateOf(initialFilters) : EMPTY_FILTERS,
+  );
   // The filters being edited live here, not in the sheet: opening the sheet
   // is then an ordinary event instead of a state to synchronise.
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);

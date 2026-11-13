@@ -1,5 +1,6 @@
 import { createNavigationContainerRef } from "@react-navigation/native";
 import type { PushTarget } from "../start/start-decision";
+import { requestCatalogCar } from "./catalog-car-request";
 import type { RootParams } from "./routes";
 
 /**
@@ -24,6 +25,12 @@ export function openPushTarget(target: PushTarget): void {
   if (target.screen === "subscription") {
     // M-SUB-02 comes with TASK-041; until then the profile.
     navigationRef.navigate("tabs", { screen: "profile", params: { screen: "profile-home" } });
+    return;
+  }
+  if (target.screen === "catalog" && target.params?.carId) {
+    // P-REM-01/02 (TASK-069): the catalog's home with this car in its header.
+    requestCatalogCar(target.params.carId);
+    navigationRef.navigate("tabs", { screen: "catalog", params: { screen: "catalog-home" } });
   }
 }
 

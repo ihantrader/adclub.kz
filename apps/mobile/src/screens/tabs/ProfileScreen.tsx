@@ -18,6 +18,7 @@ import {
   ScreenBody,
   Section,
   Sheet,
+  Switch,
   Text,
   useTheme,
   useToast,
@@ -70,6 +71,7 @@ export function ProfileScreen({
   const [sheet, setSheet] = useState<"city" | "language" | "appearance" | null>(null);
   const [showcase, setShowcase] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [savingReminders, setSavingReminders] = useState(false);
   const { show } = useToast();
   const clubInfo = useClubInfo();
   const partnerUrl = partnerFormUrl(clubInfo.data, __DEV__ ? { apiUrl } : null);
@@ -176,6 +178,30 @@ export function ProfileScreen({
                 />
               )}
             </ListGroup>
+            {/* M-PRO-04 «Напоминания о замене» (TASK-069): the cards and the pushes of
+                reminders; orders and payments are not switched off in the app. */}
+            {session.profile && (
+              <View style={styles.reminders}>
+                <Switch
+                  label={t("profile.reminders")}
+                  description={t("profile.remindersText")}
+                  checked={session.profile.remindersEnabled}
+                  disabled={!online || savingReminders}
+                  onChange={(remindersEnabled) => {
+                    setSavingReminders(true);
+                    session
+                      .updateProfile({ remindersEnabled })
+                      .catch(() => show(t("reminder.failed")))
+                      .finally(() => setSavingReminders(false));
+                  }}
+                />
+                {!online && (
+                  <Text variant="caption" color="textMuted">
+                    {t("garage.needsNetwork")}
+                  </Text>
+                )}
+              </View>
+            )}
           </Section>
         )}
 
@@ -391,4 +417,5 @@ const styles = StyleSheet.create({
   },
   personText: { flex: 1, gap: 2 },
   choices: { paddingBottom: 8 },
+  reminders: { paddingTop: 12, gap: 4 },
 });

@@ -10,5 +10,6 @@ export type { DraftCatalogCategory, MappedDraft } from "./maintenance-draft-mapp
 export { DevMaintenanceSeed, DevMaintenanceSeedError } from "./dev-maintenance-seed";
 export type { DevMaintenanceSeedResult } from "./dev-maintenance-seed";
 export { planCandidatesWhere, scopeOf } from "./maintenance-scope";
+export { targetProblems } from "./maintenance-targets";
 export { maintenancePlan, maintenancePlanItem, maintenanceTables } from "./schema";
 export type { MaintenancePlanItemRow, MaintenancePlanRow } from "./schema";

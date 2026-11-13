@@ -23,6 +23,7 @@ import { AuditLog } from "../audit";
 import { decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
 import { GarageService } from "../garage";
+import { GarageReminders } from "../reminders";
 import {
   account,
   ipHint,
@@ -120,6 +121,7 @@ export class AdminUsersService {
     @Inject(SessionStore) private readonly sessions: SessionStore,
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(Notifications) private readonly notifications: Notifications,
+    @Inject(GarageReminders) private readonly reminders: GarageReminders,
   ) {}
 
   async list(query: AdminUserListQuery): Promise<AdminUserPage> {
@@ -311,7 +313,11 @@ export class AdminUsersService {
 
   async garageOf(accountId: string): Promise<AdminUserGarageResponse> {
     await this.requireAccount(this.database.db, accountId);
-    return this.garage.list(accountId);
+    const [{ cars }, reminders] = await Promise.all([
+      this.garage.list(accountId),
+      this.reminders.adminView(accountId),
+    ]);
+    return { cars, reminders };
   }
 
   /** The sessions of the user's app page by page (TASK-080, X22): without `limit`, all. */

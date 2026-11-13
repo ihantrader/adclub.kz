@@ -44,6 +44,8 @@ const KIND_OF_SCHEMA: Record<string, StatusKind | "not a badge"> = {
   maintenanceItemStatusSchema: "maintenanceItem",
   // A match of a recognized vehicle document, not the state of a record.
   vehicleDocumentMatchStatusSchema: "not a badge",
+  // A reminder of a car (TASK-069): a card in the app, words in the admin's garage (`reminderWords`).
+  reminderStateSchema: "not a badge",
 };
 
 interface EnumLike {

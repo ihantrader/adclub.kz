@@ -79,6 +79,8 @@ export const accountProfileSchema = z.object({
    * or a message was refused «not on WhatsApp»): T-PRO-03.
    */
   whatsappAvailable: z.boolean(),
+  /** M-PRO-04 «Напоминания о замене» (TASK-069): off — neither the cards nor the pushes. */
+  remindersEnabled: z.boolean(),
 });
 
 export type AccountProfile = z.infer<typeof accountProfileSchema>;
@@ -120,6 +122,7 @@ export const updateAccountProfileBodySchema = z
     emailNewsConsent: z.boolean().optional(),
     cityId: z.uuid().nullable().optional(),
     language: catalogLanguageSchema.optional(),
+    remindersEnabled: z.boolean().optional(),
   })
   .loose()
   .superRefine((body, context) => {

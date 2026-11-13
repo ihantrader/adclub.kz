@@ -3,6 +3,7 @@ import { hiddenPhoneSchema, phoneShareConsentSchema } from "./account";
 import { catalogLanguageSchema } from "./catalog";
 import { clubAccessStateSchema } from "./club-access";
 import { accountCarSchema } from "./garage";
+import { garageReminderCarSchema } from "./reminders";
 import { orderStatusSchema } from "./orders";
 
 /**
@@ -151,7 +152,11 @@ export const adminUserResponseSchema = z.object({ user: adminUserSchema });
 export type AdminUserResponse = z.infer<typeof adminUserResponseSchema>;
 
 /** The garage of a user, to look at only (A-USR-02); most recently added first. */
-export const adminUserGarageResponseSchema = z.object({ cars: z.array(accountCarSchema) });
+export const adminUserGarageResponseSchema = z.object({
+  cars: z.array(accountCarSchema),
+  /** The reminders of each car (TASK-069), as the app is told them, without «Подобрать». */
+  reminders: z.array(garageReminderCarSchema),
+});
 
 export type AdminUserGarageResponse = z.infer<typeof adminUserGarageResponseSchema>;
 

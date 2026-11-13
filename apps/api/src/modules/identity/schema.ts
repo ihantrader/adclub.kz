@@ -40,6 +40,8 @@ export const account = pgTable("account", {
   cityId: uuid("city_id"),
   language: text("language").$type<"kk" | "ru" | "en">(),
   emailNewsConsent: boolean("email_news_consent").notNull().default(false),
+  /** M-PRO-04 «Напоминания о замене» (TASK-069). */
+  remindersEnabled: boolean("reminders_enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

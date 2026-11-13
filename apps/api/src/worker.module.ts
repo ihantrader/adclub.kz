@@ -21,6 +21,13 @@ import { ReviewJobsModule } from "./modules/reviews";
 import { AssistantJobsModule } from "./modules/assistant";
 import { RatingJobsModule } from "./modules/ratings";
 import { BillingJobsModule } from "./modules/billing";
+import { CatalogModule } from "./modules/catalog";
+import { CompatibilityModule } from "./modules/compatibility";
+import { ClubAccessModule } from "./modules/club-access";
+import { ShowcaseModule } from "./modules/showcase";
+import { VehiclesModule } from "./modules/vehicles";
+import { MaintenanceModule } from "./modules/maintenance";
+import { ReminderJobsModule } from "./modules/reminders";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -43,6 +50,14 @@ export class WorkerModule {
       ai?: Partial<AiServiceOptions>;
     } = {},
   ) {
+    // The reminders (TASK-069) read through the client catalog, the one compatibility
+    // calculation and the maintenance plans — the same modules the API has, without routes.
+    const catalog = CatalogModule.forRoot({ http: false });
+    const compatibility = CompatibilityModule.forRoot({ http: false, catalog });
+    const clubAccess = ClubAccessModule.forRoot({ http: false });
+    const showcase = ShowcaseModule.forRoot({ http: false, catalog, compatibility, clubAccess });
+    const vehicles = VehiclesModule.forRoot({ http: false });
+    const maintenance = MaintenanceModule.forRoot({ http: false, catalog, showcase, vehicles });
     return {
       module: WorkerModule,
       imports: [
@@ -74,6 +89,7 @@ export class WorkerModule {
         AssistantJobsModule,
         RatingJobsModule,
         BillingJobsModule.forRoot(config),
+        ReminderJobsModule.forRoot({ compatibility, showcase, maintenance }),
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

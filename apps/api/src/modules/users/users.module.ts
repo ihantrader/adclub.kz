@@ -12,6 +12,8 @@ export interface UsersModuleOptions {
   catalog: DynamicModule;
   clubAccess: DynamicModule;
   suppliers: DynamicModule;
+  /** The reminders of a user's cars on the «Гараж» tab (TASK-069). */
+  reminders: DynamicModule;
 }
 
 /**
@@ -27,7 +29,7 @@ export class UsersModule {
   static forRoot(options: UsersModuleOptions): DynamicModule {
     return {
       module: UsersModule,
-      imports: [options.catalog, options.clubAccess, options.suppliers],
+      imports: [options.catalog, options.clubAccess, options.suppliers, options.reminders],
       controllers: [AdminUsersController],
       providers: [
         AdminUsersService,

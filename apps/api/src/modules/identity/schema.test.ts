@@ -21,6 +21,7 @@ describe("identity schema: account", () => {
         "cityId",
         "language",
         "emailNewsConsent",
+        "remindersEnabled",
         "createdAt",
         "updatedAt",
       ].sort(),

@@ -541,6 +541,12 @@ import {
   totpVerifiedResponseSchema,
   totpVerifyBodySchema,
 } from "./sign-in";
+import {
+  garageReminderCarSchema,
+  garageReminderDoneBodySchema,
+  garageReminderPathSchema,
+  garageRemindersResponseSchema,
+} from "./reminders";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -736,7 +742,13 @@ function defineRoute<const Route extends ApiRouteDefinition>(route: Route): Rout
 /** Account-level routes every signed-in session may use, whatever its context. */
 const anyContext = ["user", "supplier", "admin"] as const satisfies readonly AccessContext[];
 
-export const apiRoutes = {
+/**
+ * The routes up to TASK-063. `apiRoutes` is put together from parts with an
+ * explicit type: one object literal of every route outgrew what the compiler
+ * serializes into a declaration (TS7056, TASK-069). A new group of routes is
+ * another part below, added to `apiRoutes`.
+ */
+const coreApiRoutes = {
   getHealth: defineRoute({
     operationId: "getHealth",
     method: "GET",
@@ -5919,6 +5931,76 @@ export const apiRoutes = {
     },
   }),
 } as const;
+
+/** Reminders about a planned replacement (TASK-069; SCREENS M-REM-01, M-REM-02). */
+const reminderRoutes = {
+  listGarageReminders: defineRoute({
+    operationId: "listGarageReminders",
+    method: "GET",
+    path: "/garage/reminders",
+    summary:
+      "What each car of the account is due to replace and whether to ask its mileage (SCREENS M-REM-01, M-REM-02), counted by the server",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    responses: {
+      200: { description: "The reminders by car", schema: garageRemindersResponseSchema },
+    },
+  }),
+  markGarageReminderDone: defineRoute({
+    operationId: "markGarageReminderDone",
+    method: "POST",
+    path: "/garage/cars/{carId}/reminders/{planItemId}/done",
+    summary:
+      "«Уже поменял» (M-REM-01, D-038): the replacement marked at the current mileage, or at the corrected one written first to the journal",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageReminderPathSchema,
+    requestBody: {
+      description: "The corrected mileage, if any",
+      schema: garageReminderDoneBodySchema,
+    },
+    responses: {
+      200: { description: "The car's reminders now", schema: garageReminderCarSchema },
+    },
+  }),
+  snoozeGarageReminder: defineRoute({
+    operationId: "snoozeGarageReminder",
+    method: "POST",
+    path: "/garage/cars/{carId}/reminders/{planItemId}/snooze",
+    summary: "«Напомнить позже» (M-REM-01): the reminder put off for `reminder_snooze_days`",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageReminderPathSchema,
+    responses: {
+      200: { description: "The car's reminders now", schema: garageReminderCarSchema },
+    },
+  }),
+  dismissGarageMileageQuestion: defineRoute({
+    operationId: "dismissGarageMileageQuestion",
+    method: "POST",
+    path: "/garage/cars/{carId}/mileage-question/dismiss",
+    summary: "«Не сейчас» on the mileage question (M-REM-02): not asked again until the next day",
+    tag: "garage",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    pathParams: garageCarIdPathSchema,
+    responses: {
+      200: { description: "The car's reminders now", schema: garageReminderCarSchema },
+    },
+  }),
+} as const;
+
+export const apiRoutes: typeof coreApiRoutes & typeof reminderRoutes = {
+  ...coreApiRoutes,
+  ...reminderRoutes,
+};
 
 export type ApiRoutes = typeof apiRoutes;
 export type ApiRouteName = keyof ApiRoutes;

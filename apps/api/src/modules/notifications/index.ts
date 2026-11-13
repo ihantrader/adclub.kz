@@ -30,6 +30,7 @@ export {
   PushRenderError,
   pushTemplate,
   pushTemplates,
+  PUSH_TEMPLATES_WITHOUT_WHATSAPP,
   renderPushText,
   SUPPLIER_WORD,
 } from "./push-templates";

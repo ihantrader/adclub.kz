@@ -529,6 +529,7 @@ export * from "./price-review";
 export * from "./notifications";
 export * from "./maintenance";
 export * from "./assistant";
+export * from "./reminders";
 
 export { buildOpenApiDocument, OPENAPI_INFO } from "./openapi";
 export type { OpenApiDocument } from "./openapi";

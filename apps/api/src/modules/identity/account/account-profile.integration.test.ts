@@ -201,6 +201,7 @@ describe("account profile (PostgreSQL + Redis)", () => {
         phoneShareConsent: null,
         // TASK-052: the login code went through WhatsApp.
         whatsappAvailable: true,
+        remindersEnabled: true,
       });
       const me = currentAccountResponseSchema.parse(
         (await http().get("/auth/me").set(bearer(token))).body,

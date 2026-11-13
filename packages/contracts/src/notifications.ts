@@ -9,7 +9,8 @@ import { z } from "zod";
  * Every kind of notification to the user — the one list: the setting
  * `critical_notification_kinds` takes its values from it, the server's
  * entrance `Notifications.enqueue` takes a kind from it, and the admin
- * panel names each of them. `maintenance_reminder` is for stage D.
+ * panel names each of them. `maintenance_reminder` and `mileage_request` —
+ * the reminders of TASK-069 (P-REM-01, P-REM-02); neither is critical.
  */
 export const notificationKinds = [
   "order_accepted",
@@ -24,6 +25,7 @@ export const notificationKinds = [
   "supply_overdue",
   "review_text_rejected",
   "maintenance_reminder",
+  "mileage_request",
   "payment_failed",
 ] as const;
 
@@ -38,6 +40,8 @@ export type NotificationKind = z.infer<typeof notificationKindSchema>;
 export const pushTargetSchema = z.discriminatedUnion("screen", [
   z.object({ screen: z.literal("order"), params: z.object({ orderId: z.uuid() }) }),
   z.object({ screen: z.literal("subscription"), params: z.object({}).optional() }),
+  // TASK-069: the catalog's home with this car in its header (M-REM-01, M-REM-02).
+  z.object({ screen: z.literal("catalog"), params: z.object({ carId: z.uuid() }) }),
 ]);
 export type PushTargetValue = z.infer<typeof pushTargetSchema>;
 

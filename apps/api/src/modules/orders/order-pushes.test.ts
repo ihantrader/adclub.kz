@@ -110,7 +110,15 @@ describe("orderPushVariables", () => {
 
   it("never carries the code, the QR or the address", () => {
     for (const code of Object.keys(pushTemplates)) {
-      if (code === "review_text_rejected" || code === "payment_failed") continue;
+      if (
+        code === "review_text_rejected" ||
+        code === "payment_failed" ||
+        code === "maintenance_reminder" ||
+        code === "maintenance_reminder_service" ||
+        code === "mileage_request"
+      ) {
+        continue;
+      }
       const values = orderPushVariables(
         code as keyof typeof pushTemplates,
         order(),

@@ -103,6 +103,7 @@ export class AccountProfileService {
             emailNewsConsent: body.emailNewsConsent,
             cityId: body.cityId,
             language: body.language,
+            remindersEnabled: body.remindersEnabled,
           },
           tx,
         );
@@ -118,6 +119,7 @@ export class AccountProfileService {
               emailNewsConsent: before.emailNewsConsent,
               cityId: before.cityId,
               language: before.language,
+              remindersEnabled: before.remindersEnabled,
             },
             after: {
               name: updated.name,
@@ -125,6 +127,7 @@ export class AccountProfileService {
               emailNewsConsent: updated.emailNewsConsent,
               cityId: updated.cityId,
               language: updated.language,
+              remindersEnabled: updated.remindersEnabled,
             },
           },
           tx,
@@ -162,6 +165,7 @@ export class AccountProfileService {
           ? { version: row.consentVersion, at: row.consentPhoneShareAt.toISOString() }
           : null,
       whatsappAvailable: whatsapp,
+      remindersEnabled: row.remindersEnabled,
     };
   }
 }

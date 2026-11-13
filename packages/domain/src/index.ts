@@ -449,3 +449,22 @@ export type {
   PlanChoice,
   ScopeMatch,
 } from "./maintenance/maintenance-plan";
+export {
+  addAlmatyMonths,
+  almatyMonthsBetween,
+  mileageEstimate,
+  nextAlmatyDay,
+  readingNear,
+  REMINDER_MIN_SPAN_DAYS,
+  reminderState,
+} from "./maintenance/maintenance-reminder";
+export type {
+  ReminderBasis,
+  ReminderCarInput,
+  ReminderCarState,
+  ReminderElementInput,
+  ReminderItem,
+  ReminderItemState,
+  ReminderReading,
+  ReminderSettings,
+} from "./maintenance/maintenance-reminder";

@@ -120,6 +120,93 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keeps the reminders of a car with their rules, goes with the car, and rolls back (TASK-069)", async () => {
+    const accountId = (
+      await client.query<{ id: string; reminders_enabled: boolean }>(
+        "INSERT INTO account (phone) VALUES ('+77470000969') RETURNING id, reminders_enabled",
+      )
+    ).rows[0]!;
+    // M-PRO-04 is on for every account, the ones before the migration too.
+    expect(accountId.reminders_enabled).toBe(true);
+    const makeId = (
+      await client.query<{ id: string }>("INSERT INTO vehicle_make DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const modelId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO vehicle_model (make_id) VALUES ($1) RETURNING id",
+        [makeId],
+      )
+    ).rows[0]!.id;
+    const carId = (
+      await client.query<{ id: string; mileage_question_dismissed_until: Date | null }>(
+        `INSERT INTO account_car (account_id, make_id, make_label, model_id, model_label)
+         VALUES ($1, $2, 'Test', $3, 'Model') RETURNING id, mileage_question_dismissed_until`,
+        [accountId.id, makeId, modelId],
+      )
+    ).rows[0]!.id;
+    const planId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO maintenance_plan (make_id, name, source) VALUES ($1, 'Test plan', 'manual') RETURNING id",
+        [makeId],
+      )
+    ).rows[0]!.id;
+    const itemId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO maintenance_plan_item (plan_id, kind, interval_km, status) VALUES ($1, 'part', 10000, 'proposed') RETURNING id",
+        [planId],
+      )
+    ).rows[0]!.id;
+    const insert = (doneKm: number | null, doneAt: string | null) =>
+      client.query(
+        `INSERT INTO maintenance_reminder (account_id, car_id, plan_item_id, done_km, done_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [accountId.id, carId, itemId, doneKm, doneAt],
+      );
+    // A mileage of «Уже поменял» goes with its moment; a mark by the date alone may have none.
+    await expect(insert(30_000, null)).rejects.toThrow(/maintenance_reminder_done/);
+    await insert(null, "2026-11-13T06:00:00Z");
+    // One row per car and element.
+    await expect(insert(31_000, "2026-11-13T06:00:00Z")).rejects.toThrow(
+      /maintenance_reminder_car_item_key/,
+    );
+    // P-REM-02 is a kind of notification.
+    await client.query(
+      `INSERT INTO notification (dedupe_key, recipient_account_id, event_kind, channel, template_code, lang, payload, subject_type)
+       VALUES ('test-069', $1, 'mileage_request', 'push', 'mileage_request', 'ru', '{}', 'account_car')`,
+      [accountId.id],
+    );
+    // The car removed — its reminders go with it.
+    await client.query("DELETE FROM account_car WHERE id = $1", [carId]);
+    expect((await client.query("SELECT 1 FROM maintenance_reminder")).rowCount).toBe(0);
+
+    await rollBackThrough("1792350000000_maintenance-reminders");
+    expect(await tableExists(client, "maintenance_reminder")).toBe(false);
+    const columns = await client.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE (table_name = 'account' AND column_name = 'reminders_enabled')
+          OR (table_name = 'account_car' AND column_name IN ('mileage_question_dismissed_until', 'mileage_pushed_at', 'mileage_confirmed_at'))`,
+    );
+    expect(columns.rowCount).toBe(0);
+    // The kind is gone with its rows; the old kinds are as they were.
+    expect(
+      (await client.query("SELECT 1 FROM notification WHERE event_kind = 'mileage_request'"))
+        .rowCount,
+    ).toBe(0);
+    await expect(
+      client.query(
+        `INSERT INTO notification (dedupe_key, recipient_account_id, event_kind, channel, template_code, lang, payload, subject_type)
+         VALUES ('test-069-b', $1, 'mileage_request', 'push', 'mileage_request', 'ru', '{}', 'account_car')`,
+        [accountId.id],
+      ),
+    ).rejects.toThrow(/notification_kind_check/);
+    await client.query("DELETE FROM notification WHERE recipient_account_id = $1", [accountId.id]);
+    await client.query("DELETE FROM maintenance_plan_item WHERE id = $1", [itemId]);
+    await client.query("DELETE FROM maintenance_plan WHERE id = $1", [planId]);
+    await client.query("DELETE FROM vehicle_model WHERE id = $1", [modelId]);
+    await client.query("DELETE FROM vehicle_make WHERE id = $1", [makeId]);
+    await client.query("DELETE FROM account WHERE id = $1", [accountId.id]);
+  });
+
   it("opens one assistant dialog per client key, lets keyless ones be, and rolls back (TASK-063.B)", async () => {
     const accountId = (
       await client.query<{ id: string }>(

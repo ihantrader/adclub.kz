@@ -39,6 +39,14 @@ export const accountCar = pgTable("account_car", {
   /** The key of the adding that made this car (TASK-029.B); `null` — added without one. */
   idempotencyKey: uuid("idempotency_key"),
   isPrimary: boolean("is_primary").notNull().default(false),
+  /** M-REM-02 «Не сейчас» (TASK-069): the mileage is not asked until then. */
+  mileageQuestionDismissedUntil: timestamp("mileage_question_dismissed_until", {
+    withTimezone: true,
+  }),
+  /** The same mileage as the last reading confirmed (no reading is written for it; TASK-069). */
+  mileageConfirmedAt: timestamp("mileage_confirmed_at", { withTimezone: true }),
+  /** The last P-REM-02 to this car (TASK-069). */
+  mileagePushedAt: timestamp("mileage_pushed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

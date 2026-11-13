@@ -202,6 +202,38 @@ export class MaintenanceAnswers {
   }
 
   /**
+   * The active plan of a car and its active elements in order — the very
+   * choice `answer` makes (`maintenancePlanFor` over the candidates of its
+   * SQL twin); `null` — no plan applies (none, or one needs a level the car
+   * does not say). The reminders of TASK-069 take it from here.
+   */
+  async activePlanOf(
+    executor: DbExecutor,
+    car: ResolvedCompatibilityVehicle,
+  ): Promise<{ planId: string; rows: MaintenancePlanItemRow[] } | null> {
+    const candidates = await executor
+      .select()
+      .from(maintenancePlan)
+      .where(planCandidatesWhere(car));
+    const choice = maintenancePlanFor(
+      car,
+      candidates.map((row) => ({ id: row.id, status: row.status, scope: scopeOf(row), row })),
+    );
+    if (choice.kind !== "plan") return null;
+    const rows = await executor
+      .select()
+      .from(maintenancePlanItem)
+      .where(
+        and(
+          eq(maintenancePlanItem.planId, choice.plan.id),
+          eq(maintenancePlanItem.status, "active"),
+        ),
+      )
+      .orderBy(asc(maintenancePlanItem.position), asc(maintenancePlanItem.id));
+    return { planId: choice.plan.id, rows };
+  }
+
+  /**
    * The check of one plan, whatever its status (TASK-061 requirement 3):
    * every element that is not archived — the proposed ones too — with how
    * many items of its rule the catalog has at all and how many are sold.
@@ -281,7 +313,68 @@ export class MaintenanceAnswers {
     { item: MaintenanceDueItem; row: MaintenancePlanItemRow; problems: MaintenanceItemProblem[] }[]
   > {
     const rows = due.map((entry) => entry.element.row);
-    const [titles, problems] = await Promise.all([
+    const { titles, problems, catalogs } = await this.catalogsOf(
+      executor,
+      rows,
+      car,
+      cityId,
+      viewer,
+      lang,
+    );
+    return due.map((entry, index) => {
+      const row = entry.element.row;
+      return {
+        row,
+        problems: problems[index]!,
+        item: {
+          id: row.id,
+          title: titles[index]!,
+          kind: row.kind,
+          reason: entry.reason,
+          atKm: entry.atKm,
+          atMonths: entry.atMonths,
+          intervalKm: row.intervalKm,
+          intervalMonths: row.intervalMonths,
+          quantity: row.quantity,
+          catalog: catalogs[index]!,
+        },
+      };
+    });
+  }
+
+  /** The titles of elements in a language (the Russian one when there is no translation). */
+  async titlesOf(
+    executor: DbExecutor,
+    ids: readonly string[],
+    lang: CatalogLanguage,
+  ): Promise<Map<string, MaintenanceDueItem["title"]>> {
+    const texts = await loadTexts(executor, "maintenance_plan_item", [...ids]);
+    return new Map(
+      ids.map((id) => [
+        id,
+        localize(textsOf(texts, id, "name"), lang) ?? { text: "", isFallback: true },
+      ]),
+    );
+  }
+
+  /**
+   * The titles of elements and what the platform sells by each one's rule
+   * for this car and city — exactly what `GET /maintenance/plan` answers for
+   * them (the reminders of TASK-069 open «Подобрать» by this very answer).
+   */
+  async catalogsOf(
+    executor: DbExecutor,
+    rows: readonly MaintenancePlanItemRow[],
+    car: ResolvedCompatibilityVehicle,
+    cityId: string | undefined,
+    viewer: Viewer,
+    lang: CatalogLanguage,
+  ): Promise<{
+    titles: MaintenanceDueItem["title"][];
+    problems: MaintenanceItemProblem[][];
+    catalogs: MaintenanceCatalog[];
+  }> {
+    const [texts, problems] = await Promise.all([
       loadTexts(
         executor,
         "maintenance_plan_item",
@@ -297,25 +390,13 @@ export class MaintenanceAnswers {
           : this.sold(executor, row, car, cityId, viewer, lang),
       ),
     );
-    return due.map((entry, index) => {
-      const row = entry.element.row;
-      return {
-        row,
-        problems: problems[index]!,
-        item: {
-          id: row.id,
-          title: localize(textsOf(titles, row.id, "name"), lang) ?? { text: "", isFallback: true },
-          kind: row.kind,
-          reason: entry.reason,
-          atKm: entry.atKm,
-          atMonths: entry.atMonths,
-          intervalKm: row.intervalKm,
-          intervalMonths: row.intervalMonths,
-          quantity: row.quantity,
-          catalog: catalogs[index]!,
-        },
-      };
-    });
+    return {
+      titles: rows.map(
+        (row) => localize(textsOf(texts, row.id, "name"), lang) ?? { text: "", isFallback: true },
+      ),
+      problems,
+      catalogs,
+    };
   }
 
   /**

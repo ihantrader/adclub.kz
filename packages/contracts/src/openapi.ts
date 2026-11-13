@@ -62,6 +62,7 @@ import * as searchContract from "./search";
 import * as vehicleContract from "./vehicles";
 import * as maintenanceContract from "./maintenance";
 import * as assistantContract from "./assistant";
+import * as reminderContract from "./reminders";
 import {
   accessContextSchema,
   administratorListResponseSchema,
@@ -301,6 +302,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(priceReviewContract),
   ...moduleComponentSchemas(maintenanceContract),
   ...moduleComponentSchemas(assistantContract),
+  ...moduleComponentSchemas(reminderContract),
   ApiErrorResponse: apiErrorResponseSchema,
   ErrorCode: errorCodeSchema,
   ClientPlatform: clientPlatformSchema,

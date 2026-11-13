@@ -25,6 +25,7 @@ import { OrdersModule } from "./modules/orders";
 import { ShowcaseModule } from "./modules/showcase";
 import { MaintenanceModule } from "./modules/maintenance";
 import { AssistantModule } from "./modules/assistant";
+import { RemindersModule } from "./modules/reminders";
 import { OpsRunMetricsModule } from "./modules/operations";
 import { SearchIndexMetricsModule } from "./modules/search-index";
 import { SignalsModule } from "./modules/signals";
@@ -90,6 +91,16 @@ export class AppModule implements NestModule {
       maintenance,
       signals,
     });
+    // One garage module: the reminders write the mileage of «Уже поменял» through it (TASK-069).
+    const garage = GarageModule.forRoot({ http: true });
+    // Reminders about a planned replacement (TASK-069): the app's routes and the admin's view.
+    const reminders = RemindersModule.forRoot({
+      http: true,
+      compatibility,
+      showcase,
+      maintenance,
+      garage,
+    });
     const billing = BillingModule.forRoot(config, {
       http: true,
       clubAccess,
@@ -134,7 +145,8 @@ export class AppModule implements NestModule {
         // contract routes alone.
         ...(config.nodeEnv === "production" ? [] : [OpenApiModule]),
         IdentityModule.forRoot(config),
-        GarageModule.forRoot({ http: true }),
+        garage,
+        reminders,
         catalog,
         vehicles,
         VehicleDocumentModule.forRoot({ vehicles }),
@@ -166,7 +178,7 @@ export class AppModule implements NestModule {
           maintenance,
           assistant,
         }),
-        UsersModule.forRoot({ catalog, clubAccess, suppliers }),
+        UsersModule.forRoot({ catalog, clubAccess, suppliers, reminders }),
         priceImports,
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).

@@ -19,6 +19,7 @@ export interface AccountProfileRow {
   name: string | null;
   email: string | null;
   emailNewsConsent: boolean;
+  remindersEnabled: boolean;
   cityId: string | null;
   language: CatalogLanguage | null;
   consentPhoneShareAt: Date | null;
@@ -38,6 +39,7 @@ const profileColumns = {
   name: account.name,
   email: account.email,
   emailNewsConsent: account.emailNewsConsent,
+  remindersEnabled: account.remindersEnabled,
   cityId: account.cityId,
   language: account.language,
   consentPhoneShareAt: account.consentPhoneShareAt,
@@ -49,6 +51,7 @@ export interface UpdateAccountProfileInput {
   name?: string;
   email?: string | null;
   emailNewsConsent?: boolean;
+  remindersEnabled?: boolean;
   cityId?: string | null;
   language?: CatalogLanguage;
 }
@@ -169,6 +172,7 @@ export class AccountStore {
     if (patch.email !== undefined) values.email = patch.email;
     if (patch.cityId !== undefined) values.cityId = patch.cityId;
     if (patch.language !== undefined) values.language = patch.language;
+    if (patch.remindersEnabled !== undefined) values.remindersEnabled = patch.remindersEnabled;
     if (patch.emailNewsConsent !== undefined) {
       values.emailNewsConsent = patch.emailNewsConsent;
     }

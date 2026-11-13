@@ -149,6 +149,35 @@ export const pushTemplates = {
       en: "Review not published: {reason}. You can correct it",
     },
   },
+  // TASK-069: reminders, without a WhatsApp copy (ARCHITECTURE 13.2).
+  maintenance_reminder: {
+    screen: "P-REM-01",
+    kind: "maintenance_reminder",
+    texts: {
+      ru: "Пора менять {what} на {car}. Подобрать?",
+      kk: "{car} көлігінде {what} ауыстыратын уақыт келді. Таңдаймыз ба?",
+      en: "Time to replace {what} on your {car}. Find one?",
+    },
+  },
+  // A service of the plan reads by its own name: «Замена моторного масла для …» (ours, for approval).
+  maintenance_reminder_service: {
+    screen: "P-REM-01a",
+    kind: "maintenance_reminder",
+    texts: {
+      ru: "{what} для {car} — пора. Записаться?",
+      kk: "{car}: {what} уақыты келді. Жазыласыз ба?",
+      en: "{what} for your {car} is due. Book it?",
+    },
+  },
+  mileage_request: {
+    screen: "P-REM-02",
+    kind: "mileage_request",
+    texts: {
+      ru: "Обновите пробег {car} — напомним о замене вовремя",
+      kk: "{car} жүрісін жаңартыңыз — ауыстыру туралы уақытында еске саламыз",
+      en: "Update the mileage of your {car} — we'll remind you of replacements on time",
+    },
+  },
   payment_failed: {
     screen: "P-SUB-01",
     kind: "payment_failed",
@@ -161,6 +190,16 @@ export const pushTemplates = {
 } as const satisfies Record<string, PushTemplateDefinition>;
 
 export type PushTemplateCode = keyof typeof pushTemplates;
+
+/**
+ * The pushes that are never copied to WhatsApp (ARCHITECTURE 13.2): the
+ * reminders of TASK-069 — they have no `user_<code>` template.
+ */
+export const PUSH_TEMPLATES_WITHOUT_WHATSAPP: readonly PushTemplateCode[] = [
+  "maintenance_reminder",
+  "maintenance_reminder_service",
+  "mileage_request",
+];
 
 /** «Поставщик» — what the text says instead of the name to a person without club access (SCREENS 8.4). */
 export const SUPPLIER_WORD: Readonly<Record<PushLang, string>> = {

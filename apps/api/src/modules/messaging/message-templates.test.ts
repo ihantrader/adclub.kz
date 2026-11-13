@@ -16,7 +16,11 @@ import {
   type MessageTemplateDefinition,
   type MessageTemplateRegistry,
 } from "./message-templates";
-import { placeholdersOf as placeholdersOfPush, pushTemplates } from "../notifications";
+import {
+  placeholdersOf as placeholdersOfPush,
+  PUSH_TEMPLATES_WITHOUT_WHATSAPP,
+  pushTemplates,
+} from "../notifications";
 
 /** The identifiers of the templates in SCREENS 8.5 (`W-01`, `W-01a`, …). */
 function screensTemplateIds(): string[] {
@@ -65,7 +69,9 @@ describe("the registry of message templates (TASK-024 requirement 2)", () => {
   it("has one user template per push text, with the push's own placeholders (TASK-052)", () => {
     const users = Object.entries(messageTemplates).filter(([key]) => key.startsWith("user_"));
     expect(users.map(([key]) => key.slice("user_".length)).sort()).toEqual(
-      Object.keys(pushTemplates).sort(),
+      Object.keys(pushTemplates)
+        .filter((code) => !(PUSH_TEMPLATES_WITHOUT_WHATSAPP as readonly string[]).includes(code))
+        .sort(),
     );
     for (const [key, template] of users) {
       const push = pushTemplates[key.slice("user_".length) as keyof typeof pushTemplates];

@@ -57,6 +57,7 @@ describe("settings registry", () => {
       "vehicles",
       "compatibility",
       "garage",
+      "reminders",
       "suppliers",
       "offers",
       "showcase",

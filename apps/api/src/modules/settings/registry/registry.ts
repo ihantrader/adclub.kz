@@ -1166,6 +1166,68 @@ const garage = group({
   },
 });
 
+// TASK-069 (ARCHITECTURE 4.87): reminders about a planned replacement and the mileage question.
+const reminders = group({
+  id: "reminders",
+  title: "Напоминания",
+  editableBy: "admin",
+  settings: {
+    mileage_ask_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Через сколько дней без нового показания пробега приложение спрашивает его (M-REM-02) и не чаще какого срока уходит push «Обновите пробег» (P-REM-02).",
+    }),
+    reminder_lead_km: define.integer({
+      unit: "count",
+      min: 0,
+      max: 10_000,
+      default: 500,
+      description: "За сколько километров до плановой замены напоминать (км).",
+    }),
+    reminder_lead_days: define.duration({
+      unit: "days",
+      min: 0,
+      max: 90,
+      default: 14,
+      description: "За сколько дней до плановой замены по сроку напоминать.",
+    }),
+    reminder_snooze_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 90,
+      default: 7,
+      description: "На сколько дней «Напомнить позже» откладывает напоминание.",
+    }),
+    reminder_push_interval_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 90,
+      default: 3,
+      description:
+        "Не чаще какого срока уходит push о замене (P-REM-01) по одному автомобилю — сколько бы элементов ни подошло.",
+    }),
+    reminder_mileage_window_days: define.duration({
+      unit: "days",
+      min: 14,
+      max: 730,
+      default: 180,
+      description:
+        "За сколько последних дней берутся показания пробега, по которым считается средний дневной пробег.",
+    }),
+    reminder_hour: define.integer({
+      unit: "hour_of_day",
+      min: 0,
+      max: 23,
+      default: 11,
+      description:
+        "В котором часу (Алматы) ежедневно уходят напоминания о замене и вопросы о пробеге.",
+    }),
+  },
+});
+
 const compatibility = group({
   id: "compatibility",
   title: "Совместимость",
@@ -2077,6 +2139,7 @@ export const settingGroups = [
   vehicles,
   compatibility,
   garage,
+  reminders,
   suppliers,
   offers,
   showcase,
@@ -2105,6 +2168,7 @@ export const settingDefinitions = {
   ...vehicles.settings,
   ...compatibility.settings,
   ...garage.settings,
+  ...reminders.settings,
   ...suppliers.settings,
   ...offers.settings,
   ...showcase.settings,

@@ -35,7 +35,7 @@ import {
 } from "./garage-errors";
 import { sameLevels } from "./garage-merge";
 import { GarageStore, type NewAccountCar } from "./garage.store";
-import type { AccountCarRow, MileageLogRow } from "./schema";
+import { accountCar, type AccountCarRow, type MileageLogRow } from "./schema";
 
 /**
  * The levels and the modification of a car as columns. The modification is
@@ -220,6 +220,13 @@ export class GarageService {
           },
           tx,
         );
+      } else {
+        // The same as the last: no reading, but the mileage is confirmed now —
+        // the question «Какой сейчас пробег» is answered (TASK-069).
+        await tx
+          .update(accountCar)
+          .set({ mileageConfirmedAt: new Date() })
+          .where(eq(accountCar.id, carId));
       }
       return (await this.views([car], tx))[0]!;
     });

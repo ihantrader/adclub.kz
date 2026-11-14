@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 import { visibleGarage, type SyncResult } from "../garage/account-garage";
 import {
@@ -13,8 +21,14 @@ import {
   type GarageState,
 } from "../garage/garage";
 import { withGuestMileage, type MileageReading } from "../garage/mileage";
-import { accountGarage } from "../services/account-garage";
-import { accountGarageStore, garageStore, sessionStore } from "./stores";
+import { accountGarage, accountGarageLoaded } from "../services/account-garage";
+import {
+  accountGarageStore,
+  devicePreferencesLoaded,
+  devicePreferencesWereRead,
+  garageStore,
+  sessionStore,
+} from "./stores";
 
 /**
  * The garage of the app — one value for the whole app (SCREENS M-GAR-01):
@@ -34,6 +48,11 @@ export interface GarageContextValue {
   primary: GarageCar | null;
   /** Signed in: the garage is the account's, and changing it needs the network. */
   remote: boolean;
+  /**
+   * The garage of this launch has been read: a guest's at once (the device),
+   * an account's once synced (or the server did not answer — TASK-069.A).
+   */
+  loaded: boolean;
   /** A car of the garage that is the same as this one, if there is one (as shown now). */
   duplicateOf: (car: GarageCar) => GarageCar | undefined;
   /** `idempotencyKey` — one per adding screen, so a repeat after a lost answer adds nothing. */
@@ -72,6 +91,25 @@ export function GarageProvider({ children }: { children: ReactNode }) {
   const accountId = session.status === "signed_in" ? session.session.accountId : null;
   const state = visibleGarage(accountId, copy, guest);
   const remote = accountId !== null;
+  const loadedAccount = useSyncExternalStore(
+    accountGarageLoaded.subscribe,
+    accountGarageLoaded.get,
+  );
+  // A guest's garage is the device's — loaded once the stores (the session
+  // among them) have really been read; until then «a guest» may yet be a
+  // signed-in person whose session is still being read (TASK-069.A).
+  const [storesRead, setStoresRead] = useState(devicePreferencesWereRead);
+  useEffect(() => {
+    if (storesRead) return;
+    let alive = true;
+    void devicePreferencesLoaded.then(() => {
+      if (alive) setStoresRead(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [storesRead]);
+  const loaded = accountId === null ? storesRead : loadedAccount === accountId;
 
   const add = useCallback(async (car: GarageCar, idempotencyKey: string) => {
     if (signedInAccount() !== null) return accountGarage.add(car, idempotencyKey);
@@ -122,6 +160,7 @@ export function GarageProvider({ children }: { children: ReactNode }) {
       cars: state.cars,
       primary: primaryCar(state),
       remote,
+      loaded,
       duplicateOf,
       add,
       update,
@@ -131,7 +170,7 @@ export function GarageProvider({ children }: { children: ReactNode }) {
       sync,
       nextId: () => newCarId(Date.now()),
     }),
-    [state, remote, duplicateOf, add, update, remove, makePrimary, recordMileage, sync],
+    [state, remote, loaded, duplicateOf, add, update, remove, makePrimary, recordMileage, sync],
   );
 
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>;

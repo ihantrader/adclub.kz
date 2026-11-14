@@ -2,10 +2,14 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { CatalogCarProvider } from "../catalog/catalog-car-provider";
 import { catalogEntry } from "../catalog/catalog-gate";
-import { onCatalogCarRequest } from "./catalog-car-request";
+import {
+  pendingCatalogCar,
+  subscribeCatalogCarRequest,
+  takeCatalogCarRequest,
+} from "./catalog-car-request";
 import type { GarageCar } from "../garage/garage";
 import { CatalogHomeScreen } from "../screens/catalog/CatalogHomeScreen";
 import { ItemListScreen } from "../screens/catalog/ItemListScreen";
@@ -30,17 +34,20 @@ const Stack = createNativeStackNavigator<CatalogStackParams>();
  * the first car added opens the catalog fresh, at its main screen.
  */
 export function CatalogTab() {
-  const { state, cars, makePrimary } = useGarage();
+  const { state, cars, loaded, makePrimary } = useGarage();
   const carPicker = useCarPicker();
   const entry = catalogEntry(state);
-  // A push of a reminder names its car (TASK-069): it becomes the car of the header.
-  useEffect(
-    () =>
-      onCatalogCarRequest((carId) => {
-        if (cars.some((car) => car.id === carId)) void makePrimary(carId).catch(() => undefined);
-      }),
-    [cars, makePrimary],
-  );
+  // A push of a reminder names its car (TASK-069): it becomes the car of the
+  // header — once the garage has loaded, when the push opened the app from
+  // nothing (TASK-069.A); a car deleted meanwhile is dropped silently.
+  const request = useSyncExternalStore(subscribeCatalogCarRequest, pendingCatalogCar);
+  useEffect(() => {
+    if (request === null) return;
+    const carId = takeCatalogCarRequest({ loaded, carIds: cars.map((car) => car.id) });
+    if (carId !== null && entry.kind === "open" && entry.car.id !== carId) {
+      void makePrimary(carId).catch(() => undefined);
+    }
+  }, [request, loaded, cars, entry, makePrimary]);
 
   if (entry.kind === "needs-car") return <NeedsCarScreen onAddCar={carPicker.add} />;
   return (

@@ -68,7 +68,8 @@ COMPLETED
 - `pnpm build` — PASS
 - `vitest --config vitest.integration.config.ts reminders.integration.test.ts settings.integration.test.ts` — PASS
 - `registry.test.ts` (ключи ARCHITECTURE 14 против реестра) — PASS, 7/7.
-- CI — не ждал (CLAUDE.md 11). Прогон: см. «Remaining Work».
+- CI — не ждал (CLAUDE.md 11). Прогон `43630098403` (коммит `6da7e9f`), на момент отчёта — в очереди.
+- Интеграционные `settings` + `reminders` — 29/29.
 
 ## UAT / E2E
 Окружение: `api-test-ai`, `worker-test-ai`, `mobile-web`. Временная правка `env` в `.claude/launch.json` (dev-контейнеры на 5433/9002, `AI_PROVIDER=test`) возвращена, не закоммичена. Панель браузера скрыта, поэтому проход — безголовый Chrome (Playwright, `channel: "chrome"`), 390×844, ru.
@@ -119,7 +120,7 @@ COMPLETED
   - `registry.test.ts` («has exactly the keys ARCHITECTURE 14 lists») — PASS;
   - новой группы нет, списки групп в `registry.test.ts` и `settings.integration.test.ts` не менялись; `settings.integration.test.ts` — PASS.
 - **AC-5 — PASS.** Локальные проверки — раздел Verification. Миграции нет.
-- **AC-6 — PASS.** Этот отчёт; идентификатор прогона CI — ниже.
+- **AC-6 — PASS.** Этот отчёт; прогон CI — `43630098403`.
 
 ## Errors & Fixes
 - Проход в браузере: гостя считали «загруженным» сразу — push, пришедший, пока сессия ещё читается, отбрасывался. Исправлено: `loaded` гостя — после `devicePreferencesLoaded`. Повторный проход — PASS.

@@ -187,7 +187,12 @@ export class ReminderFacts {
             intervalMonths: row.intervalMonths,
             firstKm: row.firstKm,
             firstMonths: row.firstMonths,
-            basis: latestBasis(rows.get(row.id), replaced.get(row.id) ?? [], carReadings),
+            basis: latestBasis(
+              rows.get(row.id),
+              replaced.get(row.id) ?? [],
+              carReadings,
+              settings.reminder_order_reading_days,
+            ),
             snoozedUntil: rows.get(row.id)?.snoozedUntil ?? null,
           })),
         },
@@ -329,12 +334,14 @@ export class ReminderFacts {
 
 /**
  * The latest known replacement: «Уже поменял» or an order; the mileage of an
- * order is the reading nearest to when it was given out (none — by the date).
+ * order is the reading nearest to when it was given out, within
+ * `reminder_order_reading_days` (none — unknown: by the schedule and the date).
  */
 function latestBasis(
   kept: MaintenanceReminderRow | undefined,
   orders: readonly FinishedOrder[],
   readings: readonly ReminderReading[],
+  readingDays: number,
 ): ReminderBasis | null {
   let best: ReminderBasis | null = null;
   if (kept?.doneAt) {
@@ -344,7 +351,7 @@ function latestBasis(
     if (best === null || order.at.getTime() > best.at.getTime()) {
       best = {
         source: "order",
-        atKm: readingNear(readings, order.at)?.valueKm ?? null,
+        atKm: readingNear(readings, order.at, readingDays)?.valueKm ?? null,
         at: order.at,
         orderId: order.id,
       };

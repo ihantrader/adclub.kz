@@ -25,6 +25,18 @@ function carNotFound(): ApiException {
   return new ApiException(404, "NOT_FOUND", "No such car in this account's garage");
 }
 
+/**
+ * The car's row lock — the one `garage.remind` takes (TASK-069.A): a mark is
+ * either seen by the job under its lock or made after its push is written.
+ */
+async function lockCar(tx: DbExecutor, carId: string): Promise<void> {
+  await tx
+    .select({ id: accountCar.id })
+    .from(accountCar)
+    .where(eq(accountCar.id, carId))
+    .for("update");
+}
+
 function elementNotFound(): ApiException {
   return new ApiException(404, "NOT_FOUND", "No such element in the plan of this car");
 }
@@ -85,6 +97,7 @@ export class GarageReminders {
     const [entry] = await this.facts.forAccount(session.accountId, { carId, now });
     const km = entry?.state.currentKm ?? null;
     await this.database.db.transaction(async (tx) => {
+      await lockCar(tx, carId);
       const [kept] = await tx
         .select()
         .from(maintenanceReminder)
@@ -115,9 +128,12 @@ export class GarageReminders {
   ): Promise<GarageReminderCar> {
     await this.element(session.accountId, carId, planItemId);
     const days = await this.settings.get("reminder_snooze_days");
-    await this.upsert(this.database.db, session.accountId, carId, planItemId, {
-      snoozedUntil: new Date(Date.now() + days * DAY_MS),
-      notifiedCycle: null,
+    await this.database.db.transaction(async (tx) => {
+      await lockCar(tx, carId);
+      await this.upsert(tx, session.accountId, carId, planItemId, {
+        snoozedUntil: new Date(Date.now() + days * DAY_MS),
+        notifiedCycle: null,
+      });
     });
     return this.one(session, carId, lang);
   }

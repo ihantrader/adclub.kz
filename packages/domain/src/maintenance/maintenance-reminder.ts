@@ -10,6 +10,12 @@
  *   without either — the plan's schedule from zero (`schedule`): the
  *   replacements due before the car's journal began are taken as done, and
  *   the next one of the schedule is the one to remind of;
+ * - **the mileage of a replacement unknown** (TASK-069.A) — an order with no
+ *   reading within `reminder_order_reading_days` of it, «Уже поменял» with
+ *   no readings, or a replacement of the old scale (before the confirmed
+ *   «меньше прошлого» that began the current stretch, and above its first
+ *   reading): by the mileage — the schedule, as with no history; by the date
+ *   — from the replacement; whichever first;
  * - **the current mileage** is the last reading plus the average daily
  *   mileage of the readings of the last `windowDays` (at least two, at least
  *   14 days apart) — otherwise the last reading alone; a reading lower than
@@ -155,14 +161,18 @@ export function nextAlmatyDay(now: Date): Date {
 
 /**
  * The reading nearest to a moment (an order given out): the mileage of the
- * replacement it made; `null` — no readings.
+ * replacement it made — but only a reading within `withinDays` of it, either
+ * side (`reminder_order_reading_days`, TASK-069.A): a reading entered a year
+ * later says nothing of the mileage then. `null` — none that near.
  */
 export function readingNear(
   readings: readonly ReminderReading[],
   at: Date,
+  withinDays: number = Number.POSITIVE_INFINITY,
 ): ReminderReading | null {
   let best: ReminderReading | null = null;
   for (const reading of readings) {
+    if (Math.abs(reading.at.getTime() - at.getTime()) > withinDays * DAY_MS) continue;
     if (
       best === null ||
       Math.abs(reading.at.getTime() - at.getTime()) < Math.abs(best.at.getTime() - at.getTime())
@@ -240,6 +250,7 @@ function itemOf(
   car: ReminderCarInput,
   mileage: ReturnType<typeof mileageEstimate>,
   firstReading: ReminderReading | null,
+  startedAnew: boolean,
   settings: ReminderSettings,
   now: Date,
 ): ReminderItem {
@@ -250,27 +261,54 @@ function itemOf(
   let elapsedKm: number | null = null;
   let elapsedMonths: number | null = null;
 
+  // The schedule from zero by the mileage: what was due before the journal began is taken as done.
+  const byKm =
+    firstReading && (element.intervalKm !== null || element.firstKm !== null)
+      ? previousPoint(firstReading.valueKm, element.intervalKm, element.firstKm)
+      : null;
+  const schedule =
+    byKm === null
+      ? null
+      : {
+          baseKm: byKm,
+          dueKm: nextPoint(byKm, element.intervalKm, element.firstKm),
+          elapsedKm: current === null ? null : Math.max(0, current - byKm),
+        };
+
   if (element.basis) {
     const known = element.basis;
+    // A mileage of the old, wrong scale (TASK-069.A): the replacement came
+    // before the confirmed «меньше прошлого» that began the current stretch,
+    // and is above its first reading — the scale it was counted in is gone.
+    const oldScale =
+      known.atKm !== null &&
+      firstReading !== null &&
+      startedAnew &&
+      known.at.getTime() < firstReading.at.getTime() &&
+      known.atKm > firstReading.valueKm;
+    const atKm = oldScale ? null : known.atKm;
     basis = {
       source: known.source,
-      atKm: known.atKm,
+      atKm,
       at: known.at,
       orderId: known.orderId ?? null,
     };
-    if (known.atKm !== null && element.intervalKm !== null) dueKm = known.atKm + element.intervalKm;
+    if (atKm !== null) {
+      if (element.intervalKm !== null) dueKm = atKm + element.intervalKm;
+      if (current !== null) elapsedKm = Math.max(0, current - atKm);
+    } else {
+      // The mileage then is unknown: by the mileage — the schedule, as with no
+      // history (I997); by the date — from the replacement; whichever first.
+      dueKm = schedule?.dueKm ?? null;
+      elapsedKm = schedule?.elapsedKm ?? null;
+    }
     if (element.intervalMonths !== null)
       dueDate = addAlmatyMonths(known.at, element.intervalMonths);
-    if (known.atKm !== null && current !== null) elapsedKm = Math.max(0, current - known.atKm);
     elapsedMonths = almatyMonthsBetween(known.at, now);
   } else {
-    // The schedule from zero: what was due before the journal began is taken as done.
-    let baseKm: number | null = null;
-    if (firstReading && (element.intervalKm !== null || element.firstKm !== null)) {
-      baseKm = previousPoint(firstReading.valueKm, element.intervalKm, element.firstKm);
-      dueKm = nextPoint(baseKm, element.intervalKm, element.firstKm);
-      if (current !== null) elapsedKm = Math.max(0, current - baseKm);
-    }
+    const baseKm = schedule?.baseKm ?? null;
+    dueKm = schedule?.dueKm ?? null;
+    elapsedKm = schedule?.elapsedKm ?? null;
     let baseAt: Date | null = null;
     const age = car.ageMonthsAtKnownSince;
     if (age !== null && (element.intervalMonths !== null || element.firstMonths !== null)) {
@@ -337,10 +375,13 @@ export function reminderState(
       top: null,
     };
   }
-  const firstReading = currentStretch(car.readings)[0] ?? null;
+  const stretch = currentStretch(car.readings);
+  const firstReading = stretch[0] ?? null;
+  // The stretch began with a confirmed «меньше прошлого», not with the first reading of all.
+  const startedAnew = stretch.length < car.readings.length;
   const items = [...car.elements]
     .sort((a, b) => a.position - b.position)
-    .map((element) => itemOf(element, car, mileage, firstReading, settings, now));
+    .map((element) => itemOf(element, car, mileage, firstReading, startedAnew, settings, now));
   const lastAnswer = Math.max(
     mileage.lastAt?.getTime() ?? Number.NEGATIVE_INFINITY,
     car.mileageConfirmedAt?.getTime() ?? Number.NEGATIVE_INFINITY,

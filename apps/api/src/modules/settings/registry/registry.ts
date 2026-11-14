@@ -1217,6 +1217,14 @@ const reminders = group({
       description:
         "За сколько последних дней берутся показания пробега, по которым считается средний дневной пробег.",
     }),
+    reminder_order_reading_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 180,
+      default: 30,
+      description:
+        "Пробег замены по заявке — показание, внесённое не дальше этого числа дней от выдачи (в обе стороны); иначе пробег замены неизвестен и срок по км считается по графику.",
+    }),
     reminder_hour: define.integer({
       unit: "hour_of_day",
       min: 0,

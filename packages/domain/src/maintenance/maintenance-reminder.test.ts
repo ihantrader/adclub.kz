@@ -215,7 +215,108 @@ describe("reminderState — the estimate of the mileage", () => {
       NOW,
     );
     expect(state).toMatchObject({ currentKm: 25_000, estimated: false });
-    expect(state.items[0]).toMatchObject({ state: "waiting", elapsedKm: 0 });
+    // 30 000 is of the old scale: by the mileage — the schedule from 25 000 (20 000 → 30 000).
+    expect(state.items[0]).toMatchObject({
+      state: "waiting",
+      dueKm: 30_000,
+      elapsedKm: 5_000,
+      basis: { source: "user", atKm: null },
+    });
+  });
+});
+
+describe("reminderState — the mileage of a replacement unknown (TASK-069.A)", () => {
+  it("an order with no reading near it: by the schedule and by the date, whichever first", () => {
+    // Given out 300 days ago; the journal began later, at 24 600, now 30 100.
+    const item = one(
+      car({
+        readings: [
+          { valueKm: 24_600, at: daysAgo(100) },
+          { valueKm: 30_100, at: daysAgo(1) },
+        ],
+        elements: [
+          oil({ basis: { source: "order", atKm: null, at: daysAgo(300), orderId: "o1" } }),
+        ],
+      }),
+    );
+    expect(item).toMatchObject({
+      state: "due",
+      reason: "km",
+      dueKm: 30_000,
+      basis: { source: "order", atKm: null, orderId: "o1" },
+    });
+    expect(item.dueDate).toEqual(addAlmatyMonths(daysAgo(300), 12));
+    expect(item.elapsedKm).toBeGreaterThan(5_000);
+  });
+
+  it("the same order with the date first: due by the date", () => {
+    const item = one(
+      car({
+        readings: [{ valueKm: 21_000, at: daysAgo(10) }],
+        elements: [
+          oil({ basis: { source: "order", atKm: null, at: daysAgo(360), orderId: "o1" } }),
+        ],
+      }),
+    );
+    expect(item).toMatchObject({ state: "due", reason: "date", dueKm: 30_000, elapsedKm: 1_000 });
+  });
+
+  it("«Уже поменял» with no readings, then readings came — the mileage part works by the schedule", () => {
+    const before = one(
+      car({ elements: [oil({ basis: { source: "user", atKm: null, at: daysAgo(60) } })] }),
+    );
+    expect(before).toMatchObject({ state: "waiting", dueKm: null, elapsedKm: null });
+    const after = one(
+      car({
+        readings: [{ valueKm: 29_600, at: daysAgo(2) }],
+        elements: [oil({ basis: { source: "user", atKm: null, at: daysAgo(60) } })],
+      }),
+    );
+    expect(after).toMatchObject({ state: "due", reason: "km", dueKm: 30_000, elapsedKm: 9_600 });
+  });
+
+  it("a replacement of the old scale after a confirmed «меньше прошлого»: no 310 000", () => {
+    const state = reminderState(
+      car({
+        readings: [
+          { valueKm: 300_000, at: daysAgo(40) },
+          { valueKm: 30_000, at: daysAgo(20) },
+          { valueKm: 31_000, at: daysAgo(10) },
+        ],
+        elements: [oil({ basis: { source: "user", atKm: 300_000, at: daysAgo(30) } })],
+      }),
+      SETTINGS,
+      NOW,
+    );
+    const item = state.items[0]!;
+    expect(item.dueKm).toBe(40_000);
+    expect(item.elapsedKm).toBe(1_000);
+    expect(item.basis.atKm).toBeNull();
+    expect(item.dueDate).toEqual(addAlmatyMonths(daysAgo(30), 12));
+  });
+
+  it("a replacement after the correction is of the new scale and counted as it is", () => {
+    const item = one(
+      car({
+        readings: [
+          { valueKm: 300_000, at: daysAgo(40) },
+          { valueKm: 30_000, at: daysAgo(20) },
+          { valueKm: 31_000, at: daysAgo(10) },
+        ],
+        elements: [oil({ basis: { source: "user", atKm: 30_500, at: daysAgo(12) } })],
+      }),
+    );
+    expect(item).toMatchObject({ dueKm: 40_500, elapsedKm: 500, basis: { atKm: 30_500 } });
+  });
+
+  it("a replacement before the journal without a correction keeps its mileage", () => {
+    const item = one(
+      car({
+        readings: [{ valueKm: 24_000, at: daysAgo(5) }],
+        elements: [oil({ basis: { source: "user", atKm: 20_000, at: daysAgo(30) } })],
+      }),
+    );
+    expect(item).toMatchObject({ dueKm: 30_000, elapsedKm: 4_000, basis: { atKm: 20_000 } });
   });
 });
 
@@ -314,5 +415,16 @@ describe("dates in Almaty", () => {
     ];
     expect(readingNear(readings, daysAgo(50))?.valueKm).toBe(15_000);
     expect(readingNear([], NOW)).toBeNull();
+  });
+
+  it("the reading near an order — only within the window, either side, the edge included", () => {
+    const at = daysAgo(100);
+    const readings = [{ valueKm: 40_000, at: daysAgo(70) }];
+    expect(readingNear(readings, at, 30)?.valueKm).toBe(40_000);
+    expect(readingNear(readings, at, 29)).toBeNull();
+    expect(readingNear([{ valueKm: 10_000, at: daysAgo(130) }], at, 30)?.valueKm).toBe(10_000);
+    expect(
+      readingNear([{ valueKm: 10_000, at: new Date(daysAgo(130).getTime() - 1) }], at, 30),
+    ).toBeNull();
   });
 });

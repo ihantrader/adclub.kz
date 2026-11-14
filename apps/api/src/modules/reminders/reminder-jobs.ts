@@ -42,8 +42,45 @@ export const reminderJobCatalog = [remindJob];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BATCH = 200;
 
+const ALMATY_OFFSET_MS = 5 * 60 * 60 * 1000;
+
 function almatyDay(at: Date): string {
-  return new Date(at.getTime() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return new Date(at.getTime() + ALMATY_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** Calendar days of Almaty from `from` to `to`: 23:59 → 00:01 is one day. */
+export function almatyDaysBetween(from: Date, to: Date): number {
+  const day = (at: Date) => Math.floor((at.getTime() + ALMATY_OFFSET_MS) / DAY_MS);
+  return day(to) - day(from);
+}
+
+const sameTime = (a: Date | null | undefined, b: Date | null | undefined) =>
+  (a?.getTime() ?? null) === (b?.getTime() ?? null);
+
+/** «Уже поменял» or «Напомнить позже» differ from what the facts were counted from. */
+function marksChanged(
+  entry: CarReminderFacts,
+  rows: readonly {
+    planItemId: string;
+    doneAt: Date | null;
+    doneKm: number | null;
+    snoozedUntil: Date | null;
+  }[],
+): boolean {
+  const ids = new Set([...entry.rows.keys(), ...rows.map((row) => row.planItemId)]);
+  const now = new Map(rows.map((row) => [row.planItemId, row]));
+  for (const id of ids) {
+    const before = entry.rows.get(id);
+    const after = now.get(id);
+    if (
+      !sameTime(before?.doneAt, after?.doneAt) ||
+      (before?.doneKm ?? null) !== (after?.doneKm ?? null) ||
+      !sameTime(before?.snoozedUntil, after?.snoozedUntil)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 @Injectable()
@@ -99,18 +136,46 @@ export class GarageRemind implements PeriodicJobHandler {
     accountId: string,
     settings: Readonly<SettingValues>,
   ): Promise<{ reminders: number; questions: number }> {
-    const sent = { reminders: 0, questions: 0 };
     const now = new Date();
     // The facts are read without a transaction: the count takes queries per car
     // (the plan, compatibility of the orders), and nothing is locked meanwhile.
     const facts = await this.facts.forAccount(accountId, { now, settings });
-    for (const entry of facts) {
-      if (!entry.hasPlan) continue;
-      const kind = await this.database.db.transaction((tx) =>
-        this.remindCar(tx, accountId, entry, settings, now),
-      );
+    return this.remindCars(accountId, facts, settings, now);
+  }
+
+  /**
+   * The cars of an account, from facts read before (public for the test of
+   * what is pressed between the read and the lock). A car whose reminders
+   * changed meanwhile («Уже поменял», «Напомнить позже» — TASK-069.A) is
+   * counted again from fresh facts once; changed once more — left to the next run.
+   */
+  async remindCars(
+    accountId: string,
+    facts: readonly CarReminderFacts[],
+    settings: Readonly<SettingValues>,
+    now: Date,
+  ): Promise<{ reminders: number; questions: number; stale: number }> {
+    const sent = { reminders: 0, questions: 0, stale: 0 };
+    for (const first of facts) {
+      let entry: CarReminderFacts | undefined = first;
+      let kind: Awaited<ReturnType<GarageRemind["remindCar"]>> = "stale";
+      for (let attempt = 0; attempt < 2 && entry; attempt++) {
+        if (!entry.hasPlan) {
+          kind = null;
+          break;
+        }
+        const current: CarReminderFacts = entry;
+        kind = await this.database.db.transaction((tx) =>
+          this.remindCar(tx, accountId, current, settings, now),
+        );
+        if (kind !== "stale") break;
+        [entry] = await this.facts.forAccount(accountId, { now, settings, carId: first.car.id });
+        // Removed meanwhile — nothing to remind of.
+        if (!entry) kind = null;
+      }
       if (kind === "reminder") sent.reminders += 1;
       if (kind === "question") sent.questions += 1;
+      if (kind === "stale") sent.stale += 1;
     }
     return sent;
   }
@@ -121,10 +186,11 @@ export class GarageRemind implements PeriodicJobHandler {
     entry: CarReminderFacts,
     settings: Readonly<SettingValues>,
     now: Date,
-  ): Promise<"reminder" | "question" | null> {
+  ): Promise<"reminder" | "question" | "stale" | null> {
     const carId = entry.car.id;
     // The car's row lock, briefly: a car removed meanwhile is simply gone, the
     // switch is read again, and two runs write what was pushed in turn.
+    // «Уже поменял» and «Напомнить позже» take the same lock (TASK-069.A).
     const [locked] = await tx
       .select({ id: accountCar.id, mileagePushedAt: accountCar.mileagePushedAt })
       .from(accountCar)
@@ -136,16 +202,20 @@ export class GarageRemind implements PeriodicJobHandler {
       .from(account)
       .where(eq(account.id, accountId));
     if (!person?.enabled) return null;
-    await this.keepCounted(tx, accountId, entry);
-    // What was pushed — read again under the lock, not from the facts read before it.
+    // What was pushed and marked — read again under the lock, not from the facts read before it.
     const pushed = await tx
       .select({
         planItemId: maintenanceReminder.planItemId,
         cycle: maintenanceReminder.notifiedCycle,
         snoozedUntil: maintenanceReminder.snoozedUntil,
+        doneAt: maintenanceReminder.doneAt,
+        doneKm: maintenanceReminder.doneKm,
       })
       .from(maintenanceReminder)
       .where(eq(maintenanceReminder.carId, carId));
+    // A mark made after the facts were read: they are stale — no push from them.
+    if (marksChanged(entry, pushed)) return "stale";
+    await this.keepCounted(tx, accountId, entry);
     const cycleOfItem = new Map(pushed.map((row) => [row.planItemId, row.cycle]));
     const snoozeOfItem = new Map(pushed.map((row) => [row.planItemId, row.snoozedUntil]));
 
@@ -156,9 +226,10 @@ export class GarageRemind implements PeriodicJobHandler {
       .from(maintenanceReminder)
       .where(and(eq(maintenanceReminder.carId, carId), isNotNull(maintenanceReminder.notifiedAt)));
     const lastAt = lastPush[0]?.at ? new Date(lastPush[0].at) : null;
+    // Calendar days of Almaty (TASK-069.A): a run that reaches the car a few
+    // seconds earlier than the last one does not put the push off by a day.
     const intervalOver =
-      lastAt === null ||
-      now.getTime() - lastAt.getTime() >= settings.reminder_push_interval_days * DAY_MS;
+      lastAt === null || almatyDaysBetween(lastAt, now) >= settings.reminder_push_interval_days;
     if (intervalOver) {
       const fresh = entry.state.items
         .filter((item) => item.state === "due")
@@ -195,7 +266,7 @@ export class GarageRemind implements PeriodicJobHandler {
     }
     const askedLongAgo =
       locked.mileagePushedAt === null ||
-      now.getTime() - locked.mileagePushedAt.getTime() >= settings.mileage_ask_days * DAY_MS;
+      almatyDaysBetween(locked.mileagePushedAt, now) >= settings.mileage_ask_days;
     if (entry.state.askMileage && askedLongAgo) {
       await this.notifications.enqueue(tx, {
         kind: "mileage_request",

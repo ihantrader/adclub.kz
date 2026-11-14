@@ -42,7 +42,8 @@ import { DevVehicleSeed } from "../vehicles";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
 import { DevMaintenanceSeed } from "../maintenance";
 import { DevSupplierSeed } from "../suppliers";
-import { GarageRemind } from ".";
+import { AppSettings } from "../settings";
+import { GarageRemind, ReminderFacts } from ".";
 
 /**
  * TASK-069 end to end on a real PostgreSQL and Redis: the reminders of a
@@ -828,5 +829,146 @@ describe("reminders about a planned replacement (PostgreSQL + Redis)", () => {
     )!;
     expect(seen).toMatchObject({ basis: { source: "user" }, catalog: null });
     expect(seen.basis.atKm).toBeGreaterThanOrEqual(30_100);
+  });
+
+  // ------------------------------------------------------------ TASK-069.A
+
+  it("an order given out long before the first reading does not move the mileage due", async () => {
+    const w = await world();
+    const sold = await sell(w);
+    const owner = await user({ clubAccess: true });
+    const carId = await addCar(owner, w);
+    const stock = await finishedOrder(owner, sold, "stock");
+    // Given out 400 days ago; the journal began 100 days ago at 24 600.
+    await db.query(
+      "UPDATE customer_order SET closed_at = now() - interval '400 days', finished_at = now() - interval '400 days' WHERE id = $1",
+      [stock.id],
+    );
+    await reading(owner, carId, 24_600, 100);
+    await reading(owner, carId, 30_100, 1);
+    const { oil } = await oilElement(owner, carId);
+    // Not 24 600 + 10 000 = 34 600: the mileage then is unknown, the schedule says 30 000.
+    expect(oil.basis).toMatchObject({ source: "order", orderId: stock.id, atKm: null });
+    expect(oil.dueKm).toBe(30_000);
+    expect(oil.state).toBe("due");
+
+    // Given out 125 days ago — 25 days from the reading: within reminder_order_reading_days (30).
+    await db.query(
+      "UPDATE customer_order SET closed_at = now() - interval '125 days', finished_at = now() - interval '125 days' WHERE id = $1",
+      [stock.id],
+    );
+    const near = await oilElement(owner, carId);
+    expect(near.oil.basis.atKm).toBe(24_600);
+    expect(near.oil.dueKm).toBe(34_600);
+    // A narrower window — unknown again.
+    await settings.set({ reminder_order_reading_days: 20 });
+    const far = await oilElement(owner, carId);
+    expect(far.oil.basis.atKm).toBeNull();
+    expect(far.oil.dueKm).toBe(30_000);
+  });
+
+  it("«Уже поменял» between the read of the facts and the lock: no push about it", async () => {
+    const w = await world();
+    const owner = await user();
+    const carId = await addCar(owner, w);
+    await reading(owner, carId, 24_600, 100);
+    await reading(owner, carId, 30_100, 1);
+    const values = await app.get(AppSettings).values();
+    const now = new Date();
+    // What the job read — the oil is the most overdue then.
+    const facts = await app
+      .get(ReminderFacts)
+      .forAccount(owner.accountId, { now, settings: values });
+    const top = facts[0]!.state.top!;
+    const { oil } = await oilElement(owner, carId);
+    expect(top.id).toBe(oil.planItemId);
+    // Pressed meanwhile.
+    await ok(
+      owner.as("post", `/garage/cars/${carId}/reminders/${oil.planItemId}/done`, {}),
+      (body) => body,
+    );
+    const sent = await app.get(GarageRemind).remindCars(owner.accountId, facts, values, now);
+    expect(sent.stale).toBe(0);
+    const pushed = await pushes(owner.accountId);
+    expect(pushed.every((row) => row.payload.variables.what !== "моторное масло")).toBe(true);
+    // Counted again from fresh facts: the kept view says «Уже поменял».
+    const kept = await db.query<{ last_source: string; notified_at: Date | null }>(
+      "SELECT last_source, notified_at FROM maintenance_reminder WHERE car_id = $1 AND plan_item_id = $2",
+      [carId, oil.planItemId],
+    );
+    expect(kept.rows[0]).toMatchObject({ last_source: "user", notified_at: null });
+
+    // «Напомнить позже» meanwhile — the same.
+    const again = await app
+      .get(ReminderFacts)
+      .forAccount(owner.accountId, { now, settings: values });
+    const next = again[0]!.state.top!;
+    await ok(owner.as("post", `/garage/cars/${carId}/reminders/${next.id}/snooze`), (body) => body);
+    await db.query("UPDATE maintenance_reminder SET notified_at = NULL WHERE car_id = $1", [carId]);
+    const before = (await pushes(owner.accountId)).length;
+    await app.get(GarageRemind).remindCars(owner.accountId, again, values, now);
+    const after = await pushes(owner.accountId);
+    expect(
+      await count(
+        "maintenance_reminder",
+        "car_id = $1 AND plan_item_id = $2 AND notified_at IS NOT NULL",
+        [carId, next.id],
+      ),
+    ).toBe(0);
+    expect(after.length).toBeLessThanOrEqual(before + 1);
+  });
+
+  it("the interval per car is counted in calendar days of Almaty", async () => {
+    const w = await world();
+    const owner = await user();
+    const carId = await addCar(owner, w);
+    await reading(owner, carId, 24_600, 100);
+    await reading(owner, carId, 30_100, 1);
+    await remind();
+    expect(await pushes(owner.accountId)).toHaveLength(1);
+    const almatyToday =
+      "(date_trunc('day', now() AT TIME ZONE 'Asia/Almaty') AT TIME ZONE 'Asia/Almaty')";
+    // Two days of Almaty ago, at their very start — up to 72 hours, but 2 days: not yet.
+    await db.query(
+      `UPDATE maintenance_reminder SET notified_at = ${almatyToday} - interval '2 days' WHERE car_id = $1 AND notified_at IS NOT NULL`,
+      [carId],
+    );
+    await remind();
+    expect(await pushes(owner.accountId)).toHaveLength(1);
+    // The last second of the day three days ago — under 72 hours, but 3 days: the push goes.
+    await db.query(
+      `UPDATE maintenance_reminder SET notified_at = ${almatyToday} - interval '2 days' - interval '1 second' WHERE car_id = $1 AND notified_at IS NOT NULL`,
+      [carId],
+    );
+    await remind();
+    expect(await pushes(owner.accountId)).toHaveLength(2);
+
+    // The mileage question likewise: a car without readings, asked 30 Almaty days ago.
+    const second = await addCar(owner, w);
+    await remind();
+    const asked = () =>
+      pushes(owner.accountId).then(
+        (rows) => rows.filter((row) => row.event_kind === "mileage_request").length,
+      );
+    expect(await asked()).toBe(1);
+    // The question's key is its Almaty day: moved, as the day before would have it.
+    await db.query(
+      "UPDATE notification SET dedupe_key = dedupe_key || ':before' WHERE recipient_account_id = $1 AND event_kind = 'mileage_request'",
+      [owner.accountId],
+    );
+    // 29 days of Almaty ago at their start (up to 30 × 24 hours) — not yet.
+    await db.query(
+      `UPDATE account_car SET mileage_pushed_at = ${almatyToday} - interval '29 days' WHERE id = $1`,
+      [second],
+    );
+    await remind();
+    expect(await asked()).toBe(1);
+    // The last second of the day 30 days ago — under 30 × 24 hours, but 30 days: asked.
+    await db.query(
+      `UPDATE account_car SET mileage_pushed_at = ${almatyToday} - interval '29 days' - interval '1 second' WHERE id = $1`,
+      [second],
+    );
+    await remind();
+    expect(await asked()).toBe(2);
   });
 });

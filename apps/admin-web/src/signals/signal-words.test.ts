@@ -1,6 +1,13 @@
 import { adminSignalKindSchema, type AdminSignal } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
-import { conflictText, KIND_ORDER, KIND_TITLES, subjectLink, subjectText } from "./signal-words";
+import {
+  conflictText,
+  conversionText,
+  KIND_ORDER,
+  KIND_TITLES,
+  subjectLink,
+  subjectText,
+} from "./signal-words";
 
 const base: AdminSignal = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -87,6 +94,35 @@ describe("the words of signals", () => {
         payload: { supplierName: "Автомаркет", rating: 3.4, ratingCount: 5, ratingThreshold: 3.5 },
       }),
     ).toBe("Автомаркет · ★ 3,4 (5) · порог 3,5");
+  });
+
+  it("words «Просмотров много, заявок мало» and opens the views of the supplier (TASK-070)", () => {
+    const id = "0b6c9f1e-2a3d-4c5b-8e7f-9a0b1c2d3e4f";
+    const plain = (text: string) => text.replaceAll(String.fromCharCode(0xa0), " ");
+    expect(KIND_TITLES.views_orders_gap).toBe("Просмотров много, заявок мало");
+    expect(KIND_ORDER).toContain("views_orders_gap");
+    expect(subjectLink({ subjectType: "supplier", subjectId: id, kind: "views_orders_gap" })).toBe(
+      `/suppliers/${id}?tab=views`,
+    );
+    expect(
+      plain(
+        subjectText({
+          kind: "views_orders_gap",
+          payload: {
+            supplierName: "Автомаркет",
+            views: 1200,
+            orders: 3,
+            conversion: 0.0025,
+            medianConversion: 0.04,
+            conversionThreshold: 0.012,
+            windowDays: 30,
+          },
+        }),
+      ),
+    ).toBe(
+      "Автомаркет · 3 заявки на 1 200 просмотров участников клуба · конверсия 0,3 % · медиана 4 % · порог 1,2 % · за 30 дней",
+    );
+    expect(conversionText(0.125)).toBe("13 %");
   });
 
   it("words the three signals of the supplier's card subscription (TASK-042)", () => {

@@ -33,6 +33,8 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   push_fallback_high: "Push не доходит до пользователей",
   // TASK-062.
   assistant_budget_exhausted: "Дневной бюджет ИИ исчерпан: помощник недоступен",
+  // TASK-070.
+  views_orders_gap: "Просмотров много, заявок мало",
 };
 
 /** The kinds in the order of importance of A-HOME. */
@@ -47,6 +49,7 @@ export const KIND_ORDER: readonly AdminSignalKind[] = [
   "supply_overdue",
   "visit_unresolved",
   "low_rating",
+  "views_orders_gap",
   "duplicate_after_late_close",
   "frequent_admin_closes",
 ];
@@ -67,6 +70,12 @@ function plural(n: number, one: string, few: string, many: string): string {
 
 export function count(n: number, one: string, few: string, many: string): string {
   return `${n.toLocaleString("ru-RU")} ${plural(n, one, few, many)}`;
+}
+
+/** A conversion as a percentage: «0,5 %», «12 %». */
+export function conversionText(share: number): string {
+  const percent = share * 100;
+  return `${percent.toLocaleString("ru-RU", { maximumFractionDigits: percent < 10 ? 1 : 0 })} %`;
 }
 
 /** What the signal is about, in one line («Заявки № 1001 и № 1004»). */
@@ -164,6 +173,25 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
       ]
         .filter(Boolean)
         .join(" · ");
+    case "views_orders_gap":
+      return [
+        payload.supplierName,
+        payload.views !== undefined && payload.orders !== undefined
+          ? `${count(payload.orders, "заявка", "заявки", "заявок")} на ${count(payload.views, "просмотр", "просмотра", "просмотров")} участников клуба`
+          : null,
+        payload.conversion !== undefined ? `конверсия ${conversionText(payload.conversion)}` : null,
+        payload.medianConversion !== undefined
+          ? `медиана ${conversionText(payload.medianConversion)}`
+          : null,
+        payload.conversionThreshold !== undefined
+          ? `порог ${conversionText(payload.conversionThreshold)}`
+          : null,
+        payload.windowDays !== undefined
+          ? `за ${count(payload.windowDays, "день", "дня", "дней")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
     case "billing_plan_missing":
     case "assistant_budget_exhausted":
       return payload.since ? `с ${formatMoment(payload.since)}` : "";
@@ -210,7 +238,9 @@ export function subjectLink(
             ? "rating"
             : signal.kind === "payment_failed"
               ? "billing"
-              : "members",
+              : signal.kind === "views_orders_gap"
+                ? "views"
+                : "members",
       );
     case "channel":
       // TASK-043: the payment system's silence — the charges waiting for it (A-BILL-03);
@@ -251,6 +281,8 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "Нет тарифа для поставщиков: подписку нельзя начать и продлить. Задайте тариф в «Биллинг → Тарифы»; сигнал закроется сам.",
   assistant_budget_exhausted:
     "Расход на ИИ за сутки дошёл до ai_daily_budget_usd: AI Pilot отвечает «недоступен», каталог и поиск работают. Поднимите бюджет в «Настройки → ИИ» или дождитесь следующих суток (по Алматы). Сигнал — не больше одного в сутки.",
+  views_orders_gap:
+    "Участники клуба часто смотрят предложения поставщика, а заявок мало — возможно, клиентов уводят мимо платформы. Посмотрите просмотры и заявки по дням и свяжитесь с поставщиком; решение — за человеком, поставщику ничего не сообщается. Сигнал закроется сам, когда расхождение уйдёт.",
   push_fallback_high:
     "Большая доля важных уведомлений пользователям уходит резервом в WhatsApp: приложение не подтверждает push. Проверьте провайдера push и последнюю версию приложения. Сигнал закроется сам, когда доля снизится.",
 };

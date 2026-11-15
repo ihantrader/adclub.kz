@@ -17,6 +17,7 @@ import { SupplierProfile } from "./SupplierProfile";
 import { SupplierStatuses } from "./SupplierStatuses";
 import { SUPPLIER_TYPE_TEXT } from "./supplier-words";
 import { SupplierRating } from "./SupplierRating";
+import { SupplierViews } from "./SupplierViews";
 import "./suppliers.css";
 
 const TAB_TEXT: Record<SupplierTab, string> = {
@@ -26,6 +27,7 @@ const TAB_TEXT: Record<SupplierTab, string> = {
   offers: "Предложения",
   orders: "Заявки",
   rating: "Рейтинг и отзывы",
+  views: "Просмотры и заявки",
   billing: "Подписка",
   price: "Прайс",
   history: "История",
@@ -40,7 +42,9 @@ const TABS = Object.keys(TAB_TEXT) as SupplierTab[];
  * journal, the home page and a signal open the right one. «Рейтинг и
  * отзывы» — TASK-049, TASK-050 (`?tab=reviews` of before opens it too);
  * «Подписка» — TASK-042 (`?tab=billing`: the card, the charges and both
- * pauses side by side; the payment-failed signal opens it); «Модерация»
+ * pauses side by side; the payment-failed signal opens it); «Просмотры и
+ * заявки» — TASK-070 (`?tab=views`; the signal «Просмотров много, заявок
+ * мало» opens it); «Модерация»
  * comes later.
  */
 export function SupplierCard({ supplierId }: { supplierId: string }) {
@@ -75,6 +79,9 @@ export function SupplierCard({ supplierId }: { supplierId: string }) {
         break;
       case "rating":
         body = <SupplierRating supplierId={supplierId} />;
+        break;
+      case "views":
+        body = <SupplierViews supplierId={supplierId} />;
         break;
       case "billing":
         body = <SupplierBilling supplierId={supplierId} />;

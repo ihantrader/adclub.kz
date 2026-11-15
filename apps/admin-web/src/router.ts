@@ -138,6 +138,7 @@ export type SupplierTab =
   | "offers"
   | "orders"
   | "rating"
+  | "views"
   | "billing"
   | "price"
   | "history";

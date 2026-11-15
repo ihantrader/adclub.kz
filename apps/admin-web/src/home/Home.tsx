@@ -30,6 +30,7 @@ const SIGNAL_KINDS = [
   "supply_overdue",
   "visit_unresolved",
   "low_rating",
+  "views_orders_gap",
   "duplicate_after_late_close",
   "frequent_admin_closes",
 ] as const;

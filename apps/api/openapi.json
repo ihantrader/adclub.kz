@@ -8173,7 +8173,8 @@
                 "payment_system_down",
                 "billing_plan_missing",
                 "push_fallback_high",
-                "assistant_budget_exhausted"
+                "assistant_budget_exhausted",
+                "views_orders_gap"
               ]
             }
           },
@@ -10273,6 +10274,79 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSupplierResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{supplierId}/views": {
+      "get": {
+        "operationId": "getAdminSupplierViews",
+        "summary": "A-SUP-03 «Просмотры и заявки»: by days of Almaty — views of the supplier's offers by kind of viewer (members of the club, users without club access, guests), its orders that count in statistics and the conversion; the totals of the period and the rule of the signal «Просмотров много, заявок мало». Who looked — never",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "supplierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The views and the orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSupplierViewsResponse"
                 }
               }
             }
@@ -29241,7 +29315,8 @@
           "payment_system_down",
           "billing_plan_missing",
           "push_fallback_high",
-          "assistant_budget_exhausted"
+          "assistant_budget_exhausted",
+          "views_orders_gap"
         ]
       },
       "AdminSignalListQuery": {
@@ -29488,6 +29563,41 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "views": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "orders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "conversion": {
+            "type": "number"
+          },
+          "medianConversion": {
+            "type": "number"
+          },
+          "conversionThreshold": {
+            "type": "number"
+          },
+          "suppliersInMedian": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "windowDays": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "periodFrom": {
+            "type": "string"
+          },
+          "periodTo": {
+            "type": "string"
           }
         }
       },
@@ -30762,6 +30872,129 @@
           "sessions",
           "nextCursor",
           "total"
+        ]
+      },
+      "AdminSupplierViews": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/AlmatyDay"
+          },
+          "to": {
+            "$ref": "#/components/schemas/AlmatyDay"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "club": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "user": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "guest": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "orders": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "conversion": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "day": {
+                  "$ref": "#/components/schemas/AlmatyDay"
+                }
+              },
+              "required": [
+                "club",
+                "user",
+                "guest",
+                "total",
+                "orders",
+                "conversion",
+                "day"
+              ]
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/OfferViewFigures"
+          },
+          "signal": {
+            "type": "object",
+            "properties": {
+              "windowDays": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "minViews": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "minSuppliers": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "ratio": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "windowDays",
+              "minViews",
+              "minSuppliers",
+              "ratio"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "days",
+          "total",
+          "signal"
+        ]
+      },
+      "AdminSupplierViewsQuery": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/AlmatyDay"
+          },
+          "to": {
+            "$ref": "#/components/schemas/AlmatyDay"
+          }
+        }
+      },
+      "AdminSupplierViewsResponse": {
+        "type": "object",
+        "properties": {
+          "views": {
+            "$ref": "#/components/schemas/AdminSupplierViews"
+          }
+        },
+        "required": [
+          "views"
         ]
       },
       "AdminUser": {
@@ -32746,6 +32979,11 @@
           "name",
           "lastSignInAt"
         ]
+      },
+      "AlmatyDay": {
+        "type": "string",
+        "format": "date",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
       },
       "AnnouncedPlan": {
         "type": "object",
@@ -42255,6 +42493,58 @@
         },
         "required": [
           "currentVersion"
+        ]
+      },
+      "OfferViewFigures": {
+        "type": "object",
+        "properties": {
+          "club": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "user": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "guest": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "orders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "conversion": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "club",
+          "user",
+          "guest",
+          "total",
+          "orders",
+          "conversion"
+        ]
+      },
+      "OfferViewerKind": {
+        "type": "string",
+        "enum": [
+          "guest",
+          "user",
+          "club"
         ]
       },
       "OfferVisitOptions": {

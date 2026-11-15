@@ -140,6 +140,7 @@ describe("buildOpenApiDocument", () => {
       "/admin/suppliers/{supplierId}/sessions/end",
       "/admin/suppliers/{supplierId}/sessions/{sessionId}/end",
       "/admin/suppliers/{supplierId}/verification",
+      "/admin/suppliers/{supplierId}/views",
       "/admin/totp/backup-codes",
       "/admin/translations",
       "/admin/translations/{entityType}/{entityId}",

@@ -227,6 +227,18 @@ export type {
   RatingWeights,
   SupplierRating,
 } from "./supplier/supplier-rating";
+export {
+  VIEWS_SIGNAL_NEW_FALL,
+  viewsConversion,
+  viewsSignalMove,
+  viewsSignalVerdicts,
+} from "./supplier/views-signal";
+export type {
+  SupplierViewsFigures,
+  ViewsSignalOutcome,
+  ViewsSignalRules,
+  ViewsSignalVerdict,
+} from "./supplier/views-signal";
 export { orderRepeatDecision } from "./order/order-repeat";
 export type {
   OrderRepeatBlocked,

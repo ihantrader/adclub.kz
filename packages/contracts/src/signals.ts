@@ -78,6 +78,15 @@ import type { CatalogItemListQuery } from "./catalog-items";
  *   (`ai_daily_budget_usd`) is spent and the assistant answers «AI Pilot
  *   сейчас недоступен…». The subject is the assistant itself; raised at most
  *   once an Almaty day; the administrator closes it.
+ * - `views_orders_gap` (TASK-070; PRODUCT 13, 16) — members of the club look
+ *   at a supplier's offers a lot and order little: its conversion (orders
+ *   that count in statistics ÷ views by members of the club) in the window
+ *   `views_signal_window_days` is below the median of the suppliers with at
+ *   least `views_signal_min` views × `views_signal_ratio`. One signal per
+ *   supplier, opened and refreshed by the daily `offers.views-signal`; it
+ *   closes by itself when the gap is gone; closed by an administrator, it
+ *   opens again only at a lower conversion or a whole window later.
+ *   Nothing is blocked and the supplier is told nothing.
  *
  * Later tasks add the others (a spike of complaints).
  */
@@ -95,6 +104,7 @@ export const adminSignalKindSchema = z.enum([
   "billing_plan_missing",
   "push_fallback_high",
   "assistant_budget_exhausted",
+  "views_orders_gap",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -207,6 +217,22 @@ export const adminSignalPayloadSchema = z.object({
   fallbacks: z.number().int().optional(),
   fallbackShare: z.number().optional(),
   windowHours: z.number().int().optional(),
+  /**
+   * `views_orders_gap` (TASK-070): the views of the supplier's offers by
+   * members of the club and its orders in the window (`periodFrom`–`periodTo`,
+   * days of Almaty, `windowDays` long), its conversion, the median of the
+   * suppliers compared (`suppliersInMedian`) and the threshold it is below
+   * (median × `views_signal_ratio`); the supplier — `supplierId`, `supplierName`.
+   */
+  views: z.number().int().optional(),
+  orders: z.number().int().optional(),
+  conversion: z.number().optional(),
+  medianConversion: z.number().optional(),
+  conversionThreshold: z.number().optional(),
+  suppliersInMedian: z.number().int().optional(),
+  windowDays: z.number().int().optional(),
+  periodFrom: z.string().optional(),
+  periodTo: z.string().optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

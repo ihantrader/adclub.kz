@@ -381,6 +381,7 @@ import {
   orderSupplierPathSchema,
   supplierProfileResponseSchema,
 } from "./ratings";
+import { adminSupplierViewsQuerySchema, adminSupplierViewsResponseSchema } from "./offer-views";
 import {
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
@@ -5582,6 +5583,10 @@ const coreApiRoutes = {
       200: { description: "What was found, by kind", schema: adminSearchResponseSchema },
     },
   }),
+} as const;
+
+/** Maintenance plans and the assistant (TASK-061, TASK-062): a part of its own (TS7056, I1006). */
+const planAndAssistantRoutes = {
   // ------------------------------------------- maintenance plans (TASK-061)
   getMaintenancePlan: defineRoute({
     operationId: "getMaintenancePlan",
@@ -5997,9 +6002,34 @@ const reminderRoutes = {
   }),
 } as const;
 
-export const apiRoutes: typeof coreApiRoutes & typeof reminderRoutes = {
+/** Views of offers and the signal of a gap between views and orders (TASK-070). */
+const offerViewRoutes = {
+  getAdminSupplierViews: defineRoute({
+    operationId: "getAdminSupplierViews",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}/views",
+    summary:
+      "A-SUP-03 «Просмотры и заявки»: by days of Almaty — views of the supplier's offers by kind of viewer (members of the club, users without club access, guests), its orders that count in statistics and the conversion; the totals of the period and the rule of the signal «Просмотров много, заявок мало». Who looked — never",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    query: adminSupplierViewsQuerySchema,
+    responses: {
+      200: { description: "The views and the orders", schema: adminSupplierViewsResponseSchema },
+    },
+  }),
+} as const;
+
+export const apiRoutes: typeof coreApiRoutes &
+  typeof planAndAssistantRoutes &
+  typeof reminderRoutes &
+  typeof offerViewRoutes = {
   ...coreApiRoutes,
+  ...planAndAssistantRoutes,
   ...reminderRoutes,
+  ...offerViewRoutes,
 };
 
 export type ApiRoutes = typeof apiRoutes;

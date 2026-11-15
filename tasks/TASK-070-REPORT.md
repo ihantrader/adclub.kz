@@ -83,7 +83,7 @@ COMPLETED
   - `ratings.integration.test.ts` — PASS, 10/10 (M-CAT-09 через тот же контроллер);
   - `reviews.integration.test.ts` — PASS, 15/15; `identity/access.integration.test.ts` — PASS, 32/32 (полный список маршрутов `/admin`); `identity/cleanup/sign-in-data-cleanup.integration.test.ts` — PASS, 5/5 (полный список задач).
   - Каждый файл запускался отдельно. Общий прогон шести файлов разом перегрузил Docker на этой машине: таймауты старта контейнеров и 120-секундные таймауты тестов, каскад в `database`. Поодиночке те же файлы — зелёные. Весь набор — в CI.
-- CI: RESULT_CI.
+- CI: прогон `43734475890` (workflow CI, push в `main`, коммит `0734734`) запущен, результат не ожидался — проверяет архитектор при приёмке.
 
 ## UAT / E2E
 Окружение: `api-test-ai`, `worker-test-ai`, `mobile-web`, `admin-web` на dev-базе (PostgreSQL на 5433, MinIO на 9002 — временная правка `env` в `.claude/launch.json`, возвращена, не закоммичена). `AI_PROVIDER=test`. Панель браузера скрыта, поэтому проход — безголовым Chrome (Playwright, `channel: "chrome"`): приложение 390×844, админка 1440×900.

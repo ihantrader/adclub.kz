@@ -249,12 +249,13 @@ function itemOf(
   element: ReminderElementInput,
   car: ReminderCarInput,
   mileage: ReturnType<typeof mileageEstimate>,
-  firstReading: ReminderReading | null,
+  stretch: readonly ReminderReading[],
   startedAnew: boolean,
   settings: ReminderSettings,
   now: Date,
 ): ReminderItem {
   const current = mileage.currentKm;
+  const firstReading = stretch[0] ?? null;
   let basis: ReminderItem["basis"];
   let dueKm: number | null = null;
   let dueDate: Date | null = null;
@@ -299,8 +300,18 @@ function itemOf(
     } else {
       // The mileage then is unknown: by the mileage — the schedule, as with no
       // history (I997); by the date — from the replacement; whichever first.
-      dueKm = schedule?.dueKm ?? null;
-      elapsedKm = schedule?.elapsedKm ?? null;
+      // A replacement inside the journal is at least the last reading before
+      // it: the schedule's point at or below that reading is the base — not
+      // the journal's first reading, which would call it due at once (I1013).
+      const before = stretch.filter((reading) => reading.at.getTime() <= known.at.getTime()).at(-1);
+      if (before && (element.intervalKm !== null || element.firstKm !== null)) {
+        const baseKm = previousPoint(before.valueKm, element.intervalKm, element.firstKm);
+        dueKm = nextPoint(baseKm, element.intervalKm, element.firstKm);
+        elapsedKm = current === null ? null : Math.max(0, current - baseKm);
+      } else {
+        dueKm = schedule?.dueKm ?? null;
+        elapsedKm = schedule?.elapsedKm ?? null;
+      }
     }
     if (element.intervalMonths !== null)
       dueDate = addAlmatyMonths(known.at, element.intervalMonths);
@@ -376,12 +387,11 @@ export function reminderState(
     };
   }
   const stretch = currentStretch(car.readings);
-  const firstReading = stretch[0] ?? null;
   // The stretch began with a confirmed «меньше прошлого», not with the first reading of all.
   const startedAnew = stretch.length < car.readings.length;
   const items = [...car.elements]
     .sort((a, b) => a.position - b.position)
-    .map((element) => itemOf(element, car, mileage, firstReading, startedAnew, settings, now));
+    .map((element) => itemOf(element, car, mileage, stretch, startedAnew, settings, now));
   const lastAnswer = Math.max(
     mileage.lastAt?.getTime() ?? Number.NEGATIVE_INFINITY,
     car.mileageConfirmedAt?.getTime() ?? Number.NEGATIVE_INFINITY,

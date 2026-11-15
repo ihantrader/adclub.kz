@@ -249,6 +249,22 @@ describe("reminderState — the mileage of a replacement unknown (TASK-069.A)", 
     expect(item.elapsedKm).toBeGreaterThan(5_000);
   });
 
+  it("an order inside the journal with no reading near it: from the reading before it, not due at once (I1013)", () => {
+    // Readings 10 000 and 30 000 a year apart; the order given out 60 days later, nothing near it.
+    const item = one(
+      car({
+        readings: [
+          { valueKm: 10_000, at: daysAgo(500) },
+          { valueKm: 30_000, at: daysAgo(130) },
+          { valueKm: 31_000, at: daysAgo(5) },
+        ],
+        elements: [oil({ basis: { source: "order", atKm: null, at: daysAgo(70), orderId: "o1" } })],
+      }),
+    );
+    expect(item).toMatchObject({ state: "waiting", dueKm: 40_000, basis: { atKm: null } });
+    expect(item.elapsedKm).toBeGreaterThanOrEqual(1_000);
+  });
+
   it("the same order with the date first: due by the date", () => {
     const item = one(
       car({

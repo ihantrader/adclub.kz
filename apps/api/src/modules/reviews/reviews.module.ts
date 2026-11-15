@@ -1,5 +1,6 @@
 import { Inject, Module, type DynamicModule, type OnModuleInit } from "@nestjs/common";
 import { JobRegistry } from "../../jobs";
+import { OfferViewsRecorderModule } from "../offer-views";
 import { ComplaintsService } from "./complaints.service";
 import { ReviewCheckExpiry, ReviewChecker } from "./review-check";
 import { ReviewFeedback } from "./review-feedback";
@@ -36,7 +37,12 @@ export class ReviewsModule {
   static forRoot(options: ReviewsModuleOptions): DynamicModule {
     return {
       module: ReviewsModule,
-      imports: [options.orders, options.clubAccess],
+      imports: [
+        options.orders,
+        options.clubAccess,
+        // M-CAT-09 from an offer counts a view of it (TASK-070).
+        ...(options.http ? [OfferViewsRecorderModule] : []),
+      ],
       controllers: options.http
         ? [UserReviewsController, SupplierReviewsController, AdminReviewsController]
         : [],

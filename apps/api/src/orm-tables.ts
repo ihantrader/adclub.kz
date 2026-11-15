@@ -18,6 +18,7 @@ import { searchIndexTables } from "./modules/search-index";
 import { priceImportTables } from "./modules/price-imports";
 import { reviewTables } from "./modules/reviews";
 import { ratingTables } from "./modules/ratings";
+import { offerViewTables } from "./modules/offer-views";
 import { reminderTables } from "./modules/reminders";
 import { billingTables } from "./modules/billing";
 import { settingsTables } from "./modules/settings";
@@ -54,6 +55,7 @@ export const ormTables: readonly PgTable[] = [
   ...reviewTables,
   ...assistantTables,
   ...ratingTables,
+  ...offerViewTables,
   ...billingTables,
   ...operationsTables,
   ...jobsTables,

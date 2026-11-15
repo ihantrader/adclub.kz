@@ -1,4 +1,5 @@
 import { Module, type DynamicModule } from "@nestjs/common";
+import { OfferViewsRecorderModule } from "../offer-views";
 import { SearchIndexModule } from "../search-index";
 import { DocumentAttempts, PhotoRecognitions } from "../vehicle-document";
 import { CatalogSearchService } from "./catalog-search.service";
@@ -31,7 +32,14 @@ export class ShowcaseModule {
   static forRoot(options: ShowcaseModuleOptions): DynamicModule {
     return {
       module: ShowcaseModule,
-      imports: [options.catalog, options.compatibility, options.clubAccess, SearchIndexModule],
+      imports: [
+        options.catalog,
+        options.compatibility,
+        options.clubAccess,
+        SearchIndexModule,
+        // The card of an item counts the views of its offers (TASK-070).
+        ...(options.http ? [OfferViewsRecorderModule] : []),
+      ],
       controllers: options.http ? [ShowcaseController, PartPhotoController] : [],
       // A part by its photo (TASK-058) only where the routes are served: it
       // reads photos through the attempts of the certificate (Redis, AI).

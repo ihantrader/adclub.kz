@@ -20,6 +20,7 @@ import { PriceImportJobsModule } from "./modules/price-imports";
 import { ReviewJobsModule } from "./modules/reviews";
 import { AssistantJobsModule } from "./modules/assistant";
 import { RatingJobsModule } from "./modules/ratings";
+import { OfferViewJobsModule } from "./modules/offer-views";
 import { BillingJobsModule } from "./modules/billing";
 import { CatalogModule } from "./modules/catalog";
 import { CompatibilityModule } from "./modules/compatibility";
@@ -88,6 +89,7 @@ export class WorkerModule {
         ReviewJobsModule,
         AssistantJobsModule,
         RatingJobsModule,
+        OfferViewJobsModule,
         BillingJobsModule.forRoot(config),
         ReminderJobsModule.forRoot({ compatibility, showcase, maintenance }),
         ...(hasDevJobs(config) ? [DevJobsModule] : []),

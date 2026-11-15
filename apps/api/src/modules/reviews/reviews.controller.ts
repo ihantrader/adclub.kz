@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Param, Query, Res } from "@nestjs/common";
+import { Body, Controller, Headers, Inject, Param, Query, Req, Res } from "@nestjs/common";
 import {
   adminComplaintListQuerySchema,
   adminReviewActionBodySchema,
@@ -44,7 +44,7 @@ import {
   type UserReviewResponse,
 } from "@adclub/contracts";
 import { pickLanguage } from "@adclub/i18n";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
 import { RateLimitedRoute } from "../../rate-limit";
 import { ClubAccess } from "../club-access";
@@ -54,6 +54,7 @@ import {
   SessionRoute,
   type AuthenticatedSession,
 } from "../identity";
+import { OfferViews } from "../offer-views";
 import { roleSafeCaching, viewerOf } from "../showcase";
 import { ComplaintsService } from "./complaints.service";
 import { ReviewsService, type ReviewAdmin } from "./reviews.service";
@@ -137,6 +138,7 @@ export class SupplierReviewsController {
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
     @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
     @Inject(SupplierProfiles) private readonly profiles: SupplierProfiles,
+    @Inject(OfferViews) private readonly views: OfferViews,
   ) {}
 
   @RateLimitedRoute(apiRoutes.getSupplierReviews)
@@ -163,10 +165,13 @@ export class SupplierReviewsController {
     @Param(new ZodValidationPipe(offerSupplierPathSchema)) params: OfferSupplierPath,
     @Headers("accept-language") acceptLanguage: string | undefined,
     @OptionalSession() session: AuthenticatedSession | null,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SupplierProfileResponse> {
     const viewer = await viewerOf(session, this.clubAccess);
     const answer = await this.profiles.ofOffer(params.offerId, viewer);
+    // The offer was shown (TASK-070): a view, never on the path of the answer.
+    this.views.seen(viewer, [params.offerId], request.ip);
     roleSafeCaching(response, pickLanguage(acceptLanguage), session !== null);
     return answer;
   }

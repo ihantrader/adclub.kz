@@ -822,13 +822,39 @@ const rating = group({
       description:
         "Рейтинг ниже этого числа звёзд (при показанном рейтинге) — сигнал администратору «Низкий рейтинг». Автоматической блокировки нет.",
     }),
+  },
+});
+
+// TASK-070 (ARCHITECTURE 4.88): «Просмотров много, заявок мало». The two
+// keys of before (TASK-050 put them in «Рейтинг», nothing read them) moved here.
+const signals = group({
+  id: "signals",
+  title: "Сигналы о поставщиках",
+  editableBy: "admin",
+  settings: {
+    views_signal_window_days: define.duration({
+      unit: "days",
+      min: 7,
+      max: 180,
+      default: 30,
+      description:
+        "За сколько последних дней (до вчерашнего включительно, по Алматы) сравниваются просмотры предложений участниками клуба и заявки в сигнале «Просмотров много, заявок мало».",
+    }),
     views_signal_min: define.integer({
       unit: "count",
       min: 1,
       max: 1_000_000,
-      default: 100,
+      default: 200,
       description:
-        "С какого числа просмотров предложений проверяется расхождение просмотров и заявок.",
+        "С какого числа просмотров предложений участниками клуба за окно поставщик сравнивается с другими (и входит в медиану конверсии).",
+    }),
+    views_signal_min_suppliers: define.integer({
+      unit: "count",
+      min: 2,
+      max: 1000,
+      default: 5,
+      description:
+        "Сколько поставщиков с достаточным числом просмотров нужно, чтобы медиана конверсии что-то значила; меньше — сигнала нет ни у кого.",
     }),
     views_signal_ratio: define.number({
       unit: "ratio",
@@ -836,7 +862,15 @@ const rating = group({
       max: 1,
       default: 0.3,
       description:
-        "Конверсия ниже этой доли от медианы категории — сигнал администратору об обходе платформы.",
+        "Конверсия поставщика (заявки ÷ просмотры участников клуба) ниже этой доли от медианы — сигнал администратору «Просмотров много, заявок мало». Автоматических мер нет.",
+    }),
+    offer_view_retention_days: define.duration({
+      unit: "days",
+      min: 2,
+      max: 365,
+      default: 90,
+      description:
+        "Сколько дней хранятся отдельные просмотры (только для отсева повторов); суточные итоги остаются.",
     }),
   },
 });
@@ -2141,6 +2175,7 @@ export const settingGroups = [
   ai,
   translation,
   rating,
+  signals,
   pricelist,
   reviews,
   photos,
@@ -2170,6 +2205,7 @@ export const settingDefinitions = {
   ...ai.settings,
   ...translation.settings,
   ...rating.settings,
+  ...signals.settings,
   ...pricelist.settings,
   ...reviews.settings,
   ...photos.settings,

@@ -1,4 +1,4 @@
-import { Controller, Headers, Inject, Param, Query, Res } from "@nestjs/common";
+import { Controller, Headers, Inject, Param, Query, Req, Res } from "@nestjs/common";
 import {
   apiRoutes,
   CATALOG_CLIENT_CACHE_SECONDS,
@@ -17,10 +17,11 @@ import {
   type ShowcaseListResponse,
 } from "@adclub/contracts";
 import { pickLanguage } from "@adclub/i18n";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
 import { RateLimitedRoute } from "../../rate-limit";
 import { OptionalSession, type AuthenticatedSession } from "../identity";
+import { OfferViews } from "../offer-views";
 import { CatalogSearchService } from "./catalog-search.service";
 import { ShowcaseService } from "./showcase.service";
 
@@ -56,6 +57,7 @@ export class ShowcaseController {
   constructor(
     @Inject(ShowcaseService) private readonly showcase: ShowcaseService,
     @Inject(CatalogSearchService) private readonly searching: CatalogSearchService,
+    @Inject(OfferViews) private readonly views: OfferViews,
   ) {}
 
   @RateLimitedRoute(apiRoutes.getShowcaseItems)
@@ -94,11 +96,18 @@ export class ShowcaseController {
     @Query(new ZodValidationPipe(showcaseItemQuerySchema)) query: ShowcaseItemQuery,
     @Headers("accept-language") acceptLanguage: string | undefined,
     @OptionalSession() session: AuthenticatedSession | null,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ShowcaseItemResponse> {
     const lang = pickLanguage(acceptLanguage);
     const viewer = await this.showcase.viewer(session);
     const answer = await this.showcase.card(params.itemId, query, viewer, lang);
+    // Every offer of the card was shown (TASK-070): views, never on the path of the answer.
+    this.views.seen(
+      viewer,
+      answer.offers.map((entry) => entry.id),
+      request.ip,
+    );
     roleSafeCaching(response, lang, session !== null);
     return answer;
   }

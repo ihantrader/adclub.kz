@@ -51,6 +51,7 @@ describe("settings registry", () => {
       "ai",
       "translation",
       "rating",
+      "signals",
       "pricelist",
       "reviews",
       "photos",

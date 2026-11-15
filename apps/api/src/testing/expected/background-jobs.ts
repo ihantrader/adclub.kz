@@ -48,6 +48,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "assistant.anonymize-messages",
   "ratings.recompute-supplier",
   "ratings.reconcile",
+  "offers.views-signal",
   "billing.apply-events",
   "billing.wake-events",
   "billing.expire-subscriptions",
@@ -111,6 +112,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "notifications.recover-interrupted", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The share of critical pushes copied to WhatsApp above the threshold (TASK-052).
   { name: "notifications.watch-fallback-share", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The signal «Просмотров много, заявок мало» and the cleanup of raw views (TASK-070).
+  { name: "offers.views-signal", cron: "10 5 * * *", timezone: "Asia/Almaty" },
   // Deadlines of orders: no answer, the end of a reserve, its warning (TASK-021).
   { name: "orders.apply-deadlines", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Keys of creation requests of orders long finished (TASK-022).

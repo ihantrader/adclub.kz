@@ -66,4 +66,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1792250000000_assistant-charged-at",
   "1792300000000_assistant-open-key",
   "1792350000000_maintenance-reminders",
+  "1792400000000_offer-views",
 ];

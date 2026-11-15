@@ -120,6 +120,95 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("keeps one view per offer, day and viewer, the daily totals by kind, and rolls back (TASK-070)", async () => {
+    const owner = (
+      await client.query<{ id: string }>(
+        "INSERT INTO account (phone) VALUES ('+77470000970') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const city = (
+      await client.query<{ id: string }>(
+        "INSERT INTO city (code, name_ru) VALUES ('views-070', 'Город просмотров') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const supplierId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO supplier (name, city_id) VALUES ('Просмотры', $1) RETURNING id",
+        [city],
+      )
+    ).rows[0]!.id;
+    const location = (
+      await client.query<{ id: string }>(
+        "INSERT INTO supplier_location (supplier_id, city_id) VALUES ($1, $2) RETURNING id",
+        [supplierId, city],
+      )
+    ).rows[0]!.id;
+    const nodeId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO category (code, kind, level) VALUES ('views_070_node', 'goods', 1) RETURNING id",
+      )
+    ).rows[0]!.id;
+    const categoryId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO category (code, kind, level, parent_id, parent_level) VALUES ('views_070_sub', 'goods', 2, $1, 1) RETURNING id",
+        [nodeId],
+      )
+    ).rows[0]!.id;
+    const brandId = (
+      await client.query<{ id: string }>("INSERT INTO brand DEFAULT VALUES RETURNING id")
+    ).rows[0]!.id;
+    const itemId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id) VALUES ('generic', $1, 'goods', $2) RETURNING id",
+        [categoryId, brandId],
+      )
+    ).rows[0]!.id;
+    const offerId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, pickup, delivery) VALUES ($1, $2, $3, 'generic', 1000, 'in_stock', true, true) RETURNING id",
+        [supplierId, location, itemId],
+      )
+    ).rows[0]!.id;
+    const view = (key: string, kind = "club") =>
+      client.query(
+        `INSERT INTO offer_view_event (offer_id, day, viewer_key, viewer_kind, supplier_id)
+         VALUES ($1, '2026-11-14', $2, $3, $4)`,
+        [offerId, key, kind, supplierId],
+      );
+    await view("a-key-of-sixteen-characters");
+    // The same viewer the same day — the primary key refuses a second row.
+    await expect(view("a-key-of-sixteen-characters")).rejects.toThrow(/offer_view_event_pkey/);
+    await expect(view("another-key-of-sixteen", "member")).rejects.toThrow(/viewer_kind/);
+    await expect(view("short")).rejects.toThrow(/viewer_key/);
+    await client.query(
+      `INSERT INTO offer_view_daily (offer_id, day, viewer_kind, supplier_id, views)
+       VALUES ($1, '2026-11-14', 'club', $2, 1)`,
+      [offerId, supplierId],
+    );
+    await expect(
+      client.query(
+        `INSERT INTO offer_view_daily (offer_id, day, viewer_kind, supplier_id, views)
+         VALUES ($1, '2026-11-15', 'club', $2, 0)`,
+        [offerId, supplierId],
+      ),
+    ).rejects.toThrow(/offer_view_daily_views_check/);
+
+    await rollBackThrough("1792400000000_offer-views");
+    expect(await tableExists(client, "offer_view_event")).toBe(false);
+    expect(await tableExists(client, "offer_view_daily")).toBe(false);
+    // Everything else is as it was.
+    expect((await client.query("SELECT 1 FROM offer WHERE id = $1", [offerId])).rowCount).toBe(1);
+    await client.query("DELETE FROM offer WHERE id = $1", [offerId]);
+    await client.query("DELETE FROM catalog_item WHERE id = $1", [itemId]);
+    await client.query("DELETE FROM brand WHERE id = $1", [brandId]);
+    await client.query("DELETE FROM category WHERE id = $1", [categoryId]);
+    await client.query("DELETE FROM category WHERE id = $1", [nodeId]);
+    await client.query("DELETE FROM supplier_location WHERE id = $1", [location]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city]);
+    await client.query("DELETE FROM account WHERE id = $1", [owner]);
+  });
+
   it("keeps the reminders of a car with their rules, goes with the car, and rolls back (TASK-069)", async () => {
     const accountId = (
       await client.query<{ id: string; reminders_enabled: boolean }>(

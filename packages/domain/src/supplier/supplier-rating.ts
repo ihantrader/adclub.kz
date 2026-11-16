@@ -205,15 +205,6 @@ function roundTo(value: number, digits: number): number {
 }
 
 /**
- * The rating: the **weighted sum** of the parts by `rating_weights`
- * (ARCHITECTURE 13.2 said «произведение»; with weights adding up to 1 it is a
- * sum — 4.71 I762). A share left out for too few orders gives its weight to
- * the others in proportion (the weights present are divided by their sum);
- * the scores are always present once the rating is shown. Fewer published
- * scores than `minReviews` — no rating, «Новый поставщик», whatever the
- * shares (they are still counted and kept).
- */
-/**
  * The two shares of a tally of orders: the answers and the terms kept;
  * fewer than `minOrders` behind a share — `null` («Мало заявок для
  * оценки»). The rating and the supplier's statistics (S-STAT-01, TASK-071)
@@ -230,6 +221,15 @@ export function ratingShares(
   };
 }
 
+/**
+ * The rating: the **weighted sum** of the parts by `rating_weights`
+ * (ARCHITECTURE 13.2 said «произведение»; with weights adding up to 1 it is a
+ * sum — 4.71 I762). A share left out for too few orders gives its weight to
+ * the others in proportion (the weights present are divided by their sum);
+ * the scores are always present once the rating is shown. Fewer published
+ * scores than `minReviews` — no rating, «Новый поставщик», whatever the
+ * shares (they are still counted and kept).
+ */
 export function supplierRating(inputs: RatingInputs, rules: RatingRules): SupplierRating {
   const reviewsAverage =
     inputs.reviewsCount > 0 ? inputs.reviewsScoreSum / inputs.reviewsCount : null;

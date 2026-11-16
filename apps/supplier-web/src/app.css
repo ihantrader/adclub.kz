@@ -3318,7 +3318,8 @@ a.ac-button {
 
 .stats-figure__value--muted {
   font-size: 18px;
-  line-height: 36px;
+  /* Two lines of «Мало заявок для оценки» on a narrow card: no 36 px gap between them. */
+  line-height: 24px;
   color: var(--ac-color-text-muted);
 }
 

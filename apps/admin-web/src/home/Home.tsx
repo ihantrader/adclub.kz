@@ -64,12 +64,13 @@ export function homeCards(home: AdminHome): HomeCard[] {
       href: routePaths.reviews,
     },
     {
-      key: "requests",
+      // TASK-071: one card for everything suppliers wait for — the queue's «Всего».
+      key: "moderation",
       icon: "checklist",
-      title: "Запросы на позиции",
-      value: home.catalogRequests,
-      note: "Строк прайсов нет в справочнике: создать позицию, указать существующую или отклонить",
-      href: withQuery(routePaths.catalogRequests, { status: "new" }),
+      title: "Модерация ждёт",
+      value: home.moderationWaiting,
+      note: "Запросы поставщиков на новые позиции и предложения совместимости: решить в карточке каждого",
+      href: routePaths.moderation,
     },
     {
       // TASK-061: AI drafts of maintenance plans not activated yet — the list's `total`.

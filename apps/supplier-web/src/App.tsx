@@ -22,6 +22,7 @@ import { OffersList } from "./offers/OffersList";
 import { OrderCardScreen } from "./orders/OrderScreen";
 import { OrdersList } from "./orders/OrdersList";
 import { Billing } from "./billing/Billing";
+import { Stats } from "./stats/Stats";
 import { Moderation } from "./moderation/Moderation";
 import { RequestFormScreen } from "./moderation/RequestForm";
 import { PriceImports } from "./price/PriceImports";
@@ -298,6 +299,8 @@ function Page({
       return <Moderation generation={cabinet.generation} timeZone={card.timeZone} />;
     case "offerRequest":
       return <RequestFormScreen />;
+    case "stats":
+      return <Stats />;
     case "billing":
       return (
         <Billing generation={cabinet.generation} timeZone={card.timeZone} pauses={card.pauses} />

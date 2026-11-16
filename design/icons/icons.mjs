@@ -37,6 +37,8 @@ export const ui = {
   chevronUp: "caret-up",
   circleCheck: "check-circle",
   circleX: "x-circle",
+  // «Статистика» of the cabinet (S-STAT-01, TASK-071).
+  chart: "chart-bar",
   // «Вставить» on the keypad of the manual code entry (S-SCAN-02, TASK-079).
   clipboard: "clipboard-text",
   clock: "clock",

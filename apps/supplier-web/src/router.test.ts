@@ -34,6 +34,12 @@ describe("the cabinet's addresses", () => {
     expect(menuOf("billing")).toBe("billing");
   });
 
+  it("gives «Статистика» an address under «Ещё» and an item of its own in the side menu (TASK-071)", () => {
+    expect(routeOf("/stats")).toBe("stats");
+    expect(tabOf("stats")).toBe("more");
+    expect(menuOf("stats")).toBe("stats");
+  });
+
   it("gives «Прайс» a tab and an upload its own address under it (stage C, TASK-046)", () => {
     const id = "3a2b1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d";
     expect(priceImportPath(id)).toBe(`/price/${id}`);

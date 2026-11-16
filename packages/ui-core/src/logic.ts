@@ -220,6 +220,7 @@ export type IconName =
   | "cameraSlash"
   | "car"
   | "category"
+  | "chart"
   | "check"
   | "checklist"
   | "chevronDown"

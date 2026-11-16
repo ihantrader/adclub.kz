@@ -23,6 +23,7 @@ import { OrderCard } from "./orders/OrderCard";
 import { Orders } from "./orders/Orders";
 import { ComplaintCard, Complaints } from "./reviews/Complaints";
 import { Reviews } from "./reviews/Reviews";
+import { Moderation } from "./moderation/Moderation";
 import { AssistantComplaintCard, AssistantComplaints } from "./assistant/AssistantComplaints";
 import { useLocation, useRoute, type RouteKey } from "./router";
 
@@ -268,6 +269,8 @@ function Page({ route, me }: { route: RouteKey; me: CurrentAccountResponse | nul
       return <Payments />;
     case "billingPlans":
       return <Plans />;
+    case "moderation":
+      return <Moderation />;
     case "reviews":
       return <Reviews />;
     case "complaints":

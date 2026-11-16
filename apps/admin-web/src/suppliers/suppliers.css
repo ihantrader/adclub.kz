@@ -306,6 +306,13 @@
   white-space: nowrap;
 }
 
+/* A word in place of a number («Мало заявок для оценки», «Новый поставщик»): it wraps (TASK-071). */
+.rating-figure__value--text {
+  font-size: 18px;
+  white-space: normal;
+  color: var(--ac-color-text-muted);
+}
+
 .rating-figure__star {
   display: inline-flex;
   align-items: center;

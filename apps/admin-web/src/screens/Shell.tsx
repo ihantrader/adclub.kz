@@ -29,6 +29,7 @@ const MENU: NavItem<StaticRoute>[] = [
   { key: "home", label: "Главная", icon: "checklist", href: routePaths.home },
   { key: "signals", label: "Сигналы", icon: "alertTriangle", href: routePaths.signals },
   { key: "catalog", label: "Справочник", icon: "category", href: routePaths.catalog },
+  { key: "moderation", label: "Модерация", icon: "progressCheck", href: routePaths.moderation },
   { key: "vehicles", label: "Автомобили", icon: "car", href: routePaths.vehicles },
   { key: "orders", label: "Заявки", icon: "receipt", href: routePaths.orders },
   { key: "users", label: "Пользователи", icon: "users", href: routePaths.users },

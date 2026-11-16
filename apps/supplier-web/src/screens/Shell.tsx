@@ -148,6 +148,7 @@ export function Shell({ route, cabinet, fallbackNames, children }: ShellProps) {
     },
     { key: "team", label: t("nav.team"), icon: "users", href: routePaths.team },
     { key: "company", label: t("nav.company"), icon: "store", href: routePaths.company },
+    { key: "stats", label: t("nav.stats"), icon: "chart", href: routePaths.stats },
     { key: "billing", label: t("nav.billing"), icon: "creditCard", href: routePaths.billing },
     { key: "settings", label: t("nav.settings"), icon: "settings", href: routePaths.settings },
     ...(installWay === "installed"

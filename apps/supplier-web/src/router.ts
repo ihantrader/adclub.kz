@@ -22,6 +22,8 @@ export const routePaths = {
   settings: "/settings",
   team: "/team",
   company: "/company",
+  /** S-STAT-01 «Статистика» (TASK-071). */
+  stats: "/stats",
   /** S-BILL-01 «Подписка» (TASK-042); the provider's page sends the browser back to it. */
   billing: "/billing",
   install: "/install",
@@ -41,6 +43,7 @@ export const morePages: readonly RouteKey[] = [
   "settings",
   "team",
   "company",
+  "stats",
   "billing",
   "install",
   "moderation",

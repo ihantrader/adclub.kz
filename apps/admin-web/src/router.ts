@@ -46,6 +46,8 @@ export const routePaths = {
   // Reviews and complaints (TASK-049): A-REV-01, A-REV-02.
   reviews: "/reviews",
   complaints: "/complaints",
+  // Everything suppliers wait for, one queue (TASK-071, A-MOD).
+  moderation: "/moderation",
   // The assistant (TASK-062): complaints about its answers.
   assistantComplaints: "/assistant/complaints",
 } as const;

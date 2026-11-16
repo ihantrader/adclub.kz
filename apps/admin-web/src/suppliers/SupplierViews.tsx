@@ -9,6 +9,8 @@ import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
 import { useAddressFilters } from "./shared";
 import { conversionCell, shortDay, VIEW_PERIODS, viewRangeOf } from "./views-words";
+import { SupplierStatsSection } from "./SupplierStatsSection";
+import { statsPeriodOf } from "./stats-words";
 
 const number = (value: number) => value.toLocaleString("ru-RU");
 
@@ -60,37 +62,39 @@ export function SupplierViews({ supplierId }: { supplierId: string }) {
   const quiet = views !== undefined && views.total.total === 0 && views.total.orders === 0;
   return (
     <div className="detail-stack">
+      <StatusChips<string>
+        label="Период"
+        value={range.days === null ? "signal" : String(range.days)}
+        allLabel={null}
+        chips={[
+          ...VIEW_PERIODS.map((days) => ({
+            value: String(days),
+            label: `${String(days)} дней`,
+            count: null,
+          })),
+          ...(range.days === null
+            ? [
+                {
+                  value: "signal",
+                  label: `${shortDay(range.from)}–${shortDay(range.to)}, как в сигнале`,
+                  count: null,
+                },
+              ]
+            : []),
+        ]}
+        onChange={(next) => {
+          if (next === "signal") return;
+          set({ period: next === "30" ? undefined : next, from: undefined, to: undefined });
+        }}
+      />
+      {/* TASK-071: one period for the tab — the supplier's statistics and the views below. */}
+      <SupplierStatsSection supplierId={supplierId} period={statsPeriodOf(range.days)} />
       <section className="section" aria-labelledby="views-head">
         <div className="section__head">
           <h2 id="views-head" className="section__title">
             Просмотры и заявки
           </h2>
         </div>
-        <StatusChips<string>
-          label="Период"
-          value={range.days === null ? "signal" : String(range.days)}
-          allLabel={null}
-          chips={[
-            ...VIEW_PERIODS.map((days) => ({
-              value: String(days),
-              label: `${String(days)} дней`,
-              count: null,
-            })),
-            ...(range.days === null
-              ? [
-                  {
-                    value: "signal",
-                    label: `${shortDay(range.from)}–${shortDay(range.to)}, как в сигнале`,
-                    count: null,
-                  },
-                ]
-              : []),
-          ]}
-          onChange={(next) => {
-            if (next === "signal") return;
-            set({ period: next === "30" ? undefined : next, from: undefined, to: undefined });
-          }}
-        />
         <LoadError error={loaded.error} retry={loaded.reload} />
         <LoadingContent
           ready={views !== undefined}

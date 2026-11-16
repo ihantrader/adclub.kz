@@ -3238,3 +3238,96 @@ a.ac-button {
     gap: var(--ac-space-3);
   }
 }
+
+/* ---------- «Статистика» (S-STAT-01, TASK-071) ---------- */
+.stats-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  min-width: 0;
+}
+
+.stats-note {
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  margin: 0;
+}
+
+.stats-card__title {
+  margin: 0;
+}
+
+/* The outcomes of the orders: a label on the left, its number on the right. */
+.stats-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-3);
+  margin: 0;
+}
+
+.stats-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ac-space-3);
+}
+
+.stats-row > dt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stats-row__value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--ac-font-weight-body-strong);
+}
+
+/* The shares, the views and the rating: one column on a phone, two from 600, four from 1280. */
+.stats-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ac-space-3);
+}
+
+@media (min-width: 600px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.stats-figure {
+  gap: var(--ac-space-1);
+}
+
+.stats-figure__value {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: var(--ac-font-weight-body-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-figure__value--muted {
+  font-size: 18px;
+  line-height: 36px;
+  color: var(--ac-color-text-muted);
+}
+
+.stats-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-1);
+}
+
+.stats-rating > svg {
+  color: var(--ac-color-warning);
+}

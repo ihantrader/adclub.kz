@@ -40,6 +40,7 @@ describe("upload routes", () => {
       "/admin/vehicles/imports",
       "/supplier/price-imports",
       "/catalog/part-photo",
+      "/speech/transcribe",
     ]);
     expect(isUploadRoute(apiRoutes.uploadItemPhoto)).toBe(true);
     expect(isUploadRoute(apiRoutes.createCatalogItem)).toBe(false);
@@ -57,12 +58,13 @@ describe("upload routes", () => {
 });
 
 describe("routes that wait for a model (TASK-063.B)", () => {
-  it("are exactly the assistant's turn and the three photo recognitions", () => {
+  it("are exactly the assistant's turn, the three photo recognitions and voice", () => {
     expect(modelRoutes.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
       "POST /assistant/messages",
       "POST /catalog/part-photo",
       "POST /garage/dashboard",
       "POST /garage/vehicle-document",
+      "POST /speech/transcribe",
     ]);
     // None has path parameters: `waitsForModel` compares paths as they are.
     expect(modelRoutes.every((route) => route.pathParams === undefined)).toBe(true);

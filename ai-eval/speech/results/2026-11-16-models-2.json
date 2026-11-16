@@ -1,0 +1,1194 @@
+{
+  "set": "synthetic",
+  "startedAt": "2026-11-16T12:45:29.045Z",
+  "finishedAt": "2026-11-16T12:51:00.118Z",
+  "dataVersion": 1,
+  "samples": 25,
+  "languageHint": "ru",
+  "label": "models-2",
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "google/gemini-3.5-flash-lite",
+      "answeredBy": ["google/gemini-3.5-flash-lite"],
+      "calls": 25,
+      "failures": [],
+      "costUsd": 0.003841,
+      "costIsEstimate": false,
+      "costPerRequestUsd": 0.0001536,
+      "tokensIn": 9631,
+      "tokensOut": 381,
+      "latencyMs": {
+        "min": 1209,
+        "median": 1567,
+        "max": 22961
+      },
+      "score": {
+        "samples": 25,
+        "answered": 25,
+        "werByLang": {
+          "ru": {
+            "errors": 1,
+            "words": 45,
+            "rate": 0.022
+          },
+          "en": {
+            "errors": 1,
+            "words": 16,
+            "rate": 0.063
+          },
+          "none": {
+            "errors": 0,
+            "words": 2,
+            "rate": 0
+          }
+        },
+        "articles": {
+          "exact": 5,
+          "total": 5,
+          "share": 1
+        },
+        "silence": {
+          "empty": 2,
+          "total": 2
+        },
+        "passes": true,
+        "misses": [
+          {
+            "id": "ru-pads-atlas",
+            "heard": "колодки на Atlas",
+            "wer": 0.333
+          },
+          {
+            "id": "en-spark-plugs",
+            "heard": "spark plugs for Chery",
+            "wer": 0.25
+          }
+        ]
+      },
+      "answers": {
+        "ru-pads-atlas": {
+          "raw": "колодки на Atlas",
+          "text": "колодки на Atlas",
+          "wer": 0.333
+        },
+        "ru-brake-pads-geely": {
+          "raw": "тормозные колодки для Geely Atlas",
+          "text": "тормозные колодки для Geely Atlas",
+          "wer": 0
+        },
+        "ru-oil-5w30": {
+          "raw": "моторное масло 5W-30",
+          "text": "моторное масло 5W-30",
+          "wer": 0
+        },
+        "ru-oil-change": {
+          "raw": "замена масла",
+          "text": "замена масла",
+          "wer": 0
+        },
+        "ru-cabin-filter": {
+          "raw": "салонный фильтр на Coolray",
+          "text": "салонный фильтр на Coolray",
+          "wer": 0
+        },
+        "ru-spark-plugs": {
+          "raw": "свечи зажигания",
+          "text": "свечи зажигания",
+          "wer": 0
+        },
+        "ru-battery": {
+          "raw": "аккумулятор 60 ампер",
+          "text": "аккумулятор 60 ампер",
+          "wer": 0
+        },
+        "ru-winter-tires": {
+          "raw": "зимние шины 215/65 R17",
+          "text": "зимние шины 215/65 R17",
+          "wer": 0
+        },
+        "ru-mileage": {
+          "raw": "пробег 45200 километров",
+          "text": "пробег 45200 километров",
+          "wer": 0
+        },
+        "ru-shock": {
+          "raw": "передний амортизатор",
+          "text": "передний амортизатор",
+          "wer": 0
+        },
+        "ru-antifreeze": {
+          "raw": "антифриз зеленый",
+          "text": "антифриз зеленый",
+          "wer": 0
+        },
+        "ru-wipers": {
+          "raw": "щетки стеклоочистителя",
+          "text": "щетки стеклоочистителя",
+          "wer": 0
+        },
+        "ru-article-geely": {
+          "raw": "04465-0K090",
+          "text": "04465-0K090",
+          "wer": 0
+        },
+        "ru-article-rear": {
+          "raw": "4050068800",
+          "text": "4050068800",
+          "wer": 0
+        },
+        "ru-diagnostics": {
+          "raw": "компьютерная диагностика двигателя",
+          "text": "компьютерная диагностика двигателя",
+          "wer": 0
+        },
+        "ru-pads-atlas-noise": {
+          "raw": "колодки на Атлас",
+          "text": "колодки на Атлас",
+          "wer": 0
+        },
+        "ru-article-geely-noise": {
+          "raw": "04465-0K090",
+          "text": "04465-0K090",
+          "wer": 0
+        },
+        "en-brake-pads": {
+          "raw": "brake pads for Geely Atlas",
+          "text": "brake pads for Geely Atlas",
+          "wer": 0
+        },
+        "en-engine-oil": {
+          "raw": "Engine oil 5W-30",
+          "text": "Engine oil 5W-30",
+          "wer": 0
+        },
+        "en-air-filter": {
+          "raw": "air filter",
+          "text": "air filter",
+          "wer": 0
+        },
+        "en-spark-plugs": {
+          "raw": "spark plugs for Chery",
+          "text": "spark plugs for Chery",
+          "wer": 0.25
+        },
+        "en-article-trw": {
+          "raw": "GDB3534",
+          "text": "GDB3534",
+          "wer": 0
+        },
+        "en-article-man": {
+          "raw": "MAN67527",
+          "text": "MAN67527",
+          "wer": 0
+        },
+        "silence": {
+          "raw": "",
+          "text": "",
+          "wer": 0
+        },
+        "car-noise": {
+          "raw": "",
+          "text": "",
+          "wer": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-3-flash-preview",
+      "answeredBy": ["google/gemini-3-flash-preview"],
+      "calls": 25,
+      "failures": [],
+      "costUsd": 0.007112,
+      "costIsEstimate": false,
+      "costPerRequestUsd": 0.0002845,
+      "tokensIn": 9631,
+      "tokensOut": 352,
+      "latencyMs": {
+        "min": 1133,
+        "median": 1675,
+        "max": 2650
+      },
+      "score": {
+        "samples": 25,
+        "answered": 25,
+        "werByLang": {
+          "ru": {
+            "errors": 4,
+            "words": 45,
+            "rate": 0.089
+          },
+          "en": {
+            "errors": 0,
+            "words": 17,
+            "rate": 0
+          },
+          "none": {
+            "errors": 2,
+            "words": 2,
+            "rate": 1
+          }
+        },
+        "articles": {
+          "exact": 5,
+          "total": 5,
+          "share": 1
+        },
+        "silence": {
+          "empty": 0,
+          "total": 2
+        },
+        "passes": true,
+        "misses": [
+          {
+            "id": "ru-pads-atlas",
+            "heard": "колодки на Geely Atlas",
+            "wer": 0.667
+          },
+          {
+            "id": "ru-cabin-filter",
+            "heard": "салонный фильтр на Geely Coolray",
+            "wer": 0.25
+          },
+          {
+            "id": "ru-pads-atlas-noise",
+            "heard": "колодки на Atlas",
+            "wer": 0.333
+          },
+          {
+            "id": "silence",
+            "heard": "аккумулятор на Toyota Land Cruiser Prado 150",
+            "wer": 1
+          },
+          {
+            "id": "car-noise",
+            "heard": "кузовные запчасти на BMW",
+            "wer": 1
+          }
+        ]
+      },
+      "answers": {
+        "ru-pads-atlas": {
+          "raw": "колодки на Geely Atlas",
+          "text": "колодки на Geely Atlas",
+          "wer": 0.667
+        },
+        "ru-brake-pads-geely": {
+          "raw": "тормозные колодки для Geely Atlas",
+          "text": "тормозные колодки для Geely Atlas",
+          "wer": 0
+        },
+        "ru-oil-5w30": {
+          "raw": "моторное масло 5W-30",
+          "text": "моторное масло 5W-30",
+          "wer": 0
+        },
+        "ru-oil-change": {
+          "raw": "замена масла",
+          "text": "замена масла",
+          "wer": 0
+        },
+        "ru-cabin-filter": {
+          "raw": "салонный фильтр на Geely Coolray",
+          "text": "салонный фильтр на Geely Coolray",
+          "wer": 0.25
+        },
+        "ru-spark-plugs": {
+          "raw": "свечи зажигания",
+          "text": "свечи зажигания",
+          "wer": 0
+        },
+        "ru-battery": {
+          "raw": "аккумулятор 60 ампер",
+          "text": "аккумулятор 60 ампер",
+          "wer": 0
+        },
+        "ru-winter-tires": {
+          "raw": "зимние шины 215/65 R17",
+          "text": "зимние шины 215/65 R17",
+          "wer": 0
+        },
+        "ru-mileage": {
+          "raw": "пробег 45200 км",
+          "text": "пробег 45200 км",
+          "wer": 0
+        },
+        "ru-shock": {
+          "raw": "передний амортизатор",
+          "text": "передний амортизатор",
+          "wer": 0
+        },
+        "ru-antifreeze": {
+          "raw": "антифриз зеленый",
+          "text": "антифриз зеленый",
+          "wer": 0
+        },
+        "ru-wipers": {
+          "raw": "щетки стеклоочистителя",
+          "text": "щетки стеклоочистителя",
+          "wer": 0
+        },
+        "ru-article-geely": {
+          "raw": "04465-0K090",
+          "text": "04465-0K090",
+          "wer": 0
+        },
+        "ru-article-rear": {
+          "raw": "4050068800",
+          "text": "4050068800",
+          "wer": 0
+        },
+        "ru-diagnostics": {
+          "raw": "компьютерная диагностика двигателя",
+          "text": "компьютерная диагностика двигателя",
+          "wer": 0
+        },
+        "ru-pads-atlas-noise": {
+          "raw": "колодки на Atlas",
+          "text": "колодки на Atlas",
+          "wer": 0.333
+        },
+        "ru-article-geely-noise": {
+          "raw": "04465-0K090",
+          "text": "04465-0K090",
+          "wer": 0
+        },
+        "en-brake-pads": {
+          "raw": "brake pads for Geely Atlas",
+          "text": "brake pads for Geely Atlas",
+          "wer": 0
+        },
+        "en-engine-oil": {
+          "raw": "Engine oil 5W-30",
+          "text": "Engine oil 5W-30",
+          "wer": 0
+        },
+        "en-air-filter": {
+          "raw": "air filter",
+          "text": "air filter",
+          "wer": 0
+        },
+        "en-spark-plugs": {
+          "raw": "spark plugs for Coolray",
+          "text": "spark plugs for Coolray",
+          "wer": 0
+        },
+        "en-article-trw": {
+          "raw": "GDB3534",
+          "text": "GDB3534",
+          "wer": 0
+        },
+        "en-article-man": {
+          "raw": "MAN 67527",
+          "text": "MAN 67527",
+          "wer": 0
+        },
+        "silence": {
+          "raw": "аккумулятор на Toyota Land Cruiser Prado 150",
+          "text": "аккумулятор на Toyota Land Cruiser Prado 150",
+          "wer": 1
+        },
+        "car-noise": {
+          "raw": "кузовные запчасти на BMW",
+          "text": "кузовные запчасти на BMW",
+          "wer": 1
+        }
+      }
+    },
+    {
+      "model": "xiaomi/mimo-v2.5",
+      "answeredBy": ["xiaomi/mimo-v2.5"],
+      "calls": 25,
+      "failures": [
+        {
+          "sampleId": "ru-pads-atlas",
+          "kind": "unavailable",
+          "message": "The AI call took longer than 60000 ms"
+        },
+        {
+          "sampleId": "car-noise",
+          "kind": "invalid_output",
+          "message": "The answer was cut off (max_tokens)"
+        }
+      ],
+      "costUsd": 0.004213,
+      "costIsEstimate": false,
+      "costPerRequestUsd": 0.0001832,
+      "tokensIn": 6317,
+      "tokensOut": 1693,
+      "latencyMs": {
+        "min": 1626,
+        "median": 3310,
+        "max": 10688
+      },
+      "score": {
+        "samples": 25,
+        "answered": 23,
+        "werByLang": {
+          "ru": {
+            "errors": 9,
+            "words": 45,
+            "rate": 0.2
+          },
+          "en": {
+            "errors": 0,
+            "words": 16,
+            "rate": 0
+          },
+          "none": {
+            "errors": 1,
+            "words": 2,
+            "rate": 0.5
+          }
+        },
+        "articles": {
+          "exact": 5,
+          "total": 5,
+          "share": 1
+        },
+        "silence": {
+          "empty": 1,
+          "total": 2
+        },
+        "passes": false,
+        "misses": [
+          {
+            "id": "ru-pads-atlas",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-oil-5w30",
+            "heard": "моторные масла 5W-30",
+            "wer": 0.667
+          },
+          {
+            "id": "ru-cabin-filter",
+            "heard": "Салонный фильтр на кулери",
+            "wer": 0.25
+          },
+          {
+            "id": "ru-shock",
+            "heard": "Передние амортизаторы",
+            "wer": 1
+          },
+          {
+            "id": "ru-pads-atlas-noise",
+            "heard": "Колодки на Атлос",
+            "wer": 0.333
+          },
+          {
+            "id": "car-noise",
+            "heard": "(no answer)",
+            "wer": 0
+          }
+        ]
+      },
+      "answers": {
+        "ru-brake-pads-geely": {
+          "raw": "тормозные колодки для Geely Atlas",
+          "text": "тормозные колодки для Geely Atlas",
+          "wer": 0
+        },
+        "ru-oil-5w30": {
+          "raw": "моторные масла 5W-30",
+          "text": "моторные масла 5W-30",
+          "wer": 0.667
+        },
+        "ru-oil-change": {
+          "raw": "Замена масла",
+          "text": "Замена масла",
+          "wer": 0
+        },
+        "ru-cabin-filter": {
+          "raw": "Салонный фильтр на кулери",
+          "text": "Салонный фильтр на кулери",
+          "wer": 0.25
+        },
+        "ru-spark-plugs": {
+          "raw": "Свечи зажигания",
+          "text": "Свечи зажигания",
+          "wer": 0
+        },
+        "ru-battery": {
+          "raw": "Аккумулятор 60 ампер",
+          "text": "Аккумулятор 60 ампер",
+          "wer": 0
+        },
+        "ru-winter-tires": {
+          "raw": "Зимние шины 215/65 R17",
+          "text": "Зимние шины 215/65 R17",
+          "wer": 0
+        },
+        "ru-mileage": {
+          "raw": "пробег 45200 километров",
+          "text": "пробег 45200 километров",
+          "wer": 0
+        },
+        "ru-shock": {
+          "raw": "Передние амортизаторы",
+          "text": "Передние амортизаторы",
+          "wer": 1
+        },
+        "ru-antifreeze": {
+          "raw": "антифриз зеленый",
+          "text": "антифриз зеленый",
+          "wer": 0
+        },
+        "ru-wipers": {
+          "raw": "Щётки стеклоочистителя",
+          "text": "Щётки стеклоочистителя",
+          "wer": 0
+        },
+        "ru-article-geely": {
+          "raw": "04465-0K090",
+          "text": "04465-0K090",
+          "wer": 0
+        },
+        "ru-article-rear": {
+          "raw": "4050068800",
+          "text": "4050068800",
+          "wer": 0
+        },
+        "ru-diagnostics": {
+          "raw": "Компьютерная диагностика двигателя",
+          "text": "Компьютерная диагностика двигателя",
+          "wer": 0
+        },
+        "ru-pads-atlas-noise": {
+          "raw": "Колодки на Атлос",
+          "text": "Колодки на Атлос",
+          "wer": 0.333
+        },
+        "ru-article-geely-noise": {
+          "raw": "04465-0K090",
+          "text": "04465-0K090",
+          "wer": 0
+        },
+        "en-brake-pads": {
+          "raw": "brake pads for Geely Atlas",
+          "text": "brake pads for Geely Atlas",
+          "wer": 0
+        },
+        "en-engine-oil": {
+          "raw": "Engine oil 5W-30",
+          "text": "Engine oil 5W-30",
+          "wer": 0
+        },
+        "en-air-filter": {
+          "raw": "Air filter",
+          "text": "Air filter",
+          "wer": 0
+        },
+        "en-spark-plugs": {
+          "raw": "Spark plugs for Coolray",
+          "text": "Spark plugs for Coolray",
+          "wer": 0
+        },
+        "en-article-trw": {
+          "raw": "GDB3534",
+          "text": "GDB3534",
+          "wer": 0
+        },
+        "en-article-man": {
+          "raw": "MAN67527",
+          "text": "MAN67527",
+          "wer": 0
+        },
+        "silence": {
+          "raw": "",
+          "text": "",
+          "wer": 0
+        }
+      }
+    },
+    {
+      "model": "xiaomi/mimo-v2.6-pro",
+      "answeredBy": ["xiaomi/mimo-v2.6-pro"],
+      "calls": 25,
+      "failures": [
+        {
+          "sampleId": "ru-winter-tires",
+          "kind": "unavailable",
+          "message": "The AI call failed: terminated"
+        },
+        {
+          "sampleId": "ru-mileage",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-shock",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-antifreeze",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-wipers",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-article-geely",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-article-rear",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-diagnostics",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-pads-atlas-noise",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-article-geely-noise",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-brake-pads",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-engine-oil",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-air-filter",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-spark-plugs",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-article-trw",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-article-man",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "silence",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "car-noise",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        }
+      ],
+      "costUsd": 0.009076,
+      "costIsEstimate": false,
+      "costPerRequestUsd": 0.0012966,
+      "tokensIn": 1901,
+      "tokensOut": 739,
+      "latencyMs": {
+        "min": 975,
+        "median": 2295,
+        "max": 13792
+      },
+      "score": {
+        "samples": 25,
+        "answered": 7,
+        "werByLang": {
+          "ru": {
+            "errors": 28,
+            "words": 47,
+            "rate": 0.596
+          },
+          "en": {
+            "errors": 16,
+            "words": 16,
+            "rate": 1
+          },
+          "none": {
+            "errors": 2,
+            "words": 2,
+            "rate": 1
+          }
+        },
+        "articles": {
+          "exact": 0,
+          "total": 5,
+          "share": 0
+        },
+        "silence": {
+          "empty": 0,
+          "total": 2
+        },
+        "passes": false,
+        "misses": [
+          {
+            "id": "ru-pads-atlas",
+            "heard": "Колодки на Atlas",
+            "wer": 0.333
+          },
+          {
+            "id": "ru-oil-5w30",
+            "heard": "Моторные масла 5W-30",
+            "wer": 0.667
+          },
+          {
+            "id": "ru-winter-tires",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-mileage",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-shock",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-antifreeze",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-wipers",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-article-geely",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "ru-article-rear",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "ru-diagnostics",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-pads-atlas-noise",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-article-geely-noise",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "en-brake-pads",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-engine-oil",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-air-filter",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-spark-plugs",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-article-trw",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "en-article-man",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "silence",
+            "heard": "(no answer)",
+            "wer": 0
+          },
+          {
+            "id": "car-noise",
+            "heard": "(no answer)",
+            "wer": 0
+          }
+        ]
+      },
+      "answers": {
+        "ru-pads-atlas": {
+          "raw": "Колодки на Atlas",
+          "text": "Колодки на Atlas",
+          "wer": 0.333
+        },
+        "ru-brake-pads-geely": {
+          "raw": "тормозные колодки для Geely Atlas",
+          "text": "тормозные колодки для Geely Atlas",
+          "wer": 0
+        },
+        "ru-oil-5w30": {
+          "raw": "Моторные масла 5W-30",
+          "text": "Моторные масла 5W-30",
+          "wer": 0.667
+        },
+        "ru-oil-change": {
+          "raw": "Замена масла",
+          "text": "Замена масла",
+          "wer": 0
+        },
+        "ru-cabin-filter": {
+          "raw": "Салонный фильтр на Coolray",
+          "text": "Салонный фильтр на Coolray",
+          "wer": 0
+        },
+        "ru-spark-plugs": {
+          "raw": "Свечи зажигания",
+          "text": "Свечи зажигания",
+          "wer": 0
+        },
+        "ru-battery": {
+          "raw": "аккумулятор 60 ампер",
+          "text": "аккумулятор 60 ампер",
+          "wer": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-3.1-flash-lite",
+      "answeredBy": [],
+      "calls": 25,
+      "failures": [
+        {
+          "sampleId": "ru-pads-atlas",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-brake-pads-geely",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-oil-5w30",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-oil-change",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-cabin-filter",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-spark-plugs",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-battery",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-winter-tires",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-mileage",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-shock",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-antifreeze",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-wipers",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-article-geely",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-article-rear",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-diagnostics",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-pads-atlas-noise",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "ru-article-geely-noise",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-brake-pads",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-engine-oil",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-air-filter",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-spark-plugs",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-article-trw",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "en-article-man",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "silence",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        },
+        {
+          "sampleId": "car-noise",
+          "kind": "unavailable",
+          "message": "OpenRouter could not be reached"
+        }
+      ],
+      "costUsd": 0,
+      "costIsEstimate": false,
+      "costPerRequestUsd": 0,
+      "tokensIn": 0,
+      "tokensOut": 0,
+      "latencyMs": {
+        "min": 0,
+        "median": 0,
+        "max": 0
+      },
+      "score": {
+        "samples": 25,
+        "answered": 0,
+        "werByLang": {
+          "ru": {
+            "errors": 47,
+            "words": 47,
+            "rate": 1
+          },
+          "en": {
+            "errors": 16,
+            "words": 16,
+            "rate": 1
+          },
+          "none": {
+            "errors": 2,
+            "words": 2,
+            "rate": 1
+          }
+        },
+        "articles": {
+          "exact": 0,
+          "total": 5,
+          "share": 0
+        },
+        "silence": {
+          "empty": 0,
+          "total": 2
+        },
+        "passes": false,
+        "misses": [
+          {
+            "id": "ru-pads-atlas",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-brake-pads-geely",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-oil-5w30",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-oil-change",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-cabin-filter",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-spark-plugs",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-battery",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-winter-tires",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-mileage",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-shock",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-antifreeze",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-wipers",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-article-geely",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "ru-article-rear",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "ru-diagnostics",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-pads-atlas-noise",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "ru-article-geely-noise",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "en-brake-pads",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-engine-oil",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-air-filter",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-spark-plugs",
+            "heard": "(no answer)",
+            "wer": 1
+          },
+          {
+            "id": "en-article-trw",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "en-article-man",
+            "heard": "(no answer)",
+            "wer": 1,
+            "article": false
+          },
+          {
+            "id": "silence",
+            "heard": "(no answer)",
+            "wer": 0
+          },
+          {
+            "id": "car-noise",
+            "heard": "(no answer)",
+            "wer": 0
+          }
+        ]
+      },
+      "answers": {}
+    }
+  ]
+}

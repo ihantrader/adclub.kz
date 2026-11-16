@@ -35,7 +35,8 @@ export type AiJobKind =
   | "photo_search"
   | "attr_fill"
   | "review_check"
-  | "maintenance_plan_draft";
+  | "maintenance_plan_draft"
+  | "speech_transcribe";
 
 /**
  * What a provider reported for one call. `costUsd` is what the provider
@@ -260,6 +261,34 @@ export const partPhotoOutputSchema = z.object({
 });
 
 export type PartPhotoOutput = z.infer<typeof partPhotoOutputSchema>;
+
+// ------------------------------------------------------- voice (TASK-059)
+
+/**
+ * A recording to transcribe (TASK-059, ARCHITECTURE 4.90): a WAV of 16-bit
+ * PCM the server has checked by its content. It lives in memory for this
+ * one call — no gateway keeps it, logs it or writes it anywhere (`AiService`
+ * records only its size and length in `ai_job.input_ref`). `language` is
+ * the language of the app's interface: a hint of what is likely, never a
+ * restriction — a person may speak Kazakh, Russian, English or mix them.
+ */
+export interface SpeechInput {
+  audio: Uint8Array;
+  format: "wav";
+  seconds: number;
+  language: "kk" | "ru" | "en";
+}
+
+/**
+ * What the model answers: the words said, as they were said, in the
+ * language and the script they were said in; an empty text when nothing
+ * was said. The server cleans it for the search line (`cleanSpeechText`).
+ */
+export const speechOutputSchema = z.object({
+  text: z.string(),
+});
+
+export type SpeechOutput = z.infer<typeof speechOutputSchema>;
 
 // ----------------------------------------------------- price list matching
 
@@ -492,6 +521,13 @@ export abstract class AiGateway {
 
   abstract readPartPhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult>;
 
+  /** What was said in a recording (TASK-059). */
+  abstract transcribeSpeech(
+    input: SpeechInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult>;
+
   abstract matchPrices(
     input: PriceMatchInput,
     model: string,
@@ -582,6 +618,14 @@ export const partPhotoOperation: AiOperation<PhotoInput, PartPhotoOutput> = {
   models: { primary: "ai_model_part_photo_primary", fallback: "ai_model_part_photo_fallback" },
   outputSchema: partPhotoOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.readPartPhoto(input, model, signal),
+};
+
+/** What was said in a recording (TASK-059): `ai_job.kind` is `speech_transcribe`. */
+export const speechOperation: AiOperation<SpeechInput, SpeechOutput> = {
+  kind: "speech_transcribe",
+  models: { primary: "ai_model_speech_primary", fallback: "ai_model_speech_fallback" },
+  outputSchema: speechOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.transcribeSpeech(input, model, signal),
 };
 
 /** Matching price list rows with catalog candidates (TASK-047): `ai_job.kind` is `price_match`. */

@@ -49,6 +49,8 @@ export const settingUnitSchema = z.enum([
   "percent",
   "hour_of_day",
   "megabytes",
+  // Voice input (TASK-059: the size of a recording).
+  "kilobytes",
   "rows",
   // Tenge (TASK-018: the bounds of an offer's price).
   "kzt",

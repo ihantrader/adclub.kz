@@ -270,6 +270,12 @@ import {
   vehicleDocumentResponseSchema,
 } from "./vehicle-document";
 import {
+  SPEECH_CONTENT_TYPES,
+  SPEECH_MAX_BYTES,
+  speechQuerySchema,
+  speechTranscriptionSchema,
+} from "./speech";
+import {
   dashboardQuerySchema,
   dashboardResponseSchema,
   partPhotoQuerySchema,
@@ -4444,6 +4450,34 @@ const coreApiRoutes = {
       200: {
         description: "The article read and the items of the catalog with it",
         schema: partPhotoResponseSchema,
+      },
+    },
+  }),
+  // Voice input (TASK-059, ARCHITECTURE 4.90): the recording is counted by
+  // hand, per device and address or per account, like a photo — the
+  // answer says how many are left, and an attempt the provider could not
+  // serve is given back. Stored nowhere; the answer is the text only.
+  transcribeSpeech: defineRoute({
+    operationId: "transcribeSpeech",
+    method: "POST",
+    path: "/speech/transcribe",
+    waitsForModel: true,
+    summary:
+      "Recognise what was said in a recording (SCREENS M-CAT-05): the text for the search line only; the recording is stored nowhere; open to guests by device",
+    tag: "catalog",
+    clientVersionCheck: "enforced",
+    auth: "optional",
+    contexts: ["user"],
+    query: speechQuerySchema,
+    upload: {
+      description: "The recording itself: WAV, 16-bit PCM (read by its content)",
+      contentTypes: SPEECH_CONTENT_TYPES,
+      maxBytes: SPEECH_MAX_BYTES,
+    },
+    responses: {
+      200: {
+        description: "What was said, for the search line, and the attempts left",
+        schema: speechTranscriptionSchema,
       },
     },
   }),

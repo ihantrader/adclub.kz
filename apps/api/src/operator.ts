@@ -45,6 +45,7 @@ import {
   VehicleDocumentEval,
 } from "./modules/vehicle-document";
 import { PhotoEval, PhotoEvalBudgetError, savePhotoEvalRun } from "./modules/photo-eval";
+import { saveSpeechEvalRun, SpeechEval, SpeechEvalBudgetError } from "./modules/speech";
 import { AssistantEval, AssistantModule, saveAssistantEvalRun } from "./modules/assistant";
 import {
   CompatibilityModule,
@@ -160,6 +161,13 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                off a drawn dashboard (`ai-eval/dashboard`) and the
  *                                article off a drawn label (`ai-eval/part-photo`);
  *                                written to `ai-eval/<set>/results/`.
+ *   ai:eval:speech --models <a,b,…> --confirm-spend <usd> [--label <text>] [--set synthetic|recordings] [--lang kk|ru|en] [--only <id,id>]
+ *                                hear every recording of `ai-eval/speech` once with
+ *                                each model (TASK-059): the word error rate by
+ *                                language, the article exactly, silence as nothing,
+ *                                time and the price of a request; written to
+ *                                `ai-eval/speech/results/` (the live recordings —
+ *                                `recordings/`, out of git — to `recordings/results/`).
  *   ai:eval:assistant --models <a,b,…> --confirm-spend <usd> [--label <text>] [--only <id,id>]
  *                                play every scenario of `ai-eval/assistant` through the
  *                                assistant's pipeline with each model (TASK-062): the
@@ -305,6 +313,7 @@ class OperatorModule {
         TranslationEval,
         VehicleDocumentEval,
         PhotoEval,
+        SpeechEval,
       ],
     };
   }
@@ -350,6 +359,7 @@ const USAGE = `Usage: operator <command> [arguments]
   ai:eval:dashboard --models <a,b,...> --confirm-spend <usd> [--label <text>]
   ai:eval:assistant --models <a,b,...> --confirm-spend <usd> [--label <text>] [--only <id,id>]
   ai:eval:part-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  ai:eval:speech --models <a,b,...> --confirm-spend <usd> [--label <text>] [--set synthetic|recordings] [--lang kk|ru|en] [--only <id,id>]
   search:status
   search:reindex
   search:reconcile
@@ -478,6 +488,7 @@ interface Services {
   translationEval: TranslationEval;
   documentEval: VehicleDocumentEval;
   photoEval: PhotoEval;
+  speechEval: SpeechEval;
   assistantEval: AssistantEval;
   searchIndex: SearchIndexWriter;
   searchEval: SearchEval;
@@ -508,6 +519,7 @@ async function run(
     translations,
     translationEval,
     documentEval,
+    speechEval,
     photoEval,
     assistantEval,
     searchIndex,
@@ -564,6 +576,8 @@ async function run(
       engine: { type: "string" },
       "model-id": { type: "string" },
       only: { type: "string" },
+      set: { type: "string" },
+      lang: { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -789,6 +803,71 @@ async function run(
           guessedHiddenVin: result.score.guessedHiddenVin,
           costUsd: result.costUsd,
           costPerScanUsd: result.costPerScanUsd,
+          latencyMs: result.latencyMs,
+          failures: result.failures.length,
+          failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
+        })),
+      };
+    }
+    case "ai:eval:speech": {
+      if (!devCommands) {
+        throw new OperatorCommandError("ai:eval:speech is available in development and tests only");
+      }
+      const models = required(values.models, "--models")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0);
+      if (models.length === 0) {
+        throw new OperatorCommandError("--models lists no model");
+      }
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.5");
+      }
+      const set = values.set ?? "synthetic";
+      if (set !== "synthetic" && set !== "recordings") {
+        throw new OperatorCommandError("--set is synthetic or recordings");
+      }
+      const lang = values.lang ?? "ru";
+      if (lang !== "kk" && lang !== "ru" && lang !== "en") {
+        throw new OperatorCommandError("--lang is kk, ru or en");
+      }
+      // As for the photos: the daily budget is what stops the run, so the
+      // stated spend must fit in what is left of it.
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const run = await speechEval.run({
+        models,
+        set,
+        languageHint: lang,
+        ...(values.label === undefined ? {} : { label: values.label }),
+        ...(values.only === undefined
+          ? {}
+          : { only: values.only.split(",").map((id) => id.trim()) }),
+      });
+      const path = saveSpeechEvalRun(
+        run,
+        `${run.startedAt.slice(0, 10)}-${values.label ?? "models"}`,
+      );
+      return {
+        saved: path,
+        set: run.set,
+        dataVersion: run.dataVersion,
+        samples: run.samples,
+        // What each model heard is in the saved file; here only the numbers.
+        results: run.results.map((result) => ({
+          model: result.model,
+          passes: result.score.passes,
+          wer: result.score.werByLang,
+          articles: result.score.articles,
+          silence: result.score.silence,
+          costUsd: result.costUsd,
+          costPerRequestUsd: result.costPerRequestUsd,
           latencyMs: result.latencyMs,
           failures: result.failures.length,
           failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
@@ -1111,6 +1190,7 @@ async function main(): Promise<void> {
         translationEval: app.get(TranslationEval),
         documentEval: app.get(VehicleDocumentEval),
         photoEval: app.get(PhotoEval),
+        speechEval: app.get(SpeechEval),
         assistantEval: app.get(AssistantEval),
         searchIndex: app.get(SearchIndexWriter),
         searchEval: app.get(SearchEval),
@@ -1140,6 +1220,7 @@ main().catch((error: unknown) => {
     error instanceof NotificationsCommandError ||
     error instanceof DocumentEvalBudgetError ||
     error instanceof PhotoEvalBudgetError ||
+    error instanceof SpeechEvalBudgetError ||
     error instanceof SearchReindexBusyError ||
     error instanceof SearchIndexUnavailableError
   ) {

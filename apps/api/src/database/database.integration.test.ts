@@ -120,6 +120,27 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("takes a speech_transcribe call into ai_job and rolls back without it (TASK-059)", async () => {
+    runMigrate("up", container.getConnectionUri());
+    const insert = (kind: string) =>
+      client.query(
+        "INSERT INTO ai_job (kind, provider, model, initiator_type, status) VALUES ($1, 'test', 'm', 'system', 'running')",
+        [kind],
+      );
+    await insert("speech_transcribe");
+    await insert("part_photo");
+    await rollBackThrough("1792500000000_speech-transcribe");
+    // The calls of voice are gone with the kind; the others stay.
+    const kinds = await client.query<{ kind: string }>(
+      "SELECT kind FROM ai_job WHERE kind IN ('speech_transcribe', 'part_photo')",
+    );
+    expect(kinds.rows.map((row) => row.kind)).toEqual(["part_photo"]);
+    await expect(insert("speech_transcribe")).rejects.toThrow(/ai_job_kind_check/);
+    runMigrate("up", container.getConnectionUri());
+    await insert("speech_transcribe");
+    await client.query("DELETE FROM ai_job WHERE model = 'm'");
+  });
+
   it("marks decisions older than a day as digested, keeps one digest a day, and rolls back (TASK-071)", async () => {
     const city = (
       await client.query<{ id: string }>(

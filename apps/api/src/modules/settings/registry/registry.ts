@@ -569,6 +569,52 @@ const guestAssistant = group({
       default: HOUR,
       description: "Окно предела сообщений помощнику одной учётной записи.",
     }),
+    speech_max_seconds: define.duration({
+      unit: "seconds",
+      min: 3,
+      max: 60,
+      default: 15,
+      description:
+        "Наибольшая длина голосового запроса (TASK-059): запись в приложении останавливается сама на этой длине, сервер не принимает более длинную (413, попытка не тратится).",
+    }),
+    speech_max_size_kb: define.integer({
+      unit: "kilobytes",
+      min: 64,
+      max: 4096,
+      default: 1024,
+      description:
+        "Наибольший размер голосового запроса, килобайты (TASK-059): приложение пишет WAV 16 кГц моно, около 32 КБ в секунду, так что 15 секунд — около 480 КБ. Больше — 413 до вызова модели, попытка не тратится.",
+    }),
+    speech_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 30,
+      description:
+        "Сколько голосовых запросов гости могут сделать с одного адреса (сети IPv6 /64) за окно (TASK-059) — против обхода пробного лимита устройства (guest_limits.voice_requests) новым устройством. Адрес мобильного оператора бывает общим у многих людей, поэтому предел щедрый.",
+    }),
+    speech_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: 7 * DAY,
+      default: DAY,
+      description: "Окно предела голосовых запросов гостей с одного адреса.",
+    }),
+    speech_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10_000,
+      default: 60,
+      description:
+        "Сколько голосовых запросов вошедший пользователь может сделать за окно (сутки по умолчанию; TASK-059) — против зацикливания, не против обычного поиска голосом.",
+    }),
+    speech_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: 7 * DAY,
+      default: DAY,
+      description: "Окно предела голосовых запросов одной учётной записи.",
+    }),
     assistant_retention_days: define.duration({
       unit: "days",
       min: 1,
@@ -704,6 +750,20 @@ const ai = group({
       default: "google/gemini-3.1-flash-lite",
       description:
         "Запасная модель чтения пробега: используется, когда основная недоступна. Другой поставщик модели, тоже прошла порог замера (около $0.0005 за скан). Чтобы запасной не было, укажите ту же модель, что и основную.",
+    }),
+    ai_model_speech_primary: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "xiaomi/mimo-v2.6-flash",
+      description:
+        "Модель OpenRouter для распознавания речи в голосовом вводе (TASK-059). Должна принимать звук; запросы уходят только провайдерам без хранения (D-057). Выбрана замером на синтетическом наборе ai-eval/speech (D-058, ARCHITECTURE 4.90): самая дешёвая из прошедших порог (артикул 5 из 5, WER русского 13,3 % при пороге 15 %, тишина и шум — пусто), около /usr/bin/bash.00005 за запрос, медиана 1,2 с. Набор — русский и английский голоса Windows; казахский и смешанная речь ещё не замерены. Меняется без релиза, действует не позже чем через 30 секунд.",
+    }),
+    ai_model_speech_fallback: define.string({
+      maxLength: 100,
+      pattern: MODEL_ID,
+      default: "google/gemini-3.5-flash-lite",
+      description:
+        "Запасная модель распознавания речи: используется, когда основная недоступна. Другой поставщик, лучшая точность замера (WER русского 2,2 %, артикул 5 из 5, тишина пусто), около /usr/bin/bash.00015 за запрос. Чтобы запасной не было, укажите ту же модель, что и основную.",
     }),
     ai_model_part_photo_primary: define.string({
       maxLength: 100,

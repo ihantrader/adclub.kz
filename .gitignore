@@ -29,3 +29,6 @@ Thumbs.db
 # into the project root on a build — never in git
 google-services.json
 GoogleService-Info.plist
+
+# live speech recordings of people for ai:eval:speech (TASK-059): voices, never in git
+ai-eval/speech/recordings/

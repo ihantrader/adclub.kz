@@ -526,6 +526,7 @@ export * from "./account";
 export * from "./garage";
 export * from "./vehicle-document";
 export * from "./photo-recognition";
+export * from "./speech";
 export * from "./price-imports";
 export * from "./price-review";
 export * from "./notifications";

@@ -3,6 +3,7 @@ import {
   AiGatewayError,
   FALLBACK_WORTHY,
   reviewCheckOutputSchema,
+  speechOutputSchema,
   translateOutputSchema,
   vehicleDocumentOutputSchema,
 } from "./ai-gateway";
@@ -282,6 +283,44 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     expect(user.find((part) => part.type === "image_url")?.image_url?.url).toBe(
       `data:image/jpeg;base64,${Buffer.from(image).toString("base64")}`,
     );
+  });
+
+  it("sends a recording inline as input_audio, privately, with the language as a hint only (TASK-059)", async () => {
+    const { gateway, seen } = gatewayWith(() =>
+      answer({
+        model: MODEL,
+        usage: { prompt_tokens: 260, completion_tokens: 12, cost: 0.00003 },
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: JSON.stringify({ text: "колодки на атлас" }) },
+          },
+        ],
+      }),
+    );
+    const audio = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4]);
+    const result = await gateway.transcribeSpeech(
+      { audio, format: "wav", seconds: 2.5, language: "kk" },
+      MODEL,
+      SIGNAL,
+    );
+    expect(speechOutputSchema.parse(result.output)).toEqual({ text: "колодки на атлас" });
+    const body = seen[0]!.body;
+    expect(body).toMatchObject({
+      model: MODEL,
+      provider: { zdr: true, data_collection: "deny", require_parameters: true },
+      response_format: { type: "json_schema", json_schema: { strict: true } },
+    });
+    const user = (body.messages as { role: string; content: unknown }[]).find(
+      (message) => message.role === "user",
+    )!.content as { type: string; text?: string; input_audio?: { data: string; format: string } }[];
+    expect(user.find((part) => part.type === "input_audio")?.input_audio).toEqual({
+      data: Buffer.from(audio).toString("base64"),
+      format: "wav",
+    });
+    // The language of the app is said as a hint, and the instruction allows any language.
+    expect(user.find((part) => part.type === "text")?.text).toContain("Kazakh");
+    expect(JSON.stringify(body.messages)).toMatch(/mix languages; never translate/);
   });
 
   it("sends only the text and the score of a review, privately, and reads the violations (TASK-049)", async () => {

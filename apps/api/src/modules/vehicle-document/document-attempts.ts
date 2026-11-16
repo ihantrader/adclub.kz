@@ -19,9 +19,10 @@ export type DocumentReader =
  * a device is effectively for good — a year, so Redis still forgets a
  * device nobody uses.
  */
-const DEVICE_WINDOW_SECONDS = 365 * 24 * 60 * 60;
+export const DEVICE_WINDOW_SECONDS = 365 * 24 * 60 * 60;
 
-interface Bucket {
+/** One count of a reader: the limit named in a refusal, the Redis key, how many and how long. */
+export interface Bucket {
   limit: RateLimitName;
   key: string;
   max: number;
@@ -42,12 +43,10 @@ export interface CountedAttempt {
  * fault. Without Redis nothing is read: every attempt costs money, and an
  * uncounted one is not allowed (as the request form, 4.26).
  */
-@Injectable()
-export class DocumentAttempts {
-  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+export abstract class RecognitionAttempts {
   constructor(
-    @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
-    @Inject(AppSettings) private readonly settings: AppSettings,
+    protected readonly limiter: RateLimiterService,
+    protected readonly settings: AppSettings,
   ) {}
 
   /** How many are left now, nothing counted. */
@@ -125,7 +124,25 @@ export class DocumentAttempts {
     };
   }
 
-  private async bucketsOf(reader: DocumentReader): Promise<Bucket[]> {
+  /** The buckets of a reader, the first one the limit the answer reports. */
+  protected abstract bucketsOf(reader: DocumentReader): Promise<Bucket[]>;
+}
+
+/**
+ * The attempts of the three photos (TASK-057, TASK-058): one count for the
+ * certificate, the dashboard and a part.
+ */
+@Injectable()
+export class DocumentAttempts extends RecognitionAttempts {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(
+    @Inject(RateLimiterService) limiter: RateLimiterService,
+    @Inject(AppSettings) settings: AppSettings,
+  ) {
+    super(limiter, settings);
+  }
+
+  protected async bucketsOf(reader: DocumentReader): Promise<Bucket[]> {
     if (reader.kind === "account") {
       const [max, windowSeconds] = await Promise.all([
         this.settings.get("vehicle_document_per_account"),

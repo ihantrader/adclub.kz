@@ -505,3 +505,23 @@ export type {
   ReminderReading,
   ReminderSettings,
 } from "./maintenance/maintenance-reminder";
+export {
+  encodeWav,
+  floatToPcm16,
+  readWav,
+  resamplePcm16,
+  SPEECH_SAMPLE_RATE,
+  toSpeechPcm,
+  wavSamples,
+} from "./speech/wav";
+export type { WavInfo, WavReading, WavRejection } from "./speech/wav";
+export { cleanSpeechText, speechAttemptCharge, SPEECH_TEXT_MAX_LENGTH } from "./speech/speech-text";
+export type { CleanedSpeechText, SpeechAttemptOutcome } from "./speech/speech-text";
+export {
+  createSpeechWatch,
+  levelOfRms,
+  pcmRms,
+  speechHeardAnything,
+  SPEECH_SILENCE_STOP_MS,
+} from "./speech/speech-level";
+export type { SpeechWatchState } from "./speech/speech-level";

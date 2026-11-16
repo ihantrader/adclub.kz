@@ -33,6 +33,7 @@
   "src/modules/search-index/search-index.integration.test.ts": 110,
   "src/modules/settings/settings.integration.test.ts": 33,
   "src/modules/showcase/showcase.integration.test.ts": 35,
+  "src/modules/speech/speech.integration.test.ts": 50,
   "src/modules/suppliers/supplier-members.integration.test.ts": 37,
   "src/modules/suppliers/suppliers.integration.test.ts": 20,
   "src/modules/users/admin-users.integration.test.ts": 13,

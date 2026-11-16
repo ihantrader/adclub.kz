@@ -18172,6 +18172,87 @@
         }
       }
     },
+    "/speech/transcribe": {
+      "post": {
+        "operationId": "transcribeSpeech",
+        "summary": "Recognise what was said in a recording (SCREENS M-CAT-05): the text for the search line only; the recording is stored nowhere; open to guests by device",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "deviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {},
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The recording itself: WAV, 16-bit PCM (read by its content)",
+          "required": true,
+          "content": {
+            "audio/wav": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "audio/wav"
+              }
+            },
+            "audio/wave": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "audio/wave"
+              }
+            },
+            "audio/x-wav": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "audio/x-wav"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What was said, for the search line, and the attempts left",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechTranscription"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier-leads": {
       "post": {
         "operationId": "submitSupplierLead",
@@ -39897,6 +39978,8 @@
           "GARAGE_MILEAGE_LOWER",
           "VEHICLE_DOCUMENT_INVALID",
           "VEHICLE_DOCUMENT_UNAVAILABLE",
+          "SPEECH_INVALID",
+          "SPEECH_UNAVAILABLE",
           "PRICE_IMPORT_FILE_INVALID",
           "PRICE_IMPORT_STATE",
           "PRICE_IMPORT_VERSION_CONFLICT",
@@ -46662,6 +46745,9 @@
           "assistant_guest_per_ip",
           "assistant_daily_dialogs_per_user",
           "assistant_messages_per_account",
+          "speech_per_device",
+          "speech_per_ip",
+          "speech_per_account",
           "price_import_uploads_per_supplier",
           "price_export_per_member",
           "billing_actions_per_member",
@@ -48909,6 +48995,7 @@
           "percent",
           "hour_of_day",
           "megabytes",
+          "kilobytes",
           "rows",
           "kzt"
         ]
@@ -49950,6 +50037,97 @@
         "required": [
           "token",
           "expiresAt"
+        ]
+      },
+      "SpeechInvalidDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "not_audio",
+              "unsupported_format",
+              "unsupported_encoding",
+              "broken",
+              "empty"
+            ]
+          },
+          "detected": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "SpeechTooLargeDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "duration",
+              "size"
+            ]
+          },
+          "maxSeconds": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "reason",
+          "maxSeconds",
+          "maxBytes"
+        ]
+      },
+      "SpeechTranscription": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "heard": {
+            "type": "boolean"
+          },
+          "cut": {
+            "type": "boolean"
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/VehicleDocumentAttempts"
+          }
+        },
+        "required": [
+          "text",
+          "heard",
+          "cut",
+          "attempts"
+        ]
+      },
+      "SpeechUnavailableDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "budget"
+            ]
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/VehicleDocumentAttempts"
+          }
+        },
+        "required": [
+          "reason",
+          "attempts"
         ]
       },
       "StartCardBindingBody": {

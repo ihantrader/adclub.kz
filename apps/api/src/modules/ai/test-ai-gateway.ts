@@ -12,6 +12,7 @@ import {
   type PriceMatchInput,
   type PriceMatchRow,
   type ReviewCheckInput,
+  type SpeechInput,
   type TranslateInput,
   type TranslateItem,
   type VehicleDocumentInput,
@@ -25,6 +26,7 @@ import {
   TEST_PART_PHOTOS,
 } from "./test-photos";
 import { testAssistantStep } from "./test-assistant";
+import { speechSampleCode, TEST_SPEECH } from "./test-speech";
 import { testMaintenanceDraft } from "./test-maintenance-plans";
 import { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 
@@ -152,6 +154,9 @@ export class TestAiGateway extends AiGateway {
   readonly documentRequests: { bytes: number; model: string }[] = [];
   /** Every photo of the dashboard or a part received (TASK-058): its size and the model, never the picture. */
   readonly photoRequests: { kind: "dashboard" | "part"; bytes: number; model: string }[] = [];
+  /** Every recording received (TASK-059): its size, its length and the model, never the sound. */
+  readonly speechRequests: { bytes: number; seconds: number; language: string; model: string }[] =
+    [];
   /** Every batch of price list rows received: how many rows and the model (TASK-047). */
   readonly priceMatchRequests: { rows: number; model: string }[] = [];
   /** An answer for one row instead of the closest candidate; `undefined` — the default. */
@@ -351,6 +356,42 @@ export class TestAiGateway extends AiGateway {
       output = (code === null ? undefined : TEST_PART_PHOTOS[code]) ?? TEST_PART_PHOTO_UNREADABLE;
     }
     return this.photoResult(structuredClone(output), model);
+  }
+
+  /**
+   * Hears a synthetic speech sample by its code (`test-speech.ts`); a
+   * recording without one is heard as nothing. Modes: `unreadable` (nothing
+   * is heard), and the failures of every photo — `unavailable`, `slow`, …
+   */
+  async transcribeSpeech(
+    input: SpeechInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    this.speechRequests.push({
+      bytes: input.audio.length,
+      seconds: input.seconds,
+      language: input.language,
+      model,
+    });
+    await this.photoFailures(model, signal);
+    const code = this.mode === "unreadable" ? null : speechSampleCode(input.audio);
+    const text = (code === null ? undefined : TEST_SPEECH[code]) ?? "";
+    // A second of sound is about 32 tokens for a model that hears it; the price is make-believe.
+    const tokensIn = 200 + Math.round(input.seconds * 32);
+    const tokensOut = 20;
+    const costUsd =
+      (tokensIn * PRETEND_PRICE_PER_MILLION.input + tokensOut * PRETEND_PRICE_PER_MILLION.output) /
+      1_000_000;
+    return {
+      output: { text },
+      model,
+      usage: {
+        tokensIn,
+        tokensOut,
+        costUsd: this.mode === "no_cost" ? null : Math.round(costUsd * 1_000_000) / 1_000_000,
+      },
+    };
   }
 
   /**

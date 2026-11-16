@@ -1,0 +1,203 @@
+{
+  "set": "synthetic",
+  "startedAt": "2026-11-16T14:12:50.843Z",
+  "finishedAt": "2026-11-16T14:13:38.543Z",
+  "dataVersion": 1,
+  "samples": 25,
+  "languageHint": "ru",
+  "label": "models-3",
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "google/gemini-3.1-flash-lite",
+      "answeredBy": ["google/gemini-3.1-flash-lite"],
+      "calls": 25,
+      "failures": [],
+      "costUsd": 0.003631,
+      "costIsEstimate": false,
+      "costPerRequestUsd": 0.0001452,
+      "tokensIn": 9631,
+      "tokensOut": 398,
+      "latencyMs": {
+        "min": 1148,
+        "median": 1458,
+        "max": 10902
+      },
+      "score": {
+        "samples": 25,
+        "answered": 25,
+        "werByLang": {
+          "ru": {
+            "errors": 1,
+            "words": 45,
+            "rate": 0.022
+          },
+          "en": {
+            "errors": 1,
+            "words": 16,
+            "rate": 0.063
+          },
+          "none": {
+            "errors": 1,
+            "words": 2,
+            "rate": 0.5
+          }
+        },
+        "articles": {
+          "exact": 5,
+          "total": 5,
+          "share": 1
+        },
+        "silence": {
+          "empty": 1,
+          "total": 2
+        },
+        "passes": true,
+        "misses": [
+          {
+            "id": "ru-pads-atlas-noise",
+            "heard": "колодки на Atlas",
+            "wer": 0.333
+          },
+          {
+            "id": "en-spark-plugs",
+            "heard": "spark plugs for Kolray",
+            "wer": 0.25
+          },
+          {
+            "id": "silence",
+            "heard": "Toyota Camry 70 май фильтрі",
+            "wer": 1
+          }
+        ]
+      },
+      "answers": {
+        "ru-pads-atlas": {
+          "raw": "колодки на Атлас",
+          "text": "колодки на Атлас",
+          "wer": 0
+        },
+        "ru-brake-pads-geely": {
+          "raw": "тормозные колодки для Geely Atlas",
+          "text": "тормозные колодки для Geely Atlas",
+          "wer": 0
+        },
+        "ru-oil-5w30": {
+          "raw": "моторное масло 5W-30",
+          "text": "моторное масло 5W-30",
+          "wer": 0
+        },
+        "ru-oil-change": {
+          "raw": "замена масла",
+          "text": "замена масла",
+          "wer": 0
+        },
+        "ru-cabin-filter": {
+          "raw": "салонный фильтр на Coolray",
+          "text": "салонный фильтр на Coolray",
+          "wer": 0
+        },
+        "ru-spark-plugs": {
+          "raw": "свечи зажигания",
+          "text": "свечи зажигания",
+          "wer": 0
+        },
+        "ru-battery": {
+          "raw": "Аккумулятор 60 ампер",
+          "text": "Аккумулятор 60 ампер",
+          "wer": 0
+        },
+        "ru-winter-tires": {
+          "raw": "зимние шины 215/65 R17",
+          "text": "зимние шины 215/65 R17",
+          "wer": 0
+        },
+        "ru-mileage": {
+          "raw": "пробег 45200 километров",
+          "text": "пробег 45200 километров",
+          "wer": 0
+        },
+        "ru-shock": {
+          "raw": "передний амортизатор",
+          "text": "передний амортизатор",
+          "wer": 0
+        },
+        "ru-antifreeze": {
+          "raw": "антифриз зеленый",
+          "text": "антифриз зеленый",
+          "wer": 0
+        },
+        "ru-wipers": {
+          "raw": "щетки стеклоочистителя",
+          "text": "щетки стеклоочистителя",
+          "wer": 0
+        },
+        "ru-article-geely": {
+          "raw": "044650K090",
+          "text": "044650K090",
+          "wer": 0
+        },
+        "ru-article-rear": {
+          "raw": "4050068800",
+          "text": "4050068800",
+          "wer": 0
+        },
+        "ru-diagnostics": {
+          "raw": "компьютерная диагностика двигателя",
+          "text": "компьютерная диагностика двигателя",
+          "wer": 0
+        },
+        "ru-pads-atlas-noise": {
+          "raw": "колодки на Atlas",
+          "text": "колодки на Atlas",
+          "wer": 0.333
+        },
+        "ru-article-geely-noise": {
+          "raw": "044650K090",
+          "text": "044650K090",
+          "wer": 0
+        },
+        "en-brake-pads": {
+          "raw": "brake pads for Geely Atlas",
+          "text": "brake pads for Geely Atlas",
+          "wer": 0
+        },
+        "en-engine-oil": {
+          "raw": "engine oil 5W-30",
+          "text": "engine oil 5W-30",
+          "wer": 0
+        },
+        "en-air-filter": {
+          "raw": "air filter",
+          "text": "air filter",
+          "wer": 0
+        },
+        "en-spark-plugs": {
+          "raw": "spark plugs for Kolray",
+          "text": "spark plugs for Kolray",
+          "wer": 0.25
+        },
+        "en-article-trw": {
+          "raw": "GDB3534",
+          "text": "GDB3534",
+          "wer": 0
+        },
+        "en-article-man": {
+          "raw": "MAN67527",
+          "text": "MAN67527",
+          "wer": 0
+        },
+        "silence": {
+          "raw": "Toyota Camry 70 май фильтрі",
+          "text": "Toyota Camry 70 май фильтрі",
+          "wer": 1
+        },
+        "car-noise": {
+          "raw": "",
+          "text": "",
+          "wer": 0
+        }
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import { AuditModule } from "./modules/audit";
 import { CatalogModule } from "./modules/catalog";
 import { VehiclesModule } from "./modules/vehicles";
 import { VehicleDocumentModule } from "./modules/vehicle-document";
+import { SpeechModule } from "./modules/speech";
 import { CompatibilityModule } from "./modules/compatibility";
 import { SuppliersModule } from "./modules/suppliers";
 import { OffersModule } from "./modules/offers";
@@ -153,6 +154,8 @@ export class AppModule implements NestModule {
         catalog,
         vehicles,
         VehicleDocumentModule.forRoot({ vehicles }),
+        // Voice input (TASK-059).
+        SpeechModule,
         compatibility,
         suppliers,
         offers,

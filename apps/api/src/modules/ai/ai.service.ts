@@ -16,6 +16,7 @@ import {
   partPhotoOperation,
   priceMatchOperation,
   reviewCheckOperation,
+  speechOperation,
   translateOperation,
   vehicleDocumentOperation,
   type AiFailureKind,
@@ -32,6 +33,8 @@ import {
   type PriceMatchOutput,
   type ReviewCheckInput,
   type ReviewCheckOutput,
+  type SpeechInput,
+  type SpeechOutput,
   type TranslateInput,
   type TranslateOutput,
   type VehicleDocumentInput,
@@ -172,6 +175,11 @@ export class AiService {
   /** The article off a photo of a part (TASK-058); the photo itself is never recorded. */
   readPartPhoto(input: PhotoInput, meta: AiCallMeta): Promise<AiCallResult<PartPhotoOutput>> {
     return this.call(partPhotoOperation, input, meta);
+  }
+
+  /** What was said in a recording (TASK-059); the sound and the text are never recorded. */
+  transcribeSpeech(input: SpeechInput, meta: AiCallMeta): Promise<AiCallResult<SpeechOutput>> {
+    return this.call(speechOperation, input, meta);
   }
 
   /** Rows of a price list matched with their candidates (TASK-047). */

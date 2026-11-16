@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "note": "Format of ai-eval/speech/recordings/recordings.json — live recordings of people (TASK-059). The folder recordings/ is not in git: these are people's voices. Files: WAV, 16-bit PCM, mono, any rate 8–48 kHz, at most 15 s (convert with any audio editor). expected — every acceptable spelling of what a person would type; article — the article that must come out exactly, or null. Run: pnpm --filter api operator ai:eval:speech --set recordings --models <a,b> --confirm-spend <usd>; results go to recordings/results/ (also out of git).",
+  "samples": [
+    {
+      "id": "kk-pads-atlas-car",
+      "lang": "kk",
+      "expected": ["атласқа тежегіш қалыптары", "атласка тежегиш калыптары"],
+      "article": null,
+      "file": "kk-pads-atlas-car.wav",
+      "note": "Kazakh, in a moving car, phone in a holder"
+    },
+    {
+      "id": "mixed-oil-coolray",
+      "lang": "mixed",
+      "expected": ["кулрейге масло 5w30", "coolray масло 5w30"],
+      "article": null,
+      "file": "mixed-oil-coolray.wav",
+      "note": "Kazakh and Russian in one phrase"
+    },
+    {
+      "id": "ru-article-office",
+      "lang": "ru",
+      "expected": ["04465 0k090"],
+      "article": "04465-0K090",
+      "file": "ru-article-office.wav",
+      "note": "Russian, the article spelled out, quiet room"
+    }
+  ]
+}

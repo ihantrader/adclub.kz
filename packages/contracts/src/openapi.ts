@@ -30,6 +30,12 @@ import {
   partPhotoResponseSchema,
 } from "./photo-recognition";
 import {
+  speechInvalidDetailsSchema,
+  speechTooLargeDetailsSchema,
+  speechTranscriptionSchema,
+  speechUnavailableDetailsSchema,
+} from "./speech";
+import {
   vehicleDocumentAttemptsSchema,
   vehicleDocumentResponseSchema,
   vehicleDocumentUnavailableDetailsSchema,
@@ -496,6 +502,11 @@ const componentSchemas: Record<string, z.ZodType> = {
   VehicleDocumentAttempts: vehicleDocumentAttemptsSchema,
   VehicleDocumentResponse: vehicleDocumentResponseSchema,
   VehicleDocumentUnavailableDetails: vehicleDocumentUnavailableDetailsSchema,
+  // Voice input (TASK-059).
+  SpeechTranscription: speechTranscriptionSchema,
+  SpeechInvalidDetails: speechInvalidDetailsSchema,
+  SpeechTooLargeDetails: speechTooLargeDetailsSchema,
+  SpeechUnavailableDetails: speechUnavailableDetailsSchema,
   // The mileage of a car, the dashboard and a part by photo (TASK-058).
   CarMileage: carMileageSchema,
   MileageSource: mileageSourceSchema,

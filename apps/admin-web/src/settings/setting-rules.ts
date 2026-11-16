@@ -56,6 +56,7 @@ const UNITS: Record<SettingUnit, string> = {
   percent: "%",
   hour_of_day: "ч (время Алматы)",
   megabytes: "МБ",
+  kilobytes: "КБ",
   rows: "строк",
   kzt: "₸",
 };

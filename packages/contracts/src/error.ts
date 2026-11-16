@@ -388,6 +388,13 @@ import { clientPlatformSchema } from "./client";
  *   person's fault and no attempt was counted; offer «Выбрать из списка».
  *   `details` is `VehicleDocumentUnavailableDetails`.
  *
+ * Voice input (TASK-059, ARCHITECTURE 4.90):
+ * - `SPEECH_INVALID` (400): the body is not a WAV of 16-bit PCM the
+ *   server reads, by its content; `details` is `SpeechInvalidDetails`.
+ * - `SPEECH_UNAVAILABLE` (503): the provider can't serve it now or the
+ *   day's AI budget is spent — the attempt was given back; «Голосовой
+ *   ввод временно недоступен». `details` is `SpeechUnavailableDetails`.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -545,6 +552,9 @@ export const errorCodeSchema = z.enum([
   // A photographed vehicle registration certificate (TASK-057, D-064).
   "VEHICLE_DOCUMENT_INVALID",
   "VEHICLE_DOCUMENT_UNAVAILABLE",
+  // Voice input (TASK-059, ARCHITECTURE 4.90).
+  "SPEECH_INVALID",
+  "SPEECH_UNAVAILABLE",
   // Price list imports (TASK-046, ARCHITECTURE 4.66).
   "PRICE_IMPORT_FILE_INVALID",
   "PRICE_IMPORT_STATE",

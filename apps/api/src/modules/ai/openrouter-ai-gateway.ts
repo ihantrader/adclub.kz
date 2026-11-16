@@ -9,6 +9,7 @@ import {
   reviewCheckOutputSchema,
   translateOutputSchema,
   vehicleDocumentOutputSchema,
+  speechOutputSchema,
   type AiFailureKind,
   type AiResult,
   type AiUsage,
@@ -18,6 +19,7 @@ import {
   type PhotoInput,
   type PriceMatchInput,
   type ReviewCheckInput,
+  type SpeechInput,
   type TranslateGlossaryEntry,
   type TranslateInput,
   type VehicleDocumentInput,
@@ -217,6 +219,34 @@ const DASHBOARD_FORMAT = {
     name: "dashboard_mileage",
     strict: true,
     schema: strictJsonSchema(dashboardOutputSchema),
+  },
+} as const;
+
+/**
+ * Voice input (TASK-059, ARCHITECTURE 4.90): what a person said into the
+ * search line of a car parts catalog. The language of the app is a hint
+ * only (SCREENS M-CAT-05: «язык не выбирается»): the instruction says the
+ * person may speak Kazakh, Russian, English or mix them.
+ */
+const SPEECH_SYSTEM = `You transcribe a short voice query a person said into the search line of a car parts and services catalog in Kazakhstan.
+
+Rules:
+- Write exactly the words said, in the language and the script they were said in: Kazakh in the Kazakh Cyrillic alphabet, Russian in Cyrillic, English in Latin letters. A query may mix languages; never translate.
+- Write numbers with digits. A part number (article) spelled out letter by letter and digit by digit is written as one code with Latin capital letters and digits, the way it is printed (for example 04465-0K090, GDB3534); viscosity grades and tyre sizes as they are written (5W-30, 215/65 R17).
+- Car makes and models as their makers write them (Geely Atlas, Chery Tiggo).
+- No comments, no quotes, no labels, no descriptions of sounds. If nothing was said (silence, only noise or music), answer with an empty text.`;
+
+const SPEECH_LANGUAGE_NAMES = { kk: "Kazakh", ru: "Russian", en: "English" } as const;
+
+/** A short query: its text is at most a line. */
+const SPEECH_MAX_TOKENS = 1_000;
+
+const SPEECH_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "speech_transcription",
+    strict: true,
+    schema: strictJsonSchema(speechOutputSchema),
   },
 } as const;
 
@@ -498,6 +528,46 @@ export class OpenRouterAiGateway extends AiGateway {
             content: [
               { type: "text", text: "Read this photo." },
               { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      },
+      signal,
+    );
+  }
+
+  /**
+   * A recording (TASK-059): inline as base64 `input_audio` in this one
+   * request — OpenRouter takes no link for sound — routed only to an
+   * endpoint that keeps nothing (D-057, `PRIVATE_ROUTING`);
+   * `require_parameters` keeps it away from an endpoint that hears nothing.
+   */
+  async transcribeSpeech(
+    input: SpeechInput,
+    model: string,
+    signal: AbortSignal,
+  ): Promise<AiResult> {
+    return this.complete(
+      {
+        model,
+        max_tokens: SPEECH_MAX_TOKENS,
+        response_format: SPEECH_FORMAT,
+        messages: [
+          { role: "system", content: SPEECH_SYSTEM },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Transcribe this recording. The app's language is ${SPEECH_LANGUAGE_NAMES[input.language]}, which the person may or may not speak.`,
+              },
+              {
+                type: "input_audio",
+                input_audio: {
+                  data: Buffer.from(input.audio).toString("base64"),
+                  format: input.format,
+                },
+              },
             ],
           },
         ],

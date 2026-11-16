@@ -199,6 +199,14 @@ export const rateLimitNameSchema = z.enum([
   "assistant_daily_dialogs_per_user",
   "assistant_messages_per_account",
   /**
+   * Voice input (TASK-059; SCREENS M-CAT-05): a guest's trial voice
+   * requests per device, for good (`guest_limits.voice_requests`), a
+   * guest's address against a device id made anew, a person's account.
+   */
+  "speech_per_device",
+  "speech_per_ip",
+  "speech_per_account",
+  /**
    * Price list uploads of one company (TASK-046) in a rolling hour —
    * counted in the database by the uploads themselves, not by the guard.
    */

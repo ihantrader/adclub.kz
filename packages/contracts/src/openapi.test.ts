@@ -244,6 +244,7 @@ describe("buildOpenApiDocument", () => {
       "/reviews",
       "/reviews/{reviewId}/score-only",
       "/reviews/{reviewId}/text",
+      "/speech/transcribe",
       "/supplier-leads",
       "/supplier/billing/card-bindings",
       "/supplier/billing/card-bindings/{bindingId}",

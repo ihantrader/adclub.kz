@@ -281,7 +281,7 @@ export const messageTemplates = {
       kk: "Тексеру нәтижесі: қосылды {added}, қабылданбады {rejected}. Толығырақ: {link}",
     },
     sample: pick("added", "rejected", "link"),
-    sentBy: null,
+    sentBy: "suppliers.moderation-digest (ModerationDigest, TASK-071)",
   },
   /** W-07 — a message from an administrator. */
   admin_message: {

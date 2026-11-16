@@ -120,6 +120,86 @@ describe("PostgreSQL: migrations and readiness", () => {
     expect(rows.map((row) => row.name)).toEqual([...EXPECTED_MIGRATIONS]);
   });
 
+  it("marks decisions older than a day as digested, keeps one digest a day, and rolls back (TASK-071)", async () => {
+    const city = (
+      await client.query<{ id: string }>(
+        "INSERT INTO city (code, name_ru) VALUES ('digest-071', 'Город сводки') RETURNING id",
+      )
+    ).rows[0]!.id;
+    const supplierId = (
+      await client.query<{ id: string }>(
+        "INSERT INTO supplier (name, city_id) VALUES ('Сводка', $1) RETURNING id",
+        [city],
+      )
+    ).rows[0]!.id;
+    // Before the migration: an old decision, a fresh one and a request still waiting.
+    await rollBackThrough("1792450000000_moderation-digest");
+    expect(await columnExists(client, "catalog_request", "digested_at")).toBe(false);
+    // The decider and the item are not what this checks: their references are not followed here.
+    await client.query("SET session_replication_role = replica");
+    const someone = "00000000-0000-4000-8000-000000000071";
+    const request = (status: string, decidedAt: string | null) =>
+      client.query<{ id: string }>(
+        `INSERT INTO catalog_request
+           (supplier_id, key_kind, key, payload, status, decided_at, decided_by_admin_id,
+            result_item_id, reject_reason, source)
+         VALUES ($1, 'article', $2, '{}'::jsonb, $3, $4, $5, $6, $7, 'manual') RETURNING id`,
+        [
+          supplierId,
+          `k-${status}-${String(decidedAt)}`,
+          status,
+          decidedAt,
+          decidedAt ? someone : null,
+          status === "approved" ? someone : null,
+          status === "rejected" ? "Нет такой" : null,
+        ],
+      );
+    const old = (await request("approved", "2026-01-01T10:00:00Z")).rows[0]!.id;
+    const fresh = (await request("rejected", new Date().toISOString())).rows[0]!.id;
+    const waiting = (await request("new", null)).rows[0]!.id;
+    await client.query("SET session_replication_role = DEFAULT");
+
+    runMigrate("up", container.getConnectionUri());
+    const digested = async (id: string) =>
+      (
+        await client.query<{ digested_at: Date | null }>(
+          "SELECT digested_at FROM catalog_request WHERE id = $1",
+          [id],
+        )
+      ).rows[0]!.digested_at;
+    // The first digest after the release takes the decisions of the last day only.
+    expect((await digested(old))?.toISOString()).toBe("2026-01-01T10:00:00.000Z");
+    expect(await digested(fresh)).toBeNull();
+    expect(await digested(waiting)).toBeNull();
+    expect(await columnExists(client, "item_compatibility_proposal", "digested_at")).toBe(true);
+    expect(await indexExists(client, "catalog_request_undigested_idx")).toBe(true);
+
+    const digest = (day: string, added: number, rejected: number) =>
+      client.query(
+        "INSERT INTO supplier_moderation_digest (supplier_id, day, added, rejected, recipients) VALUES ($1, $2, $3, $4, 1)",
+        [supplierId, day, added, rejected],
+      );
+    await digest("2026-11-16", 1, 0);
+    // Once a day per company, and never an empty one.
+    await expect(digest("2026-11-16", 0, 1)).rejects.toThrow(/supplier_moderation_digest_day_key/);
+    await expect(digest("2026-11-17", 0, 0)).rejects.toThrow(
+      /supplier_moderation_digest_something/,
+    );
+
+    await rollBackThrough("1792450000000_moderation-digest");
+    expect(await tableExists(client, "supplier_moderation_digest")).toBe(false);
+    expect(await columnExists(client, "catalog_request", "digested_at")).toBe(false);
+    expect(await columnExists(client, "item_compatibility_proposal", "digested_at")).toBe(false);
+    // The requests are as they were.
+    expect(
+      (await client.query("SELECT 1 FROM catalog_request WHERE supplier_id = $1", [supplierId]))
+        .rowCount,
+    ).toBe(3);
+    await client.query("DELETE FROM catalog_request WHERE supplier_id = $1", [supplierId]);
+    await client.query("DELETE FROM supplier WHERE id = $1", [supplierId]);
+    await client.query("DELETE FROM city WHERE id = $1", [city]);
+  });
+
   it("keeps one view per offer, day and viewer, the daily totals by kind, and rolls back (TASK-070)", async () => {
     const owner = (
       await client.query<{ id: string }>(

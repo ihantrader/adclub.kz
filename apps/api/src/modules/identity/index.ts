@@ -72,4 +72,6 @@ export type { SupplierSessionRow } from "./session/session.store";
 export { ipHint } from "./session/ip-hint";
 export { sessionPage } from "./session/session-page";
 export { SupplierMemberRemover } from "./supplier/supplier-member-remover";
+export { companyRecipients } from "./supplier/company-recipients";
+export type { CompanyRecipient } from "./supplier/company-recipients";
 export type { RemovedMember } from "./supplier/supplier-member-remover";

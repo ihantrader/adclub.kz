@@ -50,14 +50,31 @@ function facts() {
   return { answered, expiredUnanswered, takenOn, closedByAdmin, supplyOverdue, kept, missed };
 }
 
+/**
+ * Which orders: the rating's window — the last `n` days of the database's
+ * clock; or a period of days of Almaty, both ends included (the supplier's
+ * statistics, TASK-071 — the orders placed on those days).
+ */
+export type RatingWindow = number | { from: string; to: string };
+
 function since(windowDays: number): SQL {
   return sql`now() - make_interval(days => ${windowDays})`;
 }
 
-function ordersOf(supplierIds: readonly string[], windowDays: number): SQL | undefined {
+/** A moment is in the window. */
+function inWindow(at: SQL | typeof customerOrder.createdAt, window: RatingWindow): SQL {
+  if (typeof window === "number") {
+    return sql`${at} >= ${since(window)}`;
+  }
+  return sql`((${at} AT TIME ZONE 'Asia/Almaty')::date) BETWEEN ${window.from}::date AND ${window.to}::date`;
+}
+
+function ordersOf(supplierIds: readonly string[], window: RatingWindow): SQL | undefined {
   return and(
     inArray(customerOrder.supplierId, [...supplierIds]),
-    gte(customerOrder.createdAt, since(windowDays)),
+    typeof window === "number"
+      ? gte(customerOrder.createdAt, since(window))
+      : inWindow(customerOrder.createdAt, window),
   );
 }
 
@@ -65,7 +82,7 @@ function ordersOf(supplierIds: readonly string[], windowDays: number): SQL | und
 export async function ratingOrderFacts(
   executor: DbExecutor,
   supplierIds: readonly string[],
-  windowDays: number,
+  window: RatingWindow,
 ): Promise<(RatingOrderFacts & { id: string; supplierId: string })[]> {
   if (supplierIds.length === 0) {
     return [];
@@ -86,7 +103,7 @@ export async function ratingOrderFacts(
       supplyOverdue: fact.supplyOverdue,
     })
     .from(customerOrder)
-    .where(ordersOf(supplierIds, windowDays));
+    .where(ordersOf(supplierIds, window));
   return rows.map((row) => ({
     ...row,
     kind: row.kind as OrderKind,
@@ -116,7 +133,7 @@ interface ReviewRow extends Record<string, unknown> {
 export async function ratingInputs(
   executor: DbExecutor,
   supplierIds: readonly string[],
-  windowDays: number,
+  window: RatingWindow,
 ): Promise<Map<string, RatingInputs>> {
   const inputs = new Map<string, RatingInputs>();
   for (const id of supplierIds) {
@@ -142,7 +159,7 @@ export async function ratingInputs(
       judged: sql<number>`count(*) FILTER (WHERE ${fact.kept} OR ${fact.missed})::int`,
     })
     .from(customerOrder)
-    .where(and(ordersOf(supplierIds, windowDays), inSupplierStatistics()))
+    .where(and(ordersOf(supplierIds, window), inSupplierStatistics()))
     .groupBy(customerOrder.supplierId);
   for (const row of counted as CountRow[]) {
     const entry = inputs.get(row.supplier_id)!;
@@ -158,7 +175,7 @@ export async function ratingInputs(
     FROM review
     JOIN ${customerOrder} ON customer_order.id = review.order_id
     WHERE review.status = 'published'
-      AND review.published_at >= ${since(windowDays)}
+      AND ${inWindow(sql`review.published_at`, window)}
       AND ${inSupplierStatistics()}
       AND ${inArray(sql`review.supplier_id`, [...supplierIds])}
     GROUP BY review.supplier_id

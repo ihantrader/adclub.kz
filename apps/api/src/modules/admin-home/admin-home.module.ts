@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { AdminHomeController } from "./admin-home.controller";
 import { AdminHomeService } from "./admin-home.service";
+import { ModerationModule } from "../moderation";
 
 /** The one instance of each module of the process the counters ask (their very rules). */
 export interface AdminHomeModuleOptions {
@@ -40,6 +41,8 @@ export class AdminHomeModule {
         options.billing,
         options.maintenance,
         options.assistant,
+        // The moderation queue (TASK-071): one count for the card and the list.
+        ModerationModule,
       ],
       controllers: [AdminHomeController],
       providers: [AdminHomeService],

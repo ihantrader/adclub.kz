@@ -35,6 +35,8 @@ import { PriceImportsModule } from "./modules/price-imports";
 import { ReviewsModule } from "./modules/reviews";
 import { RatingsModule } from "./modules/ratings";
 import { OfferViewsModule } from "./modules/offer-views";
+import { ModerationModule } from "./modules/moderation";
+import { SupplierStatsModule } from "./modules/supplier-stats";
 import { SettingsModule, type SettingsCacheOptions } from "./modules/settings";
 import { JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog } from "./background-jobs";
@@ -169,6 +171,9 @@ export class AppModule implements NestModule {
         RatingsModule.forRoot({ http: true, signals, suppliers }),
         // Views of offers (TASK-070): the admin's «Просмотры и заявки».
         OfferViewsModule.forRoot({ signals }),
+        // Moderation in one place and the statistics of a supplier (TASK-071).
+        ModerationModule,
+        SupplierStatsModule,
         billing,
         AdminHomeModule.forRoot({
           catalog,

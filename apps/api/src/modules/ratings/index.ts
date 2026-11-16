@@ -3,6 +3,7 @@ export type { RatingsModuleOptions } from "./ratings.module";
 export { publicRatingFor, publicRatingOf, SupplierRatings } from "./supplier-ratings.service";
 export type { PublicRating } from "./supplier-ratings.service";
 export { ratingInputs, ratingOrderFacts } from "./rating-facts";
+export type { RatingWindow } from "./rating-facts";
 export {
   ratingChanged,
   ratingJobCatalog,

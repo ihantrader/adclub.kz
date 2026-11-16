@@ -49,6 +49,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "ratings.recompute-supplier",
   "ratings.reconcile",
   "offers.views-signal",
+  "suppliers.moderation-digest",
   "billing.apply-events",
   "billing.wake-events",
   "billing.expire-subscriptions",
@@ -136,6 +137,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "reviews.expire-checks", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The nightly check of the search index against the database (TASK-045).
   { name: "search.reconcile", cron: "20 4 * * *", timezone: "Asia/Almaty" },
+  // The daily digest of moderation W-06, at `moderation_digest_hour` (TASK-071).
+  { name: "suppliers.moderation-digest", cron: "0 18 * * *", timezone: "Asia/Almaty" },
   // Imports of the vehicle catalog stuck longer than allowed (TASK-014).
   { name: "vehicles.expire-imports", cron: "* * * * *", timezone: "Asia/Almaty" },
 ];

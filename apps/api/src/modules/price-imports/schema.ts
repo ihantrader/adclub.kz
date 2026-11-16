@@ -261,6 +261,8 @@ export const catalogRequest = pgTable("catalog_request", {
   createdByMemberId: uuid("created_by_member_id"),
   decidedByAdminId: uuid("decided_by_admin_id"),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
+  // TASK-071: taken by the moderation digest W-06 (`ModerationDigest`).
+  digestedAt: timestamp("digested_at", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   // TASK-048: a request by hand (S-OFF-05).
   source: text("source").$type<CatalogRequestSource>().notNull().default("price_import"),

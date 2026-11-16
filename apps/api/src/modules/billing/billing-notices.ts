@@ -1,9 +1,8 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { and, asc, eq } from "drizzle-orm";
 import { bankRetriesLeft, BILLING_TIME_ZONE, nextBankRetry } from "@adclub/domain";
 import { APP_CONFIG, type AppConfig } from "../../config";
 import type { DbExecutor } from "../../database";
-import { account, supplierMember } from "../identity";
+import { companyRecipients, type CompanyRecipient } from "../identity";
 import { Messaging } from "../messaging";
 import { AppSettings } from "../settings";
 
@@ -24,14 +23,7 @@ export const PAYMENT_TERM_SUBJECT = "payment_term";
 
 type NoticeLang = "kk" | "ru";
 
-export interface BillingRecipient {
-  memberId: string;
-  phone: string;
-  lang: NoticeLang;
-}
-
-/** How many employees hear of a payment when nobody is the contact person and nobody takes notices. */
-const FALLBACK_RECIPIENTS = 3;
+export type BillingRecipient = CompanyRecipient;
 
 const LOCALES: Record<NoticeLang, string> = { ru: "ru-RU", kk: "kk-KZ" };
 
@@ -95,35 +87,13 @@ export class BillingNotices {
     return { retryDays, hour, notifiedLimit };
   }
 
+  /** The company's recipients of a service message — the one rule `companyRecipients` (W-06 takes it too). */
   async recipients(
     executor: DbExecutor,
     supplierId: string,
     notifiedLimit: number,
   ): Promise<BillingRecipient[]> {
-    const rows = await executor
-      .select({
-        memberId: supplierMember.id,
-        phone: account.phone,
-        lang: supplierMember.notificationLanguage,
-        contact: supplierMember.isContactPerson,
-        enabledAt: supplierMember.notificationsEnabledAt,
-      })
-      .from(supplierMember)
-      .innerJoin(account, eq(account.id, supplierMember.accountId))
-      .where(and(eq(supplierMember.supplierId, supplierId), eq(supplierMember.status, "active")))
-      .orderBy(asc(supplierMember.createdAt), asc(supplierMember.id));
-    const contacts = rows.filter((row) => row.contact);
-    let chosen = contacts;
-    if (chosen.length === 0) {
-      chosen = rows
-        .filter((row) => row.enabledAt !== null)
-        .sort((a, b) => a.enabledAt!.getTime() - b.enabledAt!.getTime())
-        .slice(0, notifiedLimit);
-    }
-    if (chosen.length === 0) {
-      chosen = rows.slice(0, FALLBACK_RECIPIENTS);
-    }
-    return chosen.map((row) => ({ memberId: row.memberId, phone: row.phone, lang: row.lang }));
+    return companyRecipients(executor, supplierId, notifiedLimit);
   }
 
   /**

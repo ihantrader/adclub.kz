@@ -185,6 +185,7 @@ describe("ormTables", () => {
         "maintenance_reminder",
         "offer_view_event",
         "offer_view_daily",
+        "supplier_moderation_digest",
       ]),
     );
     expect(described.find((column) => column.column === "expires_at")?.type).toBe(

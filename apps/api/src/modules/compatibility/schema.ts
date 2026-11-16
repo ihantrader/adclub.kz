@@ -67,6 +67,8 @@ export const itemCompatibilityProposal = pgTable("item_compatibility_proposal", 
   reviewedByAdminId: uuid("reviewed_by_admin_id"),
   reviewedByAccountId: uuid("reviewed_by_account_id"),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  // TASK-071: taken by the moderation digest W-06 (`ModerationDigest`).
+  digestedAt: timestamp("digested_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

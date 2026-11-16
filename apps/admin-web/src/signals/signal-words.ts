@@ -230,6 +230,18 @@ export function subjectLink(
     case "order":
       return orderPath(signal.subjectId);
     case "supplier":
+      // TASK-070 acceptance: the views tab opens on the signal's own window, so
+      // its figures are the ones the signal names.
+      if (
+        signal.kind === "views_orders_gap" &&
+        signal.payload?.periodFrom &&
+        signal.payload.periodTo
+      ) {
+        return `${supplierPath(signal.subjectId, "views")}&${new URLSearchParams({
+          from: signal.payload.periodFrom,
+          to: signal.payload.periodTo,
+        }).toString()}`;
+      }
       return supplierPath(
         signal.subjectId,
         signal.kind === "frequent_admin_closes"

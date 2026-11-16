@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conversionCell, shortDay, viewPeriodRange } from "./views-words";
+import { conversionCell, shortDay, viewPeriodRange, viewRangeOf } from "./views-words";
 
 describe("«Просмотры и заявки» of a supplier (TASK-070)", () => {
   it("takes the period from the address: 7, 30 or 90 days up to today", () => {
@@ -16,6 +16,28 @@ describe("«Просмотры и заявки» of a supplier (TASK-070)", () =
     // Left out or unknown — 30.
     expect(viewPeriodRange(null, "2026-11-15").from).toBe("2026-10-17");
     expect(viewPeriodRange("365", "2026-11-15").days).toBe(30);
+  });
+
+  it("opens on the signal's window when its link brings one, otherwise on the period", () => {
+    const today = "2026-11-16";
+    expect(viewRangeOf({ period: null, from: "2026-10-16", to: "2026-11-14" }, today)).toEqual({
+      days: null,
+      from: "2026-10-16",
+      to: "2026-11-14",
+    });
+    // Broken, reversed or future windows fall back to `?period=`.
+    for (const [from, to] of [
+      ["2026-11-14", "2026-10-16"],
+      ["2026-10-16", "2026-11-17"],
+      ["16.10.2026", "2026-11-14"],
+      ["2026-10-16", null],
+    ] as const) {
+      expect(viewRangeOf({ period: "7", from, to }, today)).toEqual({
+        days: 7,
+        from: "2026-11-10",
+        to: today,
+      });
+    }
   });
 
   it("writes a day short and a conversion as per cent, a dash without views", () => {

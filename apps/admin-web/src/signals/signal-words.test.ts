@@ -70,6 +70,18 @@ describe("the words of signals", () => {
     expect(
       subjectLink({ subjectType: "supplier", subjectId: id, kind: "frequent_admin_closes" }),
     ).toBe(`/suppliers/${id}?tab=orders`);
+    // TASK-070: «Просмотры и заявки» on the signal's own window.
+    expect(
+      subjectLink({
+        subjectType: "supplier",
+        subjectId: id,
+        kind: "views_orders_gap",
+        payload: { periodFrom: "2026-10-16", periodTo: "2026-11-14" },
+      }),
+    ).toBe(`/suppliers/${id}?tab=views&from=2026-10-16&to=2026-11-14`);
+    expect(subjectLink({ subjectType: "supplier", subjectId: id, kind: "views_orders_gap" })).toBe(
+      `/suppliers/${id}?tab=views`,
+    );
     expect(
       subjectLink({
         subjectType: "channel",

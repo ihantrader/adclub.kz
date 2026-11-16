@@ -30,6 +30,26 @@ export function viewPeriodRange(
   return { days, from, to: today };
 }
 
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The range of the tab: the signal's own window when its link brought
+ * `?from=&to=` (days of Almaty, not after today), otherwise `?period=`.
+ * `days: null` — the signal's window. Without it the card showed the last 30
+ * days to today, and the signal's «1 заявка на 95 просмотров» (30 days to
+ * yesterday) did not match what the link opened.
+ */
+export function viewRangeOf(
+  query: { period: string | null; from: string | null; to: string | null },
+  today = almatyToday(),
+): { days: ViewPeriod | null; from: string; to: string } {
+  const { from, to } = query;
+  if (from && to && DAY_RE.test(from) && DAY_RE.test(to) && from <= to && to <= today) {
+    return { days: null, from, to };
+  }
+  return viewPeriodRange(query.period, today);
+}
+
 /** «14.11» of `2026-11-14`. */
 export function shortDay(day: string): string {
   const [, month, date] = day.split("-");

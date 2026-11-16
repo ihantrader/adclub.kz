@@ -8,7 +8,7 @@ import { routePaths, withQuery } from "../router";
 import { useLoad } from "../use-load";
 import { LoadError } from "../vehicles/shared";
 import { useAddressFilters } from "./shared";
-import { conversionCell, shortDay, VIEW_PERIODS, viewPeriodRange } from "./views-words";
+import { conversionCell, shortDay, VIEW_PERIODS, viewRangeOf } from "./views-words";
 
 const number = (value: number) => value.toLocaleString("ru-RU");
 
@@ -42,7 +42,11 @@ function Figure({ label, value, note }: { label: string; value: ReactNode; note:
  */
 export function SupplierViews({ supplierId }: { supplierId: string }) {
   const { query, set } = useAddressFilters();
-  const range = viewPeriodRange(query.get("period"));
+  const range = viewRangeOf({
+    period: query.get("period"),
+    from: query.get("from"),
+    to: query.get("to"),
+  });
   const loaded = useLoad<AdminSupplierViewsResponse>(
     () =>
       apiClient.getAdminSupplierViews(
@@ -64,14 +68,28 @@ export function SupplierViews({ supplierId }: { supplierId: string }) {
         </div>
         <StatusChips<string>
           label="Период"
-          value={String(range.days)}
+          value={range.days === null ? "signal" : String(range.days)}
           allLabel={null}
-          chips={VIEW_PERIODS.map((days) => ({
-            value: String(days),
-            label: `${String(days)} дней`,
-            count: null,
-          }))}
-          onChange={(next) => set({ period: next === "30" ? undefined : next })}
+          chips={[
+            ...VIEW_PERIODS.map((days) => ({
+              value: String(days),
+              label: `${String(days)} дней`,
+              count: null,
+            })),
+            ...(range.days === null
+              ? [
+                  {
+                    value: "signal",
+                    label: `${shortDay(range.from)}–${shortDay(range.to)}, как в сигнале`,
+                    count: null,
+                  },
+                ]
+              : []),
+          ]}
+          onChange={(next) => {
+            if (next === "signal") return;
+            set({ period: next === "30" ? undefined : next, from: undefined, to: undefined });
+          }}
         />
         <LoadError error={loaded.error} retry={loaded.reload} />
         <LoadingContent

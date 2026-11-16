@@ -139,6 +139,15 @@ try {
       manifest.includes("android.permission.CAMERA"),
       "AndroidManifest.xml lacks the camera permission",
     );
+    // Voice input (TASK-059): the microphone, and no plugin blocks it.
+    expect(
+      /<uses-permission android:name="android.permission.RECORD_AUDIO"\s*\/>/.test(manifest),
+      "AndroidManifest.xml lacks the microphone permission (RECORD_AUDIO)",
+    );
+    expect(
+      !/android.permission.RECORD_AUDIO"\s+tools:node="remove"/.test(manifest),
+      "AndroidManifest.xml removes the microphone permission (a plugin blocks RECORD_AUDIO)",
+    );
     const gradle = readFileSync(join(app, "android", "app", "build.gradle"), "utf8");
     expect(
       gradle.includes('applicationId "kz.adclub.app"') ||
@@ -159,6 +168,10 @@ try {
       "Info.plist lacks UIBackgroundModes remote-notification",
     );
     expect(plist.includes("NSCameraUsageDescription"), "Info.plist lacks NSCameraUsageDescription");
+    expect(
+      plist.includes("NSMicrophoneUsageDescription"),
+      "Info.plist lacks NSMicrophoneUsageDescription (voice input)",
+    );
     expect(plist.includes("whatsapp"), "Info.plist lacks LSApplicationQueriesSchemes");
     const expoPlist = join(app, "ios", "AsiaDriveClub", "Supporting", "Expo.plist");
     expect(

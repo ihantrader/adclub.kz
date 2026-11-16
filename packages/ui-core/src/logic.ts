@@ -218,6 +218,8 @@ export type IconName =
   | "calendarX"
   | "camera"
   | "cameraSlash"
+  // Voice input (M-CAT-05, TASK-059).
+  | "microphone"
   | "car"
   | "category"
   | "chart"

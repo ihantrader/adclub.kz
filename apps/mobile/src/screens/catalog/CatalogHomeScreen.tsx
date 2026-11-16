@@ -42,6 +42,8 @@ export interface CatalogHomeScreenProps {
   onOpenSearch: () => void;
   /** The camera of the line: a part by a photo of its article (M-CAT-06, TASK-058). */
   onOpenPartPhoto: () => void;
+  /** The microphone in the line (M-CAT-05, TASK-059): the search with the voice sheet open. */
+  onOpenVoice: () => void;
   /** The entry of the assistant (M-CAT-01, TASK-063): one row with the character. */
   onAskAssistant: () => void;
   /** «Подобрать» of M-REM-01 (TASK-069): the subcategory with the rule's filters. */
@@ -68,6 +70,7 @@ export function CatalogHomeScreen({
   onCompleteEngine,
   onOpenSearch,
   onOpenPartPhoto,
+  onOpenVoice,
   onAskAssistant,
   onPickReminder,
   onMileagePhoto,
@@ -126,7 +129,16 @@ export function CatalogHomeScreen({
               onPress={onOpenSearch}
               disabled={!online}
               disabledHint={t("search.needsNetwork")}
-              action={{ icon: "camera", label: t("partPhoto.open"), onPress: onOpenPartPhoto }}
+              action={[
+                // Without a network the sheet says «Нужна сеть» itself.
+                {
+                  icon: "microphone",
+                  label: t("voice.open"),
+                  onPress: onOpenVoice,
+                  disabled: false,
+                },
+                { icon: "camera", label: t("partPhoto.open"), onPress: onOpenPartPhoto },
+              ]}
             />
           </View>
         </>

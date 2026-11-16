@@ -43,8 +43,10 @@ export type CatalogStackParams = {
    * M-CAT-04: the search (TASK-044), for the car and the city of the header.
    * `photo` — the article a photo gave (M-CAT-06, TASK-058): put into the
    * line marked «распознан» and searched at once.
+   * `voice` — the microphone of the main screen (M-CAT-05, TASK-059): the
+   * voice sheet opens over the search at once.
    */
-  "catalog-search": { photo?: PartPhotoFound; typeArticle?: number } | undefined;
+  "catalog-search": { photo?: PartPhotoFound; typeArticle?: number; voice?: number } | undefined;
   /** M-CAT-06 (TASK-058): the camera for the article of a part. */
   "catalog-part-photo": undefined;
   /**

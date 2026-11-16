@@ -57,7 +57,7 @@
         "expo-camera",
         {
           "cameraPermission": "The camera photographs your vehicle registration certificate to add the car. The photo is not kept.",
-          "microphonePermission": false,
+          "microphonePermission": "The microphone hears what you say to search the catalog by voice. The recording is used only to recognise your words and is not kept.",
           "recordAudioAndroid": false
         }
       ],
@@ -66,7 +66,16 @@
         {
           "photosPermission": "A photo of your vehicle registration certificate is read to add the car. The photo is not kept.",
           "cameraPermission": "The camera photographs your vehicle registration certificate to add the car. The photo is not kept.",
-          "microphonePermission": false
+          "microphonePermission": "The microphone hears what you say to search the catalog by voice. The recording is used only to recognise your words and is not kept."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "The microphone hears what you say to search the catalog by voice. The recording is used only to recognise your words and is not kept.",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
         }
       ],
       "./plugins/with-whatsapp-queries.js",

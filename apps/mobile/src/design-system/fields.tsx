@@ -189,13 +189,16 @@ export interface SearchFieldProps extends Omit<TextInputProps, "value" | "onChan
   value: string;
   onChangeText: (value: string) => void;
   clearLabel: string;
-  /** A button at the right edge (M-CAT-06: the camera, TASK-058) — after «clear». */
-  action?: SearchFieldAction;
+  /**
+   * Buttons at the right edge, after «clear»: the microphone (M-CAT-05,
+   * TASK-059) and the camera (M-CAT-06, TASK-058), in the order given.
+   */
+  action?: SearchFieldAction | readonly SearchFieldAction[];
 }
 
 /** An icon button inside a search field: what it does is said to a screen reader. */
 export interface SearchFieldAction {
-  icon: "camera";
+  icon: "camera" | "microphone";
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -274,9 +277,18 @@ export function SearchField({
           <Icon name="x" size={20} color="textMuted" />
         </Pressable>
       )}
-      {action && <FieldAction action={action} />}
+      {actionsOf(action).map((one) => (
+        <FieldAction key={one.icon} action={one} />
+      ))}
     </View>
   );
+}
+
+function actionsOf(
+  action: SearchFieldAction | readonly SearchFieldAction[] | undefined,
+): readonly SearchFieldAction[] {
+  if (!action) return [];
+  return "icon" in action ? [action] : action;
 }
 
 export interface SearchEntryProps {
@@ -287,8 +299,8 @@ export interface SearchEntryProps {
   /** Without a network the search cannot work: the entry says so instead of opening (TASK-078). */
   disabled?: boolean;
   disabledHint?: string;
-  /** A button at the right edge, apart from opening the search (M-CAT-06: the camera). */
-  action?: SearchFieldAction;
+  /** Buttons at the right edge, apart from opening the search (M-CAT-05 the microphone, M-CAT-06 the camera). */
+  action?: SearchFieldAction | readonly SearchFieldAction[];
 }
 
 /**
@@ -344,7 +356,8 @@ export function SearchEntry({
       )}
     </Pressable>
   );
-  if (!action) return entry;
+  const actions = actionsOf(action);
+  if (actions.length === 0) return entry;
   // The button sits inside the frame but is a control of its own: a
   // pressable inside the entry would be hidden from a screen reader.
   return (
@@ -359,7 +372,9 @@ export function SearchEntry({
           },
         ]}
       >
-        <FieldAction action={{ ...action, disabled: action.disabled ?? disabled }} />
+        {actions.map((one) => (
+          <FieldAction key={one.icon} action={{ ...one, disabled: one.disabled ?? disabled }} />
+        ))}
       </View>
     </View>
   );
@@ -548,6 +563,9 @@ const styles = StyleSheet.create({
   // focus (DESIGN 7.7, TASK-078 M3). React Native's types know no `none`.
   input: {
     flex: 1,
+    // A browser gives an input a width of its own: without this the buttons
+    // after it (the microphone and the camera, TASK-059) leave the frame.
+    minWidth: 0,
     minHeight: 44,
     paddingVertical: 10,
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as unknown as TextStyle) : null),
@@ -568,7 +586,8 @@ const styles = StyleSheet.create({
   },
   entryAction: {
     minHeight: size.field,
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: line.width,
     borderLeftWidth: 0,
     borderTopRightRadius: radius.s,

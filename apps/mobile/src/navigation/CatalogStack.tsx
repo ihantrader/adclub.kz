@@ -130,6 +130,7 @@ function CatalogHome({ navigation }: NativeStackScreenProps<CatalogStackParams, 
       onCompleteEngine={completeEngine}
       onOpenSearch={() => navigation.navigate("catalog-search")}
       onOpenPartPhoto={() => navigation.navigate("catalog-part-photo")}
+      onOpenVoice={() => navigation.navigate("catalog-search", { voice: Date.now() })}
       onAskAssistant={() => askAssistant()}
       onPickReminder={(reminder) => {
         // «Подобрать» (M-REM-01): the answer of the plan for the rule — its subcategory and filters.
@@ -201,6 +202,7 @@ function CatalogSearch({
       {...(route.params?.typeArticle !== undefined
         ? { typeArticle: route.params.typeArticle }
         : {})}
+      {...(route.params?.voice !== undefined ? { voice: route.params.voice } : {})}
       onPhoto={() => navigation.navigate("catalog-part-photo")}
       onBack={navigation.goBack}
       onOpenItem={(item) =>

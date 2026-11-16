@@ -23,6 +23,8 @@ export const ui = {
   camera: "camera",
   // The scanner without a camera (S-SCAN-01, TASK-033).
   cameraSlash: "camera-slash",
+  // Voice input in the search line (M-CAT-05, TASK-059).
+  microphone: "microphone",
   // The car of the garage, «нет автомобиля», the catalog header and the car
   // sheet: the front view reads at 20 and in the tab bar at 24 alike.
   car: "car",

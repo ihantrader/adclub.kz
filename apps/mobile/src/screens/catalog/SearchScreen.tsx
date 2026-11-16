@@ -20,6 +20,7 @@ import {
   useDelayedIndicator,
   useTheme,
 } from "../../design-system";
+import type { AssistantLimitSheet } from "../../assistant/assistant-rules";
 import { useCatalogCar } from "../../catalog/catalog-car-provider";
 import { categoryIconOf } from "../../catalog/category-icon";
 import {
@@ -43,11 +44,15 @@ import { useCity } from "../../state/city-provider";
 import { useGarage } from "../../state/garage-provider";
 import { useLanguage } from "../../state/language";
 import { recentSearchesStore } from "../../state/stores";
+import { useSignIn } from "../../navigation/use-sign-in";
+import { stillRecognizedText } from "../../speech/voice-input";
+import { AssistantLimitSheetView } from "../assistant/AssistantSheets";
 import { CitySheet } from "../CitySheet";
 import { CarSheet } from "./CarSheet";
 import { CatalogHeader } from "./CatalogHeader";
 import { FiltersSheet } from "./FiltersSheet";
 import { ItemRow } from "./parts";
+import { VoiceSheet } from "./VoiceSheet";
 
 /** How long typing has to pause before the suggestions are asked for (M-CAT-04). */
 const SUGGEST_AFTER_MS = 300;
@@ -57,6 +62,8 @@ export interface SearchScreenProps {
   photo?: PartPhotoFound;
   /** «Ввести артикул» after a photo that gave none: the line, empty and focused. */
   typeArticle?: number;
+  /** The microphone of the catalog's main screen (M-CAT-05, TASK-059): the voice sheet opens at once (a new stamp). */
+  voice?: number;
   /** The camera in the line (M-CAT-06). */
   onPhoto: () => void;
   onBack: () => void;
@@ -96,6 +103,7 @@ export interface SearchScreenProps {
  * - Offline: «Нужна сеть» — the search is the server's.
  */
 export function SearchScreen({
+  voice,
   photo,
   typeArticle,
   onPhoto,
@@ -123,6 +131,17 @@ export function SearchScreen({
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
   // What the last photo gave (TASK-058): the article, the other ones, the analogs.
   const [recognized, setRecognized] = useState<PartPhotoFound | null>(null);
+  // What the voice gave (TASK-059): «распознано» while the line holds it.
+  const [heard, setHeard] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const [limit, setLimit] = useState<AssistantLimitSheet | null>(null);
+  const signIn = useSignIn();
+  // The microphone of the main screen: a new stamp opens the voice sheet here.
+  const [seenVoice, setSeenVoice] = useState<number | undefined>(undefined);
+  if (voice !== undefined && voice !== seenVoice) {
+    setSeenVoice(voice);
+    setListening(true);
+  }
 
   // A new photo: its article goes into the line and is searched at once.
   // «Ввести артикул» (a new stamp): the line empty and focused — the field is
@@ -147,6 +166,7 @@ export function SearchScreen({
       setSubmitted(null);
       setFieldKey((key) => key + 1);
     } else if (newPhoto) {
+      setHeard(null);
       const tidy = tidyQuery(photo.article);
       setRecognized(photo);
       setText(tidy);
@@ -162,6 +182,7 @@ export function SearchScreen({
   const typed = tidyQuery(text);
   // «распознан» until the person edits the line (SCREENS 9.3).
   const fromPhoto = recognized !== null && stillRecognizedArticle(text, recognized.article);
+  const fromVoice = heard !== null && stillRecognizedText(text, heard);
   // The search that was run, while the query is still the one it was run for:
   // editing the query goes back to the suggestions.
   const submitted = ran !== null && ran === typed ? ran : null;
@@ -230,17 +251,29 @@ export function SearchScreen({
           value={text}
           onChangeText={setText}
           clearLabel={t("search.clearField")}
-          autoFocus={recognized === null}
+          autoFocus={recognized === null && heard === null && !listening}
           autoCorrect={false}
           autoCapitalize="none"
           onSubmitEditing={() => run(text)}
-          action={{
-            icon: "camera",
-            label: t("partPhoto.open"),
-            onPress: onPhoto,
-            disabled: !online,
-          }}
+          action={[
+            {
+              icon: "microphone",
+              label: t("voice.open"),
+              onPress: () => setListening(true),
+              // Twice is once: the sheet is already open.
+              disabled: listening,
+            },
+            { icon: "camera", label: t("partPhoto.open"), onPress: onPhoto, disabled: !online },
+          ]}
         />
+        {fromVoice && (
+          <View style={styles.recognizedLine} testID="voice-recognized">
+            <AiBadge>{t("search.recognizedText")}</AiBadge>
+            <Text variant="caption" color="textMuted" style={styles.recognizedText}>
+              {t("search.recognizedVoice")}
+            </Text>
+          </View>
+        )}
         {fromPhoto && recognized && (
           <View style={styles.recognized}>
             <View style={styles.recognizedLine}>
@@ -319,6 +352,27 @@ export function SearchScreen({
         onAddCar={onAddCar}
       />
       <CitySheet visible={sheet === "city"} onClose={() => setSheet(null)} services />
+      <VoiceSheet
+        visible={listening}
+        onClose={() => setListening(false)}
+        onText={(said) => {
+          // What was heard is a query typed: into the line and searched at once.
+          setRecognized(null);
+          setHeard(tidyQuery(said));
+          run(said);
+        }}
+        onType={() => {
+          setHeard(null);
+          setFieldKey((key) => key + 1);
+        }}
+        onLimit={setLimit}
+      />
+      <AssistantLimitSheetView
+        sheet={limit}
+        onClose={() => setLimit(null)}
+        onSignIn={signIn.start}
+        onCatalog={onBack}
+      />
       <FiltersSheet
         visible={sheet === "filters"}
         onClose={() => setSheet(null)}

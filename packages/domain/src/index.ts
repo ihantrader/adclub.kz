@@ -212,11 +212,36 @@ export {
   ratingOrderActions,
   ratingOrderOutcome,
   ratingPercent,
+  ratingShares,
   roundRating,
   shareOnScale,
   supplierRating,
   tallyRatingOrders,
 } from "./supplier/supplier-rating";
+export {
+  shiftCalendarDay,
+  statsPeriodRange,
+  supplierPeriodStats,
+  supplierStatsPeriods,
+} from "./supplier/supplier-stats";
+export type {
+  SupplierPeriodOrders,
+  SupplierPeriodShares,
+  SupplierPeriodStats,
+} from "./supplier/supplier-stats";
+export {
+  inNextDigest,
+  MODERATION_DIGEST_FIRST_LOOKBACK_HOURS,
+  moderationDecisionOutcome,
+  moderationDigestCounts,
+  moderationDigestDue,
+  moderationDigestKey,
+} from "./supplier/moderation-digest";
+export type {
+  ModerationDecision,
+  ModerationDecisionKind,
+  ModerationDigestCounts,
+} from "./supplier/moderation-digest";
 export type {
   RatingAnswer,
   RatingInputs,

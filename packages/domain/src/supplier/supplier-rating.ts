@@ -213,13 +213,27 @@ function roundTo(value: number, digits: number): number {
  * scores than `minReviews` — no rating, «Новый поставщик», whatever the
  * shares (they are still counted and kept).
  */
+/**
+ * The two shares of a tally of orders: the answers and the terms kept;
+ * fewer than `minOrders` behind a share — `null` («Мало заявок для
+ * оценки»). The rating and the supplier's statistics (S-STAT-01, TASK-071)
+ * both take it, so a share means one thing everywhere.
+ */
+export function ratingShares(
+  tally: RatingOrderTally,
+  minOrders: number,
+): { responseRate: number | null; onTimeRate: number | null } {
+  const least = Math.max(1, minOrders);
+  return {
+    responseRate: tally.answerRequired >= least ? tally.answered / tally.answerRequired : null,
+    onTimeRate: tally.judged >= least ? tally.kept / tally.judged : null,
+  };
+}
+
 export function supplierRating(inputs: RatingInputs, rules: RatingRules): SupplierRating {
   const reviewsAverage =
     inputs.reviewsCount > 0 ? inputs.reviewsScoreSum / inputs.reviewsCount : null;
-  const minOrders = Math.max(1, rules.minOrders);
-  const responseRate =
-    inputs.answerRequired >= minOrders ? inputs.answered / inputs.answerRequired : null;
-  const onTimeRate = inputs.judged >= minOrders ? inputs.kept / inputs.judged : null;
+  const { responseRate, onTimeRate } = ratingShares(inputs, rules.minOrders);
   const shown = {
     reviewsAverage: reviewsAverage === null ? null : roundTo(reviewsAverage, 2),
     responseRate: responseRate === null ? null : roundTo(responseRate, 4),

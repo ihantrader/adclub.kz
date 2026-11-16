@@ -518,6 +518,7 @@ export * from "./signals";
 export * from "./reviews";
 export * from "./ratings";
 export * from "./offer-views";
+export * from "./moderation-stats";
 export * from "./users";
 export * from "./showcase";
 export * from "./search";

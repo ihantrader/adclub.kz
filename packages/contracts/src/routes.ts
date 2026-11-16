@@ -383,6 +383,12 @@ import {
 } from "./ratings";
 import { adminSupplierViewsQuerySchema, adminSupplierViewsResponseSchema } from "./offer-views";
 import {
+  adminModerationPageSchema,
+  adminModerationQuerySchema,
+  supplierStatsQuerySchema,
+  supplierStatsResponseSchema,
+} from "./moderation-stats";
+import {
   showcaseCategoryPathSchema,
   showcaseItemPathSchema,
   showcaseItemQuerySchema,
@@ -6022,14 +6028,66 @@ const offerViewRoutes = {
   }),
 } as const;
 
+/** The moderation queue of the admin panel and the statistics of a supplier (TASK-071). */
+const moderationStatsRoutes = {
+  listAdminModeration: defineRoute({
+    operationId: "listAdminModeration",
+    method: "GET",
+    path: "/admin/moderation",
+    summary:
+      "The moderation queue (A-MOD, «Модерация»): every waiting request of suppliers — requests to add an item (from a price list or by hand) and compatibility proposals — oldest first, by kind and supplier; `total` with no filter is the home card «Модерация ждёт». Decisions are made on each one's own card",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: adminModerationQuerySchema,
+    responses: {
+      200: { description: "A page of the queue", schema: adminModerationPageSchema },
+    },
+  }),
+  getSupplierStats: defineRoute({
+    operationId: "getSupplierStats",
+    method: "GET",
+    path: "/supplier/stats",
+    summary:
+      "S-STAT-01 «Статистика» of the session's company: the orders placed in the last 7, 30 or 90 days of Almaty (no test orders) by outcome, views of its offers, the share of answers and of terms kept (the rules of the rating), and the rating shown now",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierStatsQuerySchema,
+    responses: {
+      200: { description: "The statistics", schema: supplierStatsResponseSchema },
+    },
+  }),
+  getAdminSupplierStats: defineRoute({
+    operationId: "getAdminSupplierStats",
+    method: "GET",
+    path: "/admin/suppliers/{supplierId}/stats",
+    summary:
+      "The statistics of a supplier exactly as its cabinet shows them (S-STAT-01): the same count for the same period",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: supplierAdminPathSchema,
+    query: supplierStatsQuerySchema,
+    responses: {
+      200: { description: "The statistics", schema: supplierStatsResponseSchema },
+    },
+  }),
+} as const;
+
 export const apiRoutes: typeof coreApiRoutes &
   typeof planAndAssistantRoutes &
   typeof reminderRoutes &
-  typeof offerViewRoutes = {
+  typeof offerViewRoutes &
+  typeof moderationStatsRoutes = {
   ...coreApiRoutes,
   ...planAndAssistantRoutes,
   ...reminderRoutes,
   ...offerViewRoutes,
+  ...moderationStatsRoutes,
 };
 
 export type ApiRoutes = typeof apiRoutes;

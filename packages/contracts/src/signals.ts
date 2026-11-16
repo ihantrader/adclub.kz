@@ -399,6 +399,12 @@ export const adminHomeSchema = z.object({
    */
   catalogRequests: z.number().int(),
   /**
+   * TASK-071 (4, «Модерация ждёт · N»): every waiting request of suppliers —
+   * requests to add an item and compatibility proposals — `GET
+   * /admin/moderation` (`total`, no filter). One count for the card and the queue.
+   */
+  moderationWaiting: z.number().int(),
+  /**
    * TASK-049 (3, «Отзывы на проверке · N»): reviews held for the
    * administrator — `GET /admin/reviews?status=held`.
    */

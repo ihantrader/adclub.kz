@@ -6815,6 +6815,92 @@
         }
       }
     },
+    "/admin/moderation": {
+      "get": {
+        "operationId": "listAdminModeration",
+        "summary": "The moderation queue (A-MOD, «Модерация»): every waiting request of suppliers — requests to add an item (from a price list or by hand) and compatibility proposals — oldest first, by kind and supplier; `total` with no filter is the home card «Модерация ждёт». Decisions are made on each one's own card",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "item_request",
+                "compatibility"
+              ]
+            }
+          },
+          {
+            "name": "supplierId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminModerationPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/order-extension-candidates": {
       "get": {
         "operationId": "listAdminExtensionCandidates",
@@ -10210,6 +10296,73 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupplierSessionsEndedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/suppliers/{supplierId}/stats": {
+      "get": {
+        "operationId": "getAdminSupplierStats",
+        "summary": "The statistics of a supplier exactly as its cabinet shows them (S-STAT-01): the same count for the same period",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "supplierId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "30",
+              "type": "string",
+              "enum": [
+                "7",
+                "30",
+                "90"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierStatsResponse"
                 }
               }
             }
@@ -21660,6 +21813,63 @@
         }
       }
     },
+    "/supplier/stats": {
+      "get": {
+        "operationId": "getSupplierStats",
+        "summary": "S-STAT-01 «Статистика» of the session's company: the orders placed in the last 7, 30 or 90 days of Almaty (no test orders) by outcome, views of its offers, the share of answers and of terms kept (the rules of the rating), and the rating shown now",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "30",
+              "type": "string",
+              "enum": [
+                "7",
+                "30",
+                "90"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierStatsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/subscription": {
       "get": {
         "operationId": "getSupplierSubscription",
@@ -26648,6 +26858,11 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "moderationWaiting": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "reviewsHeld": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -26722,6 +26937,7 @@
           "aiBudget",
           "newSupplierLeads",
           "catalogRequests",
+          "moderationWaiting",
           "reviewsHeld",
           "complaintsNew",
           "assistantComplaintsNew",
@@ -27555,6 +27771,212 @@
           "plan",
           "items",
           "activePlanId"
+        ]
+      },
+      "AdminModerationEntry": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AdminModerationKind"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "supplier": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/AdminModerationSource"
+          },
+          "proposed": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "article": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "brand",
+                  "article"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brand": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "article": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "brand",
+                  "article"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vehicle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "createdAt",
+          "supplier",
+          "source",
+          "proposed",
+          "item",
+          "vehicle"
+        ]
+      },
+      "AdminModerationKind": {
+        "type": "string",
+        "enum": [
+          "item_request",
+          "compatibility"
+        ]
+      },
+      "AdminModerationPage": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminModerationEntry"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "total",
+          "nextCursor"
+        ]
+      },
+      "AdminModerationQuery": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AdminModerationKind"
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      },
+      "AdminModerationSource": {
+        "type": "string",
+        "enum": [
+          "price_import",
+          "manual",
+          "cabinet"
         ]
       },
       "AdminOrder": {
@@ -52850,6 +53272,235 @@
         },
         "required": [
           "refusal"
+        ]
+      },
+      "SupplierStats": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/SupplierStatsPeriod"
+          },
+          "from": {
+            "$ref": "#/components/schemas/AlmatyDay"
+          },
+          "to": {
+            "$ref": "#/components/schemas/AlmatyDay"
+          },
+          "orders": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "completedServices": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "cancelledByUser": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "declinedBySupplier": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "expiredNoResponse": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "total",
+              "completed",
+              "completedServices",
+              "cancelledByUser",
+              "declinedBySupplier",
+              "expiredNoResponse"
+            ]
+          },
+          "views": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "club": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "total",
+              "club"
+            ]
+          },
+          "shares": {
+            "type": "object",
+            "properties": {
+              "responseRate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "responsePercent": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "answered": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "answerRequired": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "onTimeRate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "onTimePercent": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kept": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "judged": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "minOrders": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "responseRate",
+              "responsePercent",
+              "answered",
+              "answerRequired",
+              "onTimeRate",
+              "onTimePercent",
+              "kept",
+              "judged",
+              "minOrders"
+            ]
+          },
+          "rating": {
+            "type": "object",
+            "properties": {
+              "score": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "isNew": {
+                "type": "boolean"
+              },
+              "reviewsCount": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "windowDays": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "minReviews": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "score",
+              "isNew",
+              "reviewsCount",
+              "windowDays",
+              "minReviews"
+            ]
+          }
+        },
+        "required": [
+          "period",
+          "from",
+          "to",
+          "orders",
+          "views",
+          "shares",
+          "rating"
+        ]
+      },
+      "SupplierStatsPeriod": {
+        "type": "string",
+        "enum": [
+          "7",
+          "30",
+          "90"
+        ]
+      },
+      "SupplierStatsQuery": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "default": "30",
+            "$ref": "#/components/schemas/SupplierStatsPeriod"
+          }
+        },
+        "required": [
+          "period"
+        ]
+      },
+      "SupplierStatsResponse": {
+        "type": "object",
+        "properties": {
+          "stats": {
+            "$ref": "#/components/schemas/SupplierStats"
+          }
+        },
+        "required": [
+          "stats"
         ]
       },
       "SupplierSubscriptionResponse": {

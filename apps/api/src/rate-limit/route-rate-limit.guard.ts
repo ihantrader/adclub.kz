@@ -33,9 +33,11 @@ export { rateLimitSettingKeys };
  * inside services). Over the limit — 429 `RATE_LIMITED` with
  * `Retry-After`. Counted before the body is checked: a flood of malformed
  * requests is limited too. A route that takes a file (`upload`) has its
- * body read by a middleware before any guard, so its address is counted
- * there, before the body is read (`UploadRateLimitMiddleware`, TASK-059.A),
- * and this guard counts only a session's own bucket of such a route.
+ * body read by a middleware before any guard, so a limit of such a route by
+ * address only is counted there, before the body is read
+ * (`UploadRateLimitMiddleware`, TASK-059.A), and this guard skips it; a route
+ * that takes a file and counts by session (`perAccount`, `perMember`) is
+ * still counted here, after its body is read (`countedBeforeBody`).
  *
  * Whose bucket a request falls into (`countedAs`):
  *

@@ -97,6 +97,26 @@ describe("the phone's port when the recording is cancelled during its start (TAS
     expect(handlers.onAutoStop).not.toHaveBeenCalled();
   });
 
+  it("leaves the recording mode of a newer attempt alone when a cancelled one ends late (acceptance)", async () => {
+    const begin = deferred();
+    const { deps, streams, modes } = nativeDeps(Promise.resolve(), begin.promise);
+    const port = createNativeSpeechPortWith(deps);
+    const first = port.start(spyHandlers());
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    // The sheet closed and opened again at once: a second attempt starts.
+    port.cancel();
+    const second = port.start(spyHandlers());
+    await vi.waitFor(() => expect(streams).toHaveLength(2));
+    begin.resolve();
+    await Promise.all([first, second]);
+    expect(streams[0]!.released).toBe(true);
+    expect(streams[1]!.running).toBe(true);
+    // The late end of the first attempt did not switch the mode off under the second.
+    expect(modes.at(-1)).toBe(true);
+    port.cancel();
+    expect(modes.at(-1)).toBe(false);
+  });
+
   it("closes the stream that started after the cancel, and calls no handler", async () => {
     const begin = deferred();
     const { deps, streams, modes } = nativeDeps(Promise.resolve(), begin.promise);

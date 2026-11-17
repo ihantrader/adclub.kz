@@ -176,15 +176,24 @@ export function createWebSpeechPort(env: WebSpeechEnv = browserEnv()): SpeechPor
         stopTracks();
         throw error;
       }
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
-      processor.onaudioprocess = (event) => {
-        if (!live()) return;
-        const pcm = floatToPcm16(event.inputBuffer.getChannelData(0));
-        recording.push(resamplePcm16(pcm, context.sampleRate, SPEECH_SAMPLE_RATE));
-      };
-      source.connect(processor);
-      processor.connect(context.destination);
+      let source: MediaStreamAudioSourceNode;
+      let processor: ScriptProcessorNode;
+      try {
+        source = context.createMediaStreamSource(stream);
+        processor = context.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (event) => {
+          if (!live()) return;
+          const pcm = floatToPcm16(event.inputBuffer.getChannelData(0));
+          recording.push(resamplePcm16(pcm, context.sampleRate, SPEECH_SAMPLE_RATE));
+        };
+        source.connect(processor);
+        processor.connect(context.destination);
+      } catch (error) {
+        // The graph could not be built: nothing of the microphone stays open.
+        stopTracks();
+        void context.close().catch(() => undefined);
+        throw error;
+      }
       stop = () => {
         processor.onaudioprocess = null;
         processor.disconnect();

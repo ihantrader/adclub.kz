@@ -43,6 +43,15 @@ export function createNativeSpeechPortWith(deps: NativeSpeechDeps): SpeechPort {
   let stream: NativeAudioStream | null = null;
   let listener: { remove(): void } | null = null;
   let buffer: ReturnType<typeof createRecordingBuffer> | null = null;
+  /** The attempt that last switched the recording mode on. */
+  let modeOwner = 0;
+  /**
+   * An attempt ended late switches the mode off only while it is still the
+   * one that switched it on: a newer attempt started meanwhile keeps its mode.
+   */
+  const modeOffFor = (mine: number) => {
+    if (modeOwner === mine) void deps.setRecordingMode(false).catch(() => undefined);
+  };
 
   const close = (own: NativeAudioStream | null, ownListener: { remove(): void } | null) => {
     try {
@@ -85,22 +94,32 @@ export function createNativeSpeechPortWith(deps: NativeSpeechDeps): SpeechPort {
       end();
       const mine = attempt;
       const live = () => mine === attempt;
+      modeOwner = mine;
       await deps.setRecordingMode(true);
       if (!live()) {
         // Ended while the mode was set: nothing was opened but the mode.
-        void deps.setRecordingMode(false).catch(() => undefined);
+        modeOffFor(mine);
         return;
       }
       const recording = createRecordingBuffer(handlers);
-      const own = deps.createStream({
-        sampleRate: SPEECH_SAMPLE_RATE,
-        channels: 1,
-        encoding: "int16",
-      });
-      const ownListener = own.addListener("audioStreamBuffer", (chunk) => {
-        // Chunks of an ended attempt reach no handler.
-        if (live()) recording.push(toSpeechPcm(chunk.data, chunk.sampleRate, chunk.channels));
-      });
+      let own: NativeAudioStream | null = null;
+      let ownListener: { remove(): void };
+      try {
+        own = deps.createStream({
+          sampleRate: SPEECH_SAMPLE_RATE,
+          channels: 1,
+          encoding: "int16",
+        });
+        ownListener = own.addListener("audioStreamBuffer", (chunk) => {
+          // Chunks of an ended attempt reach no handler.
+          if (live()) recording.push(toSpeechPcm(chunk.data, chunk.sampleRate, chunk.channels));
+        });
+      } catch (error) {
+        // The stream could not be made: the mode and whatever exists are closed.
+        close(own, null);
+        modeOffFor(mine);
+        throw error;
+      }
       stream = own;
       listener = ownListener;
       buffer = recording;
@@ -112,7 +131,7 @@ export function createNativeSpeechPortWith(deps: NativeSpeechDeps): SpeechPort {
         buffer = null;
         stream = null;
         listener = null;
-        void deps.setRecordingMode(false).catch(() => undefined);
+        modeOffFor(mine);
         throw error;
       }
       if (!live()) {
@@ -120,7 +139,7 @@ export function createNativeSpeechPortWith(deps: NativeSpeechDeps): SpeechPort {
         // again now that `start` has opened it.
         recording.drop();
         close(own, ownListener);
-        void deps.setRecordingMode(false).catch(() => undefined);
+        modeOffFor(mine);
       }
     },
     finish() {

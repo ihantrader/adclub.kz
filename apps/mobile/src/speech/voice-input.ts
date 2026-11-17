@@ -56,6 +56,8 @@ export function voiceFailureOf(error: unknown, signedIn: boolean): VoiceFailure 
   if (code === "RATE_LIMITED") {
     if (details.limit === "speech_per_account") return { limit: "day" };
     if (details.limit === "speech_per_device") return { limit: "guest_trial" };
+    // The flood limit of an address (TASK-059.A): not the person's limit — try later.
+    if (details.limit === "speech_requests_per_ip") return "unavailable";
     // The address: many guests of one network; to the person it is the trial limit.
     return signedIn ? { limit: "day" } : { limit: "guest_trial" };
   }
@@ -64,6 +66,40 @@ export function voiceFailureOf(error: unknown, signedIn: boolean): VoiceFailure 
   }
   if (code === "PAYLOAD_TOO_LARGE" && details.reason === "duration") return "too_long";
   return "unavailable";
+}
+
+/**
+ * Where the sheet is when the app's state changes (TASK-059.A):
+ * - `closed` — the sheet is not open;
+ * - `asking` — the system's question about the microphone is on the screen:
+ *   it takes the app out of `active` itself (iOS — `inactive`, Android —
+ *   `background`, the permission activity pauses the app's one);
+ * - `open` — any other moment of the open sheet, recording included.
+ */
+export type VoiceSheetMoment = "closed" | "asking" | "open";
+
+/**
+ * What the sheet does when the app leaves or returns to `active`: an app put
+ * away with the sheet open throws the recording away and closes the sheet
+ * (nothing is sent); the system's own question is not the person leaving.
+ */
+export function voiceOnAppState(moment: VoiceSheetMoment, next: string): "keep" | "discard" {
+  if (moment !== "open") return "keep";
+  return next === "active" ? "keep" : "discard";
+}
+
+/**
+ * Whether the answer of something awaited is still wanted: the sheet is still
+ * open and nothing newer was started (a closed sheet, a second press, a retry
+ * each start a new generation). Checked after every `await` of the sheet —
+ * otherwise a permission granted after the sheet closed would start the
+ * microphone with no sheet on the screen.
+ */
+export function voiceAnswerWanted(
+  started: number,
+  now: { generation: number; visible: boolean },
+): boolean {
+  return now.visible && started === now.generation;
 }
 
 /** The «распознано» mark stays while the line holds what was heard. */

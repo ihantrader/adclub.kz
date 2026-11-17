@@ -44,6 +44,7 @@ import { backgroundJobCatalog } from "./background-jobs";
 import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
 import { JsonBodyMiddleware, OriginPolicyMiddleware, UploadBodyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
+import { UploadRateLimitMiddleware } from "./rate-limit";
 import { ObservabilityModule } from "./observability";
 
 @Module({})
@@ -203,13 +204,15 @@ export class AppModule implements NestModule {
     // Order matters: the access log line needs the request id context, and
     // a request refused for its origin or its body type should still be
     // logged. `UploadBodyMiddleware` comes after the body-type check and
-    // touches only the routes that take a file (TASK-013).
+    // touches only the routes that take a file (TASK-013); the limit by address
+    // of such a route is counted before its body is read (TASK-059.A).
     consumer
       .apply(
         RequestIdMiddleware,
         AccessLogMiddleware,
         OriginPolicyMiddleware,
         JsonBodyMiddleware,
+        UploadRateLimitMiddleware,
         UploadBodyMiddleware,
       )
       .forRoutes("*");

@@ -37,6 +37,10 @@ function concat(...parts: Int16Array[]): Int16Array {
 
 const bytesOf = (text: string) => Uint8Array.from(text, (char) => char.charCodeAt(0));
 
+/** No lone surrogate: every code unit of a pair has its other half. */
+const wellFormed = (text: string) =>
+  !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(text);
+
 describe("the format of a recording, by its content", () => {
   it("reads the WAV the app writes, its length and its comment", () => {
     const wav = encodeWav(tone(2.5, 0.3), SPEECH_SAMPLE_RATE, {
@@ -231,6 +235,29 @@ describe("the recognised text as the search line takes it", () => {
     // One word longer than the line is cut where the line ends.
     expect(cleanSpeechText("x".repeat(150)).text).toHaveLength(SPEECH_TEXT_MAX_LENGTH);
     expect(cleanSpeechText("a".repeat(100))).toMatchObject({ cut: false });
+  });
+
+  it("never splits a surrogate pair when it cuts (TASK-059.A)", () => {
+    // 99 letters and a character outside the BMP across the 100th unit.
+    const raw = `${"ж".repeat(99)}${String.fromCodePoint(0x1d400)}${"ж".repeat(20)}`;
+    const cleaned = cleanSpeechText(raw);
+    expect(cleaned.cut).toBe(true);
+    expect(cleaned.text).toBe("ж".repeat(99));
+    expect(wellFormed(cleaned.text)).toBe(true);
+    const astral = String.fromCodePoint(0x1d41a).repeat(80);
+    const many = cleanSpeechText(astral);
+    expect(many.text.length).toBe(SPEECH_TEXT_MAX_LENGTH);
+    expect(wellFormed(many.text)).toBe(true);
+  });
+
+  it("cuts by characters when the only space follows leading marks (TASK-059.A)", () => {
+    const cleaned = cleanSpeechText(`— ${"а".repeat(150)}`);
+    expect(cleaned.heard).toBe(true);
+    expect(cleaned.text.length).toBeGreaterThan(0);
+    expect(cleaned.text.endsWith("а")).toBe(true);
+    // Nothing that is a word after cutting — nothing was heard, never an empty text heard.
+    const marks = cleanSpeechText(`— ${"—".repeat(150)}а`);
+    expect(marks).toEqual({ text: "", heard: false, cut: false });
   });
 });
 

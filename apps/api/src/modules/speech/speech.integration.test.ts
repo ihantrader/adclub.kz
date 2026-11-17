@@ -277,6 +277,48 @@ describe("voice input (PostgreSQL + Redis)", () => {
     expect(byAccount.body).toMatchObject({ details: { limit: "speech_per_account" } });
   });
 
+  it("stops a flood of refused bodies from one address before reading them, sparing the guest's attempts (TASK-059.A)", async () => {
+    await settings.set({ speech_requests_per_ip: 10, speech_requests_per_ip_window_seconds: 600 });
+    const ip = "198.51.100.77";
+    const deviceId = randomUUID();
+    const junk = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70);
+    const statuses: number[] = [];
+    // Each kind of refusal counts: not a sound (400), not a sound type (415), too long (413).
+    await settings.set({ speech_max_seconds: 3 });
+    for (let index = 0; index < 10; index += 1) {
+      const response =
+        index % 3 === 0
+          ? await speak(junk, { deviceId, ip })
+          : index % 3 === 1
+            ? await speak(sample("ru-pads-atlas"), { deviceId, ip }, { contentType: "image/jpeg" })
+            : await speak(encodeWav(tone(5), 16_000), { deviceId, ip });
+      statuses.push(response.status);
+    }
+    expect(statuses).toEqual([400, 415, 413, 400, 415, 413, 400, 415, 413, 400]);
+    // The eleventh — whatever it is, even a real recording — is refused before its body.
+    for (const body of [junk, sample("ru-pads-atlas")]) {
+      const flooded = await speak(body, { deviceId, ip });
+      expect(flooded.status).toBe(429);
+      expect(flooded.body).toMatchObject({
+        code: "RATE_LIMITED",
+        details: { limit: "speech_requests_per_ip" },
+      });
+      expect(flooded.headers["retry-after"]).toBeDefined();
+    }
+    // A signed-in person from that address is held too: the address is counted before the session.
+    const token = await signIn("+77010000365");
+    const signedIn = await speak(sample("ru-pads-atlas"), { token, ip });
+    expect(signedIn.status).toBe(429);
+    expect(signedIn.body).toMatchObject({ details: { limit: "speech_requests_per_ip" } });
+    expect(gateway.speechRequests).toHaveLength(0);
+    expect(await jobs()).toBe(0);
+
+    // The guest's trial attempts were never touched: the first one from another address is spent now.
+    await settings.set({ speech_max_seconds: 15 });
+    const recognised = await heard(sample("ru-pads-atlas"), { deviceId });
+    expect(recognised.attempts).toEqual({ scope: "guest", remaining: 4, limit: 5 });
+  });
+
   it("holds guests to the guests' day budget; gives the attempt back", async () => {
     await settings.set({ guest_ai_daily_budget_usd: 0 });
     const deviceId = randomUUID();

@@ -2,7 +2,6 @@ import {
   applyDecorators,
   Inject,
   Injectable,
-  Logger,
   SetMetadata,
   UseGuards,
   type CanActivate,
@@ -12,29 +11,18 @@ import { Reflector } from "@nestjs/core";
 import type { ApiRouteDefinition, RateLimitName } from "@adclub/contracts";
 import type { Request } from "express";
 import { ApiRoute, API_ROUTE_METADATA, RateLimitGuardMark } from "../common/contract";
-import { rateLimitedException, serviceUnavailableException } from "../common/errors";
 import {
   authenticatedSessionOf,
   OptionalSessionGuard,
   optionalSessionOf,
   SessionGuard,
 } from "../modules/identity";
-import { AppSettings, isSettingKey, type SettingKey } from "../modules/settings";
+import { AppSettings } from "../modules/settings";
 import { Metrics } from "../observability";
-import { RateLimiterService, RateLimiterUnavailableError, rateLimitSubject } from "../redis";
+import { RateLimiterService, rateLimitSubject } from "../redis";
+import { countedBeforeBody, RouteLimitCounter, rateLimitSettingKeys } from "./route-limit-counter";
 
-/** How often a served read without a working limiter is reported (not every request). */
-const UNAVAILABLE_WARNING_INTERVAL_MS = 60_000;
-
-/** The settings of a limit: `<limit>` (how many) and `<limit>_window_seconds` (per how long). */
-export function rateLimitSettingKeys(limit: RateLimitName): [SettingKey, SettingKey] {
-  const max = limit;
-  const window = `${limit}_window_seconds`;
-  if (!isSettingKey(max) || !isSettingKey(window)) {
-    throw new Error(`The rate limit ${limit} has no settings ${max} and ${window}`);
-  }
-  return [max, window];
-}
+export { rateLimitSettingKeys };
 
 /**
  * How often a route may be called (ARCHITECTURE 4.26, 4.30, 4.33): the
@@ -43,8 +31,11 @@ export function rateLimitSettingKeys(limit: RateLimitName): [SettingKey, Setting
  * open route, a route open to guests that answers a session too, and a
  * route of a session (TASK-023: the limits that used to be written by hand
  * inside services). Over the limit — 429 `RATE_LIMITED` with
- * `Retry-After`. Counted before the body is read or checked: a flood of
- * malformed requests is limited too.
+ * `Retry-After`. Counted before the body is checked: a flood of malformed
+ * requests is limited too. A route that takes a file (`upload`) has its
+ * body read by a middleware before any guard, so its address is counted
+ * there, before the body is read (`UploadRateLimitMiddleware`, TASK-059.A),
+ * and this guard counts only a session's own bucket of such a route.
  *
  * Whose bucket a request falls into (`countedAs`):
  *
@@ -69,17 +60,17 @@ export function rateLimitSettingKeys(limit: RateLimitName): [SettingKey, Setting
 @RateLimitGuardMark()
 @Injectable()
 export class RouteRateLimitGuard implements CanActivate {
-  private readonly logger = new Logger("RateLimit");
-  /** When each limit last reported serving without Redis. */
-  private readonly lastUnavailableWarning = new Map<RateLimitName, number>();
+  private readonly counter: RouteLimitCounter;
 
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
-    @Inject(RateLimiterService) private readonly limiter: RateLimiterService,
-    @Inject(AppSettings) private readonly settings: AppSettings,
-    @Inject(Metrics) private readonly metrics: Metrics,
-  ) {}
+    @Inject(RateLimiterService) limiter: RateLimiterService,
+    @Inject(AppSettings) settings: AppSettings,
+    @Inject(Metrics) metrics: Metrics,
+  ) {
+    this.counter = new RouteLimitCounter(limiter, settings, metrics);
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const route = this.reflector.get<ApiRouteDefinition | undefined>(
@@ -97,38 +88,16 @@ export class RouteRateLimitGuard implements CanActivate {
     }
     const request = context.switchToHttp().getRequest<Request>();
     const counted = this.countedAs(route, spec, request);
-    const [maxKey, windowKey] = rateLimitSettingKeys(counted.limit);
-    const [max, windowSeconds] = await Promise.all([
-      this.settings.get(maxKey),
-      this.settings.get(windowKey),
-    ]);
-    const key = `route:${counted.limit}:${counted.subject}`;
-    let allowed: boolean;
-    let retryAfterSeconds: number;
-    try {
-      ({ allowed, retryAfterSeconds } = await this.limiter.hit(key, {
-        max: max as number,
-        windowSeconds: windowSeconds as number,
-      }));
-    } catch (error) {
-      if (!(error instanceof RateLimiterUnavailableError)) {
-        throw error;
-      }
-      if (spec.whenUnavailable === "refuse") {
-        this.logger.warn(`Refused without the limit limit=${counted.limit}: ${error.message}`);
-        throw serviceUnavailableException();
-      }
-      this.warnServedUnlimited(counted.limit, error);
+    if (route && countedBeforeBody(route)) {
+      // Counted by address before the body was read (`UploadRateLimitMiddleware`).
       return true;
     }
-    if (!allowed) {
-      this.metrics.countRateLimitHit(counted.limit);
-      // No address, account or employee in the line: the limit and the route say enough.
-      this.logger.warn(
-        `Rate limit hit limit=${counted.limit} route=${route?.operationId ?? request.path}`,
-      );
-      throw rateLimitedException(counted.limit, retryAfterSeconds);
-    }
+    await this.counter.hit({
+      limit: counted.limit,
+      subject: counted.subject,
+      whenUnavailable: spec.whenUnavailable,
+      route: route?.operationId ?? request.path,
+    });
     return true;
   }
 
@@ -177,15 +146,6 @@ export class RouteRateLimitGuard implements CanActivate {
       throw new Error("A limit per account without a session guard before it");
     }
     return session;
-  }
-
-  private warnServedUnlimited(limit: RateLimitName, error: Error): void {
-    const now = Date.now();
-    if (now - (this.lastUnavailableWarning.get(limit) ?? 0) < UNAVAILABLE_WARNING_INTERVAL_MS) {
-      return;
-    }
-    this.lastUnavailableWarning.set(limit, now);
-    this.logger.warn(`Served without the limit limit=${limit}: ${error.message}`);
   }
 }
 

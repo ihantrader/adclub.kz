@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createRecordingBuffer, SPEECH_MAX_SECONDS } from "./speech-port";
-import { stillRecognizedText, voiceFailureOf, voiceOutcomeOf, voiceStartOf } from "./voice-input";
+import {
+  stillRecognizedText,
+  voiceAnswerWanted,
+  voiceFailureOf,
+  voiceOnAppState,
+  voiceOutcomeOf,
+  voiceStartOf,
+} from "./voice-input";
 
 const attempts = { scope: "guest" as const, remaining: 4, limit: 5 };
 
@@ -11,6 +18,35 @@ function tone(seconds: number, amplitude: number): Int16Array {
   }
   return out;
 }
+
+describe("the sheet when the app leaves and returns (TASK-059.A)", () => {
+  it("keeps the sheet while the system asks about the microphone", () => {
+    // iOS: the question makes the app `inactive`; Android: `background`.
+    expect(voiceOnAppState("asking", "inactive")).toBe("keep");
+    expect(voiceOnAppState("asking", "background")).toBe("keep");
+    expect(voiceOnAppState("asking", "active")).toBe("keep");
+  });
+
+  it("throws the recording away when the app is put away with the sheet open", () => {
+    expect(voiceOnAppState("open", "background")).toBe("discard");
+    expect(voiceOnAppState("open", "inactive")).toBe("discard");
+    expect(voiceOnAppState("open", "active")).toBe("keep");
+  });
+
+  it("does nothing once the sheet is closed", () => {
+    for (const next of ["active", "inactive", "background"]) {
+      expect(voiceOnAppState("closed", next)).toBe("keep");
+    }
+  });
+
+  it("wants an answer only for the open sheet's latest start", () => {
+    expect(voiceAnswerWanted(3, { generation: 3, visible: true })).toBe(true);
+    // Closed while the system asked: the granted permission does not record.
+    expect(voiceAnswerWanted(3, { generation: 3, visible: false })).toBe(false);
+    // Something newer was started (a second press, a retry, a close).
+    expect(voiceAnswerWanted(3, { generation: 4, visible: true })).toBe(false);
+  });
+});
 
 describe("voice input in the search (M-CAT-05)", () => {
   it("explains before the system asks, and sends to the settings once it will not ask again", () => {
@@ -39,6 +75,9 @@ describe("voice input in the search (M-CAT-05)", () => {
     expect(voiceFailureOf(refusal("RATE_LIMITED", { limit: "speech_per_device" }), false)).toEqual({
       limit: "guest_trial",
     });
+    expect(
+      voiceFailureOf(refusal("RATE_LIMITED", { limit: "speech_requests_per_ip" }), false),
+    ).toBe("unavailable");
     expect(voiceFailureOf(refusal("RATE_LIMITED", { limit: "speech_per_ip" }), false)).toEqual({
       limit: "guest_trial",
     });

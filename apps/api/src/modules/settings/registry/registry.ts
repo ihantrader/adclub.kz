@@ -615,6 +615,21 @@ const guestAssistant = group({
       default: DAY,
       description: "Окно предела голосовых запросов одной учётной записи.",
     }),
+    speech_requests_per_ip: define.integer({
+      unit: "count",
+      min: 10,
+      max: 100_000,
+      default: 300,
+      description:
+        "Сколько запросов к распознаванию речи принимается с одного адреса (сети IPv6 /64) за окно — всех, гостей и вошедших, в том числе отказанных как не звук, слишком длинный или не того типа (TASK-059.A). Считается до чтения тела; пробных попыток гостя не тратит. Против потока мусора, не против людей: адрес мобильного оператора общий у многих, поэтому предел щедрый.",
+    }),
+    speech_requests_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 60,
+      max: DAY,
+      default: 600,
+      description: "Окно общего предела запросов к распознаванию речи с одного адреса.",
+    }),
     assistant_retention_days: define.duration({
       unit: "days",
       min: 1,

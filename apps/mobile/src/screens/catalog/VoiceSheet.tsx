@@ -14,7 +14,9 @@ import {
 import { transcribeSpeech, speechPort } from "../../services/speech";
 import { useOnline } from "../../services/use-network";
 import {
+  voiceAnswerWanted,
   voiceFailureOf,
+  voiceOnAppState,
   voiceOutcomeOf,
   voiceStartOf,
   type VoiceState,
@@ -52,7 +54,17 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
   const [state, setState] = useState<VoiceState | "starting">("starting");
   const [level, setLevel] = useState(0);
   const generation = useRef(0);
+  // Read after every `await`: a closed sheet wants no answer (TASK-059.A).
+  const open = useRef(visible);
+  // The system's question about the microphone is on the screen.
+  const asking = useRef(false);
   const dismissed = useAfterDismiss(visible);
+  const wanted = (token: number) =>
+    voiceAnswerWanted(token, { generation: generation.current, visible: open.current });
+
+  useEffect(() => {
+    open.current = visible;
+  }, [visible]);
   // The spinner of «Распознаём…» only after the delay of the loading rule (D-069).
   const spinner = useDelayedIndicator(state === "recognizing" || state === "starting");
 
@@ -74,17 +86,20 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
           if (token === generation.current) setLevel(watch.level);
         },
         onAutoStop: () => {
-          if (token === generation.current) void send(token);
+          if (wanted(token)) void send(token);
         },
       });
+      // Closed while the microphone was opening: the port opened nothing,
+      // and nothing of this recording may stay.
+      if (!open.current) speechPort.cancel();
     } catch {
-      if (token === generation.current) setState("unavailable");
+      if (wanted(token)) setState("unavailable");
     }
   };
 
   const send = async (token: number) => {
     const capture = await speechPort.finish();
-    if (token !== generation.current || !capture) return;
+    if (!wanted(token) || !capture) return;
     // Nothing that could be speech: «Не расслышали» at once, no attempt spent.
     if (!capture.heardAnything) {
       setState("not_heard");
@@ -97,7 +112,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
     setState("recognizing");
     try {
       const answer = await transcribeSpeech(capture.wav);
-      if (token !== generation.current) return;
+      if (!wanted(token)) return;
       const outcome = voiceOutcomeOf(answer);
       if (outcome.kind === "not_heard") {
         setState("not_heard");
@@ -105,7 +120,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
       }
       close(() => onText(outcome.text));
     } catch (error) {
-      if (token !== generation.current) return;
+      if (!wanted(token)) return;
       const failure = voiceFailureOf(error, sessionStore.get().status === "signed_in");
       if (typeof failure === "object") {
         const sheet = failure.limit;
@@ -129,7 +144,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
       return;
     }
     const permission = await speechPort.permission().catch(() => null);
-    if (token !== generation.current) return;
+    if (!wanted(token)) return;
     if (!permission) {
       setState("unavailable");
       return;
@@ -140,7 +155,13 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
   };
 
   const allow = async () => {
+    generation.current += 1;
+    const token = generation.current;
+    asking.current = true;
     const answer = await speechPort.request().catch(() => null);
+    asking.current = false;
+    // The sheet closed while the system asked: the microphone is not opened.
+    if (!wanted(token)) return;
     if (answer?.status === "granted") void record();
     else setState("denied");
   };
@@ -158,10 +179,13 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // The app in the background while recording: the recording is thrown away.
+  // The app put away with the sheet open: the recording is thrown away. The
+  // system's question about the microphone takes the app out of `active`
+  // itself, and is not the person leaving (TASK-059.A).
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next !== "active" && visible) {
+      const moment = !visible ? "closed" : asking.current ? "asking" : "open";
+      if (voiceOnAppState(moment, next) === "discard") {
         generation.current += 1;
         speechPort.cancel();
         onClose();

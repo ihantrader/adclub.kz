@@ -8,7 +8,8 @@ import {
 import { pickLanguage } from "@adclub/i18n";
 import type { Request } from "express";
 import { ZodValidationPipe } from "../../common/validation";
-import { OptionalSession, OptionalSessionRoute, type AuthenticatedSession } from "../identity";
+import { RateLimitedRoute } from "../../rate-limit";
+import { OptionalSession, type AuthenticatedSession } from "../identity";
 import { photoReaderOf } from "../vehicle-document";
 import { SpeechRecognitions } from "./speech.service";
 
@@ -24,7 +25,9 @@ export class SpeechController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(SpeechRecognitions) private readonly speech: SpeechRecognitions) {}
 
-  @OptionalSessionRoute(apiRoutes.transcribeSpeech)
+  // The limit by address of every request, refused ones included, is counted
+  // before the body is read (TASK-059.A); the trial attempts — by the service.
+  @RateLimitedRoute(apiRoutes.transcribeSpeech)
   transcribe(
     @Query(new ZodValidationPipe(speechQuerySchema)) query: SpeechQuery,
     @OptionalSession() session: AuthenticatedSession | null,

@@ -207,6 +207,12 @@ export const rateLimitNameSchema = z.enum([
   "speech_per_ip",
   "speech_per_account",
   /**
+   * Every request to recognise speech from one address (TASK-059.A), refused
+   * ones included, counted before the body is read: against a flood, not a
+   * person — the trial attempts of a guest are not touched.
+   */
+  "speech_requests_per_ip",
+  /**
    * Price list uploads of one company (TASK-046) in a rolling hour —
    * counted in the database by the uploads themselves, not by the guard.
    */

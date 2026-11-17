@@ -18206,6 +18206,10 @@
         "x-access-contexts": [
           "user"
         ],
+        "x-rate-limit": {
+          "limit": "speech_requests_per_ip",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The recording itself: WAV, 16-bit PCM (read by its content)",
           "required": true,
@@ -46748,6 +46752,7 @@
           "speech_per_device",
           "speech_per_ip",
           "speech_per_account",
+          "speech_requests_per_ip",
           "price_import_uploads_per_supplier",
           "price_export_per_member",
           "billing_actions_per_member",

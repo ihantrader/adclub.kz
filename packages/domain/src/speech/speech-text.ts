@@ -74,14 +74,33 @@ export function cleanSpeechText(
   let cut = false;
   if (text.length > maxLength) {
     cut = true;
-    const head = text.slice(0, maxLength + 1);
+    // Whole characters only: a surrogate pair is never split (TASK-059.A).
+    const hard = headOf(text, maxLength);
+    const head = headOf(text, maxLength + 1);
     const space = head.lastIndexOf(" ");
-    text = (space > 0 ? head.slice(0, space) : text.slice(0, maxLength)).replace(
-      /[\s,;:–—-]+$/u,
-      "",
-    );
+    const byWord = space > 0 ? trimTail(head.slice(0, space)) : "";
+    // A word cut that leaves no word (the only space after leading marks) cuts by characters.
+    text = LETTER_OR_DIGIT.test(byWord) ? byWord : trimTail(hard);
   }
+  if (!LETTER_OR_DIGIT.test(text)) return { text: "", heard: false, cut: false };
   return { text, heard: true, cut };
+}
+
+function trimTail(text: string): string {
+  return text.replace(/[\s,;:–—-]+$/u, "");
+}
+
+/**
+ * The longest start of the text of whole characters (code points) that fits
+ * `units` UTF-16 units — the measure of the search line's limit.
+ */
+function headOf(text: string, units: number): string {
+  let length = 0;
+  for (const char of text) {
+    if (length + char.length > units) break;
+    length += char.length;
+  }
+  return text.slice(0, length);
 }
 
 /**

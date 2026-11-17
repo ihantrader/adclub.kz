@@ -4468,6 +4468,9 @@ const coreApiRoutes = {
     clientVersionCheck: "enforced",
     auth: "optional",
     contexts: ["user"],
+    // Every request from one address, refused ones included (TASK-059.A):
+    // counted before the body is read, never the trial attempts above.
+    rateLimit: { limit: "speech_requests_per_ip", whenUnavailable: "allow" },
     query: speechQuerySchema,
     upload: {
       description: "The recording itself: WAV, 16-bit PCM (read by its content)",

@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { cleanSpeechText, readWav } from "@adclub/domain";
+import { ASSISTANT_MESSAGE_MAX_CHARS } from "@adclub/contracts";
+import { cleanSpeechText, readWav, SPEECH_TEXT_MAX_LENGTH } from "@adclub/domain";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { DatabaseService } from "../../../database";
@@ -28,6 +29,8 @@ const sampleSchema = z.object({
   lang: z.string().nullable(),
   expected: z.array(z.string()).min(1),
   article: z.string().nullable().default(null),
+  /** The field the phrase is said into (TASK-060); absent — the search line. */
+  purpose: z.enum(["search", "mileage", "vehicle", "assistant"]).default("search"),
   file: z.string().min(1),
   note: z.string().optional(),
 });
@@ -189,7 +192,7 @@ export class SpeechEval {
       const startedAt = Date.now();
       try {
         const result = await this.ai.transcribeSpeech(
-          { audio, format: "wav", seconds: read.wav.seconds, language },
+          { audio, format: "wav", seconds: read.wav.seconds, language, purpose: sample.purpose },
           {
             initiator: { type: "system" },
             inputRef: {
@@ -205,7 +208,13 @@ export class SpeechEval {
         latencies.push(Date.now() - startedAt);
         answeredBy.add(result.model);
         // Scored as the search line gets it: cleaned by the server, as the route does.
-        answers.set(sample.id, cleanSpeechText(result.output.text).text);
+        answers.set(
+          sample.id,
+          cleanSpeechText(
+            result.output.text,
+            sample.purpose === "assistant" ? ASSISTANT_MESSAGE_MAX_CHARS : SPEECH_TEXT_MAX_LENGTH,
+          ).text,
+        );
         raw.set(sample.id, result.output.text);
         const [row] = await this.database.db.select().from(aiJob).where(eq(aiJob.id, result.jobId));
         costUsd += Number(row?.costUsd ?? 0);

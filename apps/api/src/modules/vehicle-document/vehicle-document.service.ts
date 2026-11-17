@@ -3,26 +3,15 @@ import type {
   VehicleDocumentAttempts,
   VehicleDocumentFields,
   VehicleDocumentKind,
-  VehicleDocumentMatch,
   VehicleDocumentResponse,
-  VehicleGenerationSummary,
-  VehicleModificationView,
 } from "@adclub/contracts";
 import { engineVolumeCc, normalizeKzPlate, normalizeVin } from "@adclub/domain";
 import { AiService, type VehicleDocumentOutput } from "../ai";
-import { VehicleReadService } from "../vehicles";
 import type { DocumentReader } from "./document-attempts";
 import { PhotoRecognitions } from "./photo-recognitions";
-import {
-  matchColor,
-  matchEngines,
-  matchGeneration,
-  matchNamed,
-  modelTexts,
-  NOT_FOUND,
-  splitMakeModel,
-} from "./document-matching";
+import { splitMakeModel } from "./document-matching";
 import { DocumentProofs } from "./document-proofs";
+import { NO_MATCH, VehicleMatching } from "./vehicle-matching";
 
 const NO_FIELDS: VehicleDocumentFields = {
   make: null,
@@ -32,14 +21,6 @@ const NO_FIELDS: VehicleDocumentFields = {
   plate: null,
   engineVolumeCc: null,
   color: null,
-};
-
-const NO_MATCH: VehicleDocumentMatch = {
-  make: NOT_FOUND,
-  model: NOT_FOUND,
-  generation: NOT_FOUND,
-  engine: NOT_FOUND,
-  color: { status: "not_found", value: null },
 };
 
 /** A text field of the answer as the client gets it: trimmed, bounded, never empty. */
@@ -107,7 +88,7 @@ export class VehicleDocumentService {
   constructor(
     @Inject(PhotoRecognitions) private readonly photos: PhotoRecognitions,
     @Inject(AiService) private readonly ai: AiService,
-    @Inject(VehicleReadService) private readonly vehicles: VehicleReadService,
+    @Inject(VehicleMatching) private readonly matching: VehicleMatching,
     @Inject(DocumentProofs) private readonly proofs: DocumentProofs,
   ) {}
 
@@ -141,50 +122,9 @@ export class VehicleDocumentService {
     return {
       result: kind,
       fields,
-      match: await this.match(fields),
+      match: await this.matching.certificate(fields),
       documentProof: this.proofs.issue(new Date()),
       attempts: reading.attempts,
     };
-  }
-
-  /** The fields placed in the vehicle catalog, through the very routes the steps read. */
-  private async match(fields: VehicleDocumentFields): Promise<VehicleDocumentMatch> {
-    const color = matchColor(fields.color);
-    const result: VehicleDocumentMatch = {
-      ...NO_MATCH,
-      color:
-        color === null ? { status: "not_found", value: null } : { status: "exact", value: color },
-    };
-    const { makes } = await this.vehicles.makes("ru");
-    result.make = matchNamed([fields.make], makes);
-    if (result.make.status !== "exact" || !result.make.value) {
-      return result;
-    }
-    const { models } = await this.vehicles.models(result.make.value.id, "ru");
-    result.model = matchNamed(modelTexts(fields.make, fields.model), models);
-    if (result.model.status !== "exact" || !result.model.value) {
-      return result;
-    }
-    const { generations } = await this.vehicles.generations(result.model.value.id, "ru");
-    result.generation = matchGeneration(generations, fields.year);
-    result.engine = matchEngines(
-      await this.modificationsOf(
-        result.generation.candidates.length > 0
-          ? result.generation.candidates.map((value) => value.id)
-          : generations.map((generation: VehicleGenerationSummary) => generation.id),
-      ),
-      fields.year,
-      fields.engineVolumeCc,
-    );
-    return result;
-  }
-
-  private async modificationsOf(
-    generationIds: readonly string[],
-  ): Promise<VehicleModificationView[]> {
-    const answers = await Promise.all(
-      generationIds.map((id) => this.vehicles.modifications(id, "ru", undefined)),
-    );
-    return answers.flatMap((answer) => answer.modifications);
   }
 }

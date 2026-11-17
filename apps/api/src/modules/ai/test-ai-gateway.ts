@@ -26,7 +26,7 @@ import {
   TEST_PART_PHOTOS,
 } from "./test-photos";
 import { testAssistantStep } from "./test-assistant";
-import { speechSampleCode, TEST_SPEECH } from "./test-speech";
+import { speechSampleCode, TEST_SPEECH, TEST_SPEECH_MADE } from "./test-speech";
 import { testMaintenanceDraft } from "./test-maintenance-plans";
 import { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 
@@ -154,9 +154,14 @@ export class TestAiGateway extends AiGateway {
   readonly documentRequests: { bytes: number; model: string }[] = [];
   /** Every photo of the dashboard or a part received (TASK-058): its size and the model, never the picture. */
   readonly photoRequests: { kind: "dashboard" | "part"; bytes: number; model: string }[] = [];
-  /** Every recording received (TASK-059): its size, its length and the model, never the sound. */
-  readonly speechRequests: { bytes: number; seconds: number; language: string; model: string }[] =
-    [];
+  /** Every recording received (TASK-059): its size, its length, the field (TASK-060) and the model, never the sound. */
+  readonly speechRequests: {
+    bytes: number;
+    seconds: number;
+    language: string;
+    purpose: string;
+    model: string;
+  }[] = [];
   /** Every batch of price list rows received: how many rows and the model (TASK-047). */
   readonly priceMatchRequests: { rows: number; model: string }[] = [];
   /** An answer for one row instead of the closest candidate; `undefined` — the default. */
@@ -372,11 +377,12 @@ export class TestAiGateway extends AiGateway {
       bytes: input.audio.length,
       seconds: input.seconds,
       language: input.language,
+      purpose: input.purpose,
       model,
     });
     await this.photoFailures(model, signal);
     const code = this.mode === "unreadable" ? null : speechSampleCode(input.audio);
-    const text = (code === null ? undefined : TEST_SPEECH[code]) ?? "";
+    const text = (code === null ? undefined : (TEST_SPEECH[code] ?? TEST_SPEECH_MADE[code])) ?? "";
     // A second of sound is about 32 tokens for a model that hears it; the price is make-believe.
     const tokensIn = 200 + Math.round(input.seconds * 32);
     const tokensOut = 20;

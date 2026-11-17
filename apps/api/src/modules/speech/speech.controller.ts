@@ -18,7 +18,8 @@ import { SpeechRecognitions } from "./speech.service";
  * the account of a session, or the device id a guest sends, as for a photo.
  * The body is the recording itself: `UploadBodyMiddleware` has checked the
  * declared type and read the bytes, and they live in this request only.
- * The language of the interface goes to the model as a hint.
+ * The language of the interface and the field the text goes into
+ * (`purpose`, TASK-060) go to the model as hints.
  */
 @Controller()
 export class SpeechController {
@@ -39,6 +40,7 @@ export class SpeechController {
       photoReaderOf(session, query.deviceId, request),
       body,
       pickLanguage(acceptLanguage),
+      query.purpose ?? "search",
     );
   }
 }

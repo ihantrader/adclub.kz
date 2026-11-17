@@ -39,6 +39,8 @@ import {
   vehicleDocumentAttemptsSchema,
   vehicleDocumentResponseSchema,
   vehicleDocumentUnavailableDetailsSchema,
+  vehicleMatchBodySchema,
+  vehicleMatchResponseSchema,
 } from "./vehicle-document";
 import {
   notificationAckResponseSchema,
@@ -507,6 +509,9 @@ const componentSchemas: Record<string, z.ZodType> = {
   SpeechInvalidDetails: speechInvalidDetailsSchema,
   SpeechTooLargeDetails: speechTooLargeDetailsSchema,
   SpeechUnavailableDetails: speechUnavailableDetailsSchema,
+  // A car named by voice (TASK-060).
+  VehicleMatchBody: vehicleMatchBodySchema,
+  VehicleMatchResponse: vehicleMatchResponseSchema,
   // The mileage of a car, the dashboard and a part by photo (TASK-058).
   CarMileage: carMileageSchema,
   MileageSource: mileageSourceSchema,

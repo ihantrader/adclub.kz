@@ -8,7 +8,8 @@ import {
 import { pickLanguage } from "@adclub/i18n";
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
-import { OptionalSession, OptionalSessionRoute, type AuthenticatedSession } from "../identity";
+import { RateLimitedRoute } from "../../rate-limit";
+import { OptionalSession, type AuthenticatedSession } from "../identity";
 import { photoReaderOf } from "../vehicle-document";
 import { PartPhotoService } from "./part-photo.service";
 import { ShowcaseService } from "./showcase.service";
@@ -27,7 +28,9 @@ export class PartPhotoController {
     @Inject(ShowcaseService) private readonly showcase: ShowcaseService,
   ) {}
 
-  @OptionalSessionRoute(apiRoutes.recognizePartPhoto)
+  // Every request of an address, refused ones included, is counted before the
+  // body is read (TASK-060, `photo_requests_per_ip`); the trial attempts — by the service.
+  @RateLimitedRoute(apiRoutes.recognizePartPhoto)
   async recognize(
     @Query(new ZodValidationPipe(partPhotoQuerySchema)) query: PartPhotoQuery,
     @Headers("accept-language") acceptLanguage: string | undefined,

@@ -236,6 +236,39 @@ Rules:
 - Car makes and models as their makers write them (Geely Atlas, Chery Tiggo).
 - No comments, no quotes, no labels, no descriptions of sounds. If nothing was said (silence, only noise or music), answer with an empty text.`;
 
+/**
+ * What else the model is told by the field the text goes into (TASK-060):
+ * the search line keeps the instruction above as it was measured; the
+ * other fields say what is said there and how to write it.
+ */
+const SPEECH_PURPOSES: Readonly<Record<SpeechInput["purpose"], { said: string; rule: string }>> = {
+  search: {
+    said: "a short voice query a person said into the search line of a car parts and services catalog in Kazakhstan",
+    rule: "",
+  },
+  mileage: {
+    said: "the mileage of their car a person said into the mileage field of a car app in Kazakhstan: the reading of the odometer",
+    rule: "\n- The mileage is a number: write it with digits only (45200, 120000), never in words; keep a unit if it was said (km, miles).",
+  },
+  vehicle: {
+    said: "the car a person named to add it to their garage in a car app in Kazakhstan: make, model, year, engine size, colour",
+    rule: "\n- Write the make and the model as on the car's badge, in Latin letters where they are written so (Geely Atlas, Chery Tiggo 7 Pro, Toyota Camry, Hyundai Tucson), even if they were pronounced in Russian or Kazakh; the year with four digits (2023); the engine size like 1.5.",
+  },
+  assistant: {
+    said: "a message a person said to the assistant of a car parts and services club in Kazakhstan: ordinary speech, possibly several sentences",
+    rule: "\n- Keep the sentences and their punctuation as said; the message may be longer than a query.",
+  },
+};
+
+/** The instruction for a recording said into the field of `purpose`. */
+function speechSystem(purpose: SpeechInput["purpose"]): string {
+  const { said, rule } = SPEECH_PURPOSES[purpose];
+  return SPEECH_SYSTEM.replace(
+    "a short voice query a person said into the search line of a car parts and services catalog in Kazakhstan",
+    said,
+  ).replace("\n- No comments, no quotes", `${rule}\n- No comments, no quotes`);
+}
+
 const SPEECH_LANGUAGE_NAMES = { kk: "Kazakh", ru: "Russian", en: "English" } as const;
 
 /** A short query: its text is at most a line. */
@@ -553,7 +586,7 @@ export class OpenRouterAiGateway extends AiGateway {
         max_tokens: SPEECH_MAX_TOKENS,
         response_format: SPEECH_FORMAT,
         messages: [
-          { role: "system", content: SPEECH_SYSTEM },
+          { role: "system", content: speechSystem(input.purpose) },
           {
             role: "user",
             content: [

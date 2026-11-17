@@ -300,7 +300,7 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     );
     const audio = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4]);
     const result = await gateway.transcribeSpeech(
-      { audio, format: "wav", seconds: 2.5, language: "kk" },
+      { audio, format: "wav", seconds: 2.5, language: "kk", purpose: "search" },
       MODEL,
       SIGNAL,
     );
@@ -321,6 +321,43 @@ describe("the OpenRouter provider (no call to the real service: an HTTP stand-in
     // The language of the app is said as a hint, and the instruction allows any language.
     expect(user.find((part) => part.type === "text")?.text).toContain("Kazakh");
     expect(JSON.stringify(body.messages)).toMatch(/mix languages; never translate/);
+  });
+
+  it("tells the model the field a recording is said into (TASK-060)", async () => {
+    const { gateway, seen } = gatewayWith(() =>
+      answer({
+        model: MODEL,
+        usage: { prompt_tokens: 260, completion_tokens: 12, cost: 0.00003 },
+        choices: [
+          { finish_reason: "stop", message: { content: JSON.stringify({ text: "45200" }) } },
+        ],
+      }),
+    );
+    const audio = new Uint8Array([0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4]);
+    const systemOf = async (purpose: "search" | "mileage" | "vehicle" | "assistant") => {
+      await gateway.transcribeSpeech(
+        { audio, format: "wav", seconds: 2, language: "ru", purpose },
+        MODEL,
+        SIGNAL,
+      );
+      const messages = seen.at(-1)!.body.messages as { role: string; content: unknown }[];
+      return String(messages.find((message) => message.role === "system")!.content);
+    };
+    const search = await systemOf("search");
+    expect(search).toContain("search line of a car parts and services catalog");
+    const mileage = await systemOf("mileage");
+    expect(mileage).toContain("mileage field");
+    expect(mileage).toContain("digits only");
+    const vehicle = await systemOf("vehicle");
+    expect(vehicle).toContain("as on the car's badge, in Latin letters");
+    const assistant = await systemOf("assistant");
+    expect(assistant).toContain("possibly several sentences");
+    // Every purpose keeps the rules of the search: never translate, nothing but the words.
+    for (const system of [mileage, vehicle, assistant]) {
+      expect(system).toMatch(/never translate/);
+      expect(system).toMatch(/No comments, no quotes/);
+      expect(system).not.toContain("search line");
+    }
   });
 
   it("sends only the text and the score of a review, privately, and reads the violations (TASK-049)", async () => {

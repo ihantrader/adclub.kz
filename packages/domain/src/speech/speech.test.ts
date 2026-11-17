@@ -226,6 +226,21 @@ describe("the recognised text as the search line takes it", () => {
     }
   });
 
+  it("says nothing was heard for one letter or one digit (TASK-060)", () => {
+    for (const raw of ["а", "A.", "7", "«х»", "— я —", "[шум] к"]) {
+      expect(cleanSpeechText(raw), raw).toEqual({ text: "", heard: false, cut: false });
+    }
+    // Two signs are something said: the search takes a query from two.
+    expect(cleanSpeechText("ок")).toEqual({ text: "ок", heard: true, cut: false });
+    expect(cleanSpeechText("5 W")).toMatchObject({ text: "5 W", heard: true });
+  });
+
+  it("cuts to the line of the purpose it was given", () => {
+    const long = `${"слово ".repeat(60)}конец`;
+    expect(cleanSpeechText(long, 1000)).toMatchObject({ cut: false });
+    expect(cleanSpeechText(long, 100).text.length).toBeLessThanOrEqual(100);
+  });
+
   it("cuts a long text by a word to the search line", () => {
     const long = `${"колодки ".repeat(20)}конец`;
     const cleaned = cleanSpeechText(long);

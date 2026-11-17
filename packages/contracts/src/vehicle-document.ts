@@ -132,6 +132,39 @@ export const vehicleDocumentResponseSchema = z.object({
 
 export type VehicleDocumentResponse = z.infer<typeof vehicleDocumentResponseSchema>;
 
+/**
+ * A car named by voice (TASK-060; SCREENS M-START-05, M-GAR-02): the text
+ * the speech recognition gave («Джили Атлас 2023, полтора литра») is placed
+ * in the vehicle catalog by the server — no AI, no attempt spent — and the
+ * answer has the form of a certificate's, so the app puts it into the steps
+ * the same way (marked «распознано»; the car is «документ не подтверждён»).
+ */
+export const VEHICLE_MATCH_TEXT_MAX_LENGTH = 200;
+
+export const vehicleMatchBodySchema = z.object({
+  text: z.string().trim().min(1).max(VEHICLE_MATCH_TEXT_MAX_LENGTH),
+});
+
+export type VehicleMatchBody = z.infer<typeof vehicleMatchBodySchema>;
+
+/**
+ * - `result` — `found`: the make is in the catalog (the steps start below
+ *   what was placed); `not_found`: no make of the catalog was named —
+ *   «Не поняли автомобиль».
+ * - `fields` — what the phrase said: the make and the model as said, the
+ *   year, the engine size; `vin`, `plate` and `color` are always `null` (a
+ *   voice never gives the first two; a colour said is in `match.color`).
+ * - `match` — as a certificate's: `exact`, `candidates` or `not_found` per
+ *   level, and the colour of the fixed list (D-063) if one was said.
+ */
+export const vehicleMatchResponseSchema = z.object({
+  result: z.enum(["found", "not_found"]),
+  fields: vehicleDocumentFieldsSchema,
+  match: vehicleDocumentMatchSchema,
+});
+
+export type VehicleMatchResponse = z.infer<typeof vehicleMatchResponseSchema>;
+
 /** `details.reason` of `VEHICLE_DOCUMENT_INVALID`. */
 export const vehicleDocumentInvalidReasonSchema = z.enum([
   "not_an_image",

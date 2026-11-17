@@ -82,8 +82,22 @@ export function cleanSpeechText(
     // A word cut that leaves no word (the only space after leading marks) cuts by characters.
     text = LETTER_OR_DIGIT.test(byWord) ? byWord : trimTail(hard);
   }
-  if (!LETTER_OR_DIGIT.test(text)) return { text: "", heard: false, cut: false };
+  // One letter or digit is not something said (TASK-060): «Не расслышали».
+  if (lettersAndDigits(text) < SPEECH_TEXT_MIN_SIGNS) return { text: "", heard: false, cut: false };
   return { text, heard: true, cut };
+}
+
+/**
+ * At least this many letters and digits make an answer something heard: the
+ * search takes a query from two (TASK-060), and one sign alone is a noise
+ * the model wrote down rather than a word.
+ */
+export const SPEECH_TEXT_MIN_SIGNS = 2;
+
+function lettersAndDigits(text: string): number {
+  let count = 0;
+  for (const char of text) if (LETTER_OR_DIGIT.test(char)) count += 1;
+  return count;
 }
 
 function trimTail(text: string): string {

@@ -15640,6 +15640,10 @@
         "x-access-contexts": [
           "user"
         ],
+        "x-rate-limit": {
+          "limit": "photo_requests_per_ip",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The photo itself (JPEG, PNG or WebP)",
           "required": true,
@@ -16574,6 +16578,10 @@
         "x-access-contexts": [
           "user"
         ],
+        "x-rate-limit": {
+          "limit": "photo_requests_per_ip",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The photo itself (JPEG, PNG or WebP)",
           "required": true,
@@ -16752,6 +16760,10 @@
         "x-access-contexts": [
           "user"
         ],
+        "x-rate-limit": {
+          "limit": "photo_requests_per_ip",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The photo itself (JPEG, PNG or WebP)",
           "required": true,
@@ -18188,6 +18200,20 @@
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "search",
+                "mileage",
+                "vehicle",
+                "assistant"
+              ]
             }
           },
           {
@@ -22202,6 +22228,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VehicleModelsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/vehicles/match": {
+      "post": {
+        "operationId": "matchVehicleText",
+        "summary": "Place a car named in words («Geely Atlas 2023, 1.5») in the vehicle catalog, as a certificate is placed: make and model by every spelling and by transliteration, the generation of the year, the engines of the size; no AI; open to guests",
+        "tags": [
+          "vehicles"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "x-rate-limit": {
+          "limit": "vehicle_match_per_ip",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "The text the speech recognition gave",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleMatchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What was placed, in the form of a certificate's match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleMatchResponse"
                 }
               }
             }
@@ -46753,6 +46829,8 @@
           "speech_per_ip",
           "speech_per_account",
           "speech_requests_per_ip",
+          "photo_requests_per_ip",
+          "vehicle_match_per_ip",
           "price_import_uploads_per_supplier",
           "price_export_per_member",
           "billing_actions_per_member",
@@ -50098,6 +50176,10 @@
           "text": {
             "type": "string",
             "maxLength": 100
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1000
           },
           "heard": {
             "type": "boolean"
@@ -57880,6 +57962,278 @@
         "enum": [
           "kz",
           "global"
+        ]
+      },
+      "VehicleMatchBody": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "VehicleMatchResponse": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": [
+              "found",
+              "not_found"
+            ]
+          },
+          "fields": {
+            "type": "object",
+            "properties": {
+              "make": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "year": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "vin": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "engineVolumeCc": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "make",
+              "model",
+              "year",
+              "vin",
+              "plate",
+              "engineVolumeCc",
+              "color"
+            ]
+          },
+          "match": {
+            "type": "object",
+            "properties": {
+              "make": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "generation": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "engine": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "candidates",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarLevelValue"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/CarLevelValue"
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "value",
+                  "candidates"
+                ]
+              },
+              "color": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "not_found"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/CarColorId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "status",
+                  "value"
+                ]
+              }
+            },
+            "required": [
+              "make",
+              "model",
+              "generation",
+              "engine",
+              "color"
+            ]
+          }
+        },
+        "required": [
+          "result",
+          "fields",
+          "match"
         ]
       },
       "VehicleModelIdPath": {

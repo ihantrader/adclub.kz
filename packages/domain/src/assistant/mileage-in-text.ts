@@ -1,4 +1,5 @@
 import { MILEAGE_MAX_KM } from "../garage/mileage";
+import { numberWordsToDigits } from "../speech/number-words";
 
 /**
  * The mileage a person named in a message to the assistant (TASK-062;
@@ -21,7 +22,7 @@ export const MILEAGE_MIN_KM = 100;
 const SPACES = /[\u00a0\u2000-\u200b\u202f\u205f\u3000]/gu;
 
 /** A number as people write it: digits, optionally grouped by spaces or dots («20 000», «20.000»). */
-const NUMBER = String.raw`(\d{1,3}(?:[ .]\d{3})+|\d+(?:[.,]\d+)?)`;
+const NUMBER = String.raw`(\d{1,3}(?:[ .,]\d{3})+|\d+(?:[.,]\d+)?)`;
 
 /** Thousands: «к», «k», «тыс», «тысяч», «мың», «thousand». */
 const THOUSANDS = String.raw`(?:к|k|тыс\.?|тысяч[а-я]*|мың|thousand|thousands)`;
@@ -45,8 +46,8 @@ const WITH_UNIT = new RegExp(
 );
 
 function valueOf(number: string, thousands: boolean): number | null {
-  const grouped = /^\d{1,3}(?:[ .]\d{3})+$/u.test(number);
-  const plain = grouped ? number.replace(/[ .]/gu, "") : number.replace(",", ".");
+  const grouped = /^\d{1,3}(?:[ .,]\d{3})+$/u.test(number);
+  const plain = grouped ? number.replace(/[ .,]/gu, "") : number.replace(",", ".");
   const value = Number(plain);
   if (!Number.isFinite(value)) return null;
   const km = Math.round(thousands ? value * 1000 : value);
@@ -54,21 +55,51 @@ function valueOf(number: string, thousands: boolean): number | null {
 }
 
 function isThousands(unit: string | undefined): boolean {
-  return unit !== undefined && new RegExp(`^${THOUSANDS}`, "iu").test(unit.trim());
+  // A whole word: the «k» of «km» is not thousands (TASK-060).
+  return unit !== undefined && new RegExp(`^${THOUSANDS}(?!\\p{L})`, "iu").test(unit.trim());
+}
+
+/** Any number standing on its own: not a part of a word («ТО-2», «5W-30»). */
+const BARE = new RegExp(String.raw`(?<![\p{L}\p{N}-])${NUMBER}(?![\p{L}\p{N}])`, "gu");
+
+export interface MileageInTextOptions {
+  /**
+   * The text was said into the mileage field (TASK-060; M-GAR-07, M-REM-02):
+   * the field already says it is a mileage, so a number alone counts
+   * («сорок пять тысяч двести», «45 200»), if the text holds exactly one.
+   */
+  field?: boolean;
 }
 
 /**
  * The mileage in kilometres the text names, or `null`. A number after a
  * word of mileage wins over a number with a unit elsewhere in the text
- * («нужно ТО на 20к, пробег 18 500» — 18 500).
+ * («нужно ТО на 20к, пробег 18 500» — 18 500). Numbers written in words
+ * («сорок пять тысяч двести», «қырық бес мың», «forty five thousand») are
+ * read as their digits first (`numberWordsToDigits`, TASK-060).
  */
-export function mileageInText(text: string): number | null {
-  const normalized = text.normalize("NFKC").replace(SPACES, " ").toLowerCase();
-  for (const match of normalized.matchAll(WITH_WORD)) {
+export function mileageInText(text: string, options: MileageInTextOptions = {}): number | null {
+  const plain = text.normalize("NFKC").replace(SPACES, " ").toLowerCase();
+  // With the words in digits first («45 тысяч двести» is 45 200, not 45 000)…
+  const digits = numberWordsToDigits(plain);
+  const found = mileageByRules(digits);
+  if (found !== null) return found;
+  if (options.field) {
+    const numbers = [...digits.matchAll(BARE)];
+    // Two numbers said («45 или 46 тысяч») — the person is asked again.
+    return numbers.length === 1 ? valueOf(numbers[0]![1]!, false) : null;
+  }
+  // …then as written: «20 тысяч» keeps its unit there.
+  return digits === plain ? null : mileageByRules(plain);
+}
+
+/** A number after a word of mileage, or a number with a unit. */
+function mileageByRules(text: string): number | null {
+  for (const match of text.matchAll(WITH_WORD)) {
     const km = valueOf(match[1]!, isThousands(match[2]));
     if (km !== null) return km;
   }
-  for (const match of normalized.matchAll(WITH_UNIT)) {
+  for (const match of text.matchAll(WITH_UNIT)) {
     const km = valueOf(match[1]!, isThousands(match[2]));
     if (km !== null) return km;
   }

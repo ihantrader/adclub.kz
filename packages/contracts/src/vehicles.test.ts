@@ -90,8 +90,14 @@ describe("vehicle catalog contract (TASK-014)", () => {
       "getVehicleMakeModels",
       "getVehicleModelGenerations",
       "getVehicleGenerationModifications",
+      // A car named by voice (TASK-060), limited by address.
+      "matchVehicleText",
     ]);
     expect(client.every((route) => !("auth" in route))).toBe(true);
+    expect(apiRoutes.matchVehicleText.rateLimit).toEqual({
+      limit: "vehicle_match_per_ip",
+      whenUnavailable: "allow",
+    });
     expect(apiRoutes.uploadVehicleImport.upload.contentTypes).toContain("text/csv");
   });
 

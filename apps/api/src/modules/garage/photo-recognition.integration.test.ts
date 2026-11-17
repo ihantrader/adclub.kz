@@ -746,6 +746,60 @@ describe("mileage and photos of TASK-058 (PostgreSQL + Redis + MinIO)", () => {
     expect(over.body).toMatchObject({ details: { limit: "vehicle_document_per_ip" } });
   });
 
+  it("stops a flood of refused photos from one address before reading them, sparing the guest's attempts (TASK-060)", async () => {
+    await settings.set({ photo_requests_per_ip: 10, photo_requests_per_ip_window_seconds: 600 });
+    const ip = "198.51.100.79";
+    const deviceId = randomUUID();
+    const junk = Buffer.from("not a picture at all");
+    // One count for the three routes, every kind of refusal counted: not a picture (400) and not an image type (415).
+    const routes = ["/garage/vehicle-document", "/garage/dashboard", "/catalog/part-photo"];
+    const statuses: number[] = [];
+    for (let index = 0; index < 10; index += 1) {
+      const path = routes[index % 3]!;
+      const response =
+        index % 2 === 0
+          ? await photo(path, junk, { deviceId, ip })
+          : await http()
+              .post(`${path}?deviceId=${deviceId}`)
+              .set("X-Client", IOS)
+              .set("X-Forwarded-For", ip)
+              .set("Content-Type", "text/plain")
+              .send("hello");
+      statuses.push(response.status);
+    }
+    expect(statuses.filter((status) => status === 429)).toEqual([]);
+    expect(new Set(statuses)).toEqual(new Set([400, 415]));
+    // The eleventh — even a real photo, on any of the three — is refused before its body.
+    for (const [path, bytes] of [
+      ["/garage/dashboard", dashboardSample("lcd-45200-clean")],
+      ["/catalog/part-photo", partSample("geely-box-clean")],
+      ["/garage/vehicle-document", documentSample("coolray-clean")],
+    ] as const) {
+      const flooded = await photo(path, bytes, { deviceId, ip });
+      expect(flooded.status, path).toBe(429);
+      expect(flooded.body).toMatchObject({
+        code: "RATE_LIMITED",
+        details: { limit: "photo_requests_per_ip" },
+      });
+      expect(flooded.headers["retry-after"]).toBeDefined();
+    }
+    // A signed-in person from that address is held too: the address is counted before the session.
+    const token = await signIn("+77011580011");
+    const signedIn = await photo("/garage/dashboard", dashboardSample("lcd-45200-clean"), {
+      token,
+      ip,
+    });
+    expect(signedIn.status).toBe(429);
+    expect((await db.query("SELECT count(*)::int AS n FROM ai_job")).rows[0]!.n).toBe(0);
+
+    // The guest's trial attempts were never touched.
+    const attempts = await http()
+      .get(`/garage/vehicle-document/attempts?deviceId=${deviceId}`)
+      .set("X-Client", IOS);
+    expect(attempts.body).toMatchObject({ scope: "guest", remaining: 3, limit: 3 });
+    expect((await dashboard("lcd-45200-clean", { deviceId })).attempts.remaining).toBe(2);
+  });
+
   // ----------------------------------------------------- stored nowhere
 
   it("leaves no byte of either photo and no reading in any table, the storage or the output", async () => {

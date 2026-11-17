@@ -13,7 +13,12 @@
 // people — Kazakh, Russian, mixed speech, a car's noise — go to
 // `ai-eval/speech/recordings/` (not in git, `recordings.example.json`).
 //
-// Usage: node scripts/speech-samples.mjs [--check]
+// TASK-060 added phrases said into the other fields — the mileage, a car to
+// add, a message to the assistant — each with its `purpose` (absent — the
+// search line). `--only id,id` speaks only those and keeps the other files
+// as they are (a voice of another Windows may sound a little different).
+//
+// Usage: node scripts/speech-samples.mjs [--check] [--only id,id]
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -226,6 +231,81 @@ const SAMPLES = [
     expected: ["man67527", "man 67527"],
     article: "MAN67527",
   },
+  // TASK-060: the mileage field (M-GAR-07, M-REM-02).
+  {
+    id: "ru-mileage-field",
+    code: 40,
+    lang: "ru",
+    purpose: "mileage",
+    voice: IRINA,
+    say: "сорок пять тысяч двести километров",
+    expected: ["45200 километров", "45200 км", "45200"],
+  },
+  {
+    id: "ru-mileage-words",
+    code: 41,
+    lang: "ru",
+    purpose: "mileage",
+    voice: IRINA,
+    say: "сто двадцать тысяч",
+    expected: ["120000", "сто двадцать тысяч"],
+  },
+  {
+    id: "en-mileage-field",
+    code: 42,
+    lang: "en",
+    purpose: "mileage",
+    voice: ZIRA,
+    say: "forty five thousand two hundred kilometers",
+    expected: ["45200 kilometers", "45200 km", "45200"],
+  },
+  // TASK-060: a car to add (M-START-05, M-GAR-02).
+  {
+    id: "ru-car-atlas",
+    code: 43,
+    lang: "ru",
+    purpose: "vehicle",
+    voice: IRINA,
+    say: "джили атлас две тысячи двадцать третьего года",
+    expected: ["geely atlas 2023 года", "geely atlas 2023", "джили атлас 2023 года"],
+  },
+  {
+    id: "ru-car-coolray",
+    code: 44,
+    lang: "ru",
+    purpose: "vehicle",
+    voice: IRINA,
+    say: "джили кулрей две тысячи двадцать четыре, полтора литра",
+    expected: ["geely coolray 2024 1.5 литра", "geely coolray 2024 полтора литра"],
+  },
+  {
+    id: "ru-car-unknown",
+    code: 45,
+    lang: "ru",
+    purpose: "vehicle",
+    voice: IRINA,
+    say: "тойота камри две тысячи двадцатого года",
+    expected: ["toyota camry 2020", "toyota camry 2020 года", "тойота камри 2020 года"],
+  },
+  {
+    id: "en-car-tiggo",
+    code: 46,
+    lang: "en",
+    purpose: "vehicle",
+    voice: DAVID,
+    say: "chery tiggo seven pro, twenty twenty two",
+    expected: ["chery tiggo 7 pro 2022"],
+  },
+  // TASK-060: a message to the assistant (M-AI-01).
+  {
+    id: "ru-assistant-squeak",
+    code: 47,
+    lang: "ru",
+    purpose: "assistant",
+    voice: IRINA,
+    say: "скрипит при торможении, что посмотреть",
+    expected: ["скрипит при торможении что посмотреть"],
+  },
   { id: "silence", code: 30, lang: null, kind: "silence", seconds: 2.5, expected: [""] },
   { id: "car-noise", code: 31, lang: null, kind: "noise", seconds: 3, expected: [""] },
 ];
@@ -402,6 +482,7 @@ function describe(sample, seconds) {
     id: sample.id,
     code: sample.code,
     lang: sample.lang,
+    ...(sample.purpose ? { purpose: sample.purpose } : {}),
     ...(sample.voice ? { voice: sample.voice, say: sample.say } : { kind: sample.kind }),
     ...(sample.noise ? { noise: sample.noise } : {}),
     expected: sample.expected,
@@ -424,6 +505,14 @@ function manifest(described) {
 }
 
 const check = process.argv.includes("--check");
+const onlyAt = process.argv.indexOf("--only");
+const only =
+  onlyAt < 0 ? null : new Set((process.argv[onlyAt + 1] ?? "").split(",").filter(Boolean));
+if (only) {
+  for (const id of only) {
+    if (!SAMPLES.some((sample) => sample.id === id)) throw new Error(`No sample ${id}`);
+  }
+}
 const described = [];
 const problems = [];
 if (check) {
@@ -446,8 +535,17 @@ if (check) {
   const current = existsSync(join(OUT, "samples.json"))
     ? readFileSync(join(OUT, "samples.json"), "utf8")
     : "";
-  if (current !== manifest(described))
-    problems.push("samples.json is not what the files and the script say");
+  // Compared as data: the file in the repository is formatted by Prettier (`pnpm format`).
+  const same = (() => {
+    try {
+      return (
+        JSON.stringify(JSON.parse(current)) === JSON.stringify(JSON.parse(manifest(described)))
+      );
+    } catch {
+      return false;
+    }
+  })();
+  if (!same) problems.push("samples.json is not what the files and the script say");
   if (problems.length > 0) {
     console.error(problems.join("\n"));
     console.error("Run: pnpm speech:samples (on Windows)");
@@ -459,6 +557,14 @@ if (check) {
   mkdirSync(join(OUT, "samples"), { recursive: true });
   try {
     for (const sample of SAMPLES) {
+      if (only && !only.has(sample.id)) {
+        // Kept as it is: only its length is read for the list.
+        const kept = readPcm(
+          new Uint8Array(readFileSync(join(OUT, "samples", `${sample.id}.wav`))),
+        );
+        described.push(describe(sample, kept.samples.length / RATE));
+        continue;
+      }
       const samples = sample.voice ? speak(sample, scratch) : made(sample);
       const seconds = samples.length / RATE;
       if (seconds > MAX_SECONDS)

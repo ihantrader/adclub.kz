@@ -271,12 +271,15 @@ export type PartPhotoOutput = z.infer<typeof partPhotoOutputSchema>;
  * records only its size and length in `ai_job.input_ref`). `language` is
  * the language of the app's interface: a hint of what is likely, never a
  * restriction — a person may speak Kazakh, Russian, English or mix them.
+ * `purpose` is the field the text goes into (TASK-060): the hint of what is
+ * said there — a query, a mileage, a car, a message to the assistant.
  */
 export interface SpeechInput {
   audio: Uint8Array;
   format: "wav";
   seconds: number;
   language: "kk" | "ru" | "en";
+  purpose: "search" | "mileage" | "vehicle" | "assistant";
 }
 
 /**

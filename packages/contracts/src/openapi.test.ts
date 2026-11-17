@@ -299,6 +299,7 @@ describe("buildOpenApiDocument", () => {
       "/vehicles/generations/{generationId}/modifications",
       "/vehicles/makes",
       "/vehicles/makes/{makeId}/models",
+      "/vehicles/match",
       "/vehicles/models/{modelId}/generations",
     ]);
     expect(document.paths["/health"].get.operationId).toBe("getHealth");

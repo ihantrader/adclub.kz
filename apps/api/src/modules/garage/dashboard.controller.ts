@@ -7,7 +7,8 @@ import {
 } from "@adclub/contracts";
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../../common/validation";
-import { OptionalSession, OptionalSessionRoute, type AuthenticatedSession } from "../identity";
+import { RateLimitedRoute } from "../../rate-limit";
+import { OptionalSession, type AuthenticatedSession } from "../identity";
 import { photoReaderOf } from "../vehicle-document";
 import { DashboardService } from "./dashboard.service";
 
@@ -22,7 +23,9 @@ export class DashboardController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(DashboardService) private readonly dashboards: DashboardService) {}
 
-  @OptionalSessionRoute(apiRoutes.recognizeDashboard)
+  // Every request of an address, refused ones included, is counted before the
+  // body is read (TASK-060, `photo_requests_per_ip`); the trial attempts — by the service.
+  @RateLimitedRoute(apiRoutes.recognizeDashboard)
   async recognize(
     @Query(new ZodValidationPipe(dashboardQuerySchema)) query: DashboardQuery,
     @OptionalSession() session: AuthenticatedSession | null,

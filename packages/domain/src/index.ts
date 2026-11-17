@@ -304,6 +304,8 @@ export {
 } from "./garage/mileage";
 export type { MileageVerdict } from "./garage/mileage";
 export { MILEAGE_MIN_KM, mileageInText } from "./assistant/mileage-in-text";
+export type { MileageInTextOptions } from "./assistant/mileage-in-text";
+export { numberWordsToDigits } from "./speech/number-words";
 export {
   ASSISTANT_DIAGNOSIS_PHRASES,
   ASSISTANT_MESSAGE_MAX_LENGTH,
@@ -326,6 +328,13 @@ export {
   normalizeVin,
 } from "./vehicle/vehicle-document";
 export type { VinCheck } from "./vehicle/vehicle-document";
+export {
+  readVehiclePhrase,
+  VEHICLE_NAME_MAX_WORDS,
+  vehicleNameSpans,
+  vehicleNameSpellings,
+} from "./vehicle/vehicle-phrase";
+export type { VehicleNameSpan, VehiclePhrase } from "./vehicle/vehicle-phrase";
 export {
   priceColumnRoles,
   priceDoubtWords,
@@ -515,7 +524,12 @@ export {
   wavSamples,
 } from "./speech/wav";
 export type { WavInfo, WavReading, WavRejection } from "./speech/wav";
-export { cleanSpeechText, speechAttemptCharge, SPEECH_TEXT_MAX_LENGTH } from "./speech/speech-text";
+export {
+  cleanSpeechText,
+  speechAttemptCharge,
+  SPEECH_TEXT_MAX_LENGTH,
+  SPEECH_TEXT_MIN_SIGNS,
+} from "./speech/speech-text";
 export type { CleanedSpeechText, SpeechAttemptOutcome } from "./speech/speech-text";
 export {
   createSpeechWatch,

@@ -4,7 +4,11 @@ import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { speechTranscriptionSchema, type SpeechTranscription } from "@adclub/contracts";
+import {
+  ASSISTANT_MESSAGE_MAX_CHARS,
+  speechTranscriptionSchema,
+  type SpeechTranscription,
+} from "@adclub/contracts";
 import { encodeWav } from "@adclub/domain";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
@@ -158,10 +162,14 @@ describe("voice input (PostgreSQL + Redis)", () => {
   function speak(
     bytes: Uint8Array,
     who: { token?: string; deviceId?: string; ip?: string; client?: string },
-    options: { contentType?: string; language?: string } = {},
+    options: { contentType?: string; language?: string; purpose?: string } = {},
   ) {
+    const query = new URLSearchParams({
+      ...(who.deviceId ? { deviceId: who.deviceId } : {}),
+      ...(options.purpose ? { purpose: options.purpose } : {}),
+    }).toString();
     const call = http()
-      .post(`/speech/transcribe${who.deviceId ? `?deviceId=${who.deviceId}` : ""}`)
+      .post(`/speech/transcribe${query ? `?${query}` : ""}`)
       .set("X-Client", who.client ?? IOS)
       .set("X-Forwarded-For", who.ip ?? nextIp())
       .set("Content-Type", options.contentType ?? "audio/wav");
@@ -173,7 +181,7 @@ describe("voice input (PostgreSQL + Redis)", () => {
   async function heard(
     bytes: Uint8Array,
     who: { token?: string; deviceId?: string; ip?: string },
-    options: { language?: string } = {},
+    options: { language?: string; purpose?: string } = {},
   ): Promise<SpeechTranscription> {
     const response = await speak(bytes, who, options);
     expect(response.status, JSON.stringify(response.body)).toBe(200);
@@ -229,6 +237,58 @@ describe("voice input (PostgreSQL + Redis)", () => {
     });
     gateway.mode = "unreadable";
     expect(await heard(sample("ru-pads-atlas"), { deviceId })).toMatchObject({ heard: false });
+  });
+
+  it("tells the model the field the text goes into and cuts the text to that field (TASK-060)", async () => {
+    const deviceId = randomUUID();
+    // Absent — the search line.
+    await heard(sample("ru-oil-change"), { deviceId });
+    expect(gateway.speechRequests.at(-1)).toMatchObject({ purpose: "search" });
+    const mileage = await heard(sample("ru-mileage-field"), { deviceId }, { purpose: "mileage" });
+    expect(mileage.text).toBe("45 200 километров");
+    expect(gateway.speechRequests.at(-1)).toMatchObject({ purpose: "mileage" });
+    const car = await heard(sample("ru-car-atlas"), { deviceId }, { purpose: "vehicle" });
+    expect(car.text).toBe("Geely Atlas 2023 года");
+    expect(gateway.speechRequests.at(-1)).toMatchObject({ purpose: "vehicle" });
+
+    // A message to the assistant takes what the message field takes, the search line a line.
+    const token = await signIn("+77010000366");
+    const long = encodeWav(tone(2), 16_000, { comment: "adclub-speech-sample:91" });
+    const message = await heard(long, { token }, { purpose: "assistant" });
+    expect(message.cut).toBe(false);
+    expect(message.message!.length).toBeGreaterThan(100);
+    expect(message.message!.length).toBeLessThanOrEqual(ASSISTANT_MESSAGE_MAX_CHARS);
+    expect(message.message!.endsWith("Спасибо")).toBe(true);
+    // `text` keeps the length of a line for the versions of the app that read it.
+    expect(message.text.length).toBeLessThanOrEqual(100);
+    expect(message.message!.startsWith(message.text)).toBe(true);
+    expect(gateway.speechRequests.at(-1)).toMatchObject({ purpose: "assistant" });
+    const line = await heard(long, { token });
+    expect(line.cut).toBe(true);
+    expect(line.text.length).toBeLessThanOrEqual(100);
+    expect(line.message).toBeUndefined();
+
+    // A purpose the server does not know is refused before anything is counted.
+    const calls = gateway.speechRequests.length;
+    const unknown = await speak(sample("ru-oil-change"), { deviceId }, { purpose: "poem" });
+    expect(unknown.status).toBe(400);
+    expect(gateway.speechRequests).toHaveLength(calls);
+    // The limits are one for every purpose: four of five trial requests spent on this device.
+    expect(
+      (await heard(sample("ru-oil-change"), { deviceId }, { purpose: "assistant" })).attempts,
+    ).toEqual({ scope: "guest", remaining: 1, limit: 5 });
+  });
+
+  it("says nothing was heard for one letter — the model was asked, the attempt is spent (TASK-060)", async () => {
+    const deviceId = randomUUID();
+    const letter = encodeWav(tone(1), 16_000, { comment: "adclub-speech-sample:90" });
+    expect(await heard(letter, { deviceId })).toEqual({
+      text: "",
+      heard: false,
+      cut: false,
+      attempts: { scope: "guest", remaining: 4, limit: 5 },
+    });
+    expect(await jobs()).toBe(1);
   });
 
   // ---------------------------------------------------------- the limits
@@ -471,7 +531,7 @@ describe("voice input (PostgreSQL + Redis)", () => {
     ]);
 
     const written = output.text();
-    expect(written).toContain("Speech transcribed heard=true");
+    expect(written).toContain("Speech transcribed purpose=search heard=true");
     for (const value of forbidden) {
       expect(written.includes(value), `the output holds ${value.slice(0, 12)}…`).toBe(false);
     }

@@ -4,6 +4,8 @@ import { DocumentProofs } from "./document-proofs";
 import { PhotoRecognitions } from "./photo-recognitions";
 import { VehicleDocumentController } from "./vehicle-document.controller";
 import { VehicleDocumentService } from "./vehicle-document.service";
+import { VehicleMatchController } from "./vehicle-match.controller";
+import { VehicleMatching } from "./vehicle-matching";
 
 export interface VehicleDocumentModuleOptions {
   /** The vehicle catalog module of the app, made once (`AppModule`): the fields are placed in it. */
@@ -21,8 +23,15 @@ export class VehicleDocumentModule {
     return {
       module: VehicleDocumentModule,
       imports: [options.vehicles],
-      controllers: [VehicleDocumentController],
-      providers: [DocumentAttempts, DocumentProofs, PhotoRecognitions, VehicleDocumentService],
+      // The car named by voice (TASK-060) is placed the way a certificate is: `VehicleMatching`.
+      controllers: [VehicleDocumentController, VehicleMatchController],
+      providers: [
+        DocumentAttempts,
+        DocumentProofs,
+        PhotoRecognitions,
+        VehicleDocumentService,
+        VehicleMatching,
+      ],
       exports: [DocumentProofs],
     };
   }

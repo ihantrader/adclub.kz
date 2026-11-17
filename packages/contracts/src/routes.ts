@@ -268,6 +268,8 @@ import {
   vehicleDocumentAttemptsSchema,
   vehicleDocumentQuerySchema,
   vehicleDocumentResponseSchema,
+  vehicleMatchBodySchema,
+  vehicleMatchResponseSchema,
 } from "./vehicle-document";
 import {
   SPEECH_CONTENT_TYPES,
@@ -1192,6 +1194,9 @@ const coreApiRoutes = {
     clientVersionCheck: "enforced",
     auth: "optional",
     contexts: ["user"],
+    // Every request from one address, refused ones included (TASK-060):
+    // counted before the body is read, never the trial attempts.
+    rateLimit: { limit: "photo_requests_per_ip", whenUnavailable: "allow" },
     query: dashboardQuerySchema,
     upload: {
       description: "The photo itself (JPEG, PNG or WebP)",
@@ -1239,6 +1244,9 @@ const coreApiRoutes = {
     clientVersionCheck: "enforced",
     auth: "optional",
     contexts: ["user"],
+    // Every request from one address, refused ones included (TASK-060):
+    // counted before the body is read, never the trial attempts.
+    rateLimit: { limit: "photo_requests_per_ip", whenUnavailable: "allow" },
     query: vehicleDocumentQuerySchema,
     upload: {
       description: "The photo itself (JPEG, PNG or WebP)",
@@ -2485,6 +2493,29 @@ const coreApiRoutes = {
       200: {
         description: "The generation and its modifications",
         schema: vehicleModificationsResponseSchema,
+      },
+    },
+  }),
+  // A car named by voice (TASK-060, M-START-05): placed in the catalog by
+  // the server, without AI — a guest's trial attempts are not touched; the
+  // address is limited against a loop.
+  matchVehicleText: defineRoute({
+    operationId: "matchVehicleText",
+    method: "POST",
+    path: "/vehicles/match",
+    summary:
+      "Place a car named in words («Geely Atlas 2023, 1.5») in the vehicle catalog, as a certificate is placed: make and model by every spelling and by transliteration, the generation of the year, the engines of the size; no AI; open to guests",
+    tag: "vehicles",
+    clientVersionCheck: "enforced",
+    rateLimit: { limit: "vehicle_match_per_ip", whenUnavailable: "allow" },
+    requestBody: {
+      description: "The text the speech recognition gave",
+      schema: vehicleMatchBodySchema,
+    },
+    responses: {
+      200: {
+        description: "What was placed, in the form of a certificate's match",
+        schema: vehicleMatchResponseSchema,
       },
     },
   }),
@@ -4440,6 +4471,9 @@ const coreApiRoutes = {
     clientVersionCheck: "enforced",
     auth: "optional",
     contexts: ["user"],
+    // Every request from one address, refused ones included (TASK-060):
+    // counted before the body is read, never the trial attempts.
+    rateLimit: { limit: "photo_requests_per_ip", whenUnavailable: "allow" },
     query: partPhotoQuerySchema,
     upload: {
       description: "The photo itself (JPEG, PNG or WebP)",

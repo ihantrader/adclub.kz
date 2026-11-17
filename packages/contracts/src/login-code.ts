@@ -213,6 +213,14 @@ export const rateLimitNameSchema = z.enum([
    */
   "speech_requests_per_ip",
   /**
+   * Every request to read a photo (a certificate, a dashboard, a part) from
+   * one address (TASK-060), refused ones included, counted before the body
+   * is read — as `speech_requests_per_ip`; the trial attempts are not touched.
+   */
+  "photo_requests_per_ip",
+  /** A car named by voice placed in the catalog (TASK-060): no AI, a limit by address against a loop. */
+  "vehicle_match_per_ip",
+  /**
    * Price list uploads of one company (TASK-046) in a rolling hour —
    * counted in the database by the uploads themselves, not by the guard.
    */

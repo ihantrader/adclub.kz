@@ -33,22 +33,52 @@ export const SPEECH_MAX_BYTES = 4 * 1024 * 1024;
 /** The declared types a recording is sent with; what it is, the server reads from its content. */
 export const SPEECH_CONTENT_TYPES = ["audio/wav", "audio/x-wav", "audio/wave"] as const;
 
-/** `deviceId` — a guest's trial voice requests are counted by the device (as photos). */
+/**
+ * What the recording is said into (TASK-060): the hint the model gets and
+ * how long the text may be.
+ * - `search` (the default) — the search line (M-CAT-05): up to 100 characters;
+ * - `mileage` — the mileage field (M-GAR-07, M-REM-02): numbers with digits;
+ * - `vehicle` — a car to add (M-START-05, M-GAR-02): makes and models as on
+ *   the badge, in Latin letters where they are written so;
+ * - `assistant` — a message to AI Pilot (M-AI-01): ordinary speech, up to
+ *   the length of a message (`ASSISTANT_MESSAGE_MAX_CHARS`).
+ * The limits, the attempts and what is kept are one for every purpose.
+ */
+export const speechPurposeSchema = z.enum(["search", "mileage", "vehicle", "assistant"]);
+
+export type SpeechPurpose = z.infer<typeof speechPurposeSchema>;
+
+/** The longest text of an answer: a message to the assistant (`ASSISTANT_MESSAGE_MAX_CHARS`). */
+export const SPEECH_TEXT_MAX_CHARS = 1000;
+
+/**
+ * `deviceId` — a guest's trial voice requests are counted by the device (as
+ * photos); `purpose` — what the text is for (absent — `search`).
+ */
 export const speechQuerySchema = z.object({
   deviceId: z.uuid().optional(),
+  purpose: speechPurposeSchema.optional(),
 });
 
 export type SpeechQuery = z.infer<typeof speechQuerySchema>;
 
 /**
- * - `text` — what was said, as the search line takes it: the model's words
- *   only, at most 100 characters (cut by a word, `cut`); empty when nothing
- *   was heard — «Не расслышали, попробуйте ещё раз».
+ * - `text` — what was said, as a line takes it: the model's words only, at
+ *   most 100 characters (cut by a word); empty when nothing was heard (one
+ *   letter or digit is not heard either, TASK-060) — «Не расслышали,
+ *   попробуйте ещё раз». For `assistant` — the beginning of `message`.
+ * - `message` (TASK-060) — `assistant` only: the whole message, at most
+ *   1000 characters (`ASSISTANT_MESSAGE_MAX_CHARS`); absent for the other
+ *   purposes. Added beside `text` so that `text` keeps its length for the
+ *   versions of the app that read it.
+ * - `cut` — the text was longer than its field takes (for `assistant` —
+ *   than the message).
  * - `attempts` — what is left of the limit after this one: a guest's trial
  *   voice requests on this device, or the account's of the day.
  */
 export const speechTranscriptionSchema = z.object({
   text: z.string().max(100),
+  message: z.string().max(SPEECH_TEXT_MAX_CHARS).optional(),
   heard: z.boolean(),
   cut: z.boolean(),
   attempts: vehicleDocumentAttemptsSchema,

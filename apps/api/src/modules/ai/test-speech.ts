@@ -36,6 +36,25 @@ export const TEST_SPEECH: Readonly<Record<number, string>> = {
   25: "MAN 67527",
   30: "",
   31: "(шум)",
+  // TASK-060: the mileage field, a car to add, a message to the assistant.
+  40: "45 200 километров.",
+  41: "Сто двадцать тысяч",
+  42: "45,200 kilometers",
+  43: "Geely Atlas 2023 года.",
+  44: "Geely Coolray 2024, 1.5 литра",
+  45: "Toyota Camry 2020",
+  46: "Chery Tiggo 7 Pro 2022.",
+  47: "Скрипит при торможении, что посмотреть?",
+};
+
+/**
+ * Answers for recordings an integration test makes itself with
+ * `encodeWav` (TASK-060) — never a file of the set: one letter (nothing
+ * heard) and a message longer than the search line.
+ */
+export const TEST_SPEECH_MADE: Readonly<Record<number, string>> = {
+  90: "А.",
+  91: `${"Подскажите, что проверить: скрипит при торможении и тянет вправо. ".repeat(6)}Спасибо`,
 };
 
 const MARKER = /^adclub-speech-sample:(\d+)$/u;

@@ -18,6 +18,7 @@ import {
   transferGarageResponseSchema,
   vehicleDocumentAttemptsSchema,
   vehicleDocumentResponseSchema,
+  vehicleMatchResponseSchema,
   type CarLevels,
   type VehicleDocumentResponse,
 } from "@adclub/contracts";
@@ -756,6 +757,125 @@ describe("vehicle registration certificate (PostgreSQL + Redis + MinIO)", () => 
         all.users.find((user) => user.phone.endsWith("20"))!.accountId,
       );
       expect(garage.cars[0]).toMatchObject({ document: { status: "shown" } });
+    });
+  });
+
+  describe("a car named by voice (TASK-060)", () => {
+    function matchText(
+      textSaid: string,
+      who: { token?: string; client?: string; ip?: string } = {},
+    ) {
+      const call = http()
+        .post("/vehicles/match")
+        .set("X-Client", who.client ?? IOS)
+        .set("X-Forwarded-For", who.ip ?? nextIp());
+      if (who.token) call.set("Authorization", `Bearer ${who.token}`);
+      return call.send({ text: textSaid });
+    }
+
+    async function matched(textSaid: string, who: { token?: string; client?: string } = {}) {
+      const response = await matchText(textSaid, who);
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      return vehicleMatchResponseSchema.parse(response.body);
+    }
+
+    it("places «Джили Атлас 2023» as Geely Atlas of the second generation, without AI", async () => {
+      const answer = await matched("Джили Атлас 2023");
+      expect(answer.result).toBe("found");
+      expect(answer.fields).toEqual({
+        make: "Джили",
+        model: "Атлас",
+        year: 2023,
+        vin: null,
+        plate: null,
+        engineVolumeCc: null,
+        color: null,
+      });
+      expect(answer.match.make).toMatchObject({ status: "exact", value: { label: "Geely" } });
+      expect(answer.match.model).toMatchObject({ status: "exact", value: { label: "Atlas" } });
+      expect(answer.match.generation).toMatchObject({
+        status: "exact",
+        value: { label: "II (FX11)" },
+      });
+      // No engine size was said: nothing is chosen for the person.
+      expect(answer.match.engine.status).toBe("not_found");
+      // The words in digits, the transliteration and the year said in words.
+      const words = await matched("джили атлас две тысячи двадцать третьего года");
+      expect(words.match.model.value?.label).toBe("Atlas");
+      expect(words.fields.year).toBe(2023);
+      // Nothing went to a model, nothing was counted.
+      expect((await db.query("SELECT count(*)::int AS n FROM ai_job")).rows[0]!.n).toBe(0);
+    });
+
+    it("gives the 1.5 l engines of «Geely Coolray 2024 1.5» as candidates, and the colour said", async () => {
+      const answer = await matched("белый Geely Coolray 2024 1.5");
+      expect(answer.fields).toMatchObject({
+        make: "Geely",
+        model: "Coolray",
+        year: 2024,
+        engineVolumeCc: 1500,
+      });
+      expect(answer.match.generation).toMatchObject({
+        status: "exact",
+        value: { label: "I (SX11)" },
+      });
+      expect(answer.match.engine.status).toBe("candidates");
+      expect(answer.match.engine.candidates.map((engine) => engine.label)).toContain("JLH-3G15TD");
+      expect(answer.match.engine.candidates.map((engine) => engine.label)).not.toContain(
+        "JLH-4G20TD",
+      );
+      expect(answer.match.color).toEqual({ status: "exact", value: "white" });
+      // A model of several words, the make said by its other spelling.
+      const pro = await matched("Джили Атлас Про 2024");
+      expect(pro.match.model).toMatchObject({ status: "exact", value: { label: "Atlas Pro" } });
+      const tiggo = await matched("Chery Tiggo 7 Pro 2022");
+      expect(tiggo.match.model).toMatchObject({ status: "exact", value: { label: "Tiggo 7 Pro" } });
+      // Kazakh around the words.
+      const kazakh = await matched("менің көлігім Geely Atlas 2023 жылғы");
+      expect(kazakh.match.generation.value?.label).toBe("II (FX11)");
+    });
+
+    it("says not found for a make the catalog lacks, or none said", async () => {
+      for (const said of ["Тойота", "Toyota Camry 2020", "2023 года", "атлас 2023"]) {
+        const answer = await matched(said);
+        expect(answer.result, said).toBe("not_found");
+        expect(answer.match.make.status, said).toBe("not_found");
+        expect(answer.match.model.status, said).toBe("not_found");
+      }
+    });
+
+    it("answers a guest and any session, checks the text and limits an address", async () => {
+      const token = await signIn("+77011570030");
+      expect((await matched("Geely Atlas", { token })).result).toBe("found");
+      expect((await matched("Geely Atlas", { client: "supplier-web/0.1.0" })).result).toBe("found");
+      for (const body of [{ text: "" }, { text: "   " }, { text: "x".repeat(201) }, {}]) {
+        const refused = await http()
+          .post("/vehicles/match")
+          .set("X-Client", IOS)
+          .set("X-Forwarded-For", nextIp())
+          .send(body);
+        expect(refused.status, JSON.stringify(body)).toBe(400);
+      }
+
+      await settings.set({ vehicle_match_per_ip: 10, vehicle_match_per_ip_window_seconds: 600 });
+      const ip = "198.51.100.88";
+      for (let index = 0; index < 10; index += 1) {
+        expect((await matchText("Geely Atlas", { ip })).status).toBe(200);
+      }
+      const over = await matchText("Geely Atlas", { ip });
+      expect(over.status).toBe(429);
+      expect(over.body).toMatchObject({
+        code: "RATE_LIMITED",
+        details: { limit: "vehicle_match_per_ip" },
+      });
+      expect(over.headers["retry-after"]).toBeDefined();
+      // Another address is not held; a guest's trial attempts were never touched.
+      expect((await matchText("Geely Atlas")).status).toBe(200);
+      const deviceId = randomUUID();
+      const attempts = await http()
+        .get(`/garage/vehicle-document/attempts?deviceId=${deviceId}`)
+        .set("X-Client", IOS);
+      expect(attempts.body).toMatchObject({ remaining: 3, limit: 3 });
     });
   });
 });

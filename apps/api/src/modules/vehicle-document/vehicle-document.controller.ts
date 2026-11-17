@@ -9,6 +9,7 @@ import {
 import type { Request } from "express";
 import { photoReaderOf } from "./photo-reader";
 import { ZodValidationPipe } from "../../common/validation";
+import { RateLimitedRoute } from "../../rate-limit";
 import { OptionalSession, OptionalSessionRoute, type AuthenticatedSession } from "../identity";
 
 import { VehicleDocumentService } from "./vehicle-document.service";
@@ -26,7 +27,9 @@ export class VehicleDocumentController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
   constructor(@Inject(VehicleDocumentService) private readonly documents: VehicleDocumentService) {}
 
-  @OptionalSessionRoute(apiRoutes.recognizeVehicleDocument)
+  // Every request of an address, refused ones included, is counted before the
+  // body is read (TASK-060, `photo_requests_per_ip`); the trial attempts — by the service.
+  @RateLimitedRoute(apiRoutes.recognizeVehicleDocument)
   recognize(
     @Query(new ZodValidationPipe(vehicleDocumentQuerySchema)) query: VehicleDocumentQuery,
     @OptionalSession() session: AuthenticatedSession | null,

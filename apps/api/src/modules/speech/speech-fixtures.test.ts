@@ -36,11 +36,11 @@ describe("the synthetic speech set and the test AI provider (TASK-059)", () => {
     for (const sample of data.samples) {
       const audio = new Uint8Array(readFileSync(join(speechEvalDirectory(), sample.file)));
       const result = await gateway.transcribeSpeech(
-        { audio, format: "wav", seconds: 3, language: "ru" },
+        { audio, format: "wav", seconds: 3, language: "ru", purpose: sample.purpose },
         "test/model",
         SIGNAL,
       );
-      const text = cleanSpeechText((result.output as { text: string }).text).text;
+      const text = cleanSpeechText((result.output as { text: string }).text, 1000).text;
       answers.set(sample.id, text);
       const code = speechSampleCode(audio)!;
       expect(TEST_SPEECH[code], sample.id).toBeDefined();
@@ -71,7 +71,7 @@ describe("the synthetic speech set and the test AI provider (TASK-059)", () => {
       (
         (
           await gateway.transcribeSpeech(
-            { audio, format: "wav", seconds: 1, language: "ru" },
+            { audio, format: "wav", seconds: 1, language: "ru", purpose: "mileage" },
             "m",
             SIGNAL,
           )
@@ -88,6 +88,7 @@ describe("the synthetic speech set and the test AI provider (TASK-059)", () => {
       bytes: plain.length,
       seconds: 1,
       language: "ru",
+      purpose: "mileage",
       model: "m",
     });
   });

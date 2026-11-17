@@ -84,4 +84,4 @@ export type { AiJobRow } from "./schema";
 export { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 export { TEST_DASHBOARDS, TEST_PART_PHOTOS } from "./test-photos";
 export { testMaintenanceDraft } from "./test-maintenance-plans";
-export { speechSampleCode, TEST_SPEECH } from "./test-speech";
+export { speechSampleCode, TEST_SPEECH, TEST_SPEECH_MADE } from "./test-speech";

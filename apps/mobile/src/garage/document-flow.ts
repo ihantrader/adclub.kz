@@ -34,8 +34,15 @@ export interface CarRecognition {
   generationIds: string[];
   engineIds: string[];
   color: CarColorId | null;
-  /** The server's signature: the saved car is marked «документ показан». */
+  /** The server's signature: the saved car is marked «документ показан». Empty for a car said by voice. */
   proof: string;
+  /**
+   * `voice` — the car was named by voice (TASK-060, `POST /vehicles/match`):
+   * the steps and the final step take it as a certificate's, marked
+   * «распознано», but no document was shown — the car is «документ не
+   * подтверждён», and there is no photo to take again. Absent — a certificate.
+   */
+  source?: "voice";
   /**
    * The snapshot on this device, for the thumbnail of M-GAR-05 (SCREENS:
    * «миниатюра фото»; TASK-078). A local address that lives as long as the
@@ -44,10 +51,15 @@ export interface CarRecognition {
   photoUri?: string;
 }
 
-/** The draft the steps start from and what the recognition brings along. */
+/**
+ * The draft the steps start from and what the recognition brings along —
+ * of a certificate (`VehicleDocumentResponse`), or of a car said by voice
+ * (`VehicleMatchResponse` of the same form, TASK-060: `source` `voice`).
+ */
 export function recognitionStart(
-  answer: VehicleDocumentResponse,
+  answer: Pick<VehicleDocumentResponse, "fields" | "match"> & { documentProof?: string | null },
   photoUri?: string,
+  source?: "voice",
 ): {
   draft: CarDraft;
   recognition: CarRecognition;
@@ -79,8 +91,9 @@ export function recognitionStart(
       generationIds: match.generation.candidates.map((value) => value.id),
       engineIds: match.engine.candidates.map((value) => value.id),
       color: match.color.value,
-      proof: answer.documentProof ?? "",
+      proof: source === "voice" ? "" : (answer.documentProof ?? ""),
       ...(photoUri ? { photoUri } : {}),
+      ...(source ? { source } : {}),
     },
   };
 }

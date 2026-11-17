@@ -1,5 +1,5 @@
 import type { VehicleDocumentAttempts } from "@adclub/contracts";
-import { isMileageInRange, parseMileageInput } from "@adclub/domain";
+import { isMileageInRange, mileageInText, parseMileageInput } from "@adclub/domain";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import {
   Dialog,
   EmptyState,
   Icon,
+  IconButton,
   Screen,
   ScreenBody,
   Text,
@@ -36,13 +37,20 @@ import {
 import { useGarage } from "../../state/garage-provider";
 import { useT } from "../../state/language";
 import { CameraPanel, useCamera } from "../CameraPanel";
+import { VoiceInput } from "../voice/VoiceInput";
 import { garageErrorText } from "./garage-errors";
 
-/** What the photo read, held until the person saves it (M-GAR-05). */
+/**
+ * What the photo read or the person said, held until the person saves it
+ * (M-GAR-05). `voice` (TASK-060): the person confirms the number they said
+ * themselves — it is written as typed (`source: text`), voice being only a
+ * way of typing it.
+ */
 interface Recognized {
   km: number;
   miles: boolean;
   recognitionId: string | null;
+  by: "photo" | "voice";
 }
 
 type Phase =
@@ -83,7 +91,9 @@ const FAILURE_TEXT: Record<
  *
  * - The field «Пробег, км» with the number keyboard and «Сохранить»; under
  *   it «Сфотографировать приборную панель» and «Из галереи» (a browser has
- *   no camera — the gallery only). No microphone: voice is TASK-059/060.
+ *   no camera — the gallery only). The microphone at the field (TASK-060):
+ *   «Назовите пробег», the number said fills the field marked «распознано»
+ *   as a photo's does; no number — «Не поняли пробег», the field as it was.
  * - A photo is made smaller on the phone, read by the server and forgotten;
  *   no thumbnail is shown (the snapshot is kept nowhere). The reading fills
  *   the field marked «распознано» (T-GAR-03) until the person changes it —
@@ -117,6 +127,7 @@ export function CarMileageScreen({
   const [attempts, setAttempts] = useState<VehicleDocumentAttempts | null>(null);
   const [lower, setLower] = useState<{ reading: MileageReading; lastKm: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [listening, setListening] = useState(false);
   const afterLower = useAfterDismiss(lower !== null);
   const gate = useLoadingGate();
   /** The recognition in flight; any other answer is stale. */
@@ -186,6 +197,7 @@ export function CarMileageScreen({
           km: outcome.km,
           miles: outcome.miles,
           recognitionId: outcome.recognitionId,
+          by: "photo",
         });
         setValue(formatKm(outcome.km));
         setFieldError(undefined);
@@ -238,14 +250,15 @@ export function CarMileageScreen({
       setFieldError(t("mileage.invalid"));
       return;
     }
-    const reading: MileageReading = recognized
-      ? {
-          valueKm: km,
-          source: "photo",
-          recognizedKm: recognized.km,
-          recognitionId: recognized.recognitionId,
-        }
-      : { valueKm: km, source: "text" };
+    const reading: MileageReading =
+      recognized?.by === "photo"
+        ? {
+            valueKm: km,
+            source: "photo",
+            recognizedKm: recognized.km,
+            recognitionId: recognized.recognitionId,
+          }
+        : { valueKm: km, source: "text" };
     void save(reading, false);
   };
 
@@ -342,6 +355,14 @@ export function CarMileageScreen({
                 keyboardType="number-pad"
                 inputMode="numeric"
                 autoFocus={recognized === null}
+                trailing={
+                  <IconButton
+                    icon="microphone"
+                    label={t("mileage.voice")}
+                    onPress={() => setListening(true)}
+                    disabled={listening}
+                  />
+                }
                 {...(stillRecognized ? { aiLabel: t("doc.recognized") } : {})}
                 {...(fieldError
                   ? { error: fieldError }
@@ -358,7 +379,12 @@ export function CarMileageScreen({
                     })}
               />
               <View style={styles.photoActions}>
-                {recognized ? (
+                {recognized?.by === "voice" ? (
+                  <Button variant="secondary" icon="microphone" onPress={() => setListening(true)}>
+                    {t("voice.retrySay")}
+                  </Button>
+                ) : null}
+                {recognized?.by === "photo" ? (
                   <Button
                     variant="secondary"
                     icon="camera"
@@ -416,6 +442,23 @@ export function CarMileageScreen({
           )}
         </View>
       </ScreenBody>
+
+      <VoiceInput
+        visible={listening}
+        onClose={() => setListening(false)}
+        purpose="mileage"
+        accept={(said) => {
+          // The number said, read by the one rule of the domain; none — the field stays as it was.
+          const km = mileageInText(said, { field: true });
+          if (km === null || !isMileageInRange(km)) return "not_understood";
+          return () => {
+            setRecognized({ km, miles: false, recognitionId: null, by: "voice" });
+            setValue(formatKm(km));
+            setFieldError(undefined);
+          };
+        }}
+        onType={() => undefined}
+      />
 
       <Dialog
         visible={lower !== null}

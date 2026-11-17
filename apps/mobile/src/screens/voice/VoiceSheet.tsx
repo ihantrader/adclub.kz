@@ -1,3 +1,4 @@
+import type { SpeechPurpose } from "@adclub/contracts";
 import type { SpeechWatchState } from "@adclub/domain";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Platform, StyleSheet, View } from "react-native";
@@ -19,6 +20,7 @@ import {
   voiceOnAppState,
   voiceOutcomeOf,
   voiceStartOf,
+  type VoiceAccepted,
   type VoiceState,
 } from "../../speech/voice-input";
 import { sessionStore } from "../../state/stores";
@@ -28,18 +30,89 @@ export interface VoiceSheetProps {
   /** The sheet is open: the microphone was pressed. */
   visible: boolean;
   onClose: () => void;
-  /** What was heard: into the search line, searched at once. */
-  onText: (text: string) => void;
-  /** «Ввести текстом» and the states that end in the line: the sheet closes, the line takes the focus. */
+  /**
+   * The field the text goes into (TASK-060): the hint the model gets, the
+   * length of the text, and the words of the sheet — its title, the example
+   * phrase, the way back to typing.
+   */
+  purpose: SpeechPurpose;
+  /**
+   * What the field does with what was heard: what to do once the sheet has
+   * gone (into the search line, the mileage field, the steps of a car), or
+   * the state the sheet stays in — `not_understood` («Не поняли пробег»),
+   * or the next request could not be made. The sheet shows «Распознаём…»
+   * while it waits.
+   */
+  accept: (text: string) => VoiceAccepted | Promise<VoiceAccepted>;
+  /** «Ввести текстом» (for a car — «Выбрать из списка»): the sheet closes, the field takes the focus. */
   onType: () => void;
   /** A limit spent (M-AI-02): the sheet closes, the screen opens the limit's sheet. */
   onLimit: (sheet: AssistantLimitSheet) => void;
+  /** Every state that ended an attempt without a text the field took (a car: «Выбрать из списка» appears). */
+  onFailure?: (failure: VoiceState | "limit") => void;
+}
+
+/** The words of the sheet for each field (TASK-060); the rest is one for all. */
+function useVoiceTexts(purpose: SpeechPurpose) {
+  const t = useT();
+  switch (purpose) {
+    case "mileage":
+      return {
+        explainTitle: t("voice.mileageTitle"),
+        explainText: t("voice.mileageExplain"),
+        example: t("voice.mileageExample"),
+        typeText: t("voice.typeNumber"),
+        notUnderstood: t("voice.mileageNotUnderstood"),
+        notUnderstoodText: t("voice.mileageNotUnderstoodText"),
+        retry: t("voice.retrySay"),
+        unavailableText: t("voice.mileageUnavailableText"),
+        deniedText: t("voice.deniedTextOther"),
+      };
+    case "vehicle":
+      return {
+        explainTitle: t("voice.vehicleTitle"),
+        explainText: t("voice.vehicleExplain"),
+        example: t("voice.vehicleExample"),
+        typeText: t("doc.chooseFromList"),
+        notUnderstood: t("voice.vehicleNotUnderstood"),
+        notUnderstoodText: t("voice.vehicleNotUnderstoodText"),
+        retry: t("voice.retrySay"),
+        unavailableText: t("voice.vehicleUnavailableText"),
+        deniedText: t("voice.deniedTextOther"),
+      };
+    case "assistant":
+      return {
+        explainTitle: t("voice.assistantTitle"),
+        explainText: t("voice.assistantExplain"),
+        example: t("voice.assistantExample"),
+        typeText: t("voice.typeText"),
+        notUnderstood: t("voice.notHeard"),
+        notUnderstoodText: t("voice.notHeardText"),
+        retry: t("voice.retry"),
+        unavailableText: t("voice.assistantUnavailableText"),
+        deniedText: t("voice.deniedText"),
+      };
+    case "search":
+      return {
+        explainTitle: t("voice.explainTitle"),
+        explainText: t("voice.explainText"),
+        example: t("voice.listeningHint"),
+        typeText: t("voice.typeText"),
+        notUnderstood: t("voice.notHeard"),
+        notUnderstoodText: t("voice.notHeardText"),
+        retry: t("voice.retry"),
+        unavailableText: t("voice.unavailableText"),
+        deniedText: t("voice.deniedText"),
+      };
+  }
 }
 
 const BARS = 7;
 
 /**
- * M-CAT-05 — voice input of the search (TASK-059), a sheet over the screen:
+ * Voice input, a sheet over the screen — one for every field a person may
+ * speak into (TASK-060: M-CAT-05 the search, M-GAR-07 and M-REM-02 the
+ * mileage, M-START-05 and M-GAR-02 a car, M-AI-01 a message):
  * the explanation before the system's question (SCREENS 2.8), «Говорите…»
  * with the level and «Стоп», «Распознаём…», and every state that is not a
  * text — «Не расслышали», «Голосовой ввод временно недоступен», «Нужна сеть».
@@ -47,8 +120,17 @@ const BARS = 7;
  * closing the sheet or putting the app in the background throws the
  * recording away — nothing is sent.
  */
-export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceSheetProps) {
+export function VoiceSheet({
+  visible,
+  onClose,
+  purpose,
+  accept,
+  onType,
+  onLimit,
+  onFailure,
+}: VoiceSheetProps) {
   const t = useT();
+  const words = useVoiceTexts(purpose);
   const { theme, reduceMotion } = useTheme();
   const online = useOnline();
   const [state, setState] = useState<VoiceState | "starting">("starting");
@@ -67,6 +149,12 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
   }, [visible]);
   // The spinner of «Распознаём…» only after the delay of the loading rule (D-069).
   const spinner = useDelayedIndicator(state === "recognizing" || state === "starting");
+
+  /** A state that ends the attempt without a text the field took. */
+  const fail = (failure: VoiceState) => {
+    setState(failure);
+    onFailure?.(failure);
+  };
 
   const close = (then?: () => void) => {
     generation.current += 1;
@@ -93,7 +181,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
       // and nothing of this recording may stay.
       if (!open.current) speechPort.cancel();
     } catch {
-      if (wanted(token)) setState("unavailable");
+      if (wanted(token)) fail("unavailable");
     }
   };
 
@@ -102,33 +190,46 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
     if (!wanted(token) || !capture) return;
     // Nothing that could be speech: «Не расслышали» at once, no attempt spent.
     if (!capture.heardAnything) {
-      setState("not_heard");
+      fail("not_heard");
       return;
     }
     if (!online) {
-      setState("offline");
+      fail("offline");
       return;
     }
     setState("recognizing");
+    let said: string;
     try {
-      const answer = await transcribeSpeech(capture.wav);
+      const answer = await transcribeSpeech(capture.wav, purpose);
       if (!wanted(token)) return;
       const outcome = voiceOutcomeOf(answer);
       if (outcome.kind === "not_heard") {
-        setState("not_heard");
+        fail("not_heard");
         return;
       }
-      close(() => onText(outcome.text));
+      said = outcome.text;
     } catch (error) {
       if (!wanted(token)) return;
       const failure = voiceFailureOf(error, sessionStore.get().status === "signed_in");
       if (typeof failure === "object") {
         const sheet = failure.limit;
+        onFailure?.("limit");
         close(() => onLimit(sheet));
         return;
       }
-      setState(failure);
+      fail(failure);
+      return;
     }
+    // The field's own step (a car placed in the catalog) — still «Распознаём…».
+    let accepted: VoiceAccepted;
+    try {
+      accepted = await accept(said);
+    } catch {
+      accepted = "unavailable";
+    }
+    if (!wanted(token)) return;
+    if (typeof accepted === "function") close(accepted);
+    else fail(accepted);
   };
 
   const begin = async () => {
@@ -136,21 +237,22 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
     const token = generation.current;
     setState("starting");
     if (!online) {
-      setState("offline");
+      fail("offline");
       return;
     }
     if (!speechPort.available) {
-      setState("unavailable");
+      fail("unavailable");
       return;
     }
     const permission = await speechPort.permission().catch(() => null);
     if (!wanted(token)) return;
     if (!permission) {
-      setState("unavailable");
+      fail("unavailable");
       return;
     }
     const first = voiceStartOf(permission);
     if (first === "record") void record();
+    else if (first === "denied") fail(first);
     else setState(first);
   };
 
@@ -163,7 +265,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
     // The sheet closed while the system asked: the microphone is not opened.
     if (!wanted(token)) return;
     if (answer?.status === "granted") void record();
-    else setState("denied");
+    else fail("denied");
   };
 
   useEffect(() => {
@@ -196,7 +298,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
 
   const title =
     state === "explain"
-      ? t("voice.explainTitle")
+      ? words.explainTitle
       : state === "denied"
         ? t("voice.deniedTitle")
         : state === "listening"
@@ -205,11 +307,13 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
             ? t("voice.recognizing")
             : state === "not_heard"
               ? t("voice.notHeard")
-              : state === "offline"
-                ? t("voice.offlineTitle")
-                : state === "too_long"
-                  ? t("voice.tooLong")
-                  : t("voice.unavailable");
+              : state === "not_understood"
+                ? words.notUnderstood
+                : state === "offline"
+                  ? t("voice.offlineTitle")
+                  : state === "too_long"
+                    ? t("voice.tooLong")
+                    : t("voice.unavailable");
 
   return (
     <Sheet
@@ -225,16 +329,20 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
             <View style={styles.center}>
               <Icon name="microphone" size={40} color="accent" />
             </View>
-            <Text color="textMuted">{t("voice.explainText")}</Text>
+            <Text color="textMuted">{words.explainText}</Text>
             <Button onPress={() => void allow()}>{t("voice.explainContinue")}</Button>
-            <Button variant="secondary" onPress={() => close(onType)}>
+            {/* «Не сейчас» of a car closes the sheet only: the list is for a failure, not a choice. */}
+            <Button
+              variant="secondary"
+              onPress={() => close(purpose === "vehicle" ? undefined : onType)}
+            >
               {t("voice.notNow")}
             </Button>
           </>
         )}
         {state === "denied" && (
           <>
-            <Text color="textMuted">{t("voice.deniedText")}</Text>
+            <Text color="textMuted">{words.deniedText}</Text>
             {/* A browser has no settings page to open. */}
             {Platform.OS !== "web" && (
               <Button onPress={() => void speechPort.openSettings()}>
@@ -242,7 +350,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
               </Button>
             )}
             <Button variant="secondary" onPress={() => close(onType)}>
-              {t("voice.typeText")}
+              {words.typeText}
             </Button>
           </>
         )}
@@ -275,7 +383,7 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
               })}
             </View>
             <Text color="textMuted" style={styles.centerText}>
-              {t("voice.listeningHint")}
+              {words.example}
             </Text>
             <Button icon="microphone" onPress={() => void send(generation.current)}>
               {t("voice.stop")}
@@ -290,29 +398,33 @@ export function VoiceSheet({ visible, onClose, onText, onType, onLimit }: VoiceS
             {spinner ? <ActivityIndicator color={theme.colors.ai} /> : null}
           </View>
         )}
-        {(state === "not_heard" || state === "too_long") && (
+        {(state === "not_heard" || state === "too_long" || state === "not_understood") && (
           <>
             <Text color="textMuted">
-              {state === "not_heard" ? t("voice.notHeardText") : t("voice.tooLongText")}
+              {state === "not_heard"
+                ? t("voice.notHeardText")
+                : state === "not_understood"
+                  ? words.notUnderstoodText
+                  : t("voice.tooLongText")}
             </Text>
             <Button icon="microphone" onPress={() => void record()}>
-              {t("voice.retry")}
+              {words.retry}
             </Button>
             <Button variant="secondary" onPress={() => close(onType)}>
-              {t("voice.typeText")}
+              {words.typeText}
             </Button>
           </>
         )}
         {state === "unavailable" && (
           <>
-            <Text color="textMuted">{t("voice.unavailableText")}</Text>
-            <Button onPress={() => close(onType)}>{t("voice.typeText")}</Button>
+            <Text color="textMuted">{words.unavailableText}</Text>
+            <Button onPress={() => close(onType)}>{words.typeText}</Button>
           </>
         )}
         {state === "offline" && (
           <>
             <Text color="textMuted">{t("voice.offlineText")}</Text>
-            <Button onPress={() => close(onType)}>{t("voice.typeText")}</Button>
+            <Button onPress={() => close(onType)}>{words.typeText}</Button>
           </>
         )}
       </View>

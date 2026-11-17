@@ -174,11 +174,13 @@ export function CarSummaryView({
   // with the server's proof; the list after a failure — «не подтверждён»;
   // a car being edited keeps its own.
   const [documentAt] = useState(() => new Date().toISOString());
-  const document: CarDocumentMark | null = recognition
-    ? { status: "shown", at: documentAt, proof: recognition.proof }
-    : unconfirmed
-      ? { status: "unconfirmed", at: documentAt }
-      : (car?.document ?? null);
+  // A car said by voice (TASK-060) was recognised, but no document was shown.
+  const document: CarDocumentMark | null =
+    recognition && recognition.source !== "voice"
+      ? { status: "shown", at: documentAt, proof: recognition.proof }
+      : unconfirmed || recognition?.source === "voice"
+        ? { status: "unconfirmed", at: documentAt }
+        : (car?.document ?? null);
 
   const build = (finalColor: CarColorId | null) => {
     const checked = checkDocumentFields(vin, plate);
@@ -271,7 +273,7 @@ export function CarSummaryView({
           <Button onPress={save} loading={saving} disabled={offline}>
             {t(recognition ? "doc.saveVerified" : "car.summary.save")}
           </Button>
-          {recognition && onRetake && (
+          {recognition && recognition.source !== "voice" && onRetake && (
             <Button variant="secondary" onPress={onRetake} disabled={saving}>
               {t("doc.retake")}
             </Button>

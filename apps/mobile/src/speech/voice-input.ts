@@ -3,8 +3,9 @@ import type { AssistantLimitSheet } from "../assistant/assistant-rules";
 import type { MicrophonePermission } from "./speech-port";
 
 /**
- * Voice input in the search (TASK-059; SCREENS M-CAT-05, M-AI-02, 2.8) as
- * rules the screen only draws.
+ * Voice input (TASK-059; SCREENS M-CAT-05, M-AI-02, 2.8) as rules the sheet
+ * only draws — one sheet for every field a person may speak into (TASK-060:
+ * the search line, the mileage, a car to add, a message to the assistant).
  *
  * The states of the sheet over the screen:
  * - `explain` — before the system's question: why the microphone;
@@ -13,6 +14,8 @@ import type { MicrophonePermission } from "./speech-port";
  * - `listening` — «Говорите…», the level, «Стоп»;
  * - `recognizing` — «Распознаём…»;
  * - `not_heard` — «Не расслышали, попробуйте ещё раз»;
+ * - `not_understood` — heard, but the field could not use it («Не поняли
+ *   пробег», «Не поняли автомобиль», TASK-060);
  * - `unavailable` — «Голосовой ввод временно недоступен», the search line;
  * - `offline` — «Нужна сеть»;
  * - `too_long` — the server's limit was shorter than the app's.
@@ -25,6 +28,7 @@ export type VoiceState =
   | "listening"
   | "recognizing"
   | "not_heard"
+  | "not_understood"
   | "unavailable"
   | "offline"
   | "too_long";
@@ -36,13 +40,36 @@ export function voiceStartOf(permission: MicrophonePermission): "record" | "expl
   return "explain";
 }
 
-/** What a transcription gives the search: the text, or «Не расслышали». */
+/**
+ * What a transcription gives the field: the text, or «Не расслышали». The
+ * server says whether anything was heard — one letter or digit is not
+ * (`cleanSpeechText`, TASK-060); the app keeps no rule of its own.
+ */
 export function voiceOutcomeOf(
   answer: SpeechTranscription,
 ): { kind: "text"; text: string } | { kind: "not_heard" } {
-  const text = answer.text.trim();
-  // One letter is not a query the search takes (at least two signs).
-  return answer.heard && text.length >= 2 ? { kind: "text", text } : { kind: "not_heard" };
+  // A message to the assistant comes whole in `message`; a line in `text`.
+  const text = (answer.message ?? answer.text).trim();
+  return answer.heard && text !== "" ? { kind: "text", text } : { kind: "not_heard" };
+}
+
+/**
+ * What a field did with the text it was given (TASK-060): what to do once
+ * the sheet has gone (put it into the line, the field, the steps of a car),
+ * or the state the sheet stays in — the text said nothing the field could
+ * use, or the next request could not be made.
+ */
+export type VoiceAccepted = (() => void) | "not_understood" | "offline" | "unavailable";
+
+/**
+ * Whether a failure of voice opens «Выбрать из списка» when a car is being
+ * added (TASK-060; SCREENS M-START-05, M-GAR-02): as a photo that did not
+ * work — not heard, not understood, no microphone, unavailable, the limit,
+ * no network. Only the states that end the attempt count: the explanation
+ * before the system's question and the recording itself do not.
+ */
+export function voiceFailureOpensList(failure: VoiceState | "limit"): boolean {
+  return failure !== "explain" && failure !== "listening" && failure !== "recognizing";
 }
 
 export type VoiceFailure = VoiceState | { limit: AssistantLimitSheet };

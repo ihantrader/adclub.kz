@@ -1,4 +1,4 @@
-import type { SpeechTranscription } from "@adclub/contracts";
+import type { SpeechPurpose, SpeechTranscription, VehicleMatchResponse } from "@adclub/contracts";
 import { Platform } from "react-native";
 import { createNativeSpeechPort } from "../speech/native-speech-port";
 import type { SpeechPort } from "../speech/speech-port";
@@ -18,8 +18,25 @@ export const speechPort: SpeechPort =
 /**
  * What was said: the recording goes in one request and is held nowhere
  * after it; a guest's trial voice requests are counted by this device.
+ * `purpose` — the field it is said into (TASK-060): the hint the model gets
+ * and how long the text may be.
  */
-export async function transcribeSpeech(wav: Uint8Array): Promise<SpeechTranscription> {
-  const query = sessionStore.get().status === "signed_in" ? {} : { deviceId: await deviceId() };
+export async function transcribeSpeech(
+  wav: Uint8Array,
+  purpose: SpeechPurpose,
+): Promise<SpeechTranscription> {
+  const query =
+    sessionStore.get().status === "signed_in"
+      ? { purpose }
+      : { deviceId: await deviceId(), purpose };
   return apiClient.transcribeSpeech(wav, { query, contentType: "audio/wav" });
+}
+
+/**
+ * A car named by voice placed in the vehicle catalog by the server (TASK-060,
+ * `POST /vehicles/match`): no AI, no attempt spent; the answer has the form
+ * of a certificate's, so it goes into the steps the same way.
+ */
+export function matchVehicleText(text: string): Promise<VehicleMatchResponse> {
+  return apiClient.matchVehicleText({ text });
 }

@@ -52,7 +52,7 @@ import { CarSheet } from "./CarSheet";
 import { CatalogHeader } from "./CatalogHeader";
 import { FiltersSheet } from "./FiltersSheet";
 import { ItemRow } from "./parts";
-import { VoiceSheet } from "./VoiceSheet";
+import { VoiceSheet } from "../voice/VoiceSheet";
 
 /** How long typing has to pause before the suggestions are asked for (M-CAT-04). */
 const SUGGEST_AFTER_MS = 300;
@@ -355,7 +355,8 @@ export function SearchScreen({
       <VoiceSheet
         visible={listening}
         onClose={() => setListening(false)}
-        onText={(said) => {
+        purpose="search"
+        accept={(said) => () => {
           // What was heard is a query typed: into the line and searched at once.
           setRecognized(null);
           setHeard(tidyQuery(said));

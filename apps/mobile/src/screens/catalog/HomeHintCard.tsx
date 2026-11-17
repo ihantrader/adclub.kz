@@ -1,5 +1,5 @@
 import type { GarageReminder, GarageReminderCar, GarageRemindersResponse } from "@adclub/contracts";
-import { isMileageInRange, parseMileageInput } from "@adclub/domain";
+import { isMileageInRange, mileageInText, parseMileageInput } from "@adclub/domain";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -7,6 +7,7 @@ import {
   Banner,
   Button,
   Dialog,
+  IconButton,
   Text,
   TextField,
   useAfterDismiss,
@@ -22,6 +23,7 @@ import { useGarage } from "../../state/garage-provider";
 import { useLanguage } from "../../state/language";
 import { useSession } from "../../state/session-provider";
 import { garageErrorText } from "../garage/garage-errors";
+import { VoiceInput } from "../voice/VoiceInput";
 
 export interface HomeHintCardProps {
   car: GarageCar;
@@ -74,6 +76,9 @@ export function HomeHintCard({ car, onCompleteEngine, onPick, onMileagePhoto }: 
 
   const [mileage, setMileage] = useState("");
   const [mileageError, setMileageError] = useState<string | undefined>();
+  // The microphone of M-REM-02 (TASK-060): the number said, marked «распознано» until changed.
+  const [listening, setListening] = useState(false);
+  const [heardKm, setHeardKm] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<GarageReminder | null>(null);
   const [doneKm, setDoneKm] = useState("");
@@ -132,8 +137,10 @@ export function HomeHintCard({ car, onCompleteEngine, onPick, onMileagePhoto }: 
       }
       setBusy(true);
       try {
+        // Said or typed, the person confirms the number: it is written as typed (TASK-060).
         await garage.recordMileage(car.id, { valueKm: km, source: "text" }, confirmLower);
         setMileage("");
+        setHeardKm(null);
         toast.show(t("mileage.saved"));
         request.reload();
       } catch (error) {
@@ -144,6 +151,7 @@ export function HomeHintCard({ car, onCompleteEngine, onPick, onMileagePhoto }: 
         setBusy(false);
       }
     };
+    const stillHeard = heardKm !== null && parseMileageInput(mileage) === heardKm;
     return (
       <View style={styles.wrap}>
         <Banner tone="neutral" icon="car">
@@ -160,10 +168,19 @@ export function HomeHintCard({ car, onCompleteEngine, onPick, onMileagePhoto }: 
             keyboardType="number-pad"
             inputMode="numeric"
             {...(mileageError ? { error: mileageError } : {})}
+            {...(stillHeard ? { aiLabel: t("doc.recognized") } : {})}
+            trailing={
+              <IconButton
+                icon="microphone"
+                label={t("mileage.voice")}
+                onPress={() => setListening(true)}
+                disabled={!online || listening}
+              />
+            }
           />
           <View style={styles.column}>
             <Button size="m" onPress={() => void save(false)} loading={busy} disabled={!online}>
-              {t("mileageAsk.save")}
+              {t(stillHeard ? "doc.saveVerified" : "mileageAsk.save")}
             </Button>
             <Button size="m" variant="secondary" icon="camera" onPress={() => onMileagePhoto(car)}>
               {t("mileage.photo")}
@@ -184,6 +201,21 @@ export function HomeHintCard({ car, onCompleteEngine, onPick, onMileagePhoto }: 
           {offlineNote}
         </View>
         <LowerDialog lower={lower} onClose={() => setLower(null)} after={afterLower} />
+        <VoiceInput
+          visible={listening}
+          onClose={() => setListening(false)}
+          purpose="mileage"
+          accept={(said) => {
+            const km = mileageInText(said, { field: true });
+            if (km === null || !isMileageInRange(km)) return "not_understood";
+            return () => {
+              setHeardKm(km);
+              setMileage(formatKm(km));
+              setMileageError(undefined);
+            };
+          }}
+          onType={() => undefined}
+        />
       </View>
     );
   }

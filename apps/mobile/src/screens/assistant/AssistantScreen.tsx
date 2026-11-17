@@ -67,6 +67,7 @@ import { useGarage } from "../../state/garage-provider";
 import { useLanguage } from "../../state/language";
 import { assistantDialogsStore, sessionStore } from "../../state/stores";
 import { CarSheet } from "../catalog/CarSheet";
+import { VoiceSheet } from "../voice/VoiceSheet";
 import { garageErrorText } from "../garage/garage-errors";
 import { Avatar, ReplyBlock, ThinkingRow, UserBubble } from "./AssistantMessages";
 import { AssistantComplaintSheet, AssistantLimitSheetView } from "./AssistantSheets";
@@ -160,6 +161,8 @@ export function AssistantScreen({
   );
   const [lower, setLower] = useState<{ km: number; last: number; messageId: string } | null>(null);
   const [sheet, setSheet] = useState<"car" | null>(null);
+  // The microphone of the field (TASK-060): the text goes into the field, the person sends it.
+  const [listening, setListening] = useState(false);
   const [confirmCar, setConfirmCar] = useState<string | null>(null);
   const gate = useLoadingGate();
   // The same functions for the life of the screen: `reload` stays one, and
@@ -716,12 +719,20 @@ export function AssistantScreen({
               }
             : {})}
           trailing={
-            <IconButton
-              icon="camera"
-              label={t("partPhoto.open")}
-              onPress={onPhoto}
-              disabled={!online}
-            />
+            <View style={styles.fieldButtons}>
+              <IconButton
+                icon="microphone"
+                label={t("voice.say")}
+                onPress={() => setListening(true)}
+                disabled={!online || listening}
+              />
+              <IconButton
+                icon="camera"
+                label={t("partPhoto.open")}
+                onPress={onPhoto}
+                disabled={!online}
+              />
+            </View>
           }
         />
         <View style={styles.sendRow}>
@@ -788,6 +799,23 @@ export function AssistantScreen({
           </>
         }
       />
+      <VoiceSheet
+        visible={listening}
+        onClose={() => setListening(false)}
+        purpose="assistant"
+        // Into the field, after what is typed; never sent by itself — a voice
+        // attempt is spent, a dialog of the assistant is not.
+        accept={(said) => () =>
+          setText((typed) =>
+            (typed.trim() === "" ? said : `${typed.trimEnd()} ${said}`).slice(
+              0,
+              ASSISTANT_MESSAGE_MAX_CHARS,
+            ),
+          )
+        }
+        onType={() => undefined}
+        onLimit={setLimitSheet}
+      />
       <AssistantLimitSheetView
         sheet={limitSheet}
         onClose={() => setLimitSheet(null)}
@@ -805,6 +833,7 @@ export function AssistantScreen({
 }
 
 const styles = StyleSheet.create({
+  fieldButtons: { flexDirection: "row", alignItems: "center" },
   flex: { flex: 1 },
   header: { paddingHorizontal: layout.screenPadding, paddingTop: 4, flexDirection: "row" },
   content: {

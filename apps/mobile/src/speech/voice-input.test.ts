@@ -4,6 +4,7 @@ import {
   stillRecognizedText,
   voiceAnswerWanted,
   voiceFailureOf,
+  voiceFailureOpensList,
   voiceOnAppState,
   voiceOutcomeOf,
   voiceStartOf,
@@ -67,7 +68,41 @@ describe("voice input in the search (M-CAT-05)", () => {
     expect(voiceOutcomeOf({ text: "", heard: false, cut: false, attempts })).toEqual({
       kind: "not_heard",
     });
-    expect(voiceOutcomeOf({ text: "а", heard: true, cut: false, attempts }).kind).toBe("not_heard");
+    // Whether anything was heard is the server's word (TASK-060): «ок» heard is a text.
+    expect(voiceOutcomeOf({ text: "ок", heard: true, cut: false, attempts })).toEqual({
+      kind: "text",
+      text: "ок",
+    });
+    expect(voiceOutcomeOf({ text: "  ", heard: true, cut: false, attempts }).kind).toBe(
+      "not_heard",
+    );
+    // A message to the assistant comes whole in `message`, `text` holds its beginning.
+    expect(
+      voiceOutcomeOf({
+        text: "Скрипит при торможении",
+        message: "Скрипит при торможении и тянет вправо",
+        heard: true,
+        cut: false,
+        attempts,
+      }),
+    ).toEqual({ kind: "text", text: "Скрипит при торможении и тянет вправо" });
+  });
+
+  it("opens «Выбрать из списка» after every failure of voice, never while it works (TASK-060)", () => {
+    for (const failure of [
+      "denied",
+      "not_heard",
+      "not_understood",
+      "unavailable",
+      "offline",
+      "too_long",
+      "limit",
+    ] as const) {
+      expect(voiceFailureOpensList(failure), failure).toBe(true);
+    }
+    for (const working of ["explain", "listening", "recognizing"] as const) {
+      expect(voiceFailureOpensList(working), working).toBe(false);
+    }
   });
 
   it("opens M-AI-02 for the limits and says the rest in the sheet", () => {

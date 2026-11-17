@@ -102,6 +102,36 @@ describe("the format of a recording, by its content", () => {
     expect(readWav(streamed)).toMatchObject({ ok: true, wav: { seconds: 1 } });
   });
 
+  it("reads a megabyte of zeros in a comment at once and refuses a second sound (acceptance)", () => {
+    // ICMT of a million zeros and one letter: a backtracking pattern took minutes on it.
+    const zeros = "\0".repeat(1_000_000);
+    const wav = encodeWav(tone(0.5, 0.3), 16_000, { comment: `${zeros}x` });
+    const started = Date.now();
+    const read = readWav(wav);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(read).toMatchObject({ ok: true, wav: { seconds: 0.5 } });
+    // Only the first 256 bytes are read: all zeros here, so no comment text.
+    expect(read.ok && read.wav.comment).toBe("");
+    expect(
+      readWav(encodeWav(tone(0.5, 0.3), 16_000, { comment: "adclub-speech-sample:3\0\0\0" })),
+    ).toMatchObject({ ok: true, wav: { comment: "adclub-speech-sample:3" } });
+
+    // Two `data` chunks (a long first, a short last) or two `fmt ` — broken.
+    const long = encodeWav(tone(2, 0.3), 16_000);
+    const short = encodeWav(tone(0.2, 0.3), 16_000);
+    const twoData = new Uint8Array(long.length + short.length - 36);
+    twoData.set(long, 0);
+    twoData.set(short.subarray(36), long.length);
+    new DataView(twoData.buffer).setUint32(4, twoData.length - 8, true);
+    expect(readWav(twoData)).toEqual({ ok: false, reason: "broken" });
+    const twoFmt = new Uint8Array(long.length + 24);
+    twoFmt.set(long.subarray(0, 36), 0);
+    twoFmt.set(long.subarray(12, 36), 36);
+    twoFmt.set(long.subarray(36), 60);
+    new DataView(twoFmt.buffer).setUint32(4, twoFmt.length - 8, true);
+    expect(readWav(twoFmt)).toEqual({ ok: false, reason: "broken" });
+  });
+
   it("turns a browser's float samples at 48 kHz into 16 kHz PCM", () => {
     expect(Array.from(floatToPcm16(Float32Array.of(-1, -0.5, 0, 0.5, 1, 2)))).toEqual([
       -32768, -16384, 0, 16384, 32767, 32767,

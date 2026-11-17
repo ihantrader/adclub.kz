@@ -70,6 +70,15 @@ function otherAudioFormat(bytes: Uint8Array): string | null {
   return null;
 }
 
+/**
+ * The longest comment read: the samples carry a short code there. A comment
+ * is client bytes, so it is cut before anything is done with it and trailing
+ * zeros are dropped by a plain loop (a pattern like `/\0+$/` backtracks
+ * quadratically on a megabyte of zeros and froze the process — acceptance
+ * of TASK-059).
+ */
+const MAX_COMMENT_BYTES = 256;
+
 /** The comment of a `LIST` chunk of the kind `INFO` (`ICMT`), if it has one. */
 function infoComment(bytes: Uint8Array, view: DataView, start: number, end: number): string | null {
   if (ascii(bytes, start, 4) !== "INFO") return null;
@@ -79,7 +88,9 @@ function infoComment(bytes: Uint8Array, view: DataView, start: number, end: numb
     const size = view.getUint32(offset + 4, true);
     if (offset + 8 + size > end) return null;
     if (id === "ICMT") {
-      return ascii(bytes, offset + 8, size).replace(/\0+$/u, "");
+      let length = Math.min(size, MAX_COMMENT_BYTES);
+      while (length > 0 && bytes[offset + 8 + length - 1] === 0) length -= 1;
+      return ascii(bytes, offset + 8, length);
     }
     offset += 8 + size + (size % 2);
   }
@@ -116,6 +127,9 @@ export function readWav(input: Uint8Array): WavReading {
     const declared = view.getUint32(offset + 4, true);
     const body = offset + 8;
     if (id === "data") {
+      // One sound only: a second `data` would let a short last chunk pass the
+      // length check while a decoder plays the long first one.
+      if (dataBytes !== null) return { ok: false, reason: "broken" };
       const available = bytes.length - body;
       // A writer that streamed the sound may leave the size unknown (0 or all ones).
       if (declared === 0 || declared === 0xffffffff) dataBytes = available;
@@ -126,7 +140,7 @@ export function readWav(input: Uint8Array): WavReading {
     }
     if (body + declared > bytes.length) return { ok: false, reason: "broken" };
     if (id === "fmt ") {
-      if (declared < 16) return { ok: false, reason: "broken" };
+      if (declared < 16 || format !== null) return { ok: false, reason: "broken" };
       let tag = view.getUint16(body, true);
       if (tag === WAVE_FORMAT_EXTENSIBLE && declared >= 26) {
         // The first two bytes of the subformat GUID are the format tag.

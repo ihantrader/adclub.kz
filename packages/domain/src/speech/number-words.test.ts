@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mileageInText } from "../assistant/mileage-in-text";
-import { readVehiclePhrase, vehicleNameSpans } from "../vehicle/vehicle-phrase";
+import { readVehiclePhrase, vehicleNameSpans, vehicleYearOf } from "../vehicle/vehicle-phrase";
 import { numberWordsToDigits } from "./number-words";
 
 describe("numberWordsToDigits", () => {
@@ -63,7 +63,7 @@ describe("the mileage said into the field (TASK-060)", () => {
     expect(mileageInText(text, { field: true })).toBe(km);
   });
 
-  it.each(["", "не знаю", "примерно сорок или пятьдесят", "45 или 46 тысяч", "5"])(
+  it.each(["", "не знаю", "примерно сорок или пятьдесят", "45 или 46 тысяч"])(
     "%s → null",
     (text) => {
       expect(mileageInText(text, { field: true })).toBeNull();
@@ -79,7 +79,7 @@ describe("the mileage said into the field (TASK-060)", () => {
 
 describe("a car said by voice (TASK-060)", () => {
   it("takes out the year and the engine size", () => {
-    expect(readVehiclePhrase("Geely Atlas 2023, 1,5 турбо", 2026)).toEqual({
+    expect(readVehiclePhrase("Geely Atlas 2023, 1,5 турбо", 2026)).toMatchObject({
       year: 2023,
       engineVolumeCc: 1500,
       words: ["Geely", "Atlas"],
@@ -88,7 +88,7 @@ describe("a car said by voice (TASK-060)", () => {
       year: 2024,
       engineVolumeCc: 1500,
     });
-    expect(readVehiclePhrase("Джили Атлас две тысячи двадцать третьего года", 2026)).toEqual({
+    expect(readVehiclePhrase("Джили Атлас две тысячи двадцать третьего года", 2026)).toMatchObject({
       year: 2023,
       engineVolumeCc: null,
       words: ["Джили", "Атлас"],
@@ -123,7 +123,7 @@ describe("a car said by voice (TASK-060)", () => {
   });
 
   it("names no make when nothing but a year is said", () => {
-    expect(readVehiclePhrase("2023 года", 2026)).toEqual({
+    expect(readVehiclePhrase("2023 года", 2026)).toMatchObject({
       year: 2023,
       engineVolumeCc: null,
       words: [],
@@ -148,5 +148,119 @@ describe("a car said by voice (TASK-060)", () => {
     expect(
       vehicleNameSpans(["Geely", "Atlas", "Pro"], { from: 0, to: 1 }).map((span) => span.text),
     ).toEqual(["Atlas Pro", "Atlas", "Pro"]);
+  });
+});
+
+describe("numbers after the acceptance of TASK-060 (TASK-060.A)", () => {
+  it.each([
+    // 1. The genitive and the prepositional; «тысяч» alone is no number.
+    ["около ста тысяч", "около 100000"],
+    ["больше ста двадцати тысяч", "больше 120000"],
+    ["до двухсот тысяч", "до 200000"],
+    ["более трёхсот пятидесяти тысяч", "более 350000"],
+    ["около сорока пяти тысяч", "около 45000"],
+    ["о двухстах километрах", "о 200 километрах"],
+    ["меньше пятидесяти", "меньше 50"],
+    ["несколько тысяч", "несколько тысяч"],
+    ["тысячи", "тысячи"],
+    ["тыс.", "тыс."],
+    ["тысяча", "1000"],
+    ["мың", "1000"],
+    ["thousand", "1000"],
+    // 2. Ordinals of a year.
+    ["две тысячи пятнадцатого года", "2015 года"],
+    ["две тысячи восемнадцатого", "2018"],
+    ["две тысячи девятнадцатого", "2019"],
+    ["две тысячи одиннадцатого", "2011"],
+    ["две тысячи десятого", "2010"],
+    ["две тысячи двадцатого", "2020"],
+    ["две тысячи тридцатого", "2030"],
+    ["две тысячи двадцать третьего", "2023"],
+    ["екі мың жиырма үшінші жылғы", "2023 жылғы"],
+    ["екі мың он бесінші", "2015"],
+    ["екі мың оныншы", "2010"],
+    ["екі мың бірінші", "2001"],
+    ["екі мың жиырмасыншы", "2020"],
+    // An ordinal we do not read: no number rather than 2000.
+    ["две тысячи двухтысячного", "две тысячи двухтысячного"],
+    // 4. «он» is ten only with Kazakh.
+    ["он пять тысяч прошёл", "он 5000 прошёл"],
+    ["он бес", "15"],
+    ["он мың", "10000"],
+    ["екі мың он", "2010"],
+  ])("%s → %s", (text, digits) => {
+    expect(numberWordsToDigits(text)).toBe(digits);
+  });
+
+  it.each([
+    // 1.
+    ["пробег около ста тысяч", 100_000],
+    // 3. «45 тысяч двести» is 45 200 in both modes.
+    ["45 тысяч двести", 45_200],
+    ["нужно ТО, 45 тысяч двести", 45_200],
+  ])("the assistant: %s → %d", (text, km) => {
+    expect(mileageInText(text)).toBe(km);
+  });
+
+  it.each([
+    "пробег несколько тысяч",
+    "Coolray две тысячи двадцать третьего года, нужно масло",
+    "пятьдесят километров",
+    "45 km",
+  ])("the assistant: %s → null", (text) => {
+    expect(mileageInText(text)).toBeNull();
+  });
+
+  it.each([
+    ["около ста тысяч", 100_000],
+    ["больше ста двадцати тысяч", 120_000],
+    ["45 тысяч двести", 45_200],
+    ["он пять тысяч прошёл", 5_000],
+    ["он бес мың", 15_000],
+    // 8. Below 100 km the field takes it, as typed by hand.
+    ["пятьдесят километров", 50],
+    ["45 km", 45],
+    ["5", 5],
+  ])("the field: %s → %d", (text, km) => {
+    expect(mileageInText(text, { field: true })).toBe(km);
+  });
+
+  it.each(["несколько тысяч", "тысячи"])("the field: %s → null", (text) => {
+    expect(mileageInText(text, { field: true })).toBeNull();
+  });
+
+  it.each([
+    ["Geely Emgrand две тысячи пятнадцатого года", 2015],
+    ["Geely две тысячи восемнадцатого", 2018],
+    ["Geely две тысячи девятнадцатого", 2019],
+    ["екі мың жиырма үшінші жылғы Geely", 2023],
+    ["Geely 2099 Atlas 2023", 2023],
+    ["Peugeot 2008 2020", 2020],
+  ])("the year of %s is %d", (text, year) => {
+    expect(readVehiclePhrase(text, 2026).year).toBe(year);
+  });
+
+  it("guesses no year from a number cut short", () => {
+    expect(readVehiclePhrase("Geely две тысячи двухтысячного", 2026).year).toBeNull();
+    expect(readVehiclePhrase("Geely Atlas 2099", 2026).year).toBeNull();
+  });
+
+  it("gives every year said, and the words with them for a model named by digits", () => {
+    expect(readVehiclePhrase("Peugeot 2008 2020", 2026)).toMatchObject({
+      years: [2008, 2020],
+      words: ["Peugeot"],
+      wordsWithYears: ["Peugeot", "2008", "2020"],
+    });
+    expect(vehicleYearOf([2008, 2020], "2008")).toBe(2020);
+    expect(vehicleYearOf([2008], "2008")).toBeNull();
+    expect(vehicleYearOf([2008, 2020], "Atlas")).toBe(2020);
+    expect(vehicleYearOf([2023], null)).toBe(2023);
+  });
+
+  it("takes no engine size from a whole number with «л» or a model's number", () => {
+    expect(readVehiclePhrase("Chery Tiggo 7 Pro", 2026).engineVolumeCc).toBeNull();
+    expect(readVehiclePhrase("Chery Tiggo 7 л", 2026).engineVolumeCc).toBeNull();
+    expect(readVehiclePhrase("Chery Tiggo 7 Pro 2022, 1.5", 2026).engineVolumeCc).toBe(1500);
+    expect(readVehiclePhrase("Geely Atlas два литра", 2026).engineVolumeCc).toBe(2000);
   });
 });

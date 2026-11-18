@@ -13,6 +13,7 @@ import {
   readVehiclePhrase,
   vehicleNameSpans,
   vehicleNameSpellings,
+  vehicleYearOf,
 } from "@adclub/domain";
 import { VehicleReadService } from "../vehicles";
 import {
@@ -88,13 +89,27 @@ export class VehicleMatching {
       return { result: "not_found", fields, match: result };
     }
     const { models } = await this.vehicles.models(result.make.value.id, "ru");
-    const model = placeAmong(phrase.words, make.span, models);
+    let model = placeAmong(phrase.words, make.span, models);
+    // A model named by four digits («Peugeot 2008 2020»): the years taken out
+    // of the words are put back, and the number the model took is no year
+    // (TASK-060.A).
+    if (model.match.status !== "exact" && phrase.years.length > 0) {
+      const makeAgain = placeAmong(phrase.wordsWithYears, null, makes);
+      if (makeAgain.match.value?.id === result.make.value.id) {
+        const again = placeAmong(phrase.wordsWithYears, makeAgain.span, models);
+        if (again.match.status === "exact") model = again;
+      }
+    }
     result.model = model.match;
     fields.model = model.span?.text ?? null;
+    fields.year = vehicleYearOf(
+      phrase.years,
+      model.match.status === "exact" ? (model.span?.text ?? null) : null,
+    );
     return {
       result: "found",
       fields,
-      match: await this.belowModel(result, phrase.year, phrase.engineVolumeCc),
+      match: await this.belowModel(result, fields.year, phrase.engineVolumeCc),
     };
   }
 

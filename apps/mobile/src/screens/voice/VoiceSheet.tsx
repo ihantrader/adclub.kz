@@ -147,6 +147,18 @@ export function VoiceSheet({
   useEffect(() => {
     open.current = visible;
   }, [visible]);
+  // The place of the sheet went away with it open (the mileage question of
+  // `HomeHintCard` answered, `CarMileageScreen` left without its car): the
+  // recording is thrown away and no answer is wanted (TASK-060.A). A sheet
+  // that was closed leaves the one recorder alone — another sheet may use it.
+  useEffect(
+    () => () => {
+      generation.current += 1;
+      if (open.current) speechPort.cancel();
+      open.current = false;
+    },
+    [],
+  );
   // The spinner of «Распознаём…» only after the delay of the loading rule (D-069).
   const spinner = useDelayedIndicator(state === "recognizing" || state === "starting");
 

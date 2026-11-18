@@ -220,9 +220,13 @@ export type RecognitionFailure =
 
 /** The state of a failed call, from the error the API client threw. */
 export function recognitionFailureOf(error: unknown): RecognitionFailure {
-  const value = error as { code?: unknown; status?: unknown } | null;
+  const value = error as { code?: unknown; status?: unknown; details?: unknown } | null;
   const code = typeof value?.code === "string" ? value.code : "";
+  const details = (value?.details ?? {}) as { limit?: unknown };
   if (code === "NETWORK_ERROR") return "offline";
+  // The flood limit of an address (TASK-060.A): no attempt was spent, the
+  // person's limit is not reached — try later, as the voice says (`voiceFailureOf`).
+  if (code === "RATE_LIMITED" && details.limit === "photo_requests_per_ip") return "unavailable";
   if (code === "RATE_LIMITED") return "limit";
   if (
     code === "VEHICLE_DOCUMENT_INVALID" ||

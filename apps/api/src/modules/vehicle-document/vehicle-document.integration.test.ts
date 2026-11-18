@@ -835,6 +835,52 @@ describe("vehicle registration certificate (PostgreSQL + Redis + MinIO)", () => 
       expect(kazakh.match.generation.value?.label).toBe("II (FX11)");
     });
 
+    it("reads a year said as an ordinal, and never guesses 2000 (TASK-060.A)", async () => {
+      const emgrand = await matched("Geely Emgrand две тысячи пятнадцатого года");
+      expect(emgrand.match.model).toMatchObject({ status: "exact", value: { label: "Emgrand" } });
+      expect(emgrand.fields.year).toBe(2015);
+      // The catalog has Emgrand from 2021 only: no generation of 2015, none taken.
+      expect(emgrand.match.generation.status).toBe("not_found");
+      const atlas = await matched("Geely Atlas две тысячи восемнадцатого");
+      expect(atlas.fields.year).toBe(2018);
+      expect(atlas.match.generation).toMatchObject({
+        status: "exact",
+        value: { label: "I (NL-3)" },
+      });
+      const kazakh = await matched("екі мың жиырма үшінші жылғы Geely Atlas");
+      expect(kazakh.fields.year).toBe(2023);
+      expect(kazakh.match.generation.value?.label).toBe("II (FX11)");
+      // Every year said, not the first four digits.
+      expect((await matched("Geely 2099 Atlas 2023")).fields.year).toBe(2023);
+      // «Tiggo 7» is no 7-litre engine.
+      expect((await matched("Chery Tiggo 7 Pro 2022")).fields.engineVolumeCc).toBeNull();
+    });
+
+    it("takes four digits that name the model as the model, not the year (TASK-060.A)", async () => {
+      await db.query(`
+        WITH make AS (INSERT INTO vehicle_make DEFAULT VALUES RETURNING id),
+        make_name AS (
+          INSERT INTO vehicle_make_spelling (make_id, text, key, is_name)
+          SELECT id, 'Peugeot', 'peugeot', true FROM make
+        ),
+        model AS (INSERT INTO vehicle_model (make_id) SELECT id FROM make RETURNING id, make_id),
+        model_name AS (
+          INSERT INTO vehicle_model_spelling (model_id, make_id, text, key, is_name)
+          SELECT id, make_id, '2008', '2008', true FROM model
+        )
+        INSERT INTO vehicle_generation (model_id, name, name_key, year_from, year_to)
+        SELECT id, 'II (P24)', 'ii(p24)', 2019, NULL FROM model`);
+      const answer = await matched("Peugeot 2008 2020");
+      expect(answer.match.model).toMatchObject({ status: "exact", value: { label: "2008" } });
+      expect(answer.fields).toMatchObject({ model: "2008", year: 2020 });
+      expect(answer.match.generation).toMatchObject({
+        status: "exact",
+        value: { label: "II (P24)" },
+      });
+      // The model's name alone: no year was said.
+      expect((await matched("Peugeot 2008")).fields.year).toBeNull();
+    });
+
     it("says not found for a make the catalog lacks, or none said", async () => {
       for (const said of ["Тойота", "Toyota Camry 2020", "2023 года", "атлас 2023"]) {
         const answer = await matched(said);

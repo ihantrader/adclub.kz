@@ -12,8 +12,16 @@ import { engineVolumeCc } from "./vehicle-document";
  */
 
 export interface VehiclePhrase {
-  /** Four digits from 1950 to the current year, the first such in the phrase. */
+  /** The last of `years` («Geely 2099 Atlas 2023» — 2023), or `null`. */
   year: number | null;
+  /**
+   * Every four digits from 1950 to the current year, in the order said
+   * (TASK-060.A): one of them may be the name of a model («Peugeot 2008
+   * 2020»), and only the server knows the catalog — `vehicleYearOf`.
+   */
+  years: number[];
+  /** The words said, with the years among them in their places (to place a model named by digits). */
+  wordsWithYears: string[];
   /** The engine size in cm³ («1.5», «1,5 л», «полтора литра» — 1500). */
   engineVolumeCc: number | null;
   /** The words left, in the order said, to name the make and the model. */
@@ -38,13 +46,16 @@ const OLDEST_YEAR = 1950;
 export const VEHICLE_NAME_MAX_WORDS = 3;
 
 /** «2023», «2023-го», «2023 года» — not a part of a longer number. */
-const YEAR = /(?<![\d.,])((?:19|20)\d\d)(?![\d.,]?\d)/u;
+const YEAR = /(?<![\d.,])((?:19|20)\d\d)(?![\d.,]?\d)/gu;
 
 /** «1.5», «1,5», «2.0T» — one digit, a point or a comma, one digit. */
 const VOLUME_POINT = /(?<![\d.,])(\d)[.,](\d)(?![\d.,]?\d)/u;
-/** «2 литра», «2л», «2 l». */
+/**
+ * «2 литра», «2 liters» — a whole number of litres only with the whole word:
+ * «7 л» and the «7» of «Tiggo 7 Pro» are no engine size (TASK-060.A).
+ */
 const VOLUME_LITRES =
-  /(?<![\d.,])(\d)\s*(?:л|литр[а-я]*|литрлік|l|liter|liters|litre|litres)(?![\p{L}\p{N}])/iu;
+  /(?<![\d.,])([1-8])\s*(?:литр[а-я]*|литрлік|liter|liters|litre|litres)(?![\p{L}\p{N}])/iu;
 
 /** Words that say nothing of the make or the model. */
 const FILLER = new Set([
@@ -103,33 +114,59 @@ const FILLER = new Set([
 
 /** The phrase taken apart: the year and the engine size out, the words left in order. */
 export function readVehiclePhrase(text: string, currentYear: number): VehiclePhrase {
-  let rest = numberWordsToDigits(text.normalize("NFKC").replace(/\s+/gu, " "));
+  let withYears = numberWordsToDigits(text.normalize("NFKC").replace(/\s+/gu, " "));
 
-  let year: number | null = null;
-  const yearMatch = YEAR.exec(rest);
-  if (yearMatch) {
-    const value = Number(yearMatch[1]);
-    if (value >= OLDEST_YEAR && value <= currentYear) {
-      year = value;
-      rest = cut(rest, yearMatch.index, yearMatch[0].length);
-    }
-  }
+  // Every year said, not the first four digits: «Geely 2099 Atlas 2023» is 2023.
+  const found = [...withYears.matchAll(YEAR)].filter((match) => {
+    const value = Number(match[1]);
+    return value >= OLDEST_YEAR && value <= currentYear;
+  });
+  const years = found.map((match) => Number(match[1]));
+  let rest = withYears;
+  for (const match of [...found].reverse()) rest = cut(rest, match.index, match[0].length);
 
   let engineVolume: number | null = null;
-  const volumeMatch = VOLUME_POINT.exec(rest) ?? VOLUME_LITRES.exec(rest);
+  const volumeIn = (source: string) => VOLUME_POINT.exec(source) ?? VOLUME_LITRES.exec(source);
+  const volumeMatch = volumeIn(rest);
   if (volumeMatch) {
     const litres = Number(`${volumeMatch[1]!}.${volumeMatch[2] ?? "0"}`);
     engineVolume = engineVolumeCc(litres);
-    if (engineVolume !== null) rest = cut(rest, volumeMatch.index, volumeMatch[0].length);
+    if (engineVolume !== null) {
+      rest = cut(rest, volumeMatch.index, volumeMatch[0].length);
+      const again = volumeIn(withYears);
+      if (again) withYears = cut(withYears, again.index, again[0].length);
+    }
   }
 
-  const words = rest
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word !== "")
-    .filter((word) => !FILLER.has(word.toLowerCase().replace(/ё/gu, "е")))
-    // One letter or a number left alone names nothing («7» of «Tiggo 7 Pro» stays with its words).
-    .filter((word, index, all) => word.length > 1 || hasLetterNeighbour(all, index));
-  return { year, engineVolumeCc: engineVolume, words };
+  return {
+    year: years.at(-1) ?? null,
+    years,
+    engineVolumeCc: engineVolume,
+    words: wordsOf(rest),
+    wordsWithYears: wordsOf(withYears),
+  };
+}
+
+/** The words that may name a make or a model, in the order said. */
+function wordsOf(text: string): string[] {
+  return (
+    text
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((word) => word !== "")
+      .filter((word) => !FILLER.has(word.toLowerCase().replace(/ё/gu, "е")))
+      // One letter or a number left alone names nothing («7» of «Tiggo 7 Pro» stays with its words).
+      .filter((word, index, all) => word.length > 1 || hasLetterNeighbour(all, index))
+  );
+}
+
+/**
+ * The year of the car once the model is known (TASK-060.A): the last of the
+ * years said that is not a word of the model's name as said («Peugeot 2008
+ * 2020» with the model «2008» — 2020), or `null`.
+ */
+export function vehicleYearOf(years: readonly number[], modelSaid: string | null): number | null {
+  const taken = new Set((modelSaid ?? "").split(/[^\p{L}\p{N}]+/u));
+  return years.filter((year) => !taken.has(String(year))).at(-1) ?? null;
 }
 
 function cut(text: string, index: number, length: number): string {

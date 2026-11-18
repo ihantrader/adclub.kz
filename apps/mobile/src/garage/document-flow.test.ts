@@ -151,6 +151,16 @@ describe("states of M-GAR-04", () => {
   it("reads every failure the screen has a state for", () => {
     expect(recognitionFailureOf({ code: "NETWORK_ERROR" })).toBe("offline");
     expect(recognitionFailureOf({ code: "RATE_LIMITED" })).toBe("limit");
+    expect(
+      recognitionFailureOf({
+        code: "RATE_LIMITED",
+        details: { limit: "vehicle_document_per_device" },
+      }),
+    ).toBe("limit");
+    // The flood limit of an address spends no attempt: not «попытки закончились» (TASK-060.A).
+    expect(
+      recognitionFailureOf({ code: "RATE_LIMITED", details: { limit: "photo_requests_per_ip" } }),
+    ).toBe("unavailable");
     expect(recognitionFailureOf({ code: "VEHICLE_DOCUMENT_UNAVAILABLE" })).toBe("unavailable");
     expect(recognitionFailureOf({ code: "VEHICLE_DOCUMENT_INVALID" })).toBe("invalid");
     expect(recognitionFailureOf(new Error("anything"))).toBe("unavailable");

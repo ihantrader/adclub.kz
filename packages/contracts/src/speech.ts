@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ASSISTANT_MESSAGE_MAX_CHARS } from "./assistant";
 import { vehicleDocumentAttemptsSchema } from "./vehicle-document";
 
 /**
@@ -48,9 +49,6 @@ export const speechPurposeSchema = z.enum(["search", "mileage", "vehicle", "assi
 
 export type SpeechPurpose = z.infer<typeof speechPurposeSchema>;
 
-/** The longest text of an answer: a message to the assistant (`ASSISTANT_MESSAGE_MAX_CHARS`). */
-export const SPEECH_TEXT_MAX_CHARS = 1000;
-
 /**
  * `deviceId` — a guest's trial voice requests are counted by the device (as
  * photos); `purpose` — what the text is for (absent — `search`).
@@ -78,7 +76,7 @@ export type SpeechQuery = z.infer<typeof speechQuerySchema>;
  */
 export const speechTranscriptionSchema = z.object({
   text: z.string().max(100),
-  message: z.string().max(SPEECH_TEXT_MAX_CHARS).optional(),
+  message: z.string().max(ASSISTANT_MESSAGE_MAX_CHARS).optional(),
   heard: z.boolean(),
   cut: z.boolean(),
   attempts: vehicleDocumentAttemptsSchema,

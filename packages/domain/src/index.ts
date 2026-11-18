@@ -330,6 +330,7 @@ export {
 export type { VinCheck } from "./vehicle/vehicle-document";
 export {
   readVehiclePhrase,
+  vehicleYearOf,
   VEHICLE_NAME_MAX_WORDS,
   vehicleNameSpans,
   vehicleNameSpellings,

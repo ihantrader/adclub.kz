@@ -45,13 +45,13 @@ const WITH_UNIT = new RegExp(
   "giu",
 );
 
-function valueOf(number: string, thousands: boolean): number | null {
+function valueOf(number: string, thousands: boolean, min: number): number | null {
   const grouped = /^\d{1,3}(?:[ .,]\d{3})+$/u.test(number);
   const plain = grouped ? number.replace(/[ .,]/gu, "") : number.replace(",", ".");
   const value = Number(plain);
   if (!Number.isFinite(value)) return null;
   const km = Math.round(thousands ? value * 1000 : value);
-  return km >= MILEAGE_MIN_KM && km <= MILEAGE_MAX_KM ? km : null;
+  return km >= min && km <= MILEAGE_MAX_KM ? km : null;
 }
 
 function isThousands(unit: string | undefined): boolean {
@@ -80,27 +80,28 @@ export interface MileageInTextOptions {
  */
 export function mileageInText(text: string, options: MileageInTextOptions = {}): number | null {
   const plain = text.normalize("NFKC").replace(SPACES, " ").toLowerCase();
-  // With the words in digits first («45 тысяч двести» is 45 200, not 45 000)…
-  const digits = numberWordsToDigits(plain);
-  const found = mileageByRules(digits);
-  if (found !== null) return found;
-  if (options.field) {
-    const numbers = [...digits.matchAll(BARE)];
-    // Two numbers said («45 или 46 тысяч») — the person is asked again.
-    return numbers.length === 1 ? valueOf(numbers[0]![1]!, false) : null;
-  }
-  // …then as written: «20 тысяч» keeps its unit there.
-  return digits === plain ? null : mileageByRules(plain);
+  // The words in digits («45 тысяч двести» is 45 200, not 45 000). A number
+  // that began with digits keeps the unit its word of thousands carried
+  // («20 тысяч» — «20000 км»), so it counts here as it did when written
+  // with digits, in the field and outside it alike (TASK-060.A).
+  const digits = numberWordsToDigits(plain, { digitThousandsUnit: " км" });
+  if (!options.field) return mileageByRules(digits, MILEAGE_MIN_KM);
+  // In the field anything from 0 is a reading, as the field typed by hand
+  // takes it (`isMileageInRange`); outside it below `MILEAGE_MIN_KM` is not.
+  const numbers = [...digits.matchAll(BARE)];
+  // Two numbers said («45 или 46 тысяч») — the person is asked again.
+  if (numbers.length !== 1) return null;
+  return mileageByRules(digits, 0) ?? valueOf(numbers[0]![1]!, false, 0);
 }
 
 /** A number after a word of mileage, or a number with a unit. */
-function mileageByRules(text: string): number | null {
+function mileageByRules(text: string, min: number): number | null {
   for (const match of text.matchAll(WITH_WORD)) {
-    const km = valueOf(match[1]!, isThousands(match[2]));
+    const km = valueOf(match[1]!, isThousands(match[2]), min);
     if (km !== null) return km;
   }
   for (const match of text.matchAll(WITH_UNIT)) {
-    const km = valueOf(match[1]!, isThousands(match[2]));
+    const km = valueOf(match[1]!, isThousands(match[2]), min);
     if (km !== null) return km;
   }
   return null;

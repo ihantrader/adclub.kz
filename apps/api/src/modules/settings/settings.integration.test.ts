@@ -1054,15 +1054,14 @@ describe("settings (PostgreSQL + Redis)", () => {
     it("reaches another process within the cache lifetime, with no restart", async () => {
       const admin = await setUpAdmin();
       await worker.get(AppSettings).values();
-      const changed = await asAdmin(
-        "put",
-        "/admin/settings/guest_ip_rate_limit_per_hour",
-        admin.accessToken,
-        { value: 3, expectedVersion: 0, reason: "Гости злоупотребляют" },
-      );
+      const changed = await asAdmin("put", "/admin/settings/speech_per_ip", admin.accessToken, {
+        value: 3,
+        expectedVersion: 0,
+        reason: "Гости злоупотребляют",
+      });
       expect(changed.status).toBe(200);
       const deadline = Date.now() + CACHE_MS + 1000;
-      while ((await worker.get(AppSettings).get("guest_ip_rate_limit_per_hour")) !== 3) {
+      while ((await worker.get(AppSettings).get("speech_per_ip")) !== 3) {
         expect(Date.now()).toBeLessThan(deadline);
         await sleep(50);
       }

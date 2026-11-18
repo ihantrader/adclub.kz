@@ -395,6 +395,13 @@ import { clientPlatformSchema } from "./client";
  *   day's AI budget is spent — the attempt was given back; «Голосовой
  *   ввод временно недоступен». `details` is `SpeechUnavailableDetails`.
  *
+ * A guest's AI trial (TASK-066, ARCHITECTURE 8.6):
+ * - `GUEST_SIGN_IN_REQUIRED` (403): the AI is for signed-in people only
+ *   now (`guest_attestation_required`) — on every route of a guest's trial
+ *   (a photo, a recording, the assistant), before the body is read: no
+ *   attempt counted, no model called. The app shows M-AI-02 «Пробные
+ *   запросы временно недоступны» with «Войти»; the ways without AI stay.
+ *
  * The request itself, not its data (TASK-009.A; before it, all of these
  * came back as `VALIDATION_ERROR`, which is only for data that fails the
  * route's schema):
@@ -555,6 +562,8 @@ export const errorCodeSchema = z.enum([
   // Voice input (TASK-059, ARCHITECTURE 4.90).
   "SPEECH_INVALID",
   "SPEECH_UNAVAILABLE",
+  // A guest's AI trial closed to guests (TASK-066, ARCHITECTURE 8.6).
+  "GUEST_SIGN_IN_REQUIRED",
   // Price list imports (TASK-046, ARCHITECTURE 4.66).
   "PRICE_IMPORT_FILE_INVALID",
   "PRICE_IMPORT_STATE",

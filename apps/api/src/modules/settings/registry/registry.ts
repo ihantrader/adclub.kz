@@ -478,17 +478,10 @@ const guestAssistant = group({
       description:
         "Дневной бюджет на ИИ-операции всех гостей; при исчерпании гостю предлагается войти.",
     }),
-    guest_ip_rate_limit_per_hour: define.integer({
-      unit: "count",
-      min: 1,
-      max: 10_000,
-      default: 10,
-      description: "Сколько гостевых ИИ-запросов в час принимается с одного адреса.",
-    }),
     guest_attestation_required: define.boolean({
       default: false,
       description:
-        "Требовать проверку подлинности приложения (App Attest / Play Integrity) у гостя.",
+        "Выключатель «ИИ только для вошедших»: включено — гость не может распознать фото (техпаспорт, приборная панель, деталь), голос и спросить помощника, приложение предлагает войти; вошедших это не касается. Проверки подлинности приложения (App Attest / Play Integrity) пока нет, поэтому включённая настройка закрывает ИИ всем гостям. Включать при злоупотреблении (признаки — команда guest:status).",
     }),
     assistant_daily_dialogs_per_user: define.integer({
       unit: "count",

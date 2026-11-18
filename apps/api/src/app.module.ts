@@ -45,6 +45,7 @@ import { HttpExceptionFilter, NotFoundModule } from "./common/errors";
 import { JsonBodyMiddleware, OriginPolicyMiddleware, UploadBodyMiddleware } from "./common/http";
 import { AccessLogMiddleware, JsonLoggerService, RequestIdMiddleware } from "./common/logging";
 import { UploadRateLimitMiddleware } from "./rate-limit";
+import { GuestModule, GuestTrialGateMiddleware } from "./guest";
 import { ObservabilityModule } from "./observability";
 
 @Module({})
@@ -125,6 +126,7 @@ export class AppModule implements NestModule {
         AuditModule.forRoot({ http: true }),
         SettingsModule.forRoot({ http: true, cache: options.settingsCache }),
         AiModule.forRoot(config, { metrics: config.metrics.enabled }),
+        GuestModule,
         MessagingModule.forRoot(config, {
           http: true,
           metrics: config.metrics.enabled,
@@ -205,12 +207,15 @@ export class AppModule implements NestModule {
     // a request refused for its origin or its body type should still be
     // logged. `UploadBodyMiddleware` comes after the body-type check and
     // touches only the routes that take a file (TASK-013); the limit by address
-    // of such a route is counted before its body is read (TASK-059.A).
+    // of such a route is counted before its body is read (TASK-059.A). The
+    // gate of a guest's AI trial refuses a guest before any body is read,
+    // the assistant's JSON included (TASK-066).
     consumer
       .apply(
         RequestIdMiddleware,
         AccessLogMiddleware,
         OriginPolicyMiddleware,
+        GuestTrialGateMiddleware,
         JsonBodyMiddleware,
         UploadRateLimitMiddleware,
         UploadBodyMiddleware,

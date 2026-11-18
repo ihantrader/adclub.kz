@@ -1,6 +1,7 @@
 {
   "src/database/database.integration.test.ts": 34,
   "src/database/schema-drift.integration.test.ts": 2,
+  "src/guest/guest-mode.integration.test.ts": 70,
   "src/jobs/jobs.integration.test.ts": 236,
   "src/modules/admin-home/admin-panel.integration.test.ts": 11,
   "src/modules/assistant/assistant.integration.test.ts": 260,

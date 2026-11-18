@@ -442,6 +442,7 @@ export {
   apiRoutes,
   buildRoutePath,
   buildRouteQuery,
+  guestAiTrialRoutes,
   isUploadRoute,
   MODEL_REQUEST_CLIENT_WAIT_MS,
   MODEL_REQUEST_SERVER_MAX_SECONDS,

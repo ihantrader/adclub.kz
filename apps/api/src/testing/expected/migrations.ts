@@ -69,4 +69,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1792400000000_offer-views",
   "1792450000000_moderation-digest",
   "1792500000000_speech-transcribe",
+  "1792550000000_drop-guest-ip-rate-limit-setting",
 ];

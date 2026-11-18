@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   apiRoutes,
   buildRoutePath,
+  guestAiTrialRoutes,
   isUploadRoute,
   MODEL_REQUEST_CLIENT_WAIT_MS,
   MODEL_REQUEST_SERVER_MAX_SECONDS,
@@ -79,6 +80,16 @@ describe("routes that wait for a model (TASK-063.B)", () => {
     expect(waitsForModel("POST", "http://h/assistant/messages/abc/complaint")).toBe(false);
     expect(waitsForModel("GET", "http://h/garage/vehicle-document/attempts")).toBe(false);
     expect(waitsForModel("POST", "http://h/orders")).toBe(false);
+  });
+
+  it("are the routes of a guest's AI trial, open to guests and without path parameters (TASK-066)", () => {
+    expect(guestAiTrialRoutes.map((route) => route.operationId).sort()).toEqual(
+      modelRoutes.map((route) => route.operationId).sort(),
+    );
+    for (const route of guestAiTrialRoutes) {
+      expect(route.auth, route.operationId).toBe("optional");
+      expect(route.method, route.operationId).toBe("POST");
+    }
   });
 
   it("are waited for longer than the server may take on them", () => {

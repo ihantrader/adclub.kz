@@ -21,6 +21,8 @@ import {
   ReviewLogins,
 } from "./modules/identity";
 import { AiModule, AiService } from "./modules/ai";
+import { GuestActivity, GuestModule } from "./guest";
+import { RedisModule } from "./redis";
 import { MessagingAdmin, MessagingCommandError, MessagingModule } from "./modules/messaging";
 import {
   NotificationsAdmin,
@@ -127,6 +129,13 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  * AI and automatic translation of the catalog (ARCHITECTURE 4.19):
  *   ai:status                    the provider, today's spend against the daily budget, today's
  *                                calls by kind and status, the latest failed calls
+ *   guest:status [--day <YYYY-MM-DD>]
+ *                                the signs of the switch `guest_attestation_required`
+ *                                (TASK-066): the guests' AI spend against their budget,
+ *                                their model calls by kind, their requests by kind and
+ *                                the share from devices seen before the day, devices of
+ *                                the day and new ones, the networks (/24, /64) with most
+ *                                new devices — no phone numbers, no whole addresses
  *   translations:status          the queue: pending, held by a run, waiting after a temporary
  *                                failure, and the tasks refused for good with the reason
  *   translations:queue-missing   queue a translation for every language that has none (what
@@ -279,6 +288,9 @@ class OperatorModule {
         AuditModule.forRoot({ http: false }),
         SettingsModule.forRoot({ http: false }),
         AiModule.forRoot(config),
+        // The signs of a guest's AI trial live in Redis (TASK-066, guest:status).
+        RedisModule,
+        GuestModule,
         MessagingModule.forRoot(config, { http: false }),
         NotificationsModule.forRoot(config, { http: false }),
         catalog,
@@ -349,6 +361,7 @@ const USAGE = `Usage: operator <command> [arguments]
   push:retry <notificationId|deliveryId>
   push:status
   ai:status
+  guest:status [--day <YYYY-MM-DD>]
   translations:status
   translations:queue-missing
   translations:run
@@ -484,6 +497,7 @@ interface Services {
   plans: Plans;
   cards: SupplierCards;
   ai: AiService;
+  guests: GuestActivity;
   translations: TranslationQueue;
   translationEval: TranslationEval;
   documentEval: VehicleDocumentEval;
@@ -516,6 +530,7 @@ async function run(
     plans,
     cards,
     ai,
+    guests,
     translations,
     translationEval,
     documentEval,
@@ -547,6 +562,7 @@ async function run(
       "batch-size": { type: "string" },
       glossary: { type: "boolean" },
       label: { type: "string" },
+      day: { type: "string" },
       limit: { type: "string" },
       status: { type: "string" },
       template: { type: "string" },
@@ -662,6 +678,12 @@ async function run(
     }
     case "ai:status":
       return ai.status();
+    case "guest:status": {
+      if (values.day !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(values.day)) {
+        throw new OperatorCommandError("--day is a date of Almaty, YYYY-MM-DD");
+      }
+      return guests.status(values.day);
+    }
     case "translations:status":
       return translations.status();
     case "translations:queue-missing":
@@ -1186,6 +1208,7 @@ async function main(): Promise<void> {
         plans: app.get(Plans),
         cards: app.get(SupplierCards),
         ai: app.get(AiService),
+        guests: app.get(GuestActivity),
         translations: app.get(TranslationQueue),
         translationEval: app.get(TranslationEval),
         documentEval: app.get(VehicleDocumentEval),

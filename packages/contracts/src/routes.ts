@@ -706,6 +706,15 @@ export interface ApiRouteDefinition {
    * second recognition). Not part of the OpenAPI document.
    */
   waitsForModel?: true;
+  /**
+   * A guest's AI trial (TASK-066; PRODUCT 6.6, ARCHITECTURE 8.6): a route
+   * that spends a guest's trial attempt on a model — a photo, a recording,
+   * a message to the assistant. With the setting `guest_attestation_required`
+   * on, a guest (a request without `Authorization`) gets 403
+   * `GUEST_SIGN_IN_REQUIRED` before the body is read; a signed-in person is
+   * served as before. Not part of the OpenAPI document.
+   */
+  guestAiTrial?: true;
   responses: Readonly<Record<number, ApiResponseDefinition>>;
 }
 
@@ -1188,6 +1197,7 @@ const coreApiRoutes = {
     method: "POST",
     path: "/garage/dashboard",
     waitsForModel: true,
+    guestAiTrial: true,
     summary:
       "Read the total mileage off a photo of the dashboard (SCREENS M-GAR-07): the photo is stored nowhere, nothing is written",
     tag: "garage",
@@ -1238,6 +1248,7 @@ const coreApiRoutes = {
     method: "POST",
     path: "/garage/vehicle-document",
     waitsForModel: true,
+    guestAiTrial: true,
     summary:
       "Read a car off a photo of a Kazakhstan registration certificate (SCREENS M-GAR-04): the photo is stored nowhere, nothing is added to the garage",
     tag: "garage",
@@ -4465,6 +4476,7 @@ const coreApiRoutes = {
     method: "POST",
     path: "/catalog/part-photo",
     waitsForModel: true,
+    guestAiTrial: true,
     summary:
       "Read the article off a photo of a part or its box and find it as the search does (M-CAT-06): the photo is stored nowhere; open to guests",
     tag: "catalog",
@@ -4496,6 +4508,7 @@ const coreApiRoutes = {
     method: "POST",
     path: "/speech/transcribe",
     waitsForModel: true,
+    guestAiTrial: true,
     summary:
       "Recognise what was said in a recording (SCREENS M-CAT-05): the text for the search line only; the recording is stored nowhere; open to guests by device",
     tag: "catalog",
@@ -5891,6 +5904,7 @@ const planAndAssistantRoutes = {
     method: "POST",
     path: "/assistant/messages",
     waitsForModel: true,
+    guestAiTrial: true,
     summary:
       "One turn of the AI Pilot assistant (M-AI-01): the person's message, the model looks things up only with tools over the catalog, the answer is its text and the cards the server builds from the catalog; the first message without dialogId opens a dialog and spends one of the day's (a guest's trial) dialogs; open to guests by deviceId",
     tag: "assistant",
@@ -6221,6 +6235,14 @@ function pathOfUrl(url: string): string {
 /** Every route that waits for a model. */
 export const modelRoutes: readonly ApiRouteDefinition[] = Object.freeze(
   Object.values(apiRoutes).filter((route: ApiRouteDefinition) => route.waitsForModel === true),
+);
+
+/**
+ * Every route of a guest's AI trial (`guestAiTrial`, TASK-066): the one list
+ * the server's gate of `guest_attestation_required` closes to guests.
+ */
+export const guestAiTrialRoutes: readonly ApiRouteDefinition[] = Object.freeze(
+  Object.values(apiRoutes).filter((route: ApiRouteDefinition) => route.guestAiTrial === true),
 );
 
 /** Path parameters a caller passes to a route (`never` for routes without them). */

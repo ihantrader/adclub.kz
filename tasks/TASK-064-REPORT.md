@@ -50,6 +50,8 @@ COMPLETED
 - **Модели (I1098).** Основная — `openai/gpt-4.1-mini`, запасная — `google/gemini-3.1-flash-lite`.
 
 ## Verification
+CI не ждал: пуш в `main` (коммиты 535dff6, c56e34e, 32cef6a, 99ca9d4), прогон CI — **44367189440**.
+
 Итоговый прогон после правок по ревью:
 - `pnpm format:check` — PASS.
 - `pnpm lint` — PASS: 0 ошибок; одно старое предупреждение в `ratings/supplier-ratings.service.ts`, файл не трогал.

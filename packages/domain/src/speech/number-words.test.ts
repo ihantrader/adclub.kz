@@ -264,3 +264,34 @@ describe("numbers after the acceptance of TASK-060 (TASK-060.A)", () => {
     expect(readVehiclePhrase("Geely Atlas два литра", 2026).engineVolumeCc).toBe(2000);
   });
 });
+
+describe("the mileage field at the acceptance of TASK-060.A", () => {
+  it.each([
+    ["120к", 120_000],
+    ["120k", 120_000],
+    ["45200км", 45_200],
+    ["пробег 120к", 120_000],
+    ["пробег 45200км", 45_200],
+    ["сто двадцать тысяч", 120_000],
+    ["45 200", 45_200],
+    ["45.200", 45_200],
+  ])("%s → %d", (text, km) => {
+    expect(mileageInText(text, { field: true })).toBe(km);
+  });
+
+  // A number read only in part is no reading: the person is asked again.
+  it.each([
+    "полтора миллиона",
+    "два миллиона",
+    "миллион двести тысяч",
+    "сорок пять с половиной тысяч",
+    "1.5",
+    "пробег 1.5",
+    "45,5",
+    "сорок тыщ",
+    "сто двадцать тысяч миль",
+    "120000 miles",
+  ])("%s → null", (text) => {
+    expect(mileageInText(text, { field: true })).toBeNull();
+  });
+});

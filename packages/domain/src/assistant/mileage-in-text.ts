@@ -50,6 +50,8 @@ function valueOf(number: string, thousands: boolean, min: number): number | null
   const plain = grouped ? number.replace(/[ .,]/gu, "") : number.replace(",", ".");
   const value = Number(plain);
   if (!Number.isFinite(value)) return null;
+  // A fraction of a kilometre is not a reading («пробег 1.5»); of thousands it is («1,5 тыс»).
+  if (!thousands && !Number.isInteger(value)) return null;
   const km = Math.round(thousands ? value * 1000 : value);
   return km >= min && km <= MILEAGE_MAX_KM ? km : null;
 }
@@ -58,9 +60,6 @@ function isThousands(unit: string | undefined): boolean {
   // A whole word: the «k» of «km» is not thousands (TASK-060).
   return unit !== undefined && new RegExp(`^${THOUSANDS}(?!\\p{L})`, "iu").test(unit.trim());
 }
-
-/** Any number standing on its own: not a part of a word («ТО-2», «5W-30»). */
-const BARE = new RegExp(String.raw`(?<![\p{L}\p{N}-])${NUMBER}(?![\p{L}\p{N}])`, "gu");
 
 export interface MileageInTextOptions {
   /**
@@ -88,11 +87,42 @@ export function mileageInText(text: string, options: MileageInTextOptions = {}):
   if (!options.field) return mileageByRules(digits, MILEAGE_MIN_KM);
   // In the field anything from 0 is a reading, as the field typed by hand
   // takes it (`isMileageInRange`); outside it below `MILEAGE_MIN_KM` is not.
-  const numbers = [...digits.matchAll(BARE)];
+  const numbers = [...digits.matchAll(ANY_NUMBER)];
   // Two numbers said («45 или 46 тысяч») — the person is asked again.
   if (numbers.length !== 1) return null;
-  return mileageByRules(digits, 0) ?? valueOf(numbers[0]![1]!, false, 0);
+  const number = numbers[0]!;
+  // Miles are not kilometres; the field takes kilometres only.
+  if (MILES.test(digits)) return null;
+  const byRules = mileageByRules(digits, 0);
+  if (byRules !== null) return byRules;
+  // A number alone counts only when it was read whole (TASK-060.A
+  // acceptance): «1.5» of «полтора миллиона», the «2» of «два миллиона»
+  // and the «45» of «сорок пять с половиной тысяч» are not a mileage.
+  const value = number[1]!;
+  if (/[.,]/u.test(value) && !GROUPED.test(value)) return null;
+  const before = digits.slice(0, number.index);
+  const after = digits.slice(number.index + number[0]!.length);
+  if (/^\p{L}/u.test(after) || UNREAD_AFTER.test(after) || UNREAD_BEFORE.test(before)) {
+    return null;
+  }
+  return valueOf(value, false, 0);
 }
+
+/** Every number standing on its own start, a unit glued to it or not («120к», «45200км»). */
+const ANY_NUMBER = new RegExp(String.raw`(?<![\p{L}\p{N}-])${NUMBER}`, "gu");
+
+/** «20 000», «20.000» — a number grouped by thousands, not a fraction. */
+const GROUPED = /^\d{1,3}(?:[ .,]\d{3})+$/u;
+
+/** A unit of miles anywhere in the text. */
+const MILES = /(?<!\p{L})(?:миль|миля|мили|mile|miles|mi)(?!\p{L})/iu;
+
+/** Words after a number that say only a part of it was read. */
+const UNREAD_AFTER =
+  /^\s*(?:миллион|миллиард|млн|million|billion|тыщ|тыщи|тыш|косар|с половин|половин|жарым|and a half)/iu;
+
+/** Words before a number that say only a part of it was read («миллион двести тысяч»). */
+const UNREAD_BEFORE = /(?:миллион[а-я]*|миллиард[а-я]*|млн\.?|million|billion)\s*$/iu;
 
 /** A number after a word of mileage, or a number with a unit. */
 function mileageByRules(text: string, min: number): number | null {

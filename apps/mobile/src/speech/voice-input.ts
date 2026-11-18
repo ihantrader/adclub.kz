@@ -1,5 +1,6 @@
 import type { SpeechTranscription } from "@adclub/contracts";
 import type { AssistantLimitSheet } from "../assistant/assistant-rules";
+import { guestAiClosed } from "../assistant/guest-ai-closed";
 import type { MicrophonePermission } from "./speech-port";
 
 /**
@@ -80,6 +81,8 @@ export function voiceFailureOf(error: unknown, signedIn: boolean): VoiceFailure 
   const code = typeof value?.code === "string" ? value.code : "";
   const details = (value?.details ?? {}) as { limit?: unknown; reason?: unknown };
   if (code === "NETWORK_ERROR") return "offline";
+  // AI for signed-in people only now (TASK-066): M-AI-02 of the guests' budget.
+  if (guestAiClosed(error)) return { limit: "guest_budget" };
   if (code === "RATE_LIMITED") {
     if (details.limit === "speech_per_account") return { limit: "day" };
     if (details.limit === "speech_per_device") return { limit: "guest_trial" };

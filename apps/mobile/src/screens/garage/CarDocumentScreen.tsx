@@ -31,6 +31,7 @@ import {
 import { listFallback, useListFallback } from "../../garage/list-fallback";
 
 import { useCarAdding } from "../../navigation/car-adding";
+import { useSignIn } from "../../navigation/use-sign-in";
 import type { RootParams } from "../../navigation/routes";
 import { useOnline } from "../../services/use-network";
 import {
@@ -56,14 +57,16 @@ const FAILURE_TEXT: Record<
       | "doc.unavailableTitle"
       | "doc.limitTitle"
       | "garage.needsNetwork"
-      | "doc.invalidTitle";
+      | "doc.invalidTitle"
+      | "assistant.limitBudgetTitle";
     text:
       | "doc.failedText"
       | "doc.otherText"
       | "doc.unavailableText"
       | "doc.limit"
       | "doc.offlineText"
-      | "doc.invalidText";
+      | "doc.invalidText"
+      | "assistant.limitBudgetText";
     retake: boolean;
   }
 > = {
@@ -73,6 +76,12 @@ const FAILURE_TEXT: Record<
   limit: { title: "doc.limitTitle", text: "doc.limit", retake: false },
   offline: { title: "garage.needsNetwork", text: "doc.offlineText", retake: true },
   invalid: { title: "doc.invalidTitle", text: "doc.invalidText", retake: true },
+  // AI for signed-in people only now (TASK-066): M-AI-02 of the guests' budget, with «Войти».
+  guest_closed: {
+    title: "assistant.limitBudgetTitle",
+    text: "assistant.limitBudgetText",
+    retake: false,
+  },
 };
 
 /**
@@ -100,6 +109,7 @@ export function CarDocumentScreen({
 }: NativeStackScreenProps<RootParams, "car-document">) {
   const { origin, carId, picked } = route.params;
   const t = useT();
+  const signIn = useSignIn();
   const toast = useToast();
   const { theme } = useTheme();
   const garage = useGarage();
@@ -311,7 +321,11 @@ export function CarDocumentScreen({
   const failed = phase.kind === "failed" ? FAILURE_TEXT[phase.failure] : null;
   // T-GAR-04: a guest's trial recognitions left — a caption with the buttons it is about (TASK-078).
   const attemptsNote =
-    attempts?.scope === "guest" && !(phase.kind === "failed" && phase.failure === "limit") ? (
+    attempts?.scope === "guest" &&
+    !(
+      phase.kind === "failed" &&
+      (phase.failure === "limit" || phase.failure === "guest_closed")
+    ) ? (
       <Text variant="caption" color="textMuted" style={styles.center}>
         {t("doc.attemptsLeft", { count: attempts.remaining })}
       </Text>
@@ -345,6 +359,9 @@ export function CarDocumentScreen({
             {attemptsNote}
             {failed.retake && (
               <Button onPress={() => setPhase({ kind: "camera" })}>{t("doc.retake")}</Button>
+            )}
+            {phase.kind === "failed" && phase.failure === "guest_closed" && (
+              <Button onPress={signIn.start}>{t("auth.signIn")}</Button>
             )}
             {confirming ? (
               <Button variant="secondary" onPress={() => navigation.goBack()}>

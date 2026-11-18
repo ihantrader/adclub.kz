@@ -27,6 +27,7 @@ import {
   type MileageReading,
 } from "../../garage/mileage";
 import type { RootParams } from "../../navigation/routes";
+import { useSignIn } from "../../navigation/use-sign-in";
 import { useOnline } from "../../services/use-network";
 import {
   documentAttempts,
@@ -67,14 +68,16 @@ const FAILURE_TEXT: Record<
       | "doc.unavailableTitle"
       | "doc.limitTitle"
       | "garage.needsNetwork"
-      | "doc.invalidTitle";
+      | "doc.invalidTitle"
+      | "assistant.limitBudgetTitle";
     text:
       | "mileage.failedText"
       | "mileage.unavailableText"
       | "mileage.limitText"
       | "mileage.limitTextGuest"
       | "mileage.offlineText"
-      | "doc.invalidText";
+      | "doc.invalidText"
+      | "assistant.limitBudgetText";
     retake: boolean;
   }
 > = {
@@ -84,6 +87,12 @@ const FAILURE_TEXT: Record<
   limit: { title: "doc.limitTitle", text: "mileage.limitText", retake: false },
   offline: { title: "garage.needsNetwork", text: "mileage.offlineText", retake: true },
   invalid: { title: "doc.invalidTitle", text: "doc.invalidText", retake: true },
+  // AI for signed-in people only now (TASK-066): M-AI-02 of the guests' budget, with «Войти».
+  guest_closed: {
+    title: "assistant.limitBudgetTitle",
+    text: "assistant.limitBudgetText",
+    retake: false,
+  },
 };
 
 /**
@@ -114,6 +123,7 @@ export function CarMileageScreen({
 }: NativeStackScreenProps<RootParams, "car-mileage">) {
   const { carId } = route.params;
   const t = useT();
+  const signIn = useSignIn();
   const toast = useToast();
   const garage = useGarage();
   const online = useOnline();
@@ -272,7 +282,11 @@ export function CarMileageScreen({
     attempts?.scope !== "account" &&
     !garage.remote;
   const attemptsNote =
-    attempts?.scope === "guest" && !(phase.kind === "failed" && phase.failure === "limit") ? (
+    attempts?.scope === "guest" &&
+    !(
+      phase.kind === "failed" &&
+      (phase.failure === "limit" || phase.failure === "guest_closed")
+    ) ? (
       <Text variant="caption" color="textMuted" style={styles.center}>
         {t("doc.attemptsLeft", { count: attempts.remaining })}
       </Text>
@@ -326,7 +340,17 @@ export function CarMileageScreen({
             {failed.retake && (
               <Button onPress={() => setPhase({ kind: "camera" })}>{t("doc.retake")}</Button>
             )}
-            <Button variant={failed.retake ? "secondary" : "primary"} onPress={byHand}>
+            {phase.kind === "failed" && phase.failure === "guest_closed" && (
+              <Button onPress={signIn.start}>{t("auth.signIn")}</Button>
+            )}
+            <Button
+              variant={
+                failed.retake || (phase.kind === "failed" && phase.failure === "guest_closed")
+                  ? "secondary"
+                  : "primary"
+              }
+              onPress={byHand}
+            >
               {t("mileage.byHand")}
             </Button>
           </View>

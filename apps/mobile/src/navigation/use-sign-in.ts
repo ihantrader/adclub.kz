@@ -20,7 +20,11 @@ import { ROOT_NAVIGATOR, type RootParams } from "./routes";
 export function useSignIn() {
   const navigation = useNavigation();
   return useMemo(() => {
-    const root = () => navigation.getParent<NativeStackNavigationProp<RootParams>>(ROOT_NAVIGATOR);
+    // A screen of the root stack itself (a car's photo, the mileage) has no
+    // root parent: its own navigation is the root (as `VoiceInput` does).
+    const root = () =>
+      navigation.getParent<NativeStackNavigationProp<RootParams>>(ROOT_NAVIGATOR) ??
+      (navigation as unknown as NativeStackNavigationProp<RootParams>);
     return {
       /** M-AUTH-01, straight away — no shorter path exists once someone asks to sign in. */
       start: () => {

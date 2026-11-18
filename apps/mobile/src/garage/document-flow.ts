@@ -1,5 +1,6 @@
 import type { VehicleDocumentFields, VehicleDocumentResponse } from "@adclub/contracts";
 import { checkVin, normalizeKzPlate } from "@adclub/domain";
+import { guestAiClosed } from "../assistant/guest-ai-closed";
 import type { CarColorId } from "./car-color";
 import { EMPTY_DRAFT, type CarDraft, type PickerOption } from "./car-picker";
 import type { CarLevel, GarageCar } from "./garage";
@@ -216,7 +217,14 @@ export function confirmationMerge(
  * every state of the screen besides the camera and «Распознаём…».
  */
 export type RecognitionFailure =
-  "not_readable" | "other_document" | "unavailable" | "limit" | "offline" | "invalid";
+  | "not_readable"
+  | "other_document"
+  | "unavailable"
+  | "limit"
+  | "offline"
+  | "invalid"
+  /** AI for signed-in people only now (TASK-066): M-AI-02 «временно недоступны», «Войти». */
+  | "guest_closed";
 
 /** The state of a failed call, from the error the API client threw. */
 export function recognitionFailureOf(error: unknown): RecognitionFailure {
@@ -224,6 +232,7 @@ export function recognitionFailureOf(error: unknown): RecognitionFailure {
   const code = typeof value?.code === "string" ? value.code : "";
   const details = (value?.details ?? {}) as { limit?: unknown };
   if (code === "NETWORK_ERROR") return "offline";
+  if (guestAiClosed(error)) return "guest_closed";
   // The flood limit of an address (TASK-060.A): no attempt was spent, the
   // person's limit is not reached — try later, as the voice says (`voiceFailureOf`).
   if (code === "RATE_LIMITED" && details.limit === "photo_requests_per_ip") return "unavailable";

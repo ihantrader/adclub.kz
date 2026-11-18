@@ -161,29 +161,37 @@ export function PartPhotoScreen({ onBack, onFound, onTypeArticle }: PartPhotoScr
       .catch(() => setPhase({ kind: "failed", failure: "invalid" }));
 
   const failure = phase.kind === "failed" ? phase.failure : null;
-  const guestLimit = failure === "limit" && attempts?.scope !== "account" && !remote;
+  // A guest's trial spent, or AI for signed-in people only now (TASK-066): the way on is «Войти».
+  const guestLimit =
+    (failure === "limit" && attempts?.scope !== "account" && !remote) || failure === "guest_closed";
   const failedText =
     failure === null
       ? null
       : failure === "no_article" || failure === "not_readable" || failure === "other_document"
         ? { title: t("partPhoto.notFoundTitle"), text: t("partPhoto.notFoundText"), retake: true }
-        : failure === "limit"
+        : failure === "guest_closed"
           ? {
-              title: t("doc.limitTitle"),
-              text: t(guestLimit ? "partPhoto.limitText" : "partPhoto.limitTextSignedIn"),
+              title: t("assistant.limitBudgetTitle"),
+              text: t("assistant.limitBudgetText"),
               retake: false,
             }
-          : failure === "offline"
-            ? { title: t("garage.needsNetwork"), text: t("partPhoto.offlineText"), retake: true }
-            : failure === "invalid"
-              ? { title: t("doc.invalidTitle"), text: t("doc.invalidText"), retake: true }
-              : {
-                  title: t("doc.unavailableTitle"),
-                  text: t("partPhoto.unavailableText"),
-                  retake: false,
-                };
+          : failure === "limit"
+            ? {
+                title: t("doc.limitTitle"),
+                text: t(guestLimit ? "partPhoto.limitText" : "partPhoto.limitTextSignedIn"),
+                retake: false,
+              }
+            : failure === "offline"
+              ? { title: t("garage.needsNetwork"), text: t("partPhoto.offlineText"), retake: true }
+              : failure === "invalid"
+                ? { title: t("doc.invalidTitle"), text: t("doc.invalidText"), retake: true }
+                : {
+                    title: t("doc.unavailableTitle"),
+                    text: t("partPhoto.unavailableText"),
+                    retake: false,
+                  };
   const attemptsNote =
-    attempts?.scope === "guest" && failure !== "limit" ? (
+    attempts?.scope === "guest" && failure !== "limit" && failure !== "guest_closed" ? (
       <Text variant="caption" color="textMuted" style={styles.center}>
         {t("doc.attemptsLeft", { count: attempts.remaining })}
       </Text>

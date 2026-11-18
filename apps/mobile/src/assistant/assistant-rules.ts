@@ -7,6 +7,7 @@ import type {
 } from "@adclub/contracts";
 import type { AiPilotState } from "@adclub/ui-core";
 import type { GarageCar } from "../garage/garage";
+import { guestAiClosed } from "./guest-ai-closed";
 
 /**
  * The AI Pilot assistant in the app (TASK-063; SCREENS M-AI-01, M-AI-02;
@@ -97,6 +98,8 @@ function detailsOf(error: { details: unknown }): Record<string, unknown> {
 /** The refusal of `POST /assistant/messages`; `withDialog` — the message named a dialog. */
 export function assistantFailureOf(error: unknown, withDialog: boolean): AssistantFailure {
   if (!isApiError(error)) return { kind: "other" };
+  // AI for signed-in people only now (TASK-066): the sheet of the guests' budget.
+  if (guestAiClosed(error)) return { kind: "guest_budget" };
   switch (error.code) {
     case "RATE_LIMITED": {
       const details = detailsOf(error);

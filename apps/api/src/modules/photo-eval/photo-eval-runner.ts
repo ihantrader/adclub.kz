@@ -12,16 +12,21 @@ import {
   type AiCallResult,
   type DashboardOutput,
   type PartPhotoOutput,
+  type PricePhotoOutput,
   type PhotoInput,
 } from "../ai";
+import { PRICE_PHOTO_MAX_SIDE_PX } from "@adclub/contracts";
 import { prepareDocumentImage } from "../vehicle-document";
 import {
   loadDashboardEvalData,
   loadPartEvalData,
+  loadPricePhotoEvalData,
   photoEvalDirectory,
   type PhotoEvalKind,
 } from "./photo-eval-data";
 import { renderPhotoEvalRun } from "./photo-eval-report";
+import { keptPricePhoto, scorePricePhotos, type PricePhotoScore } from "./price-photo-score";
+import { pricePhotoPage } from "@adclub/domain";
 import {
   scoreDashboards,
   scoreParts,
@@ -55,9 +60,9 @@ export interface PhotoEvalModelResult {
   tokensIn: number;
   tokensOut: number;
   latencyMs: { min: number; median: number; max: number };
-  score: DashboardScore | PartScore;
+  score: DashboardScore | PartScore | PricePhotoScore;
   /** What the model read, by sample — the material for a person to look at. */
-  answers: Record<string, DashboardOutput | PartPhotoOutput>;
+  answers: Record<string, DashboardOutput | PartPhotoOutput | PricePhotoOutput>;
 }
 
 export interface PhotoEvalRun {
@@ -102,7 +107,12 @@ export class PhotoEval {
     kind: PhotoEvalKind,
     options: { models: string[]; label?: string },
   ): Promise<PhotoEvalRun> {
-    const data = kind === "dashboard" ? loadDashboardEvalData() : loadPartEvalData();
+    const data =
+      kind === "dashboard"
+        ? loadDashboardEvalData()
+        : kind === "price-photo"
+          ? loadPricePhotoEvalData()
+          : loadPartEvalData();
     const startedAt = new Date();
     const results: PhotoEvalModelResult[] = [];
     for (const model of options.models) {
@@ -124,10 +134,10 @@ export class PhotoEval {
     kind: PhotoEvalKind,
     input: PhotoInput,
     meta: AiCallMeta,
-  ): Promise<AiCallResult<DashboardOutput | PartPhotoOutput>> {
-    return kind === "dashboard"
-      ? this.ai.readDashboard(input, meta)
-      : this.ai.readPartPhoto(input, meta);
+  ): Promise<AiCallResult<DashboardOutput | PartPhotoOutput | PricePhotoOutput>> {
+    if (kind === "dashboard") return this.ai.readDashboard(input, meta);
+    if (kind === "price-photo") return this.ai.readPricePhoto(input, meta);
+    return this.ai.readPartPhoto(input, meta);
   }
 
   private async runModel(
@@ -135,7 +145,7 @@ export class PhotoEval {
     model: string,
     samples: readonly { id: string; file: string }[],
   ): Promise<PhotoEvalModelResult> {
-    const answers = new Map<string, DashboardOutput | PartPhotoOutput>();
+    const answers = new Map<string, DashboardOutput | PartPhotoOutput | PricePhotoOutput>();
     const failures: PhotoEvalFailure[] = [];
     const latencies: number[] = [];
     const answeredBy = new Set<string>();
@@ -146,32 +156,49 @@ export class PhotoEval {
     let tokensOut = 0;
     const directory = photoEvalDirectory(kind);
     for (const sample of samples) {
-      const image = await prepareDocumentImage(readFileSync(join(directory, sample.file)));
-      calls += 1;
+      const image = await prepareDocumentImage(
+        readFileSync(join(directory, sample.file)),
+        kind === "price-photo" ? PRICE_PHOTO_MAX_SIDE_PX : undefined,
+      );
       const startedAt = Date.now();
       try {
-        const result = await this.call(
-          kind,
-          { image: image.bytes, contentType: "image/jpeg" },
-          {
-            initiator: { type: "system" },
-            inputRef: {
-              eval: `${kind}-models`,
+        // A price page is read twice and kept as the worker keeps it (TASK-064).
+        const outputs: (DashboardOutput | PartPhotoOutput | PricePhotoOutput)[] = [];
+        for (let reading = 1; reading <= 2; reading += 1) {
+          calls += 1;
+          const result = await this.call(
+            kind,
+            { image: image.bytes, contentType: "image/jpeg" },
+            {
+              initiator: { type: "system" },
+              inputRef: {
+                eval: `${kind}-models`,
+                model,
+                sample: sample.id,
+                reading,
+                bytes: image.bytes.byteLength,
+              },
               model,
-              sample: sample.id,
-              bytes: image.bytes.byteLength,
             },
-            model,
-          },
-        );
+          );
+          answeredBy.add(result.model);
+          outputs.push(result.output);
+          const [row] = await this.database.db
+            .select()
+            .from(aiJob)
+            .where(eq(aiJob.id, result.jobId));
+          costUsd += Number(row?.costUsd ?? 0);
+          costIsEstimate ||= row?.costIsEstimate ?? false;
+          tokensIn += row?.tokensIn ?? 0;
+          tokensOut += row?.tokensOut ?? 0;
+          const first = outputs[0] as PricePhotoOutput;
+          if (kind !== "price-photo" || pricePhotoPage(first).kind !== "rows") break;
+        }
         latencies.push(Date.now() - startedAt);
-        answeredBy.add(result.model);
-        answers.set(sample.id, result.output);
-        const [row] = await this.database.db.select().from(aiJob).where(eq(aiJob.id, result.jobId));
-        costUsd += Number(row?.costUsd ?? 0);
-        costIsEstimate ||= row?.costIsEstimate ?? false;
-        tokensIn += row?.tokensIn ?? 0;
-        tokensOut += row?.tokensOut ?? 0;
+        answers.set(
+          sample.id,
+          kind === "price-photo" ? keptPricePhoto(outputs as PricePhotoOutput[]) : outputs[0]!,
+        );
       } catch (error) {
         if (error instanceof AiBudgetExhaustedError) {
           throw new PhotoEvalBudgetError(error.message);
@@ -189,7 +216,12 @@ export class PhotoEval {
     const score =
       kind === "dashboard"
         ? scoreDashboards(loadDashboardEvalData().samples, answers as Map<string, DashboardOutput>)
-        : scoreParts(loadPartEvalData().samples, answers as Map<string, PartPhotoOutput>);
+        : kind === "price-photo"
+          ? scorePricePhotos(
+              loadPricePhotoEvalData().samples,
+              answers as Map<string, PricePhotoOutput>,
+            )
+          : scoreParts(loadPartEvalData().samples, answers as Map<string, PartPhotoOutput>);
     this.logger.log(
       `Model measured kind=${kind} model=${model} calls=${calls} failed=${failures.length} costUsd=${costUsd.toFixed(6)} passes=${String(score.passes)}`,
     );

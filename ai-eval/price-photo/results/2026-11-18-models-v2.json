@@ -1,0 +1,1391 @@
+{
+  "kind": "price-photo",
+  "startedAt": "2026-11-18T16:45:20.711Z",
+  "finishedAt": "2026-11-18T16:46:55.565Z",
+  "dataVersion": 1,
+  "samples": 9,
+  "label": "models-v2",
+  "provider": "openrouter",
+  "results": [
+    {
+      "model": "google/gemini-3.1-flash-lite",
+      "answeredBy": [
+        "google/gemini-3.1-flash-lite"
+      ],
+      "calls": 9,
+      "failures": [],
+      "costUsd": 0.015481,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.00172,
+      "tokensIn": 18144,
+      "tokensOut": 7295,
+      "latencyMs": {
+        "min": 1490,
+        "median": 2875,
+        "max": 6016
+      },
+      "score": {
+        "exact": {
+          "correct": 55,
+          "total": 55,
+          "share": 1
+        },
+        "missed": 0,
+        "falseRows": {
+          "correct": 6,
+          "total": 61,
+          "share": 0.098
+        },
+        "refusal": {
+          "correct": 1,
+          "total": 1,
+          "share": 1
+        },
+        "doubtMarked": {
+          "correct": 1,
+          "total": 2,
+          "share": 0.5
+        },
+        "silentErrors": 0,
+        "passes": false,
+        "misses": []
+      },
+      "answers": {
+        "list-clean": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть | ",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть | ",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть | ",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19 800 | нет | ",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3 450 | есть | ",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "two-pages-1": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть | ",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть | ",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть | ",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "two-pages-2": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "— | Shell | Shell Helix Ultra 0W-20, 1 л | 6 300 | есть | ",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix Ultra 0W-20, 1 л",
+              "price": 6300,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": [
+                "price"
+              ]
+            },
+            {
+              "text": "— | Mobil | Mobil 1 ESP 5W-30 | 24 000 | 2 шт | ",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil 1 ESP 5W-30",
+              "price": 24000,
+              "availability": "2 шт",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "FM-301 | Фильтрон | Фильтр масляный | 2 100 | есть | ",
+              "article": "FM-301",
+              "brand": "Фильтрон",
+              "name": "Фильтр масляный",
+              "price": 2100,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "list-tilt": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть | null",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть | null",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть | null",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19 800 | нет | null",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3 450 | есть | null",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "list-small-font": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "KZ-4100 | Стартвольт | Деталь образца № 1 | 1 000 | есть | ",
+              "article": "KZ-4100",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 1",
+              "price": 1000,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4107 | Фильтрон | Деталь образца № 2 | 1 350 | есть | ",
+              "article": "KZ-4107",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 2",
+              "price": 1350,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4114 | Лузар | Деталь образца № 3 | 1 700 | есть | ",
+              "article": "KZ-4114",
+              "brand": "Лузар",
+              "name": "Деталь образца № 3",
+              "price": 1700,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4121 | Стартвольт | Деталь образца № 4 | 2 050 | есть | ",
+              "article": "KZ-4121",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 4",
+              "price": 2050,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4128 | Фильтрон | Деталь образца № 5 | 2 400 | нет | ",
+              "article": "KZ-4128",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 5",
+              "price": 2400,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4135 | Лузар | Деталь образца № 6 | 2 750 | есть | ",
+              "article": "KZ-4135",
+              "brand": "Лузар",
+              "name": "Деталь образца № 6",
+              "price": 2750,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4142 | Стартвольт | Деталь образца № 7 | 3 100 | есть | ",
+              "article": "KZ-4142",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 7",
+              "price": 3100,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4149 | Фильтрон | Деталь образца № 8 | 3 450 | есть | ",
+              "article": "KZ-4149",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 8",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4156 | Лузар | Деталь образца № 9 | 3 800 | есть | ",
+              "article": "KZ-4156",
+              "brand": "Лузар",
+              "name": "Деталь образца № 9",
+              "price": 3800,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4163 | Стартвольт | Деталь образца № 10 | 4 150 | нет | ",
+              "article": "KZ-4163",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 10",
+              "price": 4150,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4170 | Фильтрон | Деталь образца № 11 | 4 500 | есть | ",
+              "article": "KZ-4170",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 11",
+              "price": 4500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4177 | Лузар | Деталь образца № 12 | 4 850 | есть | ",
+              "article": "KZ-4177",
+              "brand": "Лузар",
+              "name": "Деталь образца № 12",
+              "price": 4850,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4184 | Стартвольт | Деталь образца № 13 | 5 200 | есть | ",
+              "article": "KZ-4184",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 13",
+              "price": 5200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4191 | Фильтрон | Деталь образца № 14 | 5 550 | есть | ",
+              "article": "KZ-4191",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 14",
+              "price": 5550,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4198 | Лузар | Деталь образца № 15 | 5 900 | нет | ",
+              "article": "KZ-4198",
+              "brand": "Лузар",
+              "name": "Деталь образца № 15",
+              "price": 5900,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4205 | Стартвольт | Деталь образца № 16 | 6 250 | есть | ",
+              "article": "KZ-4205",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 16",
+              "price": 6250,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4212 | Фильтрон | Деталь образца № 17 | 6 600 | есть | ",
+              "article": "KZ-4212",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 17",
+              "price": 6600,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4219 | Лузар | Деталь образца № 18 | 6 950 | есть | ",
+              "article": "KZ-4219",
+              "brand": "Лузар",
+              "name": "Деталь образца № 18",
+              "price": 6950,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4226 | Стартвольт | Деталь образца № 19 | 7 300 | есть | ",
+              "article": "KZ-4226",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 19",
+              "price": 7300,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4233 | Фильтрон | Деталь образца № 20 | 7 650 | нет | ",
+              "article": "KZ-4233",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 20",
+              "price": 7650,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4240 | Лузар | Деталь образца № 21 | 8 000 | есть | ",
+              "article": "KZ-4240",
+              "brand": "Лузар",
+              "name": "Деталь образца № 21",
+              "price": 8000,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4247 | Стартвольт | Деталь образца № 22 | 8 350 | есть | ",
+              "article": "KZ-4247",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 22",
+              "price": 8350,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть | ",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть | ",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "screen-glare": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть | ",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть | ",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть | ",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19 800 | нет | ",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3 450 | есть | ",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "pen-correction": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть | null",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть | null",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 17 500 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 17500,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть | null",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19 800 | нет | null",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3 450 | есть | null",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "not-a-table": {
+          "kind": "not_a_table",
+          "rows": []
+        },
+        "unreadable-blur": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "1408-009 | VAG | Колодки тормозные передние | 10 500 | есть | null",
+              "article": "1408-009",
+              "brand": "VAG",
+              "name": "Колодки тормозные передние",
+              "price": 10500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "6689014 | VAG | Колодки тормозные передние VAG | 14 000 | есть | null",
+              "article": "6689014",
+              "brand": "VAG",
+              "name": "Колодки тормозные передние VAG",
+              "price": 14000,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "10000499 | VAG | Колодки тормозные задние | 12 000 | под заказ | 3 дня",
+              "article": "10000499",
+              "brand": "VAG",
+              "name": "Колодки тормозные задние",
+              "price": 12000,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "- | VAG | Disc burn VAG 89 90 41 | 21 000 | нет | null",
+              "article": null,
+              "brand": "VAG",
+              "name": "Disc burn VAG 89 90 41",
+              "price": 21000,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": [
+                "article"
+              ]
+            },
+            {
+              "text": "- | VAG | Disc burn VAG 89 90 42 | 19 000 | нет | null",
+              "article": null,
+              "brand": "VAG",
+              "name": "Disc burn VAG 89 90 42",
+              "price": 19000,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": [
+                "article"
+              ]
+            },
+            {
+              "text": "874568 | Stels | Гайка колесная передняя | 2 500 | есть | null",
+              "article": "874568",
+              "brand": "Stels",
+              "name": "Гайка колесная передняя",
+              "price": 2500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "answeredBy": [
+        "openai/gpt-4.1-mini"
+      ],
+      "calls": 9,
+      "failures": [],
+      "costUsd": 0.011218,
+      "costIsEstimate": false,
+      "costPerScanUsd": 0.001246,
+      "tokensIn": 17298,
+      "tokensOut": 4271,
+      "latencyMs": {
+        "min": 3428,
+        "median": 5982,
+        "max": 17311
+      },
+      "score": {
+        "exact": {
+          "correct": 55,
+          "total": 55,
+          "share": 1
+        },
+        "missed": 0,
+        "falseRows": {
+          "correct": 3,
+          "total": 58,
+          "share": 0.052
+        },
+        "refusal": {
+          "correct": 1,
+          "total": 1,
+          "share": 1
+        },
+        "doubtMarked": {
+          "correct": 0,
+          "total": 2,
+          "share": 0
+        },
+        "silentErrors": 0,
+        "passes": false,
+        "misses": []
+      },
+      "answers": {
+        "list-clean": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть |",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть |",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть |",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19 800 | нет |",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3 450 | есть |",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "two-pages-1": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть |",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть |",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть |",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "two-pages-2": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "— | Shell | Shell Helix Ultra 0W-20, 1 л | 6 300 | есть | null",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix Ultra 0W-20, 1 л",
+              "price": 6300,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil 1 ESP 5W-30 | 24 000 | 2 шт | null",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil 1 ESP 5W-30",
+              "price": 24000,
+              "availability": "2 шт",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "FM-301 | Фильтрон | Фильтр масляный | 2 100 | есть | null",
+              "article": "FM-301",
+              "brand": "Фильтрон",
+              "name": "Фильтр масляный",
+              "price": 2100,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "list-tilt": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18500 | есть |",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14200 | есть |",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21400 | есть |",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19800 | есть |",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартовльт | Свеча зажигания иридиевая | 3450 | есть |",
+              "article": "ST-55120",
+              "brand": "Стартовльт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "list-small-font": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "KZ-4100 | Стартвольт | Деталь образца № 1 | 1000 | есть |",
+              "article": "KZ-4100",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 1",
+              "price": 1000,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4107 | Фильтрон | Деталь образца № 2 | 1350 | есть |",
+              "article": "KZ-4107",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 2",
+              "price": 1350,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4114 | Лузар | Деталь образца № 3 | 1700 | есть |",
+              "article": "KZ-4114",
+              "brand": "Лузар",
+              "name": "Деталь образца № 3",
+              "price": 1700,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4121 | Стартвольт | Деталь образца № 4 | 2050 | есть |",
+              "article": "KZ-4121",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 4",
+              "price": 2050,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4128 | Фильтрон | Деталь образца № 5 | 2400 | нет |",
+              "article": "KZ-4128",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 5",
+              "price": 2400,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4135 | Лузар | Деталь образца № 6 | 2750 | есть |",
+              "article": "KZ-4135",
+              "brand": "Лузар",
+              "name": "Деталь образца № 6",
+              "price": 2750,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4142 | Стартвольт | Деталь образца № 7 | 3100 | есть |",
+              "article": "KZ-4142",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 7",
+              "price": 3100,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4149 | Фильтрон | Деталь образца № 8 | 3450 | есть |",
+              "article": "KZ-4149",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 8",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4156 | Лузар | Деталь образца № 9 | 3800 | есть |",
+              "article": "KZ-4156",
+              "brand": "Лузар",
+              "name": "Деталь образца № 9",
+              "price": 3800,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4163 | Стартвольт | Деталь образца № 10 | 4150 | нет |",
+              "article": "KZ-4163",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 10",
+              "price": 4150,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4170 | Фильтрон | Деталь образца № 11 | 4500 | есть |",
+              "article": "KZ-4170",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 11",
+              "price": 4500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4177 | Лузар | Деталь образца № 12 | 4850 | есть |",
+              "article": "KZ-4177",
+              "brand": "Лузар",
+              "name": "Деталь образца № 12",
+              "price": 4850,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4184 | Стартвольт | Деталь образца № 13 | 5200 | есть |",
+              "article": "KZ-4184",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 13",
+              "price": 5200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4191 | Фильтрон | Деталь образца № 14 | 5550 | есть |",
+              "article": "KZ-4191",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 14",
+              "price": 5550,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4198 | Лузар | Деталь образца № 15 | 5900 | нет |",
+              "article": "KZ-4198",
+              "brand": "Лузар",
+              "name": "Деталь образца № 15",
+              "price": 5900,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4205 | Стартвольт | Деталь образца № 16 | 6250 | есть |",
+              "article": "KZ-4205",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 16",
+              "price": 6250,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4212 | Фильтрон | Деталь образца № 17 | 6600 | есть |",
+              "article": "KZ-4212",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 17",
+              "price": 6600,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4219 | Лузар | Деталь образца № 18 | 6950 | есть |",
+              "article": "KZ-4219",
+              "brand": "Лузар",
+              "name": "Деталь образца № 18",
+              "price": 6950,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4226 | Стартвольт | Деталь образца № 19 | 7300 | есть |",
+              "article": "KZ-4226",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 19",
+              "price": 7300,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4233 | Фильтрон | Деталь образца № 20 | 7650 | нет |",
+              "article": "KZ-4233",
+              "brand": "Фильтрон",
+              "name": "Деталь образца № 20",
+              "price": 7650,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4240 | Лузар | Деталь образца № 21 | 8000 | есть |",
+              "article": "KZ-4240",
+              "brand": "Лузар",
+              "name": "Деталь образца № 21",
+              "price": 8000,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "KZ-4247 | Стартвольт | Деталь образца № 22 | 8350 | есть |",
+              "article": "KZ-4247",
+              "brand": "Стартвольт",
+              "name": "Деталь образца № 22",
+              "price": 8350,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18500 | есть |",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14200 | есть |",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "screen-glare": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18 500 | есть |",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14 200 | есть |",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 16 900 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 16900,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21 400 | есть |",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19 800 | нет |",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3 450 | есть |",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "pen-correction": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "04465-0K090 | GEELY | Колодки тормозные передние | 18500 | есть |",
+              "article": "04465-0K090",
+              "brand": "GEELY",
+              "name": "Колодки тормозные передние",
+              "price": 18500,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "GDB3534 | TRW | Колодки тормозные передние TRW | 14200 | есть |",
+              "article": "GDB3534",
+              "brand": "TRW",
+              "name": "Колодки тормозные передние TRW",
+              "price": 14200,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "4050068800 | GEELY | Колодки тормозные задние | 17500 | под заказ | 3 дня",
+              "article": "4050068800",
+              "brand": "GEELY",
+              "name": "Колодки тормозные задние",
+              "price": 17500,
+              "availability": "под заказ",
+              "leadTime": "3 дня",
+              "uncertain": []
+            },
+            {
+              "text": "— | Shell | Shell Helix HX8 5W-30, 4 л | 21400 | есть |",
+              "article": null,
+              "brand": "Shell",
+              "name": "Shell Helix HX8 5W-30, 4 л",
+              "price": 21400,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "— | Mobil | Mobil Super 3000 5W-40, 4 л | 19800 | нет |",
+              "article": null,
+              "brand": "Mobil",
+              "name": "Mobil Super 3000 5W-40, 4 л",
+              "price": 19800,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": []
+            },
+            {
+              "text": "ST-55120 | Стартвольт | Свеча зажигания иридиевая | 3450 | есть |",
+              "article": "ST-55120",
+              "brand": "Стартвольт",
+              "name": "Свеча зажигания иридиевая",
+              "price": 3450,
+              "availability": "есть",
+              "leadTime": null,
+              "uncertain": []
+            }
+          ]
+        },
+        "not-a-table": {
+          "kind": "not_a_table",
+          "rows": []
+        },
+        "unreadable-blur": {
+          "kind": "price_list",
+          "rows": [
+            {
+              "text": "100001-X0001 | 2500 | Передний тормозной диск | 2500 | есть | 7 дней",
+              "article": "100001-X0001",
+              "brand": null,
+              "name": "Передний тормозной диск",
+              "price": 2500,
+              "availability": "есть",
+              "leadTime": "7 дней",
+              "uncertain": [
+                "price"
+              ]
+            },
+            {
+              "text": "200002-ABC02 | 3000 | Задний тормозной диск | 3000 | нет |",
+              "article": "200002-ABC02",
+              "brand": null,
+              "name": "Задний тормозной диск",
+              "price": 3000,
+              "availability": "нет",
+              "leadTime": null,
+              "uncertain": [
+                "price"
+              ]
+            },
+            {
+              "text": "300003-DEF03 | 4500 | Передний амортизатор (левый) | 4500 | есть | 3 дня",
+              "article": "300003-DEF03",
+              "brand": null,
+              "name": "Передний амортизатор (левый)",
+              "price": 4500,
+              "availability": "есть",
+              "leadTime": "3 дня",
+              "uncertain": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

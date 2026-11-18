@@ -10,6 +10,9 @@ apps/api/contract-snapshots/mobile/supported.json
 ai-eval/translate/results/
 # written by `pnpm --filter api operator ai:eval:assistant` (TASK-062), kept as produced
 ai-eval/assistant/results/
+# written by `pnpm --filter api operator ai:eval:price-photo` and `pnpm price-photo:samples` (TASK-064), kept as produced
+ai-eval/price-photo/results/
+ai-eval/price-photo/samples.json
 dist/
 coverage/
 .turbo/

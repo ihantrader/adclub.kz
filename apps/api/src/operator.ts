@@ -166,6 +166,8 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *                                The spend is stated as for translations.
  *   ai:eval:dashboard --models <a,b,…> --confirm-spend <usd> [--label <text>]
  *   ai:eval:part-photo --models <a,b,…> --confirm-spend <usd> [--label <text>]
+ *   ai:eval:price-photo --models <a,b,…> --confirm-spend <usd> [--label <text>]
+ *                                (TASK-064: the rows off drawn price pages, `ai-eval/price-photo`)
  *                                the same for the photos of TASK-058: the mileage
  *                                off a drawn dashboard (`ai-eval/dashboard`) and the
  *                                article off a drawn label (`ai-eval/part-photo`);
@@ -372,6 +374,7 @@ const USAGE = `Usage: operator <command> [arguments]
   ai:eval:dashboard --models <a,b,...> --confirm-spend <usd> [--label <text>]
   ai:eval:assistant --models <a,b,...> --confirm-spend <usd> [--label <text>] [--only <id,id>]
   ai:eval:part-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  ai:eval:price-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
   ai:eval:speech --models <a,b,...> --confirm-spend <usd> [--label <text>] [--set synthetic|recordings] [--lang kk|ru|en] [--only <id,id>]
   search:status
   search:reindex
@@ -939,7 +942,8 @@ async function run(
       };
     }
     case "ai:eval:dashboard":
-    case "ai:eval:part-photo": {
+    case "ai:eval:part-photo":
+    case "ai:eval:price-photo": {
       if (!devCommands) {
         throw new OperatorCommandError(`${command} is available in development and tests only`);
       }
@@ -963,7 +967,12 @@ async function run(
           `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
         );
       }
-      const kind = command === "ai:eval:dashboard" ? "dashboard" : "part-photo";
+      const kind =
+        command === "ai:eval:dashboard"
+          ? "dashboard"
+          : command === "ai:eval:price-photo"
+            ? "price-photo"
+            : "part-photo";
       const run = await photoEval.run(kind, {
         models,
         ...(values.label === undefined ? {} : { label: values.label }),

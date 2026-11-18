@@ -11,7 +11,7 @@ import { z } from "zod";
  * development tool; nothing in the API or the worker loads the sets.
  */
 
-export type PhotoEvalKind = "dashboard" | "part-photo";
+export type PhotoEvalKind = "dashboard" | "part-photo" | "price-photo";
 
 const dashboardSampleSchema = z.object({
   id: z.string().regex(/^[a-z0-9_-]+$/u),
@@ -54,6 +54,49 @@ const partSampleSchema = z.object({
 });
 
 export type PartEvalSample = z.infer<typeof partSampleSchema>;
+
+/** A photographed price page (TASK-064, `ai-eval/price-photo/`, `scripts/price-photo-samples.mjs`). */
+const pricePhotoSampleSchema = z.object({
+  id: z.string().regex(/^[a-z0-9_-]+$/u),
+  file: z.string().regex(/^samples\/[a-z0-9_-]+\.jpg$/u),
+  code: z.number().int().min(1).max(255),
+  variant: z.string(),
+  page: z.number().int().optional(),
+  pages: z.number().int().optional(),
+  readable: z.boolean(),
+  acceptKinds: z.array(z.enum(["price_list", "not_a_table", "unreadable"])).optional(),
+  expected: z.object({
+    kind: z.enum(["price_list", "not_a_table", "unreadable"]),
+    rows: z.array(
+      z.object({
+        article: z.string().nullable(),
+        articleNorm: z.string().nullable(),
+        brand: z.string().nullable(),
+        name: z.string(),
+        price: z.number().int(),
+        availability: z.string().nullable(),
+        leadDays: z.number().int().nullable(),
+        /** Under a stain or a correction by hand: a careful model says it is unsure. */
+        uncertainPrice: z.boolean(),
+      }),
+    ),
+  }),
+});
+
+export type PricePhotoEvalSample = z.infer<typeof pricePhotoSampleSchema>;
+
+export function loadPricePhotoEvalData(
+  directory = photoEvalDirectory("price-photo"),
+): PhotoEvalData<PricePhotoEvalSample> {
+  const file = z
+    .object({
+      version: z.number().int().positive(),
+      note: z.string().optional(),
+      samples: z.array(pricePhotoSampleSchema).min(5).max(60),
+    })
+    .parse(JSON.parse(readFileSync(join(directory, "samples.json"), "utf8")) as unknown);
+  return { version: file.version, samples: unique(file.samples) };
+}
 
 function fileSchema<T extends z.ZodType>(sample: T) {
   return z.object({

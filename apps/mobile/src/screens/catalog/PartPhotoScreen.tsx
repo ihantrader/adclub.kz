@@ -73,10 +73,14 @@ export function PartPhotoScreen({ onBack, onFound, onTypeArticle }: PartPhotoScr
     useCallback(() => {
       focused.current = true;
       let live = true;
-      // Back from «Войти» signed in: the guest's spent trial is not this person's limit.
+      // Back from «Войти» signed in: the guest's spent trial, or AI closed to
+      // guests (TASK-066), is not this person's limit.
       if (remote) {
         setPhase((current) =>
-          current.kind === "failed" && current.failure === "limit" ? { kind: "camera" } : current,
+          current.kind === "failed" &&
+          (current.failure === "limit" || current.failure === "guest_closed")
+            ? { kind: "camera" }
+            : current,
         );
         setAttempts(null);
       } else {

@@ -158,7 +158,15 @@ export function CarDocumentScreen({
   // T-GAR-04: a guest sees the trial recognitions left before the photo.
   useFocusEffect(
     useCallback(() => {
-      if (garage.remote) return undefined;
+      if (garage.remote) {
+        // Back from «Войти» signed in: AI closed to guests is not closed to this person (TASK-066).
+        setPhase((current) =>
+          current.kind === "failed" && current.failure === "guest_closed"
+            ? { kind: "camera" }
+            : current,
+        );
+        return undefined;
+      }
       let live = true;
       documentAttempts()
         .then((value) => live && setAttempts(value))

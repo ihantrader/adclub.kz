@@ -1,6 +1,5 @@
 {
   "$about": "Тексты кабинета поставщика (TASK-031). Русский — рабочие формулировки SCREENS.md 6.0, 6.1, 6.6 и 8.1, 8.5; где SCREENS.md текста не задаёт (подсказки форм, пустые состояния, ошибки), текст рабочий и утверждается вместе с экраном.",
-
   "common.retry": "Повторить",
   "common.cancel": "Отмена",
   "common.save": "Сохранить",
@@ -20,12 +19,10 @@
   "common.delete": "Удалить",
   "common.notNow": "Не сейчас",
   "common.done": "Готово",
-
   "language.kk": "Қазақша",
   "language.ru": "Русский",
   "language.en": "English",
   "language.label": "Язык",
-
   "nav.label": "Разделы кабинета",
   "tabs.orders": "Заявки",
   "tabs.offers": "Предложения",
@@ -37,10 +34,8 @@
   "nav.settings": "Мои настройки",
   "nav.install": "Установить на экран",
   "placeholder.text": "Раздел появится в следующем обновлении кабинета",
-
   "header.switchCompany": "Сменить компанию",
   "header.companyLabel": "Компания",
-
   "auth.title": "Вход в кабинет поставщика",
   "auth.phoneLabel": "Номер телефона",
   "auth.getCode": "Получить код",
@@ -77,7 +72,6 @@
   "auth.policyLink": "Политику конфиденциальности",
   "auth.codeDigits": "{n} цифр",
   "auth.brandLine": "Asia Drive Club · Кабинет поставщика",
-
   "join.title": "Станьте партнёром клуба",
   "join.lead": "Клиенты автоклуба — без расходов на рекламу",
   "join.companyName": "Название компании",
@@ -109,7 +103,6 @@
   "join.error.unavailable": "Сейчас не удалось отправить. Попробуйте позже",
   "join.error.network": "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз",
   "join.error.failed": "Не удалось отправить. Попробуйте ещё раз",
-
   "compat.title": "Данные о совместимости",
   "compat.lead": "Знаете, к каким автомобилям подходит позиция? Предложите — администратор клуба проверит и добавит",
   "compat.open": "Предложить данные",
@@ -140,18 +133,14 @@
   "compat.error.notApplicable": "Для этой позиции совместимость не указывается",
   "compat.error.itemGone": "Позиция больше недоступна в справочнике — предложить для неё нельзя",
   "compat.error.tooMany": "Слишком много предложений за сутки. Попробуйте через {minutes} мин",
-
   "update.title": "Нужно обновить кабинет",
   "update.reload": "Обновить страницу",
   "app.updated": "Кабинет обновлён",
   "app.reload": "Обновить",
-
   "banner.pausedAdmin": "Предложения временно сняты с витрины администратором клуба. Текущие заявки нужно выполнить",
   "banner.pausedBilling": "Предложения сняты с витрины: подписка не оплачена. Текущие заявки нужно выполнить",
   "banner.blocked": "Кабинет заблокирован администратором клуба",
-
   "more.title": "Ещё",
-
   "settings.title": "Мои настройки",
   "settings.name": "Имя",
   "settings.phone": "Телефон",
@@ -170,7 +159,6 @@
   "settings.signOutConfirmTitle": "Выйти из кабинета?",
   "settings.signOutConfirmText": "Войти снова можно по номеру телефона",
   "settings.companySwitched": "Компания: {name}",
-
   "team.title": "Сотрудники",
   "team.explanation": "Уведомление о каждой заявке отправляется каждому сотруднику отдельно. Уведомления получают не больше {n} сотрудников",
   "team.limitReached": "Достигнут предел — {n}",
@@ -198,7 +186,6 @@
   "team.removed": "Сотрудник удалён",
   "team.gone": "Этого сотрудника уже удалили",
   "team.tableMember": "Сотрудник",
-
   "company.title": "Компания",
   "company.name": "Название",
   "company.bin": "БИН",
@@ -250,7 +237,6 @@
   "company.dateRequired": "Укажите дату",
   "company.hasChanges": "Есть несохранённые изменения",
   "company.noChanges": "Изменений нет",
-
   "day.1": "Понедельник",
   "day.2": "Вторник",
   "day.3": "Среда",
@@ -258,7 +244,6 @@
   "day.5": "Пятница",
   "day.6": "Суббота",
   "day.7": "Воскресенье",
-
   "install.title": "Установить на экран",
   "install.text": "Кабинет откроется одним нажатием, как приложение",
   "install.button": "Установить",
@@ -272,7 +257,6 @@
   "install.androidStep2": "Выберите «Установить приложение»",
   "install.androidInstallApp": "Установить приложение",
   "install.androidNewTab": "Новая вкладка",
-
   "offers.title": "Предложения",
   "offers.add": "Добавить позицию",
   "offers.tabOnSale": "В продаже",
@@ -394,7 +378,6 @@
   "searchSelect.failed": "Не удалось загрузить — нет связи с сервером",
   "searchSelect.nothing": "Ничего не нашлось",
   "searchSelect.searching": "Ищем…",
-
   "offerSearch.title": "Добавить позицию",
   "offerSearch.label": "Поиск в справочнике клуба",
   "offerSearch.placeholder": "Артикул или название",
@@ -407,7 +390,6 @@
   "offerSearch.rateLimited": "Слишком много поисков, подождите {seconds} с",
   "offerSearch.limitReached": "Показаны первые 100 совпадений — уточните запрос",
   "offerSearch.offline": "Нет сети — поиск недоступен",
-
   "offerForm.newTitle": "Новое предложение",
   "offerForm.title": "Предложение",
   "offerForm.toList": "К предложениям",
@@ -438,7 +420,6 @@
   "offerForm.previewUnknown": "Дата появится, когда будет указан срок",
   "offerForm.create": "Выставить",
   "offerForm.conflict": "Предложение уже изменил коллега (сейчас — {now}). Ваши значения остались в форме — сохраните ещё раз, если они верные",
-
   "orders.title": "Заявки",
   "orders.loading": "Загружаем заявки",
   "orders.tabNew": "Новые",
@@ -651,7 +632,6 @@
   "orders.actionsLabel": "Действия с заявкой",
   "orders.tableKind": "Тип",
   "orders.tableReceiving": "Получение",
-
   "scan.close": "Закрыть сканер",
   "scan.aim": "Наведите камеру на QR в приложении клиента",
   "scan.cameraStarting": "Включаем камеру",
@@ -729,10 +709,9 @@
   "scan.noCameraHint": "Камера недоступна — введите код",
   "scan.typeHint": "Можно набрать с клавиатуры или вставить",
   "scan.scanQr": "Сканировать QR",
-
   "price.title": "Прайс",
   "price.back": "К загрузкам прайса",
-  "price.dropTitle": "Загрузите прайс как есть: Excel или CSV",
+  "price.dropTitle": "Загрузите прайс как есть: Excel, CSV или фото",
   "price.dropHint": "Перетащите файл сюда или выберите его. До {mb} МБ и {rows} строк",
   "price.dropHintShort": "Перетащите файл сюда или выберите его",
   "price.choose": "Выбрать файл",
@@ -819,7 +798,6 @@
   "price.rowError.repeatedRow": "Повтор строки {value}",
   "price.rowError.serviceItem": "Это услуга: цены услуг задаются по моделям, не из прайса",
   "price.rowError.supplierType": "Компания продаёт только услуги — товары из прайса не применяются",
-
   "nav.moderation": "Модерация",
   "offerSearch.requestLink": "Нет в справочнике? Отправьте запрос на добавление",
   "offerSearch.requestAction": "Отправить запрос",
@@ -1012,7 +990,6 @@
   "price.tableSize": "Размер",
   "price.tableResult": "Итог",
   "price.tableState": "Состояние",
-
   "nav.billing": "Подписка",
   "billing.title": "Подписка",
   "billing.opening": "Открываем страницу платёжной системы…",
@@ -1085,7 +1062,6 @@
   "billing.error.noPlan": "Подписка пока недоступна: тариф для поставщиков ещё не назначен. Мы сообщили администратору клуба",
   "billing.error.noCard": "Сначала привяжите карту",
   "billing.error.nothingToPay": "Подписка оплачена — платить сейчас не нужно",
-
   "nav.stats": "Статистика",
   "stats.title": "Статистика",
   "stats.period": "Период",
@@ -1114,5 +1090,56 @@
   "stats.ratingNewNote": "Рейтинг появится после {n} оценок клиентов за последние {days} дней",
   "stats.reviews": "Оценок клиентов: {n}",
   "stats.empty": "За этот период заявок не было",
-  "stats.emptyNote": "Просмотры и рейтинг — ниже"
+  "stats.emptyNote": "Просмотры и рейтинг — ниже",
+  "price.takePhoto": "Сфотографировать",
+  "price.choosePhotos": "Фото из галереи",
+  "price.photo.draftTitle": "Страницы прайса: {n}",
+  "price.photo.page": "Стр. {n}",
+  "price.photo.remove": "Убрать",
+  "price.photo.upload": "Загрузить",
+  "price.photo.cancel": "Отмена",
+  "price.photo.addMore": "Добавить страницу",
+  "price.photo.hint": "По одной странице на снимок, ровно и при хорошем свете. До {pages} страниц.",
+  "price.photo.tooMany": "Не больше {pages} страниц в одной загрузке",
+  "price.photo.preparing": "Готовим фото…",
+  "price.photo.title": "Фото, {n} стр.",
+  "price.photo.recognizing": "Распознаём фото… страница {done} из {total}",
+  "price.photo.recognizingShort": "Распознаём фото…",
+  "price.photo.waiting": "Ожидает распознавания",
+  "price.photo.waitingHint": "Распознавание сейчас недоступно — продолжится само. Страницу можно закрыть.",
+  "price.photo.retakeTitle": "Фото не читается: стр. {pages}",
+  "price.photo.retakeText": "Переснимите страницу ровно, при хорошем свете и без бликов — или уберите её. Остальные страницы уже распознаны, прайс не применяется, пока все страницы не прочитаны.",
+  "price.photo.status.read": "Распознано: {rows}",
+  "price.photo.status.waiting": "Ждёт распознавания",
+  "price.photo.status.noTable": "На фото нет таблицы прайса",
+  "price.photo.status.unreadable": "Не читается",
+  "price.photo.status.failed": "Не удалось распознать",
+  "price.photo.retake": "Переснять",
+  "price.photo.retakeGallery": "Выбрать другое фото",
+  "price.photo.removePage": "Убрать страницу",
+  "price.photo.retakeSent": "Страница {page} отправлена — распознаём",
+  "price.status.needsRetake": "Нужно переснять",
+  "price.error.photoPage": "Стр. {page}: {reason}",
+  "price.error.photo.notAnImage": "это не фото",
+  "price.error.photo.unsupportedFormat": "формат не подходит — нужен JPEG, PNG или WebP",
+  "price.error.photo.broken": "файл повреждён",
+  "price.error.photo.tooManyPixels": "слишком большое изображение",
+  "price.error.photo.tooLarge": "больше {limit} МБ",
+  "price.error.photo.noPages": "Выберите хотя бы одно фото",
+  "price.error.photo.tooManyPages": "Не больше {limit} страниц в одной загрузке",
+  "price.error.photo.malformed": "Не удалось отправить фото — попробуйте ещё раз",
+  "price.parsed.columnsPhoto": "Строки распознаны с фото",
+  "review.fromPhoto": "распознано с фото · стр. {page}",
+  "review.photoText": "На фото: {text}",
+  "review.readUncertain": "Прочитано неуверенно: {fields}",
+  "review.readConfirm": "Прочитано верно",
+  "review.field.row": "вся строка",
+  "review.field.article": "артикул",
+  "review.field.brand": "бренд",
+  "review.field.name": "название",
+  "review.field.price": "цена",
+  "review.field.availability": "наличие",
+  "review.field.leadDays": "срок",
+  "review.readWaiting": "Прочитаны с фото неуверенно и без «Прочитано верно» не будут применены: {rows}",
+  "result.reason.readConfirmationRequired": "Строка с фото прочитана неуверенно и не подтверждена"
 }

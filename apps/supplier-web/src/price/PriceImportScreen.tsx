@@ -1,6 +1,7 @@
 import type {
   PriceColumnRoleName,
   PriceImportColumn,
+  PriceImport,
   PriceImportDetailResponse,
   PriceImportRow,
 } from "@adclub/contracts";
@@ -15,12 +16,14 @@ import {
   useLoadingGate,
 } from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
 import { useVisiblePoll } from "../orders/live";
 import { PriceResult } from "./PriceResult";
 import { PriceReview } from "./PriceReview";
+import { shrinkPhoto } from "./photo-shrink";
+import { retakePricePhoto } from "./upload";
 import { formatWhen } from "../orders/order-rules";
 import { goBack, navigate, navigateTo, priceImportPath, useRouteId } from "../router";
 import { PageHeader } from "../screens/PageHeader";
@@ -30,7 +33,11 @@ import {
   confirmErrorText,
   failureText,
   formatNumber,
+  importTitle,
   isRunning,
+  pageNeedsRetake,
+  pageStatusText,
+  uploadErrorText,
   missingRoleKeys,
   progressText,
   ROLE_ORDER,
@@ -87,13 +94,13 @@ export function PriceImportScreen({ timeZone }: { timeZone: string }) {
   const head = (
     <>
       <PageHeader
-        title={detail?.import.fileName ?? t("price.title")}
+        title={(detail && importTitle(detail.import, t)) ?? t("price.title")}
         back={() => goBack("price")}
       />
       {detail && (
         <p className="ac-text-body-s ac-muted price-wrap">
           {[
-            detail.import.fileName,
+            importTitle(detail.import, t),
             formatWhen(detail.import.createdAt, timeZone, lang, t),
             detail.import.uploadedBy.name,
           ]
@@ -181,6 +188,37 @@ function Body({
     </Banner>
   );
 
+  if (entry.status === "parsing" && entry.photo) {
+    // Photographed pages being read (TASK-064): the page now, or the wait for AI.
+    const waiting = entry.photo.aiWaiting !== null;
+    return (
+      <>
+        {same}
+        <div className="card price-running" role="status">
+          <Icon name={waiting ? "clock" : "camera"} size={24} />
+          <div className="stack-s">
+            <p className="ac-text-body-strong">{progressText(entry, t, lang)}</p>
+            <p className="ac-text-body-s ac-muted">
+              {waiting ? t("price.photo.waitingHint") : t("price.processing")}
+            </p>
+          </div>
+        </div>
+        <PhotoPages entry={entry} onChanged={reload} />
+      </>
+    );
+  }
+
+  if (entry.status === "needs_retake" && entry.photo) {
+    return (
+      <>
+        <Banner tone="warning" icon="camera">
+          <strong>{progressText(entry, t, lang)}</strong> {t("price.photo.retakeText")}
+        </Banner>
+        <PhotoPages entry={entry} onChanged={reload} />
+      </>
+    );
+  }
+
   if (
     entry.status === "parsing" ||
     entry.status === "reading" ||
@@ -242,20 +280,24 @@ function Body({
   }
 
   const stats = entry.stats;
-  const columnsLine = (
-    <p className="ac-text-body-s ac-muted">
-      {t(
-        entry.columnsSource === "remembered"
-          ? "price.parsed.columnsRemembered"
-          : "price.parsed.columnsConfirmed",
-      )}{" "}
-      {entry.status === "review" && (
-        <Button variant="text" size="s" onClick={() => setEditing(true)}>
-          {t("price.parsed.changeColumns")}
-        </Button>
-      )}
-    </p>
-  );
+  const columnsLine =
+    entry.columnsSource === "photo" ? (
+      // A photographed list has no columns to change (TASK-064).
+      <p className="ac-text-body-s ac-muted">{t("price.parsed.columnsPhoto")}</p>
+    ) : (
+      <p className="ac-text-body-s ac-muted">
+        {t(
+          entry.columnsSource === "remembered"
+            ? "price.parsed.columnsRemembered"
+            : "price.parsed.columnsConfirmed",
+        )}{" "}
+        {entry.status === "review" && (
+          <Button variant="text" size="s" onClick={() => setEditing(true)}>
+            {t("price.parsed.changeColumns")}
+          </Button>
+        )}
+      </p>
+    );
 
   if (entry.status === "review") {
     return (
@@ -288,16 +330,20 @@ function Body({
             errors: formatNumber(stats?.errorRows ?? 0),
           })}
         </p>
-        <p className="ac-text-body-s ac-muted">
-          {t(
-            entry.columnsSource === "remembered"
-              ? "price.parsed.columnsRemembered"
-              : "price.parsed.columnsConfirmed",
-          )}{" "}
-          <Button variant="text" size="s" onClick={() => setEditing(true)}>
-            {t("price.parsed.changeColumns")}
-          </Button>
-        </p>
+        {entry.columnsSource === "photo" ? (
+          columnsLine
+        ) : (
+          <p className="ac-text-body-s ac-muted">
+            {t(
+              entry.columnsSource === "remembered"
+                ? "price.parsed.columnsRemembered"
+                : "price.parsed.columnsConfirmed",
+            )}{" "}
+            <Button variant="text" size="s" onClick={() => setEditing(true)}>
+              {t("price.parsed.changeColumns")}
+            </Button>
+          </p>
+        )}
         {stats && stats.serviceRows > 0 && (
           <p className="ac-text-body-s ac-muted">
             {t("price.parsed.serviceRows", { n: formatNumber(stats.serviceRows) })}
@@ -311,6 +357,153 @@ function Body({
       {((stats?.errorRows ?? 0) > 0 || (entry.match?.errors ?? 0) > 0) && (
         <RowErrors importId={entry.id} />
       )}
+    </>
+  );
+}
+
+/**
+ * The pages of a photographed upload (TASK-064): what each gave; a page
+ * that gave nothing — «Переснять» (the camera of a phone, or another photo)
+ * and «Убрать страницу» (not the only one). The other pages keep what they
+ * gave: only the page taken again is read again.
+ */
+function PhotoPages({ entry, onChanged }: { entry: PriceImport; onChanged: () => void }) {
+  const { t, lang } = useLanguage();
+  const online = useOnline();
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const gallery = useRef<HTMLInputElement>(null);
+  const target = useRef<number | null>(null);
+  const pages = entry.photo?.pages ?? [];
+  const retaking = entry.status === "needs_retake";
+
+  async function retake(files: FileList | null) {
+    const file = files?.[0];
+    const pageNo = target.current;
+    if (!file || pageNo === null) return;
+    setBusy(pageNo);
+    setError(null);
+    try {
+      await retakePricePhoto(entry.id, pageNo, await shrinkPhoto(file), lang, () => undefined);
+      setDone(t("price.photo.retakeSent", { page: String(pageNo) }));
+      onChanged();
+    } catch (failure) {
+      setError(uploadErrorText(failure, t, 20));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(pageNo: number) {
+    setBusy(pageNo);
+    setError(null);
+    try {
+      await apiClient.removePricePhoto({ importId: entry.id, pageNo: String(pageNo) });
+      onChanged();
+    } catch (failure) {
+      setError(uploadErrorText(failure, t, 20));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function pick(input: HTMLInputElement | null, pageNo: number) {
+    target.current = pageNo;
+    input?.click();
+  }
+
+  return (
+    <>
+      {error && (
+        <Banner tone="danger" icon="alertTriangle">
+          {error}
+        </Banner>
+      )}
+      {done && !error && (
+        <Banner tone="neutral" icon="info">
+          {done}
+        </Banner>
+      )}
+      <ol className="price-photo-pages" aria-label={importTitle(entry, t) ?? undefined}>
+        {pages.map((page) => (
+          <li key={page.pageNo} className="price-photo-pages__page">
+            <span className="stack-s">
+              <span className="ac-text-body-strong">
+                {t("price.photo.page", { n: page.pageNo })}
+              </span>
+              <span
+                className={
+                  pageNeedsRetake(page)
+                    ? "ac-text-body-s review-row__note"
+                    : "ac-text-body-s ac-muted"
+                }
+              >
+                {pageStatusText(page, t, lang)}
+              </span>
+            </span>
+            {retaking && pageNeedsRetake(page) && (
+              <span className="actions-row">
+                <Button
+                  icon="camera"
+                  size="s"
+                  disabled={!online || busy !== null}
+                  loading={busy === page.pageNo}
+                  onClick={() => pick(camera.current, page.pageNo)}
+                >
+                  {t("price.photo.retake")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="s"
+                  disabled={!online || busy !== null}
+                  onClick={() => pick(gallery.current, page.pageNo)}
+                >
+                  {t("price.photo.retakeGallery")}
+                </Button>
+                {pages.length > 1 && (
+                  <Button
+                    variant="text"
+                    size="s"
+                    disabled={!online || busy !== null}
+                    onClick={() => void remove(page.pageNo)}
+                  >
+                    {t("price.photo.removePage")}
+                  </Button>
+                )}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+      <input
+        ref={camera}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="ac-visually-hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="price-retake-camera"
+        onChange={(event) => {
+          void retake(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={gallery}
+        type="file"
+        accept="image/*"
+        className="ac-visually-hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid="price-retake-file"
+        onChange={(event) => {
+          void retake(event.target.files);
+          event.target.value = "";
+        }}
+      />
     </>
   );
 }

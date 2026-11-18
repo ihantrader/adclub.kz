@@ -40,7 +40,9 @@ import {
   changeLines,
   chosenItem,
   decidedText,
+  asksReadConfirmation,
   fileText,
+  uncertainText,
   firstTab,
   noteText,
   REVIEW_TABS,
@@ -705,6 +707,20 @@ function RowCard({
         {row.byName && group !== "errors" && (
           <span className="ac-text-caption ac-muted">{t("review.byName")}</span>
         )}
+        {row.photo && (
+          // A row read off a photo (TASK-064): marked as AI's result, with the text as read.
+          <span className="review-row__photo">
+            <AiBadge>{t("review.fromPhoto", { page: String(row.photo.pageNo) })}</AiBadge>
+            <span className="ac-text-caption ac-muted price-wrap">
+              {t("review.photoText", { text: row.photo.text })}
+            </span>
+            {uncertainText(row, t) && (
+              <Badge tone="warning" icon="alertTriangle">
+                {uncertainText(row, t)}
+              </Badge>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="review-row__item">
@@ -776,6 +792,15 @@ function RowCard({
               onChange={(checked) => act({ priceConfirmed: checked })}
             />
           </>
+        )}
+        {asksReadConfirmation(row) && (
+          // Never applied silently (TASK-064): the supplier checks the row against the photo.
+          <Checkbox
+            label={t("review.readConfirm")}
+            checked={row.photo?.readConfirmed ?? false}
+            disabled={busy}
+            onChange={(checked) => act({ readConfirmed: checked })}
+          />
         )}
       </div>
 

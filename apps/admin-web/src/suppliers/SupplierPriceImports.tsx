@@ -74,7 +74,8 @@ export function SupplierPriceImports({ supplierId }: { supplierId: string }) {
                             className="ac-text-body-strong cell-one-line"
                             title={entry.fileName ?? undefined}
                           >
-                            {entry.fileName ?? "Без имени"}
+                            {entry.fileName ??
+                              (entry.format === "photo" ? "Фото прайса" : "Без имени")}
                           </span>
                           <span className="row-title__sub">
                             {priceImportTypeText(entry)} · {entry.uploadedBy.name ?? "сотрудник"}

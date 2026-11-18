@@ -380,6 +380,8 @@ export const PRICE_IMPORT_STATUS_TEXT: Record<PriceImport["status"], string> = {
   applied: "Применён",
   failed: "Не прочитан",
   expired: "Сверка истекла",
+  // TASK-064: a photographed page gave nothing.
+  needs_retake: "Ждёт пересъёмки страницы",
 };
 
 const PRICE_FAILURE_TEXT: Record<PriceImportFailure["reason"], string> = {
@@ -404,7 +406,14 @@ export function priceImportFailureText(failure: PriceImportFailure): string {
  * same for the cabinet: «Excel», «CSV»; a name that says otherwise
  * («renamed.csv» holding a workbook) gets «по содержимому».
  */
-export function priceImportTypeText(entry: Pick<PriceImport, "format" | "fileName">): string {
+export function priceImportTypeText(
+  entry: Pick<PriceImport, "format" | "fileName"> & { photo?: PriceImport["photo"] },
+): string {
+  // Photographed pages (TASK-064): the kind and how many pages.
+  if (entry.format === "photo") {
+    const pages = entry.photo?.pages.length ?? 0;
+    return `Фото, ${String(pages)} стр.`;
+  }
   const type = entry.format === "xlsx" ? "Excel" : "CSV";
   const extension = /\.([a-z0-9]+)$/i.exec(entry.fileName ?? "")?.[1]?.toLowerCase();
   if (!extension) return type;

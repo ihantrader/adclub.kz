@@ -1,10 +1,14 @@
 import { isApiError } from "@adclub/api-client";
 import {
+  priceImportPhotoInvalidDetailsSchema,
   priceImportVersionConflictDetailsSchema,
   type PriceColumnRoleName,
   type PriceImport,
   type PriceImportFailure,
   type PriceImportStatus,
+  type PricePhotoPageInfo,
+  type PricePhotoPageStatus,
+  type PricePhotoProblem,
   type PriceRowErrorValue,
 } from "@adclub/contracts";
 import { missingPriceRoles, numberText } from "@adclub/domain";
@@ -90,6 +94,7 @@ export const STATUS_TEXT: Record<PriceImportStatus, SupplierTextKey> = {
   applied: "price.status.applied",
   failed: "price.status.failed",
   expired: "price.status.expired",
+  needs_retake: "price.status.needsRetake",
 };
 
 export type StatusTone = "neutral" | "warning" | "success" | "danger";
@@ -98,6 +103,7 @@ export function statusTone(status: PriceImportStatus): StatusTone {
   switch (status) {
     case "columns":
     case "review":
+    case "needs_retake":
       return "warning";
     case "parsed":
     case "applied":
@@ -154,6 +160,8 @@ export function uploadErrorText(error: unknown, t: Translate, maxFileMb: number)
       const reason = reasonOf(error.details);
       return reason ? failureText(reason, t) : t("price.error.notATable");
     }
+    case "PRICE_IMPORT_PHOTO_INVALID":
+      return photoErrorText(error.details, t);
     case "PAYLOAD_TOO_LARGE":
       return t("price.error.tooLarge", { mb: maxFileMb });
     case "UNSUPPORTED_MEDIA_TYPE":
@@ -167,6 +175,59 @@ export function uploadErrorText(error: unknown, t: Translate, maxFileMb: number)
     default:
       return t("common.errorText");
   }
+}
+
+const PHOTO_PROBLEM_TEXT: Record<PricePhotoProblem, SupplierTextKey> = {
+  not_an_image: "price.error.photo.notAnImage",
+  unsupported_format: "price.error.photo.unsupportedFormat",
+  broken: "price.error.photo.broken",
+  too_many_pixels: "price.error.photo.tooManyPixels",
+  too_large: "price.error.photo.tooLarge",
+  no_pages: "price.error.photo.noPages",
+  too_many_pages: "price.error.photo.tooManyPages",
+  malformed: "price.error.photo.malformed",
+};
+
+/**
+ * A refused photo (TASK-064): «Стр. 2: это не фото» — by the page's number;
+ * a problem of the whole upload as it is.
+ */
+export function photoErrorText(details: unknown, t: Translate): string {
+  const parsed = priceImportPhotoInvalidDetailsSchema.safeParse(details);
+  if (!parsed.success) return t("price.error.photo.malformed");
+  const { page, reason, limit } = parsed.data;
+  const text = t(PHOTO_PROBLEM_TEXT[reason] ?? "price.error.photo.malformed", {
+    limit: limit === null ? "" : String(limit),
+  });
+  return page === null ? text : t("price.error.photoPage", { page: String(page), reason: text });
+}
+
+/** The name of an upload: the file's, or «Фото, 3 стр.» for photographed pages (TASK-064). */
+export function importTitle(entry: PriceImport, t: Translate): string | null {
+  if (entry.format === "photo") {
+    return t("price.photo.title", { n: String(entry.photo?.pages.length ?? 0) });
+  }
+  return entry.fileName;
+}
+
+const PAGE_STATUS_TEXT: Record<PricePhotoPageStatus, SupplierTextKey> = {
+  waiting: "price.photo.status.waiting",
+  read: "price.photo.status.read",
+  no_table: "price.photo.status.noTable",
+  unreadable: "price.photo.status.unreadable",
+  failed: "price.photo.status.failed",
+};
+
+/** What a photographed page gave, in words. */
+export function pageStatusText(page: PricePhotoPageInfo, t: Translate, lang: Lang): string {
+  return t(PAGE_STATUS_TEXT[page.status], {
+    rows: page.rows === null ? "" : rowsText(lang, page.rows, t),
+  });
+}
+
+/** A page to take again or leave out: it gave nothing. */
+export function pageNeedsRetake(page: PricePhotoPageInfo): boolean {
+  return page.status === "no_table" || page.status === "unreadable" || page.status === "failed";
 }
 
 /** The words of a confirmation of the columns that was refused. */
@@ -280,6 +341,25 @@ export function countsText(parts: readonly (readonly [CountKey, number])[], t: T
 }
 
 export function progressText(entry: PriceImport, t: Translate, lang: Lang): string | null {
+  if (entry.status === "parsing" && entry.photo) {
+    // Photographed pages (TASK-064): «ожидает распознавания» or the page being read.
+    if (entry.photo.aiWaiting) return t("price.photo.waiting");
+    const total = entry.photo.pages.length;
+    return total > 1
+      ? t("price.photo.recognizing", {
+          done: String(Math.min(total, entry.photo.recognized + 1)),
+          total: String(total),
+        })
+      : t("price.photo.recognizingShort");
+  }
+  if (entry.status === "needs_retake" && entry.photo) {
+    return t("price.photo.retakeTitle", {
+      pages: entry.photo.pages
+        .filter(pageNeedsRetake)
+        .map((page) => String(page.pageNo))
+        .join(", "),
+    });
+  }
   if (entry.status === "parsing") {
     return entry.progress && entry.progress.done > 0
       ? t("price.progressRows", { n: formatNumber(entry.progress.done) })

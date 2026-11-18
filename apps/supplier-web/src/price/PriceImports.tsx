@@ -20,6 +20,7 @@ import { useWide } from "../offers/use-wide";
 import { navigateTo, priceImportPath } from "../router";
 import { PageHeader } from "../screens/PageHeader";
 import {
+  importTitle,
   isRunning,
   progressText,
   sizeText,
@@ -28,7 +29,8 @@ import {
   uploadErrorText,
 } from "./price-rules";
 import { PriceExport } from "./PriceExport";
-import { uploadPriceFile } from "./upload";
+import { shrinkPhoto } from "./photo-shrink";
+import { uploadPriceFile, uploadPricePhotos } from "./upload";
 
 /** How often the history is asked again while a file is being read. */
 const RUNNING_POLL_MS = 2000;
@@ -55,6 +57,7 @@ const STATUS_ICON = {
   applied: "circleCheck",
   failed: "circleX",
   expired: "circleX",
+  needs_retake: "camera",
 } as const;
 
 /**
@@ -77,7 +80,22 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [draft, setDraft] = useState<DraftPage[] | null>(null);
+  // The pages and «preparing» as they are now, for a second drop before a render (TASK-064).
+  const draftRef = useRef<DraftPage[]>([]);
+  draftRef.current = draft ?? [];
+  const preparingRef = useRef(false);
+  // The previews of a draft left behind (another page of the cabinet) are freed.
+  useEffect(
+    () => () => {
+      for (const entry of draftRef.current) URL.revokeObjectURL(entry.url);
+    },
+    [],
+  );
+  const [preparing, setPreparing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const gallery = useRef<HTMLInputElement>(null);
   const { begin, settle } = gate;
 
   const load = useCallback(async () => {
@@ -136,7 +154,14 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
   function drop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     setDragging(false);
-    if (!uploading && online) chosen(event.dataTransfer.files);
+    if (uploading || !online || preparing) return;
+    const files = [...event.dataTransfer.files];
+    // Pictures dropped are pages of a photographed price list (TASK-064).
+    if (files.length > 0 && files.every((file) => file.type.startsWith("image/"))) {
+      void addPhotos(files);
+      return;
+    }
+    chosen(event.dataTransfer.files);
   }
 
   async function loadMore() {
@@ -165,8 +190,72 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
     }
   }
 
-  const disabled = uploading !== null || !online;
+  const disabled = uploading !== null || !online || preparing;
   const limits = page?.limits;
+  const maxPages = limits?.photoMaxPages ?? 10;
+
+  /** Photos chosen or taken: shrunk, added to the pages after those already there. */
+  async function addPhotos(files: FileList | readonly File[] | null) {
+    if (preparingRef.current) return;
+    const chosenFiles = files ? [...files] : [];
+    if (chosenFiles.length === 0) return;
+    setUploadError(null);
+    const room = maxPages - draftRef.current.length;
+    if (chosenFiles.length > room) setUploadError(t("price.photo.tooMany", { pages: maxPages }));
+    setPreparing(true);
+    preparingRef.current = true;
+    try {
+      const pages = await Promise.all(
+        chosenFiles.slice(0, Math.max(0, room)).map(async (file) => {
+          const blob = await shrinkPhoto(file);
+          return {
+            id: `${String(Date.now())}-${Math.random()}`,
+            blob,
+            url: URL.createObjectURL(blob),
+          };
+        }),
+      );
+      setDraft((current) => [...(current ?? []), ...pages]);
+    } finally {
+      setPreparing(false);
+      preparingRef.current = false;
+    }
+  }
+
+  function removePage(id: string) {
+    setDraft((current) => {
+      const left = (current ?? []).filter((entry) => {
+        if (entry.id === id) URL.revokeObjectURL(entry.url);
+        return entry.id !== id;
+      });
+      return left.length > 0 ? left : null;
+    });
+  }
+
+  function dropDraft() {
+    for (const entry of draft ?? []) URL.revokeObjectURL(entry.url);
+    setDraft(null);
+  }
+
+  async function uploadPhotos() {
+    if (!draft || draft.length === 0) return;
+    setUploadError(null);
+    const size = draft.reduce((sum, entry) => sum + entry.blob.size, 0);
+    setUploading({ name: t("price.photo.title", { n: String(draft.length) }), size, fraction: 0 });
+    try {
+      const created = await uploadPricePhotos(
+        draft.map((entry) => entry.blob),
+        lang,
+        (fraction) => setUploading((current) => (current ? { ...current, fraction } : current)),
+      );
+      dropDraft();
+      navigateTo(priceImportPath(created.id));
+    } catch (error) {
+      setUploadError(uploadErrorText(error, t, maxFileMb));
+    } finally {
+      setUploading(null);
+    }
+  }
 
   return (
     <>
@@ -202,6 +291,18 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
                 <span style={{ width: `${String(Math.round(uploading.fraction * 100))}%` }} />
               </div>
             </div>
+          ) : draft ? (
+            <PhotoDraft
+              pages={draft}
+              maxPages={maxPages}
+              disabled={disabled}
+              preparing={preparing}
+              onRemove={removePage}
+              onAdd={() => gallery.current?.click()}
+              onCamera={() => camera.current?.click()}
+              onUpload={() => void uploadPhotos()}
+              onCancel={dropDraft}
+            />
           ) : (
             <>
               <p className="ac-text-body-s ac-muted">
@@ -212,11 +313,58 @@ export function PriceImports({ timeZone }: { timeZone: string }) {
                     })
                   : t("price.dropHintShort")}
               </p>
-              <Button icon="plus" disabled={disabled} onClick={() => input.current?.click()}>
-                {t("price.choose")}
-              </Button>
+              <div className="actions-row price-drop__actions">
+                <Button icon="plus" disabled={disabled} onClick={() => input.current?.click()}>
+                  {t("price.choose")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon="camera"
+                  disabled={disabled}
+                  loading={preparing}
+                  onClick={() => camera.current?.click()}
+                >
+                  {t("price.takePhoto")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={disabled}
+                  onClick={() => gallery.current?.click()}
+                >
+                  {t("price.choosePhotos")}
+                </Button>
+              </div>
             </>
           )}
+          {/* The camera of a phone (`capture`), and several pictures from the gallery (TASK-064). */}
+          <input
+            ref={camera}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="ac-visually-hidden"
+            tabIndex={-1}
+            aria-hidden="true"
+            data-testid="price-camera"
+            onChange={(event) => {
+              void addPhotos(event.target.files);
+              event.target.value = "";
+            }}
+          />
+          <input
+            ref={gallery}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/*"
+            multiple
+            className="ac-visually-hidden"
+            tabIndex={-1}
+            aria-hidden="true"
+            data-testid="price-photos"
+            onChange={(event) => {
+              void addPhotos(event.target.files);
+              event.target.value = "";
+            }}
+          />
           <input
             ref={input}
             type="file"
@@ -322,7 +470,7 @@ function HistoryTable({ imports, timeZone }: { imports: PriceImport[]; timeZone:
                     href={href}
                     onClick={(event) => openImport(event, href)}
                   >
-                    {entry.fileName ?? t("price.noFileName")}
+                    {importTitle(entry, t) ?? t("price.noFileName")}
                   </a>
                 </td>
                 <td className="num">{formatWhen(entry.createdAt, timeZone, lang, t)}</td>
@@ -360,7 +508,7 @@ function HistoryRow({ entry, timeZone }: { entry: PriceImport; timeZone: string 
       >
         <span className="price-history__main">
           <span className="ac-text-body-strong price-wrap">
-            {entry.fileName ?? t("price.noFileName")}
+            {importTitle(entry, t) ?? t("price.noFileName")}
           </span>
           <span className="ac-text-body-s ac-muted">
             {[
@@ -378,5 +526,79 @@ function HistoryRow({ entry, timeZone }: { entry: PriceImport; timeZone: string 
         </Badge>
       </a>
     </li>
+  );
+}
+
+/** A page chosen before the upload: the picture made smaller and its preview. */
+interface DraftPage {
+  id: string;
+  blob: Blob;
+  url: string;
+}
+
+/**
+ * The pages of a photographed price list before the upload (S-PRICE-01,
+ * TASK-064): thumbnails in the order of the pages, «Убрать» under each,
+ * «Добавить страницу», «Загрузить». The order is the order chosen.
+ */
+function PhotoDraft({
+  pages,
+  maxPages,
+  disabled,
+  preparing,
+  onRemove,
+  onAdd,
+  onCamera,
+  onUpload,
+  onCancel,
+}: {
+  pages: DraftPage[];
+  maxPages: number;
+  disabled: boolean;
+  preparing: boolean;
+  onRemove: (id: string) => void;
+  onAdd: () => void;
+  onCamera: () => void;
+  onUpload: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useLanguage();
+  const full = pages.length >= maxPages;
+  return (
+    <div className="price-photos stack-s">
+      <p className="ac-text-body-strong">{t("price.photo.draftTitle", { n: pages.length })}</p>
+      <p className="ac-text-body-s ac-muted">{t("price.photo.hint", { pages: maxPages })}</p>
+      <ol className="price-photos__pages">
+        {pages.map((entry, index) => (
+          <li key={entry.id} className="price-photos__page">
+            <img src={entry.url} alt={t("price.photo.page", { n: index + 1 })} />
+            <span className="ac-text-caption">{t("price.photo.page", { n: index + 1 })}</span>
+            <Button variant="text" size="s" disabled={disabled} onClick={() => onRemove(entry.id)}>
+              {t("price.photo.remove")}
+            </Button>
+          </li>
+        ))}
+      </ol>
+      <div className="actions-row price-drop__actions">
+        <Button icon="upload" disabled={disabled || pages.length === 0} onClick={onUpload}>
+          {t("price.photo.upload")}
+        </Button>
+        <Button
+          variant="secondary"
+          icon="camera"
+          disabled={disabled || full}
+          loading={preparing}
+          onClick={onCamera}
+        >
+          {t("price.takePhoto")}
+        </Button>
+        <Button variant="secondary" disabled={disabled || full} onClick={onAdd}>
+          {t("price.photo.addMore")}
+        </Button>
+        <Button variant="text" disabled={disabled} onClick={onCancel}>
+          {t("price.photo.cancel")}
+        </Button>
+      </div>
+    </div>
   );
 }

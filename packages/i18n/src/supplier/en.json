@@ -1,6 +1,5 @@
 {
   "$about": "English. Translated from the Russian working texts of SCREENS.md by the coding agent (TASK-031).",
-
   "common.retry": "Retry",
   "common.cancel": "Cancel",
   "common.save": "Save",
@@ -20,12 +19,10 @@
   "common.delete": "Delete",
   "common.notNow": "Not now",
   "common.done": "Done",
-
   "language.kk": "Қазақша",
   "language.ru": "Русский",
   "language.en": "English",
   "language.label": "Language",
-
   "nav.label": "Cabinet sections",
   "tabs.orders": "Orders",
   "tabs.offers": "Offers",
@@ -37,10 +34,8 @@
   "nav.settings": "My settings",
   "nav.install": "Add to home screen",
   "placeholder.text": "This section arrives with the next update of the cabinet",
-
   "header.switchCompany": "Switch company",
   "header.companyLabel": "Company",
-
   "auth.title": "Supplier cabinet sign-in",
   "auth.phoneLabel": "Phone number",
   "auth.getCode": "Get code",
@@ -77,7 +72,6 @@
   "auth.policyLink": "Privacy Policy",
   "auth.codeDigits": "{n} digits",
   "auth.brandLine": "Asia Drive Club · Supplier cabinet",
-
   "join.title": "Become a club partner",
   "join.lead": "Car club customers — with no advertising costs",
   "join.companyName": "Company name",
@@ -109,7 +103,6 @@
   "join.error.unavailable": "Could not send it right now. Try again later",
   "join.error.network": "No connection to the server. Check the internet and try again",
   "join.error.failed": "Could not send. Try again",
-
   "compat.title": "Compatibility data",
   "compat.lead": "Know which cars the item fits? Propose it — the club's administrator checks and adds it",
   "compat.open": "Propose compatibility data",
@@ -140,18 +133,14 @@
   "compat.error.notApplicable": "Compatibility is not kept for this item",
   "compat.error.itemGone": "The item is no longer available in the catalog — it can't be proposed",
   "compat.error.tooMany": "Too many proposals today. Try again in {minutes} min",
-
   "update.title": "The cabinet needs an update",
   "update.reload": "Reload the page",
   "app.updated": "The cabinet has been updated",
   "app.reload": "Reload",
-
   "banner.pausedAdmin": "A club administrator has temporarily removed your offers from the showcase. Current orders must still be fulfilled",
   "banner.pausedBilling": "Offers are off the showcase: the subscription isn't paid. Current orders must still be fulfilled",
   "banner.blocked": "The cabinet has been blocked by a club administrator",
-
   "more.title": "More",
-
   "settings.title": "My settings",
   "settings.name": "Name",
   "settings.phone": "Phone",
@@ -170,7 +159,6 @@
   "settings.signOutConfirmTitle": "Sign out of the cabinet?",
   "settings.signOutConfirmText": "You can sign in again with your phone number",
   "settings.companySwitched": "Company: {name}",
-
   "team.title": "Employees",
   "team.explanation": "A notification about each order goes to each employee separately. No more than {n} employees receive notifications",
   "team.limitReached": "Limit reached — {n}",
@@ -198,7 +186,6 @@
   "team.removed": "Employee removed",
   "team.gone": "This employee has already been removed",
   "team.tableMember": "Employee",
-
   "company.title": "Company",
   "company.name": "Name",
   "company.bin": "BIN",
@@ -250,7 +237,6 @@
   "company.dateRequired": "Enter a date",
   "company.hasChanges": "There are unsaved changes",
   "company.noChanges": "No changes",
-
   "day.1": "Monday",
   "day.2": "Tuesday",
   "day.3": "Wednesday",
@@ -258,7 +244,6 @@
   "day.5": "Friday",
   "day.6": "Saturday",
   "day.7": "Sunday",
-
   "install.title": "Add to home screen",
   "install.text": "The cabinet will open with one tap, like an app",
   "install.button": "Install",
@@ -272,7 +257,6 @@
   "install.androidStep2": "Choose “Install app”",
   "install.androidInstallApp": "Install app",
   "install.androidNewTab": "New tab",
-
   "offers.title": "Offers",
   "offers.add": "Add an item",
   "offers.tabOnSale": "On sale",
@@ -394,7 +378,6 @@
   "searchSelect.failed": "Couldn't load — no connection to the server",
   "searchSelect.nothing": "Nothing found",
   "searchSelect.searching": "Searching…",
-
   "offerSearch.title": "Add an item",
   "offerSearch.label": "Search the club's catalog",
   "offerSearch.placeholder": "Article or name",
@@ -407,7 +390,6 @@
   "offerSearch.rateLimited": "Too many searches, wait {seconds} s",
   "offerSearch.limitReached": "The first 100 matches are shown — refine the search",
   "offerSearch.offline": "No network — search is unavailable",
-
   "offerForm.newTitle": "New offer",
   "offerForm.title": "Offer",
   "offerForm.toList": "To offers",
@@ -438,7 +420,6 @@
   "offerForm.previewUnknown": "The date appears once the term is given",
   "offerForm.create": "Put on sale",
   "offerForm.conflict": "A colleague has already changed the offer (now {now}). Your values stayed in the form — save again if they are right",
-
   "orders.title": "Orders",
   "orders.loading": "Loading orders",
   "orders.tabNew": "New",
@@ -651,7 +632,6 @@
   "orders.actionsLabel": "Order actions",
   "orders.tableKind": "Type",
   "orders.tableReceiving": "Receiving",
-
   "scan.close": "Close the scanner",
   "scan.aim": "Point the camera at the QR in the client's app",
   "scan.cameraStarting": "Turning the camera on",
@@ -729,10 +709,9 @@
   "scan.noCameraHint": "No camera — type the code",
   "scan.typeHint": "You can type it on the keyboard or paste it",
   "scan.scanQr": "Scan a QR",
-
   "price.title": "Price list",
   "price.back": "Back to uploads",
-  "price.dropTitle": "Upload your price list as it is: Excel or CSV",
+  "price.dropTitle": "Upload your price list as it is: Excel, CSV or photos",
   "price.dropHint": "Drop the file here or choose it. Up to {mb} MB and {rows} rows",
   "price.dropHintShort": "Drop the file here or choose it",
   "price.choose": "Choose a file",
@@ -819,7 +798,6 @@
   "price.rowError.repeatedRow": "Repeats row {value}",
   "price.rowError.serviceItem": "This is a service: service prices are set by model, not from a price list",
   "price.rowError.supplierType": "The company sells services only — goods of the price list aren't applied",
-
   "nav.moderation": "Moderation",
   "offerSearch.requestLink": "Not in the catalog? Send a request to add it",
   "offerSearch.requestAction": "Send a request",
@@ -1012,7 +990,6 @@
   "price.tableSize": "Size",
   "price.tableResult": "Result",
   "price.tableState": "State",
-
   "nav.billing": "Subscription",
   "billing.title": "Subscription",
   "billing.opening": "Opening the payment system's page…",
@@ -1085,7 +1062,6 @@
   "billing.error.noPlan": "The subscription isn't available yet: no tariff for suppliers has been set. We have told the club administrator",
   "billing.error.noCard": "Link a card first",
   "billing.error.nothingToPay": "The subscription is paid — nothing to pay now",
-
   "nav.stats": "Statistics",
   "stats.title": "Statistics",
   "stats.period": "Period",
@@ -1114,5 +1090,56 @@
   "stats.ratingNewNote": "The rating appears after {n} customer scores in the last {days} days",
   "stats.reviews": "Customer scores: {n}",
   "stats.empty": "No orders in this period",
-  "stats.emptyNote": "Views and the rating are below"
+  "stats.emptyNote": "Views and the rating are below",
+  "price.takePhoto": "Take a photo",
+  "price.choosePhotos": "Photos from the gallery",
+  "price.photo.draftTitle": "Pages of the price list: {n}",
+  "price.photo.page": "Page {n}",
+  "price.photo.remove": "Remove",
+  "price.photo.upload": "Upload",
+  "price.photo.cancel": "Cancel",
+  "price.photo.addMore": "Add a page",
+  "price.photo.hint": "One page per photo, straight and in good light. Up to {pages} pages.",
+  "price.photo.tooMany": "At most {pages} pages in one upload",
+  "price.photo.preparing": "Preparing the photos…",
+  "price.photo.title": "Photos, {n} p.",
+  "price.photo.recognizing": "Reading the photos… page {done} of {total}",
+  "price.photo.recognizingShort": "Reading the photos…",
+  "price.photo.waiting": "Waiting to be read",
+  "price.photo.waitingHint": "Reading is unavailable right now — it will go on by itself. You can close the page.",
+  "price.photo.retakeTitle": "A photo can't be read: page {pages}",
+  "price.photo.retakeText": "Take the page again, straight, in good light and without glare — or leave it out. The other pages are read; nothing is applied until every page is.",
+  "price.photo.status.read": "Read: {rows}",
+  "price.photo.status.waiting": "Waiting to be read",
+  "price.photo.status.noTable": "No price table on the photo",
+  "price.photo.status.unreadable": "Can't be read",
+  "price.photo.status.failed": "Couldn't be read",
+  "price.photo.retake": "Retake",
+  "price.photo.retakeGallery": "Choose another photo",
+  "price.photo.removePage": "Leave the page out",
+  "price.photo.retakeSent": "Page {page} sent — reading it",
+  "price.status.needsRetake": "Retake needed",
+  "price.error.photoPage": "Page {page}: {reason}",
+  "price.error.photo.notAnImage": "not a photo",
+  "price.error.photo.unsupportedFormat": "the format won't do — JPEG, PNG or WebP",
+  "price.error.photo.broken": "the file is damaged",
+  "price.error.photo.tooManyPixels": "the picture is too large",
+  "price.error.photo.tooLarge": "larger than {limit} MB",
+  "price.error.photo.noPages": "Choose at least one photo",
+  "price.error.photo.tooManyPages": "At most {limit} pages in one upload",
+  "price.error.photo.malformed": "The photos couldn't be sent — try again",
+  "price.parsed.columnsPhoto": "Rows read from the photos",
+  "review.fromPhoto": "read from a photo · page {page}",
+  "review.photoText": "On the photo: {text}",
+  "review.readUncertain": "Read with doubt: {fields}",
+  "review.readConfirm": "Read correctly",
+  "review.field.row": "the whole row",
+  "review.field.article": "article",
+  "review.field.brand": "brand",
+  "review.field.name": "name",
+  "review.field.price": "price",
+  "review.field.availability": "stock",
+  "review.field.leadDays": "term",
+  "review.readWaiting": "Read from photos with doubt, not applied without «Read correctly»: {rows}",
+  "result.reason.readConfirmationRequired": "A row of a photo read with doubt, not confirmed"
 }

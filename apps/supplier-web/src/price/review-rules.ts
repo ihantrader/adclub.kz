@@ -163,10 +163,49 @@ export function applyNotes(summary: PriceReviewSummary, t: Translate, lang: Lang
       }),
     );
   }
+  // Rows of a photo read with doubt (TASK-064); an older server says nothing of them.
+  const read = summary.preview.readConfirmationRequired ?? 0;
+  if (read > 0) {
+    notes.push(t("review.readWaiting", { rows: rowsText(lang, read, t) }));
+  }
   return notes;
 }
 
 // ---------------------------------------------------------------- a row
+
+type PhotoField = NonNullable<PriceReviewRow["photo"]>["uncertain"][number];
+
+const PHOTO_FIELD_TEXT: Record<PhotoField, SupplierTextKey> = {
+  row: "review.field.row",
+  article: "review.field.article",
+  brand: "review.field.brand",
+  name: "review.field.name",
+  price: "review.field.price",
+  availability: "review.field.availability",
+  lead_days: "review.field.leadDays",
+};
+
+/** «Прочитано неуверенно: цена» — what the model doubted in a row of a photo (TASK-064). */
+export function uncertainText(row: PriceReviewRow, t: Translate): string | null {
+  const fields = row.photo?.uncertain ?? [];
+  if (fields.length === 0) return null;
+  return t("review.readUncertain", {
+    fields: fields.map((field) => t(PHOTO_FIELD_TEXT[field] ?? "review.field.row")).join(", "),
+  });
+}
+
+/**
+ * «Прочитано верно» is asked of a row of a photo read with doubt that would
+ * be applied — not of an error, and not of one skipped.
+ */
+export function asksReadConfirmation(row: PriceReviewRow): boolean {
+  return (
+    (row.photo?.uncertain.length ?? 0) > 0 &&
+    row.group !== "errors" &&
+    row.decision?.kind !== "skip" &&
+    row.outcome === null
+  );
+}
 
 /** What the file says of the item: article, brand, name — as written. */
 export function fileText(row: PriceReviewRow): string {
@@ -412,6 +451,7 @@ const NOT_APPLIED_TEXT: Record<PriceRowNotAppliedReason, SupplierTextKey> = {
   supplier_type: "result.reason.supplierType",
   out_of_stock: "result.reason.outOfStock",
   duplicate_item: "result.reason.duplicateItem",
+  read_confirmation_required: "result.reason.readConfirmationRequired",
 };
 
 /** Why rows were not applied, in words; a reason the cabinet doesn't know yet — a general one. */

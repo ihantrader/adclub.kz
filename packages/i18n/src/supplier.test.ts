@@ -202,8 +202,8 @@ describe("supplier cabinet texts", () => {
     for (const lang of languages) {
       for (const key of supplierTextKeys()) {
         // Words of three letters or more in caps; «БИН»/«БСН», «SMS», «QR» are names,
-        // and so are the formats of a price file, «CSV» and «UTF-8» (TASK-046).
-        const text = supplierText(lang, key).replace(/\b(БИН|БСН|BIN|SMS|CSV|UTF)\b/g, "");
+        // and so are the formats of a price file, «CSV» and «UTF-8» (TASK-046), and of a photo, «JPEG», «PNG» (TASK-064).
+        const text = supplierText(lang, key).replace(/\b(БИН|БСН|BIN|SMS|CSV|UTF|JPEG|PNG)\b/g, "");
         expect(text).not.toMatch(/\b[A-ZА-ЯЁӘҒҚҢӨҰҮҺІ]{3,}\b/u);
       }
     }

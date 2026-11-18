@@ -5,15 +5,17 @@ import { apiClient, session } from "../api";
 import { API_URL, APP_VERSION } from "../config";
 
 /**
- * Sending a price file with the progress of the upload (S-PRICE-01
- * «прогресс загрузки»). `fetch` tells nothing about the bytes it has sent,
- * so this one request goes by `XMLHttpRequest` — with the same headers the
- * API client sends, the session's access token, and the session's cookie.
- * An expired token is exchanged by any ordinary request of the client (one
- * exchange for the whole page), and the upload is repeated once.
+ * Sending a price file — or photographed pages (TASK-064) — with the
+ * progress of the upload (S-PRICE-01 «прогресс загрузки»). `fetch` tells
+ * nothing about the bytes it has sent, so these requests go by
+ * `XMLHttpRequest` — with the same headers the API client sends, the
+ * session's access token, and the session's cookie. An expired token is
+ * exchanged by any ordinary request of the client (one exchange for the
+ * whole page), and the upload is repeated once.
  *
- * The file goes as it is, as `application/octet-stream`: what it is, the
- * server decides by its content.
+ * A file goes as it is, as `application/octet-stream`: what it is, the
+ * server decides by its content. Photographed pages go as a form of parts
+ * named `page`, in their order (the browser writes the boundary itself).
  */
 
 /** A slow phone network and a file of 20 MB: minutes, not seconds. */
@@ -24,20 +26,28 @@ interface Answer {
   body: unknown;
 }
 
+interface Upload {
+  method: "POST" | "PUT";
+  path: string;
+  body: Blob | FormData;
+  /** `null` — the browser sets it (a form with its boundary). */
+  contentType: string | null;
+  /** The status of success. */
+  ok: number;
+}
+
 function send(
-  file: Blob,
-  fileName: string,
+  upload: Upload,
   language: string,
   token: string | undefined,
   onProgress: (fraction: number) => void,
 ): Promise<Answer> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const query = new URLSearchParams({ fileName: fileName.slice(0, 255) });
-    xhr.open("POST", `${API_URL}${apiRoutes.uploadPriceImport.path}?${query.toString()}`);
+    xhr.open(upload.method, `${API_URL}${upload.path}`);
     xhr.withCredentials = true;
     xhr.timeout = UPLOAD_TIMEOUT_MS;
-    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    if (upload.contentType) xhr.setRequestHeader("Content-Type", upload.contentType);
     xhr.setRequestHeader("X-Client", `supplier-web/${APP_VERSION}`);
     xhr.setRequestHeader("Accept-Language", language);
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -64,7 +74,7 @@ function send(
       );
     xhr.onerror = failed;
     xhr.ontimeout = failed;
-    xhr.send(file);
+    xhr.send(upload.body);
   });
 }
 
@@ -74,9 +84,8 @@ async function freshToken(): Promise<string | undefined> {
   return session.accessToken();
 }
 
-/** Uploads a price file; resolves with the new import or rejects with an `ApiError`. */
-export async function uploadPriceFile(
-  file: File,
+async function uploaded(
+  upload: Upload,
   language: string,
   onProgress: (fraction: number) => void,
 ): Promise<PriceImport> {
@@ -84,13 +93,13 @@ export async function uploadPriceFile(
   for (let attempt = 0; ; attempt++) {
     let answer: Answer;
     try {
-      answer = await send(file, file.name, language, token, onProgress);
+      answer = await send(upload, language, token, onProgress);
       reportRequestOutcome(true);
     } catch (error) {
       reportRequestOutcome(false);
       throw error;
     }
-    if (answer.status === 201) return (answer.body as PriceImportResponse).import;
+    if (answer.status === upload.ok) return (answer.body as PriceImportResponse).import;
     const error = apiErrorFromResponse(answer.status, answer.body);
     if (attempt === 0 && error.code === "ACCESS_TOKEN_EXPIRED") {
       onProgress(0);
@@ -99,4 +108,63 @@ export async function uploadPriceFile(
     }
     throw error;
   }
+}
+
+/** Uploads a price file; resolves with the new import or rejects with an `ApiError`. */
+export function uploadPriceFile(
+  file: File,
+  language: string,
+  onProgress: (fraction: number) => void,
+): Promise<PriceImport> {
+  const query = new URLSearchParams({ fileName: file.name.slice(0, 255) });
+  return uploaded(
+    {
+      method: "POST",
+      path: `${apiRoutes.uploadPriceImport.path}?${query.toString()}`,
+      body: file,
+      contentType: "application/octet-stream",
+      ok: 201,
+    },
+    language,
+    onProgress,
+  );
+}
+
+/** Uploads photographed pages in their order (TASK-064). */
+export function uploadPricePhotos(
+  pages: readonly Blob[],
+  language: string,
+  onProgress: (fraction: number) => void,
+): Promise<PriceImport> {
+  const form = new FormData();
+  pages.forEach((page, index) => form.append("page", page, `page-${String(index + 1)}.jpg`));
+  return uploaded(
+    {
+      method: "POST",
+      path: apiRoutes.uploadPricePhotos.path,
+      body: form,
+      contentType: null,
+      ok: 201,
+    },
+    language,
+    onProgress,
+  );
+}
+
+/** «Переснять»: one page of an import taken again. */
+export function retakePricePhoto(
+  importId: string,
+  pageNo: number,
+  page: Blob,
+  language: string,
+  onProgress: (fraction: number) => void,
+): Promise<PriceImport> {
+  const path = apiRoutes.retakePricePhoto.path
+    .replace("{importId}", encodeURIComponent(importId))
+    .replace("{pageNo}", String(pageNo));
+  return uploaded(
+    { method: "PUT", path, body: page, contentType: "application/octet-stream", ok: 200 },
+    language,
+    onProgress,
+  );
 }

@@ -1,6 +1,5 @@
 {
   "$about": "Қазақша. ВНИМАНИЕ: перевод сделан coding-agent'ом и НЕ ПОДТВЕРЖДЁН НОСИТЕЛЕМ ЯЗЫКА (TASK-031, как и казахские тексты мобильного приложения). Проверка носителем — отдельной задачей; до неё тексты считаются черновыми.",
-
   "common.retry": "Қайталау",
   "common.cancel": "Бас тарту",
   "common.save": "Сақтау",
@@ -20,12 +19,10 @@
   "common.delete": "Жою",
   "common.notNow": "Қазір емес",
   "common.done": "Дайын",
-
   "language.kk": "Қазақша",
   "language.ru": "Русский",
   "language.en": "English",
   "language.label": "Тіл",
-
   "nav.label": "Кабинет бөлімдері",
   "tabs.orders": "Өтінімдер",
   "tabs.offers": "Ұсыныстар",
@@ -37,10 +34,8 @@
   "nav.settings": "Менің баптауларым",
   "nav.install": "Экранға орнату",
   "placeholder.text": "Бөлім кабинеттің келесі жаңартуында пайда болады",
-
   "header.switchCompany": "Компанияны ауыстыру",
   "header.companyLabel": "Компания",
-
   "auth.title": "Жеткізуші кабинетіне кіру",
   "auth.phoneLabel": "Телефон нөмірі",
   "auth.getCode": "Код алу",
@@ -77,7 +72,6 @@
   "auth.policyLink": "Құпиялылық саясатын қабылдайсыз",
   "auth.codeDigits": "{n} сан",
   "auth.brandLine": "Asia Drive Club · Жеткізуші кабинеті",
-
   "join.title": "Клубтың серіктесі болыңыз",
   "join.lead": "Автоклуб клиенттері — жарнамаға шығынсыз",
   "join.companyName": "Компания атауы",
@@ -109,7 +103,6 @@
   "join.error.unavailable": "Қазір жіберу мүмкін болмады. Кейінірек қайталап көріңіз",
   "join.error.network": "Сервермен байланыс жоқ. Интернетті тексеріп, қайталап көріңіз",
   "join.error.failed": "Жіберу мүмкін болмады. Қайталап көріңіз",
-
   "compat.title": "Сәйкестік деректері",
   "compat.lead": "Позиция қай көліктерге сәйкес келетінін білесіз бе? Ұсыныңыз — клуб әкімшісі тексеріп, қосады",
   "compat.open": "Деректерді ұсыну",
@@ -140,18 +133,14 @@
   "compat.error.notApplicable": "Бұл позиция үшін сәйкестік көрсетілмейді",
   "compat.error.itemGone": "Позиция анықтамалықта енді қолжетімсіз — ол үшін ұсыну мүмкін емес",
   "compat.error.tooMany": "Бір тәулікте ұсыныстар тым көп. {minutes} минуттан кейін қайталап көріңіз",
-
   "update.title": "Кабинетті жаңарту керек",
   "update.reload": "Бетті жаңарту",
   "app.updated": "Кабинет жаңартылды",
   "app.reload": "Жаңарту",
-
   "banner.pausedAdmin": "Ұсыныстарды клуб әкімшісі витринадан уақытша алып тастады. Ағымдағы өтінімдерді орындау керек",
   "banner.pausedBilling": "Ұсыныстар витринадан алынды: жазылым төленбеген. Ағымдағы өтінімдерді орындау керек",
   "banner.blocked": "Кабинетті клуб әкімшісі бұғаттады",
-
   "more.title": "Тағы",
-
   "settings.title": "Менің баптауларым",
   "settings.name": "Аты",
   "settings.phone": "Телефон",
@@ -170,7 +159,6 @@
   "settings.signOutConfirmTitle": "Кабинеттен шығу керек пе?",
   "settings.signOutConfirmText": "Қайта кіру телефон нөмірі арқылы мүмкін",
   "settings.companySwitched": "Компания: {name}",
-
   "team.title": "Қызметкерлер",
   "team.explanation": "Әр өтінім туралы хабарлама әр қызметкерге жеке жіберіледі. Хабарламаларды {n} қызметкерден артық алмайды",
   "team.limitReached": "Шекке жетті — {n}",
@@ -198,7 +186,6 @@
   "team.removed": "Қызметкер жойылды",
   "team.gone": "Бұл қызметкер әлдеқашан жойылған",
   "team.tableMember": "Қызметкер",
-
   "company.title": "Компания",
   "company.name": "Атауы",
   "company.bin": "БСН",
@@ -250,7 +237,6 @@
   "company.dateRequired": "Күнді көрсетіңіз",
   "company.hasChanges": "Сақталмаған өзгерістер бар",
   "company.noChanges": "Өзгеріс жоқ",
-
   "day.1": "Дүйсенбі",
   "day.2": "Сейсенбі",
   "day.3": "Сәрсенбі",
@@ -258,7 +244,6 @@
   "day.5": "Жұма",
   "day.6": "Сенбі",
   "day.7": "Жексенбі",
-
   "install.title": "Экранға орнату",
   "install.text": "Кабинет қолданба сияқты бір басумен ашылады",
   "install.button": "Орнату",
@@ -272,7 +257,6 @@
   "install.androidStep2": "«Қолданбаны орнату» тармағын таңдаңыз",
   "install.androidInstallApp": "Қолданбаны орнату",
   "install.androidNewTab": "Жаңа қойынды",
-
   "offers.title": "Ұсыныстар",
   "offers.add": "Позиция қосу",
   "offers.tabOnSale": "Сатылымда",
@@ -394,7 +378,6 @@
   "searchSelect.failed": "Жүктеу мүмкін болмады — сервермен байланыс жоқ",
   "searchSelect.nothing": "Ештеңе табылмады",
   "searchSelect.searching": "Іздеп жатырмыз…",
-
   "offerSearch.title": "Позиция қосу",
   "offerSearch.label": "Клуб анықтамалығынан іздеу",
   "offerSearch.placeholder": "Артикулы немесе атауы",
@@ -407,7 +390,6 @@
   "offerSearch.rateLimited": "Іздеу тым көп, {seconds} с күтіңіз",
   "offerSearch.limitReached": "Алғашқы 100 сәйкестік көрсетілді — сұрауды нақтылаңыз",
   "offerSearch.offline": "Желі жоқ — іздеу қолжетімсіз",
-
   "offerForm.newTitle": "Жаңа ұсыныс",
   "offerForm.title": "Ұсыныс",
   "offerForm.toList": "Ұсыныстарға",
@@ -438,7 +420,6 @@
   "offerForm.previewUnknown": "Мерзім көрсетілгенде күні шығады",
   "offerForm.create": "Сатылымға қою",
   "offerForm.conflict": "Ұсынысты әріптесіңіз өзгертіп қойған (қазір — {now}). Сіздің мәндеріңіз формада қалды — дұрыс болса, қайта сақтаңыз",
-
   "orders.title": "Өтінімдер",
   "orders.loading": "Өтінімдерді жүктеп жатырмыз",
   "orders.tabNew": "Жаңа",
@@ -651,7 +632,6 @@
   "orders.actionsLabel": "Өтініммен әрекеттер",
   "orders.tableKind": "Түрі",
   "orders.tableReceiving": "Алу",
-
   "scan.close": "Сканерді жабу",
   "scan.aim": "Камераны клиент қосымшасындағы QR-ға бағыттаңыз",
   "scan.cameraStarting": "Камераны қосып жатырмыз",
@@ -729,10 +709,9 @@
   "scan.noCameraHint": "Камера қолжетімсіз — кодты енгізіңіз",
   "scan.typeHint": "Пернетақтадан теруге немесе қоюға болады",
   "scan.scanQr": "QR сканерлеу",
-
   "price.title": "Прайс",
   "price.back": "Прайс жүктемелеріне",
-  "price.dropTitle": "Прайсты сол күйінде жүктеңіз: Excel немесе CSV",
+  "price.dropTitle": "Прайсты сол күйінде жүктеңіз: Excel, CSV немесе фото",
   "price.dropHint": "Файлды осында сүйреңіз немесе таңдаңыз. {mb} МБ және {rows} жолға дейін",
   "price.dropHintShort": "Файлды осында сүйреңіз немесе таңдаңыз",
   "price.choose": "Файлды таңдау",
@@ -819,7 +798,6 @@
   "price.rowError.repeatedRow": "{value}-жолдың қайталануы",
   "price.rowError.serviceItem": "Бұл қызмет: қызмет бағасы прайстан емес, модельдер бойынша беріледі",
   "price.rowError.supplierType": "Компания тек қызмет көрсетеді — прайстағы тауарлар қолданылмайды",
-
   "nav.moderation": "Модерация",
   "offerSearch.requestLink": "Анықтамалықта жоқ па? Қосуға сұраныс жіберіңіз",
   "offerSearch.requestAction": "Сұраныс жіберу",
@@ -1012,7 +990,6 @@
   "price.tableSize": "Көлемі",
   "price.tableResult": "Нәтиже",
   "price.tableState": "Күйі",
-
   "nav.billing": "Жазылым",
   "billing.title": "Жазылым",
   "billing.opening": "Төлем жүйесінің бетін ашамыз…",
@@ -1085,7 +1062,6 @@
   "billing.error.noPlan": "Жазылым әзірге қолжетімсіз: жеткізушілерге тариф әлі тағайындалмаған. Біз клуб әкімшісіне хабарладық",
   "billing.error.noCard": "Алдымен картаны байланыстырыңыз",
   "billing.error.nothingToPay": "Жазылым төленген — қазір төлеудің қажеті жоқ",
-
   "nav.stats": "Статистика",
   "stats.title": "Статистика",
   "stats.period": "Кезең",
@@ -1114,5 +1090,56 @@
   "stats.ratingNewNote": "Рейтинг соңғы {days} күнде клиенттердің {n} бағасынан кейін пайда болады",
   "stats.reviews": "Клиент бағалары: {n}",
   "stats.empty": "Бұл кезеңде өтінімдер болған жоқ",
-  "stats.emptyNote": "Қараулар мен рейтинг — төменде"
+  "stats.emptyNote": "Қараулар мен рейтинг — төменде",
+  "price.takePhoto": "Суретке түсіру",
+  "price.choosePhotos": "Галереядан фото",
+  "price.photo.draftTitle": "Прайс беттері: {n}",
+  "price.photo.page": "{n}-бет",
+  "price.photo.remove": "Алып тастау",
+  "price.photo.upload": "Жүктеу",
+  "price.photo.cancel": "Болдырмау",
+  "price.photo.addMore": "Бет қосу",
+  "price.photo.hint": "Әр суретке бір бет, тегіс әрі жақсы жарықта. {pages} бетке дейін.",
+  "price.photo.tooMany": "Бір жүктеуде {pages} беттен аспауы керек",
+  "price.photo.preparing": "Фото дайындалуда…",
+  "price.photo.title": "Фото, {n} бет",
+  "price.photo.recognizing": "Фото танылуда… {total} беттің {done}-сі",
+  "price.photo.recognizingShort": "Фото танылуда…",
+  "price.photo.waiting": "Тануды күтуде",
+  "price.photo.waitingHint": "Тану қазір қолжетімсіз — өзі жалғасады. Бетті жабуға болады.",
+  "price.photo.retakeTitle": "Фото оқылмайды: {pages}-бет",
+  "price.photo.retakeText": "Бетті тегіс, жақсы жарықта, жылтырсыз қайта түсіріңіз немесе алып тастаңыз. Қалған беттер танылды; барлық беттер оқылмайынша прайс қолданылмайды.",
+  "price.photo.status.read": "Танылды: {rows}",
+  "price.photo.status.waiting": "Тануды күтуде",
+  "price.photo.status.noTable": "Фотода прайс кестесі жоқ",
+  "price.photo.status.unreadable": "Оқылмайды",
+  "price.photo.status.failed": "Тану мүмкін болмады",
+  "price.photo.retake": "Қайта түсіру",
+  "price.photo.retakeGallery": "Басқа фото таңдау",
+  "price.photo.removePage": "Бетті алып тастау",
+  "price.photo.retakeSent": "{page}-бет жіберілді — танылуда",
+  "price.status.needsRetake": "Қайта түсіру керек",
+  "price.error.photoPage": "{page}-бет: {reason}",
+  "price.error.photo.notAnImage": "бұл фото емес",
+  "price.error.photo.unsupportedFormat": "пішімі сәйкес емес — JPEG, PNG немесе WebP керек",
+  "price.error.photo.broken": "файл бүлінген",
+  "price.error.photo.tooManyPixels": "сурет тым үлкен",
+  "price.error.photo.tooLarge": "{limit} МБ-тан үлкен",
+  "price.error.photo.noPages": "Кемінде бір фото таңдаңыз",
+  "price.error.photo.tooManyPages": "Бір жүктеуде {limit} беттен аспауы керек",
+  "price.error.photo.malformed": "Фото жіберілмеді — қайталап көріңіз",
+  "price.parsed.columnsPhoto": "Жолдар фотодан танылды",
+  "review.fromPhoto": "фотодан танылды · {page}-бет",
+  "review.photoText": "Фотода: {text}",
+  "review.readUncertain": "Сенімсіз оқылды: {fields}",
+  "review.readConfirm": "Дұрыс оқылды",
+  "review.field.row": "бүкіл жол",
+  "review.field.article": "артикул",
+  "review.field.brand": "бренд",
+  "review.field.name": "атауы",
+  "review.field.price": "бағасы",
+  "review.field.availability": "қолда бары",
+  "review.field.leadDays": "мерзімі",
+  "review.readWaiting": "Фотодан сенімсіз оқылды, «Дұрыс оқылды» белгісінсіз қолданылмайды: {rows}",
+  "result.reason.readConfirmationRequired": "Фотодағы жол сенімсіз оқылды және расталмады"
 }

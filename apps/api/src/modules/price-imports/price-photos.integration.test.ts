@@ -684,6 +684,8 @@ describe("photographed price lists (PostgreSQL + Redis + MinIO)", () => {
     expect(json.status).toBe(415);
 
     await settings.set({ price_photo_max_pages: 2, price_photo_max_size_mb: 1 });
+    // The API keeps its own copy of the settings: read again, not by the cache age.
+    await new TestSettings(app).reload();
     const many = await photos(of, [
       sample("list-clean"),
       sample("list-tilt"),
@@ -711,6 +713,7 @@ describe("photographed price lists (PostgreSQL + Redis + MinIO)", () => {
     // One upload, however many pages, counts once — together with the refused ones.
     await db.query("DELETE FROM price_import_refusal");
     await settings.set({ price_import_uploads_per_supplier_hour: 2 });
+    await new TestSettings(app).reload();
     const page = await of.as("get", "/supplier/price-imports");
     expect(priceImportPageSchema.parse(page.body).limits).toMatchObject({
       photoMaxPages: 2,

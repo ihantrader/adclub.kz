@@ -386,6 +386,28 @@ export {
   priceExportRow,
 } from "./price-import/price-export";
 export type { PriceExportOffer } from "./price-import/price-export";
+export {
+  agreePricePhotoPages,
+  PRICE_PHOTO_AGREEMENT_MIN,
+  PRICE_PHOTO_CELL_MAX,
+  PRICE_PHOTO_FIELDS,
+  PRICE_PHOTO_PAGE_ROWS_MAX,
+  PRICE_PHOTO_ROLES,
+  PRICE_PHOTO_TEXT_MAX,
+  photoPrice,
+  photoText,
+  pricePhotoPage,
+  pricePhotoRow,
+  pricePhotoRowUncertain,
+} from "./price-import/price-photo";
+export type {
+  PricePhotoField,
+  PricePhotoModelAnswer,
+  PricePhotoModelRow,
+  PricePhotoPage,
+  PricePhotoRow,
+  PricePhotoUncertainty,
+} from "./price-import/price-photo";
 export type {
   ArticleReading,
   AvailabilityReading,

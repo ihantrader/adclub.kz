@@ -113,6 +113,23 @@ export const priceReviewRowSchema = z.object({
   /** «Подтвердить цену» of a sharp change. */
   priceConfirmed: z.boolean(),
   /**
+   * A row of a photographed price list (TASK-064): «распознано с фото» —
+   * the page, the row as the model read it, and what it was unsure of
+   * (`uncertain`: fields, or `row` — the whole row). An uncertain row is
+   * applied only with «Прочитано верно» (`readConfirmed`); `null` — a row of
+   * a file.
+   */
+  photo: z
+    .object({
+      pageNo: z.number().int(),
+      text: z.string(),
+      uncertain: z.array(
+        z.enum(["row", "article", "brand", "name", "price", "availability", "lead_days"]),
+      ),
+      readConfirmed: z.boolean(),
+    })
+    .nullable(),
+  /**
    * A row not found (or decided «Нет в справочнике») goes to the
    * administrator as a request to add the item — on by default.
    */
@@ -191,6 +208,8 @@ export const priceReviewSummarySchema = z.object({
     unchecked: z.number().int(),
     /** Sharp changes not confirmed: they won't be applied. */
     priceConfirmationRequired: z.number().int(),
+    /** Rows of a photo read with doubt and not confirmed (TASK-064): they won't be applied. */
+    readConfirmationRequired: z.number().int(),
   }),
   /** Applying is refused until the missing offers have a choice (when there are any). */
   canApply: z.boolean(),
@@ -211,13 +230,16 @@ export const decidePriceRowBodySchema = z
     itemId: z.uuid().optional(),
     priceConfirmed: z.boolean().optional(),
     sendRequest: z.boolean().optional(),
+    /** «Прочитано верно» of a row of a photo read with doubt (TASK-064). */
+    readConfirmed: z.boolean().optional(),
   })
   .refine(
     (body) =>
       body.decision !== undefined ||
       body.priceConfirmed !== undefined ||
-      body.sendRequest !== undefined,
-    { message: "Give a decision, a price confirmation or the request choice" },
+      body.sendRequest !== undefined ||
+      body.readConfirmed !== undefined,
+    { message: "Give a decision, a price or reading confirmation or the request choice" },
   );
 
 export type DecidePriceRowBody = z.infer<typeof decidePriceRowBodySchema>;

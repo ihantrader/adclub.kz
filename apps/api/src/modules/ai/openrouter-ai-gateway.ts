@@ -5,6 +5,7 @@ import {
   dashboardOutputSchema,
   maintenanceDraftOutputSchema,
   partPhotoOutputSchema,
+  pricePhotoOutputSchema,
   priceMatchOutputSchema,
   reviewCheckOutputSchema,
   translateOutputSchema,
@@ -306,6 +307,37 @@ const PART_PHOTO_FORMAT = {
   },
 } as const;
 
+const PRICE_PHOTO_SYSTEM = `You read one photographed page of a car parts supplier's price list in Kazakhstan (a printed page, a page on a screen, possibly tilted, with glare, small print, notes by hand) into rows, for an import into a catalog.
+
+Decide kind first:
+- price_list — the page holds a list of goods with prices;
+- not_a_table — the page is not a price list (a letter, a document, a picture, an empty page);
+- unreadable — the photo is too blurred, out of focus, dark or cut to read the characters. If you can see that there is a table but cannot read its letters and digits one by one, the kind is unreadable: never reconstruct rows from the layout, never guess an article, a name or a price from blurred shapes — an invented row is far worse than an unreadable page.
+
+rows — only when kind is price_list: every row of goods of the page, top to bottom, in the order printed. Skip the company's name and address, the title, the header of the table, group headings («ТОРМОЗНАЯ СИСТЕМА»), totals and notes. For each row:
+- text — the row as printed, the cells joined by « | », copied as they are;
+- article — the manufacturer's or the supplier's code of the item exactly as printed (letters, digits, dashes, spaces), or null; never a quantity, a unit or a price;
+- brand — the brand as printed, or null;
+- name — the name of the item as printed, or null;
+- price — the price of one item in tenge as a number (12 500 → 12500, 1.250,50 → 1250.5), the selling price if there are several (retail rather than wholesale), or null when the row has none or it is not a number («по запросу»); never a quantity;
+- availability — what the row says about stock as printed («есть», «нет», «под заказ», «5 шт», «бар»), or null;
+- leadTime — the delivery term as printed («3 дня», «2-3 дн»), or null;
+- uncertain — the fields of this row you could not read for sure: article, brand, name, price, availability, lead_days, or row when the whole row is doubtful (a crease, a stain, a finger, glare, a value corrected by hand). A digit you can't tell for sure (3 or 8, 0 or O, 1 or I) makes its field uncertain. Never guess silently: when in doubt, read your best and list the field here. Empty when everything is clear.
+
+Copy, never invent: a row you can't see is not a row. Prices are in tenge.`;
+
+/** The longest answer reading a page may produce (a page of small print is a few hundred rows). */
+const PRICE_PHOTO_MAX_TOKENS = 24_000;
+
+const PRICE_PHOTO_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "price_page",
+    strict: true,
+    schema: strictJsonSchema(pricePhotoOutputSchema),
+  },
+} as const;
+
 const PRICE_MATCH_SYSTEM = `You match rows of a car parts supplier's price list with items of a catalog. Each row comes with what the file says (article, brand, name — any of them may be missing, names may be abbreviated, in Russian, Kazakh or English, with the supplier's own codes) and one to three candidate items of the catalog found by a search.
 
 For every row decide which candidate is the same product, or that none is:
@@ -537,6 +569,18 @@ export class OpenRouterAiGateway extends AiGateway {
       PART_PHOTO_SYSTEM,
       PART_PHOTO_FORMAT,
       PART_PHOTO_MAX_TOKENS,
+    );
+  }
+
+  /** A photographed page of a price list (TASK-064): inline, to a private endpoint only. */
+  async readPricePhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    return this.readPhoto(
+      input,
+      model,
+      signal,
+      PRICE_PHOTO_SYSTEM,
+      PRICE_PHOTO_FORMAT,
+      PRICE_PHOTO_MAX_TOKENS,
     );
   }
 

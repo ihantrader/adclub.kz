@@ -39,7 +39,7 @@ import {
   requestKeys,
   type MissingOfferRow,
 } from "./price-review-data";
-import type { PriceImportActor } from "./price-imports.service";
+import { photoPagesOf, type PriceImportActor } from "./price-imports.service";
 import {
   priceImport,
   priceImportRow,
@@ -139,6 +139,7 @@ export class PriceReviewService {
           request: 0,
           unchecked: 0,
           priceConfirmationRequired: 0,
+          readConfirmationRequired: 0,
         };
     const sharp = reviewing ? await this.sharpCounts(db, record) : { rows: 0, unconfirmed: 0 };
     const withdrawMissing = record.missingAction === "withdraw" ? missing.offers : 0;
@@ -289,6 +290,16 @@ export class PriceReviewService {
         }
       }
       if (body.priceConfirmed !== undefined) changes.priceConfirmed = body.priceConfirmed;
+      if (body.readConfirmed !== undefined) {
+        // «Прочитано верно» is about a row of a photo read with doubt (TASK-064).
+        if ((current.photoUncertain?.length ?? 0) === 0) {
+          throw validationError(
+            "readConfirmed",
+            "Only a row of a photo read with doubt is confirmed",
+          );
+        }
+        changes.readConfirmed = body.readConfirmed;
+      }
       if (body.sendRequest !== undefined) changes.sendRequest = body.sendRequest;
       const [row] = await tx
         .update(priceImportRow)
@@ -576,6 +587,9 @@ export class PriceReviewService {
       record,
       names.get(record.uploadedByMemberId) ?? null,
       record.appliedByMemberId ? (names.get(record.appliedByMemberId) ?? null) : null,
+      record.fileKind === "photo"
+        ? ((await photoPagesOf(executor, [record.id])).get(record.id) ?? [])
+        : null,
     );
   }
 
@@ -672,6 +686,15 @@ export class PriceReviewService {
               }
             : null,
         priceConfirmed: row.priceConfirmed,
+        photo:
+          row.photoPage !== null && row.photoText !== null
+            ? {
+                pageNo: row.photoPage,
+                text: row.photoText,
+                uncertain: row.photoUncertain ?? [],
+                readConfirmed: row.readConfirmed,
+              }
+            : null,
         sendRequest:
           row.matchGroup === "not_found" || row.decision === "not_in_catalog"
             ? sendsRequest(

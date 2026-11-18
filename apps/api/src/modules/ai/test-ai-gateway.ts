@@ -9,6 +9,7 @@ import {
   type AssistantStepOutput,
   type MaintenanceDraftInput,
   type PhotoInput,
+  type PricePhotoOutput,
   type PriceMatchInput,
   type PriceMatchRow,
   type ReviewCheckInput,
@@ -25,6 +26,7 @@ import {
   TEST_PART_PHOTO_UNREADABLE,
   TEST_PART_PHOTOS,
 } from "./test-photos";
+import { TEST_PRICE_PHOTO_UNREADABLE, TEST_PRICE_PHOTOS } from "./test-price-photos";
 import { testAssistantStep } from "./test-assistant";
 import { speechSampleCode, TEST_SPEECH, TEST_SPEECH_MADE } from "./test-speech";
 import { testMaintenanceDraft } from "./test-maintenance-plans";
@@ -153,7 +155,8 @@ export class TestAiGateway extends AiGateway {
   /** Every certificate photo received: its size and the model, never the picture (TASK-057). */
   readonly documentRequests: { bytes: number; model: string }[] = [];
   /** Every photo of the dashboard or a part received (TASK-058): its size and the model, never the picture. */
-  readonly photoRequests: { kind: "dashboard" | "part"; bytes: number; model: string }[] = [];
+  readonly photoRequests: { kind: "dashboard" | "part" | "price"; bytes: number; model: string }[] =
+    [];
   /** Every recording received (TASK-059): its size, its length, the field (TASK-060) and the model, never the sound. */
   readonly speechRequests: {
     bytes: number;
@@ -167,6 +170,11 @@ export class TestAiGateway extends AiGateway {
   /** An answer for one row instead of the closest candidate; `undefined` — the default. */
   matchOverride:
     ((row: PriceMatchRow) => { itemId: string | null; confidence: number } | undefined) | undefined;
+  /**
+   * Answers for the next readings of a price page, in order, instead of the
+   * control strip (TASK-064: a model that reads one page differently twice).
+   */
+  readonly pricePhotoAnswers: PricePhotoOutput[] = [];
 
   async translate(input: TranslateInput, model: string, signal: AbortSignal): Promise<AiResult> {
     this.requests.push({ input, model });
@@ -359,6 +367,25 @@ export class TestAiGateway extends AiGateway {
     else {
       const code = await readSampleMarker(input.image);
       output = (code === null ? undefined : TEST_PART_PHOTOS[code]) ?? TEST_PART_PHOTO_UNREADABLE;
+    }
+    return this.photoResult(structuredClone(output), model);
+  }
+
+  /**
+   * Reads a synthetic price page by its control strip (`test-price-photos.ts`);
+   * a page without a strip is `unreadable`. Modes: `unreadable`, and the
+   * failures of every photo — `unavailable`, `slow`, …
+   */
+  async readPricePhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
+    this.photoRequests.push({ kind: "price", bytes: input.image.length, model });
+    await this.photoFailures(model, signal);
+    let output: unknown;
+    const queued = this.pricePhotoAnswers.shift();
+    if (queued) output = queued;
+    else if (this.mode === "unreadable") output = TEST_PRICE_PHOTO_UNREADABLE;
+    else {
+      const code = await readSampleMarker(input.image);
+      output = (code === null ? undefined : TEST_PRICE_PHOTOS[code]) ?? TEST_PRICE_PHOTO_UNREADABLE;
     }
     return this.photoResult(structuredClone(output), model);
   }

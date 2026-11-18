@@ -24,8 +24,16 @@ import type {
   PriceRowDecisionKind,
   PriceRowKind,
   PriceRowNotAppliedReason,
+  PricePhotoPageStatus,
 } from "@adclub/contracts";
-import type { ParsedPriceRow, PriceCell, PriceRowError, PriceRowKeyKind } from "@adclub/domain";
+import type {
+  ParsedPriceRow,
+  PriceCell,
+  PricePhotoRow,
+  PricePhotoUncertainty,
+  PriceRowError,
+  PriceRowKeyKind,
+} from "@adclub/domain";
 
 /** The group of a row as stored: the contract's `errors` is `error` here. */
 export type PriceRowGroup = "confident" | "review" | "not_found" | "error";
@@ -126,7 +134,7 @@ export const priceImport = pgTable("price_import", {
   columnCount: integer("column_count"),
   headerKey: text("header_key"),
   columnMapping: jsonb("column_mapping").$type<StoredColumn[]>(),
-  columnsSource: text("columns_source").$type<"auto" | "remembered" | "supplier">(),
+  columnsSource: text("columns_source").$type<"auto" | "remembered" | "supplier" | "photo">(),
   stats: jsonb("stats").$type<PriceImportStatsRecord>().notNull().default({}),
   failure: jsonb("failure").$type<PriceImportFailure>(),
   /** When the worker began the current phase; `null` — waiting for it (TASK-046.A). */
@@ -148,9 +156,48 @@ export const priceImport = pgTable("price_import", {
   appliedByMemberId: uuid("applied_by_member_id"),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   result: jsonb("result").$type<PriceImportResult>(),
+  // TASK-064: why the recognition of the photographed pages waits for AI.
+  photoAiWaiting: text("photo_ai_waiting").$type<"unavailable" | "budget">(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/** A page of a photographed import (TASK-064; ARCHITECTURE 4.93). */
+export const priceImportPhotoPage = pgTable(
+  "price_import_photo_page",
+  {
+    importId: uuid("import_id").notNull(),
+    pageNo: integer("page_no").notNull(),
+    fileKey: text("file_key").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    checksum: text("checksum").notNull(),
+    status: text("status").$type<PricePhotoPageStatus>().notNull().default("waiting"),
+    rows: jsonb("rows").$type<PricePhotoRow[]>(),
+    rowCount: integer("row_count"),
+    droppedRows: integer("dropped_rows"),
+    retakes: integer("retakes").notNull().default(0),
+    aiJobId: uuid("ai_job_id"),
+    recognizedAt: timestamp("recognized_at", { withTimezone: true }),
+    fileDeletedAt: timestamp("file_deleted_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [primaryKey({ columns: [table.importId, table.pageNo] })],
+);
+
+/** A page taken again: counted in the hourly limit of uploads (TASK-064). */
+export const priceImportPhotoRetake = pgTable("price_import_photo_retake", {
+  id: uuid("id").primaryKey(),
+  supplierId: uuid("supplier_id").notNull(),
+  importId: uuid("import_id").notNull(),
+  memberId: uuid("member_id").notNull(),
+  pageNo: integer("page_no").notNull(),
+  createdAt: createdAt(),
+});
+
+export type PriceImportPhotoPageRecord = typeof priceImportPhotoPage.$inferSelect;
 
 export const priceImportRow = pgTable(
   "price_import_row",
@@ -183,6 +230,11 @@ export const priceImportRow = pgTable(
     outcome: text("outcome").$type<PriceRowOutcomeKind>(),
     outcomeReason: text("outcome_reason").$type<PriceRowNotAppliedReason>(),
     outcomeOfferId: uuid("outcome_offer_id"),
+    // TASK-064: a row read off a photographed page.
+    photoPage: integer("photo_page"),
+    photoText: text("photo_text"),
+    photoUncertain: text("photo_uncertain").array().$type<PricePhotoUncertainty[]>(),
+    readConfirmed: boolean("read_confirmed").notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.importId, table.rowNo] })],
 );
@@ -288,6 +340,8 @@ export const priceImportTables = [
   priceImportRow,
   priceImportFormatTable,
   priceImportRefusal,
+  priceImportPhotoPage,
+  priceImportPhotoRetake,
   supplierSkuMapping,
   catalogRequest,
 ];

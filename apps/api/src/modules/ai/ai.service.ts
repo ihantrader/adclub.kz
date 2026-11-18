@@ -14,6 +14,7 @@ import {
   dashboardOperation,
   maintenanceDraftOperation,
   partPhotoOperation,
+  pricePhotoOperation,
   priceMatchOperation,
   reviewCheckOperation,
   speechOperation,
@@ -28,6 +29,7 @@ import {
   type MaintenanceDraftInput,
   type MaintenanceDraftOutput,
   type PartPhotoOutput,
+  type PricePhotoOutput,
   type PhotoInput,
   type PriceMatchInput,
   type PriceMatchOutput,
@@ -175,6 +177,11 @@ export class AiService {
   /** The article off a photo of a part (TASK-058); the photo itself is never recorded. */
   readPartPhoto(input: PhotoInput, meta: AiCallMeta): Promise<AiCallResult<PartPhotoOutput>> {
     return this.call(partPhotoOperation, input, meta);
+  }
+
+  /** One photographed page of a price list (TASK-064); the photo itself is never recorded. */
+  readPricePhoto(input: PhotoInput, meta: AiCallMeta): Promise<AiCallResult<PricePhotoOutput>> {
+    return this.call(pricePhotoOperation, input, meta);
   }
 
   /** What was said in a recording (TASK-059); the sound and the text are never recorded. */
@@ -381,7 +388,14 @@ export class AiService {
     | { ok: false; error: AiGatewayError; result: AiResult | undefined }
   > {
     const controller = new AbortController();
-    const timeoutMs = Math.min(this.options.timeoutMs, limitMs);
+    // An operation may need longer than the usual call (a page of small print, TASK-064);
+    // a service configured shorter than the default (tests) keeps its own.
+    const base = this.options.timeoutMs;
+    const own =
+      operation.timeoutMs !== undefined && base >= defaultAiServiceOptions.timeoutMs
+        ? Math.max(base, operation.timeoutMs)
+        : base;
+    const timeoutMs = Math.min(own, limitMs);
     const timer = setTimeout(() => {
       controller.abort(
         new AiGatewayError("unavailable", `The AI call took longer than ${timeoutMs} ms`),

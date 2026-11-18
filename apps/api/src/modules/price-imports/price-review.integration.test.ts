@@ -882,6 +882,7 @@ describe("price list matching, review and application (PostgreSQL + Redis + MinI
       request: 1,
       unchecked: 1,
       priceConfirmationRequired: 1,
+      readConfirmationRequired: 0,
     });
     expect(first.canApply).toBe(false);
     const missing = await ok(

@@ -32,7 +32,10 @@ export interface PreparedDocumentImage {
   height: number;
 }
 
-export async function prepareDocumentImage(input: Buffer): Promise<PreparedDocumentImage> {
+export async function prepareDocumentImage(
+  input: Buffer,
+  maxSidePx: number = VEHICLE_DOCUMENT_MAX_SIDE_PX,
+): Promise<PreparedDocumentImage> {
   if (input.length === 0) {
     throw new DocumentImageRejected("not_an_image");
   }
@@ -65,8 +68,8 @@ export async function prepareDocumentImage(input: Buffer): Promise<PreparedDocum
     const { data, info } = await sharp(input, { limitInputPixels: PHOTO_MAX_PIXELS })
       .rotate()
       .resize({
-        width: VEHICLE_DOCUMENT_MAX_SIDE_PX,
-        height: VEHICLE_DOCUMENT_MAX_SIDE_PX,
+        width: maxSidePx,
+        height: maxSidePx,
         fit: "inside",
         withoutEnlargement: true,
       })

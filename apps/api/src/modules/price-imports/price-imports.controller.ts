@@ -7,6 +7,7 @@ import {
   priceImportListQuerySchema,
   priceImportPathSchema,
   priceImportRowsQuerySchema,
+  pricePhotoPagePathSchema,
   uploadPriceImportQuerySchema,
   type AdminPriceImportPage,
   type AdminSupplierPriceImportsPath,
@@ -18,11 +19,13 @@ import {
   type PriceImportResponse,
   type PriceImportRowsPage,
   type PriceImportRowsQuery,
+  type PricePhotoPagePath,
   type UploadPriceImportQuery,
 } from "@adclub/contracts";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
 import { PriceImportsService, type PriceImportActor } from "./price-imports.service";
+import { PricePhotosService } from "./price-photos.service";
 
 function importActor(session: AuthenticatedSession): PriceImportActor {
   if (!session.supplierId || !session.supplierMemberId) {
@@ -43,7 +46,10 @@ function importActor(session: AuthenticatedSession): PriceImportActor {
 @Controller()
 export class PriceImportsController {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(@Inject(PriceImportsService) private readonly imports: PriceImportsService) {}
+  constructor(
+    @Inject(PriceImportsService) private readonly imports: PriceImportsService,
+    @Inject(PricePhotosService) private readonly photos: PricePhotosService,
+  ) {}
 
   @SessionRoute(apiRoutes.uploadPriceImport)
   async upload(
@@ -53,6 +59,53 @@ export class PriceImportsController {
   ): Promise<PriceImportResponse> {
     const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
     return { import: await this.imports.upload(body, query, importActor(session)) };
+  }
+
+  /** Photographed pages (TASK-064): the body is a form of pages, read as bytes by `UploadBodyMiddleware`. */
+  @SessionRoute(apiRoutes.uploadPricePhotos)
+  async uploadPhotos(
+    @Req() request: Request,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<PriceImportResponse> {
+    const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+    return {
+      import: await this.photos.upload(
+        request.headers["content-type"] ?? "",
+        body,
+        importActor(session),
+      ),
+    };
+  }
+
+  @SessionRoute(apiRoutes.retakePricePhoto)
+  async retakePhoto(
+    @Param(new ZodValidationPipe(pricePhotoPagePathSchema)) params: PricePhotoPagePath,
+    @Req() request: Request,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<PriceImportResponse> {
+    const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+    return {
+      import: await this.photos.retake(
+        params.importId,
+        Number(params.pageNo),
+        body,
+        importActor(session),
+      ),
+    };
+  }
+
+  @SessionRoute(apiRoutes.removePricePhoto)
+  async removePhoto(
+    @Param(new ZodValidationPipe(pricePhotoPagePathSchema)) params: PricePhotoPagePath,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<PriceImportResponse> {
+    return {
+      import: await this.photos.remove(
+        params.importId,
+        Number(params.pageNo),
+        importActor(session),
+      ),
+    };
   }
 
   @SessionRoute(apiRoutes.listPriceImports)

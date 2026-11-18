@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -79,5 +80,33 @@ export class PriceFileStorage {
     await this.storage.client.send(
       new DeleteObjectCommand({ Bucket: this.storage.bucket, Key: key }),
     );
+  }
+
+  /**
+   * Removes every object under a prefix (TASK-064): the pages of a
+   * photographed import, the current ones and any a retake or an interrupted
+   * upload left behind. Returns how many were removed.
+   */
+  async removePrefix(prefix: string): Promise<number> {
+    if (!prefix.endsWith("/")) throw new Error(`A prefix ends with «/»: ${prefix}`);
+    let removed = 0;
+    let token: string | undefined;
+    do {
+      const listed = await this.storage.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.storage.bucket,
+          Prefix: prefix,
+          ContinuationToken: token,
+        }),
+      );
+      for (const object of listed.Contents ?? []) {
+        if (object.Key) {
+          await this.remove(object.Key);
+          removed++;
+        }
+      }
+      token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (token);
+    return removed;
   }
 }

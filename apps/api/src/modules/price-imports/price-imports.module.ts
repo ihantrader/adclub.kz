@@ -11,6 +11,7 @@ import {
   matchPricesAiJob,
   matchPricesJob,
   parsePriceFileJob,
+  readPricePhotosJob,
   readPriceValuesJob,
   wakePriceMatchingJob,
 } from "./price-import-jobs";
@@ -22,6 +23,7 @@ import {
 } from "./price-import-runner";
 import { PriceImportsAdminController, PriceImportsController } from "./price-imports.controller";
 import { PriceImportsService } from "./price-imports.service";
+import { PricePhotosService } from "./price-photos.service";
 import {
   PriceMatchAiJob,
   PriceMatcher,
@@ -31,6 +33,7 @@ import {
 } from "./price-match-runner";
 import { ModerationService } from "./moderation.service";
 import { PriceExportController } from "./price-export.controller";
+import { PricePhotoReader } from "./price-photo-runner";
 import { PriceExportService } from "./price-export.service";
 import { CatalogRequestsAdminController, PriceReviewController } from "./price-review.controller";
 import { PriceReviewService } from "./price-review.service";
@@ -64,6 +67,7 @@ export class PriceImportsModule {
       ],
       providers: [
         PriceImportsService,
+        PricePhotosService,
         PriceFileStorage,
         PriceReviewService,
         CatalogRequestsService,
@@ -89,6 +93,7 @@ export class PriceImportsModule {
     PriceMatchWake,
     PriceReviewExpiry,
     PriceImportApplier,
+    PricePhotoReader,
   ],
 })
 export class PriceImportJobsModule implements OnModuleInit {
@@ -103,6 +108,7 @@ export class PriceImportJobsModule implements OnModuleInit {
     @Inject(PriceMatchWake) private readonly wake: PriceMatchWake,
     @Inject(PriceReviewExpiry) private readonly reviews: PriceReviewExpiry,
     @Inject(PriceImportApplier) private readonly applier: PriceImportApplier,
+    @Inject(PricePhotoReader) private readonly photos: PricePhotoReader,
   ) {}
 
   onModuleInit(): void {
@@ -115,5 +121,6 @@ export class PriceImportJobsModule implements OnModuleInit {
     this.registry.handlePeriodic(wakePriceMatchingJob, this.wake);
     this.registry.handlePeriodic(expirePriceReviewsJob, this.reviews);
     this.registry.handle(applyPriceImportJob, this.applier);
+    this.registry.handle(readPricePhotosJob, this.photos);
   }
 }

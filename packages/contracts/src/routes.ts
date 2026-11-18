@@ -478,6 +478,11 @@ import {
   confirmPriceColumnsBodySchema,
   PRICE_IMPORT_CONTENT_TYPES,
   PRICE_IMPORT_MAX_UPLOAD_BYTES,
+  PRICE_PHOTO_CONTENT_TYPES,
+  PRICE_PHOTO_MAX_UPLOAD_BYTES,
+  PRICE_PHOTO_PAGE_CONTENT_TYPES,
+  PRICE_PHOTO_PAGE_MAX_UPLOAD_BYTES,
+  pricePhotoPagePathSchema,
   priceImportDetailResponseSchema,
   priceImportListQuerySchema,
   priceImportPageSchema,
@@ -4033,6 +4038,62 @@ const coreApiRoutes = {
     },
     responses: {
       201: { description: "The import, being read", schema: priceImportResponseSchema },
+    },
+  }),
+  // A photographed price list (TASK-064, ARCHITECTURE 4.93).
+  uploadPricePhotos: defineRoute({
+    operationId: "uploadPricePhotos",
+    method: "POST",
+    path: "/supplier/price-imports/photos",
+    summary:
+      "Upload photographed pages of a price list (1 to price_photo_max_pages): each page is checked by its content and kept privately; a background job reads them into rows with AI. One upload in the hourly limit, however many pages",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    upload: {
+      description:
+        "multipart/form-data: the parts named «page», each a JPEG, PNG or WebP photo, in the order of the pages",
+      contentTypes: PRICE_PHOTO_CONTENT_TYPES,
+      maxBytes: PRICE_PHOTO_MAX_UPLOAD_BYTES,
+    },
+    responses: {
+      201: { description: "The import, being recognised", schema: priceImportResponseSchema },
+    },
+  }),
+  retakePricePhoto: defineRoute({
+    operationId: "retakePricePhoto",
+    method: "PUT",
+    path: "/supplier/price-imports/{importId}/photos/{pageNo}",
+    summary:
+      "Take one page of a photographed import again («Переснять», status needs_retake): the other pages keep what they gave; counts in the hourly limit of uploads",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: pricePhotoPagePathSchema,
+    upload: {
+      description: "The photo of the page itself (JPEG, PNG or WebP)",
+      contentTypes: PRICE_PHOTO_PAGE_CONTENT_TYPES,
+      maxBytes: PRICE_PHOTO_PAGE_MAX_UPLOAD_BYTES,
+    },
+    responses: {
+      200: { description: "The import, being recognised again", schema: priceImportResponseSchema },
+    },
+  }),
+  removePricePhoto: defineRoute({
+    operationId: "removePricePhoto",
+    method: "DELETE",
+    path: "/supplier/price-imports/{importId}/photos/{pageNo}",
+    summary:
+      "Leave one page of a photographed import out (status needs_retake): the import goes on with the other pages; the last page can't be removed",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: pricePhotoPagePathSchema,
+    responses: {
+      200: { description: "The import without the page", schema: priceImportResponseSchema },
     },
   }),
   listPriceImports: defineRoute({

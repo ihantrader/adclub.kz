@@ -46,6 +46,8 @@ import {
   headerHash,
   priceImport,
   priceImportFormatTable,
+  priceImportPhotoPage,
+  priceImportPhotoRetake,
   priceImportRefusal,
   priceImportRow,
   type PriceImportStatsRecord,
@@ -488,7 +490,7 @@ function brokenFailure(): PriceImportFailure {
  * so a batch being written under its share lock is either in before (and
  * removed here) or sees the failure and stops. Returns the ids failed.
  */
-async function failImport(
+export async function failImport(
   db: DbExecutor,
   where: string | SQL,
   statuses: PriceImportStatus[],
@@ -550,10 +552,15 @@ export class PriceImportExpiry implements PeriodicJobHandler {
       .delete(priceImportRefusal)
       .where(lt(priceImportRefusal.createdAt, new Date(Date.now() - DAY_MS)))
       .returning({ id: priceImportRefusal.id });
+    // So are pages taken again (TASK-064).
+    const retakes = await this.database.db
+      .delete(priceImportPhotoRetake)
+      .where(lt(priceImportPhotoRetake.createdAt, new Date(Date.now() - DAY_MS)))
+      .returning({ id: priceImportPhotoRetake.id });
     if (expired.length > 0) {
       this.logger.warn(`Price imports read too long failed imports=${String(expired.length)}`);
     }
-    return { worked: expired.length > 0 || forgotten.length > 0 };
+    return { worked: expired.length > 0 || forgotten.length > 0 || retakes.length > 0 };
   }
 }
 
@@ -601,11 +608,20 @@ export class PriceFileDeletion implements Sweeper<Date> {
 
   async apply(tx: DbExecutor, cutoff: Date, importId: string): Promise<void> {
     const [record] = await tx
-      .select({ fileKey: priceImport.fileKey })
+      .select({ fileKey: priceImport.fileKey, fileKind: priceImport.fileKind })
       .from(priceImport)
       .where(and(eq(priceImport.id, importId), isNull(priceImport.fileDeletedAt)));
     if (!record) return;
-    await this.storage.remove(record.fileKey);
+    if (record.fileKind === "photo") {
+      // Every object under its prefix: the pages and anything a retake left behind.
+      await this.storage.removePrefix(record.fileKey);
+      await tx
+        .update(priceImportPhotoPage)
+        .set({ fileDeletedAt: new Date(), updatedAt: new Date() })
+        .where(eq(priceImportPhotoPage.importId, importId));
+    } else {
+      await this.storage.remove(record.fileKey);
+    }
     await tx
       .update(priceImport)
       .set({ fileDeletedAt: new Date(), updatedAt: new Date() })

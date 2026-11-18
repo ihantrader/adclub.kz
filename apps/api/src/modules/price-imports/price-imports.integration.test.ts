@@ -697,7 +697,12 @@ describe("price list imports (PostgreSQL + Redis + MinIO)", () => {
       (await of.as("get", "/supplier/price-imports")).body,
     );
     expect(ownList.imports.map((entry) => entry.id)).toEqual([own.id]);
-    expect(ownList.limits).toEqual({ maxFileMb: 20, maxRows: 50_000 });
+    expect(ownList.limits).toEqual({
+      maxFileMb: 20,
+      maxRows: 50_000,
+      photoMaxPages: 10,
+      photoMaxMb: 10,
+    });
 
     const admin = await adminToken();
     const adminList = await call(

@@ -101,6 +101,8 @@ describe("ormTables", () => {
         "price_import",
         "price_import_format",
         "price_import_refusal",
+        "price_import_photo_page",
+        "price_import_photo_retake",
         "price_import_row",
         "supplier_sku_mapping",
         "catalog_request",

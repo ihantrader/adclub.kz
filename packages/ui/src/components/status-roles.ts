@@ -109,6 +109,7 @@ export const statusRoles = {
     applied: done,
     failed,
     expired: over,
+    needs_retake: waits,
   } satisfies Record<PriceImportStatus, StatusRole>,
   catalogItem: {
     draft: waits,

@@ -36,7 +36,8 @@ export type AiJobKind =
   | "attr_fill"
   | "review_check"
   | "maintenance_plan_draft"
-  | "speech_transcribe";
+  | "speech_transcribe"
+  | "price_photo";
 
 /**
  * What a provider reported for one call. `costUsd` is what the provider
@@ -261,6 +262,37 @@ export const partPhotoOutputSchema = z.object({
 });
 
 export type PartPhotoOutput = z.infer<typeof partPhotoOutputSchema>;
+
+// ---------------------------------------- a photographed price (TASK-064)
+
+/**
+ * What the model answers about one photographed page of a supplier's price
+ * list (TASK-064, ARCHITECTURE 4.93): every row of goods in the order of the
+ * page, with the cells of the roles of TASK-046 — the price a number in
+ * tenge — the row word for word (`text`) and what it is unsure of
+ * (`uncertain`: a field, or `row`). `kind`: `price_list`; `not_a_table` —
+ * no price list on the photo; `unreadable` — nothing can be read. The
+ * server checks the rows again (`pricePhotoPage` of the domain).
+ */
+export const pricePhotoOutputSchema = z.object({
+  kind: z.enum(["price_list", "not_a_table", "unreadable"]),
+  rows: z.array(
+    z.object({
+      text: z.string().nullable(),
+      article: z.string().nullable(),
+      brand: z.string().nullable(),
+      name: z.string().nullable(),
+      price: z.number().nullable(),
+      availability: z.string().nullable(),
+      leadTime: z.string().nullable(),
+      uncertain: z.array(
+        z.enum(["row", "article", "brand", "name", "price", "availability", "lead_days"]),
+      ),
+    }),
+  ),
+});
+
+export type PricePhotoOutput = z.infer<typeof pricePhotoOutputSchema>;
 
 // ------------------------------------------------------- voice (TASK-059)
 
@@ -524,6 +556,9 @@ export abstract class AiGateway {
 
   abstract readPartPhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult>;
 
+  /** One photographed page of a price list into rows (TASK-064). */
+  abstract readPricePhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult>;
+
   /** What was said in a recording (TASK-059). */
   abstract transcribeSpeech(
     input: SpeechInput,
@@ -585,6 +620,12 @@ export interface AiOperation<Input, Output> {
    * (measured: one of 34 dialogs of the primary, TASK-062).
    */
   fallbackOn?: readonly AiFailureKind[];
+  /**
+   * How long one call may take, when longer than the service's usual
+   * (`AiServiceOptions.timeoutMs`): a photographed page of small print is
+   * hundreds of rows to write out (TASK-064).
+   */
+  timeoutMs?: number;
   outputSchema: z.ZodType<Output>;
   invoke(gateway: AiGateway, input: Input, model: string, signal: AbortSignal): Promise<AiResult>;
 }
@@ -621,6 +662,15 @@ export const partPhotoOperation: AiOperation<PhotoInput, PartPhotoOutput> = {
   models: { primary: "ai_model_part_photo_primary", fallback: "ai_model_part_photo_fallback" },
   outputSchema: partPhotoOutputSchema,
   invoke: (gateway, input, model, signal) => gateway.readPartPhoto(input, model, signal),
+};
+
+/** A photographed page of a price list (TASK-064): `ai_job.kind` is `price_photo`. */
+export const pricePhotoOperation: AiOperation<PhotoInput, PricePhotoOutput> = {
+  kind: "price_photo",
+  timeoutMs: 180_000,
+  models: { primary: "ai_model_price_photo_primary", fallback: "ai_model_price_photo_fallback" },
+  outputSchema: pricePhotoOutputSchema,
+  invoke: (gateway, input, model, signal) => gateway.readPricePhoto(input, model, signal),
 };
 
 /** What was said in a recording (TASK-059): `ai_job.kind` is `speech_transcribe`. */

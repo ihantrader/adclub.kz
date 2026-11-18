@@ -32,6 +32,12 @@ export interface PlanRow {
   decision: PriceRowDecisionKind | null;
   decisionItemId: string | null;
   priceConfirmed: boolean;
+  /**
+   * A row of a photo the model was unsure of (TASK-064), and the supplier's
+   * «Прочитано верно»: an uncertain row does nothing until confirmed.
+   */
+  readUncertain?: boolean;
+  readConfirmed?: boolean;
   sendRequest: boolean | null;
   keyKind: PriceRowKeyKind;
   key: string;
@@ -186,6 +192,33 @@ function planRow(
   used: Set<string>,
   requested: Set<string>,
 ): RowPlan {
+  const doubted = row.readUncertain === true && row.readConfirmed !== true;
+  // A doubted row reserves no request key: a sure row of the same key is sent.
+  const plan = planReadRow(row, facts, used, doubted ? new Set(requested) : requested);
+  if (!doubted) return plan;
+  // A row of a photo read with doubt is never applied silently (TASK-064):
+  // whatever it would do — change an offer, ask the administrator — waits
+  // for «Прочитано верно», and nothing of it is remembered, whatever it does.
+  // A sharp price waits for its own confirmation too; the doubt about the reading comes first.
+  const acts =
+    plan.action.kind !== "skipped" &&
+    (plan.action.kind !== "not_applied" || plan.action.reason === "price_confirmation_required");
+  if (!acts) return { ...plan, remember: null };
+  const itemId = "itemId" in plan.action ? plan.action.itemId : null;
+  if (itemId) used.delete(itemId);
+  return {
+    row,
+    action: { kind: "not_applied", reason: "read_confirmation_required", itemId },
+    remember: null,
+  };
+}
+
+function planReadRow(
+  row: PlanRow,
+  facts: PlanFacts,
+  used: Set<string>,
+  requested: Set<string>,
+): RowPlan {
   const itemId = finalItem(row);
   if (itemId === undefined || itemId === null) {
     if (row.decision === "skip")
@@ -324,7 +357,11 @@ export function planNumbers(plans: readonly RowPlan[]) {
   let request = 0;
   let unchecked = 0;
   let priceConfirmationRequired = 0;
+  let readConfirmationRequired = 0;
   for (const { action } of plans) {
+    if (action.kind === "not_applied" && action.reason === "read_confirmation_required") {
+      readConfirmationRequired++;
+    }
     if (action.kind === "update") {
       if (action.withdrawn) withdraw++;
       else update++;
@@ -335,5 +372,13 @@ export function planNumbers(plans: readonly RowPlan[]) {
       priceConfirmationRequired++;
     }
   }
-  return { update, create, withdraw, request, unchecked, priceConfirmationRequired };
+  return {
+    update,
+    create,
+    withdraw,
+    request,
+    unchecked,
+    priceConfirmationRequired,
+    readConfirmationRequired,
+  };
 }

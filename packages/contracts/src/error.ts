@@ -346,6 +346,9 @@ import { clientPlatformSchema } from "./client";
  *   `PriceImportVersionConflictDetails` («Колонки уже подтвердил {кто}»).
  *   With TASK-047 also any change of the review (a decision, the choice
  *   about missing offers, applying) — `changedBy`/`changedAt` name it.
+ * - `PRICE_IMPORT_PHOTO_INVALID` (400, TASK-064): a photographed page can't be
+ *   taken (not a picture, too large, too many pages); `details` is
+ *   `PriceImportPhotoInvalidDetails` — the page by its number.
  * - `PRICE_IMPORT_ITEM_UNAVAILABLE` (409, TASK-047): the item chosen for a
  *   row can't take it; `details` is `PriceImportItemUnavailableDetails`.
  * - `PRICE_IMPORT_MISSING_CHOICE` (409, TASK-047): offers are missing in the
@@ -568,6 +571,8 @@ export const errorCodeSchema = z.enum([
   "PRICE_IMPORT_FILE_INVALID",
   "PRICE_IMPORT_STATE",
   "PRICE_IMPORT_VERSION_CONFLICT",
+  // A photographed price list (TASK-064, ARCHITECTURE 4.93).
+  "PRICE_IMPORT_PHOTO_INVALID",
   // Matching and applying a price list, requests to add an item (TASK-047).
   "PRICE_IMPORT_ITEM_UNAVAILABLE",
   "PRICE_IMPORT_MISSING_CHOICE",

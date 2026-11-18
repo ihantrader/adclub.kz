@@ -29,6 +29,34 @@ export const PRICE_IMPORT_CONTENT_TYPES = [
  */
 export const PRICE_IMPORT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/**
+ * A photographed price list (TASK-064, ARCHITECTURE 4.93): every page in
+ * one `multipart/form-data` request, the parts named `page` in the order of
+ * the pages. The cabinet makes each photo smaller before sending, so a page
+ * is usually well under a megabyte; the server checks each by its content.
+ */
+export const PRICE_PHOTO_CONTENT_TYPES = ["multipart/form-data"] as const;
+
+/** The most the server reads of one request of photographed pages. */
+export const PRICE_PHOTO_MAX_UPLOAD_BYTES = 60 * 1024 * 1024;
+
+/** One page taken again («Переснять»): the body is the picture itself. */
+export const PRICE_PHOTO_PAGE_CONTENT_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/octet-stream",
+] as const;
+
+/** The most the server reads of one page taken again (`price_photo_max_size_mb` can only be lower). */
+export const PRICE_PHOTO_PAGE_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+/**
+ * The longest side a page is kept and sent to the model at: small print of
+ * a whole A4 page stays legible (the certificate needs 1600).
+ */
+export const PRICE_PHOTO_MAX_SIDE_PX = 2560;
+
 /** How many rows of goods the screen of columns shows. */
 export const PRICE_IMPORT_PREVIEW_ROWS = 20;
 
@@ -47,7 +75,12 @@ export const PRICE_IMPORT_PREVIEW_ROWS = 20;
  * - `applied` — done (`result`, S-PRICE-04);
  * - `failed` — the file could not be read (`failure`);
  * - `expired` — the review was left unfinished longer than
- *   `price_import_review_days`; nothing was applied.
+ *   `price_import_review_days`; nothing was applied;
+ * - `needs_retake` (TASK-064) — a photographed page gave no rows (no table
+ *   on it, it can't be read): the supplier takes it again or leaves it out
+ *   (`photo.pages`); nothing goes on until then. A photographed import is
+ *   recognised in `parsing` (`photo`), waiting there while AI can't be
+ *   reached (`photo.aiWaiting`).
  */
 export const priceImportStatusSchema = z.enum([
   "parsing",
@@ -60,11 +93,13 @@ export const priceImportStatusSchema = z.enum([
   "applied",
   "failed",
   "expired",
+  "needs_retake",
 ]);
 
 export type PriceImportStatus = z.infer<typeof priceImportStatusSchema>;
 
-export const priceImportFormatSchema = z.enum(["xlsx", "csv"]);
+/** `photo` (TASK-064) — photographed pages read by AI, not a file. */
+export const priceImportFormatSchema = z.enum(["xlsx", "csv", "photo"]);
 
 export type PriceImportFormat = z.infer<typeof priceImportFormatSchema>;
 
@@ -129,6 +164,77 @@ export const priceImportFileInvalidDetailsSchema = z.object({
 });
 
 export type PriceImportFileInvalidDetails = z.infer<typeof priceImportFileInvalidDetailsSchema>;
+
+/**
+ * Why photographed pages can't be taken (`PRICE_IMPORT_PHOTO_INVALID`, 400;
+ * TASK-064). Of one page (`page`, from 1): `not_an_image` — not a picture
+ * at all; `unsupported_format` — a picture, but not JPEG, PNG or WebP (HEIC,
+ * a vector); `broken` — it can't be decoded; `too_many_pixels`;
+ * `too_large` — over `price_photo_max_size_mb` (`limit`). Of the request
+ * (`page: null`): `no_pages`; `too_many_pages` — over `price_photo_max_pages`
+ * (`limit`); `malformed` — not a form of pages.
+ */
+export const pricePhotoProblemSchema = z.enum([
+  "not_an_image",
+  "unsupported_format",
+  "broken",
+  "too_many_pixels",
+  "too_large",
+  "no_pages",
+  "too_many_pages",
+  "malformed",
+]);
+
+export type PricePhotoProblem = z.infer<typeof pricePhotoProblemSchema>;
+
+export const priceImportPhotoInvalidDetailsSchema = z.object({
+  page: z.number().int().nullable(),
+  reason: pricePhotoProblemSchema,
+  limit: z.number().int().nullable(),
+});
+
+export type PriceImportPhotoInvalidDetails = z.infer<typeof priceImportPhotoInvalidDetailsSchema>;
+
+/**
+ * A photographed page (TASK-064): `waiting` — not recognised yet; `read` —
+ * it gave rows (`rows`); `no_table` — no price list on it; `unreadable` —
+ * nothing could be read; `failed` — AI could not recognise it (it refused,
+ * answered nonsense) — take it again.
+ */
+export const pricePhotoPageStatusSchema = z.enum([
+  "waiting",
+  "read",
+  "no_table",
+  "unreadable",
+  "failed",
+]);
+
+export type PricePhotoPageStatus = z.infer<typeof pricePhotoPageStatusSchema>;
+
+export const pricePhotoPageSchema = z.object({
+  /** From 1, in the order the supplier gave the pages. */
+  pageNo: z.number().int(),
+  status: pricePhotoPageStatusSchema,
+  /** Rows the page gave (`read`). */
+  rows: z.number().int().nullable(),
+  /** The picture as kept (made smaller, without its metadata). */
+  byteSize: z.number().int(),
+  /** Taken again this many times. */
+  retakes: z.number().int(),
+});
+
+export type PricePhotoPageInfo = z.infer<typeof pricePhotoPageSchema>;
+
+/** Where the recognition of a photographed import is («Распознаём фото… страница N из M»). */
+export const priceImportPhotoSchema = z.object({
+  pages: z.array(pricePhotoPageSchema),
+  /** Pages recognised (whatever they gave) of `pages.length`. */
+  recognized: z.number().int(),
+  /** AI can't be reached or the day's budget is spent: it goes on by itself; `null` — doesn't wait. */
+  aiWaiting: z.enum(["unavailable", "budget"]).nullable(),
+});
+
+export type PriceImportPhoto = z.infer<typeof priceImportPhotoSchema>;
 
 /**
  * Why an import failed: a problem of the file found by the worker, the file
@@ -276,7 +382,9 @@ export type PriceImportMatch = z.infer<typeof priceImportMatchSchema>;
  * `service_item` — services aren't imported (their prices are by model);
  * `supplier_type` — the company's type doesn't let it sell this;
  * `out_of_stock` — no offer to withdraw and nothing in stock to offer;
- * `duplicate_item` — another row of the file was applied to this item.
+ * `duplicate_item` — another row of the file was applied to this item;
+ * `read_confirmation_required` (TASK-064) — a row of a photo the model was
+ * unsure of, not confirmed «Прочитано верно».
  */
 export const priceRowNotAppliedReasonSchema = z.enum([
   "price_out_of_range",
@@ -292,6 +400,7 @@ export const priceRowNotAppliedReasonSchema = z.enum([
   "supplier_type",
   "out_of_stock",
   "duplicate_item",
+  "read_confirmation_required",
 ]);
 
 export type PriceRowNotAppliedReason = z.infer<typeof priceRowNotAppliedReasonSchema>;
@@ -345,9 +454,11 @@ export const priceImportSchema = z.object({
   /**
    * Where the roles came from: recognised now (`auto`, waiting for the
    * supplier), the company's remembered format (`remembered`, S-PRICE-02 is
-   * skipped) or confirmed by the supplier (`supplier`).
+   * skipped) or confirmed by the supplier (`supplier`); `photo` (TASK-064) —
+   * a photographed list, read by AI straight into the roles (S-PRICE-02 is
+   * not shown).
    */
-  columnsSource: z.enum(["auto", "remembered", "supplier"]).nullable(),
+  columnsSource: z.enum(["auto", "remembered", "supplier", "photo"]).nullable(),
   progress: priceImportProgressSchema.nullable(),
   stats: priceImportStatsSchema.nullable(),
   failure: priceImportFailureSchema.nullable(),
@@ -365,6 +476,8 @@ export const priceImportSchema = z.object({
   appliedAt: z.iso.datetime().nullable(),
   /** What applying did (`applied`). */
   result: priceImportResultSchema.nullable(),
+  /** A photographed price list (`format: photo`, TASK-064): its pages; `null` — a file. */
+  photo: priceImportPhotoSchema.nullable(),
 });
 
 export type PriceImport = z.infer<typeof priceImportSchema>;
@@ -415,6 +528,14 @@ export const uploadPriceImportQuerySchema = z.object({
 
 export type UploadPriceImportQuery = z.infer<typeof uploadPriceImportQuerySchema>;
 
+/** A page of a photographed import, by its number (path parameters are strings). */
+export const pricePhotoPagePathSchema = z.object({
+  importId: z.uuid(),
+  pageNo: z.string().regex(/^[1-9]\d{0,1}$/),
+});
+
+export type PricePhotoPagePath = z.infer<typeof pricePhotoPagePathSchema>;
+
 export const priceImportResponseSchema = z.object({ import: priceImportSchema });
 
 export type PriceImportResponse = z.infer<typeof priceImportResponseSchema>;
@@ -442,6 +563,10 @@ export type PriceImportListQuery = z.infer<typeof priceImportListQuerySchema>;
 export const priceImportLimitsSchema = z.object({
   maxFileMb: z.number().int(),
   maxRows: z.number().int(),
+  /** Photographed pages in one upload (`price_photo_max_pages`, TASK-064). */
+  photoMaxPages: z.number().int(),
+  /** The largest photo of a page (`price_photo_max_size_mb`). */
+  photoMaxMb: z.number().int(),
 });
 
 export const priceImportPageSchema = z.object({

@@ -2,6 +2,8 @@ import type {
   PriceImportFailure,
   PriceImportFileInvalidDetails,
   PriceImportFileProblem,
+  PriceImportPhotoInvalidDetails,
+  PricePhotoProblem,
   PriceImportStateDetails,
   PriceImportStatus,
 } from "@adclub/contracts";
@@ -55,4 +57,21 @@ export function validationError(path: string, message: string): ApiException {
   return new ApiException(400, "VALIDATION_ERROR", message, {
     details: [{ path, message }],
   });
+}
+
+/** A photographed page that can't be taken, by its number (`page: null` — the request; TASK-064). */
+export function photoInvalid(
+  page: number | null,
+  reason: PricePhotoProblem,
+  limit: number | null = null,
+): ApiException {
+  const details: PriceImportPhotoInvalidDetails = { page, reason, limit };
+  return new ApiException(
+    400,
+    "PRICE_IMPORT_PHOTO_INVALID",
+    page === null
+      ? `The photos can't be taken: ${reason}`
+      : `Page ${String(page)} can't be taken: ${reason}`,
+    { details },
+  );
 }

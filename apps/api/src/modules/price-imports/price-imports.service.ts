@@ -14,7 +14,7 @@ import {
   type UploadPriceImportQuery,
 } from "@adclub/contracts";
 import { priceRolesProblem } from "@adclub/domain";
-import { and, asc, count, desc, eq, gt, isNotNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { ApiException, rateLimitedException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue } from "../../jobs";
@@ -34,8 +34,10 @@ import {
   headerHash,
   priceImport,
   priceImportFormatTable,
+  priceImportPhotoPage,
   priceImportRefusal,
   priceImportRow,
+  type PriceImportPhotoPageRecord,
   type PriceImportRecord,
   type StoredColumn,
 } from "./schema";
@@ -114,6 +116,26 @@ export function decodeCursor(cursor: string): { createdAt: string; id: string } 
     // Falls through to the refusal below.
   }
   throw badCursor();
+}
+
+/** The photographed pages of imports, by import (TASK-064). */
+export async function photoPagesOf(
+  executor: DbExecutor,
+  importIds: readonly string[],
+): Promise<Map<string, PriceImportPhotoPageRecord[]>> {
+  const pages = new Map<string, PriceImportPhotoPageRecord[]>();
+  if (importIds.length === 0) return pages;
+  const rows = await executor
+    .select()
+    .from(priceImportPhotoPage)
+    .where(inArray(priceImportPhotoPage.importId, [...importIds]))
+    .orderBy(asc(priceImportPhotoPage.pageNo));
+  for (const row of rows) {
+    const list = pages.get(row.importId) ?? [];
+    list.push(row);
+    pages.set(row.importId, list);
+  }
+  return pages;
 }
 
 /** A cursor of the rows: the number of the last row of the page, as the file numbers them. */
@@ -244,7 +266,7 @@ export class PriceImportsService {
    * attempt (TASK-046.A requirement 3): without it, a file refused at once
    * could be sent again and again for free.
    */
-  private async refused(actor: PriceImportActor, reason: string, byteSize: number): Promise<void> {
+  async refused(actor: PriceImportActor, reason: string, byteSize: number): Promise<void> {
     await this.database.db.insert(priceImportRefusal).values({
       id: randomUUID(),
       supplierId: actor.supplierId,
@@ -261,11 +283,7 @@ export class PriceImportsService {
    * The uploads of a company in the last hour — stored ones and refused ones
    * alike — against `price_import_uploads_per_supplier_hour`.
    */
-  private async assertWithinLimit(
-    executor: DbExecutor,
-    supplierId: string,
-    limit: number,
-  ): Promise<void> {
+  async assertWithinLimit(executor: DbExecutor, supplierId: string, limit: number): Promise<void> {
     const result = await executor.execute<{ uploads: number; wait: number | null }>(sql`
       SELECT count(*)::int AS uploads,
         extract(epoch FROM min(created_at) + make_interval(secs => ${HOUR_SECONDS}) - now())::float AS wait
@@ -275,6 +293,11 @@ export class PriceImportsService {
           AND created_at > now() - make_interval(secs => ${HOUR_SECONDS})
         UNION ALL
         SELECT created_at FROM price_import_refusal
+        WHERE supplier_id = ${supplierId}::uuid
+          AND created_at > now() - make_interval(secs => ${HOUR_SECONDS})
+        UNION ALL
+        -- A photographed page taken again is a new call to AI (TASK-064).
+        SELECT created_at FROM price_import_photo_retake
         WHERE supplier_id = ${supplierId}::uuid
           AND created_at > now() - make_interval(secs => ${HOUR_SECONDS})
       ) attempts
@@ -295,7 +318,12 @@ export class PriceImportsService {
     return {
       imports,
       nextCursor,
-      limits: { maxFileMb: values.import_max_file_mb, maxRows: values.import_max_rows },
+      limits: {
+        maxFileMb: values.import_max_file_mb,
+        maxRows: values.import_max_rows,
+        photoMaxPages: values.price_photo_max_pages,
+        photoMaxMb: values.price_photo_max_size_mb,
+      },
     };
   }
 
@@ -330,8 +358,14 @@ export class PriceImportsService {
       .limit(query.limit + 1);
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
+    const pages = await photoPagesOf(
+      this.database.db,
+      page.filter((row) => row.record.fileKind === "photo").map((row) => row.record.id),
+    );
     return {
-      imports: page.map((row) => describeImport(row.record, row.name)),
+      imports: page.map((row) =>
+        describeImport(row.record, row.name, null, pages.get(row.record.id) ?? null),
+      ),
       nextCursor:
         rows.length > query.limit && last
           ? encodeCursor(last.record.createdAt, last.record.id)
@@ -339,7 +373,7 @@ export class PriceImportsService {
     };
   }
 
-  private async own(executor: DbExecutor, supplierId: string, importId: string, lock = false) {
+  async own(executor: DbExecutor, supplierId: string, importId: string, lock = false) {
     const select = executor
       .select()
       .from(priceImport)
@@ -406,6 +440,10 @@ export class PriceImportsService {
   ): Promise<PriceImport> {
     const updated = await this.database.db.transaction(async (tx) => {
       const record = await this.own(tx, actor.supplierId, importId, true);
+      if (record.fileKind === "photo") {
+        // AI read the photos straight into the roles (TASK-064): there are no columns to confirm.
+        throw importState(record.status, "A photographed price list has no columns to confirm");
+      }
       // The columns can be corrected until the import is applied (TASK-047):
       // matching and the decisions of the review start over.
       if (!CONFIRMABLE.includes(record.status)) {
@@ -537,11 +575,16 @@ export class PriceImportsService {
   }
 
   /** An import with the names of who uploaded and who applied it. */
-  private async described(record: PriceImportRecord): Promise<PriceImport> {
+  async described(record: PriceImportRecord): Promise<PriceImport> {
+    const pages =
+      record.fileKind === "photo"
+        ? ((await photoPagesOf(this.database.db, [record.id])).get(record.id) ?? [])
+        : null;
     return describeImport(
       record,
       await this.memberName(record.uploadedByMemberId),
       record.appliedByMemberId ? await this.memberName(record.appliedByMemberId) : null,
+      pages,
     );
   }
 

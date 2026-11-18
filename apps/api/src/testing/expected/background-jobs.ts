@@ -35,6 +35,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "search.apply-outbox",
   "search.reconcile",
   "prices.parse",
+  "prices.read-photos",
   "prices.read-values",
   "prices.expire-stalled",
   "prices.delete-files",

@@ -38,6 +38,8 @@ const KIND_OF_SCHEMA: Record<string, StatusKind | "not a badge"> = {
   adminChargeStatusSchema: "charge",
   // The states of a trip to the payment provider are progress text in the cabinet, not a badge.
   cardBindingStatusSchema: "not a badge",
+  // A photographed page of a price list (TASK-064) is said in words beside the page, not a badge.
+  pricePhotoPageStatusSchema: "not a badge",
   supplierInvitationStatusSchema: "invitation",
   translationQueueStateSchema: "translation",
   maintenancePlanStatusSchema: "maintenancePlan",

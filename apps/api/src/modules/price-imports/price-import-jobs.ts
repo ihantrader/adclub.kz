@@ -25,6 +25,29 @@ export const parsePriceFileJob = defineJob({
   concurrency: 2,
 });
 
+/**
+ * Reads the photographed pages of an import with AI (TASK-064), page after
+ * page; a page already read is not read again. All read — the rows are
+ * written and their values read at once (S-PRICE-02 is not shown); a page
+ * that gave nothing — `needs_retake`; AI out of reach or the day's budget
+ * spent — the import waits in `parsing` and the job comes back by itself.
+ */
+/**
+ * A run reading photographed pages refreshes the phase before each call to AI
+ * (a call with its fallback can take six minutes): an older phase is a run
+ * that stopped, and another may take the import.
+ */
+export const PHOTO_CLAIM_STALE_SECONDS = 900;
+
+export const readPricePhotosJob = defineJob({
+  name: "prices.read-photos",
+  payload: importPayload,
+  timeoutSeconds: 1800,
+  retry: { limit: 2, delaySeconds: 30, backoff: true },
+  singleton: false,
+  concurrency: 2,
+});
+
 /** Reads the values of the rows by the confirmed roles: `parsed` and the errors of each row. */
 export const readPriceValuesJob = defineJob({
   name: "prices.read-values",
@@ -117,6 +140,7 @@ export const expirePriceReviewsJob = definePeriodicJob({
 
 export const priceImportJobCatalog = [
   parsePriceFileJob,
+  readPricePhotosJob,
   readPriceValuesJob,
   expirePriceImportsJob,
   deletePriceFilesJob,

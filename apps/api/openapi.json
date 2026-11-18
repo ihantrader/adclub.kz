@@ -21388,6 +21388,162 @@
         }
       }
     },
+    "/supplier/price-imports/{importId}/photos/{pageNo}": {
+      "delete": {
+        "operationId": "removePricePhoto",
+        "summary": "Leave one page of a photographed import out (status needs_retake): the import goes on with the other pages; the last page can't be removed",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "pageNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9]\\d{0,1}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The import without the page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "retakePricePhoto",
+        "summary": "Take one page of a photographed import again («Переснять», status needs_retake): the other pages keep what they gave; counts in the hourly limit of uploads",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "importId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "pageNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9]\\d{0,1}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "The photo of the page itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "application/octet-stream"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The import, being recognised again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/price-imports/{importId}/review": {
       "get": {
         "operationId": "getPriceImportReview",
@@ -21640,7 +21796,8 @@
                 "service_item",
                 "supplier_type",
                 "out_of_stock",
-                "duplicate_item"
+                "duplicate_item",
+                "read_confirmation_required"
               ]
             }
           },
@@ -21911,6 +22068,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PriceImportRowsPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/price-imports/photos": {
+      "post": {
+        "operationId": "uploadPricePhotos",
+        "summary": "Upload photographed pages of a price list (1 to price_photo_max_pages): each page is checked by its content and kept privately; a background job reads them into rows with AI. One upload in the hourly limit, however many pages",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "requestBody": {
+          "description": "multipart/form-data: the parts named «page», each a JPEG, PNG or WebP photo, in the order of the pages",
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "multipart/form-data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The import, being recognised",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceImportResponse"
                 }
               }
             }
@@ -39641,6 +39854,9 @@
           },
           "sendRequest": {
             "type": "boolean"
+          },
+          "readConfirmed": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -40064,6 +40280,7 @@
           "PRICE_IMPORT_FILE_INVALID",
           "PRICE_IMPORT_STATE",
           "PRICE_IMPORT_VERSION_CONFLICT",
+          "PRICE_IMPORT_PHOTO_INVALID",
           "PRICE_IMPORT_ITEM_UNAVAILABLE",
           "PRICE_IMPORT_MISSING_CHOICE",
           "CATALOG_REQUEST_VERSION_CONFLICT",
@@ -44794,7 +45011,8 @@
                 "enum": [
                   "auto",
                   "remembered",
-                  "supplier"
+                  "supplier",
+                  "photo"
                 ]
               },
               {
@@ -44910,6 +45128,16 @@
                 "type": "null"
               }
             ]
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportPhoto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -44937,7 +45165,8 @@
           "reviewUntil",
           "appliedBy",
           "appliedAt",
-          "result"
+          "result",
+          "photo"
         ]
       },
       "PriceImportColumn": {
@@ -45140,7 +45369,8 @@
         "type": "string",
         "enum": [
           "xlsx",
-          "csv"
+          "csv",
+          "photo"
         ]
       },
       "PriceImportItemUnavailableDetails": {
@@ -45171,11 +45401,23 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "photoMaxPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "photoMaxMb": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": [
           "maxFileMb",
-          "maxRows"
+          "maxRows",
+          "photoMaxPages",
+          "photoMaxMb"
         ]
       },
       "PriceImportListQuery": {
@@ -45386,6 +45628,78 @@
         "required": [
           "memberId",
           "name"
+        ]
+      },
+      "PriceImportPhoto": {
+        "type": "object",
+        "properties": {
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PricePhotoPage"
+            }
+          },
+          "recognized": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "aiWaiting": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unavailable",
+                  "budget"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "pages",
+          "recognized",
+          "aiWaiting"
+        ]
+      },
+      "PriceImportPhotoInvalidDetails": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "$ref": "#/components/schemas/PricePhotoProblem"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "page",
+          "reason",
+          "limit"
         ]
       },
       "PriceImportPreviewRow": {
@@ -45733,7 +46047,8 @@
           "applying",
           "applied",
           "failed",
-          "expired"
+          "expired",
+          "needs_retake"
         ]
       },
       "PriceImportVersionBody": {
@@ -45953,6 +46268,89 @@
           "limit"
         ]
       },
+      "PricePhotoPage": {
+        "type": "object",
+        "properties": {
+          "pageNo": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "$ref": "#/components/schemas/PricePhotoPageStatus"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "byteSize": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "retakes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "pageNo",
+          "status",
+          "rows",
+          "byteSize",
+          "retakes"
+        ]
+      },
+      "PricePhotoPagePath": {
+        "type": "object",
+        "properties": {
+          "importId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "pageNo": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,1}$"
+          }
+        },
+        "required": [
+          "importId",
+          "pageNo"
+        ]
+      },
+      "PricePhotoPageStatus": {
+        "type": "string",
+        "enum": [
+          "waiting",
+          "read",
+          "no_table",
+          "unreadable",
+          "failed"
+        ]
+      },
+      "PricePhotoProblem": {
+        "type": "string",
+        "enum": [
+          "not_an_image",
+          "unsupported_format",
+          "broken",
+          "too_many_pixels",
+          "too_large",
+          "no_pages",
+          "too_many_pages",
+          "malformed"
+        ]
+      },
       "PriceReviewGroup": {
         "type": "string",
         "enum": [
@@ -46100,6 +46498,50 @@
           "priceConfirmed": {
             "type": "boolean"
           },
+          "photo": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "pageNo": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "uncertain": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "row",
+                        "article",
+                        "brand",
+                        "name",
+                        "price",
+                        "availability",
+                        "lead_days"
+                      ]
+                    }
+                  },
+                  "readConfirmed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "pageNo",
+                  "text",
+                  "uncertain",
+                  "readConfirmed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sendRequest": {
             "type": "boolean"
           },
@@ -46137,6 +46579,7 @@
           "sharpPrice",
           "decision",
           "priceConfirmed",
+          "photo",
           "sendRequest",
           "requestRejectReason",
           "outcome"
@@ -46349,6 +46792,11 @@
                 "type": "integer",
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991
+              },
+              "readConfirmationRequired": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -46357,7 +46805,8 @@
               "withdraw",
               "request",
               "unchecked",
-              "priceConfirmationRequired"
+              "priceConfirmationRequired",
+              "readConfirmationRequired"
             ]
           },
           "canApply": {
@@ -46481,7 +46930,8 @@
           "service_item",
           "supplier_type",
           "out_of_stock",
-          "duplicate_item"
+          "duplicate_item",
+          "read_confirmation_required"
         ]
       },
       "PriceRowNote": {

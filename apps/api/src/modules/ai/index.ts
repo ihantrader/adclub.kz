@@ -15,6 +15,8 @@ export {
   partPhotoOutputSchema,
   priceMatchOperation,
   priceMatchOutputSchema,
+  pricePhotoOperation,
+  pricePhotoOutputSchema,
   reviewCheckOperation,
   reviewCheckOutputSchema,
   speechOperation,
@@ -47,6 +49,7 @@ export type {
   PriceMatchInput,
   PriceMatchOutput,
   PriceMatchRow,
+  PricePhotoOutput,
   ReviewCheckInput,
   ReviewCheckOutput,
   SpeechInput,
@@ -83,5 +86,6 @@ export { aiJob, aiTables } from "./schema";
 export type { AiJobRow } from "./schema";
 export { readSampleMarker, TEST_VEHICLE_DOCUMENTS } from "./test-vehicle-documents";
 export { TEST_DASHBOARDS, TEST_PART_PHOTOS } from "./test-photos";
+export { TEST_PRICE_PHOTOS } from "./test-price-photos";
 export { testMaintenanceDraft } from "./test-maintenance-plans";
 export { speechSampleCode, TEST_SPEECH, TEST_SPEECH_MADE } from "./test-speech";

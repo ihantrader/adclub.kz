@@ -40,6 +40,8 @@ describe("upload routes", () => {
       "/admin/catalog/items/{itemId}/photos",
       "/admin/vehicles/imports",
       "/supplier/price-imports",
+      "/supplier/price-imports/photos",
+      "/supplier/price-imports/{importId}/photos/{pageNo}",
       "/catalog/part-photo",
       "/speech/transcribe",
     ]);

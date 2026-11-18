@@ -24,7 +24,12 @@ import {
 import { AiBudgetExhaustedError, AiGatewayError, AiService, FALLBACK_WORTHY } from "../ai";
 import { supplier } from "../identity";
 import { AppSettings } from "../settings";
-import { matchPricesAiJob, matchPricesJob } from "./price-import-jobs";
+import {
+  matchPricesAiJob,
+  matchPricesJob,
+  PHOTO_CLAIM_STALE_SECONDS,
+  readPricePhotosJob,
+} from "./price-import-jobs";
 import {
   brandsBySpelling,
   itemRefusal,
@@ -981,6 +986,24 @@ export class PriceMatchWake implements PeriodicJobHandler {
       );
       if (id) queued++;
     }
+    // Photographed pages no run reads (TASK-064): AI came back, a worker stopped.
+    const photos = await this.database.db.execute<{ id: string }>(sql`
+      SELECT i.id
+      FROM price_import i
+      WHERE i.status = 'parsing' AND i.file_kind = 'photo'
+        AND (i.phase_started_at IS NULL
+          OR i.phase_started_at < now() - make_interval(secs => ${PHOTO_CLAIM_STALE_SECONDS}))
+        AND i.updated_at < now() - make_interval(secs => ${WAKE_IDLE_SECONDS})
+      ORDER BY i.updated_at
+      LIMIT 100`);
+    for (const row of photos.rows) {
+      const id = await this.queue.enqueue(
+        readPricePhotosJob,
+        { importId: row.id },
+        { singletonKey: row.id },
+      );
+      if (id) queued++;
+    }
     if (queued > 0)
       this.logger.log(`Price matching put back on the queue imports=${String(queued)}`);
     return { worked: queued > 0 };
@@ -1011,7 +1034,10 @@ export class PriceReviewExpiry implements PeriodicJobHandler {
       .where(
         sql`(${priceImport.status} = 'review' AND ${priceImport.reviewUntil} < now())
           OR (${priceImport.status} IN ('parsed', 'matching')
-            AND ${priceImport.parsedAt} < now() - make_interval(days => ${days}))`,
+            AND ${priceImport.parsedAt} < now() - make_interval(days => ${days}))
+          OR (${priceImport.fileKind} = 'photo'
+            AND ${priceImport.status} IN ('parsing', 'needs_retake')
+            AND ${priceImport.createdAt} < now() - make_interval(days => ${days}))`,
       )
       .returning({ id: priceImport.id });
     if (expired.length > 0) {

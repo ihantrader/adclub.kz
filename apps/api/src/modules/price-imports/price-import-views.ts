@@ -2,12 +2,18 @@ import type {
   PriceImport,
   PriceImportColumn,
   PriceImportMatch,
+  PriceImportPhoto,
   PriceImportPreviewRow,
   PriceImportRow,
   PriceRowErrorValue,
 } from "@adclub/contracts";
 import type { PriceCell, PriceRowError } from "@adclub/domain";
-import type { PriceImportRecord, PriceImportRowRecord, PriceMatchError } from "./schema";
+import type {
+  PriceImportPhotoPageRecord,
+  PriceImportRecord,
+  PriceImportRowRecord,
+  PriceMatchError,
+} from "./schema";
 
 /**
  * What the cabinet and the admin panel are shown of an import (TASK-046):
@@ -52,15 +58,42 @@ function describeMatch(record: PriceImportRecord): PriceImportMatch | null {
   };
 }
 
+/**
+ * The pages of a photographed import (TASK-064): their states and the
+ * progress «страница N из M»; `null` — a file.
+ */
+export function describePhoto(
+  record: PriceImportRecord,
+  pages: readonly PriceImportPhotoPageRecord[] | null,
+): PriceImportPhoto | null {
+  if (record.fileKind !== "photo") return null;
+  const sorted = [...(pages ?? [])].sort((a, b) => a.pageNo - b.pageNo);
+  return {
+    pages: sorted.map((page) => ({
+      pageNo: page.pageNo,
+      status: page.status,
+      rows: page.status === "read" ? page.rowCount : null,
+      byteSize: page.byteSize,
+      retakes: page.retakes,
+    })),
+    recognized: sorted.filter((page) => page.status !== "waiting").length,
+    aiWaiting: record.status === "parsing" ? record.photoAiWaiting : null,
+  };
+}
+
 export function describeImport(
   record: PriceImportRecord,
   uploaderName: string | null,
   appliedByName: string | null = null,
+  pages: readonly PriceImportPhotoPageRecord[] | null = null,
 ): PriceImport {
   const stats = record.stats;
+  const photo = describePhoto(record, pages);
   const progress =
     record.status === "parsing"
-      ? { done: stats.rows ?? 0, total: null }
+      ? photo
+        ? { done: photo.recognized, total: photo.pages.length }
+        : { done: stats.rows ?? 0, total: null }
       : record.status === "reading"
         ? { done: stats.valuesRead ?? 0, total: stats.dataRows ?? null }
         : record.status === "matching"
@@ -104,6 +137,7 @@ export function describeImport(
       : null,
     appliedAt: iso(record.appliedAt),
     result: record.status === "applied" ? record.result : null,
+    photo,
   };
 }
 

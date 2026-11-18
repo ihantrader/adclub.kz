@@ -223,6 +223,76 @@ describe("the plan of a reviewed price list", () => {
       request: 1,
       unchecked: 1,
       priceConfirmationRequired: 0,
+      readConfirmationRequired: 0,
     });
+  });
+});
+
+describe("a row of a photo read with doubt (TASK-064)", () => {
+  it("is never applied silently: an offer, a new one, a request all wait for «Прочитано верно»", () => {
+    const plans = planRows(
+      [
+        row(1, { readUncertain: true }),
+        row(2, { itemId: "b", readUncertain: true }),
+        row(3, { group: "not_found", source: "search", itemId: null, readUncertain: true }),
+      ],
+      facts({ offers: new Map([["a", offer()]]) }),
+    );
+    expect(plans.map((plan) => plan.action)).toEqual([
+      { kind: "not_applied", reason: "read_confirmation_required", itemId: "a" },
+      { kind: "not_applied", reason: "read_confirmation_required", itemId: "b" },
+      { kind: "not_applied", reason: "read_confirmation_required", itemId: null },
+    ]);
+    expect(plans.every((plan) => plan.remember === null)).toBe(true);
+    expect(planNumbers(plans)).toMatchObject({
+      update: 0,
+      create: 0,
+      request: 0,
+      readConfirmationRequired: 3,
+    });
+  });
+
+  it("confirmed, it is applied as any row; a sharp price still asks for its own confirmation", () => {
+    const confirmed = planRows(
+      [row(1, { readUncertain: true, readConfirmed: true })],
+      facts({ offers: new Map([["a", offer()]]) }),
+    );
+    expect(confirmed[0]!.action.kind).toBe("update");
+    const sharp = planRows(
+      [row(1, { readUncertain: true, parsed: { ...row(1).parsed, price: 30_000 } })],
+      facts({ offers: new Map([["a", offer()]]) }),
+    );
+    expect(sharp[0]!.action).toMatchObject({ reason: "read_confirmation_required" });
+    const sharpRead = planRows(
+      [
+        row(1, {
+          readUncertain: true,
+          readConfirmed: true,
+          parsed: { ...row(1).parsed, price: 30_000 },
+        }),
+      ],
+      facts({ offers: new Map([["a", offer()]]) }),
+    );
+    expect(sharpRead[0]!.action).toMatchObject({ reason: "price_confirmation_required" });
+  });
+
+  it("a skipped or unchecked row stays what it is; an item it would have taken is free for another row", () => {
+    const plans = planRows([row(1, { readUncertain: true }), row(2, { key: "A1" })], facts());
+    expect(plans[0]!.action.kind).toBe("not_applied");
+    expect(plans[1]!.action.kind).toBe("create");
+    expect(
+      planRows([row(1, { readUncertain: true, decision: "skip" })], facts())[0]!.action.kind,
+    ).toBe("skipped");
+  });
+
+  it("whatever a doubted row comes to, it writes nothing into the company's memory", () => {
+    const outOfStock = planRows(
+      [row(1, { readUncertain: true, parsed: { ...row(1).parsed, availability: "out_of_stock" } })],
+      facts(),
+    );
+    expect(outOfStock[0]!.action).toMatchObject({ kind: "not_applied", reason: "out_of_stock" });
+    expect(outOfStock[0]!.remember).toBeNull();
+    const skipped = planRows([row(1, { readUncertain: true, decision: "skip" })], facts());
+    expect(skipped[0]!.remember).toBeNull();
   });
 });

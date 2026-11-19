@@ -56,7 +56,7 @@ export const PHOTO_SOURCE_TEXT: Record<ItemPhotoSourceType, string> = {
   admin_upload: "Свой файл",
   manufacturer: "Сайт производителя",
   official_catalog: "Официальный каталог",
-  multi_store: "Интернет-магазин",
+  multi_store: "Несколько магазинов",
   supplier_photo: "Фото поставщика",
 };
 
@@ -267,6 +267,14 @@ export function catalogErrorText(error: unknown): string {
       return "Файлы этого фото уже удалены — вернуть его нельзя";
     case "CATALOG_PHOTO_NOT_APPROVED":
       return "Порядок задаётся только подтверждённым фото";
+    case "PHOTO_SEARCH_UNAVAILABLE":
+      return detail<string>(error, "reason") === "disabled"
+        ? "Поиск фото здесь не настроен"
+        : "Поиск фото сейчас недоступен, попробуйте позже";
+    case "PHOTO_SEARCH_NOT_APPLICABLE":
+      return "Фото ищутся только для товаров справочника — не для услуг и не для позиций в архиве";
+    case "RATE_LIMITED":
+      return "Поиски фото на сегодня закончились — лимит в настройках «Фото»";
     case "PAYLOAD_TOO_LARGE":
       return "Файл слишком большой";
     case "UNSUPPORTED_MEDIA_TYPE":

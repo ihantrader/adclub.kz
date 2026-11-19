@@ -28,7 +28,7 @@ import { JournalHistory } from "../audit/JournalHistory";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
 import { FilterSearch, FilterSelect, FlagChips, StatusChips } from "../layout/filters";
-import { AppLink, Header, RowTitle, rowLink, Table } from "../layout/layout";
+import { AppLink, Header, RowTitle, rowLink, Table, Thumb } from "../layout/layout";
 import {
   catalogItemPath,
   catalogRequestPath,
@@ -581,6 +581,29 @@ export function RequestCard({ requestId }: { requestId: string }) {
                   <>
                     <dt>Комментарий поставщика</dt>
                     <dd className="long-text">{request.comment}</dd>
+                  </>
+                )}
+                {request.photos.length > 0 && (
+                  <>
+                    <dt>Фото поставщика</dt>
+                    <dd>
+                      <span className="badges">
+                        {request.photos.map((photo) => (
+                          <a
+                            key={photo.id}
+                            href={photo.originalUrl ?? photo.thumbUrl ?? undefined}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            aria-label="Открыть фото полностью"
+                          >
+                            <Thumb src={photo.thumbUrl} size={72} alt="Фото поставщика" />
+                          </a>
+                        ))}
+                      </span>
+                      <span className="kv__note">
+                        Станут кандидатами позиции, когда она будет создана или найдена по запросу
+                      </span>
+                    </dd>
                   </>
                 )}
                 <dt>Поставщик</dt>

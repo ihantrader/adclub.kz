@@ -1688,3 +1688,17 @@ a.home-card--attention:hover {
   flex-basis: 100%;
   color: var(--ac-color-danger);
 }
+
+/* A photo of the moderation queue (A-MOD-03, TASK-068): the picture, the item, where it came from, the decisions. */
+.moderation-photo {
+  display: flex;
+  gap: var(--ac-space-3);
+  align-items: flex-start;
+}
+
+.moderation-photo__about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}

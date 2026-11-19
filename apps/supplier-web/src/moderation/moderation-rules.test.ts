@@ -39,6 +39,7 @@ const REQUEST: SupplierCatalogRequest = {
   comment: null,
   isNew: false,
   offer: null,
+  photos: [],
 };
 
 describe("«Модерация» (S-MOD-01, TASK-048)", () => {

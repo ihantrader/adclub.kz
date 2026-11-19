@@ -39,6 +39,7 @@ const request: AdminCatalogRequest = {
   source: "price_import",
   category: null,
   comment: null,
+  photos: [],
 };
 
 describe("a request to add an item", () => {

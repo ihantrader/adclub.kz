@@ -9,6 +9,7 @@ import {
 } from "@adclub/contracts";
 import {
   ActionBar,
+  AiBadge,
   Badge,
   Banner,
   Button,
@@ -95,6 +96,8 @@ export function ItemPhotos({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<{ text: string; conflict: boolean } | null>(null);
   const [rejecting, setRejecting] = useState<AdminItemPhoto | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const list = photos.data?.photos ?? [];
   const approved = list.filter((photo) => photo.status === "approved");
@@ -165,8 +168,62 @@ export function ItemPhotos({
     }
   };
 
+  const findPhotos = async () => {
+    setSearchError(null);
+    setSearching(true);
+    try {
+      const answer = await apiClient.searchItemPhotos({ itemId });
+      photos.replace(answer);
+      toast.show(
+        answer.search.candidates > 0
+          ? `Найдено кандидатов: ${String(answer.search.candidates)} — проверьте и подтвердите`
+          : "Новых кандидатов не нашлось",
+      );
+    } catch (thrown) {
+      setSearchError(catalogErrorText(thrown));
+    } finally {
+      setSearching(false);
+    }
+  };
+  const searchState = photos.data?.photoSearch;
+
   return (
     <div className="detail-stack">
+      {searchState && (
+        <section className="card cat-block">
+          <div className="section__head">
+            <h3 className="section__title">Поиск фото</h3>
+          </div>
+          <p className="section__note">
+            Ищем по бренду, артикулу и названию: сначала сайты производителя и официальные каталоги,
+            затем одно и то же фото в нескольких магазинах. Найденное ждёт подтверждения — клиенты
+            его не видят.
+          </p>
+          {searchError && <Banner tone="warning">{searchError}</Banner>}
+          <ActionBar
+            label="Поиск фото"
+            main={
+              <Button
+                icon="search"
+                disabled={!online || !searchState.enabled || !searchState.applicable}
+                loading={searching}
+                onClick={findPhotos}
+              >
+                Найти фото
+              </Button>
+            }
+            note={
+              !searchState.enabled
+                ? "Поиск фото здесь не настроен"
+                : !searchState.applicable
+                  ? "Фото ищутся только для товаров, не для услуг и не для позиций в архиве"
+                  : searchState.lastSearchedAt
+                    ? `Последний поиск — ${formatMoment(searchState.lastSearchedAt)}, всего поисков: ${String(searchState.searches)}`
+                    : "Поиск ещё не запускался"
+            }
+          />
+        </section>
+      )}
       <section className="card cat-block">
         <div className="section__head">
           <h3 className="section__title">Загрузить фото</h3>
@@ -377,7 +434,13 @@ export function ItemPhotos({
                           Основное
                         </Badge>
                       )}
+                      {photo.proposedBy === "ai" && <AiBadge>AI</AiBadge>}
                     </div>
+                    {photo.supplier && (
+                      <span className="ac-text-caption ac-muted">
+                        от поставщика {photo.supplier.name}
+                      </span>
+                    )}
                     <div className="cat-photo__facts">
                       <TypeMark icon={photo.sourceUrl ? "externalLink" : "upload"}>
                         {PHOTO_SOURCE_TEXT[photo.sourceType]}

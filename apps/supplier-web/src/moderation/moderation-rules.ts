@@ -153,11 +153,12 @@ export function requestRefusal(
   }
 }
 
-export const MODERATION_TABS = ["requests", "compatibility"] as const;
+export const MODERATION_TABS = ["requests", "photos", "compatibility"] as const;
 
 export type ModerationTab = (typeof MODERATION_TABS)[number];
 
 export const MODERATION_TAB_TEXT: Record<ModerationTab, SupplierTextKey> = {
   requests: "moderation.tabRequests",
+  photos: "moderation.tabPhotos",
   compatibility: "moderation.tabCompatibility",
 };

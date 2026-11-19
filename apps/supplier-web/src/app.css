@@ -3165,6 +3165,8 @@ a.ac-button {
 
 /* ---------- «Модерация» (S-MOD-01) and the request for an item (S-OFF-05) ---------- */
 .moderation-card__title {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
 }
@@ -3396,4 +3398,64 @@ a.ac-button {
 
 .stats-rating > svg {
   color: var(--ac-color-warning);
+}
+
+/* S-OFF-03 «сфотографируйте деталь», photos of S-OFF-05 and «Модерация → Фото» (TASK-068). */
+.part-photo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-4);
+}
+
+.part-photo > .ac-banner {
+  align-self: stretch;
+  max-width: 560px;
+}
+
+.part-photo__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.part-photo__entry {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ac-space-2);
+}
+
+.part-photo__thumb {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--ac-radius-m);
+  background: var(--ac-color-surface-raised);
+  border: 1px solid var(--ac-color-border);
+}
+
+.photo-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+  align-items: center;
+}
+
+.moderation-thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--ac-radius-s);
+  border: 1px solid var(--ac-color-border);
+}
+
+.moderation-table__item .moderation-thumb {
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--ac-space-1);
 }

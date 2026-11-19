@@ -4,21 +4,34 @@ import type {
   AdminModerationPage,
 } from "@adclub/contracts";
 import {
+  AiBadge,
   Banner,
   Button,
+  Dialog,
   EmptyState,
   IconButton,
   LoadingContent,
   SkeletonList,
   TableToolbar,
+  TextField,
+  TypeMark,
+  useToast,
 } from "@adclub/ui";
+import { useOnline } from "@adclub/web-session";
 import { useState } from "react";
 import { apiClient } from "../api";
+import {
+  catalogErrorText,
+  conflictText,
+  isConflict,
+  PHOTO_SOURCE_TEXT,
+} from "../catalog/catalog-words";
+import { whoChanged } from "../catalog/shared";
 import { usePagedList } from "../catalog/paged";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
 import { StatusChips } from "../layout/filters";
-import { Header, RowTitle, rowLink, Table } from "../layout/layout";
+import { Header, RowTitle, rowLink, Table, Thumb } from "../layout/layout";
 import { navigateTo, routePaths, supplierPath, useLocation, withQuery } from "../router";
 import { SearchSelect } from "../search-select/SearchSelect";
 import type { Choice } from "../search-select/search-select-core";
@@ -29,7 +42,9 @@ import {
   entryTitle,
   KIND_TEXT,
   moderationFiltersOf,
+  photoOrigin,
   SOURCE_TEXT,
+  sourceHost,
   type ModerationFilters,
 } from "./moderation-words";
 
@@ -78,6 +93,40 @@ export function Moderation() {
     return { ...page, items: page.entries };
   }, `moderation:${key}`);
   const [supplierLabel, setSupplierLabel] = useState<Choice | null>(null);
+  const toast = useToast();
+  const online = useOnline();
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<AdminModerationEntry | null>(null);
+  const [reason, setReason] = useState("");
+
+  // «Подтвердить» / «Отклонить» of a photo: the very decision of the item's «Фото» (A-MOD-03).
+  const decide = async (entry: AdminModerationEntry, approve: boolean, why?: string) => {
+    const photo = entry.photo;
+    if (!photo) return;
+    setDecisionError(null);
+    setDeciding(entry.id);
+    try {
+      await apiClient.setItemPhotoStatus(
+        { itemId: photo.itemId, photoId: photo.id },
+        {
+          expectedVersion: photo.version,
+          status: approve ? "approved" : "rejected",
+          ...(why ? { reason: why } : {}),
+        },
+      );
+      toast.show(approve ? "Фото подтверждено" : "Фото отклонено");
+    } catch (thrown) {
+      setDecisionError(
+        isConflict(thrown)
+          ? conflictText(await whoChanged("catalog_item_photo", photo.id))
+          : catalogErrorText(thrown),
+      );
+    } finally {
+      setDeciding(null);
+      list.first.reload();
+    }
+  };
   const rows = list.items;
   const set = (patch: Partial<ModerationFilters>) =>
     navigateTo(linkOf({ ...filters, ...patch }), { replace: true });
@@ -98,8 +147,9 @@ export function Moderation() {
         }
       />
       <p className="section__note">
-        Ждут решения администратора. Решение принимается в карточке запроса или во вкладке
-        «Совместимость» позиции; решённые остаются в «Справочнике».
+        Ждут решения администратора. Фото подтверждаются и отклоняются прямо здесь; запросы и
+        совместимость — в карточке запроса или во вкладке «Совместимость» позиции; решённые остаются
+        в «Справочнике».
       </p>
       <div className="filters__group">
         <div className="filters">
@@ -127,6 +177,7 @@ export function Moderation() {
           onChange={(kind) => set({ kind: kind ?? undefined })}
         />
       </div>
+      {decisionError && <Banner tone="warning">{decisionError}</Banner>}
       {list.first.error !== undefined && (
         <Banner
           tone="danger"
@@ -177,11 +228,76 @@ export function Moderation() {
                     <tr key={`${entry.kind}:${entry.id}`} {...rowLink(href)}>
                       <td className="ac-text-body-s nowrap">{KIND_TEXT[entry.kind]}</td>
                       <td>
-                        <RowTitle href={href} sub={entrySub(entry) ?? undefined}>
-                          <span className="clamp" title={entryTitle(entry)}>
-                            {entryTitle(entry)}
-                          </span>
-                        </RowTitle>
+                        {entry.kind === "photo" && entry.photo ? (
+                          <div className="moderation-photo">
+                            <a
+                              href={entry.photo.originalUrl ?? entry.photo.thumbUrl ?? undefined}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              aria-label="Открыть фото полностью"
+                            >
+                              <Thumb src={entry.photo.thumbUrl} size={72} alt="Фото позиции" />
+                            </a>
+                            <div className="moderation-photo__about">
+                              <RowTitle href={href} sub={entrySub(entry) ?? undefined}>
+                                <span className="clamp" title={entryTitle(entry)}>
+                                  {entryTitle(entry)}
+                                </span>
+                              </RowTitle>
+                              <span className="badges">
+                                {photoOrigin(entry) === "ai" ? (
+                                  <AiBadge>AI</AiBadge>
+                                ) : (
+                                  <span className="ac-text-caption ac-muted">
+                                    {photoOrigin(entry)}
+                                  </span>
+                                )}
+                                <TypeMark icon={entry.photo.sourceUrl ? "externalLink" : "upload"}>
+                                  {PHOTO_SOURCE_TEXT[entry.photo.sourceType]}
+                                </TypeMark>
+                                {entry.photo.sourceUrl && (
+                                  <a
+                                    className="ac-text-caption"
+                                    href={entry.photo.sourceUrl}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    title={entry.photo.sourceUrl}
+                                  >
+                                    {sourceHost(entry.photo.sourceUrl)}
+                                  </a>
+                                )}
+                              </span>
+                              <span className="row-actions">
+                                <Button
+                                  variant="secondary"
+                                  size="s"
+                                  disabled={!online || deciding !== null}
+                                  loading={deciding === entry.id}
+                                  onClick={() => void decide(entry, true)}
+                                >
+                                  Подтвердить
+                                </Button>
+                                <Button
+                                  variant="text"
+                                  size="s"
+                                  disabled={!online || deciding !== null}
+                                  onClick={() => {
+                                    setReason("");
+                                    setRejecting(entry);
+                                  }}
+                                >
+                                  Отклонить…
+                                </Button>
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <RowTitle href={href} sub={entrySub(entry) ?? undefined}>
+                            <span className="clamp" title={entryTitle(entry)}>
+                              {entryTitle(entry)}
+                            </span>
+                          </RowTitle>
+                        )}
                       </td>
                       <td className="ac-text-body-s">
                         {entry.supplier ? (
@@ -220,6 +336,35 @@ export function Moderation() {
           )}
         </div>
       </LoadingContent>
+      <Dialog
+        open={rejecting !== null}
+        onClose={() => setRejecting(null)}
+        title="Отклонить фото?"
+        actions={
+          <>
+            <Button
+              disabled={!reason.trim()}
+              onClick={async () => {
+                const entry = rejecting;
+                setRejecting(null);
+                if (entry) await decide(entry, false, reason.trim());
+              }}
+            >
+              Отклонить
+            </Button>
+            <Button variant="secondary" onClick={() => setRejecting(null)}>
+              Отмена
+            </Button>
+          </>
+        }
+      >
+        <div className="dialog-stack">
+          <TextField label="Причина" value={reason} onChange={setReason} hint="Обязательна" />
+          {rejecting?.photo?.proposedBy === "supplier" && (
+            <p className="ac-text-body-s">Поставщик увидит причину в разделе «Модерация».</p>
+          )}
+        </div>
+      </Dialog>
     </>
   );
 }

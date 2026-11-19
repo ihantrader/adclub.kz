@@ -37,6 +37,7 @@ import {
   useRouteId,
   useRouteState,
 } from "../router";
+import { PartPhotoBlock } from "../photos/PartPhotoBlock";
 import { CompatibilityProposal } from "./CompatibilityProposal";
 import { proposesCompatibility } from "./compatibility-proposal-rules";
 import { PageHeader } from "../screens/PageHeader";
@@ -197,6 +198,8 @@ function OfferCard({ id, company }: { id: string; company: SupplierCard }) {
               company={company}
               onOffer={(offer) => setLoaded({ status: "ready", offer })}
             />
+            {/* S-OFF-03 (TASK-068): a photo of the part, while the item has none. */}
+            <PartPhotoBlock offerId={loaded.offer.id} />
             {/* S-OFF-07 (TASK-077): only where compatibility is kept. */}
             {proposesCompatibility(loaded.offer.item) && (
               <CompatibilityProposal item={loaded.offer.item} />

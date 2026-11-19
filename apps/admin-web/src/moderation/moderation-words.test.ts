@@ -2,7 +2,14 @@ import type { AdminModerationEntry } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
 import { locationOf, menuOf } from "../router";
 import { shareCell, statsPeriodOf, statsRatingText } from "../suppliers/stats-words";
-import { entryHref, entrySub, entryTitle, moderationFiltersOf } from "./moderation-words";
+import {
+  entryHref,
+  entrySub,
+  entryTitle,
+  moderationFiltersOf,
+  photoOrigin,
+  sourceHost,
+} from "./moderation-words";
 
 const SUPPLIER = { id: "11111111-1111-4111-8111-111111111111", name: "Автомаркет" };
 const ITEM = "22222222-2222-4222-8222-222222222222";
@@ -16,6 +23,7 @@ const request: AdminModerationEntry = {
   proposed: { name: "Фильтр масляный", brand: "Bosch", article: "F 026 407 210" },
   item: null,
   vehicle: null,
+  photo: null,
 };
 
 const proposal: AdminModerationEntry = {
@@ -27,6 +35,45 @@ const proposal: AdminModerationEntry = {
   proposed: null,
   item: { id: ITEM, name: "Колодки тормозные", brand: "Geely", article: "04465-0K090" },
   vehicle: "Geely Atlas · II (FX11) · 2023–",
+  photo: null,
+};
+
+const PHOTO = "55555555-5555-4555-8555-555555555555";
+
+const candidate: AdminModerationEntry = {
+  kind: "photo",
+  id: PHOTO,
+  createdAt: "2026-11-19T06:00:00.000Z",
+  supplier: null,
+  source: "search",
+  proposed: null,
+  item: { id: ITEM, name: "Колодки тормозные", brand: "Geely", article: "04465-0K090" },
+  vehicle: null,
+  photo: {
+    id: PHOTO,
+    itemId: ITEM,
+    version: 1,
+    thumbUrl: "https://storage/thumb",
+    originalUrl: "https://storage/original",
+    sourceType: "manufacturer",
+    sourceUrl: "https://www.geely.com/parts/04465",
+    proposedBy: "ai",
+    aiScore: 0.9,
+    width: 800,
+    height: 600,
+  },
+};
+
+const supplierPhoto: AdminModerationEntry = {
+  ...candidate,
+  supplier: SUPPLIER,
+  source: "cabinet",
+  photo: {
+    ...candidate.photo!,
+    proposedBy: "supplier",
+    sourceType: "supplier_photo",
+    sourceUrl: null,
+  },
 };
 
 describe("«Модерация» — the queue's words", () => {
@@ -48,9 +95,22 @@ describe("«Модерация» — the queue's words", () => {
       supplierId: "x",
     });
     expect(moderationFiltersOf(new URLSearchParams("kind=photo"))).toEqual({
+      kind: "photo",
+      supplierId: undefined,
+    });
+    expect(moderationFiltersOf(new URLSearchParams("kind=other"))).toEqual({
       kind: undefined,
       supplierId: undefined,
     });
+  });
+
+  it("opens the item's «Фото» from a photo and says who proposed it (A-MOD-03)", () => {
+    expect(entryHref(candidate)).toBe(`/catalog/items/${ITEM}?tab=photos`);
+    expect(entryTitle(candidate)).toBe("Колодки тормозные");
+    expect(photoOrigin(candidate)).toBe("ai");
+    expect(photoOrigin(supplierPhoto)).toBe("от поставщика Автомаркет");
+    expect(photoOrigin(request)).toBeNull();
+    expect(sourceHost("https://www.geely.com/parts/04465")).toBe("geely.com");
   });
 
   it("is a section of its own in the menu", () => {

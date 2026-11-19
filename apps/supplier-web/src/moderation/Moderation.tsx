@@ -1,5 +1,6 @@
 import type {
   SupplierCatalogRequest,
+  SupplierModerationPhoto,
   SupplierModerationProposal,
   SupplierModerationSummary,
 } from "@adclub/contracts";
@@ -30,6 +31,7 @@ import {
   useRouteState,
 } from "../router";
 import { PageHeader } from "../screens/PageHeader";
+import { photoStatusText, photoStatusTone } from "../photos/photo-rules";
 import {
   addedAction,
   conditionsText,
@@ -82,7 +84,12 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
   }, [generation]);
 
   const label = (key: ModerationTab) => {
-    const unseen = key === "requests" ? summary?.unseen.requests : summary?.unseen.compatibility;
+    const unseen =
+      key === "requests"
+        ? summary?.unseen.requests
+        : key === "photos"
+          ? summary?.unseen.photos
+          : summary?.unseen.compatibility;
     return unseen
       ? `${t(MODERATION_TAB_TEXT[key])} · ${t("moderation.newCount", { n: unseen })}`
       : t(MODERATION_TAB_TEXT[key]);
@@ -115,11 +122,18 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
           }}
           options={[
             { value: "requests", label: label("requests") },
+            { value: "photos", label: label("photos") },
             { value: "compatibility", label: label("compatibility") },
           ]}
         />
       </div>
-      {tab === "requests" ? <Requests timeZone={timeZone} /> : <Proposals timeZone={timeZone} />}
+      {tab === "requests" ? (
+        <Requests timeZone={timeZone} />
+      ) : tab === "photos" ? (
+        <Photos timeZone={timeZone} seenAt={summary?.seenAt ?? null} />
+      ) : (
+        <Proposals timeZone={timeZone} />
+      )}
     </>
   );
 }
@@ -197,6 +211,27 @@ function Requests({ timeZone }: { timeZone: string }) {
           }
         />
       }
+    />
+  );
+}
+
+/** «Фото» (TASK-068): the company's photos of parts and of requests, with their statuses. */
+function Photos({ timeZone, seenAt }: { timeZone: string; seenAt: string | null }) {
+  const { t } = useLanguage();
+  const load = useCallback(async (cursor: string | null) => {
+    const page = await apiClient.listSupplierModerationPhotos({
+      query: { limit: PAGE, ...(cursor ? { cursor } : {}) },
+    });
+    return { entries: page.entries, next: page.nextCursor };
+  }, []);
+  const list = usePages<SupplierModerationPhoto>(load);
+  const toRow = usePhotoRow(timeZone, seenAt);
+  return (
+    <List
+      list={list}
+      toRow={toRow}
+      aboutHeader={t("moderation.tableAbout")}
+      empty={<EmptyState icon="image" title={t("moderation.emptyPhotos")} />}
     />
   );
 }
@@ -293,8 +328,12 @@ function NewMark() {
 interface ModerationRow {
   id: string;
   isNew: boolean;
-  status: Parameters<typeof statusTone>[0];
+  status: Parameters<typeof statusTone>[0] | "proposed" | "deleted";
+  /** The tone of the status, when it isn't a request's or a proposal's. */
+  tone?: ReturnType<typeof statusTone>;
   statusText: string;
+  /** A photo's thumbnail (TASK-068). */
+  thumbUrl?: string | null;
   /** When it was decided, or nothing yet. */
   decided: string | null;
   name: string;
@@ -310,9 +349,16 @@ interface ModerationRow {
 function StatusMark({ row }: { row: ModerationRow }) {
   return (
     <Badge
-      tone={statusTone(row.status)}
+      tone={
+        row.tone ??
+        statusTone(row.status === "proposed" || row.status === "deleted" ? "rejected" : row.status)
+      }
       icon={
-        row.status === "approved" ? "circleCheck" : row.status === "rejected" ? "circleX" : "clock"
+        row.status === "approved"
+          ? "circleCheck"
+          : row.status === "rejected" || row.status === "deleted"
+            ? "circleX"
+            : "clock"
       }
     >
       {row.statusText}
@@ -328,11 +374,12 @@ function RowCard({ row }: { row: ModerationRow }) {
         {row.isNew && <NewMark />}
         {row.decided && <span className="ac-text-caption ac-muted">{row.decided}</span>}
       </div>
+      {row.thumbUrl && <img className="moderation-thumb" src={row.thumbUrl} alt="" />}
       <div className="moderation-card__title">
         <span className="ac-text-body-strong price-wrap">{row.name}</span>
         {row.line && <span className="ac-text-caption ac-muted num">{row.line}</span>}
       </div>
-      <span className="ac-text-body-s price-wrap">{row.about}</span>
+      {row.about && <span className="ac-text-body-s price-wrap">{row.about}</span>}
       {row.details && <span className="ac-text-body-s ac-muted price-wrap">{row.details}</span>}
       <span className="ac-text-caption ac-muted">{row.sent}</span>
       {row.action && <ActionBar compact others={[row.action]} />}
@@ -361,7 +408,8 @@ function RowsTable({ rows, aboutHeader }: { rows: ModerationRow[]; aboutHeader: 
           {rows.map((row) => (
             <tr key={row.id}>
               <td className="moderation-table__item">
-                <span className="price-wrap">{row.name}</span>
+                {row.thumbUrl && <img className="moderation-thumb" src={row.thumbUrl} alt="" />}
+                <div className="price-wrap">{row.name}</div>
                 {row.line && <div className="ac-text-caption ac-muted num">{row.line}</div>}
               </td>
               <td>
@@ -406,6 +454,9 @@ function useRequestRow(timeZone: string): (request: SupplierCatalogRequest) => M
       about: [
         requestSource(request, t),
         request.category ? t("moderation.category", { name: request.category.name }) : null,
+        request.photos.length > 0
+          ? t("moderation.requestPhotos", { n: request.photos.length })
+          : null,
         became,
       ]
         .filter(Boolean)
@@ -430,6 +481,38 @@ function useRequestRow(timeZone: string): (request: SupplierCatalogRequest) => M
       ) : null,
     };
   };
+}
+
+function usePhotoRow(
+  timeZone: string,
+  seenAt: string | null,
+): (entry: SupplierModerationPhoto) => ModerationRow {
+  const { t, lang } = useLanguage();
+  return ({ photo, item, request, isNew }) => ({
+    id: photo.id,
+    // The tab opens after this visit was marked seen: «новое» is by the moment before it.
+    isNew:
+      isNew ||
+      (seenAt !== null &&
+        photo.status !== "proposed" &&
+        photo.reviewedAt !== null &&
+        photo.reviewedAt > seenAt),
+    status: photo.status,
+    tone: photoStatusTone(photo.status),
+    statusText: photoStatusText(photo.status, photo.rejectionReason, t),
+    thumbUrl: photo.thumbUrl,
+    decided: photo.reviewedAt ? formatWhen(photo.reviewedAt, timeZone, lang, t) : null,
+    name: item?.name.text ?? request?.name ?? t("moderation.itemGone"),
+    line: item ? [item.brand?.name, item.article].filter(Boolean).join(" · ") || null : null,
+    about: request
+      ? request.name
+        ? t("moderation.photoOfRequest", { name: request.name })
+        : t("moderation.photoOfRequestPlain")
+      : null,
+    details: null,
+    sent: formatWhen(photo.uploadedAt, timeZone, lang, t),
+    action: null,
+  });
 }
 
 function useProposalRow(timeZone: string): (entry: SupplierModerationProposal) => ModerationRow {

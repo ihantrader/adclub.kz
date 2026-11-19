@@ -1,10 +1,22 @@
 import type { Choice } from "@adclub/ui";
-import { ActionBar, Banner, Button, SearchSelect, TextAreaField, TextField } from "@adclub/ui";
+import { CATALOG_REQUEST_PHOTOS_MAX } from "@adclub/contracts";
+import {
+  ActionBar,
+  Banner,
+  Button,
+  IconButton,
+  SearchSelect,
+  TextAreaField,
+  TextField,
+} from "@adclub/ui";
 import { useOnline } from "@adclub/web-session";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../api";
 import { useLanguage } from "../i18n";
 import { goBack, navigate, useRouteState } from "../router";
+import { photoRefusal } from "../photos/photo-rules";
+import { PhotoPicker } from "../photos/PhotoPicker";
+import { shrinkPhoto } from "../price/photo-shrink";
 import { PageHeader } from "../screens/PageHeader";
 import { formFromQuery, requestBody, requestRefusal, type RequestForm } from "./moderation-rules";
 
@@ -34,8 +46,10 @@ function loadSubcategories(): Promise<Choice[]> {
  * справочнике?» of the search: the name (required), the brand with
  * suggestions by any spelling (or another one typed), the article or
  * characteristics, the subcategory with suggestions, a comment → «Запрос
- * отправлен администратору. Результат — в разделе „Модерация“». Photos —
- * EPIC-26. One waiting request per article (or name) of the company.
+ * отправлен администратору. Результат — в разделе „Модерация“». Up to three
+ * photos by choice (TASK-068): sent after the request, one by one; the item
+ * made of the request gets them as candidates. One waiting request per
+ * article (or name) of the company.
  */
 export function RequestFormScreen() {
   const { t } = useLanguage();
@@ -48,6 +62,21 @@ export function RequestFormScreen() {
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const [photosFailed, setPhotosFailed] = useState<string | null>(null);
+
+  // The previews are the browser's own links: given back when a photo goes,
+  // and all of them when the screen is left.
+  const shown = useRef(photos);
+  useEffect(() => {
+    shown.current = photos;
+  }, [photos]);
+  useEffect(
+    () => () => {
+      for (const photo of shown.current) URL.revokeObjectURL(photo.url);
+    },
+    [],
+  );
 
   const searchBrands = useCallback(async (query: string): Promise<Choice[]> => {
     if (query.trim() === "") return [];
@@ -83,7 +112,21 @@ export function RequestFormScreen() {
     setSending(true);
     setRefusal(null);
     try {
-      await apiClient.createSupplierCatalogRequest(body);
+      const created = await apiClient.createSupplierCatalogRequest(body);
+      let failure: string | null = null;
+      for (const photo of photos) {
+        try {
+          await apiClient.uploadCatalogRequestPhoto(
+            { requestId: created.request.id },
+            await shrinkPhoto(photo.file),
+          );
+        } catch (error) {
+          failure = photoRefusal(error, t);
+        }
+      }
+      setPhotosFailed(failure);
+      for (const photo of photos) URL.revokeObjectURL(photo.url);
+      setPhotos([]);
       setSent(true);
     } catch (error) {
       setRefusal(requestRefusal(error, t).text);
@@ -99,6 +142,11 @@ export function RequestFormScreen() {
       <>
         {head}
         <Banner icon="circleCheck">{t("request.sent")}</Banner>
+        {photosFailed && (
+          <Banner tone="warning" icon="alertTriangle">
+            {t("request.photosFailed", { reason: photosFailed })}
+          </Banner>
+        )}
         <ActionBar
           main={<Button onClick={() => navigate("moderation")}>{t("result.toModeration")}</Button>}
           others={[
@@ -107,6 +155,7 @@ export function RequestFormScreen() {
               variant="secondary"
               onClick={() => {
                 setSent(false);
+                setPhotosFailed(null);
                 setTouched(false);
                 setForm(formFromQuery(""));
                 setBrand(null);
@@ -187,6 +236,40 @@ export function RequestFormScreen() {
           maxLength={1000}
           onChange={(comment) => setForm((current) => ({ ...current, comment }))}
         />
+        <div className="form-grid__wide part-photo">
+          <span className="ac-text-label">{t("request.photos")}</span>
+          {photos.length > 0 && (
+            <ul className="part-photo__list" aria-label={t("request.photos")}>
+              {photos.map((photo, index) => (
+                <li key={photo.url} className="part-photo__entry">
+                  <img className="part-photo__thumb" src={photo.url} alt="" />
+                  <IconButton
+                    icon="trash"
+                    label={t("request.photoRemove")}
+                    size={20}
+                    onClick={() => {
+                      URL.revokeObjectURL(photo.url);
+                      setPhotos((current) => current.filter((_, at) => at !== index));
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+          {photos.length < CATALOG_REQUEST_PHOTOS_MAX && (
+            <PhotoPicker
+              testId="request-photo"
+              disabled={sending}
+              onPhoto={(file) =>
+                setPhotos((current) =>
+                  current.length >= CATALOG_REQUEST_PHOTOS_MAX
+                    ? current
+                    : [...current, { file, url: URL.createObjectURL(file) }],
+                )
+              }
+            />
+          )}
+        </div>
         {refusal && (
           <div className="form-grid__wide">
             <Banner

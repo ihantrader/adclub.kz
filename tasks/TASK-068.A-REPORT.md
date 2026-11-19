@@ -64,6 +64,7 @@ COMPLETED
     - `photo-search` — 12/12;
     - `catalog-photos` — 31/31;
     - `price-review` — 14/15: один тест упал на `statement timeout` при вставке категории в dev-seed внутри `beforeEach` (прогон 847 с). Отдельный перезапуск этого теста — PASS.
+- CI: прогон `44583146169` (push `7a564b1` в `main`); результат не ждал — по правилам TASK-076
 
 ## UAT / E2E
 - Окружение: своя база `adclub_t068a`, бакет `adclub-t068a`, Redis db 2; API на :3210, кабинет на :5295.

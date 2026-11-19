@@ -1622,8 +1622,9 @@ describe("catalog structure (PostgreSQL + Redis)", () => {
       // (TASK-011), 4 of photos (TASK-013), 5 of compatibility (TASK-015), and
       // an item's offers, the admin check of compatibility and locate (TASK-035),
       // 5 of search synonyms (TASK-044), and 5 of requests for items from
-      // price lists (`/admin/catalog-requests`, TASK-047).
-      expect(adminRoutes).toHaveLength(50);
+      // price lists (`/admin/catalog-requests`, TASK-047), and the photo search
+      // of an item (TASK-068).
+      expect(adminRoutes).toHaveLength(51);
       const callers = [
         { name: "guest", token: undefined, client: IOS, status: 401, code: "AUTH_REQUIRED" },
         { name: "mobile", token: await mobileToken(), client: IOS, status: 403, code: "FORBIDDEN" },

@@ -903,8 +903,10 @@ describe("the administrator's check of AI matches of price lists (PostgreSQL + R
     expect(journal.rows.filter((row) => row.action === "price_match_audit.correct").length).toBe(
       one.status === 200 ? 2 : 1,
     );
+    // Alfa's offer — and Delta's untouched one when the second administrator's «Неверно» won.
     expect(journal.rows.filter((row) => row.action === "offer.withdrawn")).toEqual([
       { action: "offer.withdrawn", entity_id: alfa.offer_id },
+      ...(two.status === 200 ? [{ action: "offer.withdrawn", entity_id: delta.offer_id }] : []),
     ]);
 
     // The accuracy against an independent count.

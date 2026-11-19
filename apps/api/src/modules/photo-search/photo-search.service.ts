@@ -267,14 +267,23 @@ export class PhotoSearchService {
       );
       return outcome;
     } catch (error) {
-      await db
-        .update(photoSearch)
-        .set({
-          status: "failed",
-          error: error instanceof Error ? error.name : "error",
-          finishedAt: new Date(),
-        })
-        .where(eq(photoSearch.id, searchId));
+      // The search was paid for: the item waits `photo_search_retry_days` like
+      // after a search that found nothing, so a failure of ours (storage down)
+      // does not spend the day's budget on the same items every hour.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(photoSearch)
+          .set({
+            status: "failed",
+            error: error instanceof Error ? error.name : "error",
+            finishedAt: new Date(),
+          })
+          .where(eq(photoSearch.id, searchId));
+        await tx
+          .update(catalogItem)
+          .set({ photoSearchAt: sql`now()` })
+          .where(eq(catalogItem.id, itemId));
+      });
       throw error;
     }
   }

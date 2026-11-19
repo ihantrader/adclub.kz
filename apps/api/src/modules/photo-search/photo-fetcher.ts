@@ -246,6 +246,8 @@ export class HttpPhotoFetcher implements PhotoFetcher {
         target,
         {
           method: "GET",
+          // Own connection every time: a pooled keep-alive socket would skip the guarded lookup.
+          agent: false,
           lookup: this.guardedLookup(),
           headers: {
             Accept: "image/jpeg, image/png, image/webp, image/*;q=0.5",
@@ -255,7 +257,8 @@ export class HttpPhotoFetcher implements PhotoFetcher {
         (response) => {
           const status = response.statusCode ?? 0;
           if (status >= 300 && status < 400 && response.headers.location) {
-            response.resume();
+            // Not drained: a hostile host could stream an endless body after the timeout is cleared.
+            response.destroy();
             let next: string;
             try {
               next = new URL(response.headers.location, target).toString();
@@ -267,7 +270,7 @@ export class HttpPhotoFetcher implements PhotoFetcher {
             return;
           }
           if (status < 200 || status >= 300) {
-            response.resume();
+            response.destroy();
             finish(() =>
               reject(new PhotoFetchRefused("download_failed", `status ${String(status)}`)),
             );

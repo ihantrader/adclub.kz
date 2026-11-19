@@ -97,10 +97,12 @@ export class PhotoSearchRunner implements PeriodicJobHandler {
           }
           continue;
         }
-        // One item's trouble does not hold the others.
+        // Not the item's trouble (storage, the database): the next items would
+        // spend paid searches on the same failure — the rest waits for the next run.
         this.logger.error(
           `Photo search failed item=${itemId}: ${error instanceof Error ? error.message : String(error)}`,
         );
+        break;
       }
     }
     this.logger.log(`Photo searches searched=${String(searched)} candidates=${String(candidates)}`);

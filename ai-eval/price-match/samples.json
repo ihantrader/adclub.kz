@@ -1,0 +1,489 @@
+{
+  "version": 1,
+  "note": "Synthetic rows of price lists (TASK-065, D-058) against the dev catalog of `dev:compatibility:seed` and `dev:suppliers:seed`: the items below are its goods as the matching sends them to the model (name, brand, article, subcategory). Each sample is a row as a supplier's file says it, the 1–3 candidates the search would give, and the item it really is — or null: none of the candidates (another volume, another viscosity, another brand, another part). Invented data, no real company.",
+  "items": [
+    {
+      "key": "geely-front",
+      "name": "Колодки тормозные передние",
+      "brand": "Geely",
+      "article": "04465-0K090",
+      "category": "Тормозные колодки"
+    },
+    {
+      "key": "trw-front",
+      "name": "Колодки тормозные передние TRW",
+      "brand": "TRW",
+      "article": "GDB3534",
+      "category": "Тормозные колодки"
+    },
+    {
+      "key": "geely-rear",
+      "name": "Колодки тормозные задние",
+      "brand": "Geely",
+      "article": "4050068800",
+      "category": "Тормозные колодки"
+    },
+    {
+      "key": "shell-hx8-4",
+      "name": "Shell Helix HX8 5W-30, 4 л",
+      "brand": "Shell",
+      "article": null,
+      "category": "Моторные масла"
+    },
+    {
+      "key": "mobil-super-4",
+      "name": "Mobil Super 3000 5W-40, 4 л",
+      "brand": "Mobil",
+      "article": null,
+      "category": "Моторные масла"
+    },
+    {
+      "key": "shell-ultra-1",
+      "name": "Shell Helix Ultra 0W-20, 1 л",
+      "brand": "Shell",
+      "article": null,
+      "category": "Моторные масла"
+    },
+    {
+      "key": "mobil-esp",
+      "name": "Mobil 1 ESP 5W-30",
+      "brand": "Mobil",
+      "article": null,
+      "category": "Моторные масла"
+    }
+  ],
+  "samples": [
+    {
+      "id": "hx8-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Масло моторное Shell Helix HX8 5W30 4л синтетика",
+      "candidates": ["shell-hx8-4", "shell-ultra-1"],
+      "expected": "shell-hx8-4"
+    },
+    {
+      "id": "hx8-canister",
+      "lang": "ru",
+      "article": null,
+      "brand": "SHELL",
+      "name": "Хеликс НХ8 5w-30 канистра 4 литра",
+      "candidates": ["shell-hx8-4", "mobil-esp"],
+      "expected": "shell-hx8-4"
+    },
+    {
+      "id": "hx8-translit",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Шелл Хеликс HX8 5-30 4 л",
+      "candidates": ["shell-hx8-4", "shell-ultra-1", "mobil-esp"],
+      "expected": "shell-hx8-4"
+    },
+    {
+      "id": "hx8-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": "Shell",
+      "name": "Мотор майы Helix HX8 5W-30, 4 л",
+      "candidates": ["shell-hx8-4", "shell-ultra-1"],
+      "expected": "shell-hx8-4"
+    },
+    {
+      "id": "hx8-en",
+      "lang": "en",
+      "article": null,
+      "brand": null,
+      "name": "Engine oil Shell Helix HX8 5W-30 4L",
+      "candidates": ["shell-hx8-4", "mobil-super-4"],
+      "expected": "shell-hx8-4"
+    },
+    {
+      "id": "hx8-1l",
+      "lang": "ru",
+      "article": null,
+      "brand": "Shell",
+      "name": "Shell Helix HX8 5W-30 1л",
+      "candidates": ["shell-hx8-4", "shell-ultra-1"],
+      "expected": null
+    },
+    {
+      "id": "hx8-5w40",
+      "lang": "ru",
+      "article": null,
+      "brand": "Shell",
+      "name": "Shell Helix HX8 5W-40 4л",
+      "candidates": ["shell-hx8-4", "mobil-super-4"],
+      "expected": null
+    },
+    {
+      "id": "hx8-typo",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Масло Shel Helx HX8 5W30 4л",
+      "candidates": ["shell-hx8-4", "shell-ultra-1"],
+      "expected": "shell-hx8-4"
+    },
+    {
+      "id": "super-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Масло Mobil Super 3000 5W-40 4 литра",
+      "candidates": ["mobil-super-4", "mobil-esp"],
+      "expected": "mobil-super-4"
+    },
+    {
+      "id": "super-x1",
+      "lang": "ru",
+      "article": null,
+      "brand": "Mobil",
+      "name": "Мобил Супер 3000 X1 5W40 4L",
+      "candidates": ["mobil-super-4", "mobil-esp", "shell-hx8-4"],
+      "expected": "mobil-super-4"
+    },
+    {
+      "id": "super-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": null,
+      "name": "Mobil Super 3000 5W-40 мотор майы 4 л",
+      "candidates": ["mobil-super-4", "mobil-esp"],
+      "expected": "mobil-super-4"
+    },
+    {
+      "id": "super-en",
+      "lang": "en",
+      "article": null,
+      "brand": "ExxonMobil",
+      "name": "Mobil Super 3000 X1 5W-40 4 liter",
+      "candidates": ["mobil-super-4"],
+      "expected": "mobil-super-4"
+    },
+    {
+      "id": "super-1l",
+      "lang": "ru",
+      "article": null,
+      "brand": "Mobil",
+      "name": "Mobil Super 3000 5W-40 1л",
+      "candidates": ["mobil-super-4", "mobil-esp"],
+      "expected": null
+    },
+    {
+      "id": "super-2000",
+      "lang": "ru",
+      "article": null,
+      "brand": "Mobil",
+      "name": "Mobil Super 2000 10W-40 4л",
+      "candidates": ["mobil-super-4", "mobil-esp"],
+      "expected": null
+    },
+    {
+      "id": "super-ultra-confusion",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Mobil Super 5W-40 4л полусинтетика",
+      "candidates": ["mobil-super-4", "shell-ultra-1"],
+      "expected": "mobil-super-4"
+    },
+    {
+      "id": "ultra-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Масло Shell Helix Ultra 0W-20 1л",
+      "candidates": ["shell-ultra-1", "shell-hx8-4"],
+      "expected": "shell-ultra-1"
+    },
+    {
+      "id": "ultra-translit",
+      "lang": "ru",
+      "article": null,
+      "brand": "Шелл",
+      "name": "Хеликс Ультра 0W20 1 литр",
+      "candidates": ["shell-ultra-1", "shell-hx8-4"],
+      "expected": "shell-ultra-1"
+    },
+    {
+      "id": "ultra-en",
+      "lang": "en",
+      "article": null,
+      "brand": "Shell",
+      "name": "Helix Ultra 0W-20 1 L synthetic",
+      "candidates": ["shell-ultra-1", "shell-hx8-4", "mobil-esp"],
+      "expected": "shell-ultra-1"
+    },
+    {
+      "id": "ultra-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": null,
+      "name": "Shell Helix Ultra 0W-20 синтетикалық май 1 л",
+      "candidates": ["shell-ultra-1"],
+      "expected": "shell-ultra-1"
+    },
+    {
+      "id": "ultra-4l",
+      "lang": "ru",
+      "article": null,
+      "brand": "Shell",
+      "name": "Shell Helix Ultra 0W-20 4л",
+      "candidates": ["shell-ultra-1", "shell-hx8-4"],
+      "expected": null
+    },
+    {
+      "id": "ultra-5w40",
+      "lang": "ru",
+      "article": null,
+      "brand": "Shell",
+      "name": "Shell Helix Ultra 5W-40 1л",
+      "candidates": ["shell-ultra-1", "mobil-super-4"],
+      "expected": null
+    },
+    {
+      "id": "ultra-ect",
+      "lang": "ru",
+      "article": null,
+      "brand": "Shell",
+      "name": "Shell Helix Ultra ECT C3 5W-30 1л",
+      "candidates": ["shell-ultra-1", "mobil-esp"],
+      "expected": null
+    },
+    {
+      "id": "esp-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Масло Mobil 1 ESP 5W-30",
+      "candidates": ["mobil-esp", "mobil-super-4"],
+      "expected": "mobil-esp"
+    },
+    {
+      "id": "esp-formula",
+      "lang": "en",
+      "article": null,
+      "brand": "Mobil 1",
+      "name": "Mobil1 ESP Formula 5W30",
+      "candidates": ["mobil-esp", "shell-hx8-4"],
+      "expected": "mobil-esp"
+    },
+    {
+      "id": "esp-translit",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Мобил 1 ЕСП 5в30",
+      "candidates": ["mobil-esp", "mobil-super-4"],
+      "expected": "mobil-esp"
+    },
+    {
+      "id": "esp-x2",
+      "lang": "ru",
+      "article": null,
+      "brand": "Mobil",
+      "name": "Mobil 1 ESP X2 0W-20",
+      "candidates": ["mobil-esp", "shell-ultra-1"],
+      "expected": null
+    },
+    {
+      "id": "esp-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": "Mobil",
+      "name": "Mobil 1 ESP 5W-30 мотор майы",
+      "candidates": ["mobil-esp"],
+      "expected": "mobil-esp"
+    },
+    {
+      "id": "castrol",
+      "lang": "ru",
+      "article": null,
+      "brand": "Castrol",
+      "name": "Castrol Edge 5W-30 4л",
+      "candidates": ["shell-hx8-4", "mobil-esp"],
+      "expected": null
+    },
+    {
+      "id": "lukoil",
+      "lang": "ru",
+      "article": null,
+      "brand": "Лукойл",
+      "name": "Лукойл Люкс 5W-40 4 л",
+      "candidates": ["mobil-super-4", "shell-hx8-4"],
+      "expected": null
+    },
+    {
+      "id": "antifreeze",
+      "lang": "ru",
+      "article": null,
+      "brand": "Shell",
+      "name": "Антифриз Shell Longlife 5л",
+      "candidates": ["shell-hx8-4"],
+      "expected": null
+    },
+    {
+      "id": "geely-front-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": "Geely",
+      "name": "Колодки передние Geely Atlas 2023",
+      "candidates": ["geely-front", "trw-front", "geely-rear"],
+      "expected": "geely-front"
+    },
+    {
+      "id": "geely-front-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": "Джили",
+      "name": "Алдыңғы тежегіш қалыптары",
+      "candidates": ["geely-front", "geely-rear"],
+      "expected": "geely-front"
+    },
+    {
+      "id": "geely-front-en",
+      "lang": "en",
+      "article": null,
+      "brand": "GEELY",
+      "name": "Front brake pads, original",
+      "candidates": ["geely-front", "trw-front"],
+      "expected": "geely-front"
+    },
+    {
+      "id": "geely-front-short",
+      "lang": "ru",
+      "article": null,
+      "brand": "Geely",
+      "name": "Колодки торм. пер. Atlas",
+      "candidates": ["geely-front", "trw-front"],
+      "expected": "geely-front"
+    },
+    {
+      "id": "geely-rear-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": "Geely",
+      "name": "Колодки тормозные задние оригинал",
+      "candidates": ["geely-rear", "geely-front"],
+      "expected": "geely-rear"
+    },
+    {
+      "id": "geely-rear-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": "Geely",
+      "name": "Артқы тежегіш қалыптары",
+      "candidates": ["geely-rear", "geely-front"],
+      "expected": "geely-rear"
+    },
+    {
+      "id": "geely-rear-en",
+      "lang": "en",
+      "article": null,
+      "brand": "Geely",
+      "name": "Rear brake pad set",
+      "candidates": ["geely-rear", "geely-front", "trw-front"],
+      "expected": "geely-rear"
+    },
+    {
+      "id": "geely-rear-short",
+      "lang": "ru",
+      "article": null,
+      "brand": "Geely",
+      "name": "Колодки задн. Atlas",
+      "candidates": ["geely-rear", "geely-front"],
+      "expected": "geely-rear"
+    },
+    {
+      "id": "trw-plain",
+      "lang": "ru",
+      "article": null,
+      "brand": "TRW",
+      "name": "Колодки передние TRW",
+      "candidates": ["trw-front", "geely-front"],
+      "expected": "trw-front"
+    },
+    {
+      "id": "trw-en",
+      "lang": "en",
+      "article": null,
+      "brand": "TRW",
+      "name": "Brake pads front TRW for Geely Atlas",
+      "candidates": ["trw-front", "geely-front"],
+      "expected": "trw-front"
+    },
+    {
+      "id": "trw-article-typo",
+      "lang": "ru",
+      "article": "GDB 3543",
+      "brand": "TRW",
+      "name": "Колодки тормозные передние",
+      "candidates": ["trw-front", "geely-front"],
+      "expected": null
+    },
+    {
+      "id": "trw-rear",
+      "lang": "ru",
+      "article": null,
+      "brand": "TRW",
+      "name": "Колодки задние TRW",
+      "candidates": ["trw-front", "geely-rear"],
+      "expected": null
+    },
+    {
+      "id": "brembo-front",
+      "lang": "ru",
+      "article": "P 59 080",
+      "brand": "Brembo",
+      "name": "Колодки тормозные передние Brembo",
+      "candidates": ["trw-front", "geely-front"],
+      "expected": null
+    },
+    {
+      "id": "pads-coolray",
+      "lang": "ru",
+      "article": null,
+      "brand": null,
+      "name": "Колодки передние Geely Coolray",
+      "candidates": ["geely-front", "trw-front"],
+      "expected": null
+    },
+    {
+      "id": "discs",
+      "lang": "ru",
+      "article": null,
+      "brand": "Geely",
+      "name": "Диски тормозные передние Geely Atlas",
+      "candidates": ["geely-front", "geely-rear"],
+      "expected": null
+    },
+    {
+      "id": "pads-ceramic",
+      "lang": "ru",
+      "article": null,
+      "brand": "Geely",
+      "name": "Колодки передние керамика Geely оригинал",
+      "candidates": ["geely-front", "trw-front"],
+      "expected": "geely-front"
+    },
+    {
+      "id": "spark-plug",
+      "lang": "ru",
+      "article": "ILKAR7B11",
+      "brand": "NGK",
+      "name": "Свеча зажигания NGK",
+      "candidates": ["geely-front"],
+      "expected": null
+    },
+    {
+      "id": "mixed-ru-kk",
+      "lang": "kk",
+      "article": null,
+      "brand": null,
+      "name": "Shell Helix HX8 5W-30 май 4 литр канистра",
+      "candidates": ["shell-hx8-4", "shell-ultra-1"],
+      "expected": "shell-hx8-4"
+    }
+  ]
+}

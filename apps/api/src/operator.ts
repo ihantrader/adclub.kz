@@ -47,6 +47,11 @@ import {
   VehicleDocumentEval,
 } from "./modules/vehicle-document";
 import { PhotoEval, PhotoEvalBudgetError, savePhotoEvalRun } from "./modules/photo-eval";
+import {
+  PriceMatchEval,
+  PriceMatchEvalBudgetError,
+  savePriceMatchEvalRun,
+} from "./modules/price-match-eval";
 import { saveSpeechEvalRun, SpeechEval, SpeechEvalBudgetError } from "./modules/speech";
 import { AssistantEval, AssistantModule, saveAssistantEvalRun } from "./modules/assistant";
 import {
@@ -168,6 +173,9 @@ import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
  *   ai:eval:part-photo --models <a,b,…> --confirm-spend <usd> [--label <text>]
  *   ai:eval:price-photo --models <a,b,…> --confirm-spend <usd> [--label <text>]
  *                                (TASK-064: the rows off drawn price pages, `ai-eval/price-photo`)
+ *   ai:eval:price-match --models <a,b,…> --confirm-spend <usd> [--label <text>]
+ *                                (TASK-065: rows of price lists against their candidates,
+ *                                `ai-eval/price-match`; accuracy, false matches, calibration)
  *                                the same for the photos of TASK-058: the mileage
  *                                off a drawn dashboard (`ai-eval/dashboard`) and the
  *                                article off a drawn label (`ai-eval/part-photo`);
@@ -327,6 +335,7 @@ class OperatorModule {
         TranslationEval,
         VehicleDocumentEval,
         PhotoEval,
+        PriceMatchEval,
         SpeechEval,
       ],
     };
@@ -375,6 +384,7 @@ const USAGE = `Usage: operator <command> [arguments]
   ai:eval:assistant --models <a,b,...> --confirm-spend <usd> [--label <text>] [--only <id,id>]
   ai:eval:part-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
   ai:eval:price-photo --models <a,b,...> --confirm-spend <usd> [--label <text>]
+  ai:eval:price-match --models <a,b,...> --confirm-spend <usd> [--label <text>]
   ai:eval:speech --models <a,b,...> --confirm-spend <usd> [--label <text>] [--set synthetic|recordings] [--lang kk|ru|en] [--only <id,id>]
   search:status
   search:reindex
@@ -505,6 +515,7 @@ interface Services {
   translationEval: TranslationEval;
   documentEval: VehicleDocumentEval;
   photoEval: PhotoEval;
+  priceMatchEval: PriceMatchEval;
   speechEval: SpeechEval;
   assistantEval: AssistantEval;
   searchIndex: SearchIndexWriter;
@@ -539,6 +550,7 @@ async function run(
     documentEval,
     speechEval,
     photoEval,
+    priceMatchEval,
     assistantEval,
     searchIndex,
     searchEval,
@@ -998,6 +1010,54 @@ async function run(
         })),
       };
     }
+    case "ai:eval:price-match": {
+      if (!devCommands) {
+        throw new OperatorCommandError(`${command} is available in development and tests only`);
+      }
+      const models = required(values.models, "--models")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0);
+      if (models.length === 0) {
+        throw new OperatorCommandError("--models lists no model");
+      }
+      const confirmed = Number(required(values["confirm-spend"], "--confirm-spend"));
+      if (!Number.isFinite(confirmed) || confirmed <= 0) {
+        throw new OperatorCommandError("--confirm-spend must be an amount in USD, e.g. 0.5");
+      }
+      // As for the photos: the daily budget is what stops the run.
+      const budget = await ai.budget();
+      const left = budget.budgetUsd - budget.spentUsd;
+      if (confirmed > left) {
+        throw new OperatorCommandError(
+          `--confirm-spend $${confirmed} is more than the daily AI budget has left ($${left.toFixed(4)} of $${budget.budgetUsd}); lower it or raise ai_daily_budget_usd`,
+        );
+      }
+      const run = await priceMatchEval.run({
+        models,
+        threshold: Number((await settings.get("price_match_confidence_threshold")).value),
+        ...(values.label === undefined ? {} : { label: values.label }),
+      });
+      const path = savePriceMatchEvalRun(
+        run,
+        `${run.startedAt.slice(0, 10)}-${values.label ?? "models"}`,
+      );
+      return {
+        saved: path,
+        dataVersion: run.dataVersion,
+        samples: run.samples,
+        results: run.results.map((result) => ({
+          model: result.model,
+          passes: result.score.passes,
+          score: { ...result.score, misses: result.score.misses.length },
+          costUsd: result.costUsd,
+          costPerRowUsd: result.costPerRowUsd,
+          latencyMs: result.latencyMs,
+          failures: result.failures.length,
+          failureKinds: [...new Set(result.failures.map((failure) => failure.kind))],
+        })),
+      };
+    }
     case "dev:jobs:fail": {
       if (!devJobs) {
         throw new OperatorCommandError("dev:jobs:fail is available in development and tests only");
@@ -1222,6 +1282,7 @@ async function main(): Promise<void> {
         translationEval: app.get(TranslationEval),
         documentEval: app.get(VehicleDocumentEval),
         photoEval: app.get(PhotoEval),
+        priceMatchEval: app.get(PriceMatchEval),
         speechEval: app.get(SpeechEval),
         assistantEval: app.get(AssistantEval),
         searchIndex: app.get(SearchIndexWriter),
@@ -1252,6 +1313,7 @@ main().catch((error: unknown) => {
     error instanceof NotificationsCommandError ||
     error instanceof DocumentEvalBudgetError ||
     error instanceof PhotoEvalBudgetError ||
+    error instanceof PriceMatchEvalBudgetError ||
     error instanceof SpeechEvalBudgetError ||
     error instanceof SearchReindexBusyError ||
     error instanceof SearchIndexUnavailableError

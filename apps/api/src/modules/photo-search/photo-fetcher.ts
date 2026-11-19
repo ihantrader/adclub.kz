@@ -64,6 +64,9 @@ function blockedRanges(): BlockList {
     ["240.0.0.0", 4],
   ];
   for (const [network, prefix] of v4) list.addSubnet(network, prefix, "ipv4");
+  // `::/96` and `::ffff:0:0:0/96` are checked by `ipv4InIpv6Range`: a
+  // BlockList matches IPv4 addresses against IPv4-mapped subnets, so such a
+  // subnet here would block the whole IPv4 internet.
   const v6: [string, number][] = [
     ["::", 128],
     ["::1", 128],
@@ -98,11 +101,39 @@ function embeddedIpv4(address: string): string | null {
   return null;
 }
 
+/** The eight 16-bit groups of an IPv6 address (`isIP` said it is one). */
+function ipv6Groups(address: string): number[] {
+  let text = address.toLowerCase().split("%")[0]!;
+  // A dotted IPv4 tail is two groups.
+  const tail = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (tail) {
+    const [a, b, c, d] = tail.slice(1).map(Number) as [number, number, number, number];
+    text = `${text.slice(0, tail.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head, rest] = text.split("::") as [string, string | undefined];
+  const parse = (part: string) => (part ? part.split(":").map((group) => parseInt(group, 16)) : []);
+  const front = parse(head);
+  const back = rest === undefined ? [] : parse(rest);
+  return [...front, ...Array<number>(8 - front.length - back.length).fill(0), ...back];
+}
+
+/**
+ * IPv4-compatible (`::/96`, deprecated) and IPv4-translated
+ * (`::ffff:0:0:0/96`) addresses: whatever the IPv4 inside, never a site
+ * of the internet (TASK-068.A).
+ */
+function ipv4InIpv6Range(address: string): boolean {
+  const groups = ipv6Groups(address);
+  const zeros = (from: number, to: number) => groups.slice(from, to).every((group) => group === 0);
+  return zeros(0, 6) || (zeros(0, 4) && groups[4] === 0xffff && groups[5] === 0);
+}
+
 /** `true` — not an address of the public internet; nothing is downloaded from it. */
 export function isBlockedAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 0) return true;
   if (family === 6) {
+    if (ipv4InIpv6Range(address)) return true;
     const inner = embeddedIpv4(address);
     if (inner && BLOCKED.check(inner, "ipv4")) return true;
     return BLOCKED.check(address, "ipv6");

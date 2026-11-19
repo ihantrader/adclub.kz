@@ -36,6 +36,9 @@ export const photoSearchJobCatalog = [photoSearchJob];
 /** Items one run searches at most. */
 export const PHOTO_SEARCH_JOB_BATCH = 20;
 
+/** Items whose offers `due` checks against the showcase rule at most. */
+export const PHOTO_SEARCH_DUE_POOL = 200;
+
 @Injectable()
 export class PhotoSearchRunner implements PeriodicJobHandler {
   private readonly logger = new Logger("PhotoSearchJob");
@@ -47,25 +50,42 @@ export class PhotoSearchRunner implements PeriodicJobHandler {
     @Inject(PhotoSearchService) private readonly search: PhotoSearchService,
   ) {}
 
-  /** The items due, best first (the job and its tests). */
+  /**
+   * The items due, best first (the job and its tests). The price of the
+   * query does not grow with the catalog (TASK-068.A): the showcase rule —
+   * the costly part, hours and closed dates of every location — is checked
+   * only for a pool of at most `PHOTO_SEARCH_DUE_POOL` items picked by the
+   * partial index of active offers, the ones with more active offers first;
+   * of them the ones with more offers users see come first. An item whose
+   * active offers are all off the showcase may take a place in the pool; the
+   * pool is ten times a run's batch, so the run still finds work.
+   */
   async due(limit: number): Promise<string[]> {
     if (limit <= 0) return [];
     const retryDays = await this.settings.get("photo_search_retry_days");
     const rows = await this.database.db.execute<{ id: string }>(sql`
-      SELECT i.id
-      FROM catalog_item i
+      WITH pool AS (
+        SELECT i.id, i.photo_search_at, i.created_at
+        FROM catalog_item i
+        JOIN ${offer} ON ${offer.itemId} = i.id AND ${offer.status} = 'active'
+        WHERE i.status = 'active' AND i.item_type <> 'service'
+          AND i.primary_photo_id IS NULL
+          AND (i.photo_search_at IS NULL OR i.photo_search_at < now() - make_interval(days => ${retryDays}))
+          AND NOT EXISTS (
+            SELECT 1 FROM item_photo p WHERE p.item_id = i.id AND p.status = 'proposed'
+          )
+        GROUP BY i.id
+        ORDER BY count(*) DESC, i.photo_search_at ASC NULLS FIRST, i.created_at, i.id
+        LIMIT ${Math.max(PHOTO_SEARCH_DUE_POOL, limit)}
+      )
+      SELECT pool.id
+      FROM pool
       CROSS JOIN LATERAL (
         SELECT count(*)::int AS shown FROM ${offer}
-        WHERE ${offer.itemId} = i.id AND ${shownOffers()}
+        WHERE ${offer.itemId} = pool.id AND ${shownOffers()}
       ) o
-      WHERE i.status = 'active' AND i.item_type <> 'service'
-        AND i.primary_photo_id IS NULL
-        AND (i.photo_search_at IS NULL OR i.photo_search_at < now() - make_interval(days => ${retryDays}))
-        AND NOT EXISTS (
-          SELECT 1 FROM item_photo p WHERE p.item_id = i.id AND p.status = 'proposed'
-        )
-        AND o.shown > 0
-      ORDER BY o.shown DESC, i.photo_search_at ASC NULLS FIRST, i.created_at, i.id
+      WHERE o.shown > 0
+      ORDER BY o.shown DESC, pool.photo_search_at ASC NULLS FIRST, pool.created_at, pool.id
       LIMIT ${limit}`);
     return rows.rows.map((row) => row.id);
   }

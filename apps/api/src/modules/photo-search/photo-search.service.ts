@@ -45,6 +45,12 @@ import {
 export const PHOTO_SEARCH_RESULTS = 20;
 /** Downloads of one search at a time. */
 const DOWNLOADS_AT_ONCE = 4;
+/**
+ * Pictures being decoded and written again at a time, in the whole process
+ * (TASK-068.A): a decoded picture of tens of megapixels takes tens of
+ * megabytes, whatever its file weighs.
+ */
+const PREPARES_AT_ONCE = 2;
 
 export type PhotoSearchTrigger = "admin" | "job";
 
@@ -104,6 +110,26 @@ export class PhotoSearchService {
     @Inject(IMAGE_SEARCH_PROVIDER) private readonly provider: ImageSearchProvider | null,
     @Inject(PHOTO_FETCHER) private readonly fetcher: PhotoFetcher,
   ) {}
+
+  /** Preparations running now, and the ones waiting for a place (`PREPARES_AT_ONCE`). */
+  private prepares = 0;
+  private readonly waitingPrepares: (() => void)[] = [];
+
+  private async preparing<T>(work: () => Promise<T>): Promise<T> {
+    if (this.prepares >= PREPARES_AT_ONCE) {
+      await new Promise<void>((resolve) => this.waitingPrepares.push(resolve));
+    } else {
+      this.prepares += 1;
+    }
+    try {
+      return await work();
+    } finally {
+      // The place passes to the next one waiting, or is given back.
+      const next = this.waitingPrepares.shift();
+      if (next) next();
+      else this.prepares -= 1;
+    }
+  }
 
   get enabled(): boolean {
     return this.provider !== null;
@@ -306,9 +332,12 @@ export class PhotoSearchService {
 
     // Every result is downloaded (at most `PHOTO_SEARCH_RESULTS`): whether a
     // shop's picture is on another site too is known only from the pictures.
+    // Only what the ranking needs is kept of each (TASK-068.A): the files are
+    // prepared again for the chosen candidates — twenty full-size pictures
+    // are never held at once, in the API process neither.
     const downloaded = new Map<
       number,
-      { prepared: PreparedImage; hash: string; host: string; result: ImageSearchResult }
+      { checksum: string; hash: string; host: string; pixels: number; result: ImageSearchResult }
     >();
     const queue = results.map((result, index) => ({ result, index }));
     const worker = async () => {
@@ -320,35 +349,15 @@ export class PhotoSearchService {
           skip("download_failed");
           continue;
         }
-        let bytes: Buffer;
-        try {
-          bytes = await this.fetcher.fetch(result.imageUrl, maxBytes);
-        } catch (error) {
-          skip(error instanceof PhotoFetchRefused ? error.reason : "download_failed");
-          continue;
-        }
-        let prepared: PreparedImage;
-        try {
-          prepared = await prepareImage(bytes);
-        } catch (error) {
-          if (error instanceof PhotoRejected) {
-            skip(
-              error.reason === "unsupported_format" ||
-                error.reason === "broken" ||
-                error.reason === "too_many_pixels"
-                ? error.reason
-                : "not_an_image",
-            );
-            continue;
-          }
-          throw error;
-        }
-        const card = prepared.variants.find((variant) => variant.variant === "thumb")!;
+        const prepared = await this.download(result.imageUrl, maxBytes, skip);
+        if (!prepared) continue;
+        const thumb = prepared.variants.find((variant) => variant.variant === "thumb")!;
         downloaded.set(index, {
-          prepared,
-          hash: await differenceHash(card.bytes),
+          checksum: prepared.checksum,
+          hash: await differenceHash(thumb.bytes),
           // The site of a picture is the page it is on (an image may live on a CDN).
           host: pageHost,
+          pixels: prepared.width * prepared.height,
           result,
         });
       }
@@ -357,17 +366,12 @@ export class PhotoSearchService {
 
     const inputs: RankInput[] = [];
     for (const [index, entry] of [...downloaded.entries()].sort((a, b) => a[0] - b[0])) {
-      if (known.has(entry.prepared.checksum)) {
+      if (known.has(entry.checksum)) {
         skip("already_known");
         continue;
       }
       // Byte-identical copies have one hash: the ranking groups them as one picture.
-      inputs.push({
-        index,
-        host: entry.host,
-        hash: entry.hash,
-        pixels: entry.prepared.width * entry.prepared.height,
-      });
+      inputs.push({ index, host: entry.host, hash: entry.hash, pixels: entry.pixels });
     }
     const ranked = rankCandidates(
       inputs,
@@ -377,11 +381,19 @@ export class PhotoSearchService {
     for (const reason of ranked.skipped.values()) skip(reason);
 
     let candidates = 0;
+    // One chosen picture at a time: downloaded again and checked to be the
+    // one ranked — a site that answers with another picture now gives none.
     for (const candidate of ranked.chosen) {
       const entry = downloaded.get(candidate.index)!;
+      const prepared = await this.download(entry.result.imageUrl, maxBytes, skip);
+      if (!prepared) continue;
+      if (prepared.checksum !== entry.checksum) {
+        skip("download_failed");
+        continue;
+      }
       const { created } = await this.photos.addFoundCandidate(
         itemId,
-        entry.prepared,
+        prepared,
         {
           sourceType: candidate.sourceType,
           sourceUrl: entry.result.pageUrl,
@@ -404,5 +416,35 @@ export class PhotoSearchService {
       candidates,
       skipped: [...skipped.entries()].map(([reason, count]) => ({ reason, count })),
     };
+  }
+
+  /** A picture downloaded and checked like an upload; `null` — skipped, with the reason. */
+  private async download(
+    url: string,
+    maxBytes: number,
+    skip: (reason: PhotoSearchSkipReason) => void,
+  ): Promise<PreparedImage | null> {
+    let bytes: Buffer;
+    try {
+      bytes = await this.fetcher.fetch(url, maxBytes);
+    } catch (error) {
+      skip(error instanceof PhotoFetchRefused ? error.reason : "download_failed");
+      return null;
+    }
+    try {
+      return await this.preparing(() => prepareImage(bytes));
+    } catch (error) {
+      if (error instanceof PhotoRejected) {
+        skip(
+          error.reason === "unsupported_format" ||
+            error.reason === "broken" ||
+            error.reason === "too_many_pixels"
+            ? error.reason
+            : "not_an_image",
+        );
+        return null;
+      }
+      throw error;
+    }
   }
 }

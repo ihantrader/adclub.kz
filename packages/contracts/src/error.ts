@@ -126,7 +126,10 @@ import { clientPlatformSchema } from "./client";
  * - `PHOTO_SEARCH_NOT_APPLICABLE` (409): photos are searched for products of
  *   the catalog only — not for services or archived items.
  * - `CATALOG_PHOTO_NOT_NEEDED` (409): the item already has an approved photo,
- *   or is a service — a supplier does not send one (S-OFF-03).
+ *   or is a service — a supplier does not send one (S-OFF-03); the request
+ *   to add an item was decided meanwhile; or the item has this very picture
+ *   from someone else (TASK-068.A). `details` is
+ *   `CatalogPhotoNotNeededDetails`.
  *
  * The vehicle catalog (TASK-014, ARCHITECTURE 4.24):
  * - `VEHICLE_VERSION_CONFLICT` (409): the record was changed by someone

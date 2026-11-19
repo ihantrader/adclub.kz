@@ -36902,6 +36902,22 @@
           "too_many_photos"
         ]
       },
+      "CatalogPhotoNotNeededDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "item_has_photo",
+              "request_decided",
+              "already_there"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
       "CatalogRequestCategory": {
         "type": "object",
         "properties": {

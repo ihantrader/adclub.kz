@@ -5,13 +5,17 @@ import type {
   SupplierModerationPhotoQuery,
   SupplierOfferPhotos,
 } from "@adclub/contracts";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService } from "../../database";
-import { CatalogPhotosService, itemPhoto } from "../catalog";
+import {
+  CatalogPhotosService,
+  decodeCursor,
+  encodeCursor,
+  itemPhoto,
+  TIME_POSITION,
+} from "../catalog";
 import { describeOfferItems } from "../offers";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface SupplierPhotoActor {
   supplierId: string;
@@ -19,28 +23,22 @@ export interface SupplierPhotoActor {
   accountId: string;
 }
 
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(JSON.stringify([createdAt.toISOString(), id]), "utf8").toString("base64url");
-}
+/**
+ * The position of a photo in «Модерация → Фото»: its upload time to the
+ * microsecond (TASK-068.A) — a JS date keeps milliseconds only, and two
+ * photos of one millisecond would lose one of them between pages.
+ */
+const createdPosition = sql<string>`to_char(${itemPhoto.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
-function decodeCursor(cursor: string): { createdAt: string; id: string } {
-  try {
-    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (
-      Array.isArray(value) &&
-      typeof value[0] === "string" &&
-      typeof value[1] === "string" &&
-      UUID.test(value[1]) &&
-      new Date(value[0]).toISOString() === value[0]
-    ) {
-      return { createdAt: value[0], id: value[1] };
-    }
-  } catch {
-    // Falls through to the refusal.
+/** The cursor of the previous page, or a refusal that says to use it. */
+function afterOf(cursor: string): { position: string; id: string } {
+  const after = decodeCursor(cursor);
+  if (!TIME_POSITION.test(after.position)) {
+    throw new ApiException(400, "VALIDATION_ERROR", "Use the nextCursor of the previous page", {
+      details: [{ path: "cursor", message: "Use the nextCursor of the previous page" }],
+    });
   }
-  throw new ApiException(400, "VALIDATION_ERROR", "Use the nextCursor of the previous page", {
-    details: [{ path: "cursor", message: "Use the nextCursor of the previous page" }],
-  });
+  return after;
 }
 
 /**
@@ -90,17 +88,17 @@ export class SupplierPhotosService {
     lang: CatalogLanguage,
   ): Promise<SupplierModerationPhotoPage> {
     const db = this.database.db;
-    const after = query.cursor ? decodeCursor(query.cursor) : null;
+    const after = query.cursor ? afterOf(query.cursor) : null;
     const mine = eq(itemPhoto.supplierId, actor.supplierId);
     const [rows, [total], seen] = await Promise.all([
       db
-        .select()
+        .select({ ...getTableColumns(itemPhoto), position: createdPosition })
         .from(itemPhoto)
         .where(
           and(
             mine,
             after
-              ? sql`(${itemPhoto.createdAt}, ${itemPhoto.id}) < (${after.createdAt}::timestamptz, ${after.id}::uuid)`
+              ? sql`(${itemPhoto.createdAt}, ${itemPhoto.id}) < (${after.position}::timestamptz, ${after.id}::uuid)`
               : undefined,
           ),
         )
@@ -148,7 +146,7 @@ export class SupplierPhotosService {
         isNew: row.status !== "proposed" && row.reviewedAt !== null && row.reviewedAt > seenAt,
       })),
       total: total?.value ?? 0,
-      nextCursor: rows.length > query.limit && last ? encodeCursor(last.createdAt, last.id) : null,
+      nextCursor: rows.length > query.limit && last ? encodeCursor(last.position, last.id) : null,
     };
   }
 }

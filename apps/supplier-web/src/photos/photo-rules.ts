@@ -1,5 +1,9 @@
 import { isApiError } from "@adclub/api-client";
-import { PHOTO_CONTENT_TYPES, type ItemPhotoStatus } from "@adclub/contracts";
+import {
+  PHOTO_CONTENT_TYPES,
+  PHOTO_REJECTED_ITEM_FULL,
+  type ItemPhotoStatus,
+} from "@adclub/contracts";
 import type { StatusTone } from "../price/price-rules";
 import { retryMinutes } from "../errors";
 import type { Translate } from "../i18n";
@@ -22,6 +26,10 @@ export function photoStatusText(
     case "approved":
       return t("moderation.status.photoAccepted");
     case "rejected":
+      // A code of the server, not an administrator's words (TASK-068.A).
+      if (reason === PHOTO_REJECTED_ITEM_FULL) {
+        return t("moderation.status.rejected", { reason: t("photo.itemFull") });
+      }
       return reason
         ? t("moderation.status.rejected", { reason })
         : t("moderation.status.rejectedPlain");
@@ -53,8 +61,12 @@ export function photoRefusal(error: unknown, t: Translate): string {
       return t("photo.tooLarge");
     case "RATE_LIMITED":
       return t("photo.tooMany", { minutes: retryMinutes(error) });
-    case "CATALOG_PHOTO_NOT_NEEDED":
+    case "CATALOG_PHOTO_NOT_NEEDED": {
+      const reason = (error.details as { reason?: unknown } | undefined)?.reason;
+      if (reason === "request_decided") return t("photo.requestDecided");
+      if (reason === "already_there") return t("photo.alreadyThere");
       return t("photo.notNeeded");
+    }
     case "NETWORK_ERROR":
       return t("common.saveOffline");
     default:

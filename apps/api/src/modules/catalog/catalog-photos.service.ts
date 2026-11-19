@@ -7,7 +7,9 @@ import {
   ITEM_PHOTOS_MAX,
   type AdminItemPhoto,
   type AdminItemPhotosResponse,
+  PHOTO_REJECTED_ITEM_FULL,
   type CatalogPhotoInvalidDetails,
+  type CatalogPhotoNotNeededDetails,
   type CatalogRequestPhoto,
   type ItemPhotoImage,
   type ItemPhotoSearchState,
@@ -90,9 +92,18 @@ function notApproved(): ApiException {
   );
 }
 
-/** A supplier's photo isn't taken here (TASK-068): the item has one, or the request is decided. */
-function photoNotNeeded(message: string): ApiException {
-  return new ApiException(409, "CATALOG_PHOTO_NOT_NEEDED", message);
+/**
+ * A supplier's photo isn't taken here (TASK-068, TASK-068.A): the item has
+ * one, the request is decided, or the item has this picture from someone else.
+ */
+function photoNotNeeded(reason: CatalogPhotoNotNeededDetails["reason"]): ApiException {
+  const messages: Record<CatalogPhotoNotNeededDetails["reason"], string> = {
+    item_has_photo: "The item already has a photo, or is a service",
+    request_decided: "The request has been decided already",
+    already_there: "The item already has this photo",
+  };
+  const details: CatalogPhotoNotNeededDetails = { reason };
+  return new ApiException(409, "CATALOG_PHOTO_NOT_NEEDED", messages[reason], { details });
 }
 
 function filesDeleted(): ApiException {
@@ -344,7 +355,7 @@ export class CatalogPhotosService {
       const row = found.rows[0];
       if (!row) throw notFound("offer");
       if (row.item_type === "service" || row.status !== "active" || row.primary_photo_id) {
-        throw photoNotNeeded("The item already has a photo, or is a service");
+        throw photoNotNeeded("item_has_photo");
       }
       owner = { itemId: row.item_id };
     } else {
@@ -354,13 +365,27 @@ export class CatalogPhotosService {
       const row = found.rows[0];
       if (!row) throw notFound("request");
       if (row.status !== "new") {
-        throw photoNotNeeded("The request has been decided already");
+        throw photoNotNeeded("request_decided");
       }
       owner = { requestId: target.requestId };
     }
     const limit = await this.settings.get("supplier_photos_per_supplier_day");
     await this.assertSupplierDay(executor, actor.supplierId, limit);
     const prepared = await this.prepare(body);
+    // The same picture already there: the company's own photo comes back as
+    // it is; another's is never shown — not its status, reason or file
+    // (TASK-068.A).
+    const same = () =>
+      "itemId" in owner
+        ? this.findByChecksum(executor, owner.itemId, prepared.checksum)
+        : this.findRequestPhotoByChecksum(executor, owner.requestId, prepared.checksum);
+    const ownOrRefused = async (existing: ItemPhotoRow) => {
+      if (existing.supplierId !== actor.supplierId) throw photoNotNeeded("already_there");
+      const [photo] = await this.supplierPhotos([existing]);
+      return { photo: photo!, created: false };
+    };
+    const before = await same();
+    if (before) return ownOrRefused(before);
     const { photoId } = await this.store(owner, prepared, {
       sourceType: "supplier_photo",
       sourceUrl: null,
@@ -372,17 +397,16 @@ export class CatalogPhotosService {
         actor: { role: "supplier", ...actor },
       },
     });
-    const [row] = photoId
-      ? await executor.select().from(itemPhoto).where(eq(itemPhoto.id, photoId))
-      : [];
-    const existing =
-      row ??
-      ("itemId" in owner
-        ? await this.findByChecksum(executor, owner.itemId, prepared.checksum)
-        : await this.findRequestPhotoByChecksum(executor, owner.requestId, prepared.checksum));
-    if (!existing) throw notFound("photo");
-    const [photo] = await this.supplierPhotos([existing]);
-    return { photo: photo!, created: row !== undefined && photoId !== null };
+    if (!photoId) {
+      // Two uploads of the same picture at once: the other one stored it.
+      const other = await same();
+      if (!other) throw notFound("photo");
+      return ownOrRefused(other);
+    }
+    const [row] = await executor.select().from(itemPhoto).where(eq(itemPhoto.id, photoId));
+    if (!row) throw notFound("photo");
+    const [photo] = await this.supplierPhotos([row]);
+    return { photo: photo!, created: true };
   }
 
   /** Photos as a supplier's cabinet sees them: status, reason, a signed thumbnail. */
@@ -457,6 +481,9 @@ export class CatalogPhotosService {
    * The item of a request was made (or found): the photos of the request
    * become its candidates in this very transaction (TASK-068). A picture the
    * item already holds is not moved twice — it is taken out of the request.
+   * The item's limit `ITEM_PHOTOS_MAX` holds (TASK-068.A): what doesn't fit
+   * is refused with `PHOTO_REJECTED_ITEM_FULL`, which the cabinet says in the
+   * supplier's language.
    */
   async adoptRequestPhotos(
     tx: DbExecutor,
@@ -464,6 +491,8 @@ export class CatalogPhotosService {
     itemId: string,
     actor: AuditActorRecord,
   ): Promise<number> {
+    // The item's photos are counted under its lock: an upload waits.
+    await tx.execute(sql`SELECT id FROM catalog_item WHERE id = ${itemId} FOR UPDATE`);
     const rows = await tx
       .select()
       .from(itemPhoto)
@@ -474,7 +503,11 @@ export class CatalogPhotosService {
           isNull(itemPhoto.removedAt),
         ),
       )
+      .orderBy(asc(itemPhoto.createdAt), asc(itemPhoto.id))
       .for("update");
+    let room =
+      ITEM_PHOTOS_MAX -
+      (await this.photosOfItem(tx, itemId)).filter((row) => !row.removedAt).length;
     let moved = 0;
     for (const row of rows) {
       const already = await this.findByChecksum(tx, itemId, row.checksum);
@@ -490,6 +523,36 @@ export class CatalogPhotosService {
           .where(eq(itemPhoto.id, row.id));
         continue;
       }
+      if (room <= 0) {
+        await tx
+          .update(itemPhoto)
+          .set({
+            status: "rejected",
+            rejectionReason: PHOTO_REJECTED_ITEM_FULL,
+            removedAt: new Date(),
+            reviewedAt: new Date(),
+            version: row.version + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(itemPhoto.id, row.id));
+        await this.audit.record(
+          {
+            action: auditActions.catalogItemPhotoStatusChanged,
+            actor,
+            entityType: auditEntities.catalogItemPhoto,
+            entityId: row.id,
+            before: { catalogRequestId: requestId, status: row.status },
+            after: {
+              catalogRequestId: requestId,
+              status: "rejected",
+              rejectionReason: PHOTO_REJECTED_ITEM_FULL,
+            },
+          },
+          tx,
+        );
+        continue;
+      }
+      room -= 1;
       await tx
         .update(itemPhoto)
         .set({ itemId, version: row.version + 1, updatedAt: new Date() })
@@ -582,6 +645,27 @@ export class CatalogPhotosService {
     }
   }
 
+  /** The photos an item (`ITEM_PHOTOS_MAX`) or a request (`CATALOG_REQUEST_PHOTOS_MAX`) holds now. */
+  private async assertRoom(
+    executor: DbExecutor,
+    itemId: string | null,
+    requestId: string | null,
+  ): Promise<void> {
+    const held = await executor
+      .select({ id: itemPhoto.id })
+      .from(itemPhoto)
+      .where(
+        and(
+          itemId ? eq(itemPhoto.itemId, itemId) : eq(itemPhoto.catalogRequestId, requestId!),
+          itemId ? undefined : isNull(itemPhoto.itemId),
+          isNull(itemPhoto.removedAt),
+        ),
+      );
+    if (held.length >= (itemId ? ITEM_PHOTOS_MAX : CATALOG_REQUEST_PHOTOS_MAX)) {
+      throw photoInvalid("too_many_photos");
+    }
+  }
+
   /**
    * Stores a checked picture of an item or of a request as a candidate: the
    * files first, then the row and its journal entry in one transaction — a
@@ -614,19 +698,8 @@ export class CatalogPhotosService {
     if (existing) {
       return { created: false, photoId: null };
     }
-    const held = await executor
-      .select({ id: itemPhoto.id })
-      .from(itemPhoto)
-      .where(
-        and(
-          itemId ? eq(itemPhoto.itemId, itemId) : eq(itemPhoto.catalogRequestId, requestId!),
-          itemId ? undefined : isNull(itemPhoto.itemId),
-          isNull(itemPhoto.removedAt),
-        ),
-      );
-    if (held.length >= (itemId ? ITEM_PHOTOS_MAX : CATALOG_REQUEST_PHOTOS_MAX)) {
-      throw photoInvalid("too_many_photos");
-    }
+    // Refused before the files go to the storage; checked again under the lock.
+    await this.assertRoom(executor, itemId, requestId);
 
     // The id is decided here so the objects carry it.
     const photoId = randomUUID();
@@ -648,6 +721,33 @@ export class CatalogPhotosService {
           );
           await this.assertSupplierDay(tx, meta.supplier.supplierId, meta.supplier.dayLimit);
         }
+        // What was checked before the files went to the storage is checked
+        // again under the lock of the owner (TASK-068.A): a request decided
+        // meanwhile takes no photo — it would stay without an item for ever —
+        // and uploads at the same moment don't pass the limit together.
+        if (requestId) {
+          const request = await tx.execute<{ status: string }>(
+            sql`SELECT status FROM catalog_request WHERE id = ${requestId} FOR UPDATE`,
+          );
+          if (request.rows[0]?.status !== "new") throw photoNotNeeded("request_decided");
+        } else {
+          const item = await tx.execute<{
+            status: string;
+            item_type: string;
+            primary_photo_id: string | null;
+          }>(
+            sql`SELECT status, item_type, primary_photo_id FROM catalog_item WHERE id = ${itemId} FOR UPDATE`,
+          );
+          const row = item.rows[0];
+          if (!row) throw notFound("item");
+          if (
+            meta.supplier &&
+            (row.status !== "active" || row.item_type === "service" || row.primary_photo_id)
+          ) {
+            throw photoNotNeeded("item_has_photo");
+          }
+        }
+        await this.assertRoom(tx, itemId, requestId);
         await tx.insert(itemPhoto).values({
           id: photoId,
           itemId,

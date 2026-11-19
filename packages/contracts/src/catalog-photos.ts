@@ -299,3 +299,32 @@ export const catalogPhotoInvalidDetailsSchema = z.object({
 });
 
 export type CatalogPhotoInvalidDetails = z.infer<typeof catalogPhotoInvalidDetailsSchema>;
+
+/**
+ * `details.reason` of `CATALOG_PHOTO_NOT_NEEDED` (TASK-068.A): why a
+ * supplier's photo isn't taken —
+ * - `item_has_photo` — the item has an approved photo (or is a service, or
+ *   was archived);
+ * - `request_decided` — the request to add an item was decided meanwhile;
+ * - `already_there` — the item has this very picture from someone else
+ *   (nothing more is said about that photo).
+ */
+export const catalogPhotoNotNeededReasonSchema = z.enum([
+  "item_has_photo",
+  "request_decided",
+  "already_there",
+]);
+
+export const catalogPhotoNotNeededDetailsSchema = z.object({
+  reason: catalogPhotoNotNeededReasonSchema,
+});
+
+export type CatalogPhotoNotNeededDetails = z.infer<typeof catalogPhotoNotNeededDetailsSchema>;
+
+/**
+ * `rejectionReason` of a photo of a request that did not fit into the item
+ * when the request was decided (TASK-068.A): the item already held
+ * `ITEM_PHOTOS_MAX` photos. A code, not words — the cabinet says it in the
+ * supplier's language.
+ */
+export const PHOTO_REJECTED_ITEM_FULL = "item_photo_limit";

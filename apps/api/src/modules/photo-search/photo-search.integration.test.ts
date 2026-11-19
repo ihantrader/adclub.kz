@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -19,6 +20,9 @@ import {
   apiErrorResponseSchema,
   auditLogPageSchema,
   catalogPhotoInvalidDetailsSchema,
+  catalogPhotoNotNeededDetailsSchema,
+  ITEM_PHOTOS_MAX,
+  PHOTO_REJECTED_ITEM_FULL,
   itemFromRequestResponseSchema,
   searchItemPhotosResponseSchema,
   supplierCatalogRequestPageSchema,
@@ -43,7 +47,7 @@ import { Client } from "pg";
 import sharp from "sharp";
 import request, { type Response, type Test } from "supertest";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../../app.module";
 import { JsonLoggerService } from "../../common/logging";
 import { loadConfig, type AppConfig } from "../../config";
@@ -55,7 +59,7 @@ import { captureOutput, rememberCode, rememberSecret } from "../../testing/outpu
 import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
-import { DevCatalogSeed } from "../catalog";
+import { DevCatalogSeed, PhotoStorage } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
 import { IMAGE_SEARCH_PROVIDER } from "./image-search-provider";
 import { PhotoSearchRunner } from "./photo-search-job";
@@ -972,5 +976,245 @@ describe("photo search and suppliers' photos (PostgreSQL + Redis + MinIO + worke
       item: null,
       request: { id: refused, name: "FILTER-2" },
     });
+  });
+
+  // ------------------------------------------------------------ TASK-068.A
+
+  const adminUpload = (itemId: string, bytes: Buffer) =>
+    http()
+      .post(`/admin/catalog/items/${itemId}/photos`)
+      .set("X-Client", ADMIN_WEB)
+      .set("X-Forwarded-For", nextIp())
+      .set("Authorization", `Bearer ${token}`)
+      .set("Content-Type", "image/jpeg")
+      .send(bytes);
+
+  async function requestOf(shop: Company, name: string): Promise<string> {
+    return ok(
+      shop.as("post", "/supplier/catalog-requests", { name, brand: "Bosch", article: name }),
+      (body) => supplierCatalogRequestResponseSchema.parse(body).request.id,
+      201,
+    );
+  }
+
+  async function requestCard(requestId: string) {
+    return ok(asAdmin("get", `/admin/catalog-requests/${requestId}`), (body) =>
+      adminCatalogRequestResponseSchema.parse(body),
+    );
+  }
+
+  async function objectsUnder(prefix: string): Promise<number> {
+    const listed = await s3.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix }));
+    return listed.KeyCount ?? 0;
+  }
+
+  it("a request decided while its photo goes to the storage: 409, no photo without an owner", async () => {
+    const shop = await company("Автомаркет");
+    const storage = app.get(PhotoStorage);
+    const original = storage.put.bind(storage);
+    for (const decide of ["reject", "link"] as const) {
+      const requestId = await requestOf(shop, `DECIDED-${decide}`);
+      const card = await requestCard(requestId);
+      let decided = false;
+      const spy = vi.spyOn(storage, "put").mockImplementation(async (key, bytes, type) => {
+        // The administrator decides between the check and the row.
+        if (!decided) {
+          decided = true;
+          const answer =
+            decide === "reject"
+              ? await asAdmin("post", `/admin/catalog-requests/${requestId}/reject`, {
+                  expectedVersion: card.request.version,
+                  reason: "Нет такой детали",
+                })
+              : await asAdmin("post", `/admin/catalog-requests/${requestId}/link`, {
+                  expectedVersion: card.request.version,
+                  itemId: padsId,
+                });
+          expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+        }
+        return original(key, bytes, type);
+      });
+      try {
+        const late = await shop.upload(
+          `/supplier/catalog-requests/${requestId}/photos`,
+          await jpeg({ r: decide === "reject" ? 40 : 41, g: 60, b: 90 }),
+        );
+        expectError(late, 409, "CATALOG_PHOTO_NOT_NEEDED");
+        expect(catalogPhotoNotNeededDetailsSchema.parse(late.body.details).reason).toBe(
+          "request_decided",
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      const rows = await db.query(
+        "SELECT id FROM item_photo WHERE catalog_request_id = $1 AND item_id IS NULL AND removed_at IS NULL",
+        [requestId],
+      );
+      expect(rows.rows).toEqual([]);
+      expect(await objectsUnder(`catalog-photos/requests/${requestId}/`)).toBe(0);
+    }
+  });
+
+  it("uploads to one request at the same moment stay within three photos", async () => {
+    const shop = await company("Автомаркет");
+    const requestId = await requestOf(shop, "PARALLEL-1");
+    const pictures = await Promise.all(
+      [0, 1, 2, 3, 4, 5].map((n) => jpeg({ r: 20 * n, g: 200 - 20 * n, b: 77 })),
+    );
+    const answers = await Promise.all(
+      pictures.map((picture) =>
+        shop.upload(`/supplier/catalog-requests/${requestId}/photos`, picture),
+      ),
+    );
+    const statuses = answers.map((answer) => answer.status).sort();
+    expect(statuses).toEqual([201, 201, 201, 400, 400, 400]);
+    for (const refused of answers.filter((answer) => answer.status === 400)) {
+      expect(refused.body.details).toMatchObject({ reason: "too_many_photos" });
+    }
+    const held = await db.query(
+      "SELECT id FROM item_photo WHERE catalog_request_id = $1 AND item_id IS NULL AND removed_at IS NULL",
+      [requestId],
+    );
+    expect(held.rows).toHaveLength(3);
+  });
+
+  it("photos of a request move into the item as far as its limit allows; the rest are refused with a reason", async () => {
+    const shop = await company("Автомаркет");
+    const requestId = await requestOf(shop, "FULL-1");
+    for (const n of [0, 1, 2]) {
+      await ok(
+        shop.upload(
+          `/supplier/catalog-requests/${requestId}/photos`,
+          await jpeg({ r: 30 + 80 * n, g: 30, b: 160 }),
+        ),
+        (b) => b,
+        201,
+      );
+    }
+    // The item holds one photo less than it may.
+    const first = await ok(
+      adminUpload(padsId, await jpeg({ r: 1, g: 250, b: 250 })),
+      (body) => adminItemPhotosResponseSchema.parse(body),
+      201,
+    );
+    await db.query(
+      `INSERT INTO item_photo (item_id, source_type, source_url, status, proposed_by, content_type,
+         byte_size, width, height, checksum, uploaded_by)
+       SELECT item_id, source_type, source_url, status, proposed_by, content_type, byte_size,
+         width, height, encode(sha256((random()::text || g)::bytea), 'hex'), uploaded_by
+       FROM item_photo, generate_series(1, $2::int) g WHERE id = $1`,
+      [first.photos[0]!.id, ITEM_PHOTOS_MAX - 2],
+    );
+    const card = await requestCard(requestId);
+    await ok(
+      asAdmin("post", `/admin/catalog-requests/${requestId}/link`, {
+        expectedVersion: card.request.version,
+        itemId: padsId,
+      }),
+      (b) => b,
+    );
+    const active = await db.query(
+      "SELECT id FROM item_photo WHERE item_id = $1 AND removed_at IS NULL",
+      [padsId],
+    );
+    expect(active.rows).toHaveLength(ITEM_PHOTOS_MAX);
+    const moved = await db.query<{ status: string; rejection_reason: string | null }>(
+      "SELECT status, rejection_reason FROM item_photo WHERE catalog_request_id = $1 ORDER BY created_at",
+      [requestId],
+    );
+    expect(moved.rows).toEqual([
+      { status: "proposed", rejection_reason: null },
+      { status: "rejected", rejection_reason: PHOTO_REJECTED_ITEM_FULL },
+      { status: "rejected", rejection_reason: PHOTO_REJECTED_ITEM_FULL },
+    ]);
+    // The supplier sees why: the cabinet says the code in its language.
+    const page = await ok(shop.as("get", "/supplier/moderation/photos"), (body) =>
+      supplierModerationPhotoPageSchema.parse(body),
+    );
+    expect(
+      page.entries.filter((entry) => entry.photo.rejectionReason === PHOTO_REJECTED_ITEM_FULL),
+    ).toHaveLength(2);
+  });
+
+  it("a copy of someone else's photo tells the supplier nothing about it", async () => {
+    const shop = await company("Автомаркет");
+    const other = await company("Шины Юг");
+    const shopOffer = await putOffer(shop, rearId);
+    const otherOffer = await putOffer(other, rearId);
+    const theirs = await jpeg({ r: 222, g: 11, b: 99 });
+    const sent = await ok(
+      shop.upload(`/supplier/offers/${shopOffer}/photos`, theirs),
+      (body) => supplierPhotoUploadResponseSchema.parse(body),
+      201,
+    );
+    // The administrator's own copy, and the shop's photo refused with a reason.
+    const admins = await jpeg({ r: 12, g: 34, b: 56 });
+    await ok(adminUpload(rearId, admins), (b) => b, 201);
+    const listed = await ok(asAdmin("get", `/admin/catalog/items/${rearId}/photos`), (body) =>
+      adminItemPhotosResponseSchema.parse(body),
+    );
+    await setStatus(
+      rearId,
+      listed.photos.find((photo) => photo.id === sent.photo.id)!,
+      "rejected",
+      "Секретная причина",
+    );
+    // A refused photo is out of the way: the same picture may be sent again by anyone.
+    const resent = await other.upload(`/supplier/offers/${otherOffer}/photos`, theirs);
+    expect(resent.status).toBe(201);
+
+    for (const picture of [admins, theirs]) {
+      const copy = await (picture === theirs ? shop : other).upload(
+        `/supplier/offers/${picture === theirs ? shopOffer : otherOffer}/photos`,
+        picture,
+      );
+      expectError(copy, 409, "CATALOG_PHOTO_NOT_NEEDED");
+      expect(copy.body.details).toEqual({ reason: "already_there" });
+      const text = JSON.stringify(copy.body);
+      expect(text).not.toMatch(/thumbUrl|rejectionReason|Секретная|status/);
+    }
+    // Their own copy still comes back as it is.
+    const own = await ok(other.upload(`/supplier/offers/${otherOffer}/photos`, theirs), (body) =>
+      supplierPhotoUploadResponseSchema.parse(body),
+    );
+    expect(own).toMatchObject({ created: false, photo: { id: resent.body.photo.id } });
+  });
+
+  it("«Модерация → Фото» pages photos of one millisecond without losing any", async () => {
+    const shop = await company("Автомаркет");
+    const offerId = await putOffer(shop, rearId);
+    await settings.set({ supplier_photos_per_supplier_day: 100 });
+    await new TestSettings(app).reload();
+    for (const n of [0, 1, 2, 3]) {
+      await ok(
+        shop.upload(`/supplier/offers/${offerId}/photos`, await jpeg({ r: 50, g: 50 + n, b: 5 })),
+        (b) => b,
+        201,
+      );
+    }
+    // All four in one millisecond, a microsecond apart.
+    await db.query(
+      `UPDATE item_photo p SET created_at = timestamptz '2030-01-01 00:00:00.123' + s.n * interval '1 microsecond'
+       FROM (SELECT id, row_number() OVER (ORDER BY id) AS n FROM item_photo WHERE supplier_id = $1) s
+       WHERE p.id = s.id`,
+      [shop.supplierId],
+    );
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: ReturnType<typeof supplierModerationPhotoPageSchema.parse> = await ok(
+        shop.as("get", `/supplier/moderation/photos?limit=1${cursor ? `&cursor=${cursor}` : ""}`),
+        (body) => supplierModerationPhotoPageSchema.parse(body),
+      );
+      seen.push(...page.entries.map((entry) => entry.photo.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(seen).toHaveLength(4);
+    expect(new Set(seen).size).toBe(4);
+    expectError(
+      await shop.as("get", "/supplier/moderation/photos?cursor=bm90LWEtY3Vyc29y"),
+      400,
+      "VALIDATION_ERROR",
+    );
   });
 });

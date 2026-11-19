@@ -57,17 +57,26 @@ describe("blocked addresses (SSRF)", () => {
     "::ffff:7f00:1",
     "64:ff9b::a00:7",
     "2001:db8::1",
+    // IPv4-compatible (::/96) and IPv4-translated (::ffff:0:0:0/96).
+    "::7f00:1",
+    "::a00:7",
+    "::8.8.8.8",
+    "::ffff:0:a00:7",
+    "::ffff:0:808:808",
     "not-an-address",
   ])("refuses %s", (address) => {
     expect(isBlockedAddress(address)).toBe(true);
   });
 
-  it.each(["93.184.216.34", "185.22.64.10", "8.8.8.8", "2a00:1450:4001:80b::200e"])(
-    "lets %s through",
-    (address) => {
-      expect(isBlockedAddress(address)).toBe(false);
-    },
-  );
+  it.each([
+    "93.184.216.34",
+    "185.22.64.10",
+    "8.8.8.8",
+    "2a00:1450:4001:80b::200e",
+    "::ffff:8.8.8.8",
+  ])("lets %s through", (address) => {
+    expect(isBlockedAddress(address)).toBe(false);
+  });
 });
 
 describe("HttpPhotoFetcher", () => {

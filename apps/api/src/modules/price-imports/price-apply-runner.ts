@@ -5,6 +5,11 @@ import {
   type PriceImportResult,
   type PriceRowNotAppliedReason,
 } from "@adclub/contracts";
+import {
+  priceAuditReason,
+  type PriceAuditRowOutcome,
+  type PriceAuditSampling,
+} from "@adclub/domain";
 import { eq, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import type { JobHandler } from "../../jobs";
@@ -60,6 +65,12 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
       phases[phase] = Date.now() - mark;
       mark = Date.now();
     };
+    // The rule of the spot check, read before the transaction (TASK-065).
+    const [share, alwaysBelow] = await Promise.all([
+      this.settings.get("price_match_audit_share"),
+      this.settings.get("price_match_audit_always_below"),
+    ]);
+    const sampling: PriceAuditSampling = { share, alwaysBelow };
     const outcome = await this.database.db.transaction(async (tx) => {
       const [record] = await tx
         .select()
@@ -93,7 +104,15 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
         supplierId: record.supplierId,
         memberId: record.appliedByMemberId,
       };
-      const result = await this.apply(tx, record, context.plans, context.point.id, actor, lap);
+      const result = await this.apply(
+        tx,
+        record,
+        context.plans,
+        context.point.id,
+        actor,
+        lap,
+        sampling,
+      );
       await tx
         .update(priceImport)
         .set({ status: "applied", result, updatedAt: new Date() })
@@ -130,6 +149,7 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
     locationId: string,
     actor: SupplierActor,
     lap: (phase: string) => void,
+    sampling: PriceAuditSampling,
   ): Promise<PriceImportResult> {
     const now = new Date();
     const journal: AuditEntryInput[] = [];
@@ -415,6 +435,8 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
         WHERE r.import_id = ${record.id} AND r.row_no = x.row_no`);
     }
     lap("rows");
+    await this.sampleForAudit(tx, record, sampling);
+    lap("audit");
     await this.audit.recordMany(journal, tx);
     lap("journal");
     return {
@@ -428,6 +450,68 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
       notApplied: [...notApplied].map(([reason, rows]) => ({ reason, rows })),
       skipped,
     };
+  }
+
+  /**
+   * The administrator's spot check (TASK-065; D-075): of the rows just
+   * applied with the item AI chose and the supplier accepted, every one
+   * below `price_match_audit_always_below` and the share
+   * `price_match_audit_share` of the others are put aside — by
+   * `priceAuditReason` of the domain, fixed by the row, not by chance.
+   */
+  private async sampleForAudit(
+    tx: DbExecutor,
+    record: PriceImportRecord,
+    sampling: PriceAuditSampling,
+  ): Promise<void> {
+    const rows = await tx.execute<{
+      row_no: number;
+      ai_item_id: string;
+      decision_item_id: string;
+      ai_confidence: string;
+      outcome: PriceAuditRowOutcome;
+      offer_id: string | null;
+    }>(sql`
+      SELECT row_no, (candidates->0->>'itemId')::uuid AS ai_item_id, decision_item_id,
+        ai_confidence, outcome, outcome_offer_id AS offer_id
+      FROM price_import_row
+      WHERE import_id = ${record.id} AND ai_proposed AND decision = 'accept'
+        AND ai_confidence IS NOT NULL AND outcome IS NOT NULL
+        AND decision_item_id = (candidates->0->>'itemId')::uuid`);
+    const picked = rows.rows.flatMap((row) => {
+      const reason = priceAuditReason(
+        {
+          id: `${record.id}:${String(row.row_no)}`,
+          aiProposed: true,
+          decision: "accept",
+          decisionItemId: row.decision_item_id,
+          aiItemId: row.ai_item_id,
+          aiConfidence: Number(row.ai_confidence),
+          outcome: row.outcome,
+        },
+        sampling,
+      );
+      return reason
+        ? [
+            {
+              row_no: row.row_no,
+              item_id: row.ai_item_id,
+              confidence: row.ai_confidence,
+              reason,
+              offer_id: row.offer_id,
+            },
+          ]
+        : [];
+    });
+    for (const chunk of chunks(picked)) {
+      await tx.execute(sql`
+        INSERT INTO price_match_audit (import_id, row_no, supplier_id, ai_item_id, ai_confidence, reason, offer_id)
+        SELECT ${record.id}::uuid, x.row_no, ${record.supplierId}::uuid, x.item_id, x.confidence,
+          x.reason, x.offer_id
+        FROM jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb)
+          AS x(row_no int, item_id uuid, confidence numeric, reason text, offer_id uuid)
+        ON CONFLICT (import_id, row_no) DO NOTHING`);
+    }
   }
 
   /**

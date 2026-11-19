@@ -180,6 +180,16 @@ describe("the plan of a reviewed price list", () => {
     });
   });
 
+  it("remembers «Верно» on AI's own item as `supplier_ai`, any other choice as `supplier` (TASK-065)", () => {
+    const proposed = row(2, { group: "review", source: "ai", itemId: "a", aiItemId: "a" });
+    const onAi = planRows([{ ...proposed, decision: "accept", decisionItemId: "a" }], facts());
+    expect(onAi[0]!.remember).toEqual({ decision: "item", itemId: "a", by: "supplier_ai" });
+    const onOther = planRows([{ ...proposed, decision: "accept", decisionItemId: "b" }], facts());
+    expect(onOther[0]!.remember).toEqual({ decision: "item", itemId: "b", by: "supplier" });
+    const other = planRows([{ ...proposed, decision: "other", decisionItemId: "a" }], facts());
+    expect(other[0]!.remember).toEqual({ decision: "item", itemId: "a", by: "supplier" });
+  });
+
   it("sends a row not found once, remembers it, and not again after a refusal or «Не отправлять»", () => {
     const notFound = row(2, { group: "not_found", source: "ai", itemId: null });
     const [first] = planRows([notFound], facts());

@@ -295,6 +295,16 @@ export const auditActions = {
   catalogRequestApproved: "catalog_request.approved",
   catalogRequestRejected: "catalog_request.rejected",
   /**
+   * The administrator's check of an AI match of a price list (TASK-065,
+   * A-MOD-04): `correct` — «Верно»; `wrong` — «Неверно» with the right item
+   * (`after.correctItemId`) or `after.notInCatalog`, and what it did
+   * (`after.memoryRemoved`, `after.offerWithdrawn`, `after.keepReason`).
+   * The offer withdrawn by it has its own `offer.withdrawn` (`reason:
+   * match_corrected`).
+   */
+  priceMatchAuditCorrect: "price_match_audit.correct",
+  priceMatchAuditWrong: "price_match_audit.wrong",
+  /**
    * Orders (TASK-021): the supplier accepted an order and the customer's
    * phone number opened to it (actor `supplier` — the employee). The
    * order's own journal (`order_event`) holds every move; this entry
@@ -456,6 +466,8 @@ export const auditEntities = {
   review: "review",
   /** A complaint about an order (TASK-049). */
   complaint: "complaint",
+  /** An AI match of a price list put aside for a check (TASK-065). */
+  priceMatchAudit: "price_match_audit",
   /** A maintenance plan and one of its elements (TASK-061). */
   maintenancePlan: "maintenance_plan",
   maintenancePlanItem: "maintenance_plan_item",

@@ -442,6 +442,23 @@ export type {
   PriceRowKeyKind,
 } from "./price-import/price-match";
 export {
+  acceptedAiMatch,
+  auditDraw,
+  PRICE_AUDIT_BUCKETS,
+  priceAuditBucket,
+  priceAuditOfferVerdict,
+  priceAuditReason,
+} from "./price-import/price-match-audit";
+export type {
+  PriceAuditBucket,
+  PriceAuditOfferFacts,
+  PriceAuditOfferVerdict,
+  PriceAuditReason,
+  PriceAuditRowFacts,
+  PriceAuditRowOutcome,
+  PriceAuditSampling,
+} from "./price-import/price-match-audit";
+export {
   audienceStatuses,
   dueTimeEvent,
   initialSubscriptionState,

@@ -71,6 +71,7 @@ export class ModerationService {
       requests: number;
       compatibility: number;
       photos: number;
+      corrections: number;
       seen_at: string;
       now: string;
     }>(sql`
@@ -85,6 +86,8 @@ export class ModerationService {
           WHERE p.supplier_id = ${actor.supplierId} AND p.status <> 'pending' AND p.reviewed_at > seen.at) AS compatibility,
         (SELECT count(*)::int FROM item_photo f, seen
           WHERE f.supplier_id = ${actor.supplierId} AND f.status <> 'proposed' AND f.reviewed_at > seen.at) AS photos,
+        (SELECT count(*)::int FROM price_match_audit a, seen
+          WHERE a.supplier_id = ${actor.supplierId} AND a.status = 'wrong' AND a.decided_at > seen.at) AS corrections,
         to_char((SELECT at FROM seen) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS seen_at,
         to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`);
     const row = result.rows[0]!;
@@ -93,7 +96,8 @@ export class ModerationService {
         requests: row.requests,
         compatibility: row.compatibility,
         photos: row.photos,
-        total: row.requests + row.compatibility + row.photos,
+        corrections: row.corrections,
+        total: row.requests + row.compatibility + row.photos + row.corrections,
       },
       seenAt: row.seen_at ?? new Date(0).toISOString(),
       serverTime: row.now,

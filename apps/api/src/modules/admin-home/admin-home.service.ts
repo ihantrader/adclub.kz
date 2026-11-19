@@ -10,7 +10,7 @@ import { AiService } from "../ai";
 import { AdminBilling } from "../billing";
 import { CatalogItemsService, TranslationAdminService, UNTRANSLATED_STATES } from "../catalog";
 import { AdminSignals } from "../signals";
-import { CatalogRequestsService } from "../price-imports";
+import { CatalogRequestsService, PriceMatchAuditService } from "../price-imports";
 import { ComplaintsService, ReviewsService } from "../reviews";
 import { SupplierLeadsService } from "../suppliers";
 import { MaintenancePlansService } from "../maintenance";
@@ -52,6 +52,7 @@ export class AdminHomeService {
     @Inject(MaintenancePlansService) private readonly maintenance: MaintenancePlansService,
     @Inject(AssistantAdminService) private readonly assistant: AssistantAdminService,
     @Inject(ModerationQueueService) private readonly moderation: ModerationQueueService,
+    @Inject(PriceMatchAuditService) private readonly matchAudit: PriceMatchAuditService,
   ) {}
 
   async summary(): Promise<AdminHome> {
@@ -69,6 +70,7 @@ export class AdminHomeService {
       drafts,
       assistantComplaints,
       moderationWaiting,
+      priceMatchAuditWaiting,
     ] = await Promise.all([
       this.signals.currentOfKind("whatsapp_outage"),
       this.signals.currentCounts(),
@@ -89,6 +91,7 @@ export class AdminHomeService {
       this.maintenance.aiDraftsWaiting(),
       this.assistant.newCount(),
       this.moderation.count(),
+      this.matchAudit.waiting(),
     ]);
     const [withoutPhoto, incomplete, withoutCompatibility, itemsWithoutTranslation] = quality;
     return {
@@ -110,6 +113,7 @@ export class AdminHomeService {
       newSupplierLeads: leads.counts.new,
       catalogRequests: requests,
       moderationWaiting,
+      priceMatchAuditWaiting,
       reviewsHeld: held,
       complaintsNew: complaints,
       assistantComplaintsNew: assistantComplaints,

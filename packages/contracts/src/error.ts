@@ -370,6 +370,9 @@ import { clientPlatformSchema } from "./client";
  * - `CATALOG_REQUEST_EXISTS` (409, TASK-048): the company already has a
  *   request on this article (or name) waiting for the administrator; no
  *   second one is made. `details` is `CatalogRequestExistsDetails`.
+ * - `PRICE_MATCH_AUDIT_CONFLICT` (409, TASK-065): the AI match was checked
+ *   (or changed) by another administrator after the page was loaded;
+ *   `details` is `PriceMatchAuditConflictDetails`.
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -594,6 +597,8 @@ export const errorCodeSchema = z.enum([
   "CATALOG_REQUEST_VERSION_CONFLICT",
   // The supplier's own request to add an item (TASK-048).
   "CATALOG_REQUEST_EXISTS",
+  // The administrator's check of AI matches of price lists (TASK-065).
+  "PRICE_MATCH_AUDIT_CONFLICT",
   // Reviews and complaints (TASK-049, ARCHITECTURE 4.69).
   "REVIEW_NOT_ALLOWED",
   "REVIEW_EXISTS",

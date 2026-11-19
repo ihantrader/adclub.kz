@@ -86,6 +86,8 @@ describe("settings registry", () => {
       "rating_min_orders",
       "rating_low_signal",
       "price_match_confidence_threshold",
+      "price_match_audit_share",
+      "price_match_audit_always_below",
       "price_change_threshold_percent",
       "review_check_max_wait_minutes",
       "photo_display_mode",

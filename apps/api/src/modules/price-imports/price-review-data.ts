@@ -60,6 +60,10 @@ export async function loadPlan(
       itemId: priceImportRow.itemId,
       decision: priceImportRow.decision,
       decisionItemId: priceImportRow.decisionItemId,
+      // The item AI chose is the first candidate of a row it proposed (I714).
+      aiItemId: sql<
+        string | null
+      >`CASE WHEN ${priceImportRow.aiProposed} THEN ${priceImportRow.candidates}->0->>'itemId' END`,
       priceConfirmed: priceImportRow.priceConfirmed,
       photoUncertain: priceImportRow.photoUncertain,
       readConfirmed: priceImportRow.readConfirmed,
@@ -87,6 +91,7 @@ export async function loadPlan(
             itemId: row.itemId,
             decision: row.decision,
             decisionItemId: row.decisionItemId,
+            aiItemId: row.aiItemId,
             priceConfirmed: row.priceConfirmed,
             readUncertain: (row.photoUncertain?.length ?? 0) > 0,
             readConfirmed: row.readConfirmed,

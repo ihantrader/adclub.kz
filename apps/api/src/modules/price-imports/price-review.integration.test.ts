@@ -1086,7 +1086,8 @@ describe("price list matching, review and application (PostgreSQL + Redis + MinI
           key: "масло mobil super 3000 5w40 4 литра",
           decision: "item",
           item_id: await itemByName("Mobil Super 3000 5W-40, 4 л"),
-          confirmed_by: "supplier",
+          // «Верно» on the item AI proposed (TASK-065).
+          confirmed_by: "supplier_ai",
         },
       ]),
     );
@@ -1654,6 +1655,7 @@ describe("price list matching, review and application (PostgreSQL + Redis + MinI
         requests: 1,
         compatibility: 0,
         photos: 0,
+        corrections: 0,
         total: 1,
       });
       const page = await ok(of.as("get", "/supplier/catalog-requests"), (body) =>

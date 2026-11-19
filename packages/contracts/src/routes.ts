@@ -501,6 +501,18 @@ import {
   uploadPriceImportQuerySchema,
 } from "./price-imports";
 import {
+  priceMatchAuditCardSchema,
+  priceMatchAuditCorrectBodySchema,
+  priceMatchAuditListQuerySchema,
+  priceMatchAuditMetricsQuerySchema,
+  priceMatchAuditMetricsSchema,
+  priceMatchAuditPageSchema,
+  priceMatchAuditPathSchema,
+  priceMatchAuditWrongBodySchema,
+  supplierMatchCorrectionPageSchema,
+  supplierMatchCorrectionQuerySchema,
+} from "./price-match-audit";
+import {
   adminCatalogRequestListQuerySchema,
   adminCatalogRequestPageSchema,
   adminCatalogRequestResponseSchema,
@@ -4375,6 +4387,21 @@ const coreApiRoutes = {
       200: { description: "Proposals", schema: supplierModerationProposalPageSchema },
     },
   }),
+  listSupplierMatchCorrections: defineRoute({
+    operationId: "listSupplierMatchCorrections",
+    method: "GET",
+    path: "/supplier/moderation/match-corrections",
+    summary:
+      "Corrections of the company's AI matches of price lists by an administrator (TASK-065) for «Модерация», newest first, with «новое» for this employee",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierMatchCorrectionQuerySchema,
+    responses: {
+      200: { description: "Corrections", schema: supplierMatchCorrectionPageSchema },
+    },
+  }),
   listSupplierBrandSuggestions: defineRoute({
     operationId: "listSupplierBrandSuggestions",
     method: "GET",
@@ -4482,6 +4509,83 @@ const coreApiRoutes = {
     requestBody: { description: "The reason", schema: rejectCatalogRequestBodySchema },
     responses: {
       200: { description: "The request", schema: catalogRequestDecidedResponseSchema },
+    },
+  }),
+  // ------------------------------------------- the check of AI matches (TASK-065, A-MOD-04)
+  listPriceMatchAudits: defineRoute({
+    operationId: "listPriceMatchAudits",
+    method: "GET",
+    path: "/admin/price-match-audit",
+    summary:
+      "AI matches of price lists put aside for a check (A-MOD-04): the queue oldest first, decided ones latest first; by supplier and confidence bucket, with the counts by status",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: priceMatchAuditListQuerySchema,
+    responses: {
+      200: { description: "Rows", schema: priceMatchAuditPageSchema },
+    },
+  }),
+  getPriceMatchAuditMetrics: defineRoute({
+    operationId: "getPriceMatchAuditMetrics",
+    method: "GET",
+    path: "/admin/price-match-audit/metrics",
+    summary:
+      "The accuracy of AI by the checks of a period, by confidence bucket, and the share of AI proposals the suppliers accepted — the data the threshold is set by",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    query: priceMatchAuditMetricsQuerySchema,
+    responses: {
+      200: { description: "The accuracy", schema: priceMatchAuditMetricsSchema },
+    },
+  }),
+  getPriceMatchAudit: defineRoute({
+    operationId: "getPriceMatchAudit",
+    method: "GET",
+    path: "/admin/price-match-audit/{auditId}",
+    summary:
+      "One row: the row of the price list, the supplier, the item AI chose with its confidence and explanation, who accepted it, the offer and what «Неверно» would do to it",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: priceMatchAuditPathSchema,
+    responses: {
+      200: { description: "The row", schema: priceMatchAuditCardSchema },
+    },
+  }),
+  markPriceMatchAuditCorrect: defineRoute({
+    operationId: "markPriceMatchAuditCorrect",
+    method: "POST",
+    path: "/admin/price-match-audit/{auditId}/correct",
+    summary: "«Верно»: the match is right; the row is closed",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: priceMatchAuditPathSchema,
+    requestBody: { description: "The version", schema: priceMatchAuditCorrectBodySchema },
+    responses: {
+      200: { description: "The row", schema: priceMatchAuditCardSchema },
+    },
+  }),
+  markPriceMatchAuditWrong: defineRoute({
+    operationId: "markPriceMatchAuditWrong",
+    method: "POST",
+    path: "/admin/price-match-audit/{auditId}/wrong",
+    summary:
+      "«Неверно»: the right item or «нет в справочнике»; the company's memory of the row is removed and the offer on the wrong item withdrawn unless edited by hand since or with active orders",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: priceMatchAuditPathSchema,
+    requestBody: { description: "The correction", schema: priceMatchAuditWrongBodySchema },
+    responses: {
+      200: { description: "The row", schema: priceMatchAuditCardSchema },
     },
   }),
   listAdminItemOffers: defineRoute({

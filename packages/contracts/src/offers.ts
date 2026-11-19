@@ -69,12 +69,15 @@ export type OfferStatusValue = z.infer<typeof offerStatusSchema>;
  * `manual` — by an employee; `missing_in_import` — the item was missing from
  * a price list and the supplier chose to withdraw such offers;
  * `out_of_stock_in_import` — the price list said «нет в наличии» (TASK-047):
- * the next price list with it in stock brings it back.
+ * the next price list with it in stock brings it back;
+ * `match_corrected` — an administrator found the row of the price list was
+ * matched to this item wrongly (TASK-065).
  */
 export const offerWithdrawnReasonSchema = z.enum([
   "manual",
   "missing_in_import",
   "out_of_stock_in_import",
+  "match_corrected",
 ]);
 
 export type OfferWithdrawnReason = z.infer<typeof offerWithdrawnReasonSchema>;

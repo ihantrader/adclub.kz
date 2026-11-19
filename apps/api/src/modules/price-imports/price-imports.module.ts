@@ -2,6 +2,11 @@ import { PriceOrphanCleanup } from "./price-orphan-cleanup";
 import { Inject, Module, type DynamicModule, type OnModuleInit } from "@nestjs/common";
 import { JobRegistry } from "../../jobs";
 import { CatalogRequestsService } from "./catalog-requests.service";
+import {
+  PriceMatchAuditAdminController,
+  SupplierMatchCorrectionsController,
+} from "./price-match-audit.controller";
+import { PriceMatchAuditService } from "./price-match-audit.service";
 import { PriceImportApplier } from "./price-apply-runner";
 import { PriceFileStorage } from "./price-file-storage";
 import {
@@ -66,6 +71,8 @@ export class PriceImportsModule {
         PriceReviewController,
         CatalogRequestsAdminController,
         PriceExportController,
+        PriceMatchAuditAdminController,
+        SupplierMatchCorrectionsController,
       ],
       providers: [
         PriceImportsService,
@@ -75,8 +82,9 @@ export class PriceImportsModule {
         CatalogRequestsService,
         ModerationService,
         PriceExportService,
+        PriceMatchAuditService,
       ],
-      exports: [CatalogRequestsService],
+      exports: [CatalogRequestsService, PriceMatchAuditService],
     };
   }
 }

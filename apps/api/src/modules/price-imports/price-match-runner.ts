@@ -88,6 +88,8 @@ interface RowResult {
   aiProposed?: boolean;
   aiConfidence?: number | null;
   aiExplanation?: string | null;
+  /** The `ai_job` of the call that answered (TASK-065). */
+  aiJobId?: string | null;
 }
 
 function done(
@@ -570,7 +572,11 @@ export class PriceMatcher {
         Math.max(0, Number.isFinite(match.confidence) ? match.confidence : 0),
       );
       const explanation = match.explanation.trim().slice(0, EXPLANATION_MAX) || null;
-      const ai = { aiConfidence: Math.round(confidence * 1000) / 1000, aiExplanation: explanation };
+      const ai = {
+        aiConfidence: Math.round(confidence * 1000) / 1000,
+        aiExplanation: explanation,
+        aiJobId: answer.jobId,
+      };
       if (match.itemId === null) {
         results.push(done(row.rowNo, "not_found", "ai", { candidates, ...ai }));
         continue;
@@ -773,6 +779,7 @@ export class PriceMatcher {
       ai_proposed: result.aiProposed ?? false,
       ai_confidence: result.aiConfidence ?? null,
       ai_explanation: result.aiExplanation ?? null,
+      ai_job_id: result.aiJobId ?? null,
     }));
     for (let start = 0; start < payload.length; start += 1000) {
       const chunk = payload.slice(start, start + 1000);
@@ -782,11 +789,12 @@ export class PriceMatcher {
           SET match_stage = x.stage, match_group = x.grp, match_source = x.src,
               item_id = x.item_id, candidates = x.candidates, match_note = x.note,
               match_error = x.err, ai_proposed = x.ai_proposed,
-              ai_confidence = x.ai_confidence, ai_explanation = x.ai_explanation
+              ai_confidence = x.ai_confidence, ai_explanation = x.ai_explanation,
+              ai_job_id = x.ai_job_id
           FROM jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb)
             AS x(row_no int, stage text, grp text, src text, item_id uuid, candidates jsonb,
                  note jsonb, err jsonb, ai_proposed boolean, ai_confidence numeric,
-                 ai_explanation text)
+                 ai_explanation text, ai_job_id uuid)
           WHERE r.import_id = ${record.id} AND r.row_no = x.row_no`),
       );
     }

@@ -72,5 +72,6 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1792550000000_drop-guest-ip-rate-limit-setting",
   "1792600000000_price-photos",
   "1792650000000_price-photo-hardening",
+  "1792665000000_price-match-audit",
   "1792706800000_item-photo-search",
 ];

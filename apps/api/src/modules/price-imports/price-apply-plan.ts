@@ -31,6 +31,8 @@ export interface PlanRow {
   itemId: string | null;
   decision: PriceRowDecisionKind | null;
   decisionItemId: string | null;
+  /** The item AI chose for a row it proposed (TASK-065); absent — not AI's row. */
+  aiItemId?: string | null;
   priceConfirmed: boolean;
   /**
    * A row of a photo the model was unsure of (TASK-064), and the supplier's
@@ -105,7 +107,7 @@ export type RowAction =
 
 /** What the company's memory of the row's key becomes. */
 export type Remember =
-  | { decision: "item"; itemId: string; by: "supplier" | "auto" }
+  | { decision: "item"; itemId: string; by: "supplier" | "supplier_ai" | "auto" }
   | { decision: "skip" }
   | { decision: "absent" }
   | { touch: true }
@@ -261,7 +263,12 @@ function planReadRow(
   used.add(itemId);
   const remember: Remember =
     row.decision === "accept" || row.decision === "other"
-      ? { decision: "item", itemId, by: "supplier" }
+      ? {
+          decision: "item",
+          itemId,
+          // An AI match the supplier accepted is told apart in the memory (TASK-065).
+          by: row.decision === "accept" && row.aiItemId === itemId ? "supplier_ai" : "supplier",
+        }
       : row.source === "exact_article" || row.source === "item_id"
         ? { decision: "item", itemId, by: "auto" }
         : row.source === "mapping"

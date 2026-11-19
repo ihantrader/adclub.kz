@@ -423,6 +423,12 @@ export const adminHomeSchema = z.object({
    */
   maintenanceDrafts: z.number().int(),
   /**
+   * TASK-065 («Аудит сопоставлений ждёт · N», A-MOD-04): AI matches of price
+   * lists put aside and not checked — `GET /admin/price-match-audit`
+   * (`total` of the queue). One count for the card and the queue.
+   */
+  priceMatchAuditWaiting: z.number().int(),
+  /**
    * TASK-043 (6, «Платежи поставщиков не прошли · N»): the suppliers whose
    * bank refused or who are on the billing pause —
    * `GET /admin/billing/suppliers?groups=declined,paused` (`total`).

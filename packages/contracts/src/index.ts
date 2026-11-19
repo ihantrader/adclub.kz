@@ -533,6 +533,7 @@ export * from "./photo-recognition";
 export * from "./speech";
 export * from "./price-imports";
 export * from "./price-review";
+export * from "./price-match-audit";
 export * from "./notifications";
 export * from "./maintenance";
 export * from "./assistant";

@@ -80,6 +80,7 @@ import * as moderationStatsContract from "./moderation-stats";
 import * as showcaseContract from "./showcase";
 import * as priceImportContract from "./price-imports";
 import * as priceReviewContract from "./price-review";
+import * as priceMatchAuditContract from "./price-match-audit";
 import * as searchContract from "./search";
 import * as vehicleContract from "./vehicles";
 import * as maintenanceContract from "./maintenance";
@@ -325,6 +326,7 @@ const componentSchemas: Record<string, z.ZodType> = {
   ...moduleComponentSchemas(searchContract),
   ...moduleComponentSchemas(priceImportContract),
   ...moduleComponentSchemas(priceReviewContract),
+  ...moduleComponentSchemas(priceMatchAuditContract),
   ...moduleComponentSchemas(maintenanceContract),
   ...moduleComponentSchemas(assistantContract),
   ...moduleComponentSchemas(reminderContract),

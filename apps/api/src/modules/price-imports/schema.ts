@@ -243,6 +243,8 @@ export const priceImportRow = pgTable(
     aiProposed: boolean("ai_proposed").notNull().default(false),
     aiConfidence: numeric("ai_confidence", { precision: 4, scale: 3 }),
     aiExplanation: text("ai_explanation"),
+    /** The `ai_job` of the call that matched the row (TASK-065). */
+    aiJobId: uuid("ai_job_id"),
     matchNote: jsonb("match_note").$type<PriceMatchNote>(),
     matchError: jsonb("match_error").$type<PriceMatchError>(),
     decision: text("decision").$type<PriceRowDecisionKind>(),
@@ -300,7 +302,10 @@ export const supplierSkuMapping = pgTable("supplier_sku_mapping", {
   key: text("key").notNull(),
   decision: text("decision").$type<"item" | "skip" | "absent">().notNull(),
   itemId: uuid("item_id"),
-  confirmedBy: text("confirmed_by").$type<"supplier" | "admin" | "auto">().notNull(),
+  /** `supplier_ai` — the supplier accepted the item AI chose (TASK-065). */
+  confirmedBy: text("confirmed_by")
+    .$type<"supplier" | "supplier_ai" | "admin" | "auto">()
+    .notNull(),
   confirmedByMemberId: uuid("confirmed_by_member_id"),
   confirmedByAdminId: uuid("confirmed_by_admin_id"),
   importId: uuid("import_id"),
@@ -349,6 +354,44 @@ export const catalogRequest = pgTable("catalog_request", {
 });
 
 export type CatalogRequestRow = typeof catalogRequest.$inferSelect;
+
+/** What «Неверно» did (`price_match_audit.result`). */
+export interface PriceMatchAuditResult {
+  /** The company's memory of the row's key pointed at the wrong item and was removed. */
+  memoryRemoved: boolean;
+  offer:
+    | { id: string; withdrawn: true }
+    | {
+        id: string | null;
+        withdrawn: false;
+        reason: "no_offer" | "not_active" | "edited" | "active_orders";
+        activeOrders: number;
+      };
+}
+
+/** An applied AI match put aside for the administrator (TASK-065; A-MOD-04). */
+export const priceMatchAudit = pgTable("price_match_audit", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  importId: uuid("import_id").notNull(),
+  rowNo: integer("row_no").notNull(),
+  supplierId: uuid("supplier_id").notNull(),
+  aiItemId: uuid("ai_item_id").notNull(),
+  aiConfidence: numeric("ai_confidence", { precision: 4, scale: 3 }).notNull(),
+  reason: text("reason").$type<"below" | "share">().notNull(),
+  offerId: uuid("offer_id"),
+  status: text("status").$type<"pending" | "correct" | "wrong">().notNull().default("pending"),
+  correctItemId: uuid("correct_item_id"),
+  notInCatalog: boolean("not_in_catalog").notNull().default(false),
+  comment: text("comment"),
+  result: jsonb("result").$type<PriceMatchAuditResult>(),
+  decidedByAdminId: uuid("decided_by_admin_id"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  version: integer("version").notNull().default(1),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export type PriceMatchAuditRecord = typeof priceMatchAudit.$inferSelect;
 export type SupplierSkuMappingRow = typeof supplierSkuMapping.$inferSelect;
 
 /** The key a remembered format is found by: SHA-256 of the header's normal form. */
@@ -369,4 +412,5 @@ export const priceImportTables = [
   priceFilePending,
   supplierSkuMapping,
   catalogRequest,
+  priceMatchAudit,
 ];

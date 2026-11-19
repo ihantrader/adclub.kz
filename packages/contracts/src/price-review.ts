@@ -584,6 +584,8 @@ export const supplierModerationSummarySchema = z.object({
     compatibility: z.number().int(),
     /** TASK-068: decisions on the company's photos; counted in `total`. */
     photos: z.number().int(),
+    /** TASK-065: corrections of the company's AI matches by an administrator. */
+    corrections: z.number().int(),
     total: z.number().int(),
   }),
   seenAt: z.iso.datetime(),

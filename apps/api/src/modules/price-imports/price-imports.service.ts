@@ -72,6 +72,7 @@ const UNMATCHED = {
   aiProposed: false,
   aiConfidence: null,
   aiExplanation: null,
+  aiJobId: null,
   matchNote: null,
   matchError: null,
   decision: null,

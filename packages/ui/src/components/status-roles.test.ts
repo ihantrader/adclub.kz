@@ -27,6 +27,7 @@ const KIND_OF_SCHEMA: Record<string, StatusKind | "not a badge"> = {
   itemPhotoStatusSchema: "photo",
   itemAnalogStatusSchema: "analog",
   catalogRequestStatusSchema: "catalogRequest",
+  priceMatchAuditStatusSchema: "matchAudit",
   compatibilityProposalStatusSchema: "compatibilityProposal",
   compatibilityRecordStatusSchema: "compatibilityRecord",
   offerStatusSchema: "offer",

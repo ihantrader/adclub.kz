@@ -7606,6 +7606,346 @@
         }
       }
     },
+    "/admin/price-match-audit": {
+      "get": {
+        "operationId": "listPriceMatchAudits",
+        "summary": "AI matches of price lists put aside for a check (A-MOD-04): the queue oldest first, decided ones latest first; by supplier and confidence bucket, with the counts by status",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "pending",
+              "type": "string",
+              "enum": [
+                "pending",
+                "correct",
+                "wrong"
+              ]
+            }
+          },
+          {
+            "name": "supplierId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "lt_0_7",
+                "0_7_0_85",
+                "0_85_0_95",
+                "gte_0_95"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceMatchAuditPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/price-match-audit/{auditId}": {
+      "get": {
+        "operationId": "getPriceMatchAudit",
+        "summary": "One row: the row of the price list, the supplier, the item AI chose with its confidence and explanation, who accepted it, the offer and what «Неверно» would do to it",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The row",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceMatchAuditCard"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/price-match-audit/{auditId}/correct": {
+      "post": {
+        "operationId": "markPriceMatchAuditCorrect",
+        "summary": "«Верно»: the match is right; the row is closed",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The version",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceMatchAuditCorrectBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The row",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceMatchAuditCard"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/price-match-audit/{auditId}/wrong": {
+      "post": {
+        "operationId": "markPriceMatchAuditWrong",
+        "summary": "«Неверно»: the right item or «нет в справочнике»; the company's memory of the row is removed and the offer on the wrong item withdrawn unless edited by hand since or with active orders",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "auditId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The correction",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceMatchAuditWrongBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The row",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceMatchAuditCard"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/price-match-audit/metrics": {
+      "get": {
+        "operationId": "getPriceMatchAuditMetrics",
+        "summary": "The accuracy of AI by the checks of a period, by confidence bucket, and the share of AI proposals the suppliers accepted — the data the threshold is set by",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "30",
+              "type": "string",
+              "enum": [
+                "7",
+                "30",
+                "90"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The accuracy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceMatchAuditMetrics"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/reviews": {
       "get": {
         "operationId": "listAdminReviews",
@@ -19766,6 +20106,70 @@
         }
       }
     },
+    "/supplier/moderation/match-corrections": {
+      "get": {
+        "operationId": "listSupplierMatchCorrections",
+        "summary": "Corrections of the company's AI matches of price lists by an administrator (TASK-065) for «Модерация», newest first, with «новое» for this employee",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "Corrections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierMatchCorrectionPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/moderation/photos": {
       "get": {
         "operationId": "listSupplierModerationPhotos",
@@ -27629,6 +28033,11 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "priceMatchAuditWaiting": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "supplierPaymentsFailed": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -27688,6 +28097,7 @@
           "complaintsNew",
           "assistantComplaintsNew",
           "maintenanceDrafts",
+          "priceMatchAuditWaiting",
           "supplierPaymentsFailed",
           "catalog",
           "at"
@@ -29797,6 +30207,232 @@
         "required": [
           "imports",
           "nextCursor"
+        ]
+      },
+      "AdminPriceMatchAudit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PriceMatchAuditStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "supplier": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "import": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "fileName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rowNo": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "appliedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "fileName",
+              "rowNo",
+              "appliedAt"
+            ]
+          },
+          "row": {
+            "$ref": "#/components/schemas/PriceMatchAuditRow"
+          },
+          "aiItem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aiConfidence": {
+            "type": "number"
+          },
+          "bucket": {
+            "$ref": "#/components/schemas/PriceMatchAuditBucket"
+          },
+          "aiExplanation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "aiModel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "$ref": "#/components/schemas/PriceMatchAuditReason"
+          },
+          "acceptedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceImportPerson"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "acceptedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correctItem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notInCatalog": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceMatchAuditResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "adminId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "adminId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "version",
+          "supplier",
+          "import",
+          "row",
+          "aiItem",
+          "aiConfidence",
+          "bucket",
+          "aiExplanation",
+          "aiModel",
+          "reason",
+          "acceptedBy",
+          "acceptedAt",
+          "correctItem",
+          "notInCatalog",
+          "comment",
+          "result",
+          "decidedBy",
+          "decidedAt",
+          "createdAt"
         ]
       },
       "AdminReview": {
@@ -40843,6 +41479,7 @@
           "PRICE_IMPORT_MISSING_CHOICE",
           "CATALOG_REQUEST_VERSION_CONFLICT",
           "CATALOG_REQUEST_EXISTS",
+          "PRICE_MATCH_AUDIT_CONFLICT",
           "REVIEW_NOT_ALLOWED",
           "REVIEW_EXISTS",
           "REVIEW_STATE",
@@ -43998,7 +44635,8 @@
         "enum": [
           "manual",
           "missing_in_import",
-          "out_of_stock_in_import"
+          "out_of_stock_in_import",
+          "match_corrected"
         ]
       },
       "OnOrderTerm": {
@@ -46824,6 +47462,557 @@
           "confirmedAt",
           "changedBy",
           "changedAt"
+        ]
+      },
+      "PriceMatchAuditBucket": {
+        "type": "string",
+        "enum": [
+          "lt_0_7",
+          "0_7_0_85",
+          "0_85_0_95",
+          "gte_0_95"
+        ]
+      },
+      "PriceMatchAuditCard": {
+        "type": "object",
+        "properties": {
+          "audit": {
+            "$ref": "#/components/schemas/AdminPriceMatchAudit"
+          },
+          "offer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceMatchAuditOffer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferItem"
+            }
+          }
+        },
+        "required": [
+          "audit",
+          "offer",
+          "candidates"
+        ]
+      },
+      "PriceMatchAuditConflictDetails": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PriceMatchAuditStatus"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "adminId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "adminId",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "decidedBy",
+          "decidedAt"
+        ]
+      },
+      "PriceMatchAuditCorrectBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ]
+      },
+      "PriceMatchAuditKeepReason": {
+        "type": "string",
+        "enum": [
+          "no_offer",
+          "not_active",
+          "edited",
+          "active_orders"
+        ]
+      },
+      "PriceMatchAuditListQuery": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "default": "pending",
+            "$ref": "#/components/schemas/PriceMatchAuditStatus"
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "bucket": {
+            "$ref": "#/components/schemas/PriceMatchAuditBucket"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "status",
+          "limit"
+        ]
+      },
+      "PriceMatchAuditMetrics": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "checked": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "correct": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "accuracy": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "bucket": {
+                  "$ref": "#/components/schemas/PriceMatchAuditBucket"
+                },
+                "from": {
+                  "type": "number"
+                },
+                "to": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "checked": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "correct": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "accuracy": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "bucket",
+                "from",
+                "to",
+                "checked",
+                "correct",
+                "accuracy"
+              ]
+            }
+          },
+          "proposals": {
+            "type": "object",
+            "properties": {
+              "proposed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "accepted": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "acceptedShare": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "proposed",
+              "accepted",
+              "acceptedShare"
+            ]
+          },
+          "threshold": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "days",
+          "from",
+          "to",
+          "checked",
+          "correct",
+          "accuracy",
+          "buckets",
+          "proposals",
+          "threshold"
+        ]
+      },
+      "PriceMatchAuditMetricsQuery": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "default": "30",
+            "type": "string",
+            "enum": [
+              "7",
+              "30",
+              "90"
+            ]
+          }
+        },
+        "required": [
+          "days"
+        ]
+      },
+      "PriceMatchAuditOffer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "withdrawn",
+              "suspended"
+            ]
+          },
+          "price": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "activeOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "editedByHand": {
+            "type": "boolean"
+          },
+          "willWithdraw": {
+            "type": "boolean"
+          },
+          "keepReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceMatchAuditKeepReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "price",
+          "activeOrders",
+          "editedByHand",
+          "willWithdraw",
+          "keepReason"
+        ]
+      },
+      "PriceMatchAuditPage": {
+        "type": "object",
+        "properties": {
+          "audits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminPriceMatchAudit"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "correct": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "wrong": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "pending",
+              "correct",
+              "wrong"
+            ]
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "audits",
+          "total",
+          "counts",
+          "nextCursor"
+        ]
+      },
+      "PriceMatchAuditPath": {
+        "type": "object",
+        "properties": {
+          "auditId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "auditId"
+        ]
+      },
+      "PriceMatchAuditReason": {
+        "type": "string",
+        "enum": [
+          "below",
+          "share"
+        ]
+      },
+      "PriceMatchAuditResult": {
+        "type": "object",
+        "properties": {
+          "memoryRemoved": {
+            "type": "boolean"
+          },
+          "offerId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offerWithdrawn": {
+            "type": "boolean"
+          },
+          "keepReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceMatchAuditKeepReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activeOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "memoryRemoved",
+          "offerId",
+          "offerWithdrawn",
+          "keepReason",
+          "activeOrders"
+        ]
+      },
+      "PriceMatchAuditRow": {
+        "type": "object",
+        "properties": {
+          "article": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photoText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "article",
+          "brand",
+          "name",
+          "price",
+          "photoText"
+        ]
+      },
+      "PriceMatchAuditStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "correct",
+          "wrong"
+        ]
+      },
+      "PriceMatchAuditWrongBody": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "correctItemId": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notInCatalog": {
+            "default": false,
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "correctItemId",
+          "notInCatalog"
         ]
       },
       "PriceMatchSource": {
@@ -52863,6 +54052,115 @@
           "district"
         ]
       },
+      "SupplierMatchCorrection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "row": {
+            "$ref": "#/components/schemas/PriceMatchAuditRow"
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "wrongItem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correctItem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notInCatalog": {
+            "type": "boolean"
+          },
+          "offerWithdrawn": {
+            "type": "boolean"
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "isNew": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "row",
+          "importId",
+          "wrongItem",
+          "correctItem",
+          "notInCatalog",
+          "offerWithdrawn",
+          "decidedAt",
+          "isNew"
+        ]
+      },
+      "SupplierMatchCorrectionPage": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierMatchCorrection"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "total",
+          "nextCursor"
+        ]
+      },
+      "SupplierMatchCorrectionQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "limit"
+        ]
+      },
       "SupplierMember": {
         "type": "object",
         "properties": {
@@ -53252,6 +54550,11 @@
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991
               },
+              "corrections": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
               "total": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -53262,6 +54565,7 @@
               "requests",
               "compatibility",
               "photos",
+              "corrections",
               "total"
             ]
           },

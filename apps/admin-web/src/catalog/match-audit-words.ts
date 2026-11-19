@@ -55,6 +55,7 @@ const KEEP_TEXT: Record<
 > = {
   not_active: "уже не в продаже",
   edited: "его правили вручную после загрузки — останется",
+  not_by_row: "выставлено не этой строкой прайса (его выставил поставщик) — останется",
 };
 
 /** What «Неверно…» will do, said before the administrator confirms it (A-MOD-04). */
@@ -89,6 +90,8 @@ export function wrongResultText(result: PriceMatchAuditResult): string {
     parts.push(`предложение осталось: активные заявки — ${String(result.activeOrders)}`);
   else if (result.keepReason === "edited") parts.push("предложение осталось: его правили вручную");
   else if (result.keepReason === "not_active") parts.push("предложение уже было не в продаже");
+  else if (result.keepReason === "not_by_row")
+    parts.push("предложение осталось: его выставила не эта строка прайса");
   return `${parts.join(", ")}.`;
 }
 
@@ -101,6 +104,9 @@ export function auditErrorText(error: unknown): string {
       return `Строку уже проверил ${who}${when}: «${AUDIT_STATUS_TEXT[details.data.status]}». Обновите страницу`;
     }
     return "Строку только что изменили. Обновите страницу";
+  }
+  if (isApiError(error) && error.code === "PRICE_MATCH_AUDIT_BUSY") {
+    return "Поставщик сейчас применяет прайс, повторите через минуту";
   }
   if (isApiError(error) && error.code === "VALIDATION_ERROR" && error.details) {
     const first = (error.details as { path?: string }[])[0];

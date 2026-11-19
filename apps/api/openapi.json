@@ -22788,7 +22788,8 @@
                 "supplier_type",
                 "out_of_stock",
                 "duplicate_item",
-                "read_confirmation_required"
+                "read_confirmation_required",
+                "match_corrected"
               ]
             }
           },
@@ -41969,6 +41970,7 @@
           "CATALOG_REQUEST_VERSION_CONFLICT",
           "CATALOG_REQUEST_EXISTS",
           "PRICE_MATCH_AUDIT_CONFLICT",
+          "PRICE_MATCH_AUDIT_BUSY",
           "REVIEW_NOT_ALLOWED",
           "REVIEW_EXISTS",
           "REVIEW_STATE",
@@ -48066,6 +48068,7 @@
         "type": "string",
         "enum": [
           "no_offer",
+          "not_by_row",
           "not_active",
           "edited",
           "active_orders"
@@ -49272,7 +49275,8 @@
           "supplier_type",
           "out_of_stock",
           "duplicate_item",
-          "read_confirmation_required"
+          "read_confirmation_required",
+          "match_corrected"
         ]
       },
       "PriceRowNote": {
@@ -54583,6 +54587,16 @@
           "offerWithdrawn": {
             "type": "boolean"
           },
+          "keepReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceMatchAuditKeepReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "decidedAt": {
             "type": "string",
             "format": "date-time",
@@ -54600,6 +54614,7 @@
           "correctItem",
           "notInCatalog",
           "offerWithdrawn",
+          "keepReason",
           "decidedAt",
           "isNew"
         ]

@@ -25,9 +25,14 @@ export type PriceMatchAuditBucketId = z.infer<typeof priceMatchAuditBucketSchema
 /** Why the row was put aside: below the bound (`below`) or drawn by the share (`share`). */
 export const priceMatchAuditReasonSchema = z.enum(["below", "share"]);
 
-/** Why «Неверно» left the offer as it was. */
+/**
+ * Why «Неверно» left the offer as it was. `not_by_row` (TASK-065.A) — the
+ * row didn't make the offer: it only confirmed one that was there, or
+ * changed one the supplier had put by hand.
+ */
 export const priceMatchAuditKeepReasonSchema = z.enum([
   "no_offer",
+  "not_by_row",
   "not_active",
   "edited",
   "active_orders",
@@ -235,6 +240,8 @@ export const supplierMatchCorrectionSchema = z.object({
   notInCatalog: z.boolean(),
   /** The offer on the wrong item was withdrawn (`match_corrected`). */
   offerWithdrawn: z.boolean(),
+  /** Why the offer stayed (TASK-065.A); `null` — withdrawn, or not known. */
+  keepReason: priceMatchAuditKeepReasonSchema.nullable(),
   decidedAt: z.iso.datetime(),
   isNew: z.boolean(),
 });

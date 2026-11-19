@@ -977,6 +977,7 @@
   "moderation.correction.absent": "Такой позиции в справочнике нет — можно отправить запрос на добавление",
   "moderation.correction.withdrawn": "Предложение на «{item}» снято с продажи",
   "moderation.correction.kept": "Предложение на «{item}» осталось — проверьте его",
+  "moderation.correction.keptNotByRow": "Предложение на «{item}» осталось: его выставили вы, а не эта строка прайса",
   "moderation.correction.next": "Следующая загрузка прайса снова спросит, что это за позиция",
   "moderation.tableSent": "Отправлено",
   "moderation.tableStatus": "Статус",
@@ -1178,5 +1179,6 @@
   "review.field.availability": "наличие",
   "review.field.leadDays": "срок",
   "review.readWaiting": "Прочитаны с фото неуверенно и без «Прочитано верно» не будут применены: {rows}",
-  "result.reason.readConfirmationRequired": "Строка с фото прочитана неуверенно и не подтверждена"
+  "result.reason.readConfirmationRequired": "Строка с фото прочитана неуверенно и не подтверждена",
+  "result.reason.matchCorrected": "Сопоставление строки исправил администратор клуба — загрузите прайс заново"
 }

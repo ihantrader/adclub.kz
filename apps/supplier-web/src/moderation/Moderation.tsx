@@ -39,6 +39,7 @@ import {
   correctionIsNew,
   correctionText,
   MODERATION_TAB_TEXT,
+  proposalIsNew,
   requestSource,
   requestTitle,
   statusText,
@@ -138,7 +139,7 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
       ) : tab === "photos" ? (
         <Photos timeZone={timeZone} seenAt={summary?.seenAt ?? null} />
       ) : tab === "compatibility" ? (
-        <Proposals timeZone={timeZone} />
+        <Proposals timeZone={timeZone} seenAt={summary?.seenAt ?? null} />
       ) : (
         <Corrections timeZone={timeZone} seenAt={summary?.seenAt ?? null} />
       )}
@@ -244,7 +245,7 @@ function Photos({ timeZone, seenAt }: { timeZone: string; seenAt: string | null 
   );
 }
 
-function Proposals({ timeZone }: { timeZone: string }) {
+function Proposals({ timeZone, seenAt }: { timeZone: string; seenAt: string | null }) {
   const { t } = useLanguage();
   const load = useCallback(async (cursor: string | null) => {
     const page = await apiClient.listSupplierModerationProposals({
@@ -253,7 +254,7 @@ function Proposals({ timeZone }: { timeZone: string }) {
     return { entries: page.entries, next: page.nextCursor };
   }, []);
   const list = usePages<SupplierModerationProposal>(load);
-  const toRow = useProposalRow(timeZone);
+  const toRow = useProposalRow(timeZone, seenAt);
   return (
     <List
       list={list}
@@ -568,23 +569,30 @@ function usePhotoRow(
   });
 }
 
-function useProposalRow(timeZone: string): (entry: SupplierModerationProposal) => ModerationRow {
+function useProposalRow(
+  timeZone: string,
+  seenAt: string | null,
+): (entry: SupplierModerationProposal) => ModerationRow {
   const { t, lang } = useLanguage();
-  return ({ proposal, item, isNew }) => ({
-    id: proposal.id,
-    isNew,
-    status: proposal.status,
-    statusText: statusText(proposal.status, proposal.rejectionReason, t),
-    decided: proposal.approvedWithChanges ? t("moderation.withChanges") : null,
-    name: item?.name.text ?? t("moderation.itemGone"),
-    line: item ? [item.brand?.name, item.article].filter(Boolean).join(" · ") || null : null,
-    about: (
-      <>
-        <Icon name="car" size={16} /> {conditionsText(proposal.label)}
-      </>
-    ),
-    details: t("moderation.evidence", { text: proposal.evidence }),
-    sent: formatWhen(proposal.createdAt, timeZone, lang, t),
-    action: null,
-  });
+  return (entry) => {
+    const { proposal, item } = entry;
+    return {
+      id: proposal.id,
+      // The tab opens after this visit was marked seen: «новое» is by the moment before it.
+      isNew: proposalIsNew(entry, seenAt),
+      status: proposal.status,
+      statusText: statusText(proposal.status, proposal.rejectionReason, t),
+      decided: proposal.approvedWithChanges ? t("moderation.withChanges") : null,
+      name: item?.name.text ?? t("moderation.itemGone"),
+      line: item ? [item.brand?.name, item.article].filter(Boolean).join(" · ") || null : null,
+      about: (
+        <>
+          <Icon name="car" size={16} /> {conditionsText(proposal.label)}
+        </>
+      ),
+      details: t("moderation.evidence", { text: proposal.evidence }),
+      sent: formatWhen(proposal.createdAt, timeZone, lang, t),
+      action: null,
+    };
+  };
 }

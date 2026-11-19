@@ -47,6 +47,8 @@ export const offer = pgTable("offer", {
   withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
   withdrawnReason: text("withdrawn_reason").$type<OfferWithdrawnReason>(),
   lastImportId: uuid("last_import_id"),
+  /** The price list that made the offer (TASK-065.A); `null` — by hand, or not known. */
+  createdImportId: uuid("created_import_id"),
   lastSeenInImportAt: timestamp("last_seen_in_import_at", { withTimezone: true }),
   createdByMemberId: uuid("created_by_member_id"),
   updatedByMemberId: uuid("updated_by_member_id"),

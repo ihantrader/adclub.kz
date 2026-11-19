@@ -81,10 +81,34 @@ describe("priceAuditReason", () => {
 });
 
 describe("priceAuditOfferVerdict", () => {
-  const offer = { status: "active" as const, editedByHand: false, activeOrders: 0 };
+  const offer = {
+    status: "active" as const,
+    editedByHand: false,
+    activeOrders: 0,
+    rowOutcome: "created" as const,
+    createdByImport: true,
+  };
 
   it("withdraws an active offer untouched by hand and without active orders", () => {
     expect(priceAuditOfferVerdict(offer)).toEqual({ withdraw: true });
+  });
+
+  it("withdraws only the offer the row made, returned, or changed after a price list made it (TASK-065.A)", () => {
+    for (const rowOutcome of ["created", "returned", null] as const) {
+      expect(priceAuditOfferVerdict({ ...offer, rowOutcome, createdByImport: false })).toEqual({
+        withdraw: true,
+      });
+    }
+    expect(priceAuditOfferVerdict({ ...offer, rowOutcome: "updated" })).toEqual({ withdraw: true });
+    const notByRow = { withdraw: false, reason: "not_by_row" };
+    expect(
+      priceAuditOfferVerdict({ ...offer, rowOutcome: "updated", createdByImport: false }),
+    ).toEqual(notByRow);
+    expect(priceAuditOfferVerdict({ ...offer, rowOutcome: "unchanged" })).toEqual(notByRow);
+    // Not the row's comes first: the supplier's own offer is not «edited» or «with orders».
+    expect(priceAuditOfferVerdict({ ...offer, rowOutcome: "unchanged", activeOrders: 3 })).toEqual(
+      notByRow,
+    );
   });
 
   it("keeps the offer otherwise, and says why", () => {

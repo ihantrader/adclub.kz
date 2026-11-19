@@ -31,6 +31,10 @@ export interface PlanRow {
   itemId: string | null;
   decision: PriceRowDecisionKind | null;
   decisionItemId: string | null;
+  /** When the supplier decided the row in the review (TASK-065.A); absent — not known. */
+  decidedAt?: Date | null;
+  /** AI proposed an item for the row (TASK-065.A: counted when applied). */
+  aiProposed?: boolean;
   /** The item AI chose for a row it proposed (TASK-065); absent — not AI's row. */
   aiItemId?: string | null;
   priceConfirmed: boolean;
@@ -59,6 +63,8 @@ export interface PlanOffer {
   supplierSku: string | null;
   supplierRawName: string | null;
   withdrawnReason: string | null;
+  /** When it was withdrawn (TASK-065.A); absent — not known. */
+  withdrawnAt?: Date | null;
 }
 
 export interface PlanFacts {
@@ -77,6 +83,12 @@ export interface PlanFacts {
   openRequests: ReadonlySet<string>;
   /** `kind:key` of the company's requests the administrator refused: not sent again unless asked. */
   rejectedRequests: ReadonlySet<string>;
+  /**
+   * The company's memory now, of the keys of the rows matched by it
+   * (`kind:key` → the item it names, `null` — no item any more; TASK-065.A).
+   * Absent — not checked.
+   */
+  memory?: ReadonlyMap<string, string | null>;
 }
 
 /** The offer's fields after applying a row. */
@@ -178,6 +190,33 @@ function finalItem(row: PlanRow): string | null | undefined {
   return undefined;
 }
 
+/**
+ * A row matched by the company's memory and left as it was, whose memory no
+ * longer names the item (TASK-065.A): removed by «Неверно» of the
+ * administrator, or changed since. A row the supplier decided is not.
+ */
+function rememberedMatchGone(row: PlanRow, itemId: string, facts: PlanFacts): boolean {
+  if (!facts.memory || row.source !== "mapping" || row.decision !== null) return false;
+  return (facts.memory.get(`${row.keyKind}:${row.key}`) ?? null) !== itemId;
+}
+
+/**
+ * Whether a row may return a withdrawn offer to sale: any offer — yes,
+ * except one withdrawn by the administrator's correction of a match
+ * (`match_corrected`, TASK-065.A), which only an explicit «Другая позиция»
+ * or «Верно» on this item decided after the withdrawal brings back — a
+ * remembered match or a decision made before the correction is not enough.
+ */
+export function mayReturnCorrected(
+  row: Pick<PlanRow, "decision" | "decidedAt">,
+  offer: Pick<PlanOffer, "withdrawnReason" | "withdrawnAt">,
+): boolean {
+  if (offer.withdrawnReason !== "match_corrected") return true;
+  if (row.decision !== "accept" && row.decision !== "other") return false;
+  if (!row.decidedAt || !offer.withdrawnAt) return false;
+  return row.decidedAt.getTime() > offer.withdrawnAt.getTime();
+}
+
 /** Every row, in the order of the file; a later row on an item already applied is `duplicate_item`. */
 export function planRows(rows: readonly PlanRow[], facts: PlanFacts): RowPlan[] {
   const used = new Set<string>();
@@ -257,6 +296,10 @@ function planReadRow(
     action: { kind: "not_applied", reason, itemId },
     remember,
   });
+  // The company's memory matched the row when it was reviewed; the administrator
+  // may have found that match wrong since (TASK-065.A): the row no longer says
+  // what the file means, and the next price list asks again.
+  if (rememberedMatchGone(row, itemId, facts)) return notApplied("match_corrected");
   if (used.has(itemId)) return notApplied("duplicate_item");
   const refusal = itemRefusal(facts.items.get(itemId), facts.supplierType);
   if (refusal !== null) return notApplied(REFUSAL_REASON[refusal]);
@@ -336,6 +379,12 @@ function planReadRow(
   // «нет в наличии» withdraws an offer on sale; a withdrawn one in stock again comes back.
   const withdrawn = outOfStock && offer.status === "active";
   const returned = !outOfStock && offer.status === "withdrawn";
+  // An offer withdrawn because its match was wrong comes back only by the
+  // supplier's own choice of this item made after the correction (TASK-065.A).
+  if (returned && !mayReturnCorrected(row, offer)) {
+    used.delete(itemId);
+    return notApplied("match_corrected");
+  }
   const change: OfferChange = {
     price,
     availability,

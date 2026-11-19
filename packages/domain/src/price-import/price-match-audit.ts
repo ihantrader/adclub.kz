@@ -95,20 +95,54 @@ export interface PriceAuditOfferFacts {
   editedByHand: boolean;
   /** Orders on it not yet finished. */
   activeOrders: number;
+  /**
+   * What the row did to the offer when applied (TASK-065.A); `null` — a
+   * check put aside before the outcome was kept: as before, the row's.
+   */
+  rowOutcome: PriceAuditRowOutcome | null;
+  /** The offer was made by a price list (not by hand); `false` — by hand or not known. */
+  createdByImport: boolean;
 }
 
 export type PriceAuditOfferVerdict =
   | { withdraw: true }
-  | { withdraw: false; reason: "no_offer" | "not_active" | "edited" | "active_orders" };
+  | {
+      withdraw: false;
+      reason: "no_offer" | "not_by_row" | "not_active" | "edited" | "active_orders";
+    };
+
+/**
+ * Whether the offer is the row's own (TASK-065.A): made (`created`) or
+ * returned to sale by it; changed by it (`updated`) only when a price list
+ * made it in the first place — an offer the supplier put by hand stays
+ * theirs, whatever a wrong row did to its price. `unchanged` — the row only
+ * confirmed an offer that was there: not the row's.
+ */
+export function priceAuditOfferIsRows(
+  offer: Pick<PriceAuditOfferFacts, "rowOutcome" | "createdByImport">,
+): boolean {
+  switch (offer.rowOutcome) {
+    case null:
+    case "created":
+    case "returned":
+      return true;
+    case "updated":
+      return offer.createdByImport;
+    default:
+      return false;
+  }
+}
 
 /**
  * What «Неверно» does to the offer on the wrong item (D-075): withdrawn
- * with `match_corrected` only while still active, untouched by hand, and
- * without an order a customer is waiting on — a customer's order outweighs
- * the wrong match, and a hand edit is the supplier's own word on the offer.
+ * with `match_corrected` only while it is the row's own
+ * (`priceAuditOfferIsRows`), still active, untouched by hand, and without
+ * an order a customer is waiting on — a customer's order outweighs the
+ * wrong match, and a hand edit is the supplier's own word on the offer.
  */
 export function priceAuditOfferVerdict(offer: PriceAuditOfferFacts | null): PriceAuditOfferVerdict {
   if (!offer) return { withdraw: false, reason: "no_offer" };
+  if (!priceAuditOfferIsRows(offer)) return { withdraw: false, reason: "not_by_row" };
   if (offer.status !== "active") return { withdraw: false, reason: "not_active" };
   if (offer.activeOrders > 0) return { withdraw: false, reason: "active_orders" };
   if (offer.editedByHand) return { withdraw: false, reason: "edited" };

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   DeleteObjectCommand,
   HeadObjectCommand,
@@ -1004,6 +1006,345 @@ describe("the administrator's check of AI matches of price lists (PostgreSQL + R
     }
     const confident = await rows(shop, again.id, "confident");
     expect(confident.map((row) => row.parsed?.name)).toContain("Колодки Testa Echo керамика");
+  });
+
+  // ------------------------------------------------- TASK-065.A: after acceptance
+
+  async function offerRow(itemId: string, supplierId: string) {
+    const found = await db.query<{
+      id: string;
+      status: string;
+      withdrawn_reason: string | null;
+      created_import_id: string | null;
+    }>(
+      "SELECT id, status, withdrawn_reason, created_import_id FROM offer WHERE item_id = $1 AND supplier_id = $2",
+      [itemId, supplierId],
+    );
+    expect(found.rows).toHaveLength(1);
+    return found.rows[0]!;
+  }
+
+  async function rowOutcome(importId: string, word: string) {
+    const found = await db.query<{ outcome: string; outcome_reason: string | null }>(
+      "SELECT outcome, outcome_reason FROM price_import_row WHERE import_id = $1 AND parsed->>'name' LIKE $2",
+      [importId, `% ${word} %`],
+    );
+    expect(found.rows, word).toHaveLength(1);
+    return found.rows[0]!;
+  }
+
+  /** «Поставщики нажали «Верно»» counted by every row of the period, independently. */
+  async function independentProposals() {
+    const counted = await db.query<{ proposed: number; accepted: number }>(`
+      SELECT count(*)::int AS proposed,
+        count(*) FILTER (
+          WHERE r.decision = 'accept' AND r.decision_item_id = (r.candidates->0->>'itemId')::uuid
+        )::int AS accepted
+      FROM price_import i JOIN price_import_row r ON r.import_id = i.id
+      WHERE i.status = 'applied' AND r.ai_proposed`);
+    return counted.rows[0]!;
+  }
+
+  async function metricsOf(days: 7 | 30 | 90) {
+    return ok(asAdmin("get", `/admin/price-match-audit/metrics?days=${String(days)}`), (body) =>
+      priceMatchAuditMetricsSchema.parse(body),
+    );
+  }
+
+  it("a price list reviewed before «Неверно» does not bring the corrected match back; an explicit choice does (TASK-065.A)", async () => {
+    const ids = await items();
+    await settings.set({ price_match_audit_share: 1, price_match_audit_always_below: 0.9 });
+    confidence = { Alfa: 0.95, Bravo: 0.95 };
+    const shop = await company("Автомир");
+    const file = csv([aiRow("Alfa"), aiRow("Bravo")]);
+    const first = await imported(shop, file);
+    await acceptAll(shop, first.id, ["Alfa", "Bravo"]);
+    const audits = await auditRows(first.id);
+    expect(audits).toHaveLength(2);
+
+    // Two price lists matched by the memory, waiting in their reviews.
+    const waiting = await imported(shop, file);
+    const chosen = await imported(shop, file);
+    for (const entry of [waiting, chosen]) {
+      const confident = await rows(shop, entry.id, "confident");
+      expect(confident.map((row) => row.source)).toEqual(["mapping", "mapping"]);
+    }
+
+    // The administrator finds both matches wrong: memory gone, offers withdrawn.
+    for (const audit of audits) {
+      await ok(
+        asAdmin("post", `/admin/price-match-audit/${audit.id}/wrong`, {
+          expectedVersion: 1,
+          notInCatalog: true,
+        }),
+        (body) => priceMatchAuditCardSchema.parse(body),
+      );
+    }
+    for (const word of ["Alfa", "Bravo"]) {
+      expect(await offerRow(ids[word]!, shop.supplierId)).toMatchObject({
+        status: "withdrawn",
+        withdrawn_reason: "match_corrected",
+      });
+    }
+
+    // Applied as reviewed: neither row applies, the offers stay withdrawn, the memory isn't written again.
+    const done = await applied(shop, waiting.id);
+    expect(done.result!.notApplied).toEqual([{ reason: "match_corrected", rows: 2 }]);
+    expect(done.result!.returned).toBe(0);
+    for (const word of ["Alfa", "Bravo"]) {
+      expect(await rowOutcome(waiting.id, word)).toEqual({
+        outcome: "not_applied",
+        outcome_reason: "match_corrected",
+      });
+      expect((await offerRow(ids[word]!, shop.supplierId)).status).toBe("withdrawn");
+    }
+    const memory = await db.query(
+      "SELECT 1 FROM supplier_sku_mapping WHERE supplier_id = $1 AND decision = 'item'",
+      [shop.supplierId],
+    );
+    expect(memory.rows).toHaveLength(0);
+
+    // «Другая позиция» → Alfa in the other review, after the correction: back on sale.
+    const alfaRow = (await rows(shop, chosen.id, "confident")).find((row) =>
+      row.parsed?.name?.includes(" Alfa "),
+    )!;
+    await decide(shop, chosen.id, alfaRow.rowNo, { decision: "other", itemId: ids.Alfa });
+    const back = await applied(shop, chosen.id);
+    expect(back.result).toMatchObject({
+      returned: 1,
+      notApplied: [{ reason: "match_corrected", rows: 1 }],
+    });
+    expect(await offerRow(ids.Alfa!, shop.supplierId)).toMatchObject({
+      status: "active",
+      withdrawn_reason: null,
+    });
+    expect((await offerRow(ids.Bravo!, shop.supplierId)).status).toBe("withdrawn");
+
+    // A new price list: Bravo goes to AI again; «Верно» after the correction returns
+    // the offer, writes `supplier_ai` again, and the row is put aside as a new check.
+    const fresh = await imported(shop, file);
+    const bravo = await aiRowOf(shop, fresh.id, "Bravo");
+    await decide(shop, fresh.id, bravo.rowNo, {
+      decision: "accept",
+      itemId: bravo.candidates[0]!.id,
+    });
+    const third = await applied(shop, fresh.id);
+    expect(third.result!.returned).toBe(1);
+    expect((await offerRow(ids.Bravo!, shop.supplierId)).status).toBe("active");
+    const again = await auditRows(fresh.id);
+    expect(again.map((row) => row.ai_item_id)).toEqual([ids.Bravo]);
+    const stored = await db.query<{ status: string; row_outcome: string }>(
+      "SELECT status, row_outcome FROM price_match_audit WHERE import_id = $1",
+      [fresh.id],
+    );
+    expect(stored.rows).toEqual([{ status: "pending", row_outcome: "returned" }]);
+    const by = await db.query<{ confirmed_by: string }>(
+      "SELECT confirmed_by FROM supplier_sku_mapping WHERE supplier_id = $1 AND item_id = $2",
+      [shop.supplierId, ids.Bravo],
+    );
+    expect(by.rows).toEqual([{ confirmed_by: "supplier_ai" }]);
+  });
+
+  it("«Неверно» withdraws only the offer the row made (TASK-065.A)", async () => {
+    const ids = await items();
+    await settings.set({ price_match_audit_share: 1, price_match_audit_always_below: 0.9 });
+    confidence = { Alfa: 0.95, Bravo: 0.95, Charlie: 0.95, Delta: 0.95 };
+    const shop = await company("Автомир");
+    // Delta's offer is made by a price list first (its row is put aside too).
+    const earlier = await imported(shop, csv([aiRow("Delta")]));
+    await acceptAll(shop, earlier.id, ["Delta"]);
+    expect((await offerRow(ids.Delta!, shop.supplierId)).created_import_id).toBe(earlier.id);
+    // Alfa's and Bravo's — by hand: Alfa just as the file says it, Bravo at another price.
+    for (const [word, price] of [
+      ["Alfa", 5000],
+      ["Bravo", 4000],
+    ] as const) {
+      await ok(
+        shop.as("post", "/supplier/offers", {
+          itemId: ids[word],
+          price,
+          availability: "in_stock",
+          leadDays: 0,
+          pickup: true,
+          delivery: false,
+          supplierName: `Колодки Testa ${word} керамика`,
+        }),
+        (body) => supplierOfferResponseSchema.parse(body),
+        201,
+      );
+    }
+    expect((await offerRow(ids.Alfa!, shop.supplierId)).created_import_id).toBeNull();
+    const entry = await imported(
+      shop,
+      csv([
+        aiRow("Alfa"),
+        aiRow("Bravo"),
+        aiRow("Charlie"),
+        // Another spelling of Delta: AI again, and the price list changes the offer it made.
+        ";;Колодки Testa Delta керамика новые;6000;есть;",
+      ]),
+    );
+    await acceptAll(shop, entry.id, ["Alfa", "Bravo", "Charlie", "Delta"]);
+    const audits = await db.query<{ id: string; ai_item_id: string; row_outcome: string }>(
+      "SELECT id, ai_item_id, row_outcome FROM price_match_audit WHERE import_id = $1",
+      [entry.id],
+    );
+    const of = (word: string) => audits.rows.find((row) => row.ai_item_id === ids[word])!;
+    expect(
+      Object.fromEntries(
+        ["Alfa", "Bravo", "Charlie", "Delta"].map((word) => [word, of(word).row_outcome]),
+      ),
+    ).toEqual({ Alfa: "unchanged", Bravo: "updated", Charlie: "created", Delta: "updated" });
+    // What «Неверно» would do, said before.
+    expect((await card(of("Alfa").id)).offer).toMatchObject({
+      willWithdraw: false,
+      keepReason: "not_by_row",
+    });
+    expect((await card(of("Delta").id)).offer).toMatchObject({ willWithdraw: true });
+
+    const results: Record<string, unknown> = {};
+    for (const word of ["Alfa", "Bravo", "Charlie", "Delta"]) {
+      results[word] = await ok(
+        asAdmin("post", `/admin/price-match-audit/${of(word).id}/wrong`, {
+          expectedVersion: 1,
+          notInCatalog: true,
+        }),
+        (body) => priceMatchAuditCardSchema.parse(body).audit.result,
+      );
+    }
+    expect(results).toMatchObject({
+      Alfa: { offerWithdrawn: false, keepReason: "not_by_row" },
+      Bravo: { offerWithdrawn: false, keepReason: "not_by_row" },
+      Charlie: { offerWithdrawn: true, keepReason: null },
+      Delta: { offerWithdrawn: true, keepReason: null },
+    });
+    expect(
+      Object.fromEntries(
+        await Promise.all(
+          ["Alfa", "Bravo", "Charlie", "Delta"].map(async (word) => [
+            word,
+            (await offerRow(ids[word]!, shop.supplierId)).status,
+          ]),
+        ),
+      ),
+    ).toEqual({ Alfa: "active", Bravo: "active", Charlie: "withdrawn", Delta: "withdrawn" });
+
+    // The supplier sees why the offer stayed.
+    const corrections = await ok(shop.as("get", "/supplier/moderation/match-corrections"), (body) =>
+      supplierMatchCorrectionPageSchema.parse(body),
+    );
+    const byId = new Map(corrections.entries.map((entryOf) => [entryOf.id, entryOf]));
+    expect(byId.get(of("Alfa").id)).toMatchObject({
+      offerWithdrawn: false,
+      keepReason: "not_by_row",
+    });
+    expect(byId.get(of("Charlie").id)).toMatchObject({ offerWithdrawn: true, keepReason: null });
+  });
+
+  it("counts «Верно» of suppliers per import when applied, and the old imports by the migration's portions (TASK-065.A)", async () => {
+    await items();
+    await settings.set({ price_match_audit_share: 0, price_match_audit_always_below: 0 });
+    confidence = { Alfa: 0.95, Bravo: 0.95, Charlie: 0.95, Delta: 0.95 };
+    const shop = await company("Автомир");
+    const entry = await imported(
+      shop,
+      csv(["Alfa", "Bravo", "Charlie", "Delta"].map((word) => aiRow(word))),
+    );
+    // Two accepted, one «Другая позиция», one skipped: four proposals, two accepted.
+    const alfa = await aiRowOf(shop, entry.id, "Alfa");
+    await decide(shop, entry.id, alfa.rowNo, {
+      decision: "accept",
+      itemId: alfa.candidates[0]!.id,
+    });
+    const bravo = await aiRowOf(shop, entry.id, "Bravo");
+    await decide(shop, entry.id, bravo.rowNo, {
+      decision: "accept",
+      itemId: bravo.candidates[0]!.id,
+    });
+    const charlie = await aiRowOf(shop, entry.id, "Charlie");
+    await decide(shop, entry.id, charlie.rowNo, {
+      decision: "other",
+      itemId: alfa.candidates[0]!.id,
+    });
+    const delta = await aiRowOf(shop, entry.id, "Delta");
+    await decide(shop, entry.id, delta.rowNo, { decision: "skip" });
+    await applied(shop, entry.id);
+    const other = await company("Шины Юг");
+    const second = await imported(other, csv(["Echo", "Foxtrot"].map((word) => aiRow(word))));
+    await acceptAll(other, second.id, ["Echo"]);
+
+    const independent = await independentProposals();
+    expect(independent).toEqual({ proposed: 6, accepted: 3 });
+    const stored = await db.query<{ proposed: number; accepted: number }>(
+      "SELECT sum(ai_proposed_rows)::int AS proposed, sum(ai_accepted_rows)::int AS accepted FROM price_import WHERE status = 'applied'",
+    );
+    expect(stored.rows[0]).toEqual(independent);
+    for (const days of [7, 30, 90] as const) {
+      expect((await metricsOf(days)).proposals).toEqual({ ...independent, acceptedShare: 0.5 });
+    }
+
+    // Imports applied before the counters: the migration counts them, import by import.
+    await db.query("UPDATE price_import SET ai_proposed_rows = 0, ai_accepted_rows = 0");
+    expect((await metricsOf(90)).proposals.proposed).toBe(0);
+    const migration = readFileSync(
+      join(
+        __dirname,
+        "../../../../../infra/migrations/1792720000000_price-match-audit-hardening.sql",
+      ),
+      "utf8",
+    );
+    const backfill = /DO \$\$[\s\S]*?END \$\$;/.exec(migration)?.[0];
+    expect(backfill).toBeDefined();
+    await db.query(backfill!);
+    expect((await metricsOf(90)).proposals).toEqual({ ...independent, acceptedShare: 0.5 });
+  });
+
+  it("«Неверно» while the supplier applies a price list: 409 to retry, nothing changes (TASK-065.A)", async () => {
+    await items();
+    await settings.set({ price_match_audit_share: 1, price_match_audit_always_below: 0.9 });
+    confidence = { Alfa: 0.95 };
+    const shop = await company("Автомир");
+    const entry = await imported(shop, csv([aiRow("Alfa")]));
+    await acceptAll(shop, entry.id, ["Alfa"]);
+    const [audit] = await auditRows(entry.id);
+    // An application holds the company's offers for update while it runs.
+    const applying = new Client({ connectionString: postgres.getConnectionUri() });
+    await applying.connect();
+    try {
+      await applying.query("BEGIN");
+      await applying.query("SELECT id FROM offer WHERE id = $1 FOR UPDATE", [audit!.offer_id]);
+      const started = Date.now();
+      const busy = await asAdmin("post", `/admin/price-match-audit/${audit!.id}/wrong`, {
+        expectedVersion: 1,
+        notInCatalog: true,
+      });
+      expectError(busy, 409, "PRICE_MATCH_AUDIT_BUSY");
+      expect(busy.body.retryable).toBe(true);
+      expect(Date.now() - started).toBeLessThan(2000);
+    } finally {
+      await applying.query("ROLLBACK");
+      await applying.end();
+    }
+    const after = await db.query<{ status: string; version: number }>(
+      "SELECT status, version FROM price_match_audit WHERE id = $1",
+      [audit!.id],
+    );
+    expect(after.rows[0]).toEqual({ status: "pending", version: 1 });
+    expect(
+      (
+        await db.query("SELECT 1 FROM supplier_sku_mapping WHERE supplier_id = $1", [
+          shop.supplierId,
+        ])
+      ).rows.length,
+    ).toBe(1);
+    // The application is over: «Неверно» goes through.
+    await ok(
+      asAdmin("post", `/admin/price-match-audit/${audit!.id}/wrong`, {
+        expectedVersion: 1,
+        notInCatalog: true,
+      }),
+      (body) => priceMatchAuditCardSchema.parse(body),
+    );
   });
 
   it("refuses other sessions and unknown rows", async () => {

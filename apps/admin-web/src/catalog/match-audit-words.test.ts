@@ -1,6 +1,8 @@
+import { ApiError } from "@adclub/api-client";
 import type { PriceMatchAuditCard } from "@adclub/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  auditErrorText,
   auditRowTitle,
   confidenceText,
   percentText,
@@ -68,6 +70,33 @@ describe("the words of «Аудит сопоставлений»", () => {
         activeOrders: 1,
       }),
     ).toBe("Памяти для строки не было, предложение осталось: активные заявки — 1.");
+  });
+
+  it("says an offer the row didn't make stays, and that the supplier is applying a price list (TASK-065.A)", () => {
+    expect(
+      wrongConsequences(cardWith({ ...offer, willWithdraw: false, keepReason: "not_by_row" })).join(
+        " ",
+      ),
+    ).toContain("выставлено не этой строкой прайса");
+    expect(
+      wrongResultText({
+        memoryRemoved: true,
+        offerId: offer.id,
+        offerWithdrawn: false,
+        keepReason: "not_by_row",
+        activeOrders: 0,
+      }),
+    ).toBe("Память поставщика удалена, предложение осталось: его выставила не эта строка прайса.");
+    expect(
+      auditErrorText(
+        new ApiError({
+          status: 409,
+          code: "PRICE_MATCH_AUDIT_BUSY",
+          message: "busy",
+          retryable: true,
+        }),
+      ),
+    ).toBe("Поставщик сейчас применяет прайс, повторите через минуту");
   });
 
   it("writes numbers the Russian way", () => {

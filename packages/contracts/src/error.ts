@@ -373,6 +373,10 @@ import { clientPlatformSchema } from "./client";
  * - `PRICE_MATCH_AUDIT_CONFLICT` (409, TASK-065): the AI match was checked
  *   (or changed) by another administrator after the page was loaded;
  *   `details` is `PriceMatchAuditConflictDetails`.
+ * - `PRICE_MATCH_AUDIT_BUSY` (409, `retryable: true`, TASK-065.A): the
+ *   supplier is applying a price list right now and holds its offers;
+ *   nothing changed — «Поставщик сейчас применяет прайс, повторите через
+ *   минуту».
  *
  * Giving an order out (TASK-022, ARCHITECTURE 4.32):
  * - `ORDER_QR_UNKNOWN` (400): the scanned string is not the QR of a club
@@ -611,6 +615,7 @@ export const errorCodeSchema = z.enum([
   "CATALOG_REQUEST_EXISTS",
   // The administrator's check of AI matches of price lists (TASK-065).
   "PRICE_MATCH_AUDIT_CONFLICT",
+  "PRICE_MATCH_AUDIT_BUSY",
   // Reviews and complaints (TASK-049, ARCHITECTURE 4.69).
   "REVIEW_NOT_ALLOWED",
   "REVIEW_EXISTS",

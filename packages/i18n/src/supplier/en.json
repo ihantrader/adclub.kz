@@ -977,6 +977,7 @@
   "moderation.correction.absent": "The catalog has no such item — you can request adding it",
   "moderation.correction.withdrawn": "The offer on «{item}» was withdrawn",
   "moderation.correction.kept": "The offer on «{item}» stays — please check it",
+  "moderation.correction.keptNotByRow": "The offer on «{item}» stays: you put it yourself, not this row of the price list",
   "moderation.correction.next": "The next price list upload will ask about this row again",
   "moderation.tableSent": "Sent",
   "moderation.tableStatus": "Status",
@@ -1178,5 +1179,6 @@
   "review.field.availability": "stock",
   "review.field.leadDays": "term",
   "review.readWaiting": "Read from photos with doubt, not applied without «Read correctly»: {rows}",
-  "result.reason.readConfirmationRequired": "A row of a photo read with doubt, not confirmed"
+  "result.reason.readConfirmationRequired": "A row of a photo read with doubt, not confirmed",
+  "result.reason.matchCorrected": "The club administrator corrected this row's match — upload the price list again"
 }

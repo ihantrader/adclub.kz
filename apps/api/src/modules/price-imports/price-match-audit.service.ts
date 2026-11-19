@@ -118,6 +118,22 @@ function resultView(result: PriceMatchAuditResult | null): PriceMatchAuditResult
       };
 }
 
+/**
+ * How long «Неверно» waits for the offer and the memory held by an
+ * application of a price list (TASK-065.A): well inside the statement's
+ * limit, then «Поставщик сейчас применяет прайс» instead of a 500.
+ */
+const WRONG_LOCK_TIMEOUT_MS = 1000;
+
+/** The lock wait of a statement ran out (`55P03`, `lock_not_available`). */
+function lockNotAvailable(error: unknown): boolean {
+  for (let current: unknown = error; current; current = (current as { cause?: unknown }).cause) {
+    if ((current as { code?: unknown }).code === "55P03") return true;
+    if (current === (current as { cause?: unknown }).cause) break;
+  }
+  return false;
+}
+
 interface OfferFacts extends PriceAuditOfferFacts {
   id: string;
   price: number;
@@ -274,118 +290,140 @@ export class PriceMatchAuditService {
         "Choose the right item, or say there is no such item in the catalog — one of them",
       );
     }
-    await this.database.db.transaction(async (tx) => {
-      const row = await this.assertPending(tx, auditId, body.expectedVersion);
-      if (body.correctItemId !== null) {
-        if (body.correctItemId === row.aiItemId) {
-          throw validationError("correctItemId", "This is the item AI chose; press «Верно»");
-        }
-        const item = (await itemsByIds(tx, [body.correctItemId])).get(body.correctItemId);
-        if (!item || !item.available || item.itemType === "service") {
-          throw validationError(
-            "correctItemId",
-            "Choose an active part or product of a visible subcategory",
-          );
-        }
-      }
-      // The offer first, as the application of a price list locks offers before memory;
-      // an order placed while this waited is seen by the count below (its own statement).
-      if (row.offerId) {
-        await tx.execute(sql`SELECT id FROM offer WHERE id = ${row.offerId} FOR UPDATE`);
-      }
-      const [source] = await tx
-        .select({ keyKind: priceImportRow.matchKeyKind, key: priceImportRow.matchKey })
-        .from(priceImportRow)
-        .where(and(eq(priceImportRow.importId, row.importId), eq(priceImportRow.rowNo, row.rowNo)));
-      const removed =
-        source?.keyKind && source.key
-          ? await tx.execute(sql`
-              DELETE FROM supplier_sku_mapping
-              WHERE supplier_id = ${row.supplierId} AND key_kind = ${source.keyKind}
-                AND key = ${source.key} AND decision = 'item' AND item_id = ${row.aiItemId}
-              RETURNING id`)
-          : { rows: [] };
-      const facts = row.offerId ? await this.offerFacts(tx, row) : null;
-      const verdict = priceAuditOfferVerdict(facts);
-      const result: PriceMatchAuditResult = {
-        memoryRemoved: removed.rows.length > 0,
-        offer: verdict.withdraw
-          ? { id: facts!.id, withdrawn: true }
-          : {
-              id: facts?.id ?? null,
-              withdrawn: false,
-              reason: verdict.reason,
-              activeOrders: facts?.activeOrders ?? 0,
-            },
-      };
-      if (verdict.withdraw) {
-        const done = await tx.execute<{ version: number }>(sql`
-          UPDATE offer
-          SET status = 'withdrawn', withdrawn_at = now(), withdrawn_reason = 'match_corrected',
-              version = version + 1, updated_at = now()
-          WHERE id = ${facts!.id} AND status = 'active'
-          RETURNING version`);
-        await this.audit.record(
-          {
-            action: auditActions.offerWithdrawn,
-            actor,
-            entityType: auditEntities.offer,
-            entityId: facts!.id,
-            before: { status: "active" },
-            after: {
-              status: "withdrawn",
-              reason: "match_corrected",
-              version: done.rows[0]?.version ?? null,
-              auditId,
-            },
-          },
-          tx,
-        );
-      }
-      await tx
-        .update(priceMatchAudit)
-        .set({
-          status: "wrong",
-          correctItemId: body.correctItemId,
-          notInCatalog: body.notInCatalog,
-          comment: body.comment ?? null,
-          result,
-          decidedByAdminId: actor.adminId,
-          // The database's clock, as «Модерация» compares it (`moderation_seen_at`).
-          decidedAt: sql`now()`,
-          version: row.version + 1,
-          updatedAt: new Date(),
-        })
-        .where(eq(priceMatchAudit.id, auditId));
-      const view = resultView(result)!;
-      await this.audit.record(
-        {
-          action: auditActions.priceMatchAuditWrong,
-          actor,
-          entityType: auditEntities.priceMatchAudit,
-          entityId: auditId,
-          before: { status: "pending" },
-          after: {
-            status: "wrong",
-            supplierId: row.supplierId,
-            importId: row.importId,
-            rowNo: row.rowNo,
-            itemId: row.aiItemId,
-            correctItemId: body.correctItemId,
-            notInCatalog: body.notInCatalog,
-            memoryRemoved: view.memoryRemoved,
-            offerId: view.offerId,
-            offerWithdrawn: view.offerWithdrawn,
-            keepReason: view.keepReason,
-          },
-          ...(body.comment ? { reason: body.comment } : {}),
-        },
-        tx,
+    try {
+      await this.database.db.transaction(async (tx) => {
+        // An application of the supplier's price list holds its offers (and
+        // then the memory) for as long as it runs: wait a little, not forever.
+        await tx.execute(sql.raw(`SET LOCAL lock_timeout = '${String(WRONG_LOCK_TIMEOUT_MS)}ms'`));
+        await this.markWrong(tx, auditId, body, actor);
+      });
+    } catch (error) {
+      if (!lockNotAvailable(error)) throw error;
+      throw new ApiException(
+        409,
+        "PRICE_MATCH_AUDIT_BUSY",
+        "The supplier is applying a price list right now; try again in a minute",
+        { retryable: true },
       );
-    });
+    }
     this.logger.log(`AI match marked wrong audit=${auditId}`);
     const db = this.database.db;
     return this.cardOf(db, await this.find(db, auditId), lang);
+  }
+
+  private async markWrong(
+    tx: DbExecutor,
+    auditId: string,
+    body: PriceMatchAuditWrongBody,
+    actor: AdminActor,
+  ): Promise<void> {
+    const row = await this.assertPending(tx, auditId, body.expectedVersion);
+    if (body.correctItemId !== null) {
+      if (body.correctItemId === row.aiItemId) {
+        throw validationError("correctItemId", "This is the item AI chose; press «Верно»");
+      }
+      const item = (await itemsByIds(tx, [body.correctItemId])).get(body.correctItemId);
+      if (!item || !item.available || item.itemType === "service") {
+        throw validationError(
+          "correctItemId",
+          "Choose an active part or product of a visible subcategory",
+        );
+      }
+    }
+    // The offer first, as the application of a price list locks offers before memory;
+    // an order placed while this waited is seen by the count below (its own statement).
+    if (row.offerId) {
+      await tx.execute(sql`SELECT id FROM offer WHERE id = ${row.offerId} FOR UPDATE`);
+    }
+    const [source] = await tx
+      .select({ keyKind: priceImportRow.matchKeyKind, key: priceImportRow.matchKey })
+      .from(priceImportRow)
+      .where(and(eq(priceImportRow.importId, row.importId), eq(priceImportRow.rowNo, row.rowNo)));
+    const removed =
+      source?.keyKind && source.key
+        ? await tx.execute(sql`
+            DELETE FROM supplier_sku_mapping
+            WHERE supplier_id = ${row.supplierId} AND key_kind = ${source.keyKind}
+              AND key = ${source.key} AND decision = 'item' AND item_id = ${row.aiItemId}
+            RETURNING id`)
+        : { rows: [] };
+    const facts = row.offerId ? await this.offerFacts(tx, row) : null;
+    const verdict = priceAuditOfferVerdict(facts);
+    const result: PriceMatchAuditResult = {
+      memoryRemoved: removed.rows.length > 0,
+      offer: verdict.withdraw
+        ? { id: facts!.id, withdrawn: true }
+        : {
+            id: facts?.id ?? null,
+            withdrawn: false,
+            reason: verdict.reason,
+            activeOrders: facts?.activeOrders ?? 0,
+          },
+    };
+    if (verdict.withdraw) {
+      const done = await tx.execute<{ version: number }>(sql`
+        UPDATE offer
+        SET status = 'withdrawn', withdrawn_at = now(), withdrawn_reason = 'match_corrected',
+            version = version + 1, updated_at = now()
+        WHERE id = ${facts!.id} AND status = 'active'
+        RETURNING version`);
+      await this.audit.record(
+        {
+          action: auditActions.offerWithdrawn,
+          actor,
+          entityType: auditEntities.offer,
+          entityId: facts!.id,
+          before: { status: "active" },
+          after: {
+            status: "withdrawn",
+            reason: "match_corrected",
+            version: done.rows[0]?.version ?? null,
+            auditId,
+          },
+        },
+        tx,
+      );
+    }
+    await tx
+      .update(priceMatchAudit)
+      .set({
+        status: "wrong",
+        correctItemId: body.correctItemId,
+        notInCatalog: body.notInCatalog,
+        comment: body.comment ?? null,
+        result,
+        decidedByAdminId: actor.adminId,
+        // The database's clock, as «Модерация» compares it (`moderation_seen_at`).
+        decidedAt: sql`now()`,
+        version: row.version + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(priceMatchAudit.id, auditId));
+    const view = resultView(result)!;
+    await this.audit.record(
+      {
+        action: auditActions.priceMatchAuditWrong,
+        actor,
+        entityType: auditEntities.priceMatchAudit,
+        entityId: auditId,
+        before: { status: "pending" },
+        after: {
+          status: "wrong",
+          supplierId: row.supplierId,
+          importId: row.importId,
+          rowNo: row.rowNo,
+          itemId: row.aiItemId,
+          correctItemId: body.correctItemId,
+          notInCatalog: body.notInCatalog,
+          memoryRemoved: view.memoryRemoved,
+          offerId: view.offerId,
+          offerWithdrawn: view.offerWithdrawn,
+          keepReason: view.keepReason,
+        },
+        ...(body.comment ? { reason: body.comment } : {}),
+      },
+      tx,
+    );
   }
 
   /**
@@ -406,14 +444,13 @@ export class PriceMatchAuditService {
         FROM price_match_audit
         WHERE status <> 'pending' AND decided_at >= ${from}::timestamptz
         GROUP BY ai_confidence, status`),
+      // Counted per import when it was applied (TASK-065.A): the period adds
+      // imports up, whatever the size of their price lists.
       db.execute<{ proposed: number; accepted: number }>(sql`
-        SELECT count(*)::int AS proposed,
-          count(*) FILTER (
-            WHERE r.decision = 'accept' AND r.decision_item_id = (r.candidates->0->>'itemId')::uuid
-          )::int AS accepted
-        FROM price_import i
-        JOIN price_import_row r ON r.import_id = i.id
-        WHERE i.status = 'applied' AND i.applied_at >= ${from}::timestamptz AND r.ai_proposed`),
+        SELECT coalesce(sum(ai_proposed_rows), 0)::int AS proposed,
+          coalesce(sum(ai_accepted_rows), 0)::int AS accepted
+        FROM price_import
+        WHERE status = 'applied' AND applied_at >= ${from}::timestamptz`),
       this.settings.get("price_match_confidence_threshold"),
     ]);
     const buckets = new Map(
@@ -502,6 +539,7 @@ export class PriceMatchAuditService {
         correctItem: audit.correctItem,
         notInCatalog: audit.notInCatalog,
         offerWithdrawn: audit.result?.offerWithdrawn ?? false,
+        keepReason: audit.result?.keepReason ?? null,
         decidedAt: audit.decidedAt!,
         isNew: record.decidedAt !== null && record.decidedAt > seenAt,
       })),
@@ -572,8 +610,9 @@ export class PriceMatchAuditService {
       price: number;
       active_orders: number;
       edited: boolean;
+      by_import: boolean;
     }>(sql`
-      SELECT o.id, o.status, o.price,
+      SELECT o.id, o.status, o.price, o.created_import_id IS NOT NULL AS by_import,
         (SELECT count(*)::int FROM customer_order co
           WHERE co.offer_id = o.id AND co.supplier_id = o.supplier_id
             AND co.status IN (${statuses})) AS active_orders,
@@ -596,6 +635,8 @@ export class PriceMatchAuditService {
       price: row.price,
       activeOrders: row.active_orders,
       editedByHand: row.edited,
+      rowOutcome: record.rowOutcome,
+      createdByImport: row.by_import,
     };
   }
 

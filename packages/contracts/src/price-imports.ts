@@ -384,7 +384,11 @@ export type PriceImportMatch = z.infer<typeof priceImportMatchSchema>;
  * `out_of_stock` — no offer to withdraw and nothing in stock to offer;
  * `duplicate_item` — another row of the file was applied to this item;
  * `read_confirmation_required` (TASK-064) — a row of a photo the model was
- * unsure of, not confirmed «Прочитано верно».
+ * unsure of, not confirmed «Прочитано верно»;
+ * `match_corrected` (TASK-065.A) — the row's match came from the company's
+ * memory or from a decision made before an administrator found the match
+ * wrong: the memory no longer says so (or the offer was withdrawn by the
+ * correction), and only an explicit choice in a new review applies it.
  */
 export const priceRowNotAppliedReasonSchema = z.enum([
   "price_out_of_range",
@@ -401,6 +405,7 @@ export const priceRowNotAppliedReasonSchema = z.enum([
   "out_of_stock",
   "duplicate_item",
   "read_confirmation_required",
+  "match_corrected",
 ]);
 
 export type PriceRowNotAppliedReason = z.infer<typeof priceRowNotAppliedReasonSchema>;

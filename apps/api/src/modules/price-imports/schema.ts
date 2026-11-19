@@ -157,6 +157,9 @@ export const priceImport = pgTable("price_import", {
   appliedByMemberId: uuid("applied_by_member_id"),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   result: jsonb("result").$type<PriceImportResult>(),
+  // TASK-065.A: rows AI proposed and of them accepted, counted when applied.
+  aiProposedRows: integer("ai_proposed_rows").notNull().default(0),
+  aiAcceptedRows: integer("ai_accepted_rows").notNull().default(0),
   // TASK-064: why the recognition of the photographed pages waits for AI.
   photoAiWaiting: text("photo_ai_waiting").$type<"unavailable" | "budget">(),
   createdAt: createdAt(),
@@ -364,7 +367,7 @@ export interface PriceMatchAuditResult {
     | {
         id: string | null;
         withdrawn: false;
-        reason: "no_offer" | "not_active" | "edited" | "active_orders";
+        reason: "no_offer" | "not_by_row" | "not_active" | "edited" | "active_orders";
         activeOrders: number;
       };
 }
@@ -379,6 +382,8 @@ export const priceMatchAudit = pgTable("price_match_audit", {
   aiConfidence: numeric("ai_confidence", { precision: 4, scale: 3 }).notNull(),
   reason: text("reason").$type<"below" | "share">().notNull(),
   offerId: uuid("offer_id"),
+  /** What the row did to the offer when applied (TASK-065.A); `null` — put aside before it was kept. */
+  rowOutcome: text("row_outcome").$type<"created" | "updated" | "unchanged" | "returned">(),
   status: text("status").$type<"pending" | "correct" | "wrong">().notNull().default("pending"),
   correctItemId: uuid("correct_item_id"),
   notInCatalog: boolean("not_in_catalog").notNull().default(false),

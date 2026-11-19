@@ -60,6 +60,8 @@ export async function loadPlan(
       itemId: priceImportRow.itemId,
       decision: priceImportRow.decision,
       decisionItemId: priceImportRow.decisionItemId,
+      decidedAt: priceImportRow.decidedAt,
+      aiProposed: priceImportRow.aiProposed,
       // The item AI chose is the first candidate of a row it proposed (I714).
       aiItemId: sql<
         string | null
@@ -91,6 +93,8 @@ export async function loadPlan(
             itemId: row.itemId,
             decision: row.decision,
             decisionItemId: row.decisionItemId,
+            decidedAt: row.decidedAt,
+            aiProposed: row.aiProposed,
             aiItemId: row.aiItemId,
             priceConfirmed: row.priceConfirmed,
             readUncertain: (row.photoUncertain?.length ?? 0) > 0,
@@ -149,9 +153,14 @@ export async function loadPlan(
           supplierSku: row.supplierSku,
           supplierRawName: row.supplierRawName,
           withdrawnReason: row.withdrawnReason,
+          withdrawnAt: row.withdrawnAt,
         },
       ]),
   );
+  // Read after the offers are locked: «Неверно» changes the memory only
+  // after it holds the offer (TASK-065.A), so an application never sees
+  // the offer before a correction and the memory after it.
+  const memory = await rememberedItems(executor, record.supplierId, rows);
   const requests = await requestKeys(executor, record.supplierId);
   const [limits, sharpPercent] = await Promise.all([
     offerLimits(settings),
@@ -167,8 +176,44 @@ export async function loadPlan(
     deliveryByDefault: company.deliveryByDefault,
     openRequests: requests.open,
     rejectedRequests: requests.rejected,
+    memory,
   });
   return { plans, supplier: company, point };
+}
+
+/** Keys of the company's memory read by one statement (ARCHITECTURE I1109). */
+const KEYS_PER_STATEMENT = 5000;
+
+/**
+ * The company's memory now, of the keys of the rows the memory matched
+ * (TASK-065.A): `kind:key` → the item it names, or `null` — no item.
+ */
+async function rememberedItems(
+  executor: DbExecutor,
+  supplierId: string,
+  rows: readonly PlanRow[],
+): Promise<Map<string, string | null>> {
+  const keys = [
+    ...new Map(
+      rows
+        .filter((row) => row.source === "mapping")
+        .map((row) => [`${row.keyKind}:${row.key}`, { kind: row.keyKind, key: row.key }]),
+    ).values(),
+  ];
+  const memory = new Map<string, string | null>(
+    keys.map((entry) => [`${entry.kind}:${entry.key}`, null]),
+  );
+  for (let start = 0; start < keys.length; start += KEYS_PER_STATEMENT) {
+    const chunk = keys.slice(start, start + KEYS_PER_STATEMENT);
+    const found = await executor.execute<{ kind: string; key: string; item_id: string | null }>(sql`
+      SELECT m.key_kind AS kind, m.key, m.item_id
+      FROM supplier_sku_mapping m
+      JOIN jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb) AS x(kind text, key text)
+        ON m.key_kind = x.kind AND m.key = x.key
+      WHERE m.supplier_id = ${supplierId} AND m.decision = 'item'`);
+    for (const row of found.rows) memory.set(`${row.kind}:${row.key}`, row.item_id);
+  }
+  return memory;
 }
 
 /**

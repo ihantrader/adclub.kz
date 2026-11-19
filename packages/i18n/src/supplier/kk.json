@@ -977,6 +977,7 @@
   "moderation.correction.absent": "Мұндай позиция анықтамалықта жоқ — қосуға сұрау жіберуге болады",
   "moderation.correction.withdrawn": "«{item}» ұсынысы сатылымнан алынды",
   "moderation.correction.kept": "«{item}» ұсынысы қалды — оны тексеріңіз",
+  "moderation.correction.keptNotByRow": "«{item}» ұсынысы қалды: оны прайстың бұл жолы емес, өзіңіз қойдыңыз",
   "moderation.correction.next": "Келесі прайс жүктелгенде бұл қай позиция екені қайта сұралады",
   "moderation.tableSent": "Жіберілді",
   "moderation.tableStatus": "Мәртебе",
@@ -1178,5 +1179,6 @@
   "review.field.availability": "қолда бары",
   "review.field.leadDays": "мерзімі",
   "review.readWaiting": "Фотодан сенімсіз оқылды, «Дұрыс оқылды» белгісінсіз қолданылмайды: {rows}",
-  "result.reason.readConfirmationRequired": "Фотодағы жол сенімсіз оқылды және расталмады"
+  "result.reason.readConfirmationRequired": "Фотодағы жол сенімсіз оқылды және расталмады",
+  "result.reason.matchCorrected": "Жолдың сәйкестендіруін клуб әкімшісі түзетті — прайсты қайта жүктеңіз"
 }

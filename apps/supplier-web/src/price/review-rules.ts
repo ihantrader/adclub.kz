@@ -452,6 +452,7 @@ const NOT_APPLIED_TEXT: Record<PriceRowNotAppliedReason, SupplierTextKey> = {
   out_of_stock: "result.reason.outOfStock",
   duplicate_item: "result.reason.duplicateItem",
   read_confirmation_required: "result.reason.readConfirmationRequired",
+  match_corrected: "result.reason.matchCorrected",
 };
 
 /** Why rows were not applied, in words; a reason the cabinet doesn't know yet — a general one. */

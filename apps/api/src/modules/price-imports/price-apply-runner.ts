@@ -34,6 +34,24 @@ function chunks<T>(list: readonly T[]): T[][] {
 }
 
 /**
+ * Of the rows of a plan, how many AI proposed an item for, and of them how
+ * many the supplier accepted with «Верно» on the item AI chose (TASK-065.A):
+ * «Поставщики нажали «Верно»: M из N предложений ИИ» of A-MOD-04.
+ */
+export function aiProposals(plans: readonly RowPlan[]): { proposed: number; accepted: number } {
+  let proposed = 0;
+  let accepted = 0;
+  for (const { row } of plans) {
+    if (!row.aiProposed) continue;
+    proposed++;
+    if (row.decision === "accept" && row.aiItemId && row.decisionItemId === row.aiItemId) {
+      accepted++;
+    }
+  }
+  return { proposed, accepted };
+}
+
+/**
  * Applying a reviewed price list (`prices.apply`; TASK-047 requirement 4;
  * ARCHITECTURE 12.1 step 7, 4.67): **one transaction** under the lock of the
  * import, by the plan of every row (`planRows` — the very numbers the review
@@ -113,9 +131,18 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
         lap,
         sampling,
       );
+      // The accuracy of a period adds these up (TASK-065.A): counted here, by
+      // the same plan the rows were applied by, never again over every row.
+      const ai = aiProposals(context.plans);
       await tx
         .update(priceImport)
-        .set({ status: "applied", result, updatedAt: new Date() })
+        .set({
+          status: "applied",
+          result,
+          aiProposedRows: ai.proposed,
+          aiAcceptedRows: ai.accepted,
+          updatedAt: new Date(),
+        })
         .where(eq(priceImport.id, importId));
       await this.audit.record(
         {
@@ -183,10 +210,10 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
       const inserted = await tx.execute<{ id: string; item_id: string }>(sql`
         INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability, lead_days,
           pickup, delivery, supplier_sku, supplier_raw_name, last_import_id, last_seen_in_import_at,
-          created_by_member_id, updated_by_member_id)
+          created_import_id, created_by_member_id, updated_by_member_id)
         SELECT ${record.supplierId}::uuid, ${locationId}::uuid, x.item_id, i.item_type, x.price,
           x.availability, x.lead_days, x.pickup, x.delivery, x.supplier_sku, x.supplier_raw_name,
-          ${record.id}::uuid, ${now}, ${actor.memberId}::uuid, ${actor.memberId}::uuid
+          ${record.id}::uuid, ${now}, ${record.id}::uuid, ${actor.memberId}::uuid, ${actor.memberId}::uuid
         FROM jsonb_to_recordset(${JSON.stringify(payload)}::jsonb)
           AS x(item_id uuid, price int, availability text, lead_days smallint, pickup boolean,
                delivery boolean, supplier_sku text, supplier_raw_name text)
@@ -499,17 +526,19 @@ export class PriceImportApplier implements JobHandler<{ importId: string }> {
               confidence: row.ai_confidence,
               reason,
               offer_id: row.offer_id,
+              outcome: row.outcome,
             },
           ]
         : [];
     });
     for (const chunk of chunks(picked)) {
       await tx.execute(sql`
-        INSERT INTO price_match_audit (import_id, row_no, supplier_id, ai_item_id, ai_confidence, reason, offer_id)
+        INSERT INTO price_match_audit (import_id, row_no, supplier_id, ai_item_id, ai_confidence, reason,
+          offer_id, row_outcome)
         SELECT ${record.id}::uuid, x.row_no, ${record.supplierId}::uuid, x.item_id, x.confidence,
-          x.reason, x.offer_id
+          x.reason, x.offer_id, x.outcome
         FROM jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb)
-          AS x(row_no int, item_id uuid, confidence numeric, reason text, offer_id uuid)
+          AS x(row_no int, item_id uuid, confidence numeric, reason text, offer_id uuid, outcome text)
         ON CONFLICT (import_id, row_no) DO NOTHING`);
     }
   }

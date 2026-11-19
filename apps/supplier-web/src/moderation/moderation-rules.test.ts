@@ -8,6 +8,7 @@ import {
   correctionIsNew,
   correctionText,
   formFromQuery,
+  proposalIsNew,
   requestBody,
   requestRefusal,
   requestSource,
@@ -166,6 +167,7 @@ describe("a corrected AI match (TASK-065)", () => {
     correctItem: item("Колодки тормозные передние"),
     notInCatalog: false,
     offerWithdrawn: true,
+    keepReason: null,
     decidedAt: "2026-11-19T10:00:00.000Z",
     isNew: true,
   };
@@ -201,5 +203,44 @@ describe("«новое» of a correction", () => {
     expect(correctionIsNew({ isNew: false, decidedAt: at }, "2026-11-19T09:59:59.000Z")).toBe(true);
     expect(correctionIsNew({ isNew: false, decidedAt: at }, at)).toBe(false);
     expect(correctionIsNew({ isNew: false, decidedAt: at }, null)).toBe(false);
+  });
+});
+
+describe("«новое» of a compatibility proposal (TASK-065.A)", () => {
+  it("is decided after the summary shown on opening, like a correction", () => {
+    const at = "2026-11-19T10:00:00.000Z";
+    const decided = (status: "approved" | "rejected" | "pending", reviewedAt: string | null) => ({
+      isNew: false,
+      proposal: { status, reviewedAt },
+    });
+    expect(proposalIsNew({ ...decided("approved", at), isNew: true }, null)).toBe(true);
+    expect(proposalIsNew(decided("approved", at), "2026-11-19T09:59:59.000Z")).toBe(true);
+    expect(proposalIsNew(decided("rejected", at), "2026-11-19T09:59:59.000Z")).toBe(true);
+    expect(proposalIsNew(decided("approved", at), at)).toBe(false);
+    expect(proposalIsNew(decided("approved", at), null)).toBe(false);
+    // Still waiting: never «новое».
+    expect(proposalIsNew(decided("pending", null), "2026-11-19T09:59:59.000Z")).toBe(false);
+  });
+});
+
+describe("a kept offer the row didn't make (TASK-065.A)", () => {
+  it("says the supplier put it, in three languages", () => {
+    const entry = {
+      id: A,
+      importId: A,
+      row: { article: null, brand: null, name: "Колодки", price: 1, photoText: null },
+      wrongItem: null,
+      correctItem: null,
+      notInCatalog: true,
+      offerWithdrawn: false,
+      keepReason: "not_by_row" as const,
+      decidedAt: "2026-11-19T10:00:00.000Z",
+      isNew: false,
+    };
+    expect(correctionText(entry, t).details).toContain("его выставили вы, а не эта строка прайса");
+    expect(correctionText(entry, createTranslate("kk", null)).details).toContain("өзіңіз қойдыңыз");
+    expect(correctionText(entry, createTranslate("en", null)).details).toContain(
+      "you put it yourself",
+    );
   });
 });

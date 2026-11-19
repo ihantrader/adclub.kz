@@ -6,6 +6,7 @@ import type {
   CreateCatalogRequestBody,
   SupplierCatalogRequest,
   SupplierMatchCorrection,
+  SupplierModerationProposal,
 } from "@adclub/contracts";
 import type { SupplierTextKey } from "@adclub/i18n";
 import type { StatusTone } from "../price/price-rules";
@@ -75,16 +76,41 @@ export function requestSource(request: SupplierCatalogRequest, t: Translate): st
 }
 
 /**
- * «новое» of a correction: the server's, or — the list loaded after this
+ * «новое» of a decision: the server's, or — the list loaded after this
  * visit marked «Модерация» seen — decided after the moment the summary
- * shown on opening said the employee had seen.
+ * shown on opening said the employee had seen. One rule for every tab of
+ * decisions (TASK-065.A): corrections, compatibility proposals.
  */
+export function decisionIsNew(
+  isNew: boolean,
+  decidedAt: string | null,
+  seenAt: string | null,
+): boolean {
+  if (isNew) return true;
+  return seenAt !== null && decidedAt !== null && Date.parse(decidedAt) > Date.parse(seenAt);
+}
+
+/** «новое» of a correction (TASK-065): `decisionIsNew` by the moment it was decided. */
 export function correctionIsNew(
   correction: Pick<SupplierMatchCorrection, "isNew" | "decidedAt">,
   seenAt: string | null,
 ): boolean {
-  if (correction.isNew) return true;
-  return seenAt !== null && Date.parse(correction.decidedAt) > Date.parse(seenAt);
+  return decisionIsNew(correction.isNew, correction.decidedAt, seenAt);
+}
+
+/**
+ * «новое» of a compatibility proposal (TASK-065.A): decided — approved or
+ * rejected — after the moment seen; one still waiting is never new.
+ */
+export function proposalIsNew(
+  entry: {
+    isNew: boolean;
+    proposal: Pick<SupplierModerationProposal["proposal"], "status" | "reviewedAt">;
+  },
+  seenAt: string | null,
+): boolean {
+  if (entry.proposal.status === "pending") return false;
+  return decisionIsNew(entry.isNew, entry.proposal.reviewedAt, seenAt);
 }
 
 /**
@@ -105,7 +131,11 @@ export function correctionText(
       ? `${not}. ${t("moderation.correction.absent")}`
       : not;
   const offer = t(
-    correction.offerWithdrawn ? "moderation.correction.withdrawn" : "moderation.correction.kept",
+    correction.offerWithdrawn
+      ? "moderation.correction.withdrawn"
+      : correction.keepReason === "not_by_row"
+        ? "moderation.correction.keptNotByRow"
+        : "moderation.correction.kept",
     { item: wrong },
   );
   return {

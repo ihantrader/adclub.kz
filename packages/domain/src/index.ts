@@ -449,6 +449,7 @@ export {
   auditDraw,
   PRICE_AUDIT_BUCKETS,
   priceAuditBucket,
+  priceAuditOfferIsRows,
   priceAuditOfferVerdict,
   priceAuditReason,
 } from "./price-import/price-match-audit";

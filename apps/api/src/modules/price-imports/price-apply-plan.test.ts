@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  mayReturnCorrected,
   planNumbers,
   planRows,
   sendsRequest,
@@ -304,5 +305,94 @@ describe("a row of a photo read with doubt (TASK-064)", () => {
     expect(outOfStock[0]!.remember).toBeNull();
     const skipped = planRows([row(1, { readUncertain: true, decision: "skip" })], facts());
     expect(skipped[0]!.remember).toBeNull();
+  });
+});
+
+describe("a match the administrator corrected (TASK-065.A)", () => {
+  const remembered = (extra: Partial<PlanRow> = {}) =>
+    row(2, { source: "mapping", keyKind: "name", key: "kolodki x", ...extra });
+  const corrected = offer({
+    status: "withdrawn",
+    withdrawnReason: "match_corrected",
+    withdrawnAt: new Date("2026-11-19T10:00:00Z"),
+  });
+
+  it("does not apply a remembered row whose memory is gone or names another item", () => {
+    for (const memory of [new Map<string, string | null>(), new Map([["name:kolodki x", "b"]])]) {
+      const [plan] = planRows([remembered()], facts({ memory }));
+      expect(plan!.action).toEqual({ kind: "not_applied", reason: "match_corrected", itemId: "a" });
+      expect(plan!.remember).toBeNull();
+    }
+    // Still there: applied as before.
+    const kept = planRows([remembered()], facts({ memory: new Map([["name:kolodki x", "a"]]) }));
+    expect(kept[0]!.action.kind).toBe("create");
+    // A row the supplier decided in the review is theirs, memory or not.
+    const chosen = planRows(
+      [remembered({ decision: "other", decisionItemId: "a", decidedAt: new Date() })],
+      facts({ memory: new Map() }),
+    );
+    expect(chosen[0]!.action.kind).toBe("create");
+  });
+
+  it("frees the item of a row not applied: a later row of the file may take it", () => {
+    const later = row(3, { itemId: "a" });
+    const plans = planRows([remembered(), later], facts({ memory: new Map() }));
+    expect(plans[1]!.action.kind).toBe("create");
+  });
+
+  it("returns an offer withdrawn by the correction only by a choice made after it", () => {
+    const offers = new Map([["a", corrected]]);
+    const memory = new Map([["article:A2", "a"]]);
+    // By the exact article, by the memory, by a decision made before: not returned.
+    for (const source of [
+      row(2),
+      row(2, { source: "mapping", keyKind: "article", key: "A2" }),
+      row(2, {
+        decision: "accept",
+        decisionItemId: "a",
+        decidedAt: new Date("2026-11-19T09:59:00Z"),
+      }),
+    ]) {
+      const [plan] = planRows([source], facts({ offers, memory }));
+      expect(plan!.action).toEqual({ kind: "not_applied", reason: "match_corrected", itemId: "a" });
+    }
+    // «Другая позиция» or «Верно» on this item after the correction: back on sale.
+    for (const decision of ["other", "accept"] as const) {
+      const [plan] = planRows(
+        [row(2, { decision, decisionItemId: "a", decidedAt: new Date("2026-11-19T10:05:00Z") })],
+        facts({ offers, memory }),
+      );
+      expect(plan!.action).toMatchObject({ kind: "update", returned: true });
+    }
+    // Any other withdrawal comes back as before.
+    const manual = new Map([["a", { ...corrected, withdrawnReason: "missing_in_import" }]]);
+    expect(planRows([row(2)], facts({ offers: manual }))[0]!.action).toMatchObject({
+      kind: "update",
+      returned: true,
+    });
+  });
+
+  it("states the rule on its own", () => {
+    const at = new Date("2026-11-19T10:00:00Z");
+    const after = new Date(at.getTime() + 1);
+    expect(mayReturnCorrected({ decision: null }, { withdrawnReason: "manual" })).toBe(true);
+    expect(
+      mayReturnCorrected(
+        { decision: "other", decidedAt: after },
+        { withdrawnReason: "match_corrected", withdrawnAt: at },
+      ),
+    ).toBe(true);
+    expect(
+      mayReturnCorrected(
+        { decision: "other", decidedAt: at },
+        { withdrawnReason: "match_corrected", withdrawnAt: at },
+      ),
+    ).toBe(false);
+    expect(
+      mayReturnCorrected(
+        { decision: "skip", decidedAt: after },
+        { withdrawnReason: "match_corrected", withdrawnAt: at },
+      ),
+    ).toBe(false);
   });
 });

@@ -492,7 +492,7 @@ export class CatalogPhotosService {
     actor: AuditActorRecord,
   ): Promise<number> {
     // The item's photos are counted under its lock: an upload waits.
-    await tx.execute(sql`SELECT id FROM catalog_item WHERE id = ${itemId} FOR UPDATE`);
+    await tx.execute(sql`SELECT id FROM catalog_item WHERE id = ${itemId} FOR NO KEY UPDATE`);
     const rows = await tx
       .select()
       .from(itemPhoto)
@@ -716,8 +716,12 @@ export class CatalogPhotosService {
       await executor.transaction(async (tx) => {
         if (meta.supplier) {
           // One company at a time: the count of the day holds under its lock.
+          // FOR NO KEY UPDATE here and below, not FOR UPDATE: a foreign key
+          // to the row (the memory an approved request writes names the
+          // supplier, an offer names the item) doesn't wait for the upload,
+          // so the administrator's decision and the upload can't deadlock.
           await tx.execute(
-            sql`SELECT id FROM supplier WHERE id = ${meta.supplier.supplierId} FOR UPDATE`,
+            sql`SELECT id FROM supplier WHERE id = ${meta.supplier.supplierId} FOR NO KEY UPDATE`,
           );
           await this.assertSupplierDay(tx, meta.supplier.supplierId, meta.supplier.dayLimit);
         }
@@ -727,7 +731,7 @@ export class CatalogPhotosService {
         // and uploads at the same moment don't pass the limit together.
         if (requestId) {
           const request = await tx.execute<{ status: string }>(
-            sql`SELECT status FROM catalog_request WHERE id = ${requestId} FOR UPDATE`,
+            sql`SELECT status FROM catalog_request WHERE id = ${requestId} FOR NO KEY UPDATE`,
           );
           if (request.rows[0]?.status !== "new") throw photoNotNeeded("request_decided");
         } else {
@@ -736,7 +740,7 @@ export class CatalogPhotosService {
             item_type: string;
             primary_photo_id: string | null;
           }>(
-            sql`SELECT status, item_type, primary_photo_id FROM catalog_item WHERE id = ${itemId} FOR UPDATE`,
+            sql`SELECT status, item_type, primary_photo_id FROM catalog_item WHERE id = ${itemId} FOR NO KEY UPDATE`,
           );
           const row = item.rows[0];
           if (!row) throw notFound("item");

@@ -1,6 +1,7 @@
 import {
   PHOTO_CONTENT_TYPES,
   PHOTO_MAX_UPLOAD_BYTES,
+  PHOTO_REJECTED_ITEM_FULL,
   type AdminCatalogItemCard,
   type AdminItemPhoto,
   type AdminItemPhotosResponse,
@@ -460,7 +461,14 @@ export function ItemPhotos({
                         {photo.width}×{photo.height}, {sizeText(photo.byteSize)}
                       </span>
                       <span>{formatMoment(photo.uploadedAt)}</span>
-                      {photo.rejectionReason && <span>Причина: {photo.rejectionReason}</span>}
+                      {photo.rejectionReason && (
+                        <span>
+                          Причина:{" "}
+                          {photo.rejectionReason === PHOTO_REJECTED_ITEM_FULL
+                            ? "у позиции уже максимальное число фото"
+                            : photo.rejectionReason}
+                        </span>
+                      )}
                       {photo.filesDeletedAt && (
                         <Badge tone="warning" icon="alertTriangle">
                           Файлы удалены

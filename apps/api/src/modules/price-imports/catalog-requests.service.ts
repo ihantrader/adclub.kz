@@ -243,10 +243,12 @@ export class CatalogRequestsService {
           "Choose an active part or product of a visible subcategory: services aren't set from a price list",
         );
       }
-      // FOR UPDATE, not FOR SHARE: the photos of the request are counted
+      // An exclusive lock, not FOR SHARE: the photos of the request are counted
       // against the item's under this lock (TASK-068.A), and a shared lock
       // upgraded by two links of one item at once would deadlock.
-      await tx.execute(sql`SELECT id FROM catalog_item WHERE id = ${body.itemId} FOR UPDATE`);
+      await tx.execute(
+        sql`SELECT id FROM catalog_item WHERE id = ${body.itemId} FOR NO KEY UPDATE`,
+      );
       await this.approve(tx, requestId, body.expectedVersion, body.itemId, "existing", actor);
       await this.photos.adoptRequestPhotos(tx, requestId, body.itemId, actor);
     });

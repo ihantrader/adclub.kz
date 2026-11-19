@@ -53,7 +53,7 @@ export class UploadRateLimitMiddleware implements NestMiddleware {
       // The same buckets as the guard's (`RouteRateLimitGuard.countedAs`).
       subject =
         counted.by === "account"
-          ? `account:${this.sessions.signedAccountOf(request.headers.authorization)}`
+          ? `account:${this.sessions.signedAccountOf(request.headers.authorization, route.contexts)}`
           : rateLimitSubject(request.ip);
     } catch (error) {
       next(error);

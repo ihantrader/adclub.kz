@@ -78,6 +78,7 @@ import { photoEvalDirectory } from "../photo-eval";
 const ADMIN_PHONE = "+77010000368";
 const SUPPLIER_WEB = "supplier-web/0.1.0";
 const ADMIN_WEB = "admin-web/0.1.0";
+const MOBILE = "mobile/1.0.0 (ios)";
 const MINIO_USER = "adclubtest";
 const MINIO_PASSWORD = "adclubtestsecret";
 const BUCKET = "adclub-test";
@@ -1089,6 +1090,19 @@ describe("photographed price lists (PostgreSQL + Redis + MinIO)", () => {
       .set("Authorization", "Bearer x.y.z")
       .attach("page", sample("list-clean"), { filename: "p.jpg" });
     expectError(forged, 401, "AUTH_REQUIRED");
+    // An app's token is refused by its signed kind before the body: 403.
+    const appSignIn = await signIn("+77010000397", MOBILE);
+    expect(appSignIn.status, JSON.stringify(appSignIn.body)).toBe(200);
+    const fromApp = await http()
+      .post("/supplier/price-imports/photos")
+      .set("X-Client", MOBILE)
+      .set("X-Forwarded-For", nextIp())
+      .set(
+        "Authorization",
+        `Bearer ${(appSignIn.body as { session: { accessToken: string } }).session.accessToken}`,
+      )
+      .attach("page", sample("list-clean"), { filename: "p.jpg" });
+    expectError(fromApp, 403, "FORBIDDEN");
   });
 
   it("removes the files of uploads that were never written; a page is not taken again once the import's files are gone", async () => {

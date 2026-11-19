@@ -64,6 +64,12 @@ describe("photoFormPages", () => {
     expect(
       photoFormPages(quoted, form([page("a")], BOUNDARY, "preamble\r\n"), LIMITS),
     ).toHaveLength(1);
+    // An empty preamble (RFC 2046): the body starts with the line break.
+    expect(
+      photoFormPages(TYPE, form([page("a"), page("b", 2)], BOUNDARY, "\r\n"), LIMITS).map((found) =>
+        found.toString(),
+      ),
+    ).toEqual(["a", "b"]);
     expect(photoFormPages(TYPE, form([]), LIMITS)).toEqual([]);
   });
 

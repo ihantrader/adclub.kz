@@ -57,6 +57,17 @@ import {
   type SessionSummaryRow,
 } from "./session.store";
 
+/**
+ * The context a session of each kind acts in when it has one
+ * (`resolveAccessContext`) — for the check by the signed kind alone, before
+ * the body of an upload is read (`signedAccountOf`).
+ */
+const SIGNED_KIND_CONTEXT: Record<SessionKind, AccessContext> = {
+  mobile: "user",
+  supplier_web: "supplier",
+  admin_web: "admin",
+};
+
 /** Who is calling a protected route (set by `SessionGuard`). */
 export interface AuthenticatedSession {
   sessionId: string;
@@ -410,9 +421,22 @@ export class SessionService {
    * without a valid token is refused here as `authenticate` would refuse it,
    * so its body is never read. Whether the session still lives is the
    * guard's to say afterwards.
+   *
+   * A token of a kind the route can't serve (an app's or the admin panel's
+   * token at a cabinet route) is refused here too, as the guard would
+   * refuse it — by the signed kind alone, before a body of tens of
+   * megabytes is read (TASK-064.A acceptance).
    */
-  signedAccountOf(authorization: string | string[] | undefined): string {
-    return this.signedClaims(authorization, new Date()).sub;
+  signedAccountOf(
+    authorization: string | string[] | undefined,
+    routeContexts?: readonly AccessContext[],
+  ): string {
+    const { sub, knd } = this.signedClaims(authorization, new Date());
+    if (routeContexts && !routeContexts.includes(SIGNED_KIND_CONTEXT[knd])) {
+      this.logger.warn(`Access refused before the body: context not allowed kind=${knd}`);
+      throw forbiddenException();
+    }
+    return sub;
   }
 
   private signedClaims(authorization: string | string[] | undefined, now: Date) {

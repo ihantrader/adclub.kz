@@ -79,6 +79,22 @@ function textArray(values: readonly string[]): SQL {
   return sql`ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(values)}::jsonb))`;
 }
 
+/**
+ * How many items one statement loads. Fifty thousand at once (a whole price
+ * list's plan) ran close to the statement timeout and failed the apply job
+ * on a busy machine every attempt (TASK-064.A acceptance); a few thousand a
+ * statement keeps each one far from it.
+ */
+const ITEMS_PER_STATEMENT = 5_000;
+
+function chunked<T>(values: readonly T[]): T[][] {
+  const chunks: T[][] = [];
+  for (let at = 0; at < values.length; at += ITEMS_PER_STATEMENT) {
+    chunks.push(values.slice(at, at + ITEMS_PER_STATEMENT));
+  }
+  return chunks;
+}
+
 /** Items by id, whatever their state. */
 export async function itemsByIds(
   executor: DbExecutor,
@@ -86,9 +102,10 @@ export async function itemsByIds(
 ): Promise<Map<string, MatchItem>> {
   const unique = [...new Set(ids)];
   const found = new Map<string, MatchItem>();
-  if (unique.length === 0) return found;
-  const rows = await executor.execute<ItemRow>(select(sql`i.id = ANY(${uuidArray(unique)})`));
-  for (const row of rows.rows) found.set(row.id, itemOf(row));
+  for (const chunk of chunked(unique)) {
+    const rows = await executor.execute<ItemRow>(select(sql`i.id = ANY(${uuidArray(chunk)})`));
+    for (const row of rows.rows) found.set(row.id, itemOf(row));
+  }
   return found;
 }
 
@@ -99,17 +116,18 @@ export async function itemsByArticles(
 ): Promise<Map<string, MatchItem[]>> {
   const unique = [...new Set(norms)];
   const found = new Map<string, MatchItem[]>();
-  if (unique.length === 0) return found;
-  const rows = await executor.execute<ItemRow>(
-    select(
-      sql`i.article_norm = ANY(${textArray(unique)}) AND i.status = 'active' AND c.status = 'active' AND coalesce(p.status, 'active') = 'active'`,
-    ),
-  );
-  for (const row of rows.rows) {
-    const item = itemOf(row);
-    const list = found.get(item.articleNorm!) ?? [];
-    list.push(item);
-    found.set(item.articleNorm!, list);
+  for (const chunk of chunked(unique)) {
+    const rows = await executor.execute<ItemRow>(
+      select(
+        sql`i.article_norm = ANY(${textArray(chunk)}) AND i.status = 'active' AND c.status = 'active' AND coalesce(p.status, 'active') = 'active'`,
+      ),
+    );
+    for (const row of rows.rows) {
+      const item = itemOf(row);
+      const list = found.get(item.articleNorm!) ?? [];
+      list.push(item);
+      found.set(item.articleNorm!, list);
+    }
   }
   return found;
 }

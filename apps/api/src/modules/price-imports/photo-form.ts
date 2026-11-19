@@ -82,9 +82,12 @@ export function photoFormPages(
   const next = Buffer.from(`\r\n--${boundary}`);
   const maxPageBytes = limits.maxPageMb * 1024 * 1024;
   // The first delimiter: at the very start or after a preamble line.
-  let at = body.subarray(0, delimiter.length).equals(delimiter) ? 0 : body.indexOf(next);
+  // (An empty preamble — the body starting with «\r\n--boundary» — is the
+  // second case at index 0, so the case is a flag, not the index.)
+  const leading = body.subarray(0, delimiter.length).equals(delimiter);
+  let at = leading ? 0 : body.indexOf(next);
   if (at < 0) malformed();
-  at += at === 0 ? delimiter.length : next.length;
+  at += leading ? delimiter.length : next.length;
   const pages: Buffer[] = [];
   let others = 0;
   for (;;) {

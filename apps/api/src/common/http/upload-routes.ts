@@ -22,7 +22,7 @@ import {
 
 interface UploadMatcher {
   route: Pick<ApiRouteDefinition, "method" | "upload" | "rateLimit"> &
-    Partial<Pick<ApiRouteDefinition, "auth">>;
+    Partial<Pick<ApiRouteDefinition, "auth" | "contexts">>;
   pattern: RegExp;
 }
 
@@ -58,7 +58,7 @@ export function uploadRouteFor(
   path: string,
 ):
   | (Pick<ApiRouteDefinition, "method" | "upload" | "rateLimit"> &
-      Partial<Pick<ApiRouteDefinition, "auth">>)
+      Partial<Pick<ApiRouteDefinition, "auth" | "contexts">>)
   | null {
   const upper = method.toUpperCase();
   return (

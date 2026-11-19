@@ -848,6 +848,12 @@ export class CatalogPhotosService {
       }
       const becomesRemoved = REMOVED.includes(body.status);
       const wasRemoved = row.removedAt !== null;
+      if (wasRemoved && !becomesRemoved) {
+        // A refused or removed photo coming back takes a place again
+        // (TASK-068.B): the item's limit holds under the item's lock, as on
+        // an upload — the photo itself isn't counted while it is removed.
+        await this.assertRoom(tx, itemId, null);
+      }
       await tx
         .update(itemPhoto)
         .set({

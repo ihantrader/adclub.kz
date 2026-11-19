@@ -63,6 +63,25 @@ describe("blocked addresses (SSRF)", () => {
     "::8.8.8.8",
     "::ffff:0:a00:7",
     "::ffff:0:808:808",
+    // The same ranges written with dots, in full and with a zone (TASK-068.B).
+    "::10.0.0.7",
+    "::ffff:0:10.0.0.7",
+    "::ffff:0:8.8.8.8",
+    "0:0:0:0:0:0:a00:7",
+    "0000:0000:0000:0000:0000:0000:0808:0808",
+    "0:0:0:0:ffff:0:a00:7",
+    "0000:0000:0000:0000:ffff:0000:0808:0808",
+    "0:0:0:0:ffff:0:10.0.0.7",
+    "0:0:0:0:0:ffff:a00:7",
+    "0000:0000:0000:0000:0000:ffff:7f00:0001",
+    "0:0:0:0:0:ffff:10.0.0.7",
+    "0064:ff9b:0000:0000:0000:0000:0a00:0007",
+    "0:0:0:0:0:0:0:1",
+    "fe80:0000:0000:0000:0000:0000:0000:0001",
+    "fe80::1%eth0",
+    "::a00:7%eth0",
+    "::ffff:0:10.0.0.7%1",
+    "::ffff:10.0.0.7%eth0",
     "not-an-address",
   ])("refuses %s", (address) => {
     expect(isBlockedAddress(address)).toBe(true);
@@ -74,6 +93,9 @@ describe("blocked addresses (SSRF)", () => {
     "8.8.8.8",
     "2a00:1450:4001:80b::200e",
     "::ffff:8.8.8.8",
+    "0:0:0:0:0:ffff:808:808",
+    "0000:0000:0000:0000:0000:ffff:8.8.8.8",
+    "2a00:1450:4001:080b:0000:0000:0000:200e",
   ])("lets %s through", (address) => {
     expect(isBlockedAddress(address)).toBe(false);
   });

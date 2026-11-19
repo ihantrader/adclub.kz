@@ -62,7 +62,8 @@ import { WorkerModule } from "../../worker.module";
 import { DevCatalogSeed, PhotoStorage } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
 import { IMAGE_SEARCH_PROVIDER } from "./image-search-provider";
-import { PhotoSearchRunner } from "./photo-search-job";
+import { DatabaseService } from "../../database";
+import { dueItems, PhotoSearchRunner } from "./photo-search-job";
 import type { TestImageSearch } from "./test-image-search";
 
 /**
@@ -650,6 +651,70 @@ describe("photo search and suppliers' photos (PostgreSQL + Redis + MinIO + worke
     expect(await runner.due(10)).toEqual([]);
   });
 
+  it("items off the showcase don't hold the job: an item on it is reached behind 250 of them", async () => {
+    const shop = await company("Автомаркет");
+    const second = await company("Шины Юг");
+    // A supplier without hours (D-060) with a price of 250 items without a photo.
+    const closed = await company("Без часов");
+    await db.query("UPDATE supplier_location SET weekly_hours = NULL WHERE supplier_id = $1", [
+      closed.supplierId,
+    ]);
+    const addItems = (prefix: string, count: number, age: string) =>
+      db.query<{ id: string }>(
+        `INSERT INTO catalog_item (item_type, category_id, category_kind, brand_id, article,
+           article_norm, created_at)
+         SELECT item_type, category_id, category_kind, brand_id, $2 || g, $2 || g,
+           now() - $4::interval
+         FROM catalog_item, generate_series(1, $3::int) g WHERE id = $1
+         RETURNING id`,
+        [padsId, prefix, count, age],
+      );
+    await addItems("STUCK", 250, "1 day");
+    await db.query(
+      `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability,
+         lead_days, pickup, delivery)
+       SELECT l.supplier_id, l.id, i.id, i.item_type, 1000, 'in_stock', 0, true, false
+       FROM catalog_item i, supplier_location l
+       WHERE l.supplier_id = $1 AND i.article_norm LIKE 'STUCK%'`,
+      [closed.supplierId],
+    );
+    // Created after all of them, offered by a supplier users see.
+    const lateId = (await addItems("LATE", 1, "0 seconds")).rows[0]!.id;
+    await putOffer(shop, lateId);
+
+    const runner = worker.get(PhotoSearchRunner);
+    expect(await runner.due(10)).toEqual([lateId]);
+
+    // The walk goes page by page, the next one from where the last ended —
+    // also among items created at the same moment.
+    const executor = worker.get(DatabaseService).db;
+    const walk = await dueItems(executor, { limit: 10, retryDays: 30, pageSize: 50 });
+    expect(walk.ids).toEqual([lateId]);
+    expect(walk.pages).toBeGreaterThan(5);
+    expect(walk.read).toBeGreaterThanOrEqual(251);
+    // Every item is read once: the pages neither overlap nor skip.
+    const all = await db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM catalog_item
+       WHERE status = 'active' AND item_type <> 'service' AND primary_photo_id IS NULL`,
+    );
+    expect(walk.read).toBe(all.rows[0]!.n);
+
+    // Of the items found the one with more offers users see comes first,
+    // then the one that waits longer.
+    await putOffer(shop, padsId);
+    await putOffer(shop, trwId);
+    await putOffer(second, trwId);
+    await db.query(
+      `UPDATE catalog_item SET created_at = now() - CASE id WHEN $1 THEN interval '2 hours'
+         ELSE interval '1 hour' END WHERE id IN ($1, $2)`,
+      [padsId, trwId],
+    );
+    expect(await runner.due(10)).toEqual([trwId, padsId, lateId]);
+    expect(await runner.due(1)).toEqual([trwId]);
+    // A pool of one: only the item that waits longest is looked at.
+    expect((await dueItems(executor, { limit: 1, retryDays: 30, pool: 1 })).ids).toEqual([padsId]);
+  });
+
   // -------------------------------------------------------------- moderation
 
   it("puts candidates and suppliers' photos into the queue; the item's decision takes them out", async () => {
@@ -1134,6 +1199,66 @@ describe("photo search and suppliers' photos (PostgreSQL + Redis + MinIO + worke
     expect(
       page.entries.filter((entry) => entry.photo.rejectionReason === PHOTO_REJECTED_ITEM_FULL),
     ).toHaveLength(2);
+  });
+
+  it("a refused photo comes back only while the item has room for it", async () => {
+    const first = await ok(
+      adminUpload(padsId, await jpeg({ r: 1, g: 250, b: 250 })),
+      (body) => adminItemPhotosResponseSchema.parse(body),
+      201,
+    );
+    const refused = await setStatus(padsId, first.photos[0]!, "rejected", "Чужая деталь");
+    const photo = refused.photos.find((entry) => entry.id === first.photos[0]!.id)!;
+    expect(photo.status).toBe("rejected");
+    // Meanwhile the item is filled to its limit.
+    await db.query(
+      `INSERT INTO item_photo (item_id, source_type, source_url, status, proposed_by, content_type,
+         byte_size, width, height, checksum, uploaded_by)
+       SELECT item_id, source_type, source_url, 'proposed', proposed_by, content_type, byte_size,
+         width, height, encode(sha256((random()::text || g)::bytea), 'hex'), uploaded_by
+       FROM item_photo, generate_series(1, $2::int) g WHERE id = $1`,
+      [photo.id, ITEM_PHOTOS_MAX],
+    );
+    const back = (status: "approved" | "proposed") =>
+      asAdmin("post", `/admin/catalog/items/${padsId}/photos/${photo.id}/status`, {
+        expectedVersion: photo.version,
+        status,
+      });
+    for (const status of ["approved", "proposed"] as const) {
+      const full = await back(status);
+      expectError(full, 400, "CATALOG_PHOTO_INVALID");
+      expect(catalogPhotoInvalidDetailsSchema.parse(full.body.details).reason).toBe(
+        "too_many_photos",
+      );
+    }
+    // Nothing changed and nothing went to the journal.
+    const kept = await db.query<{ status: string; version: number }>(
+      "SELECT status, version FROM item_photo WHERE id = $1",
+      [photo.id],
+    );
+    expect(kept.rows[0]).toEqual({ status: "rejected", version: photo.version });
+    // Refused to removed is not a return: the limit doesn't stand in its way.
+    const removed = await ok(
+      asAdmin("post", `/admin/catalog/items/${padsId}/photos/${photo.id}/status`, {
+        expectedVersion: photo.version,
+        status: "deleted",
+      }),
+      (body) => adminItemPhotosResponseSchema.parse(body),
+    );
+    const gone = removed.photos.find((entry) => entry.id === photo.id)!;
+    // A place is freed — the photo comes back.
+    await db.query(
+      `UPDATE item_photo SET status = 'deleted', removed_at = now()
+       WHERE id = (SELECT id FROM item_photo WHERE item_id = $1 AND removed_at IS NULL LIMIT 1)`,
+      [padsId],
+    );
+    const returned = await setStatus(padsId, gone, "approved");
+    expect(returned.photos.find((entry) => entry.id === photo.id)!.status).toBe("approved");
+    const held = await db.query(
+      "SELECT id FROM item_photo WHERE item_id = $1 AND removed_at IS NULL",
+      [padsId],
+    );
+    expect(held.rows).toHaveLength(ITEM_PHOTOS_MAX);
   });
 
   it("a copy of someone else's photo tells the supplier nothing about it", async () => {

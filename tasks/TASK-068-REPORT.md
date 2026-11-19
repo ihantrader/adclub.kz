@@ -32,14 +32,17 @@ COMPLETED — 7/7 AC (живые вызовы SerpAPI не делались по
 - кнопка администратора не ограничена `photo_search_retry_days`, только бюджетом дня (I1146);
 - W-06 считает фото в прежних числах «добавлено/отклонено» — без нового шаблона Meta (I1151).
 
+## CI
+Запушено в `main` (`0735170..fffdfb8`, три коммита задачи: `924d170`, `60f3253`, `fffdfb8`); прогон CI — **44525371983** (не дожидался, по правилу TASK-076).
+
 ## Verification
 - `pnpm format:check` — PASS.
 - `pnpm lint` — PASS (0 ошибок; одно старое предупреждение в `ratings/supplier-ratings.service.ts`, не моё).
 - `pnpm typecheck` — PASS.
 - `pnpm test` — PASS по всем пакетам (api 1137, admin-web 178, supplier-web 169, mobile 700, contracts 134, …). При общем прогоне один раз упал по таймауту 5 с мобильный `no-catalog-without-car.test.ts` (сканирование файлов под нагрузкой; мобильное не менялось), повторный прогон — PASS.
-- `pnpm build` — см. ниже (BUILD).
+- `pnpm build` — PASS (12/12 задач, включая `expo export` мобильного).
 - `openapi:generate` / `openapi:check` — PASS; `openapi:compat --snapshots` — PASS (совместимо с mobile 1.0.0); `openapi:compat --base origin/main` — PASS.
-- Интеграционные (по одному файлу, без параллельной нагрузки): `photo-search` 7/7, `catalog-photos` 31/31, `moderation` 10/10, `admin-panel` 13/13, `price-review` и `database` — см. ниже (INTEG).
+- Интеграционные (по одному файлу, без параллельной нагрузки): `photo-search` 7/7, `catalog-photos` 31/31, `moderation` 10/10, `admin-panel` 13/13, `price-review` 15/15, `src/database` 72/73 — один тест («holds the term of an order under order…», миграция заявок под заказ) упал по таймауту 120 с на шаге `runMigrate up` всей цепочки (на этой машине файл идёт 22 мин); ассерты моей миграции и её откат в цепочке прошли. Причина таймаута не подтверждена — смотреть итог в CI.
 - Юнит `photo-search-units.test.ts` — 34/34: SSRF (частные адреса IPv4/IPv6, вложенный IPv4, адрес в URL, имя с частным адресом среди ответов, перенаправление в частную сеть, чужие схема/порт, логин в адресе, размер, таймаут), ранжирование, перцептивный хэш на фикстурах, разбор ответа SerpAPI и отказов на подменённом `fetch` (ключ не попадает в текст ошибки), тестовый провайдер.
 
 ## UAT / E2E

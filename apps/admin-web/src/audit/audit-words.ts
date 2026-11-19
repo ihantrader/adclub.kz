@@ -13,6 +13,7 @@ import {
 import {
   catalogItemPath,
   catalogRequestPath,
+  matchAuditPath,
   maintenancePlanPath,
   assistantComplaintPath,
   complaintPath,
@@ -161,6 +162,8 @@ const ACTIONS: Record<string, string> = {
   "catalog_request.created": "Поставщик запросил добавить позицию",
   "catalog_request.approved": "Запрос на позицию закрыт: позиция в справочнике",
   "catalog_request.rejected": "Запрос на позицию отклонён",
+  "price_match_audit.correct": "Аудит: сопоставление ИИ верное",
+  "price_match_audit.wrong": "Аудит: сопоставление ИИ неверное",
   // TASK-061.
   "maintenance_plan.created": "Создан регламент ТО",
   "maintenance_plan.changed": "Изменён регламент ТО",
@@ -243,6 +246,7 @@ const ENTITIES: Record<string, string> = {
   account: "Пользователь",
   price_import: "Загрузка прайса",
   catalog_request: "Запрос на позицию",
+  price_match_audit: "Аудит сопоставления",
   maintenance_plan: "Регламент ТО",
   maintenance_plan_item: "Элемент регламента",
   review: "Отзыв",
@@ -500,6 +504,9 @@ export function entityLink(
     // A request to add an item opens its card; a price list — its company's «Прайс» (TASK-047).
     case "catalog_request":
       return UUID.test(entityId) ? catalogRequestPath(entityId) : null;
+    // A checked AI match opens its row of «Аудит сопоставлений» (TASK-065).
+    case "price_match_audit":
+      return UUID.test(entityId) ? matchAuditPath(entityId) : null;
     // A maintenance plan opens its card; an element — the card of its plan (TASK-061).
     case "maintenance_plan":
       return UUID.test(entityId) ? maintenancePlanPath(entityId) : null;
@@ -789,6 +796,7 @@ const STATUS_WORDS: Record<string, Record<string, string>> = {
   admin_signal: { open: "Новый", acknowledged: "В работе", closed: "Закрыт" },
   offer: { active: "В продаже", withdrawn: "Снято с продажи", suspended: "Приостановлено" },
   catalog_request: { new: "Новый", approved: "Добавлено", rejected: "Отклонено" },
+  price_match_audit: { pending: "Ждёт проверки", correct: "Верно", wrong: "Неверно" },
   maintenance_plan: { draft: "Черновик", active: "Действует", archived: "В архиве" },
   maintenance_plan_item: { proposed: "Предложено ИИ", active: "Подтверждено", archived: "Убрано" },
   subscription: SUBSCRIPTION_STATUS_TEXT,
@@ -848,6 +856,7 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
     manual: "вручную",
     missing_in_import: "нет в прайсе",
     out_of_stock_in_import: "нет в наличии по прайсу",
+    match_corrected: "сопоставление исправлено администратором",
     // The reasons of a complaint (TASK-049) and of one about the assistant (TASK-062).
     ...COMPLAINT_REASON_TEXT,
     ...ASSISTANT_REASON_TEXT,
@@ -993,6 +1002,8 @@ export function valueText(
  */
 const HIDDEN_FIELDS: Record<string, readonly string[]> = {
   vehicle_modification: ["market"],
+  // The row of the price list is the card itself (TASK-065): not a change.
+  price_match_audit: ["importId", "rowNo"],
 };
 
 /** The fields of `entityType`'s entries «было → стало» leaves out. */
@@ -1004,6 +1015,8 @@ export function hiddenFieldsOf(entityType: string): readonly string[] {
 const ENTITY_FIELD_TEXT: Record<string, Record<string, string>> = {
   account: { name: "Имя" },
   admin_user: { name: "Имя" },
+  // The check of an AI match (TASK-065): the item AI chose, and the right one.
+  price_match_audit: { itemId: "Предложил ИИ", correctItemId: "Правильная позиция" },
 };
 
 /** An id the server gave no name for: it says nothing to an administrator. */

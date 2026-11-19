@@ -73,6 +73,15 @@ export function homeCards(home: AdminHome): HomeCard[] {
       href: routePaths.moderation,
     },
     {
+      // TASK-065: AI matches of price lists put aside — the `total` of the queue.
+      key: "matchAudit",
+      icon: "sparkles",
+      title: "Аудит сопоставлений ждёт",
+      value: home.priceMatchAuditWaiting,
+      note: "Строки прайсов, где поставщик принял позицию, предложенную ИИ: проверить выборку",
+      href: routePaths.catalogMatchAudit,
+    },
+    {
       // TASK-061: AI drafts of maintenance plans not activated yet — the list's `total`.
       key: "maintenance",
       icon: "wrench",

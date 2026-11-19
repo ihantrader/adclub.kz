@@ -5,6 +5,8 @@ import { createTranslate } from "../translate";
 import {
   addedAction,
   conditionsText,
+  correctionIsNew,
+  correctionText,
   formFromQuery,
   requestBody,
   requestRefusal,
@@ -145,5 +147,59 @@ describe("the request for an item (S-OFF-05)", () => {
     expect(requestRefusal(limited, t).text).toBe(
       "Слишком много запросов. Попробуйте через 10\u00a0мин",
     );
+  });
+});
+
+describe("a corrected AI match (TASK-065)", () => {
+  const item = (name: string) => ({ name: { text: name } }) as unknown as OfferItem;
+  const correction = {
+    id: A,
+    importId: A,
+    row: {
+      article: null,
+      brand: "Geely",
+      name: "Колодки передние Atlas",
+      price: 12000,
+      photoText: null,
+    },
+    wrongItem: item("Колодки тормозные задние"),
+    correctItem: item("Колодки тормозные передние"),
+    notInCatalog: false,
+    offerWithdrawn: true,
+    decidedAt: "2026-11-19T10:00:00.000Z",
+    isNew: true,
+  };
+
+  it("says which item the row is not, and which it is, and what happened to the offer", () => {
+    const words = correctionText(correction, t);
+    expect(words.about).toBe(
+      "Строка «Колодки передние Atlas» — не «Колодки тормозные задние», а «Колодки тормозные передние»",
+    );
+    expect(words.details).toBe(
+      "Предложение на «Колодки тормозные задние» снято с продажи. Следующая загрузка прайса снова спросит, что это за позиция",
+    );
+    expect(statusText("corrected", null, t)).toBe("Сопоставление исправлено");
+    expect(statusTone("corrected")).toBe("warning");
+  });
+
+  it("says there is no such item, and that a kept offer is to check — in Kazakh too", () => {
+    const absent = { ...correction, correctItem: null, notInCatalog: true, offerWithdrawn: false };
+    const words = correctionText(absent, t);
+    expect(words.about).toContain("Такой позиции в справочнике нет");
+    expect(words.details).toContain("осталось — проверьте его");
+    const kk = correctionText(absent, createTranslate("kk", null));
+    expect(kk.about).toBe(
+      "«Колодки передние Atlas» жолы — «Колодки тормозные задние» емес. Мұндай позиция анықтамалықта жоқ — қосуға сұрау жіберуге болады",
+    );
+  });
+});
+
+describe("«новое» of a correction", () => {
+  it("is the server's, or decided after the summary shown on opening", () => {
+    const at = "2026-11-19T10:00:00.000Z";
+    expect(correctionIsNew({ isNew: true, decidedAt: at }, null)).toBe(true);
+    expect(correctionIsNew({ isNew: false, decidedAt: at }, "2026-11-19T09:59:59.000Z")).toBe(true);
+    expect(correctionIsNew({ isNew: false, decidedAt: at }, at)).toBe(false);
+    expect(correctionIsNew({ isNew: false, decidedAt: at }, null)).toBe(false);
   });
 });

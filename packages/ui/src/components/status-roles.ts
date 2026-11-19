@@ -4,6 +4,7 @@ import type {
   CatalogEntryStatus,
   CatalogItemStatus,
   CatalogRequestStatus,
+  PriceMatchAuditStatus,
   CategoryStatus,
   ClubAccessGrantStatus,
   CompatibilityProposalStatus,
@@ -141,6 +142,12 @@ export const statusRoles = {
     approved: done,
     rejected: over,
   } satisfies Record<CatalogRequestStatus, StatusRole>,
+  // The check of an AI match (TASK-065, A-MOD-04).
+  matchAudit: {
+    pending: waits,
+    correct: done,
+    wrong: over,
+  } satisfies Record<PriceMatchAuditStatus, StatusRole>,
   compatibilityProposal: {
     pending: waits,
     approved: done,

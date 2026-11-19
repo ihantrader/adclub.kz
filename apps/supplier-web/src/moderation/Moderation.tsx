@@ -1,6 +1,7 @@
 import type {
   SupplierCatalogRequest,
   SupplierModerationPhoto,
+  SupplierMatchCorrection,
   SupplierModerationProposal,
   SupplierModerationSummary,
 } from "@adclub/contracts";
@@ -35,6 +36,8 @@ import { photoStatusText, photoStatusTone } from "../photos/photo-rules";
 import {
   addedAction,
   conditionsText,
+  correctionIsNew,
+  correctionText,
   MODERATION_TAB_TEXT,
   requestSource,
   requestTitle,
@@ -89,7 +92,9 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
         ? summary?.unseen.requests
         : key === "photos"
           ? summary?.unseen.photos
-          : summary?.unseen.compatibility;
+          : key === "compatibility"
+            ? summary?.unseen.compatibility
+            : summary?.unseen.corrections;
     return unseen
       ? `${t(MODERATION_TAB_TEXT[key])} · ${t("moderation.newCount", { n: unseen })}`
       : t(MODERATION_TAB_TEXT[key]);
@@ -124,6 +129,7 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
             { value: "requests", label: label("requests") },
             { value: "photos", label: label("photos") },
             { value: "compatibility", label: label("compatibility") },
+            { value: "corrections", label: label("corrections") },
           ]}
         />
       </div>
@@ -131,8 +137,10 @@ export function Moderation({ generation, timeZone }: { generation: number; timeZ
         <Requests timeZone={timeZone} />
       ) : tab === "photos" ? (
         <Photos timeZone={timeZone} seenAt={summary?.seenAt ?? null} />
-      ) : (
+      ) : tab === "compatibility" ? (
         <Proposals timeZone={timeZone} />
+      ) : (
+        <Corrections timeZone={timeZone} seenAt={summary?.seenAt ?? null} />
       )}
     </>
   );
@@ -256,6 +264,49 @@ function Proposals({ timeZone }: { timeZone: string }) {
   );
 }
 
+/** Corrections of the company's AI matches by the administrator (TASK-065). */
+function Corrections({ timeZone, seenAt }: { timeZone: string; seenAt: string | null }) {
+  const { t, lang } = useLanguage();
+  const load = useCallback(async (cursor: string | null) => {
+    const page = await apiClient.listSupplierMatchCorrections({
+      query: { limit: PAGE, ...(cursor ? { cursor } : {}) },
+    });
+    return { entries: page.entries, next: page.nextCursor };
+  }, []);
+  const list = usePages<SupplierMatchCorrection>(load);
+  const toRow = (correction: SupplierMatchCorrection): ModerationRow => {
+    const words = correctionText(correction, t);
+    return {
+      id: correction.id,
+      // The tab opens after this visit marked the section seen: «новое» is by the moment before it.
+      isNew: correctionIsNew(correction, seenAt),
+      status: "corrected",
+      statusText: statusText("corrected", null, t),
+      decided: formatWhen(correction.decidedAt, timeZone, lang, t),
+      name: words.name,
+      line: words.line,
+      about: words.about,
+      details: words.details,
+      sent: formatWhen(correction.decidedAt, timeZone, lang, t),
+      action: null,
+    };
+  };
+  return (
+    <List
+      list={list}
+      toRow={toRow}
+      aboutHeader={t("moderation.tableRow")}
+      empty={
+        <EmptyState
+          icon="sparkles"
+          title={t("moderation.emptyCorrections")}
+          text={t("moderation.emptyCorrectionsText")}
+        />
+      }
+    />
+  );
+}
+
 function List<T>({
   list,
   empty,
@@ -358,7 +409,9 @@ function StatusMark({ row }: { row: ModerationRow }) {
           ? "circleCheck"
           : row.status === "rejected" || row.status === "deleted"
             ? "circleX"
-            : "clock"
+            : row.status === "corrected"
+              ? "alertTriangle"
+              : "clock"
       }
     >
       {row.statusText}

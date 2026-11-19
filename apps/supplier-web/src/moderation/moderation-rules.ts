@@ -5,6 +5,7 @@ import type {
   CompatibilityProposalStatus,
   CreateCatalogRequestBody,
   SupplierCatalogRequest,
+  SupplierMatchCorrection,
 } from "@adclub/contracts";
 import type { SupplierTextKey } from "@adclub/i18n";
 import type { StatusTone } from "../price/price-rules";
@@ -18,7 +19,7 @@ import type { Translate } from "../i18n";
  * Whether a decision is «новое» is the server's (`isNew`).
  */
 
-export type ModerationStatus = CatalogRequestStatus | CompatibilityProposalStatus;
+export type ModerationStatus = CatalogRequestStatus | CompatibilityProposalStatus | "corrected";
 
 /** «На рассмотрении» / «Добавлено» / «Отклонено: {причина}». */
 export function statusText(status: ModerationStatus, reason: string | null, t: Translate): string {
@@ -26,6 +27,8 @@ export function statusText(status: ModerationStatus, reason: string | null, t: T
     case "new":
     case "pending":
       return t("moderation.status.waiting");
+    case "corrected":
+      return t("moderation.correction.status");
     case "approved":
       return t("moderation.status.added");
     case "rejected":
@@ -69,6 +72,48 @@ export function requestSource(request: SupplierCatalogRequest, t: Translate): st
     : request.rowNo !== null
       ? t("moderation.fromPrice", { row: String(request.rowNo) })
       : t("moderation.fromPricePlain");
+}
+
+/**
+ * «новое» of a correction: the server's, or — the list loaded after this
+ * visit marked «Модерация» seen — decided after the moment the summary
+ * shown on opening said the employee had seen.
+ */
+export function correctionIsNew(
+  correction: Pick<SupplierMatchCorrection, "isNew" | "decidedAt">,
+  seenAt: string | null,
+): boolean {
+  if (correction.isNew) return true;
+  return seenAt !== null && Date.parse(correction.decidedAt) > Date.parse(seenAt);
+}
+
+/**
+ * A correction of an AI match by the administrator (TASK-065, S-MOD-01):
+ * «Строка «…» — не «…», а «…»» (or «такой позиции нет»), and what happened
+ * to the offer on the wrong item.
+ */
+export function correctionText(
+  correction: SupplierMatchCorrection,
+  t: Translate,
+): { name: string; line: string | null; about: string; details: string } {
+  const row = correction.row.name ?? correction.row.article ?? "";
+  const wrong = correction.wrongItem?.name.text ?? t("moderation.itemGone");
+  const not = t("moderation.correction.not", { row, item: wrong });
+  const about = correction.correctItem
+    ? `${not}, ${t("moderation.correction.right", { item: correction.correctItem.name.text })}`
+    : correction.notInCatalog
+      ? `${not}. ${t("moderation.correction.absent")}`
+      : not;
+  const offer = t(
+    correction.offerWithdrawn ? "moderation.correction.withdrawn" : "moderation.correction.kept",
+    { item: wrong },
+  );
+  return {
+    name: row,
+    line: [correction.row.brand, correction.row.article].filter(Boolean).join(" · ") || null,
+    about,
+    details: `${offer}. ${t("moderation.correction.next")}`,
+  };
 }
 
 /**
@@ -153,7 +198,7 @@ export function requestRefusal(
   }
 }
 
-export const MODERATION_TABS = ["requests", "photos", "compatibility"] as const;
+export const MODERATION_TABS = ["requests", "photos", "compatibility", "corrections"] as const;
 
 export type ModerationTab = (typeof MODERATION_TABS)[number];
 
@@ -161,4 +206,5 @@ export const MODERATION_TAB_TEXT: Record<ModerationTab, SupplierTextKey> = {
   requests: "moderation.tabRequests",
   photos: "moderation.tabPhotos",
   compatibility: "moderation.tabCompatibility",
+  corrections: "moderation.tabCorrections",
 };

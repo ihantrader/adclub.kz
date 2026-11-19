@@ -24,6 +24,8 @@ export const routePaths = {
   catalogRequests: "/catalog/requests",
   // Maintenance plans (TASK-061): the list; a plan — `/catalog/maintenance/<id>`.
   catalogMaintenance: "/catalog/maintenance",
+  // The check of AI matches of price lists (TASK-065, A-MOD-04); a row — `/catalog/match-audit/<id>`.
+  catalogMatchAudit: "/catalog/match-audit",
   // The vehicle catalog (TASK-035.B): makes, engines, the reference lists, imports.
   vehicles: "/vehicles",
   vehicleEngines: "/vehicles/engines",
@@ -73,6 +75,7 @@ export type RouteKey =
   | "catalogFill"
   | "catalogRequest"
   | "maintenancePlan"
+  | "matchAudit"
   | "vehicleMake"
   | "vehicleModel"
   | "vehicleGeneration"
@@ -91,6 +94,7 @@ const FILL_PATH = new RegExp(`^/catalog/fill/(${UUID})$`, "i");
 const VEHICLE_PATHS: [RouteKey, RegExp][] = [
   ["catalogRequest", new RegExp(`^/catalog/requests/(${UUID})$`, "i")],
   ["maintenancePlan", new RegExp(`^/catalog/maintenance/(${UUID})$`, "i")],
+  ["matchAudit", new RegExp(`^/catalog/match-audit/(${UUID})$`, "i")],
   ["vehicleMake", new RegExp(`^/vehicles/makes/(${UUID})$`, "i")],
   ["vehicleModel", new RegExp(`^/vehicles/models/(${UUID})$`, "i")],
   ["vehicleGeneration", new RegExp(`^/vehicles/generations/(${UUID})$`, "i")],
@@ -201,6 +205,11 @@ export function itemFromRequestPath(requestId: string): string {
   return withQuery(routePaths.catalogItemNew, { requestId });
 }
 
+/** A row put aside for the check of AI matches (TASK-065, A-MOD-04). */
+export function matchAuditPath(auditId: string): string {
+  return `/catalog/match-audit/${auditId}`;
+}
+
 /** The card of a maintenance plan (TASK-061). */
 export function maintenancePlanPath(planId: string): string {
   return `/catalog/maintenance/${planId}`;
@@ -253,7 +262,9 @@ export function menuOf(route: RouteKey): StaticRoute {
     route === "catalogRequests" ||
     route === "catalogRequest" ||
     route === "catalogMaintenance" ||
-    route === "maintenancePlan"
+    route === "maintenancePlan" ||
+    route === "catalogMatchAudit" ||
+    route === "matchAudit"
   ) {
     return "catalog";
   }

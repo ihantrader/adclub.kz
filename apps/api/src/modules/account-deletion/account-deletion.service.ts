@@ -298,7 +298,14 @@ export class AccountDeletion {
    * and as an employee (W-01, W-08…) — and every settled message and
    * button press keeps a placeholder instead of the number, without its
    * values. A message being sent at this very moment (`sending`, seconds)
-   * keeps it: the provider already has the number.
+   * is marked `erase_phone`: the attempt that settles it (or the sweeper of
+   * interrupted ones) loses the number and the values in the same update —
+   * the trigger `outbound_message_erase_phone` (TASK-072.A). The channel the
+   * number was last confirmed through goes too (`phone_verification`).
+   *
+   * Every statement finds the rows by an index on the number
+   * (`outbound_message_phone_idx`, `message_button_press_from_phone_idx`):
+   * the cost follows the messages of this number, not the gateway's history.
    */
   private async forgetNumber(tx: DbExecutor, phone: string, now: Date): Promise<void> {
     const at = sql`${now.toISOString()}::timestamptz`;
@@ -307,18 +314,35 @@ export class AccountDeletion {
         updated_at = ${at}
       WHERE phone = ${phone} AND status = 'queued'`);
     await tx.execute(sql`
+      UPDATE outbound_message SET erase_phone = TRUE, updated_at = ${at}
+      WHERE phone = ${phone} AND status = 'sending'`);
+    await tx.execute(sql`
       UPDATE outbound_message SET phone = ${ERASED_PHONE}, variables = NULL, updated_at = ${at}
       WHERE phone = ${phone} AND status <> 'sending'`);
     await tx.execute(sql`
       UPDATE message_button_press SET from_phone = ${ERASED_PHONE} WHERE from_phone = ${phone}`);
+    // A row locked right now is a sign-in of this number in flight: it waits
+    // for this account and then opens a new one (`findOrCreateByPhone`), so
+    // the channel it records is the new account's. Waiting for it instead
+    // would be a deadlock (it holds this row and waits for the account).
+    await tx.execute(sql`
+      DELETE FROM phone_verification WHERE phone IN (
+        SELECT phone FROM phone_verification WHERE phone = ${phone} FOR UPDATE SKIP LOCKED)`);
   }
 
   /**
    * The entries of the action journal about the person keep what was done,
    * not who it was: the name, the e-mail and the masked number are taken out
    * of `before`/`after` of every entry about the account, its memberships
-   * and what names the account (the one rewrite the journal allows, inside
-   * this transaction — the migration of TASK-072).
+   * and what names the account, and of the entries the person made as a
+   * user (`review_login.signed_in` keeps the masked number without an
+   * `accountId`) — the one rewrite the journal allows, inside this
+   * transaction, and only taking keys out (the migrations of TASK-072 and
+   * TASK-072.A). Entries the person made as an employee or an administrator
+   * are about others and keep their words. Each condition has its index
+   * (`audit_log_entity_idx`, `audit_log_before_account_idx`,
+   * `audit_log_after_account_idx`, `audit_log_actor_idx`): the cost follows
+   * the account's own entries, not the journal.
    */
   private async redactJournal(tx: DbExecutor, accountId: string): Promise<void> {
     const memberIds = (
@@ -335,6 +359,7 @@ export class AccountDeletion {
       WHERE (entity_type = 'account' AND entity_id = ${accountId})
          OR before ->> 'accountId' = ${accountId}
          OR after ->> 'accountId' = ${accountId}
+         OR (actor_account_id = ${accountId} AND actor_role = 'user')
          ${
            memberIds.length > 0
              ? sql`OR (entity_type = 'supplier_member' AND entity_id IN (${sql.join(

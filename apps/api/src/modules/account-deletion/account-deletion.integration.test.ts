@@ -857,4 +857,300 @@ describe("deleting the account, consents, the export of data (PostgreSQL + Redis
     expect(leftover.garage).toEqual([]);
     expect(leftover.orders).toHaveLength(1);
   });
+  // ------------------------------------------------------------------ TASK-072.A
+
+  /** Waits until `count` backends of the test database wait for a lock. */
+  async function lockWaiters(count: number): Promise<void> {
+    const deadline = Date.now() + 1_500;
+    for (;;) {
+      const { rows } = await db.query<{ count: string }>(
+        "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()",
+      );
+      if (Number(rows[0]!.count) >= count) return;
+      if (Date.now() > deadline) throw new Error(`lock waiters: ${rows[0]!.count} of ${count}`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+
+  it("a sign-in racing the deletion gets a new account, never a session of the deleted one", async () => {
+    const user = await customer();
+    rememberCode(user.phone);
+    await redis.del(`rl:login-code:resend:${user.phone}`);
+    const sent = await http()
+      .post("/auth/login-code")
+      .set("X-Client", IOS)
+      .set("X-Forwarded-For", nextIp())
+      .send({ phone: user.phone });
+    expect(sent.status).toBe(200);
+    const code = channels.sent.filter((message) => message.phone === user.phone).at(-1)!.code;
+    rememberCode(code);
+
+    // The deletion takes the account row first (a holder keeps it a moment,
+    // so both requests are surely in flight); the second device's sign-in
+    // arrives while the deletion holds it.
+    const holder = new Client({ connectionString: postgres.getConnectionUri() });
+    await holder.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT 1 FROM account WHERE id = $1 FOR UPDATE", [user.accountId]);
+      const deleting = user.as("post", "/account/delete", { confirm: true }).then((r) => r);
+      await lockWaiters(1);
+      const signingIn = http()
+        .post("/auth/login-code/verify")
+        .set("X-Client", IOS)
+        .set("X-Forwarded-For", nextIp())
+        .send({ phone: user.phone, code })
+        .then((r) => r);
+      await lockWaiters(2);
+      await holder.query("COMMIT");
+      const [deleted, signedIn] = await Promise.all([deleting, signingIn]);
+      expect(deleted.status, JSON.stringify(deleted.body)).toBe(200);
+      expect(signedIn.status, JSON.stringify(signedIn.body)).toBe(200);
+      remember(signedIn.body);
+
+      // The new session is of a new, empty account.
+      const bearer = (signedIn.body as { session: { accessToken: string } }).session.accessToken;
+      const profile = await ok(call(bearer, IOS, "get", "/account/profile"), (b) =>
+        accountProfileSchema.parse(b),
+      );
+      const fresh = await idOf("SELECT id FROM account WHERE phone = $1", [user.phone]);
+      expect(fresh).not.toBe(user.accountId);
+      expect(profile.phone).toBe(user.phone);
+      expect(profile.registrationCompleted).toBe(false);
+    } finally {
+      await holder.query("ROLLBACK").catch(() => undefined);
+      await holder.end();
+    }
+    const alive = await db.query(
+      "SELECT id FROM session WHERE account_id = $1 AND revoked_at IS NULL",
+      [user.accountId],
+    );
+    expect(alive.rowCount).toBe(0);
+  });
+
+  it("the guard, the token exchange and the sign-in refuse a deleted account", async () => {
+    const user = await customer();
+    const signedIn = await signIn(user.phone, IOS, false);
+    const { accessToken, refreshToken } = (
+      signedIn.body as { session: { accessToken: string; refreshToken: string } }
+    ).session;
+    await ok(user.as("post", "/account/delete", { confirm: true }), (b) => b);
+
+    // A session of the deleted account that is somehow still open (as one
+    // opened while the deletion ran would have been) opens nothing.
+    const reopen = async () =>
+      db.query(
+        "UPDATE session SET revoked_at = NULL, revoked_reason = NULL WHERE account_id = $1",
+        [user.accountId],
+      );
+    await reopen();
+    expectError(await call(accessToken, IOS, "get", "/auth/me"), 401, "SESSION_ENDED");
+    const ended = await db.query<{ revoked_reason: string }>(
+      "SELECT DISTINCT revoked_reason FROM session WHERE account_id = $1 AND revoked_at IS NOT NULL",
+      [user.accountId],
+    );
+    expect(ended.rows.map((row) => row.revoked_reason)).toContain("account_deleted");
+
+    await reopen();
+    const exchanged = await http()
+      .post("/auth/session/refresh")
+      .set("X-Client", IOS)
+      .set("X-Forwarded-For", nextIp())
+      .send({ refreshToken });
+    expectError(exchanged, 401, "SESSION_ENDED");
+    // The exchange ended the session it was asked about.
+    const latest = await db.query<{ revoked_reason: string | null }>(
+      "SELECT revoked_reason FROM session WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [user.accountId],
+    );
+    expect(latest.rows[0]!.revoked_reason).toBe("account_deleted");
+  });
+
+  it("the redaction flag only takes keys out of a journal entry", async () => {
+    const { rows } = await db.query<{ id: string; after: Record<string, unknown> }>(
+      "SELECT id, after FROM audit_log WHERE jsonb_typeof(after) = 'object' AND after <> '{}'::jsonb LIMIT 1",
+    );
+    const entry = rows[0]!;
+    const key = Object.keys(entry.after)[0]!;
+    const attempt = async (setClause: string, values: unknown[]): Promise<string | null> => {
+      await db.query("BEGIN");
+      try {
+        await db.query("SELECT set_config('adclub.audit_redaction', 'on', true)");
+        await db.query(`UPDATE audit_log SET ${setClause} WHERE id = $1`, [entry.id, ...values]);
+        await db.query("ROLLBACK");
+        return null;
+      } catch (error) {
+        await db.query("ROLLBACK");
+        return (error as Error).message;
+      }
+    };
+    // Rewriting a value, adding a key, replacing the object, clearing it — refused.
+    expect(await attempt("after = jsonb_set(after, ARRAY[$2], '\"forged\"')", [key])).toMatch(
+      /append-only/,
+    );
+    expect(await attempt(`after = after || '{"forged":1}'::jsonb`, [])).toMatch(/append-only/);
+    expect(await attempt(`after = '[]'::jsonb`, [])).toMatch(/append-only/);
+    expect(await attempt("after = NULL", [])).toMatch(/append-only/);
+    expect(await attempt("reason = 'forged'", [])).toMatch(/append-only/);
+    // Taking a key out passes, and so does leaving the entry as it is.
+    expect(await attempt("after = after - $2::text", [key])).toBeNull();
+    expect(await attempt("after = after", [])).toBeNull();
+    // Without the flag nothing passes.
+    await db.query("BEGIN");
+    await expect(
+      db.query("UPDATE audit_log SET after = after - $2::text WHERE id = $1", [entry.id, key]),
+    ).rejects.toThrow(/append-only/);
+    await db.query("ROLLBACK");
+  });
+
+  it("a message being sent and the channel of the number keep no number after the deletion", async () => {
+    const user = await customer();
+    expect(
+      (await db.query("SELECT 1 FROM phone_verification WHERE phone = $1", [user.phone])).rowCount,
+    ).toBe(1);
+    const insert = async (key: string) =>
+      idOf(
+        `INSERT INTO outbound_message (dedupe_key, template, lang, phone, subject_type, variables, status, attempts, claimed_until)
+         VALUES ($1, 'supplier_invitation', 'ru', $2, 'test', '{"name":"Әлия"}'::jsonb, 'sending', 1, now() + interval '1 minute')
+         RETURNING id`,
+        [key, user.phone],
+      );
+    const sentOne = await insert(`sending:${randomUUID()}`);
+    const retried = await insert(`sending:${randomUUID()}`);
+
+    await ok(user.as("post", "/account/delete", { confirm: true }), (b) => b);
+    expect(
+      (await db.query("SELECT 1 FROM phone_verification WHERE phone = $1", [user.phone])).rowCount,
+    ).toBe(0);
+    // The attempt is still out: the row waits with its mark.
+    const marked = await db.query<{ erase_phone: boolean }>(
+      "SELECT erase_phone FROM outbound_message WHERE id = ANY($1)",
+      [[sentOne, retried]],
+    );
+    expect(marked.rows.map((row) => row.erase_phone)).toEqual([true, true]);
+
+    // The attempt settles it — the number and the values go in the same update.
+    await db.query(
+      `UPDATE outbound_message SET status = 'sent', provider = 'test', provider_message_id = 'wamid.t072a',
+         sent_at = now(), settled_at = now(), claimed_until = NULL WHERE id = $1`,
+      [sentOne],
+    );
+    // The attempt failed and gives it back for a retry — it is cancelled instead.
+    await db.query(
+      "UPDATE outbound_message SET status = 'queued', claimed_until = NULL WHERE id = $1",
+      [retried],
+    );
+    const settled = await db.query<{
+      id: string;
+      phone: string;
+      variables: unknown;
+      status: string;
+      erase_phone: boolean;
+    }>(
+      "SELECT id, phone, variables, status, erase_phone FROM outbound_message WHERE id = ANY($1) ORDER BY id = $2 DESC",
+      [[sentOne, retried], sentOne],
+    );
+    expect(settled.rows).toEqual([
+      { id: sentOne, phone: "+70000000000", variables: null, status: "sent", erase_phone: false },
+      {
+        id: retried,
+        phone: "+70000000000",
+        variables: null,
+        status: "cancelled",
+        erase_phone: false,
+      },
+    ]);
+    expect(
+      (await db.query("SELECT 1 FROM outbound_message WHERE phone = $1", [user.phone])).rowCount,
+    ).toBe(0);
+  });
+
+  it("deletes within the statement limit on a journal and a gateway of 500 000 rows each", async () => {
+    const user = await customer();
+    await ok(user.as("patch", "/account/profile", { email: USER_EMAIL }), (b) => b);
+    const ROWS = 500_000;
+    // The worst case for the partial indexes: every entry names some account.
+    await db.query(
+      `INSERT INTO audit_log (action, actor_role, entity_type, entity_id, before, after)
+       SELECT 'order.changed', 'system', 'customer_order', g::text,
+         jsonb_build_object('accountId', gen_random_uuid()::text, 'status', 'new'),
+         jsonb_build_object('accountId', gen_random_uuid()::text, 'name', 'Кто-то')
+       FROM generate_series(1, $1::int) AS g`,
+      [ROWS],
+    );
+    await db.query(
+      `INSERT INTO audit_log (action, actor_role, actor_account_id, entity_type, entity_id, after)
+       SELECT 'account.profile_updated', 'user', $1::uuid, 'account', $1::text,
+         jsonb_build_object('accountId', $1::text, 'name', $2::text, 'email', $3::text)
+       FROM generate_series(1, 50)`,
+      [user.accountId, USER_NAME, USER_EMAIL],
+    );
+    await db.query(
+      `INSERT INTO outbound_message (dedupe_key, template, lang, phone, subject_type, status, settled_at)
+       SELECT 'bulk:' || g, 'supplier_invitation', 'ru', '+7700' || lpad(g::text, 7, '0'), 'test',
+         'cancelled', now()
+       FROM generate_series(1, $1::int) AS g`,
+      [ROWS],
+    );
+    await db.query(
+      `INSERT INTO outbound_message (dedupe_key, template, lang, phone, subject_type, status, settled_at)
+       SELECT 'mine:' || g, 'supplier_invitation', 'ru', $1, 'test', 'cancelled', now()
+       FROM generate_series(1, 20) AS g`,
+      [user.phone],
+    );
+    const event = await idOf(
+      "INSERT INTO inbound_webhook_event (provider, external_id) VALUES ('whatsapp', $1) RETURNING id",
+      [randomUUID()],
+    );
+    await db.query(
+      `INSERT INTO message_button_press (event_id, provider_message_id, from_phone)
+       SELECT $1, 'wamid.bulk.' || g, '+7700' || lpad(g::text, 7, '0')
+       FROM generate_series(1, $2::int) AS g`,
+      [event, ROWS],
+    );
+    await db.query(
+      `INSERT INTO message_button_press (event_id, provider_message_id, from_phone)
+       SELECT $1, 'wamid.mine.' || g, $2 FROM generate_series(1, 5) AS g`,
+      [event, user.phone],
+    );
+    await db.query("ANALYZE audit_log; ANALYZE outbound_message; ANALYZE message_button_press");
+
+    // The statements of the deletion that look into the big tables find
+    // their rows through indexes — none reads a table through.
+    const plans: [string, unknown[]][] = [
+      [
+        `SELECT id FROM audit_log WHERE (entity_type = 'account' AND entity_id = $1)
+           OR before ->> 'accountId' = $1 OR after ->> 'accountId' = $1
+           OR (actor_account_id = $1::uuid AND actor_role = 'user')`,
+        [user.accountId],
+      ],
+      ["SELECT id FROM outbound_message WHERE phone = $1 AND status <> 'sending'", [user.phone]],
+      ["SELECT id FROM message_button_press WHERE from_phone = $1", [user.phone]],
+    ];
+    for (const [text, values] of plans) {
+      const { rows } = await db.query<{ "QUERY PLAN": unknown }>(
+        `EXPLAIN (FORMAT JSON) ${text}`,
+        values,
+      );
+      expect(JSON.stringify(rows[0]!["QUERY PLAN"]), text).not.toContain("Seq Scan");
+    }
+
+    const deleteStarted = Date.now();
+    await ok(user.as("post", "/account/delete", { confirm: true }), (b) => b);
+    // Measured: 123–532 ms (TASK-072.A report); the limit of one statement is 2 s.
+    expect(Date.now() - deleteStarted).toBeLessThan(2_000);
+
+    const journal = await db.query(
+      "SELECT 1 FROM audit_log WHERE (after ->> 'accountId' = $1) AND (after ? 'name' OR after ? 'email')",
+      [user.accountId],
+    );
+    expect(journal.rowCount).toBe(0);
+    expect(
+      (await db.query("SELECT 1 FROM outbound_message WHERE phone = $1", [user.phone])).rowCount,
+    ).toBe(0);
+    expect(
+      (await db.query("SELECT 1 FROM message_button_press WHERE from_phone = $1", [user.phone]))
+        .rowCount,
+    ).toBe(0);
+  }, 300_000);
 });

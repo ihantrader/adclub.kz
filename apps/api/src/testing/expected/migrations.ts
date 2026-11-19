@@ -76,4 +76,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1792706800000_item-photo-search",
   "1792710720000_account-deletion-and-consents",
   "1792720000000_price-match-audit-hardening",
+  "1792721207200_account-deletion-hardening",
 ];

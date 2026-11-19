@@ -331,6 +331,12 @@ export class SessionService {
         if (row.expiresAt.getTime() <= now.getTime()) {
           return { result: { kind: "ended", reason: "expired", closed: false } };
         }
+        if (row.accountDeleted) {
+          return {
+            decision: { kind: "revoke", reason: "account_deleted" },
+            result: { kind: "ended", reason: "account_deleted", closed: false },
+          };
+        }
         // The rights behind the session are checked before it is extended.
         const decision = decideAccess(["user", "supplier", "admin"], principalOf(row));
         if (!decision.allowed && decision.reason !== "context_not_allowed") {
@@ -494,6 +500,13 @@ export class SessionService {
     }
     if (row.expiresAt.getTime() <= now.getTime()) {
       this.logger.warn(`Access refused: session expired session=${sid} account=${sub}`);
+      throw sessionEndedException();
+    }
+    if (row.accountDeleted) {
+      // A session opened while the account was being deleted (TASK-072.A):
+      // the deletion ended the others, this one ends now.
+      await this.withDatabase(() => this.store.revokeLost(sid, "account_deleted", now));
+      this.logger.warn(`Access refused: account deleted, session ended session=${sid}`);
       throw sessionEndedException();
     }
 

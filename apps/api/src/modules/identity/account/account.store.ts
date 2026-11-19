@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { CatalogLanguage } from "@adclub/contracts";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../../database";
 import { account } from "../schema";
 
@@ -88,19 +88,30 @@ export class AccountStore {
     phone: string,
     executor: DbExecutor = this.database.db,
   ): Promise<AccountRecord & { created: boolean }> {
-    const [inserted] = await executor
-      .insert(account)
-      .values({ phone })
-      .onConflictDoNothing({ target: account.phone })
-      .returning(columns);
-    if (inserted) {
-      return { ...inserted, created: true };
+    // Twice at most: the second insert follows an account of this number
+    // deleted while we waited for it, and then finds the number free.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const [inserted] = await executor
+        .insert(account)
+        .values({ phone })
+        .onConflictDoNothing({ target: account.phone })
+        .returning(columns);
+      if (inserted) {
+        return { ...inserted, created: true };
+      }
+      // The lock waits for a deletion of this account in progress (it holds
+      // the row FOR UPDATE, TASK-072.A): after it commits, the row no longer
+      // has this number and is not returned — never a deleted account.
+      const [existing] = await executor
+        .select(columns)
+        .from(account)
+        .where(and(eq(account.phone, phone), ne(account.status, "deleted")))
+        .for("share");
+      if (existing) {
+        return { ...existing, created: false };
+      }
     }
-    const existing = await this.findByPhone(phone, executor);
-    if (!existing) {
-      throw new Error("Account vanished between insert and select");
-    }
-    return { ...existing, created: false };
+    throw new Error("Account vanished between insert and select");
   }
 
   /** The full profile (`GET /account/profile`, `GET /auth/me`'s additive fields). */

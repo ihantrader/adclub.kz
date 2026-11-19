@@ -1,4 +1,4 @@
-import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { MessageProviderName } from "../../config";
 import type { MessageFailureKind } from "./message-channel";
 import type { MessageLang, MessageTemplateKey } from "./message-templates";
@@ -78,6 +78,12 @@ export const outboundMessage = pgTable("outbound_message", {
   readAt: timestamp("read_at", { withTimezone: true }),
   /** When the message stopped needing anything: sent, failed or cancelled. */
   settledAt: timestamp("settled_at", { withTimezone: true }),
+  /**
+   * The recipient deleted the account while this message was being sent
+   * (TASK-072.A): the trigger `outbound_message_erase_phone` replaces the
+   * number and drops the values as soon as the attempt settles it.
+   */
+  erasePhone: boolean("erase_phone").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

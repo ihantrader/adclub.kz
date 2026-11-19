@@ -46,6 +46,8 @@ export interface SessionAccessRow {
   expiresAt: Date;
   revokedAt: Date | null;
   revokedReason: SessionRevokedReason | null;
+  /** The member deleted the account (TASK-072.A): no session of it opens anything. */
+  accountDeleted: boolean;
   membershipStatus: MembershipStatus | null;
   adminUserId: string | null;
   adminStatus: MembershipStatus | null;
@@ -104,6 +106,7 @@ const accessColumns = {
   expiresAt: session.expiresAt,
   revokedAt: session.revokedAt,
   revokedReason: session.revokedReason,
+  accountDeleted: sql<boolean>`${account.status} = 'deleted'`,
   membershipStatus: supplierMember.status,
   adminUserId: adminUser.id,
   adminStatus: adminUser.status,
@@ -174,6 +177,7 @@ export class SessionStore {
     const [row] = await this.database.db
       .select(accessColumns)
       .from(session)
+      .innerJoin(account, eq(account.id, session.accountId))
       .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
       .leftJoin(adminUser, adminOfSession())
       .where(eq(session.id, sessionId));
@@ -184,6 +188,7 @@ export class SessionStore {
     const [row] = await this.database.db
       .select(refreshColumns)
       .from(session)
+      .innerJoin(account, eq(account.id, session.accountId))
       .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
       .leftJoin(adminUser, adminOfSession())
       .where(eq(session.id, sessionId));
@@ -409,6 +414,7 @@ export class SessionStore {
       const [row] = await tx
         .select(refreshColumns)
         .from(session)
+        .innerJoin(account, eq(account.id, session.accountId))
         .leftJoin(supplierMember, eq(supplierMember.id, session.supplierMemberId))
         .leftJoin(adminUser, adminOfSession())
         .where(eq(session.id, sessionId))

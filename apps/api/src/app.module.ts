@@ -23,6 +23,7 @@ import { OffersModule } from "./modules/offers";
 import { ClubAccessModule } from "./modules/club-access";
 import { BillingModule } from "./modules/billing";
 import { OrdersModule } from "./modules/orders";
+import { AccountDeletionModule } from "./modules/account-deletion";
 import { ShowcaseModule } from "./modules/showcase";
 import { MaintenanceModule } from "./modules/maintenance";
 import { AssistantModule } from "./modules/assistant";
@@ -174,6 +175,8 @@ export class AppModule implements NestModule {
         ...(config.metrics.enabled ? [OpsRunMetricsModule] : []),
         orders,
         reviews,
+        // Deleting the account by the member (TASK-072): orders cancel through this very instance.
+        AccountDeletionModule.forRoot({ orders }),
         // The rating of suppliers (TASK-050): its admin view and the list's column.
         RatingsModule.forRoot({ http: true, signals, suppliers }),
         // Views of offers (TASK-070): the admin's «Просмотры и заявки».

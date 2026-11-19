@@ -393,6 +393,15 @@ import { clientPlatformSchema } from "./client";
  *   чем в прошлый раз ({N} км). Всё верно?» and send again with
  *   `confirmLower: true`.
  *
+ * Consents and deleting the account (TASK-072, D-077, ARCHITECTURE 4.96):
+ * - `CONSENT_REQUIRED` (403): a text the member agreed to was updated —
+ *   show «Мы обновили условия», `POST /account/consents`, then retry;
+ *   `details.kinds` lists what to agree to.
+ * - `ACCOUNT_DELETION_REFUSED` (409): nothing was deleted —
+ *   `details.reason` is `last_member` (the only employee of the company
+ *   `details.supplierName`: «Напишите в поддержку клуба…») or
+ *   `administrator` («Сначала снимите права администратора»).
+ *
  * The codes of the certificate below are those of every photo the app
  * reads (TASK-058): the dashboard and a part as well.
  *
@@ -576,6 +585,9 @@ export const errorCodeSchema = z.enum([
   "GARAGE_VIN_TAKEN",
   // The mileage journal of a car (TASK-058).
   "GARAGE_MILEAGE_LOWER",
+  // Consents with versions and deleting the account (TASK-072, D-077).
+  "CONSENT_REQUIRED",
+  "ACCOUNT_DELETION_REFUSED",
   // A photographed vehicle registration certificate (TASK-057, D-064).
   "VEHICLE_DOCUMENT_INVALID",
   "VEHICLE_DOCUMENT_UNAVAILABLE",

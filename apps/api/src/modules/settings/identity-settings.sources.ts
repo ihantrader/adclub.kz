@@ -1,5 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
+import type { ConsentVersions } from "@adclub/domain";
 import {
+  ConsentVersionsSource,
   LoginCodeSettingsSource,
   SessionSettingsSource,
   SignInDataRetentionSource,
@@ -125,6 +127,25 @@ export class SettingsSignInDataRetentionSource extends SignInDataRetentionSource
       loginCodeDays: v.cleanup_login_code_retention_days,
       signInStepDays: v.cleanup_sign_in_step_retention_days,
       sessionDays: v.cleanup_session_retention_days,
+      deletedAccountDays: v.deleted_account_retention_days,
+    };
+  }
+}
+
+/** The current versions of the texts of consents (TASK-072). */
+@Injectable()
+export class SettingsConsentVersionsSource extends ConsentVersionsSource {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(AppSettings) private readonly settings: AppSettings) {
+    super();
+  }
+
+  async currentVersions(): Promise<ConsentVersions> {
+    const v = await this.settings.values();
+    return {
+      phone_share: v.consent_phone_share_version,
+      terms: v.consent_terms_version,
+      vehicle_document: v.consent_vehicle_document_version,
     };
   }
 }

@@ -18,7 +18,7 @@ import {
   type SupplierMemberResponse,
   type UpdateSupplierMemberBody,
 } from "@adclub/contracts";
-import { canEnableNotifications, maskPhone } from "@adclub/domain";
+import { canEnableNotifications, isDeletedPhone, maskPhone } from "@adclub/domain";
 import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { rateLimitedException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
@@ -382,6 +382,10 @@ export class SupplierMembersService {
       }
       if (row.status !== "removed") {
         throw memberState("not_removed");
+      }
+      // TASK-072: the person deleted the account — the membership stays removed.
+      if (isDeletedPhone(row.phone)) {
+        throw memberState("removed");
       }
       const enabled = rows.filter((other) => other.notificationsEnabledAt !== null).length;
       const notificationsOn = canEnableNotifications(enabled, limit);

@@ -44,6 +44,157 @@
     }
   ],
   "paths": {
+    "/account/consents": {
+      "post": {
+        "operationId": "acceptConsents",
+        "summary": "«Принять» on «Мы обновили условия»: the consents are given for the current versions of their texts (all outdated ones when `kinds` is left out)",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "Which consents",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptConsentsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The profile with the journal of consents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProfile"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/account/delete": {
+      "post": {
+        "operationId": "deleteAccount",
+        "summary": "Delete the account for good (M-PRO-05 «Удалить»): active orders cancelled as the user's own cancellation, every session ended, the account made impersonal, the garage deleted; the store subscription is not cancelled. 409 ACCOUNT_DELETION_REFUSED — nothing changed",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "requestBody": {
+          "description": "The confirmation",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The account is deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletedResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/account/deletion": {
+      "get": {
+        "operationId": "getAccountDeletion",
+        "summary": "What deleting the account will do (SCREENS M-PRO-05): active orders to cancel, companies to leave, why it would be refused, the store of the subscription",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionPreview"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/account/profile": {
       "get": {
         "operationId": "getAccountProfile",
@@ -11497,6 +11648,17 @@
             }
           },
           {
+            "name": "deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -11592,6 +11754,70 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/users/{accountId}/data-exports": {
+      "post": {
+        "operationId": "createAdminUserDataExport",
+        "summary": "«Выгрузить данные…» (TASK-072, D-077): a one-time link to the JSON of a user's data — profile, consents, garage, orders, reviews, complaints, subscription and club access, devices without tokens. Written to the journal with the reason, never the content",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "Why the data is exported",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminUserDataExportBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDataExportLink"
                 }
               }
             }
@@ -23321,6 +23547,19 @@
   },
   "components": {
     "schemas": {
+      "AcceptConsentsBody": {
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentKind"
+            }
+          }
+        }
+      },
       "AccessContext": {
         "type": "string",
         "enum": [
@@ -23494,6 +23733,143 @@
           "updatedAt"
         ]
       },
+      "AccountConsent": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ConsentKind"
+          },
+          "version": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "version",
+          "at",
+          "current"
+        ]
+      },
+      "AccountDeletedResponse": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "cancelledOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "deleted",
+          "cancelledOrders"
+        ]
+      },
+      "AccountDeletionBlocker": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "last_member"
+              },
+              "supplierId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "supplierName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "supplierId",
+              "supplierName"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "administrator"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ]
+      },
+      "AccountDeletionPreview": {
+        "type": "object",
+        "properties": {
+          "activeOrders": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "supplierMemberships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "supplierId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "supplierName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "supplierId",
+                "supplierName"
+              ]
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountDeletionBlocker"
+            }
+          },
+          "subscriptionPlatform": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ios",
+                  "android"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "activeOrders",
+          "supplierMemberships",
+          "blockers",
+          "subscriptionPlatform"
+        ]
+      },
       "AccountProfile": {
         "type": "object",
         "properties": {
@@ -23555,6 +23931,21 @@
           },
           "remindersEnabled": {
             "type": "boolean"
+          },
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountConsent"
+            }
+          },
+          "consentsOutdated": {
+            "type": "boolean"
+          },
+          "outdatedConsents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentKind"
+            }
           }
         },
         "required": [
@@ -23567,7 +23958,10 @@
           "registrationCompleted",
           "phoneShareConsent",
           "whatsappAvailable",
-          "remindersEnabled"
+          "remindersEnabled",
+          "consents",
+          "consentsOutdated",
+          "outdatedConsents"
         ]
       },
       "AcknowledgeAdminSignalBody": {
@@ -33005,6 +33399,24 @@
               }
             ]
           },
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountConsent"
+            }
+          },
+          "deletedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "clubAccess": {
             "$ref": "#/components/schemas/ClubAccessState"
           },
@@ -33135,10 +33547,33 @@
           "createdAt",
           "registrationCompleted",
           "phoneShareConsent",
+          "consents",
+          "deletedAt",
           "clubAccess",
           "memberships",
           "notifications",
           "counts"
+        ]
+      },
+      "AdminUserDataExportLink": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "url",
+          "fileName",
+          "expiresAt"
         ]
       },
       "AdminUserGarageResponse": {
@@ -33197,6 +33632,12 @@
             ]
           },
           "noWhatsapp": {
+            "type": "string",
+            "enum": [
+              "true"
+            ]
+          },
+          "deleted": {
             "type": "string",
             "enum": [
               "true"
@@ -33756,6 +34197,18 @@
           },
           "supplierMember": {
             "type": "boolean"
+          },
+          "deletedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -33767,7 +34220,8 @@
           "registrationCompleted",
           "clubAccess",
           "noShows",
-          "supplierMember"
+          "supplierMember",
+          "deletedAt"
         ]
       },
       "AdminVehicleEngine": {
@@ -39490,6 +39944,14 @@
           "remember"
         ]
       },
+      "ConsentKind": {
+        "type": "string",
+        "enum": [
+          "phone_share",
+          "terms",
+          "vehicle_document"
+        ]
+      },
       "CopyCompatibilityBody": {
         "type": "object",
         "properties": {
@@ -39544,6 +40006,19 @@
         },
         "required": [
           "scope"
+        ]
+      },
+      "CreateAdminUserDataExportBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "CreateAttributeBody": {
@@ -41113,6 +41588,18 @@
           "withdrawOffer"
         ]
       },
+      "DeleteAccountBody": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirm"
+        ]
+      },
       "DependencyCheck": {
         "type": "object",
         "properties": {
@@ -41465,6 +41952,8 @@
           "GARAGE_LIMIT_REACHED",
           "GARAGE_VIN_TAKEN",
           "GARAGE_MILEAGE_LOWER",
+          "CONSENT_REQUIRED",
+          "ACCOUNT_DELETION_REFUSED",
           "VEHICLE_DOCUMENT_INVALID",
           "VEHICLE_DOCUMENT_UNAVAILABLE",
           "SPEECH_INVALID",

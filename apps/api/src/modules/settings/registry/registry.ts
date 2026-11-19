@@ -2033,6 +2033,12 @@ const WEB_ADDRESS = {
   message: "Адрес страницы (https://…) или пусто",
 };
 
+/** A version of a consent's text (TASK-072): letters, digits, dots, dashes. */
+const CONSENT_VERSION = {
+  regex: /^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$/,
+  message: "Латинские буквы, цифры, точка, дефис, например 2026-11-mvp",
+};
+
 /**
  * What the app shows on «Документы и поддержка» (M-PRO-06) and where «Стать
  * партнёром клуба» leads (TASK-077): read by `GET /meta/club-info`. Empty —
@@ -2078,6 +2084,30 @@ const club = group({
       pattern: WEB_ADDRESS,
       description:
         "Адрес страницы «Станьте партнёром клуба» (S-PUB-01, /join кабинета); открывается из профиля приложения. Пусто — в разработке берётся кабинет на машине разработчика, в рабочей сборке пункта нет.",
+    }),
+    // TASK-072 (D-077): the current versions of the texts of consents.
+    // Raising one asks every member who agreed to an older one again
+    // («Мы обновили условия»); until then orders answer CONSENT_REQUIRED.
+    consent_phone_share_version: define.string({
+      maxLength: 50,
+      default: "2026-09-mvp",
+      pattern: CONSENT_VERSION,
+      description:
+        "Версия текста согласия на передачу номера поставщику (T-AUTH-05). Новая версия — все участники соглашаются заново, до этого заявки не оформляются.",
+    }),
+    consent_terms_version: define.string({
+      maxLength: 50,
+      default: "2026-11-mvp",
+      pattern: CONSENT_VERSION,
+      description:
+        "Версия Условий использования и Политики конфиденциальности. Новая версия — все участники соглашаются заново, до этого заявки не оформляются.",
+    }),
+    consent_vehicle_document_version: define.string({
+      maxLength: 50,
+      default: "2026-11-mvp",
+      pattern: CONSENT_VERSION,
+      description:
+        "Версия согласия на хранение VIN и госномера (D-064, T-GAR-02). Новая версия — участники с VIN или госномером в гараже соглашаются заново.",
     }),
   },
 });
@@ -2164,6 +2194,15 @@ const cleanup = group({
       default: 30,
       description:
         "Через сколько дней после выхода или истечения удаляются сессии (нужны, чтобы разобраться в сообщении о чужом входе).",
+    }),
+    // TASK-072 (D-077, ARCHITECTURE 4.96): a working value until the lawyer's.
+    deleted_account_retention_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 3650,
+      default: 1095,
+      description:
+        "Через сколько дней после удаления аккаунта стираются его последние следы — хэш номера и журнал согласий (заявки и отзывы остаются обезличенными). Рабочее значение до юриста.",
     }),
     // TASK-022 (ARCHITECTURE 4.32).
     cleanup_order_idempotency_retention_days: define.duration({

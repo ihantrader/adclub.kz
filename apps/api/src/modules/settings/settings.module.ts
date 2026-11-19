@@ -1,6 +1,7 @@
 import { Global, Module, type DynamicModule } from "@nestjs/common";
 import {
   AccountDirectory,
+  ConsentVersionsSource,
   LoginCodeSettingsSource,
   SessionSettingsSource,
   SignInDataRetentionSource,
@@ -16,6 +17,7 @@ import {
 import {
   SettingsLoginCodeSource,
   SettingsSessionSource,
+  SettingsConsentVersionsSource,
   SettingsSignInDataRetentionSource,
   SettingsSignInSource,
 } from "./identity-settings.sources";
@@ -57,6 +59,7 @@ export class SettingsModule {
         { provide: SessionSettingsSource, useClass: SettingsSessionSource },
         { provide: SignInSettingsSource, useClass: SettingsSignInSource },
         { provide: SignInDataRetentionSource, useClass: SettingsSignInDataRetentionSource },
+        { provide: ConsentVersionsSource, useClass: SettingsConsentVersionsSource },
         // Schedules of background jobs (jobs/job-settings.ts).
         { provide: JobSettingsReader, useExisting: AppSettings },
       ],
@@ -67,6 +70,7 @@ export class SettingsModule {
         SessionSettingsSource,
         SignInSettingsSource,
         SignInDataRetentionSource,
+        ConsentVersionsSource,
         JobSettingsReader,
       ],
     };

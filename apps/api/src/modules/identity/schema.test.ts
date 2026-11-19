@@ -22,6 +22,8 @@ describe("identity schema: account", () => {
         "language",
         "emailNewsConsent",
         "remindersEnabled",
+        "deletedAt",
+        "erasedAt",
         "createdAt",
         "updatedAt",
       ].sort(),
@@ -44,6 +46,8 @@ describe("identity schema: login codes", () => {
   it("lists every identity table for the schema drift check", () => {
     expect(identityTables.map((table) => getTableName(table)).sort()).toEqual([
       "account",
+      "account_consent",
+      "account_data_export",
       "admin_backup_code",
       "admin_user",
       "otp_challenge",

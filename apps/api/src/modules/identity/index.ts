@@ -56,7 +56,11 @@ export type {
   RegistrationFactsRow,
   UpdateAccountProfileInput,
 } from "./account/account.store";
-export { AccountProfileService } from "./account/account-profile.service";
+export { AccountProfileService, phoneShareOf } from "./account/account-profile.service";
+export { AccountConsents, ConsentVersionsSource } from "./account/account-consents";
+export type { ConsentSource, ConsentState } from "./account/account-consents";
+export { DeletedAccountErasure, deletedAccountErasureJob } from "./cleanup/deleted-account-erasure";
+export { accountConsent, accountDataExport } from "./schema";
 export {
   countWithoutWhatsapp,
   lastWhatsappWordKind,

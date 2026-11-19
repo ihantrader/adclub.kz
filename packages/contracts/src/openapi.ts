@@ -12,8 +12,15 @@ import {
 } from "./photo-search";
 import { z } from "zod";
 import {
+  acceptConsentsBodySchema,
+  accountConsentSchema,
+  accountDeletedResponseSchema,
+  accountDeletionBlockerSchema,
+  accountDeletionPreviewSchema,
   accountProfileSchema,
   completeRegistrationBodySchema,
+  consentKindSchema,
+  deleteAccountBodySchema,
   phoneShareConsentSchema,
   updateAccountProfileBodySchema,
 } from "./account";
@@ -503,6 +510,14 @@ const componentSchemas: Record<string, z.ZodType> = {
   CompleteRegistrationBody: completeRegistrationBodySchema,
   PhoneShareConsent: phoneShareConsentSchema,
   UpdateAccountProfileBody: updateAccountProfileBodySchema,
+  // Consents with versions and deleting the account (TASK-072).
+  ConsentKind: consentKindSchema,
+  AccountConsent: accountConsentSchema,
+  AcceptConsentsBody: acceptConsentsBodySchema,
+  AccountDeletionBlocker: accountDeletionBlockerSchema,
+  AccountDeletionPreview: accountDeletionPreviewSchema,
+  DeleteAccountBody: deleteAccountBodySchema,
+  AccountDeletedResponse: accountDeletedResponseSchema,
   AccountCar: accountCarSchema,
   CarColorId: carColorIdSchema,
   CarLevels: carLevelsSchema,

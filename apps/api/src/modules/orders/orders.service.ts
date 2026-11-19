@@ -69,7 +69,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { rateLimitedException } from "../../common/errors";
+import { ApiException, rateLimitedException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { ALMATY_TIME_ZONE } from "../../jobs";
 import { Metrics } from "../../observability";
@@ -77,7 +77,7 @@ import { RateLimiterService, RateLimiterUnavailableError } from "../../redis";
 import { CatalogPhotosService, decodeCursor, encodeCursor, TIME_POSITION } from "../catalog";
 import { ClubAccess } from "../club-access";
 import { accountCar, type AccountCarRow } from "../garage";
-import { AccountStore, supplier, supplierMember } from "../identity";
+import { AccountConsents, AccountStore, supplier, supplierMember } from "../identity";
 import { Notifications } from "../notifications";
 import { offer, offerShowcase, OfferSnapshots, receiptSchedules, servicePricings } from "../offers";
 import { AppSettings } from "../settings";
@@ -91,6 +91,7 @@ import {
   notFound,
   offerUnavailable,
   priceChanged,
+  consentRequired,
   registrationIncomplete,
   stateConflict,
   subscriptionRequired,
@@ -265,6 +266,7 @@ export class OrdersService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(AccountStore) private readonly accounts: AccountStore,
+    @Inject(AccountConsents) private readonly consents: AccountConsents,
     @Inject(ClubAccess) private readonly clubAccess: ClubAccess,
     @Inject(OfferSnapshots) private readonly snapshots: OfferSnapshots,
     @Inject(OrderTransitions) private readonly transitions: OrderTransitions,
@@ -312,6 +314,13 @@ export class OrdersService {
     if (!registration || !isRegistrationComplete(registration)) {
       throw registrationIncomplete();
     }
+    // TASK-072 (D-077): a text the member agreed to was updated — «Мы
+    // обновили условия» first; the catalog, the garage and the codes of
+    // existing orders keep working.
+    const consents = await this.consents.state(accountId);
+    if (consents.outdated.length > 0) {
+      throw consentRequired(consents.outdated);
+    }
     if (!(await this.clubAccess.has(accountId))) {
       throw subscriptionRequired();
     }
@@ -353,6 +362,14 @@ export class OrdersService {
     // and with other orders' times, and the API's clock may drift from the
     // database's.
     const at = await databaseNow(tx);
+    // TASK-072: an order racing the deletion of its account waits for it
+    // here and finds the account deleted — never an order nobody can see.
+    const owner = await tx.execute<{ status: string }>(
+      sql`SELECT status FROM account WHERE id = ${accountId} FOR SHARE`,
+    );
+    if (owner.rows[0]?.status === "deleted") {
+      throw new ApiException(401, "SESSION_ENDED", "The session has ended");
+    }
     // The same key sent at the same moment: the other request may have
     // made the order since the check before the transaction.
     const made = await this.byKey(tx, accountId, input.idempotencyKey);
@@ -847,6 +864,41 @@ export class OrdersService {
       forUser: true,
     });
     return userOrderView(this.database.db, row, lang, this.photos, this.feedback);
+  }
+
+  /**
+   * TASK-072 (D-036, D-077): the member deletes the account — every active
+   * order is cancelled as the user's own cancellation, in the caller's
+   * transaction and through the same machine: `cancel`, or `reject_term`
+   * for an order whose other term or time waits for the user's answer. The
+   * supplier gets W-04 and the push exactly as after «Отменить заявку».
+   * An order the machine no longer lets the user cancel (a deadline has just
+   * applied) is left as it became. Returns how many were cancelled.
+   */
+  async cancelAllOfAccount(tx: DbExecutor, accountId: string): Promise<number> {
+    const rows = await tx
+      .select({ id: customerOrder.id, status: customerOrder.status })
+      .from(customerOrder)
+      .where(
+        and(
+          eq(customerOrder.userAccountId, accountId),
+          inArray(customerOrder.status, [...activeOrderStatuses]),
+        ),
+      )
+      .orderBy(customerOrder.createdAt);
+    let cancelled = 0;
+    for (const row of rows) {
+      const outcome = await this.transitions.move(tx, {
+        orderId: row.id,
+        action: row.status === "term_proposed" ? "reject_term" : "cancel",
+        actor: { type: "user", accountId },
+        channel: "app",
+      });
+      if (outcome.kind === "moved") {
+        cancelled += 1;
+      }
+    }
+    return cancelled;
   }
 
   /**

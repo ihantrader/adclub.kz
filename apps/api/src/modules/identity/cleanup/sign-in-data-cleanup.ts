@@ -4,6 +4,7 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { DbExecutor } from "../../../database";
 import { defineSweeperJob, JobRegistry, type Sweeper, type SweepResult } from "../../../jobs";
 import { otpChallenge, session, signInStep } from "../schema";
+import { DeletedAccountErasure, deletedAccountErasureJob } from "./deleted-account-erasure";
 
 /**
  * Cleanup of stale sign-in data (TASK-008, D-054; ARCHITECTURE 4.12, 14):
@@ -20,6 +21,8 @@ export interface SignInDataRetention {
   loginCodeDays: number;
   signInStepDays: number;
   sessionDays: number;
+  /** TASK-072: the last traces of a deleted account (`deleted_account_retention_days`). */
+  deletedAccountDays: number;
 }
 
 /** Provided by the settings module (TASK-007 pattern). */
@@ -31,7 +34,12 @@ export const loginCodeCleanupJob = defineSweeperJob({ name: "identity.cleanup-lo
 export const signInStepCleanupJob = defineSweeperJob({ name: "identity.cleanup-sign-in-steps" });
 export const sessionCleanupJob = defineSweeperJob({ name: "identity.cleanup-sessions" });
 
-export const identityJobCatalog = [loginCodeCleanupJob, signInStepCleanupJob, sessionCleanupJob];
+export const identityJobCatalog = [
+  loginCodeCleanupJob,
+  signInStepCleanupJob,
+  sessionCleanupJob,
+  deletedAccountErasureJob,
+];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -146,6 +154,10 @@ export class SignInDataCleanup implements OnModuleInit {
         },
         this.source,
       ),
+    );
+    this.registry.sweep(
+      deletedAccountErasureJob,
+      new DeletedAccountErasure(async () => (await this.source.getRetention()).deletedAccountDays),
     );
   }
 }

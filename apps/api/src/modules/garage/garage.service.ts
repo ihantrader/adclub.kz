@@ -23,6 +23,7 @@ import { DatabaseService, type DbExecutor } from "../../database";
 import { aiJob } from "../ai";
 import { AppSettings } from "../settings";
 import { DocumentProofs } from "../vehicle-document";
+import { AccountConsents, type ConsentSource } from "../identity";
 import {
   garageCarNotFound,
   garageFieldInvalid,
@@ -164,6 +165,7 @@ export class GarageService {
     @Inject(GarageStore) private readonly store: GarageStore,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(DocumentProofs) private readonly proofs: DocumentProofs,
+    @Inject(AccountConsents) private readonly consents: AccountConsents,
   ) {}
 
   /** Cars as every answer gives them: with the current reading of the journal (TASK-058). */
@@ -312,7 +314,11 @@ export class GarageService {
    * racing repeats wait for each other; the unique index
    * `account_car_idempotency_key` holds the rule in the database as well.
    */
-  async add(accountId: string, body: AddGarageCarBody): Promise<AccountCar> {
+  async add(
+    accountId: string,
+    body: AddGarageCarBody,
+    source: ConsentSource | null = null,
+  ): Promise<AccountCar> {
     const vin = vinOf(body.vin) ?? null;
     const plate = plateOf(body.plate) ?? null;
     const mark = this.markOf(body.document, "document.proof", true);
@@ -347,6 +353,9 @@ export class GarageService {
           },
           tx,
         );
+        if (vin || plate) {
+          await this.vehicleDocumentConsent(tx, accountId, source);
+        }
         return toAccountCar(row);
       }),
     );
@@ -359,7 +368,12 @@ export class GarageService {
    * it «документ показан» («Подтвердить техпаспортом»), nothing takes it
    * back.
    */
-  async update(accountId: string, carId: string, body: SaveGarageCarBody): Promise<AccountCar> {
+  async update(
+    accountId: string,
+    carId: string,
+    body: SaveGarageCarBody,
+    source: ConsentSource | null = null,
+  ): Promise<AccountCar> {
     const vin = vinOf(body.vin);
     const plate = plateOf(body.plate);
     const mark =
@@ -371,7 +385,7 @@ export class GarageService {
           const holder = await this.store.findByVin(accountId, vin, tx);
           if (holder && holder.id !== carId) throw garageVinTaken(holder.id);
         }
-        return this.store.updateLevels(
+        const updated = await this.store.updateLevels(
           accountId,
           carId,
           {
@@ -383,12 +397,29 @@ export class GarageService {
           },
           tx,
         );
+        if (updated && (vin || plate)) {
+          await this.vehicleDocumentConsent(tx, accountId, source);
+        }
+        return updated;
       }),
     );
     if (!row) {
       throw garageCarNotFound();
     }
     return (await this.views([row]))[0]!;
+  }
+
+  /**
+   * TASK-072 (D-064, T-GAR-02 «VIN и госномер сохраним в вашем гараже»):
+   * saving a VIN or a plate is the consent to keep them, for the current
+   * version of its text — written once per version.
+   */
+  private async vehicleDocumentConsent(
+    tx: DbExecutor,
+    accountId: string,
+    source: ConsentSource | null,
+  ): Promise<void> {
+    await this.consents.give(tx, accountId, ["vehicle_document"], source);
   }
 
   async remove(accountId: string, carId: string): Promise<void> {
@@ -452,7 +483,11 @@ export class GarageService {
    * left untransferred; the device keeps them and a later transfer (after
    * some are removed) picks them up.
    */
-  async transfer(accountId: string, body: TransferGarageBody): Promise<TransferGarageResponse> {
+  async transfer(
+    accountId: string,
+    body: TransferGarageBody,
+    source: ConsentSource | null = null,
+  ): Promise<TransferGarageResponse> {
     const limit = await this.settings.get("garage_max_cars");
     return this.withReferenceChecks(() =>
       this.database.db.transaction(async (tx) => {
@@ -518,6 +553,11 @@ export class GarageService {
         }
 
         const finalRows = await this.store.listByAccount(accountId, tx);
+        // T-GAR-02 was shown to the guest when the VIN or the plate was
+        // saved on the device: the consent goes with the cars to the account.
+        if (body.cars.some((car) => car.vin || car.plate)) {
+          await this.vehicleDocumentConsent(tx, accountId, source);
+        }
         return { cars: await this.views(finalRows, tx), transferred };
       }),
     );

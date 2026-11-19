@@ -36,7 +36,7 @@ export class GarageController {
     @Body(new ZodValidationPipe(addGarageCarBodySchema)) body: AddGarageCarBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AccountCar> {
-    return this.garage.add(session.accountId, body);
+    return this.garage.add(session.accountId, body, { sessionId: session.sessionId });
   }
 
   @SessionRoute(apiRoutes.updateGarageCar)
@@ -45,7 +45,9 @@ export class GarageController {
     @Body(new ZodValidationPipe(saveGarageCarBodySchema)) body: SaveGarageCarBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<AccountCar> {
-    return this.garage.update(session.accountId, params.carId, body);
+    return this.garage.update(session.accountId, params.carId, body, {
+      sessionId: session.sessionId,
+    });
   }
 
   @SessionRoute(apiRoutes.removeGarageCar)
@@ -79,6 +81,6 @@ export class GarageController {
     @Body(new ZodValidationPipe(transferGarageBodySchema)) body: TransferGarageBody,
     @CurrentSession() session: AuthenticatedSession,
   ): Promise<TransferGarageResponse> {
-    return this.garage.transfer(session.accountId, body);
+    return this.garage.transfer(session.accountId, body, { sessionId: session.sessionId });
   }
 }

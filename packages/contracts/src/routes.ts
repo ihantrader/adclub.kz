@@ -21,8 +21,12 @@ import {
   supplierPhotoUploadResponseSchema,
 } from "./photo-search";
 import {
+  acceptConsentsBodySchema,
+  accountDeletedResponseSchema,
+  accountDeletionPreviewSchema,
   accountProfileSchema,
   completeRegistrationBodySchema,
+  deleteAccountBodySchema,
   updateAccountProfileBodySchema,
 } from "./account";
 import { auditLogPageSchema, auditLogQuerySchema } from "./audit";
@@ -346,8 +350,10 @@ import {
 import {
   adminSearchQuerySchema,
   adminSearchResponseSchema,
+  adminUserDataExportLinkSchema,
   adminUserGarageResponseSchema,
   adminUserListQuerySchema,
+  createAdminUserDataExportBodySchema,
   adminUserPageSchema,
   adminUserPathSchema,
   adminUserResponseSchema,
@@ -1110,6 +1116,54 @@ const coreApiRoutes = {
     },
     responses: {
       200: { description: "The updated profile", schema: accountProfileSchema },
+    },
+  }),
+  // Consents with versions and deleting the account (TASK-072, D-077).
+  acceptConsents: defineRoute({
+    operationId: "acceptConsents",
+    method: "POST",
+    path: "/account/consents",
+    summary:
+      "«Принять» on «Мы обновили условия»: the consents are given for the current versions of their texts (all outdated ones when `kinds` is left out)",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: { description: "Which consents", schema: acceptConsentsBodySchema },
+    responses: {
+      200: {
+        description: "The profile with the journal of consents",
+        schema: accountProfileSchema,
+      },
+    },
+  }),
+  getAccountDeletion: defineRoute({
+    operationId: "getAccountDeletion",
+    method: "GET",
+    path: "/account/deletion",
+    summary:
+      "What deleting the account will do (SCREENS M-PRO-05): active orders to cancel, companies to leave, why it would be refused, the store of the subscription",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    responses: {
+      200: { description: "The preview", schema: accountDeletionPreviewSchema },
+    },
+  }),
+  deleteAccount: defineRoute({
+    operationId: "deleteAccount",
+    method: "POST",
+    path: "/account/delete",
+    summary:
+      "Delete the account for good (M-PRO-05 «Удалить»): active orders cancelled as the user's own cancellation, every session ended, the account made impersonal, the garage deleted; the store subscription is not cancelled. 409 ACCOUNT_DELETION_REFUSED — nothing changed",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    requestBody: { description: "The confirmation", schema: deleteAccountBodySchema },
+    responses: {
+      200: { description: "The account is deleted", schema: accountDeletedResponseSchema },
     },
   }),
   // The account's own garage (TASK-029, ARCHITECTURE 4.41): once signed in,
@@ -5770,6 +5824,25 @@ const coreApiRoutes = {
     pathParams: adminUserPathSchema,
     responses: {
       200: { description: "The cars", schema: adminUserGarageResponseSchema },
+    },
+  }),
+  createAdminUserDataExport: defineRoute({
+    operationId: "createAdminUserDataExport",
+    method: "POST",
+    path: "/admin/users/{accountId}/data-exports",
+    summary:
+      "«Выгрузить данные…» (TASK-072, D-077): a one-time link to the JSON of a user's data — profile, consents, garage, orders, reviews, complaints, subscription and club access, devices without tokens. Written to the journal with the reason, never the content",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: adminUserPathSchema,
+    requestBody: {
+      description: "Why the data is exported",
+      schema: createAdminUserDataExportBodySchema,
+    },
+    responses: {
+      200: { description: "The link", schema: adminUserDataExportLinkSchema },
     },
   }),
   listAdminUserSessions: defineRoute({

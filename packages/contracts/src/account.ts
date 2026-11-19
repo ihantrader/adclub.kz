@@ -56,6 +56,27 @@ export const phoneShareConsentSchema = z.object({
 
 export type PhoneShareConsent = z.infer<typeof phoneShareConsentSchema>;
 
+/**
+ * The kinds of consent an account gives (TASK-072, D-077): the number to a
+ * supplier (T-AUTH-05), the terms of use and the privacy policy, keeping the
+ * VIN and the plate number (D-064, T-GAR-02).
+ */
+export const consentKindSchema = z.enum(["phone_share", "terms", "vehicle_document"]);
+
+export type ConsentKindValue = z.infer<typeof consentKindSchema>;
+
+/** One consent of the account's journal (M-PRO-06 «Мои согласия», A-USR-02). */
+export const accountConsentSchema = z.object({
+  kind: consentKindSchema,
+  /** The version of the text agreed to (the setting `consent_<kind>_version` at that moment). */
+  version: z.string(),
+  at: z.iso.datetime(),
+  /** Whether this is the current version of the text. */
+  current: z.boolean(),
+});
+
+export type AccountConsent = z.infer<typeof accountConsentSchema>;
+
 /** `GET /account/profile`, and the body of `PATCH`/`POST /auth/complete-registration` echoed back. */
 export const accountProfileSchema = z.object({
   /** `null` — registration is not finished (`registrationCompleted` says so too). */
@@ -81,9 +102,78 @@ export const accountProfileSchema = z.object({
   whatsappAvailable: z.boolean(),
   /** M-PRO-04 «Напоминания о замене» (TASK-069): off — neither the cards nor the pushes. */
   remindersEnabled: z.boolean(),
+  /**
+   * TASK-072: the journal of consents, the latest first — «Мои согласия»
+   * (M-PRO-06). Older clients ignore it.
+   */
+  consents: z.array(accountConsentSchema),
+  /**
+   * TASK-072: a text was updated since the member agreed to it — the app
+   * shows «Мы обновили условия» and orders are refused with
+   * `CONSENT_REQUIRED` until `POST /account/consents` accepts them.
+   */
+  consentsOutdated: z.boolean(),
+  /** Which consents to give again (empty when `consentsOutdated` is false). */
+  outdatedConsents: z.array(consentKindSchema),
 });
 
 export type AccountProfile = z.infer<typeof accountProfileSchema>;
+
+/**
+ * `POST /account/consents` (TASK-072): «Принять» on «Мы обновили условия»
+ * — the consents listed are given for their current versions. Left out,
+ * every outdated one is.
+ */
+export const acceptConsentsBodySchema = z.object({
+  kinds: z.array(consentKindSchema).min(1).max(3).optional(),
+});
+
+export type AcceptConsentsBody = z.infer<typeof acceptConsentsBodySchema>;
+
+/**
+ * Why the account cannot be deleted now (TASK-072, D-077): the last
+ * employee of a company (`supplierName` — which), or an administrator.
+ */
+export const accountDeletionBlockerSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("last_member"), supplierId: z.uuid(), supplierName: z.string() }),
+  z.object({ kind: z.literal("administrator") }),
+]);
+
+export type AccountDeletionBlocker = z.infer<typeof accountDeletionBlockerSchema>;
+
+/**
+ * `GET /account/deletion` (SCREENS M-PRO-05, the first screen): what
+ * deleting the account will do — the active orders it cancels, the
+ * companies it leaves, whether it is refused and why, and where the store
+ * subscription is to be cancelled (T-PRO-04).
+ */
+export const accountDeletionPreviewSchema = z.object({
+  activeOrders: z.number().int(),
+  /** Companies the member leaves (the membership is removed as a colleague would). */
+  supplierMemberships: z.array(z.object({ supplierId: z.uuid(), supplierName: z.string() })),
+  /** Not empty — `POST /account/delete` is refused (409 `ACCOUNT_DELETION_REFUSED`). */
+  blockers: z.array(accountDeletionBlockerSchema),
+  /**
+   * The store of a subscription that still renews or runs (T-PRO-04 «Отмените
+   * её там»): `ios` — App Store, `android` — Google Play; `null` — none.
+   */
+  subscriptionPlatform: z.enum(["ios", "android"]).nullable(),
+});
+
+export type AccountDeletionPreview = z.infer<typeof accountDeletionPreviewSchema>;
+
+/** `POST /account/delete` (M-PRO-05 «Удалить»): the second step's own confirmation. */
+export const deleteAccountBodySchema = z.object({ confirm: z.literal(true) });
+
+export type DeleteAccountBody = z.infer<typeof deleteAccountBodySchema>;
+
+export const accountDeletedResponseSchema = z.object({
+  deleted: z.literal(true),
+  /** Orders cancelled as an ordinary cancellation by the user. */
+  cancelledOrders: z.number().int(),
+});
+
+export type AccountDeletedResponse = z.infer<typeof accountDeletedResponseSchema>;
 
 /**
  * `POST /auth/complete-registration` (SCREENS M-AUTH-03 «Готово»): the

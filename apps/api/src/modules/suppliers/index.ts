@@ -25,6 +25,7 @@ export {
   supplierJobCatalog,
 } from "./supplier-invitations";
 export { supplierTables } from "./schema";
+export { companyMembersLock } from "./supplier-common";
 export {
   city,
   supplierClosedDate,

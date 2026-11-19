@@ -202,6 +202,10 @@ describe("account profile (PostgreSQL + Redis)", () => {
         // TASK-052: the login code went through WhatsApp.
         whatsappAvailable: true,
         remindersEnabled: true,
+        // TASK-072: no consent yet; M-AUTH-03 asks for them, not «Мы обновили условия».
+        consents: [],
+        consentsOutdated: false,
+        outdatedConsents: [],
       });
       const me = currentAccountResponseSchema.parse(
         (await http().get("/auth/me").set(bearer(token))).body,
@@ -255,7 +259,8 @@ describe("account profile (PostgreSQL + Redis)", () => {
           entity_type: "account",
           entity_id: row.id,
           before: null,
-          after: { name: "Әлия Нұрғалиқызы", consentVersion: "2026-09-mvp" },
+          // TASK-072: the versions of the server, never the name (the entry outlives a deletion).
+          after: { consentVersion: "2026-09-mvp", termsVersion: "2026-11-mvp" },
         },
       ]);
       expect(JSON.stringify(journal)).not.toContain(PHONE.slice(1));
@@ -311,14 +316,15 @@ describe("account profile (PostgreSQL + Redis)", () => {
       );
       expect(again.status, JSON.stringify(again.body)).toBe(200);
       const second = await accountRow();
-      expect(second).toMatchObject({ name: "Марат Б", consent_version: "2026-10" });
+      // TASK-072: the version is the server's setting, whatever the app sends.
+      expect(second).toMatchObject({ name: "Марат Б", consent_version: "2026-09-mvp" });
       expect(second.consent_phone_share_at!.getTime()).toBeGreaterThanOrEqual(
         first.consent_phone_share_at!.getTime(),
       );
       expect((await auditOf("account.registration_completed")).map((entry) => entry.after)).toEqual(
         [
-          { name: "Марат", consentVersion: "2026-09-mvp" },
-          { name: "Марат Б", consentVersion: "2026-10" },
+          { consentVersion: "2026-09-mvp", termsVersion: "2026-11-mvp" },
+          { consentVersion: "2026-09-mvp", termsVersion: "2026-11-mvp" },
         ],
       );
     });

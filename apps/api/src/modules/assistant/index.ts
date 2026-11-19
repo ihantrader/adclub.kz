@@ -7,7 +7,11 @@ export type { TurnInput, TurnOutcome } from "./assistant-pipeline";
 export { ASSISTANT_RULES, dialogContext } from "./assistant-prompt";
 export { ASSISTANT_TOOLS } from "./assistant-tools";
 export { dialogCarOf } from "./assistant-car";
-export { anonymizeAssistantMessagesJob, assistantJobCatalog } from "./assistant-retention";
+export {
+  anonymizeAssistantMessagesJob,
+  anonymizeDialogsOfAccount,
+  assistantJobCatalog,
+} from "./assistant-retention";
 export {
   AssistantEval,
   ASSISTANT_EVAL_THRESHOLDS,

@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { and, asc, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { defineSweeperJob, type Sweeper, type SweepResult } from "../../jobs";
 import { AppSettings } from "../settings";
-import { assistantComplaint, assistantMessage } from "./schema";
+import { assistantComplaint, assistantDialog, assistantMessage } from "./schema";
 
 /**
  * `assistant.anonymize-messages` (TASK-062; ARCHITECTURE 11.1 point 6,
@@ -25,6 +25,47 @@ const due = (days: number) =>
     isNull(assistantMessage.anonymizedAt),
     sql`${assistantMessage.createdAt} < now() - make_interval(days => ${days})`,
   );
+
+/**
+ * TASK-072 (D-077): the member deleted the account — every message of their
+ * dialogs loses its words at once, as the sweeper does after
+ * `assistant_retention_days`, and so does the text of a complaint about
+ * them. The dialogs, their costs and the complaints stay (the administrator
+ * resolves a complaint on what is left); the dialog keeps no car.
+ */
+export async function anonymizeDialogsOfAccount(
+  tx: DbExecutor,
+  accountId: string,
+): Promise<number> {
+  const dialogs = await tx
+    .select({ id: assistantDialog.id })
+    .from(assistantDialog)
+    .where(eq(assistantDialog.accountId, accountId));
+  const ids = dialogs.map((dialog) => dialog.id);
+  if (ids.length === 0) {
+    return 0;
+  }
+  await tx
+    .update(assistantMessage)
+    .set({
+      text: null,
+      toolCalls: [],
+      reply: sql`CASE WHEN ${assistantMessage.reply} ? 'question' AND ${assistantMessage.reply} -> 'question' <> 'null'::jsonb
+                      THEN jsonb_set(${assistantMessage.reply}, '{question,options}', '[]'::jsonb)
+                      ELSE ${assistantMessage.reply} END`,
+      anonymizedAt: sql`COALESCE(${assistantMessage.anonymizedAt}, now())`,
+    })
+    .where(inArray(assistantMessage.dialogId, ids));
+  await tx
+    .update(assistantComplaint)
+    .set({ text: null, updatedAt: sql`now()` })
+    .where(inArray(assistantComplaint.dialogId, ids));
+  await tx
+    .update(assistantDialog)
+    .set({ carId: null, updatedAt: sql`now()` })
+    .where(inArray(assistantDialog.id, ids));
+  return ids.length;
+}
 
 @Injectable()
 export class AssistantRetention implements Sweeper<number> {

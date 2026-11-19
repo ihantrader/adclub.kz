@@ -291,6 +291,9 @@ export {
 } from "./order/order-reserve";
 export { isRegistrationComplete } from "./account/registration";
 export type { RegistrationFacts } from "./account/registration";
+export { consentKinds, latestConsents, outdatedConsents } from "./account/consents";
+export type { ConsentKind, ConsentVersions, GivenConsent } from "./account/consents";
+export { DELETED_PHONE_PREFIX, deletedPhoneOf, isDeletedPhone } from "./account/deleted-account";
 export { CAR_IDENTITY_LEVELS, carIdentity, sameCar, sameCarIdentity } from "./garage/same-car";
 export type { CarIdentity, CarIdentityLevel, CarLevelRef, CarLevelsLike } from "./garage/same-car";
 export { sameCarCases } from "./garage/same-car-cases";

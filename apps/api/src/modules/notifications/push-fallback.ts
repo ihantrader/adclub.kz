@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { PUSH_FALLBACK_SUBJECT_ID, type AdminSignalPayload } from "@adclub/contracts";
-import { maskPhone } from "@adclub/domain";
+import { isDeletedPhone, maskPhone } from "@adclub/domain";
 import { and, asc, eq, gt, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import {
@@ -267,12 +267,15 @@ export class PushFallbacks implements OnModuleInit {
     return {
       phone,
       superseded,
-      current: await this.notificationSubjects.stillCurrent(
-        tx,
-        row.subjectType,
-        row.subjectId,
-        row.eventKind,
-      ),
+      // TASK-072: a deleted account has no number — its event is nobody's to copy.
+      current: isDeletedPhone(phone)
+        ? false
+        : await this.notificationSubjects.stillCurrent(
+            tx,
+            row.subjectType,
+            row.subjectId,
+            row.eventKind,
+          ),
       streak: state?.streak ?? 0,
       word: await whatsappWordOf(tx, phone),
       fallbacksToday: today?.count ?? 0,

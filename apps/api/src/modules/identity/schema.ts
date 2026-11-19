@@ -42,6 +42,10 @@ export const account = pgTable("account", {
   emailNewsConsent: boolean("email_news_consent").notNull().default(false),
   /** M-PRO-04 «Напоминания о замене» (TASK-069). */
   remindersEnabled: boolean("reminders_enabled").notNull().default(true),
+  /** TASK-072: the member deleted the account (`status = deleted`). */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  /** TASK-072: the retention passed — the hash of the number and the consents are gone. */
+  erasedAt: timestamp("erased_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -111,7 +115,9 @@ export type SessionRevokedReason =
   | "admin_removed"
   | "totp_reset"
   // An administrator ended an employee's cabinet session (TASK-017).
-  | "ended_by_admin";
+  | "ended_by_admin"
+  // The member deleted the account (TASK-072).
+  | "account_deleted";
 
 /** What the pause and the blocking make it (a check in the database keeps them in step). */
 export type SupplierStatus = "active" | "paused" | "blocked";
@@ -304,8 +310,45 @@ export const session = pgTable(
 );
 
 /** Every table this module owns — checked against the migrated database. */
+/** TASK-072: what a consent is about (`@adclub/domain` `consentKinds`). */
+export type AccountConsentKind = "phone_share" | "terms" | "vehicle_document";
+
+/** Where a consent was given: the kind of the session, or `migration`. */
+export type AccountConsentClient = "mobile" | "supplier_web" | "admin_web" | "migration";
+
+/** `account_consent` (TASK-072, ARCHITECTURE 4.96): the journal of consents, append-only. */
+export const accountConsent = pgTable("account_consent", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id),
+  kind: text("kind").$type<AccountConsentKind>().notNull(),
+  version: text("version").notNull(),
+  givenAt: timestamp("given_at", { withTimezone: true }).notNull(),
+  client: text("client").$type<AccountConsentClient>().notNull(),
+  platform: text("platform"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** `account_data_export` (TASK-072): a one-time link of «Выгрузить данные…». */
+export const accountDataExport = pgTable("account_data_export", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id),
+  adminUserId: uuid("admin_user_id")
+    .notNull()
+    .references(() => adminUser.id),
+  reason: text("reason").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const identityTables = [
   account,
+  accountConsent,
+  accountDataExport,
   otpChallenge,
   reviewLogin,
   phoneVerification,

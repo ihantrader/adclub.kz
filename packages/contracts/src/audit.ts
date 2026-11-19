@@ -361,6 +361,19 @@ export const auditActions = {
   /** TASK-036.B (A-USR-02): an administrator ended sessions of a user's app; `after.ended` — how many. */
   accountSessionsEnded: "account.sessions_ended",
   /**
+   * TASK-072 (M-PRO-05, D-077): the member deleted the account. `after` —
+   * the counts (orders cancelled, cars deleted, companies left), **never**
+   * the number, the name or the e-mail.
+   */
+  accountDeleted: "account.deleted",
+  /** TASK-072: «Принять» on «Мы обновили условия»; `after` — the kinds and versions. */
+  accountConsentsAccepted: "account.consents_accepted",
+  /**
+   * TASK-072 (A-USR-02 «Выгрузить данные…»): an administrator took a
+   * user's data; `after.reason` — why. **Never the content.**
+   */
+  accountDataExported: "account.data_exported",
+  /**
    * TASK-049 (M-ORD-05, A-REV-01): a review of an order — left by its author
    * (`after`: the score, whether there is a text, the status), checked by
    * the server (`held` with the kinds of the reasons, or `published`), and

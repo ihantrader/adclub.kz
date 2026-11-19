@@ -5,7 +5,7 @@ import {
   type PhoneRevealSubject,
   type RevealPhoneResponse,
 } from "@adclub/contracts";
-import { maskPhone } from "@adclub/domain";
+import { isDeletedPhone, maskPhone } from "@adclub/domain";
 import { sql } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
@@ -47,7 +47,8 @@ export class PhoneReveals {
   ): Promise<RevealPhoneResponse> {
     const phone = await this.database.db.transaction(async (tx) => {
       const target = await this.targetOf(tx, subject, id);
-      if (!target) {
+      // TASK-072: a deleted account has no number left to open.
+      if (!target || isDeletedPhone(target.phone)) {
         throw new ApiException(404, "NOT_FOUND", "Nothing with such a number");
       }
       await this.audit.record(

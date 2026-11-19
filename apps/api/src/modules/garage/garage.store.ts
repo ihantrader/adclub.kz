@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { accountCar, mileageLog, type AccountCarRow, type MileageLogRow } from "./schema";
 
@@ -41,7 +42,14 @@ export class GarageStore {
 
   /** Locks the account row: serializes concurrent adds/transfers of the same account (two devices). */
   async lockAccount(accountId: string, executor: DbExecutor): Promise<void> {
-    await executor.execute(sql`SELECT id FROM account WHERE id = ${accountId} FOR UPDATE`);
+    const locked = await executor.execute<{ status: string }>(
+      sql`SELECT status FROM account WHERE id = ${accountId} FOR UPDATE`,
+    );
+    // TASK-072: a request that waited for the deletion of its account behind
+    // this lock finds it deleted — its session has just ended.
+    if (locked.rows[0]?.status === "deleted") {
+      throw new ApiException(401, "SESSION_ENDED", "The session has ended");
+    }
   }
 
   async listByAccount(

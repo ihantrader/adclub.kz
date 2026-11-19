@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { hiddenPhoneSchema, phoneShareConsentSchema } from "./account";
+import { accountConsentSchema, hiddenPhoneSchema, phoneShareConsentSchema } from "./account";
 import { catalogLanguageSchema } from "./catalog";
 import { clubAccessStateSchema } from "./club-access";
 import { accountCarSchema } from "./garage";
@@ -49,6 +49,11 @@ export const adminUserListQuerySchema = z.object({
   unconfirmedCar: z.enum(["true"]).optional(),
   /** `noWhatsapp=true` — the number has no WhatsApp by the last word about it (TASK-052). */
   noWhatsapp: z.enum(["true"]).optional(),
+  /**
+   * TASK-072: `deleted=true` — only the deleted accounts («Удалённые»);
+   * left out, the list has none of them.
+   */
+  deleted: z.enum(["true"]).optional(),
   limit: z.coerce.number().int().min(1).max(USER_PAGE_MAX_SIZE).default(USER_PAGE_DEFAULT_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });
@@ -70,6 +75,8 @@ export const adminUserSummarySchema = z.object({
   noShows: z.number().int(),
   /** The account also works for a supplier (an active employee). */
   supplierMember: z.boolean(),
+  /** TASK-072: «Удалён {дата}»; `null` — the account is not deleted. */
+  deletedAt: z.iso.datetime().nullable(),
 });
 
 export type AdminUserSummary = z.infer<typeof adminUserSummarySchema>;
@@ -115,6 +122,13 @@ export const adminUserSchema = z.object({
   createdAt: z.iso.datetime(),
   registrationCompleted: z.boolean(),
   phoneShareConsent: phoneShareConsentSchema.nullable(),
+  /** TASK-072: the journal of consents with versions and dates, the latest first. */
+  consents: z.array(accountConsentSchema),
+  /**
+   * TASK-072: the member deleted the account themself — «Удалён {дата}»;
+   * the card has no personal data left, its orders and journal stay.
+   */
+  deletedAt: z.iso.datetime().nullable(),
   clubAccess: clubAccessStateSchema,
   memberships: z.array(adminUserMembershipSchema),
   /**
@@ -202,6 +216,29 @@ export type AdminUserSessionPath = z.infer<typeof adminUserSessionPathSchema>;
 export const adminUserSessionsEndedResponseSchema = z.object({ ended: z.number().int() });
 
 export type AdminUserSessionsEndedResponse = z.infer<typeof adminUserSessionsEndedResponseSchema>;
+
+/**
+ * `POST /admin/users/{accountId}/data-exports` (TASK-072, D-077): «Выгрузить
+ * данные…» — the data of a user on their request, with the reason. Written
+ * to the journal (`account.data_exported`) without the content.
+ */
+export const createAdminUserDataExportBodySchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+});
+
+export type CreateAdminUserDataExportBody = z.infer<typeof createAdminUserDataExportBodySchema>;
+
+/**
+ * The link of the file: opened once (a second time — 410), for a few
+ * minutes; the address is relative to the API.
+ */
+export const adminUserDataExportLinkSchema = z.object({
+  url: z.string(),
+  fileName: z.string(),
+  expiresAt: z.iso.datetime(),
+});
+
+export type AdminUserDataExportLink = z.infer<typeof adminUserDataExportLinkSchema>;
 
 // ------------------------------------------------------------ phone reveal
 

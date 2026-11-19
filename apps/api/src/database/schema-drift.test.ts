@@ -95,6 +95,8 @@ describe("ormTables", () => {
     expect(new Set(described.map((column) => column.table))).toEqual(
       new Set([
         "account",
+        "account_consent",
+        "account_data_export",
         "otp_challenge",
         "phone_verification",
         "review_login",

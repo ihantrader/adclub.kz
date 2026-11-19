@@ -28,6 +28,7 @@ import { SupplierContextController } from "./supplier/supplier-context.controlle
 import { SupplierContextService } from "./supplier/supplier-context.service";
 import { SupplierMemberRemover } from "./supplier/supplier-member-remover";
 import { SupplierMembershipStore } from "./supplier/supplier-membership.store";
+import { AccountConsents } from "./account/account-consents";
 
 function createLoginCodeChannels(
   config: AppConfig,
@@ -82,6 +83,7 @@ export class IdentityModule {
       ],
       providers: [
         AccountProfileService,
+        AccountConsents,
         ...(devOutbox ? [{ provide: DevLoginCodeOutbox, useValue: new DevLoginCodeOutbox() }] : []),
         // Replacement point for the real WhatsApp and SMS providers (TASK-026).
         {

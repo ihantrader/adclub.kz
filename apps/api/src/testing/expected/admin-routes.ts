@@ -178,6 +178,7 @@ export const ADMIN_ROUTES: readonly string[] = [
   "POST /admin/totp/backup-codes",
   "POST /admin/translations/{entityType}/{entityId}/{field}/{lang}/release",
   "POST /admin/translations/{entityType}/{entityId}/{field}/{lang}/retranslate",
+  "POST /admin/users/{accountId}/data-exports",
   "POST /admin/users/{accountId}/sessions/end",
   "POST /admin/users/{accountId}/sessions/{sessionId}/end",
   "POST /admin/vehicles/engines",

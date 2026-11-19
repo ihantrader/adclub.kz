@@ -6,6 +6,7 @@ import { DEV_LOGIN_CODE_OUTBOX_PATH } from "../modules/identity";
 import { DEV_MESSAGES_PATH } from "../modules/messaging";
 import { DEV_PUSHES_PATH } from "../modules/notifications";
 import { PRICE_EXPORT_DOWNLOAD_PATH } from "../modules/price-imports";
+import { ACCOUNT_EXPORT_DOWNLOAD_PATH } from "../modules/users";
 import { METRICS_PATH } from "../observability";
 import { DEV_ONLY_PATHS } from "./openapi.controller";
 
@@ -28,6 +29,8 @@ const NON_CONTRACT_PATHS: readonly string[] = [
   ...DEV_PAYMENT_CARD_PATHS,
   METRICS_PATH,
   PRICE_EXPORT_DOWNLOAD_PATH,
+  // «Выгрузить данные…» of the admin panel: a one-time link (TASK-072).
+  ACCOUNT_EXPORT_DOWNLOAD_PATH,
 ];
 
 function key(method: string, path: string): string {

@@ -1,5 +1,5 @@
 import { Module, type DynamicModule } from "@nestjs/common";
-import { AccountStore } from "../identity";
+import { AccountConsents, AccountStore } from "../identity";
 import { Discipline } from "./order-discipline";
 import { OrderFeedback } from "./order-feedback";
 import { OrderLookup } from "./order-lookup.service";
@@ -58,6 +58,7 @@ export class OrdersModule {
         : [],
       providers: [
         AccountStore,
+        AccountConsents,
         Discipline,
         OrderFeedback,
         OrderNotices,

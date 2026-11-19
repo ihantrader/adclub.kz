@@ -2,6 +2,7 @@ import { Module, type DynamicModule } from "@nestjs/common";
 import { DocumentAttempts, DocumentProofs, PhotoRecognitions } from "../vehicle-document";
 import { DashboardController } from "./dashboard.controller";
 import { DashboardService } from "./dashboard.service";
+import { AccountConsents } from "../identity";
 import { GarageController } from "./garage.controller";
 import { GarageService } from "./garage.service";
 import { GarageStore } from "./garage.store";
@@ -31,6 +32,7 @@ export class GarageModule {
       providers: [
         GarageStore,
         GarageService,
+        AccountConsents,
         DocumentProofs,
         DocumentAttempts,
         PhotoRecognitions,

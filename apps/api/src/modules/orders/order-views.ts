@@ -29,6 +29,7 @@ import type {
 import {
   complaintReasonsFor,
   hidePhone,
+  isDeletedPhone,
   isActiveOrderStatus,
   localDateTime,
   orderAwaitsReceipt,
@@ -461,7 +462,9 @@ async function phonesOf(executor: DbExecutor, accountIds: readonly string[]) {
     .from(account)
     .where(inArray(account.id, ids));
   for (const row of rows) {
-    phones.set(row.id, row.phone);
+    // TASK-072: a deleted account has no number — the supplier sees none
+    // («Участник клуба» without «Позвонить»), the administrator `***`.
+    phones.set(row.id, isDeletedPhone(row.phone) ? "" : row.phone);
   }
   return phones;
 }

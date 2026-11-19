@@ -155,6 +155,19 @@ export class AccountStore {
     return row;
   }
 
+  /** TASK-072: the phone-share consent given again (`POST /account/consents`). */
+  async recordPhoneShareConsent(
+    id: string,
+    version: string,
+    at: Date,
+    executor: DbExecutor = this.database.db,
+  ): Promise<void> {
+    await executor
+      .update(account)
+      .set({ consentPhoneShareAt: at, consentVersion: version, updatedAt: at })
+      .where(eq(account.id, id));
+  }
+
   /**
    * `PATCH /account/profile` (SCREENS M-PRO-02 «Мои данные», and the silent
    * transfer of the device's city and language after registration, TASK-029

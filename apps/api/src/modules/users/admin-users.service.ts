@@ -26,7 +26,9 @@ import { GarageService } from "../garage";
 import { GarageReminders } from "../reminders";
 import {
   account,
+  AccountConsents,
   ipHint,
+  phoneShareOf,
   noWhatsappCondition,
   SessionStore,
   sessionPage,
@@ -72,13 +74,20 @@ export function likeEscaped(text: string): string {
  * header's search.
  */
 export function appUserCondition(): SQL {
-  return sql`(
+  // TASK-072: a deleted account is in neither the list nor the search — only
+  // under «Удалённые» (`deletedUserCondition`).
+  return sql`${account.status} <> 'deleted' AND (
     ${account.consentPhoneShareAt} IS NOT NULL
     OR EXISTS (SELECT 1 FROM session AS app WHERE app.account_id = ${account.id} AND app.kind = 'mobile')
     OR EXISTS (SELECT 1 FROM customer_order AS purchase WHERE purchase.user_account_id = ${account.id})
     OR EXISTS (SELECT 1 FROM club_access_grant AS access WHERE access.account_id = ${account.id})
     OR EXISTS (SELECT 1 FROM account_car AS car WHERE car.account_id = ${account.id})
   )`;
+}
+
+/** TASK-072: «Удалённые» — the accounts their members deleted. */
+export function deletedUserCondition(): SQL {
+  return sql`${account.status} = 'deleted'`;
 }
 
 /**
@@ -122,11 +131,14 @@ export class AdminUsersService {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(Notifications) private readonly notifications: Notifications,
     @Inject(GarageReminders) private readonly reminders: GarageReminders,
+    @Inject(AccountConsents) private readonly consents: AccountConsents,
   ) {}
 
   async list(query: AdminUserListQuery): Promise<AdminUserPage> {
     const now = new Date();
-    const conditions: SQL[] = [appUserCondition()];
+    const conditions: SQL[] = [
+      query.deleted === "true" ? deletedUserCondition() : appUserCondition(),
+    ];
     if (query.q) {
       conditions.push(userSearchCondition(query.q));
     }
@@ -171,6 +183,7 @@ export class AdminUsersService {
           phone: account.phone,
           consentPhoneShareAt: account.consentPhoneShareAt,
           createdAt: account.createdAt,
+          deletedAt: account.deletedAt,
           cityName: city.nameRu,
           noShows: STANDING_NO_SHOWS,
           supplierMember: sql<boolean>`EXISTS (SELECT 1 FROM supplier_member AS member
@@ -205,6 +218,7 @@ export class AdminUsersService {
         clubAccess: access.get(row.id)!,
         noShows: Number(row.noShows),
         supplierMember: Boolean(row.supplierMember),
+        deletedAt: row.deletedAt?.toISOString() ?? null,
       })),
       total: counted?.value ?? 0,
       nextCursor: rows.length > query.limit && last ? encodeCursor(last.position, last.id) : null,
@@ -226,6 +240,7 @@ export class AdminUsersService {
         createdAt: account.createdAt,
         consentPhoneShareAt: account.consentPhoneShareAt,
         consentVersion: account.consentVersion,
+        deletedAt: account.deletedAt,
       })
       .from(account)
       .leftJoin(city, eq(city.id, account.cityId))
@@ -233,7 +248,8 @@ export class AdminUsersService {
     if (!row) {
       throw userNotFound();
     }
-    const [access, memberships, counts, word, recipient] = await Promise.all([
+    const [consents, access, memberships, counts, word, recipient] = await Promise.all([
+      this.consents.state(accountId),
       this.clubAccess.stateOf(accountId, this.database.db, now),
       this.database.db.execute<{
         supplier_id: string;
@@ -279,10 +295,10 @@ export class AdminUsersService {
       language: row.language,
       createdAt: row.createdAt.toISOString(),
       registrationCompleted: isRegistrationComplete(row),
-      phoneShareConsent:
-        row.consentPhoneShareAt && row.consentVersion
-          ? { version: row.consentVersion, at: row.consentPhoneShareAt.toISOString() }
-          : null,
+      // TASK-072: from the journal of consents, the latest first.
+      phoneShareConsent: phoneShareOf(consents.consents),
+      consents: consents.consents,
+      deletedAt: row.deletedAt?.toISOString() ?? null,
       clubAccess: access,
       memberships: memberships.rows.map((member) => ({
         supplierId: member.supplier_id,

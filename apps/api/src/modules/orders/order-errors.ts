@@ -33,6 +33,16 @@ export function subscriptionRequired(): ApiException {
  * access, since a name is more fundamental than a subscription: without one
  * the account isn't a club member at all, whatever its subscription is.
  */
+/** TASK-072: a consent's text was updated since the member agreed to it. */
+export function consentRequired(kinds: readonly string[]): ApiException {
+  return new ApiException(
+    403,
+    "CONSENT_REQUIRED",
+    "The terms were updated: accept them before ordering",
+    { details: { kinds: [...kinds] } },
+  );
+}
+
 export function registrationIncomplete(): ApiException {
   return new ApiException(
     403,

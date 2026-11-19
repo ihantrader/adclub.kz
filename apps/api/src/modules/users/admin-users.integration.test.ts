@@ -742,7 +742,8 @@ describe("admin panel: orders, users, numbers, search, journal (PostgreSQL + Red
         name: TEST_CUSTOMER_NAME,
         phone: hidePhone(employee),
         registrationCompleted: true,
-        phoneShareConsent: { version: "test" },
+        // TASK-072: the version of the server, not the one the client sends.
+        phoneShareConsent: { version: "2026-09-mvp" },
         clubAccess: { granted: false, validUntil: null },
         memberships: [{ supplierId: shop.supplierId, supplierName: "Работа", status: "active" }],
         counts: { orders: 0, sessions: 1, cars: 1 },

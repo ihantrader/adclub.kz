@@ -9,6 +9,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "identity.cleanup-login-codes",
   "identity.cleanup-sign-in-steps",
   "identity.cleanup-sessions",
+  "identity.erase-deleted-accounts",
   "catalog.translate",
   "catalog.translation-wake",
   "catalog.delete-photo-files",
@@ -104,6 +105,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "identity.cleanup-login-codes", cron: "* * * * *", timezone: "Asia/Almaty" },
   { name: "identity.cleanup-sessions", cron: "* * * * *", timezone: "Asia/Almaty" },
   { name: "identity.cleanup-sign-in-steps", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The last traces of deleted accounts past their retention (TASK-072).
+  { name: "identity.erase-deleted-accounts", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Webhook deliveries of the message provider once applied and old (TASK-024).
   { name: "messaging.cleanup-webhook-events", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The values of settled messages once their retention has passed (TASK-024).

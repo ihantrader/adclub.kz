@@ -1,11 +1,12 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { GarageService, GarageStore } from "../garage";
-import { SessionStore } from "../identity";
+import { AccountConsents, SessionStore } from "../identity";
+import { AccountDataExports } from "./account-data-exports.service";
 import { DocumentProofs } from "../vehicle-document";
 import { AdminSearch } from "./admin-search.service";
 import { AdminUsersService } from "./admin-users.service";
 import { PhoneReveals } from "./phone-reveals.service";
-import { AdminUsersController } from "./users.controller";
+import { AccountDataExportController, AdminUsersController } from "./users.controller";
 
 /** The one instance of each module of the process the search and the card ask. */
 export interface UsersModuleOptions {
@@ -30,7 +31,7 @@ export class UsersModule {
     return {
       module: UsersModule,
       imports: [options.catalog, options.clubAccess, options.suppliers, options.reminders],
-      controllers: [AdminUsersController],
+      controllers: [AdminUsersController, AccountDataExportController],
       providers: [
         AdminUsersService,
         PhoneReveals,
@@ -39,6 +40,8 @@ export class UsersModule {
         GarageService,
         DocumentProofs,
         SessionStore,
+        AccountConsents,
+        AccountDataExports,
       ],
     };
   }

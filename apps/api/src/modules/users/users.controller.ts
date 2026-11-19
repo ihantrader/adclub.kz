@@ -1,4 +1,5 @@
-import { Body, Controller, Inject, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import {
   adminSearchQuerySchema,
   adminUserListQuerySchema,
@@ -6,7 +7,10 @@ import {
   adminUserSessionPathSchema,
   adminUserSessionListQuerySchema,
   apiRoutes,
+  createAdminUserDataExportBodySchema,
   revealPhoneBodySchema,
+  type AdminUserDataExportLink,
+  type CreateAdminUserDataExportBody,
   type AdminSearchQuery,
   type AdminSearchResponse,
   type AdminUserGarageResponse,
@@ -24,6 +28,7 @@ import {
 import { ZodValidationPipe } from "../../common/validation";
 import { RateLimitedRoute } from "../../rate-limit";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
+import { AccountDataExports, ACCOUNT_EXPORT_DOWNLOAD_PATH } from "./account-data-exports.service";
 import { AdminSearch } from "./admin-search.service";
 import { AdminUsersService, type AdminActor } from "./admin-users.service";
 import { PhoneReveals } from "./phone-reveals.service";
@@ -46,6 +51,7 @@ export class AdminUsersController {
     @Inject(AdminUsersService) private readonly users: AdminUsersService,
     @Inject(PhoneReveals) private readonly reveals: PhoneReveals,
     @Inject(AdminSearch) private readonly searcher: AdminSearch,
+    @Inject(AccountDataExports) private readonly exports: AccountDataExports,
   ) {}
 
   @SessionRoute(apiRoutes.listAdminUsers)
@@ -95,6 +101,16 @@ export class AdminUsersController {
     return { ended: await this.users.endSessions(params.accountId, null, adminActor(session)) };
   }
 
+  @SessionRoute(apiRoutes.createAdminUserDataExport)
+  dataExport(
+    @Param(new ZodValidationPipe(adminUserPathSchema)) params: AdminUserPath,
+    @Body(new ZodValidationPipe(createAdminUserDataExportBodySchema))
+    body: CreateAdminUserDataExportBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<AdminUserDataExportLink> {
+    return this.exports.link(adminActor(session), params.accountId, body);
+  }
+
   @RateLimitedRoute(apiRoutes.revealPhone)
   reveal(
     @Body(new ZodValidationPipe(revealPhoneBodySchema)) body: RevealPhoneBody,
@@ -108,5 +124,32 @@ export class AdminUsersController {
     @Query(new ZodValidationPipe(adminSearchQuerySchema)) query: AdminSearchQuery,
   ): Promise<AdminSearchResponse> {
     return this.searcher.search(query.q);
+  }
+}
+
+/**
+ * The download of «Выгрузить данные…» (TASK-072). Outside the client
+ * contract, like «Скачать мой прайс»: the answer is a file the browser opens
+ * as a plain link, so the session's access token is not what lets it in —
+ * the one-time token of the link is (the token is in the query, which the
+ * access log never writes).
+ */
+@Controller()
+export class AccountDataExportController {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(AccountDataExports) private readonly exports: AccountDataExports) {}
+
+  @Get(ACCOUNT_EXPORT_DOWNLOAD_PATH)
+  async download(
+    @Query("token") token: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    const file = await this.exports.take(typeof token === "string" ? token : undefined);
+    response.status(200);
+    response.setHeader("Content-Type", "application/json; charset=utf-8");
+    response.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+    response.setHeader("Cache-Control", "private, no-store");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.end(file.body);
   }
 }

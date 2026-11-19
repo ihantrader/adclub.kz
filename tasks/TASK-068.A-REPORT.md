@@ -53,6 +53,17 @@ COMPLETED
 - `photo-search-units.test.ts` — PASS 40/40; `apps/supplier-web` `photo-rules.test.ts` — PASS 2/2
 - Интеграционные: `photo-search.integration.test.ts` (12 тестов, из них 5 новых), `catalog-photos.integration.test.ts`, `price-review.integration.test.ts` (запросы на позиции, «Создать позицию», «Это существующая позиция») — PASS 58/58 одним прогоном
 - Маршруты `/admin/catalog` не менялись, поэтому счётчики в `catalog.integration.test.ts` и `catalog-items.integration.test.ts` не затронуты
+- **После rebase на `origin/main` (TASK-065.A):**
+  - конфликт был только в `CLAUDE.md`, оставлены обе строки;
+  - `format:check`, `lint`, `typecheck`, `build`, `openapi:check`, `openapi:compat --snapshots` — PASS;
+  - `openapi:generate` после пересборки `@adclub/contracts` файл не меняет;
+  - `pnpm test` — 18/19 задач; упал `mobile` (`no-catalog-without-car.test.ts`, тайм-аут 10 с под нагрузкой), отдельно — 3/3 PASS.
+- **Интеграционные после rebase:**
+  - Три файла одним прогоном зависли в `beforeEach` одновременно на независимых контейнерах (машину нагружали тесты параллельных сессий) — сбой окружения.
+  - По одному файлу:
+    - `photo-search` — 12/12;
+    - `catalog-photos` — 31/31;
+    - `price-review` — 14/15: один тест упал на `statement timeout` при вставке категории в dev-seed внутри `beforeEach` (прогон 847 с). Отдельный перезапуск этого теста — PASS.
 
 ## UAT / E2E
 - Окружение: своя база `adclub_t068a`, бакет `adclub-t068a`, Redis db 2; API на :3210, кабинет на :5295.

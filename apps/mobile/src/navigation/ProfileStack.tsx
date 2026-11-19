@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { DeleteAccountScreen } from "../screens/profile/DeleteAccountScreen";
 import { DevicesScreen } from "../screens/profile/DevicesScreen";
 import { DocumentsScreen } from "../screens/profile/DocumentsScreen";
 import { MyDataScreen } from "../screens/profile/MyDataScreen";
@@ -22,6 +23,7 @@ export function ProfileStack() {
       <Stack.Screen name="profile-my-data" component={MyDataScreen} />
       <Stack.Screen name="profile-devices" component={DevicesScreen} />
       <Stack.Screen name="profile-documents" component={DocumentsScreen} />
+      <Stack.Screen name="profile-delete" component={DeleteAccountScreen} />
     </Stack.Navigator>
   );
 }

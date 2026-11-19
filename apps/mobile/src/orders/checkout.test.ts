@@ -110,6 +110,9 @@ describe("what each answer of POST /orders leads to", () => {
     expect(checkoutFailure(apiError(403, "REGISTRATION_INCOMPLETE"))).toEqual({
       kind: "registration_incomplete",
     });
+    expect(checkoutFailure(apiError(403, "CONSENT_REQUIRED", { kinds: ["terms"] }))).toEqual({
+      kind: "consent_required",
+    });
     expect(checkoutFailure(apiError(403, "SUBSCRIPTION_REQUIRED"))).toEqual({
       kind: "club_access_required",
     });

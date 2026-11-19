@@ -537,6 +537,7 @@
   "orders.customer": "Клиент",
   "orders.customerHidden": "Телефон өтінім қабылданғаннан кейін ашылады",
   "orders.customerNoName": "Аты көрсетілмеген",
+  "orders.customerDeleted": "Клуб қатысушысы · аккаунт жойылған",
   "orders.call": "Қоңырау шалу",
   "orders.whatsapp": "WhatsApp-қа жазу",
   "orders.item": "Позиция",

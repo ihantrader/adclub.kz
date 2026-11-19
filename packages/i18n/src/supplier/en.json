@@ -537,6 +537,7 @@
   "orders.customer": "Client",
   "orders.customerHidden": "The phone number opens once the order is accepted",
   "orders.customerNoName": "No name given",
+  "orders.customerDeleted": "Club member · account deleted",
   "orders.call": "Call",
   "orders.whatsapp": "Write in WhatsApp",
   "orders.item": "Item",

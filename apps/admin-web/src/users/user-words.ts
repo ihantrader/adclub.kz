@@ -233,8 +233,21 @@ export function userFiltersOf(query: URLSearchParams): Omit<AdminUserListQuery, 
     noShows: query.get("noShows") === "true" ? "true" : undefined,
     unconfirmedCar: query.get("unconfirmedCar") === "true" ? "true" : undefined,
     noWhatsapp: query.get("noWhatsapp") === "true" ? "true" : undefined,
+    deleted: query.get("deleted") === "true" ? "true" : undefined,
   };
 }
+
+/** TASK-072: «Удалён 19.11.2026» — the account its member deleted. */
+export function deletedText(deletedAt: string | null, day: (iso: string) => string): string | null {
+  return deletedAt ? `Удалён ${day(deletedAt)}` : null;
+}
+
+/** The names of the consents of A-USR-02 «Профиль» (TASK-072). */
+export const CONSENT_WORDS: Record<"phone_share" | "terms" | "vehicle_document", string> = {
+  phone_share: "Передача номера поставщику",
+  terms: "Условия и Политика конфиденциальности",
+  vehicle_document: "Хранение VIN и госномера",
+};
 
 /**
  * The mark of a car about its registration certificate (D-064, TASK-057):

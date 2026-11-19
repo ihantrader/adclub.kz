@@ -94,6 +94,8 @@ export type ProfileStackParams = {
   "profile-devices": undefined;
   /** M-PRO-06 (TASK-077). */
   "profile-documents": undefined;
+  /** M-PRO-05 (TASK-072). */
+  "profile-delete": undefined;
 };
 
 export type TabParams = {

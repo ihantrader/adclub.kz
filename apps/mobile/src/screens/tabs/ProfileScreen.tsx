@@ -54,8 +54,9 @@ const ShowcaseScreen = __DEV__ ? lazy(() => import("../../dev/ShowcaseScreen")) 
  * in, in the account too (`SessionProvider` keeps them in step). «Документы
  * и поддержка» and «Стать партнёром клуба» (TASK-077) are there for both.
  * «Уведомления» (M-PRO-04, TASK-051) shows the state of push. Items the app
- * doesn't have yet (subscription, deleting the
- * account) are left out on purpose, not shown disabled.
+ * doesn't have yet (the subscription)
+ * are left out on purpose, not shown disabled; «Удалить аккаунт» (TASK-072)
+ * is the last row of the signed-in member.
  */
 export function ProfileScreen({
   navigation,
@@ -238,6 +239,17 @@ export function ProfileScreen({
                 icon="logout"
                 title={t("profile.signOut")}
                 onPress={() => setConfirmSignOut(true)}
+              />
+              {/* M-PRO-05 (TASK-072, D-036): always there for a member. */}
+              <ListRow
+                icon="trash"
+                title={
+                  <Text variant="body" color="danger">
+                    {t("profile.deleteAccount")}
+                  </Text>
+                }
+                navigates
+                onPress={() => navigation.navigate("profile-delete")}
               />
             </ListGroup>
           </Section>

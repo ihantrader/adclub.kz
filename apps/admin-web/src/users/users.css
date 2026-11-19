@@ -12,6 +12,13 @@
   margin-top: 0;
 }
 
+/* TASK-072: «Выгрузить данные…» under the profile. */
+.user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-3);
+}
+
 /* A tab of one list: its note close to it. */
 .user-tab--tight {
   gap: var(--ac-space-3);

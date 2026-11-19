@@ -537,6 +537,7 @@
   "orders.customer": "Клиент",
   "orders.customerHidden": "Телефон откроется после принятия заявки",
   "orders.customerNoName": "Имя не указано",
+  "orders.customerDeleted": "Участник клуба · аккаунт удалён",
   "orders.call": "Позвонить",
   "orders.whatsapp": "Написать в WhatsApp",
   "orders.item": "Позиция",

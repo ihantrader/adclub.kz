@@ -1,6 +1,5 @@
 {
   "$about": "Қазақша. ВНИМАНИЕ: перевод сделан coding-agent'ом и НЕ ПОДТВЕРЖДЁН НОСИТЕЛЕМ ЯЗЫКА (TASK-027, TASK-028, как и казахские тексты прошлых задач). Проверка носителем — отдельной задачей; до неё тексты считаются черновыми.",
-
   "common.retry": "Қайталау",
   "common.close": "Жабу",
   "common.back": "Артқа",
@@ -13,17 +12,14 @@
   "common.yesterday": "кеше",
   "common.done": "Дайын",
   "common.save": "Сақтау",
-
   "tabs.catalog": "Каталог",
   "tabs.orders": "Өтінімдер",
   "tabs.garage": "Гараж",
   "tabs.profile": "Профиль",
-
   "start.chooseLanguage": "Тілді таңдаңыз · Выберите язык · Choose language",
   "language.kk": "Қазақша",
   "language.ru": "Русский",
   "language.en": "English",
-
   "state.offline": "Желі жоқ",
   "state.offlineText": "Қосылымды тексеріңіз — сосын бәрін жүктеп береміз",
   "state.offlineOrders": "Менің белсенді өтінімдерім",
@@ -31,7 +27,6 @@
   "state.errorText": "Қайтадан көріңіз",
   "state.tooManyRequests": "Сұраныс тым көп",
   "state.tooManyRequestsText": "Бір минут күтіп, қайта көріңіз",
-
   "update.title": "Қолданбаны жаңарту қажет",
   "update.fallbackMessage": "Бұл нұсқа бұдан былай қолдау көрсетілмейді. App Store немесе Google Play дүкенін ашып, қолданбаны жаңартыңыз",
   "update.openIos": "App Store дүкенін ашыңыз",
@@ -39,7 +34,6 @@
   "update.checkAgain": "Қайта тексеру",
   "update.openStoreFailed": "Қолданбалар дүкенін ашу мүмкін болмады",
   "update.activeOrders": "Белсенді өтінімдерді көрсету",
-
   "city.firstRunTitle": "Қай жерде тұрасыз?",
   "city.firstRunText": "Жақын жердегі жеткізушілер мен қызметтерді көрсетеміз. Тауарлар Қазақстанның барлық аумағында қолжетімді",
   "city.detect": "Автоматты анықтау",
@@ -57,10 +51,8 @@
   "city.loadError": "Қалалар тізімін жүктеу мүмкін болмады",
   "city.listEmpty": "Қалалар тізімі әзірге бос",
   "city.continueWithAll": "«Бүкіл Қазақстан» таңдап жалғастыру",
-
   "start.carTitle": "Автомобиліңіз қандай?",
   "start.carText": "Тек сәйкес келетінін көрсетеміз. Тіркелудің қажеті жоқ",
-
   "garage.add": "Автомобиль қосу",
   "garage.guestNote": "Кіріңіз — гараж барлық құрылғыда сақталады",
   "garage.primary": "Негізгі",
@@ -77,7 +69,6 @@
   "garage.changeFailed": "Сақталмады. Желіні тексеріп, қайталаңыз",
   "garage.limitReached": "Гараждағы көлік саны шегіне жетті — {limit}. Керек емесін өшіріп, жаңасын қосыңыз",
   "garage.carGone": "Бұл көлік гаражда енді жоқ — оны басқа құрылғыда өшірген",
-
   "car.title": "Автомобильді таңдау",
   "car.step.make": "Марка",
   "car.step.model": "Үлгі",
@@ -126,7 +117,6 @@
   "car.color.orange": "Қызғылт сары",
   "car.color.yellow": "Сары",
   "car.color.burgundy": "Күрең қызыл",
-
   "catalog.emptyTitle": "Каталог жақында ашылады",
   "catalog.emptyText": "Мұнда жеткізушілердің клубтық бағалары көрсетіледі — қалаңыз бен автомобиліңіз бойынша",
   "catalog.offlineBanner": "Желі жоқ · өтінімдер «Өтінімдер» қойындысында",
@@ -213,7 +203,6 @@
   "item.book": "Жазылу",
   "item.serviceAtPoint": "Қызмет жеткізушінің нүктесінде көрсетіледі",
   "item.noServiceOffers": "{city} қаласында {model} үшін ұсыныстар әзірге жоқ",
-
   "item.characteristics": "Сипаттамалары",
   "item.offers": "Клубтық бағалар",
   "item.clubPrice": "Клубтық баға",
@@ -256,14 +245,12 @@
   "supplier.unavailableText": "Ұсыныс қазір каталогта көрсетілмейді",
   "item.notFound": "Позиция табылмады",
   "item.notFoundText": "Оны каталогтан алып тастаған болуы мүмкін",
-
   "compat.fits": "Сәйкес келеді",
   "compat.fitsFor": "{car} үшін сәйкес келеді",
   "compat.needsDetails": "{level} нақтылаңыз — бөлшектің сәйкес келуі соған байланысты",
   "compat.doesNotFit": "Сіздің {car} автомобиліңізге сәйкес келмейді",
   "compat.notSpecified": "Сәйкестігі көрсетілмеген",
   "compat.completeCar": "Автомобильді толықтыру",
-
   "month.1": "қаңтар",
   "month.2": "ақпан",
   "month.3": "наурыз",
@@ -276,9 +263,7 @@
   "month.10": "қазан",
   "month.11": "қараша",
   "month.12": "желтоқсан",
-
   "orders.guestEmptyTitle": "Мұнда сіздің өтінімдеріңіз және тауар алу кодтары болады",
-
   "profile.guestTitle": "Кіріңіз немесе тіркеліңіз",
   "profile.guestText": "Телефон нөмірі бойынша, парольсіз. Автомобильдеріңіз сақталады",
   "profile.city": "Қала",
@@ -315,7 +300,39 @@
   "documents.contact": "Клубпен байланысу",
   "documents.openFailed": "Сілтемені ашу мүмкін болмады",
   "documents.empty": "Клуб құжаттары осында пайда болады",
-
+  "profile.deleteAccount": "Аккаунтты жою",
+  "deleteAccount.title": "Аккаунтты жою",
+  "deleteAccount.whatTitle": "Не жойылады",
+  "deleteAccount.itemProfile": "Профиль: аты, телефон нөмірі, e-mail, қала",
+  "deleteAccount.itemGarage": "Гараж: көліктер, VIN және мемлекеттік нөмірлер, жүріс",
+  "deleteAccount.itemOrders": "Өтінімдер тарихы сізге көрінбейтін болады",
+  "deleteAccount.itemReviews": "Пікірлер сіздің атыңызсыз қалады",
+  "deleteAccount.activeOrders.one": "Сізде {n} белсенді өтінім бар. Ол бас тартылады, жеткізуші хабарлама алады",
+  "deleteAccount.activeOrders.few": "Сізде {n} белсенді өтінім бар. Олар бас тартылады, жеткізушілер хабарлама алады",
+  "deleteAccount.activeOrders.many": "Сізде {n} белсенді өтінім бар. Олар бас тартылады, жеткізушілер хабарлама алады",
+  "deleteAccount.companies": "Сіз қызметкер болмайсыз: {companies}",
+  "deleteAccount.law": "Деректердің бір бөлігі заң талап ететін мерзімге дейін сақталады",
+  "deleteAccount.store": "Аккаунтты жою {store} ішіндегі жазылымды тоқтатпайды. Оны сол жерде тоқтатыңыз",
+  "deleteAccount.continue": "Жалғастыру",
+  "deleteAccount.confirmTitle": "Аккаунтты біржола жою керек пе?",
+  "deleteAccount.confirmText": "Аккаунтты қалпына келтіру мүмкін болмайды",
+  "deleteAccount.confirm": "Жою",
+  "deleteAccount.deleted": "Аккаунт жойылды",
+  "deleteAccount.lastMember": "Сіз «{company}» компаниясының жалғыз қызметкерісіз. Кабинетті беру немесе жабу үшін клуб қолдауына жазыңыз",
+  "deleteAccount.administrator": "Алдымен әкімші құқықтарын алып тастаңыз",
+  "deleteAccount.failed": "Аккаунтты жою мүмкін болмады. Қайталап көріңіз",
+  "deleteAccount.loadFailed": "Деректерді жүктеу мүмкін болмады",
+  "deleteAccount.needsNetwork": "Желі қажет",
+  "consents.title": "Шарттарды жаңарттық",
+  "consents.text": "Өтінім ресімдеу үшін жаңа редакцияны қабылдаңыз:",
+  "consents.accept": "Қабылдау",
+  "consents.later": "Қазір емес",
+  "consents.failed": "Сақтау мүмкін болмады. Қайталап көріңіз",
+  "consents.kind.phone_share": "Өтінімді қабылдаған жеткізушіге нөмірді беру",
+  "consents.kind.terms": "Пайдалану шарттары және Құпиялық саясаты",
+  "consents.kind.vehicle_document": "Гаражда VIN мен мемлекеттік нөмірді сақтау",
+  "documents.consentOutdated": "{date} қабылданды · {version} нұсқасы · жаңа редакция бар",
+  "documents.noConsents": "Әзірге келісімдер жоқ",
   "auth.gateSupplierName": "Жеткізушінің атауын жазылымы бар қатысушылар көреді. Алдымен кіріңіз — бұл бір минут",
   "auth.getCode": "Код алу",
   "auth.noWhatsapp": "Менде WhatsApp жоқ",
@@ -348,7 +365,6 @@
   "auth.carsWillBeSaved": "Телефон нөмірі бойынша, парольсіз. Автомобильдеріңіз сақталады",
   "auth.signIn": "Кіру",
   "auth.notNow": "Қазір емес",
-
   "profile.saved": "Сақталды",
   "profile.phone": "Телефон нөмірі",
   "profile.phoneReadOnly": "Телефон нөмірін өзгертуге болмайды",
@@ -372,7 +388,6 @@
   "profile.signOutConfirmTitle": "Аккаунттан шығу керек пе?",
   "profile.signOutConfirmText": "Белсенді өтінімдердің кодтары осы құрылғыдан жойылады. Қайта кіру телефон нөмірі арқылы мүмкін",
   "profile.finishRegistration": "Тіркелуді аяқтаңыз",
-
   "update.showOrders": "Белсенді өтінімдерді көрсету",
   "auth.gateOrder": "Өтінім рәсімдеп, код алу үшін кіріңіз",
   "item.order": "Рәсімдеу",
@@ -719,7 +734,6 @@
   "car.keepMine": "Бұрынғыдай қалдыру",
   "car.editVin": "Көліктің VIN-і",
   "car.editPlate": "Көліктің мемлекеттік нөмірі",
-
   "car.mileage": "Жүрісі",
   "car.mileageValue": "{value} км · {date}",
   "car.mileageNone": "Жүрісі көрсетілмеген",
@@ -814,7 +828,6 @@
   "assistant.limitDayTitle": "Бүгінгі шек таусылды",
   "assistant.limitDayText": "Ертең көріңіз. Каталог пен іздеу қолжетімді",
   "assistant.limitToCatalog": "Каталогқа",
-
   "reminder.dueKm": "{car} көлігінде {what} ауыстыратын уақыт келді: соңғы ауыстырудан бері шамамен {km} км жүрді",
   "reminder.dueMonths.one": "{car} көлігінде {what} ауыстыратын уақыт келді: соңғы ауыстырудан бері {n} ай өтті",
   "reminder.dueMonths.few": "{car} көлігінде {what} ауыстыратын уақыт келді: соңғы ауыстырудан бері {n} ай өтті",
@@ -846,7 +859,6 @@
   "reminder.serviceScheduleMonths.one": "{car}: {what} уақыты келді — регламент бойынша {n} айда бір рет",
   "reminder.serviceScheduleMonths.few": "{car}: {what} уақыты келді — регламент бойынша {n} айда бір рет",
   "reminder.serviceScheduleMonths.many": "{car}: {what} уақыты келді — регламент бойынша {n} айда бір рет",
-
   "voice.open": "Дауыспен іздеу",
   "voice.explainTitle": "Дауыспен іздеу",
   "voice.explainText": "Не іздейтініңізді айтыңыз: артикулды, бөлшектің атауын немесе қызметті — қазақша, орысша немесе ағылшынша. Ол үшін микрофонға рұқсат керек. Жазба тек тану үшін қажет және еш жерде сақталмайды.",

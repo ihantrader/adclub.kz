@@ -19,10 +19,13 @@ import { apiClient, sessionEndedNotice } from "../services/api";
 import { finishPendingLogoutSoon } from "../services/pending-logout";
 import { useOnline } from "../services/use-network";
 import {
+  acceptConsents as apiAcceptConsents,
   completeRegistration as apiCompleteRegistration,
+  deleteAccount as apiDeleteAccount,
   getAccountProfile,
   updateAccountProfile as apiUpdateAccountProfile,
 } from "../services/account-api";
+import { ConsentSheet } from "../screens/profile/ConsentSheet";
 import { selectionOf, type CitySelection } from "./city";
 import { useT } from "./language";
 import { logoutNeedsRetry, withPendingLogouts } from "./pending-logout";
@@ -77,6 +80,21 @@ export interface SessionContextValue {
   /** M-PRO-02 «Сохранить». */
   updateProfile: (patch: UpdateAccountProfileBody) => Promise<AccountProfile>;
   signOut: () => Promise<void>;
+  /**
+   * TASK-072: «Мы обновили условия» — opens the sheet (the launch opens it
+   * by itself when the profile says `consentsOutdated`; an order refused
+   * with `CONSENT_REQUIRED` opens it again).
+   */
+  askConsents: () => void;
+  /** «Принять»: every outdated consent for its current version. */
+  acceptConsents: () => Promise<AccountProfile>;
+  /**
+   * M-PRO-05 «Удалить» (TASK-072): the server deletes the account, then the
+   * device forgets it as a sign-out does — the session, the account's
+   * garage, the saved orders and their key, the assistant's dialog — and the
+   * app is a guest with «Аккаунт удалён».
+   */
+  deleteAccount: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -103,6 +121,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const { show } = useToast();
 
   const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const [consentSheet, setConsentSheet] = useState(false);
   // One read of the profile at a time: a sign-in asks for it and so does the
   // effect that sees the session appear — they share the request.
   const profileRequest = useRef<Promise<AccountProfile | null> | null>(null);
@@ -294,11 +313,52 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         garageStore.set(INITIAL_GARAGE);
         setProfile(null);
       },
+      askConsents: () => setConsentSheet(true),
+      acceptConsents: async () => {
+        const next = await apiAcceptConsents();
+        setProfile(next);
+        return next;
+      },
+      deleteAccount: async () => {
+        await apiDeleteAccount();
+        // Every session of the account has ended on the server: nothing is
+        // left to log out of, the device only forgets.
+        clearSession();
+        garageStore.set(INITIAL_GARAGE);
+        setProfile(null);
+        setConsentSheet(false);
+        show(t("deleteAccount.deleted"));
+      },
     }),
-    [status, accountId, profile, loadProfile, syncAccount],
+    [status, accountId, profile, loadProfile, syncAccount, show, t],
   );
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  // Once per launch (and per account): the profile says a text was updated.
+  const asked = useRef<string | null>(null);
+  const outdated = profile?.registrationCompleted === true && profile.consentsOutdated === true;
+  useEffect(() => {
+    if (!outdated || accountId === null || asked.current === accountId) return;
+    asked.current = accountId;
+    // Opening the sheet the server's answer asks for — a reaction to the
+    // profile just read, not a render of it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setConsentSheet(true);
+  }, [outdated, accountId]);
+
+  return (
+    <SessionContext.Provider value={value}>
+      {children}
+      <ConsentSheet
+        visible={consentSheet && status === "signed_in"}
+        outdated={profile?.outdatedConsents ?? []}
+        onClose={() => setConsentSheet(false)}
+        onAccept={async () => {
+          await value.acceptConsents();
+          setConsentSheet(false);
+        }}
+      />
+    </SessionContext.Provider>
+  );
 }
 
 export function useSession(): SessionContextValue {

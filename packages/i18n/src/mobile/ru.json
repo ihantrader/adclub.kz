@@ -1,6 +1,5 @@
 {
   "$about": "Тексты экранов мобильного приложения (TASK-027, TASK-028). Русский — рабочие формулировки SCREENS.md 5.1–5.3, 8.1–8.2 и раздела 2; где SCREENS.md текста не задаёт (пустые состояния каркасов, ошибки загрузки, подписи шагов выбора автомобиля), текст рабочий и утверждается вместе с экраном.",
-
   "common.retry": "Повторить",
   "common.close": "Закрыть",
   "common.back": "Назад",
@@ -13,17 +12,14 @@
   "common.yesterday": "вчера",
   "common.done": "Готово",
   "common.save": "Сохранить",
-
   "tabs.catalog": "Каталог",
   "tabs.orders": "Заявки",
   "tabs.garage": "Гараж",
   "tabs.profile": "Профиль",
-
   "start.chooseLanguage": "Тілді таңдаңыз · Выберите язык · Choose language",
   "language.kk": "Қазақша",
   "language.ru": "Русский",
   "language.en": "English",
-
   "state.offline": "Нет сети",
   "state.offlineText": "Проверьте подключение — и мы всё загрузим",
   "state.offlineOrders": "Мои активные заявки",
@@ -31,7 +27,6 @@
   "state.errorText": "Попробуйте ещё раз",
   "state.tooManyRequests": "Слишком много запросов",
   "state.tooManyRequestsText": "Подождите минуту и попробуйте снова",
-
   "update.title": "Нужно обновить приложение",
   "update.fallbackMessage": "Эта версия больше не поддерживается. Откройте App Store или Google Play и обновите приложение",
   "update.openIos": "Откройте App Store",
@@ -39,7 +34,6 @@
   "update.checkAgain": "Проверить снова",
   "update.openStoreFailed": "Не удалось открыть магазин приложений",
   "update.activeOrders": "Показать активные заявки",
-
   "city.firstRunTitle": "Где вы находитесь?",
   "city.firstRunText": "Покажем поставщиков и услуги рядом. Товары доступны по всему Казахстану",
   "city.detect": "Определить автоматически",
@@ -57,10 +51,8 @@
   "city.loadError": "Не удалось загрузить список городов",
   "city.listEmpty": "Список городов пока пуст",
   "city.continueWithAll": "Продолжить с «Весь Казахстан»",
-
   "start.carTitle": "Какой у вас автомобиль?",
   "start.carText": "Покажем только то, что подходит. Регистрация не нужна",
-
   "garage.add": "Добавить автомобиль",
   "garage.guestNote": "Войдите — гараж сохранится на всех устройствах",
   "garage.primary": "Основной",
@@ -77,7 +69,6 @@
   "garage.changeFailed": "Не удалось сохранить. Проверьте сеть и повторите",
   "garage.limitReached": "В гараже уже предельное число автомобилей — {limit}. Удалите ненужный и добавьте новый",
   "garage.carGone": "Этого автомобиля уже нет в гараже — его удалили на другом устройстве",
-
   "car.title": "Выбор автомобиля",
   "car.step.make": "Марка",
   "car.step.model": "Модель",
@@ -126,7 +117,6 @@
   "car.color.orange": "Оранжевый",
   "car.color.yellow": "Жёлтый",
   "car.color.burgundy": "Бордовый",
-
   "catalog.emptyTitle": "Каталог скоро откроется",
   "catalog.emptyText": "Здесь появятся клубные цены поставщиков — по вашему городу и вашему автомобилю",
   "catalog.offlineBanner": "Нет сети · заявки доступны во вкладке «Заявки»",
@@ -213,7 +203,6 @@
   "item.book": "Записаться",
   "item.serviceAtPoint": "Услугу оказывают в точке поставщика",
   "item.noServiceOffers": "Для {model} в городе {city} предложений пока нет",
-
   "item.characteristics": "Характеристики",
   "item.offers": "Клубные цены",
   "item.clubPrice": "Клубная цена",
@@ -256,14 +245,12 @@
   "supplier.unavailableText": "Предложение сейчас не показывается в каталоге",
   "item.notFound": "Позиция не найдена",
   "item.notFoundText": "Её могли убрать из каталога",
-
   "compat.fits": "Подходит",
   "compat.fitsFor": "Подходит для {car}",
   "compat.needsDetails": "Уточните {level} — от него зависит, подойдёт ли деталь",
   "compat.doesNotFit": "Не подходит для вашего автомобиля {car}",
   "compat.notSpecified": "Совместимость не указана",
   "compat.completeCar": "Дополнить автомобиль",
-
   "month.1": "января",
   "month.2": "февраля",
   "month.3": "марта",
@@ -276,9 +263,7 @@
   "month.10": "октября",
   "month.11": "ноября",
   "month.12": "декабря",
-
   "orders.guestEmptyTitle": "Здесь будут ваши заявки и коды для получения",
-
   "profile.guestTitle": "Войдите или зарегистрируйтесь",
   "profile.guestText": "По номеру телефона, без пароля. Ваши автомобили сохранятся",
   "profile.city": "Город",
@@ -315,7 +300,39 @@
   "documents.contact": "Связаться с клубом",
   "documents.openFailed": "Не удалось открыть ссылку",
   "documents.empty": "Документы клуба появятся здесь",
-
+  "profile.deleteAccount": "Удалить аккаунт",
+  "deleteAccount.title": "Удаление аккаунта",
+  "deleteAccount.whatTitle": "Что будет удалено",
+  "deleteAccount.itemProfile": "Профиль: имя, номер телефона, e-mail, город",
+  "deleteAccount.itemGarage": "Гараж: автомобили, VIN и госномера, пробег",
+  "deleteAccount.itemOrders": "История заявок перестанет быть видна вам",
+  "deleteAccount.itemReviews": "Отзывы останутся без вашего имени",
+  "deleteAccount.activeOrders.one": "У вас {n} активная заявка. Она будет отменена, поставщик получит уведомление",
+  "deleteAccount.activeOrders.few": "У вас {n} активные заявки. Они будут отменены, поставщики получат уведомление",
+  "deleteAccount.activeOrders.many": "У вас {n} активных заявок. Они будут отменены, поставщики получат уведомление",
+  "deleteAccount.companies": "Вы перестанете быть сотрудником: {companies}",
+  "deleteAccount.law": "Часть данных хранится столько, сколько требует закон",
+  "deleteAccount.store": "Удаление аккаунта не отменяет подписку в {store}. Отмените её там",
+  "deleteAccount.continue": "Продолжить",
+  "deleteAccount.confirmTitle": "Удалить аккаунт навсегда?",
+  "deleteAccount.confirmText": "Восстановить аккаунт будет нельзя",
+  "deleteAccount.confirm": "Удалить",
+  "deleteAccount.deleted": "Аккаунт удалён",
+  "deleteAccount.lastMember": "Вы единственный сотрудник «{company}». Напишите в поддержку клуба, чтобы передать или закрыть кабинет",
+  "deleteAccount.administrator": "Сначала снимите права администратора",
+  "deleteAccount.failed": "Не удалось удалить аккаунт. Попробуйте ещё раз",
+  "deleteAccount.loadFailed": "Не удалось загрузить данные",
+  "deleteAccount.needsNetwork": "Нужна сеть",
+  "consents.title": "Мы обновили условия",
+  "consents.text": "Чтобы оформлять заявки, примите новую редакцию:",
+  "consents.accept": "Принять",
+  "consents.later": "Не сейчас",
+  "consents.failed": "Не удалось сохранить. Попробуйте ещё раз",
+  "consents.kind.phone_share": "Передача номера поставщику, принявшему заявку",
+  "consents.kind.terms": "Условия использования и Политика конфиденциальности",
+  "consents.kind.vehicle_document": "Хранение VIN и госномера в гараже",
+  "documents.consentOutdated": "Принято {date} · версия {version} · есть новая редакция",
+  "documents.noConsents": "Согласий пока нет",
   "auth.gateSupplierName": "Название поставщика видно участникам с подпиской. Сначала войдите — это минута",
   "auth.getCode": "Получить код",
   "auth.noWhatsapp": "У меня нет WhatsApp",
@@ -348,7 +365,6 @@
   "auth.carsWillBeSaved": "По номеру телефона, без пароля. Ваши автомобили сохранятся",
   "auth.signIn": "Войти",
   "auth.notNow": "Не сейчас",
-
   "profile.saved": "Сохранено",
   "profile.phone": "Номер телефона",
   "profile.phoneReadOnly": "Номер телефона изменить нельзя",
@@ -372,7 +388,6 @@
   "profile.signOutConfirmTitle": "Выйти из аккаунта?",
   "profile.signOutConfirmText": "Коды активных заявок будут удалены с этого устройства. Войти снова можно по номеру телефона",
   "profile.finishRegistration": "Завершите регистрацию",
-
   "update.showOrders": "Показать активные заявки",
   "auth.gateOrder": "Войдите, чтобы оформить заявку и получить код",
   "item.order": "Оформить",
@@ -719,7 +734,6 @@
   "car.keepMine": "Оставить как было",
   "car.editVin": "VIN автомобиля",
   "car.editPlate": "Госномер автомобиля",
-
   "car.mileage": "Пробег",
   "car.mileageValue": "{value} км · {date}",
   "car.mileageNone": "Пробег не указан",
@@ -814,7 +828,6 @@
   "assistant.limitDayTitle": "Лимит на сегодня исчерпан",
   "assistant.limitDayText": "Попробуйте завтра. Каталог и поиск доступны",
   "assistant.limitToCatalog": "В каталог",
-
   "reminder.dueKm": "Пора менять {what} на {car}: прошло около {km} км с последней замены",
   "reminder.dueMonths.one": "Пора менять {what} на {car}: прошёл {n} месяц с последней замены",
   "reminder.dueMonths.few": "Пора менять {what} на {car}: прошло {n} месяца с последней замены",
@@ -846,7 +859,6 @@
   "reminder.serviceScheduleMonths.one": "{what} для {car} — пора: по регламенту раз в {n} месяц",
   "reminder.serviceScheduleMonths.few": "{what} для {car} — пора: по регламенту раз в {n} месяца",
   "reminder.serviceScheduleMonths.many": "{what} для {car} — пора: по регламенту раз в {n} месяцев",
-
   "voice.open": "Поиск голосом",
   "voice.explainTitle": "Поиск голосом",
   "voice.explainText": "Скажите, что ищете: артикул, название детали или услугу — по-казахски, по-русски или по-английски. Для этого нужен доступ к микрофону. Запись нужна только для распознавания и нигде не хранится.",

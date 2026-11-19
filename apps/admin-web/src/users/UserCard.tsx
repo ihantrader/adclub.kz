@@ -27,10 +27,10 @@ import {
 import { formatKzPlate } from "@adclub/domain";
 import { useOnline } from "@adclub/web-session";
 import { useState, type ReactNode } from "react";
-import { apiClient } from "../api";
+import { API_URL, apiClient } from "../api";
 import { JournalHistory } from "../audit/JournalHistory";
 import { userSubscriptionsPath } from "../billing/billing-words";
-import { formatMoment } from "../format";
+import { formatDay, formatMoment } from "../format";
 import { AppLink, Header, Table } from "../layout/layout";
 import { Discipline } from "../orders/OrderCard";
 import { MoreOrders, OrdersTable } from "../orders/Orders";
@@ -59,6 +59,8 @@ import {
   carParams,
   carTitle,
   consentText,
+  CONSENT_WORDS,
+  deletedText,
   pushReliabilityText,
   whatsappText,
   deviceText,
@@ -151,7 +153,13 @@ export function UserCard({ accountId }: { accountId: string }) {
     <>
       <Header<UserTab>
         crumbs={[USERS_CRUMB]}
-        title={user ? (user.name ?? user.phone) : "Пользователь"}
+        title={
+          user
+            ? user.deletedAt
+              ? "Удалённый пользователь"
+              : (user.name ?? user.phone)
+            : "Пользователь"
+        }
         subtitle={
           user && (
             <>
@@ -223,9 +231,47 @@ function Muted({ children }: { children: ReactNode }) {
 
 /** The profile: a card up to 720, «подпись — значение» in two columns. */
 function Profile({ user }: { user: AdminUser }) {
+  const toast = useToast();
+  const online = useOnline();
+  const [exporting, setExporting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const deleted = deletedText(user.deletedAt, (iso) => formatDay(iso));
+
+  /** «Выгрузить данные…» (TASK-072): the reason, then a one-time link opened at once. */
+  const exportData = async (reason: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const link = await apiClient.createAdminUserDataExport(
+        { accountId: user.accountId },
+        { reason },
+      );
+      setExporting(false);
+      const anchor = document.createElement("a");
+      anchor.href = new URL(link.url, API_URL).toString();
+      anchor.download = link.fileName;
+      anchor.rel = "noopener";
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      toast.show("Данные выгружены. Ссылка работала один раз");
+    } catch (failure) {
+      setError(userErrorText(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="user-tab">
-      {!user.registrationCompleted && (
+      {deleted && (
+        <Banner tone="neutral">
+          {deleted} — пользователь удалил аккаунт сам: личных данных не осталось, заявки и журнал
+          сохранены.
+        </Banner>
+      )}
+      {!deleted && !user.registrationCompleted && (
         <Banner tone="warning">
           Регистрация не завершена: нет имени или согласия — оформить заявку пользователь не может.
         </Banner>
@@ -236,7 +282,11 @@ function Profile({ user }: { user: AdminUser }) {
           <dd>{user.name ?? <Muted>не указано</Muted>}</dd>
           <dt>Телефон</dt>
           <dd>
-            <PhoneReveal phone={user.phone} subject="account" id={user.accountId} />
+            {deleted ? (
+              <Muted>номера нет — аккаунт удалён</Muted>
+            ) : (
+              <PhoneReveal phone={user.phone} subject="account" id={user.accountId} />
+            )}
           </dd>
           <dt>E-mail</dt>
           <dd>
@@ -253,12 +303,21 @@ function Profile({ user }: { user: AdminUser }) {
           <dd>{user.language ? LANGUAGE_TEXT[user.language] : <Muted>—</Muted>}</dd>
           <dt>Появился</dt>
           <dd>{formatMoment(user.createdAt)}</dd>
-          <dt>Согласие на передачу номера</dt>
+          {/* TASK-072: the journal of consents, the latest first. */}
+          <dt>Согласия</dt>
           <dd>
-            {user.phoneShareConsent ? (
-              consentText(user.phoneShareConsent, (iso) => formatMoment(iso))
-            ) : (
+            {user.consents.length === 0 ? (
               <Muted>не давал</Muted>
+            ) : (
+              <ul className="plain-list">
+                {user.consents.map((consent) => (
+                  <li key={`${consent.kind}:${consent.at}`}>
+                    {CONSENT_WORDS[consent.kind]} —{" "}
+                    {consentText(consent, (iso) => formatMoment(iso))}
+                    {!consent.current && <Muted> · есть новая редакция</Muted>}
+                  </li>
+                ))}
+              </ul>
             )}
           </dd>
           {/* TASK-052: how important events reach the person. */}
@@ -288,6 +347,23 @@ function Profile({ user }: { user: AdminUser }) {
           )}
         </dl>
       </section>
+      <div className="user-actions">
+        <Button variant="secondary" disabled={!online} onClick={() => setExporting(true)}>
+          Выгрузить данные…
+        </Button>
+      </div>
+      <ReasonDialog
+        open={exporting}
+        title="Выгрузить данные пользователя?"
+        confirm="Выгрузить"
+        onConfirm={(reason) => void exportData(reason)}
+        onClose={() => setExporting(false)}
+        busy={busy}
+        error={error}
+      >
+        Файл JSON: профиль, согласия, гараж с VIN и госномерами, заявки, отзывы, жалобы, подписка и
+        клубный доступ, устройства. Ссылка работает один раз; выгрузка попадёт в журнал с причиной.
+      </ReasonDialog>
     </div>
   );
 }

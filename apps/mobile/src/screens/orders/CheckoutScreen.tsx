@@ -64,6 +64,7 @@ import { useGarage } from "../../state/garage-provider";
 import { useLanguage } from "../../state/language";
 import { useOrdersCopy } from "../../state/orders-provider";
 import { usePush } from "../../state/push-provider";
+import { useSession } from "../../state/session-provider";
 import { NoCarContent } from "../NoCarState";
 import { CompatibilityLine, ItemPhoto, useReceiptText } from "../catalog/parts";
 import { ClubAccessSheet } from "./ClubAccessSheet";
@@ -132,6 +133,7 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
   const { selection } = useCity();
   const orders = useOrdersCopy();
   const push = usePush();
+  const session = useSession();
   const receiptText = useReceiptText();
   const cityId = cityIdOf(selection);
   const request = useShowcaseItem(itemId, {
@@ -299,6 +301,9 @@ function Checkout({ route, navigation, car }: Props & { car: GarageCar }) {
         return;
       case "registration_incomplete":
         navigation.push("auth-register");
+        return;
+      case "consent_required":
+        session.askConsents();
         return;
       case "club_access_required":
         setClubSheet(true);

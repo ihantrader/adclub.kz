@@ -12,14 +12,14 @@ import {
 } from "@adclub/ui";
 import { useEffect, useState } from "react";
 import { apiClient } from "../api";
-import { formatMoment } from "../format";
+import { formatDay, formatMoment } from "../format";
 import { FilterSearch, FilterSelect, FlagChips } from "../layout/filters";
 import { Header, RowTitle, rowLink, Table } from "../layout/layout";
 import { MoreOrders } from "../orders/Orders";
 import { navigateTo, routePaths, userPath } from "../router";
 import { useAddressFilters } from "../suppliers/shared";
 import { LoadError, usePaged } from "../vehicles/shared";
-import { accessMark, userFiltersOf } from "./user-words";
+import { accessMark, deletedText, userFiltersOf } from "./user-words";
 import "./users.css";
 
 const ACCESS = [
@@ -32,6 +32,8 @@ const FLAGS = [
   { key: "noShows", label: "Есть неявки" },
   { key: "unconfirmedCar", label: "Есть автомобиль без подтверждённого документа" },
   { key: "noWhatsapp", label: "Нет WhatsApp" },
+  // TASK-072: the deleted accounts are only here.
+  { key: "deleted", label: "Удалённые" },
 ] as const;
 
 type FlagKey = (typeof FLAGS)[number]["key"];
@@ -93,7 +95,8 @@ export function Users() {
     filters.clubAccess ||
     filters.noShows ||
     filters.unconfirmedCar ||
-    filters.noWhatsapp,
+    filters.noWhatsapp ||
+    filters.deleted,
   );
 
   // The search goes to the address a moment after typing stops.
@@ -198,10 +201,13 @@ export function Users() {
             >
               {list.items.map((user) => {
                 const href = userPath(user.accountId);
-                const notes = [
-                  user.name ? user.phone : "Без имени",
-                  user.registrationCompleted ? null : "регистрация не завершена",
-                ].filter(Boolean);
+                const deleted = deletedText(user.deletedAt, formatDay);
+                const notes = deleted
+                  ? [deleted]
+                  : [
+                      user.name ? user.phone : "Без имени",
+                      user.registrationCompleted ? null : "регистрация не завершена",
+                    ].filter(Boolean);
                 return (
                   <tr key={user.accountId} {...rowLink(href)}>
                     <td>
@@ -217,7 +223,7 @@ export function Users() {
                         }
                       >
                         <span className={user.name ? undefined : "nowrap"}>
-                          {user.name ?? user.phone}
+                          {deleted ? "Удалённый пользователь" : (user.name ?? user.phone)}
                         </span>
                       </RowTitle>
                     </td>

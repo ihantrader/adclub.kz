@@ -21,6 +21,7 @@ import {
   openCallOption,
   type CallOption,
 } from "../../orders/call-options";
+import { CONSENT_LABEL, myConsents } from "../../profile/account-deletion";
 import { documentsRows, type DocumentsRow } from "../../profile/club-info";
 import { useClubInfo } from "../../services/use-club-info";
 import { useT } from "../../state/language";
@@ -52,7 +53,7 @@ export function DocumentsScreen({
   const links = rows.filter((row): row is LinkRow => row.kind !== "consents");
   const consents = rows.some((row) => row.kind === "consents");
   const profile = session.profile;
-  const phoneShare = profile?.phoneShareConsent ?? null;
+  const given = myConsents(profile?.consents ?? []);
   const loading = info.status === "loading" && !info.data;
 
   const open = (url: string) => {
@@ -146,19 +147,30 @@ export function DocumentsScreen({
         {consents && (
           <Section title={t("documents.consents")}>
             <ListGroup>
-              <ListRow
-                first
-                icon="lock"
-                title={t("documents.phoneShare")}
-                subtitle={
-                  phoneShare
-                    ? t("documents.phoneShareGiven", {
-                        date: time.whenDay(phoneShare.at, null, now),
-                        version: phoneShare.version,
-                      })
-                    : t("documents.phoneShareMissing")
-                }
-              />
+              {/* TASK-072: the journal of consents — what, which version, when. */}
+              {given.length === 0 && (
+                <ListRow
+                  first
+                  icon="lock"
+                  title={t("documents.phoneShare")}
+                  subtitle={t("documents.phoneShareMissing")}
+                />
+              )}
+              {given.map((consent, index) => (
+                <ListRow
+                  key={consent.kind}
+                  first={index === 0}
+                  icon="lock"
+                  title={t(CONSENT_LABEL[consent.kind])}
+                  subtitle={t(
+                    consent.current ? "documents.phoneShareGiven" : "documents.consentOutdated",
+                    {
+                      date: time.whenDay(consent.at, null, now),
+                      version: consent.version,
+                    },
+                  )}
+                />
+              ))}
               <ListRow
                 icon="info"
                 title={t("documents.emailNews")}

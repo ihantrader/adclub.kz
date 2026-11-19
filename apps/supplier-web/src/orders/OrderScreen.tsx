@@ -452,37 +452,43 @@ function OrderView({
               <>
                 <div className="stack-s">
                   <p className="ac-text-body-strong">
-                    {order.customer.name ?? t("orders.customerNoName")}
+                    {order.customer.name ??
+                      t(order.customer.phone ? "orders.customerNoName" : "orders.customerDeleted")}
                   </p>
-                  <p className="num">{formatPhone(order.customer.phone)}</p>
+                  {order.customer.phone && (
+                    <p className="num">{formatPhone(order.customer.phone)}</p>
+                  )}
                 </div>
-                <ActionBar
-                  compact
-                  others={[
-                    <a
-                      key="call"
-                      className="ac-button ac-button--secondary ac-button--m"
-                      href={`tel:${order.customer.phone}`}
-                    >
-                      <span className="ac-button__content">
-                        <Icon name="phone" size={20} />
-                        <span className="ac-button__label">{t("orders.call")}</span>
-                      </span>
-                    </a>,
-                    <a
-                      key="whatsapp"
-                      className="ac-button ac-button--secondary ac-button--m"
-                      href={whatsappLink(order.customer.phone)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <span className="ac-button__content">
-                        <Icon name="whatsapp" size={20} />
-                        <span className="ac-button__label">{t("orders.whatsapp")}</span>
-                      </span>
-                    </a>,
-                  ]}
-                />
+                {/* TASK-072: a customer who deleted the account has no number left. */}
+                {order.customer.phone && (
+                  <ActionBar
+                    compact
+                    others={[
+                      <a
+                        key="call"
+                        className="ac-button ac-button--secondary ac-button--m"
+                        href={`tel:${order.customer.phone}`}
+                      >
+                        <span className="ac-button__content">
+                          <Icon name="phone" size={20} />
+                          <span className="ac-button__label">{t("orders.call")}</span>
+                        </span>
+                      </a>,
+                      <a
+                        key="whatsapp"
+                        className="ac-button ac-button--secondary ac-button--m"
+                        href={whatsappLink(order.customer.phone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <span className="ac-button__content">
+                          <Icon name="whatsapp" size={20} />
+                          <span className="ac-button__label">{t("orders.whatsapp")}</span>
+                        </span>
+                      </a>,
+                    ]}
+                  />
+                )}
               </>
             )}
           </section>

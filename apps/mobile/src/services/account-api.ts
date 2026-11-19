@@ -1,4 +1,6 @@
 import type {
+  AccountDeletedResponse,
+  AccountDeletionPreview,
   AccountProfile,
   CompleteRegistrationBody,
   UpdateAccountProfileBody,
@@ -31,4 +33,19 @@ export function getAccountProfile(): Promise<AccountProfile> {
 
 export function updateAccountProfile(body: UpdateAccountProfileBody): Promise<AccountProfile> {
   return apiClient.updateAccountProfile(body);
+}
+
+/** «Принять» on «Мы обновили условия» (TASK-072): every outdated consent. */
+export function acceptConsents(): Promise<AccountProfile> {
+  return apiClient.acceptConsents({});
+}
+
+/** M-PRO-05, the first screen (TASK-072). */
+export function getAccountDeletion(): Promise<AccountDeletionPreview> {
+  return apiClient.getAccountDeletion();
+}
+
+/** M-PRO-05 «Удалить» (TASK-072). */
+export function deleteAccount(): Promise<AccountDeletedResponse> {
+  return apiClient.deleteAccount({ confirm: true });
 }

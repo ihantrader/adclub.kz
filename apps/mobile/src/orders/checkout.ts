@@ -76,6 +76,8 @@ export type CheckoutFailure =
   | { kind: "duplicate_active"; existingOrderId: string }
   /** M-AUTH-03, then back here. */
   | { kind: "registration_incomplete" }
+  /** TASK-072: a text was updated — «Мы обновили условия», then «Оформить» again. */
+  | { kind: "consent_required" }
   /** The stand-in for the subscription (TASK-030 requirement 2). */
   | { kind: "club_access_required" }
   /** «Под заказ» — stage C; the checkout is never opened for one, but the server is the judge. */
@@ -131,6 +133,8 @@ export function checkoutFailure(error: unknown): CheckoutFailure {
         : { kind: "other" };
     case "REGISTRATION_INCOMPLETE":
       return { kind: "registration_incomplete" };
+    case "CONSENT_REQUIRED":
+      return { kind: "consent_required" };
     case "SUBSCRIPTION_REQUIRED":
       return { kind: "club_access_required" };
     case "ORDER_KIND_NOT_SUPPORTED":

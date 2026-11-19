@@ -46,7 +46,7 @@ COMPLETED
 - `pnpm build` — PASS
 - Интеграционные (Testcontainers), по файлам: `account-deletion` 4/4, `account-profile` 12/12, `admin-users` 12/12, `orders` 75/75, `reviews` 15/15, `garage` 22/22, `session` 53/53, `sign-in-data-cleanup` 5/5, `schema-drift` 2/2, `database` (цикл миграций) 71/71, `supplier-members` 22/22, `notifications` 17/17, `assistant` 22/22 — PASS (после исправлений ревью повторены `account-deletion`, `account-profile`, `admin-users`, `garage`, `orders`, `supplier-members`, `notifications`); `settings` 16/17 — **FAIL одного теста** «operator command > shows, changes, resets…» по таймауту 120 с: тест запускает восемь серверных команд подряд, на этой машине каждая 10–20 с. **На нетронутом `main` (0735170) тот же тест падает так же** — к задаче не относится
 - `openapi:generate` — выполнен; `openapi:check` — PASS; `openapi:compat --snapshots` — PASS — «Compatible with every supported app version: 1.0.0»
-- CI — {CI}
+- CI — запущен прогон 44544694955 на 6522fc9 (не ждали, CLAUDE.md §11); после rebase на origin/main (TASK-065, TASK-068) повторены format, lint, typecheck, test, build, openapi:check, openapi:compat --snapshots и интеграционные `account-deletion`, `schema-drift`, `database`, `sign-in-data-cleanup` — PASS; моя миграция переименована в `1792710720000_…`, чтобы идти после миграции TASK-068
 
 ## UAT / E2E
 Окружение: своя база `adclub_t072`, Redis db 3, MinIO-бакет `adclub-t072`, API :3300 (тестовый ИИ), приложение в браузере :8382, админка :5384, кабинет :5385; безголовый Chrome (Playwright) — встроенная панель браузера была скрыта и не делала снимков. Номера — только тестовые `+77010000364…368`, `+77010000367` — тестовый администратор этого прогона.

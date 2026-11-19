@@ -102,11 +102,15 @@ export class AccountStore {
       // The lock waits for a deletion of this account in progress (it holds
       // the row FOR UPDATE, TASK-072.A): after it commits, the row no longer
       // has this number and is not returned — never a deleted account.
+      // `NO KEY UPDATE`, not `SHARE`: callers that lock the row FOR UPDATE
+      // next (the club access) would otherwise deadlock on two shared
+      // holders upgrading; sessions and orders pointing at the row (KEY
+      // SHARE) are not held up by it.
       const [existing] = await executor
         .select(columns)
         .from(account)
         .where(and(eq(account.phone, phone), ne(account.status, "deleted")))
-        .for("share");
+        .for("no key update");
       if (existing) {
         return { ...existing, created: false };
       }

@@ -129,6 +129,19 @@ export const auditActions = {
   /** The photos of an item put in a new order; the entity is the item. */
   catalogItemPhotosReordered: "catalog_item_photo.reordered",
   /**
+   * The image search put a candidate into moderation (TASK-068): `after` —
+   * the source type and page, the score; by the administrator's button or
+   * by the background job (`system`).
+   */
+  catalogItemPhotoFound: "catalog_item_photo.found",
+  /** A search for photos of an item ran; the entity is the item. `after`: results, candidates. */
+  catalogItemPhotoSearched: "catalog_item.photo_searched",
+  /**
+   * The photos of a request to add an item became candidates of the item
+   * made of it (TASK-068); the entity is the photo.
+   */
+  catalogItemPhotoFromRequest: "catalog_item_photo.from_request",
+  /**
    * The vehicle catalog (TASK-014). `created`: the record; `changed`:
    * `before`/`after` with the changed fields and the new version;
    * `status_changed`: archived or restored.

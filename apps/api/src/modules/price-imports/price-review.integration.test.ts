@@ -1650,7 +1650,12 @@ describe("price list matching, review and application (PostgreSQL + Redis + MinI
 
     // «новое» for both employees until each of them opens «Модерация».
     for (const of of [shop, colleague2]) {
-      expect((await summaryOf(of)).unseen).toEqual({ requests: 1, compatibility: 0, total: 1 });
+      expect((await summaryOf(of)).unseen).toEqual({
+        requests: 1,
+        compatibility: 0,
+        photos: 0,
+        total: 1,
+      });
       const page = await ok(of.as("get", "/supplier/catalog-requests"), (body) =>
         supplierCatalogRequestPageSchema.parse(body),
       );

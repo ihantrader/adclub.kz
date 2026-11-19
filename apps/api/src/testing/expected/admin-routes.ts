@@ -123,6 +123,7 @@ export const ADMIN_ROUTES: readonly string[] = [
   "POST /admin/catalog/items/{itemId}/compatibility/check",
   "POST /admin/catalog/items/{itemId}/compatibility/copy",
   "POST /admin/catalog/items/{itemId}/photos",
+  "POST /admin/catalog/items/{itemId}/photos/search",
   "POST /admin/catalog/items/{itemId}/photos/{photoId}/status",
   "POST /admin/catalog/items/{itemId}/status",
   "POST /admin/catalog/items/{itemId}/synonyms",

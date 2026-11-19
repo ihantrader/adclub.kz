@@ -3,27 +3,33 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   auditActions,
   auditEntities,
+  CATALOG_REQUEST_PHOTOS_MAX,
   ITEM_PHOTOS_MAX,
   type AdminItemPhoto,
   type AdminItemPhotosResponse,
   type CatalogPhotoInvalidDetails,
+  type CatalogRequestPhoto,
   type ItemPhotoImage,
+  type ItemPhotoSearchState,
+  type ItemPhotoSourceType,
   type ItemPhotoStatus,
   type PhotoDisplayMode,
   type ReorderItemPhotosBody,
   type SetItemPhotoStatusBody,
+  type SupplierItemPhoto,
   type UploadItemPhotoQuery,
 } from "@adclub/contracts";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { ApiException } from "../../common/errors";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { ApiException, rateLimitedException } from "../../common/errors";
+import { APP_CONFIG, type AppConfig } from "../../config";
 import { DatabaseService, type DbExecutor } from "../../database";
-import { AuditLog } from "../audit";
+import { AuditLog, type AuditActorRecord } from "../audit";
 import { AppSettings } from "../settings";
 import type { CatalogActor } from "./catalog-admin.service";
 import { notFound, orderMismatch, versionConflict } from "./catalog-errors";
 import { uniqueViolation } from "./catalog-paging";
 import { describeTexts, loadTexts, textsOf } from "./catalog-texts";
-import { PhotoRejected, prepareImage } from "./photo-image";
+import { PhotoRejected, prepareImage, type PreparedImage } from "./photo-image";
 import { photoObjectKey, PhotoStorage } from "./photo-storage";
 import {
   catalogItem,
@@ -84,6 +90,11 @@ function notApproved(): ApiException {
   );
 }
 
+/** A supplier's photo isn't taken here (TASK-068): the item has one, or the request is decided. */
+function photoNotNeeded(message: string): ApiException {
+  return new ApiException(409, "CATALOG_PHOTO_NOT_NEEDED", message);
+}
+
 function filesDeleted(): ApiException {
   return new ApiException(
     409,
@@ -119,6 +130,7 @@ export class CatalogPhotosService {
     @Inject(AuditLog) private readonly audit: AuditLog,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(PhotoStorage) private readonly storage: PhotoStorage,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   // ----------------------------------------------------------------- read
@@ -243,45 +255,385 @@ export class CatalogPhotosService {
     if (FOUND_ONLINE.has(query.sourceType) && !query.sourceUrl) {
       throw photoInvalid("source_url_required");
     }
+    await this.assertSize(body);
+    const executor = this.database.db;
+    const item = await this.findItem(executor, itemId);
+    const prepared = await this.prepare(body);
+    const { created } = await this.store({ itemId }, prepared, {
+      sourceType: query.sourceType,
+      sourceUrl: query.sourceUrl ?? null,
+      proposedBy: "admin",
+      uploadedBy: accountOf(actor),
+      audit: { action: auditActions.catalogItemPhotoUploaded, actor },
+    });
+    return { response: await this.describe(executor, item), created };
+  }
+
+  /**
+   * A candidate of the image search (TASK-068): a picture already checked
+   * by `prepare`, with the page it was found on. Nothing is stored twice;
+   * the item's limit of photos holds.
+   */
+  async addFoundCandidate(
+    itemId: string,
+    prepared: PreparedImage,
+    found: {
+      sourceType: "manufacturer" | "official_catalog" | "multi_store";
+      sourceUrl: string;
+      score: number;
+      evidence: Record<string, unknown>;
+    },
+    actor: AuditActorRecord,
+  ): Promise<{ created: boolean; photoId: string | null }> {
+    return this.store({ itemId }, prepared, {
+      sourceType: found.sourceType,
+      sourceUrl: found.sourceUrl,
+      proposedBy: "ai",
+      aiScore: found.score,
+      evidence: found.evidence,
+      uploadedBy: actor.role === "admin" ? actor.accountId : null,
+      audit: {
+        action: auditActions.catalogItemPhotoFound,
+        actor,
+        extra: { score: found.score },
+      },
+    });
+  }
+
+  /** Checksums of every photo the item has or had: a refused picture isn't proposed again. */
+  async knownChecksums(itemId: string): Promise<Set<string>> {
+    const rows = await this.database.db
+      .select({ checksum: itemPhoto.checksum })
+      .from(itemPhoto)
+      .where(eq(itemPhoto.itemId, itemId));
+    return new Set(rows.map((row) => row.checksum));
+  }
+
+  /** Photos the item holds now (approved and waiting): the limit `ITEM_PHOTOS_MAX`. */
+  async activeCount(itemId: string): Promise<number> {
+    const rows = await this.photosOfItem(this.database.db, itemId);
+    return rows.filter((row) => !row.removedAt).length;
+  }
+
+  /**
+   * A supplier's photo (TASK-068; S-OFF-03, S-OFF-05): of the item of the
+   * company's offer that has no approved photo, or of the company's request
+   * to add an item while it waits. Another company's offer or request — 404,
+   * as if there were none. `supplier_photos_per_supplier_day` for the whole
+   * company. The picture is checked and stored like the administrator's,
+   * without its metadata (camera, coordinates).
+   */
+  async uploadFromSupplier(
+    target: { offerId: string } | { requestId: string },
+    body: Buffer,
+    actor: { supplierId: string; memberId: string; accountId: string },
+  ): Promise<{ photo: SupplierItemPhoto; created: boolean }> {
+    await this.assertSize(body);
+    const executor = this.database.db;
+    let owner: { itemId: string } | { requestId: string };
+    if ("offerId" in target) {
+      const found = await executor.execute<{
+        item_id: string;
+        item_type: string;
+        status: string;
+        primary_photo_id: string | null;
+      }>(sql`
+        SELECT i.id AS item_id, i.item_type, i.status, i.primary_photo_id
+        FROM offer o JOIN catalog_item i ON i.id = o.item_id
+        WHERE o.id = ${target.offerId} AND o.supplier_id = ${actor.supplierId}`);
+      const row = found.rows[0];
+      if (!row) throw notFound("offer");
+      if (row.item_type === "service" || row.status !== "active" || row.primary_photo_id) {
+        throw photoNotNeeded("The item already has a photo, or is a service");
+      }
+      owner = { itemId: row.item_id };
+    } else {
+      const found = await executor.execute<{ status: string }>(sql`
+        SELECT status FROM catalog_request
+        WHERE id = ${target.requestId} AND supplier_id = ${actor.supplierId}`);
+      const row = found.rows[0];
+      if (!row) throw notFound("request");
+      if (row.status !== "new") {
+        throw photoNotNeeded("The request has been decided already");
+      }
+      owner = { requestId: target.requestId };
+    }
+    const limit = await this.settings.get("supplier_photos_per_supplier_day");
+    await this.assertSupplierDay(executor, actor.supplierId, limit);
+    const prepared = await this.prepare(body);
+    const { photoId } = await this.store(owner, prepared, {
+      sourceType: "supplier_photo",
+      sourceUrl: null,
+      proposedBy: "supplier",
+      uploadedBy: actor.accountId,
+      supplier: { supplierId: actor.supplierId, memberId: actor.memberId, dayLimit: limit },
+      audit: {
+        action: auditActions.catalogItemPhotoUploaded,
+        actor: { role: "supplier", ...actor },
+      },
+    });
+    const [row] = photoId
+      ? await executor.select().from(itemPhoto).where(eq(itemPhoto.id, photoId))
+      : [];
+    const existing =
+      row ??
+      ("itemId" in owner
+        ? await this.findByChecksum(executor, owner.itemId, prepared.checksum)
+        : await this.findRequestPhotoByChecksum(executor, owner.requestId, prepared.checksum));
+    if (!existing) throw notFound("photo");
+    const [photo] = await this.supplierPhotos([existing]);
+    return { photo: photo!, created: row !== undefined && photoId !== null };
+  }
+
+  /** Photos as a supplier's cabinet sees them: status, reason, a signed thumbnail. */
+  async supplierPhotos(rows: readonly ItemPhotoRow[]): Promise<SupplierItemPhoto[]> {
+    if (rows.length === 0) return [];
+    const { ttlSeconds } = await this.delivery();
+    const loaded = await this.loadPhotos(
+      this.database.db,
+      rows.map((row) => row.id),
+    );
+    const described: SupplierItemPhoto[] = [];
+    for (const row of rows) {
+      const thumb = loaded.get(row.id)?.files.get("thumb");
+      described.push({
+        id: row.id,
+        status: row.status,
+        rejectionReason: row.rejectionReason,
+        thumbUrl:
+          thumb && !row.filesDeletedAt
+            ? await this.storage.signedUrl(thumb.storageKey, ttlSeconds)
+            : null,
+        uploadedAt: row.createdAt.toISOString(),
+        reviewedAt: iso(row.reviewedAt),
+      });
+    }
+    return described;
+  }
+
+  /** The photos sent with requests to add an item, oldest first, by request. */
+  async requestPhotos(
+    executor: DbExecutor,
+    requestIds: readonly string[],
+  ): Promise<Map<string, ItemPhotoRow[]>> {
+    const byRequest = new Map<string, ItemPhotoRow[]>();
+    if (requestIds.length === 0) return byRequest;
+    const rows = await executor
+      .select()
+      .from(itemPhoto)
+      .where(inArray(itemPhoto.catalogRequestId, [...new Set(requestIds)]))
+      .orderBy(asc(itemPhoto.createdAt), asc(itemPhoto.id));
+    for (const row of rows) {
+      const list = byRequest.get(row.catalogRequestId!) ?? [];
+      list.push(row);
+      byRequest.set(row.catalogRequestId!, list);
+    }
+    return byRequest;
+  }
+
+  /** Photos of requests for the administrator (A-MOD-01): with the full-size link. */
+  async requestPhotosForAdmin(rows: readonly ItemPhotoRow[]): Promise<CatalogRequestPhoto[]> {
+    const described = await this.supplierPhotos(rows);
+    const { ttlSeconds } = await this.delivery();
+    const loaded = await this.loadPhotos(
+      this.database.db,
+      rows.map((row) => row.id),
+    );
+    return Promise.all(
+      described.map(async (photo, index) => {
+        const original = loaded.get(rows[index]!.id)?.files.get("original");
+        return {
+          ...photo,
+          originalUrl:
+            original && !rows[index]!.filesDeletedAt
+              ? await this.storage.signedUrl(original.storageKey, ttlSeconds)
+              : null,
+        };
+      }),
+    );
+  }
+
+  /**
+   * The item of a request was made (or found): the photos of the request
+   * become its candidates in this very transaction (TASK-068). A picture the
+   * item already holds is not moved twice — it is taken out of the request.
+   */
+  async adoptRequestPhotos(
+    tx: DbExecutor,
+    requestId: string,
+    itemId: string,
+    actor: AuditActorRecord,
+  ): Promise<number> {
+    const rows = await tx
+      .select()
+      .from(itemPhoto)
+      .where(
+        and(
+          eq(itemPhoto.catalogRequestId, requestId),
+          isNull(itemPhoto.itemId),
+          isNull(itemPhoto.removedAt),
+        ),
+      )
+      .for("update");
+    let moved = 0;
+    for (const row of rows) {
+      const already = await this.findByChecksum(tx, itemId, row.checksum);
+      if (already) {
+        await tx
+          .update(itemPhoto)
+          .set({
+            status: "deleted",
+            removedAt: new Date(),
+            version: row.version + 1,
+            updatedAt: new Date(),
+          })
+          .where(eq(itemPhoto.id, row.id));
+        continue;
+      }
+      await tx
+        .update(itemPhoto)
+        .set({ itemId, version: row.version + 1, updatedAt: new Date() })
+        .where(eq(itemPhoto.id, row.id));
+      await this.audit.record(
+        {
+          action: auditActions.catalogItemPhotoFromRequest,
+          actor,
+          entityType: auditEntities.catalogItemPhoto,
+          entityId: row.id,
+          after: { itemId, catalogRequestId: requestId, status: row.status },
+        },
+        tx,
+      );
+      moved += 1;
+    }
+    return moved;
+  }
+
+  /** The request was refused: its photos go with it, with the same reason. */
+  async dropRequestPhotos(tx: DbExecutor, requestId: string, reason: string): Promise<void> {
+    await tx
+      .update(itemPhoto)
+      .set({
+        status: "rejected",
+        rejectionReason: reason,
+        removedAt: new Date(),
+        reviewedAt: new Date(),
+        version: sql`${itemPhoto.version} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(itemPhoto.catalogRequestId, requestId),
+          isNull(itemPhoto.itemId),
+          isNull(itemPhoto.removedAt),
+        ),
+      );
+  }
+
+  /** The state of the image search for the item card (TASK-068). */
+  photoSearchState(item: CatalogItemRow): ItemPhotoSearchState {
+    return {
+      enabled: this.config.imageSearch.provider !== "disabled",
+      applicable: item.status === "active" && item.itemType !== "service",
+      lastSearchedAt: iso(item.photoSearchAt),
+      searches: item.photoSearchCount,
+    };
+  }
+
+  // ------------------------------------------------------------ storing
+
+  /** The size limit of a photo, before anything else is done with the body. */
+  private async assertSize(body: Buffer): Promise<void> {
     const maxBytes = (await this.settings.values()).photo_max_size_mb * 1024 * 1024;
     if (body.byteLength > maxBytes) {
       throw photoTooLarge(maxBytes);
     }
+  }
 
-    const executor = this.database.db;
-    const item = await this.findItem(executor, itemId);
-
-    let prepared;
+  /** The bytes decide what the file is; a refusal says why (`CATALOG_PHOTO_INVALID`). */
+  private async prepare(body: Buffer): Promise<PreparedImage> {
     try {
-      prepared = await prepareImage(body);
+      return await prepareImage(body);
     } catch (error) {
       if (error instanceof PhotoRejected) {
         throw photoInvalid(error.reason, error.detected);
       }
       throw error;
     }
+  }
 
-    // The same picture already on this item: nothing is uploaded and
-    // nothing is written (TASK-013 requirement 1).
-    const existing = await this.findByChecksum(executor, itemId, prepared.checksum);
-    if (existing) {
-      return { response: await this.describe(executor, item), created: false };
+  /** Photos of the company in the last 24 hours against its limit (a refusal with the wait). */
+  private async assertSupplierDay(
+    executor: DbExecutor,
+    supplierId: string,
+    limit: number,
+  ): Promise<void> {
+    const day = await executor.execute<{ sent: number; wait: number | null }>(sql`
+      SELECT count(*)::int AS sent,
+        extract(epoch FROM min(created_at) + interval '1 day' - now())::float AS wait
+      FROM item_photo
+      WHERE supplier_id = ${supplierId} AND created_at > now() - interval '1 day'`);
+    const counted = day.rows[0];
+    if (counted && counted.sent >= limit) {
+      throw rateLimitedException(
+        "supplier_photos_per_supplier",
+        Math.max(1, Math.ceil(Number(counted.wait ?? 86_400))),
+      );
     }
-    if (
-      (await this.photosOfItem(executor, itemId)).filter((row) => !row.removedAt).length >=
-      ITEM_PHOTOS_MAX
-    ) {
+  }
+
+  /**
+   * Stores a checked picture of an item or of a request as a candidate: the
+   * files first, then the row and its journal entry in one transaction — a
+   * row never points at a file that isn't there, and files of an upload that
+   * broke off have no row (the cleanup job removes them). The same picture
+   * already there — nothing is written (`photoId: null`).
+   */
+  private async store(
+    owner: { itemId: string } | { requestId: string },
+    prepared: PreparedImage,
+    meta: {
+      sourceType: ItemPhotoSourceType;
+      sourceUrl: string | null;
+      proposedBy: "admin" | "supplier" | "ai";
+      uploadedBy: string | null;
+      aiScore?: number;
+      evidence?: Record<string, unknown>;
+      supplier?: { supplierId: string; memberId: string; dayLimit: number };
+      audit: { action: string; actor: AuditActorRecord; extra?: Record<string, unknown> };
+    },
+  ): Promise<{ created: boolean; photoId: string | null }> {
+    const executor = this.database.db;
+    const itemId = "itemId" in owner ? owner.itemId : null;
+    const requestId = "requestId" in owner ? owner.requestId : null;
+    // The same picture already there: nothing is uploaded and nothing is
+    // written (TASK-013 requirement 1).
+    const existing = itemId
+      ? await this.findByChecksum(executor, itemId, prepared.checksum)
+      : await this.findRequestPhotoByChecksum(executor, requestId!, prepared.checksum);
+    if (existing) {
+      return { created: false, photoId: null };
+    }
+    const held = await executor
+      .select({ id: itemPhoto.id })
+      .from(itemPhoto)
+      .where(
+        and(
+          itemId ? eq(itemPhoto.itemId, itemId) : eq(itemPhoto.catalogRequestId, requestId!),
+          itemId ? undefined : isNull(itemPhoto.itemId),
+          isNull(itemPhoto.removedAt),
+        ),
+      );
+    if (held.length >= (itemId ? ITEM_PHOTOS_MAX : CATALOG_REQUEST_PHOTOS_MAX)) {
       throw photoInvalid("too_many_photos");
     }
 
-    // The id is decided here so the objects carry it: the files are put in
-    // place first and the row is written afterwards, so a row never points
-    // at a file that isn't there. Files of an upload that failed halfway
-    // have no row and the cleanup job removes them.
+    // The id is decided here so the objects carry it.
     const photoId = randomUUID();
+    const folder = itemId ?? `requests/${requestId!}`;
     const stored = prepared.variants.map((variant) => ({
       ...variant,
-      key: photoObjectKey(itemId, photoId, variant.variant, variant.contentType),
+      key: photoObjectKey(folder, photoId, variant.variant, variant.contentType),
     }));
     for (const variant of stored) {
       await this.storage.put(variant.key, variant.bytes, variant.contentType);
@@ -289,19 +641,31 @@ export class CatalogPhotosService {
 
     try {
       await executor.transaction(async (tx) => {
+        if (meta.supplier) {
+          // One company at a time: the count of the day holds under its lock.
+          await tx.execute(
+            sql`SELECT id FROM supplier WHERE id = ${meta.supplier.supplierId} FOR UPDATE`,
+          );
+          await this.assertSupplierDay(tx, meta.supplier.supplierId, meta.supplier.dayLimit);
+        }
         await tx.insert(itemPhoto).values({
           id: photoId,
           itemId,
-          sourceType: query.sourceType,
-          sourceUrl: query.sourceUrl ?? null,
+          catalogRequestId: requestId,
+          supplierId: meta.supplier?.supplierId ?? null,
+          supplierMemberId: meta.supplier?.memberId ?? null,
+          sourceType: meta.sourceType,
+          sourceUrl: meta.sourceUrl,
+          sourceEvidence: meta.evidence ?? null,
           status: "proposed",
-          proposedBy: "admin",
+          proposedBy: meta.proposedBy,
+          aiScore: meta.aiScore === undefined ? null : String(meta.aiScore),
           contentType: prepared.contentType,
           byteSize: prepared.byteSize,
           width: prepared.width,
           height: prepared.height,
           checksum: prepared.checksum,
-          uploadedBy: accountOf(actor),
+          uploadedBy: meta.uploadedBy,
         });
         await tx.insert(itemPhotoFile).values(
           stored.map((variant) => ({
@@ -316,35 +680,40 @@ export class CatalogPhotosService {
         );
         await this.audit.record(
           {
-            action: auditActions.catalogItemPhotoUploaded,
-            actor,
+            action: meta.audit.action,
+            actor: meta.audit.actor,
             entityType: auditEntities.catalogItemPhoto,
             entityId: photoId,
             after: {
               itemId,
-              sourceType: query.sourceType,
-              sourceUrl: query.sourceUrl ?? null,
+              ...(requestId ? { catalogRequestId: requestId } : {}),
+              sourceType: meta.sourceType,
+              sourceUrl: meta.sourceUrl,
               status: "proposed",
               contentType: prepared.contentType,
               byteSize: prepared.byteSize,
               width: prepared.width,
               height: prepared.height,
               checksum: prepared.checksum,
+              ...meta.audit.extra,
             },
           },
           tx,
         );
       });
     } catch (error) {
-      if (uniqueViolation(error, "item_photo_item_checksum_key")) {
-        // Two uploads of the same picture at the same moment: the other
-        // one won, its files are the ones that stay.
-        await this.storage.remove(stored.map((variant) => variant.key)).catch(() => undefined);
-        return { response: await this.describe(executor, item), created: false };
+      // Refused after the files were stored: they go, nothing points at them.
+      await this.storage.remove(stored.map((variant) => variant.key)).catch(() => undefined);
+      if (
+        uniqueViolation(error, "item_photo_item_checksum_key") ||
+        uniqueViolation(error, "item_photo_request_checksum_key")
+      ) {
+        // Two uploads of the same picture at the same moment: the other one won.
+        return { created: false, photoId: null };
       }
       throw error;
     }
-    return { response: await this.describe(executor, item), created: true };
+    return { created: true, photoId };
   }
 
   /**
@@ -511,6 +880,25 @@ export class CatalogPhotosService {
     return row;
   }
 
+  private async findRequestPhotoByChecksum(
+    executor: DbExecutor,
+    requestId: string,
+    checksum: string,
+  ): Promise<ItemPhotoRow | undefined> {
+    const [row] = await executor
+      .select()
+      .from(itemPhoto)
+      .where(
+        and(
+          eq(itemPhoto.catalogRequestId, requestId),
+          isNull(itemPhoto.itemId),
+          eq(itemPhoto.checksum, checksum),
+          isNull(itemPhoto.removedAt),
+        ),
+      );
+    return row;
+  }
+
   /**
    * Puts the approved photos of the item in a gapless order and makes sure
    * the primary photo is one of them: the one it was, if it still is
@@ -645,6 +1033,16 @@ export class CatalogPhotosService {
       this.database.db,
       rows.map((row) => row.id),
     );
+    const supplierIds = [
+      ...new Set(rows.flatMap((row) => (row.supplierId ? [row.supplierId] : []))),
+    ];
+    const suppliers = new Map<string, string>();
+    if (supplierIds.length > 0) {
+      const found = await this.database.db.execute<{ id: string; name: string }>(
+        sql`SELECT id, name FROM supplier WHERE ${inArray(sql`id`, supplierIds)}`,
+      );
+      for (const supplier of found.rows) suppliers.set(supplier.id, supplier.name);
+    }
     const described: AdminItemPhoto[] = [];
     for (const row of rows) {
       const entry = loaded.get(row.id) ?? {
@@ -654,7 +1052,8 @@ export class CatalogPhotosService {
       const original = entry.files.get("original");
       described.push({
         id: row.id,
-        itemId: row.itemId,
+        // Admin lists are of an item's photos: a photo of a request has none yet.
+        itemId: row.itemId!,
         status: row.status,
         sourceType: row.sourceType,
         sourceUrl: row.sourceUrl,
@@ -679,6 +1078,10 @@ export class CatalogPhotosService {
         originalUrl: original
           ? await this.storage.signedUrl(original.storageKey, ttlSeconds)
           : null,
+        supplier: row.supplierId
+          ? { id: row.supplierId, name: suppliers.get(row.supplierId) ?? "—" }
+          : null,
+        catalogRequestId: row.catalogRequestId,
       });
     }
     // Approved photos first, in their order; then what waits and what was
@@ -702,6 +1105,7 @@ export class CatalogPhotosService {
       photos: await this.describePhotos(rows, item.primaryPhotoId),
       photo: images.get(item.id) ?? null,
       displayMode: mode,
+      photoSearch: this.photoSearchState(item),
     };
   }
 }

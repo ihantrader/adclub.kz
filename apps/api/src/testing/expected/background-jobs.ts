@@ -65,6 +65,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "billing.expire-bindings",
   "billing.watch-provider",
   "garage.remind",
+  "catalog.search-photos",
   "dev.always-fails",
   "dev.daily-at-setting",
 ];
@@ -92,6 +93,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "catalog.cleanup-photo-files", cron: "17 * * * *", timezone: "Asia/Almaty" },
   // Files of removed photos, once their retention has passed (TASK-013).
   { name: "catalog.delete-photo-files", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Photos of products on the showcase without one, by the image search (TASK-068): hourly.
+  { name: "catalog.search-photos", cron: "41 * * * *", timezone: "Asia/Almaty" },
   // Safety net of automatic translation (TASK-012): every five minutes.
   { name: "catalog.translation-wake", cron: "*/5 * * * *", timezone: "Asia/Almaty" },
   // Development and tests only: daily at `billing_notify_hour` (10 by default).

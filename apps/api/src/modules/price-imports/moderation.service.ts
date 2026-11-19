@@ -70,6 +70,7 @@ export class ModerationService {
     const result = await this.database.db.execute<{
       requests: number;
       compatibility: number;
+      photos: number;
       seen_at: string;
       now: string;
     }>(sql`
@@ -82,6 +83,8 @@ export class ModerationService {
           WHERE r.supplier_id = ${actor.supplierId} AND r.status <> 'new' AND r.decided_at > seen.at) AS requests,
         (SELECT count(*)::int FROM item_compatibility_proposal p, seen
           WHERE p.supplier_id = ${actor.supplierId} AND p.status <> 'pending' AND p.reviewed_at > seen.at) AS compatibility,
+        (SELECT count(*)::int FROM item_photo f, seen
+          WHERE f.supplier_id = ${actor.supplierId} AND f.status <> 'proposed' AND f.reviewed_at > seen.at) AS photos,
         to_char((SELECT at FROM seen) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS seen_at,
         to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS now`);
     const row = result.rows[0]!;
@@ -89,7 +92,8 @@ export class ModerationService {
       unseen: {
         requests: row.requests,
         compatibility: row.compatibility,
-        total: row.requests + row.compatibility,
+        photos: row.photos,
+        total: row.requests + row.compatibility + row.photos,
       },
       seenAt: row.seen_at ?? new Date(0).toISOString(),
       serverTime: row.now,

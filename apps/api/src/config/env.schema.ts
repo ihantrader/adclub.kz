@@ -114,6 +114,19 @@ export type AiProviderName = (typeof aiProviders)[number];
  * is refused in production, where nobody would get a message.
  */
 export const messageProviders = ["test", "whatsapp_cloud"] as const;
+
+/**
+ * Where photos of items are searched (TASK-068, ARCHITECTURE 9.7, 4.95):
+ * `serpapi` — SerpAPI (Google Images), needs `SERPAPI_API_KEY`; `test` —
+ * the fixtures of `apps/api/fixtures/photo-search`, no network (development,
+ * tests and CI). Outside development and tests `test` means **no search**:
+ * the button answers «поиск не настроен» and the job does nothing.
+ * `IMAGE_SEARCH_TEST_MODE`: `ok`, or `unavailable` — the test provider fails
+ * like an unreachable one.
+ */
+export const imageSearchProviders = ["test", "serpapi"] as const;
+export const imageSearchTestModes = ["ok", "unavailable"] as const;
+export type ImageSearchProviderName = (typeof imageSearchProviders)[number] | "disabled";
 export type MessageProviderName = (typeof messageProviders)[number];
 
 /**
@@ -517,6 +530,18 @@ export const envSchema = z.object({
       .trim()
       .regex(/^[a-zA-Z0-9_-]{1,100}$/),
   ),
+  // The image search of photos of items (TASK-068, ARCHITECTURE 9.7, 4.95).
+  // Unset: `test` in development and tests (fixtures, no network), and no
+  // search at all elsewhere — production starts without one.
+  IMAGE_SEARCH_PROVIDER: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(imageSearchProviders).optional(),
+  ),
+  IMAGE_SEARCH_TEST_MODE: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(imageSearchTestModes).default("ok"),
+  ),
+  SERPAPI_API_KEY: blankAsUndefined(z.string().trim().min(16)),
 });
 
 export interface RateLimitSettings {
@@ -661,6 +686,13 @@ export type AppConfig = {
     /** The index of items users search (the live one; a rebuild swaps into it). */
     index: string;
   };
+  /** The image search of photos of items (TASK-068); `disabled` — none here. */
+  imageSearch: {
+    provider: ImageSearchProviderName;
+    testMode: (typeof imageSearchTestModes)[number];
+    /** `undefined` without one. */
+    serpApiKey: string | undefined;
+  };
   /**
    * Variables present in the environment that used to hold what are
    * settings now, or belong to something the project no longer has; they
@@ -700,6 +732,7 @@ const SECRET_VARIABLES = [
   "MEILI_MASTER_KEY",
   "MEILISEARCH_API_KEY",
   "S3_SECRET_KEY",
+  "SERPAPI_API_KEY",
 ] as const;
 
 /** The variables that are addresses with a password in them. */
@@ -880,6 +913,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       "PAYMENT_PROVIDER: the test payment provider is not allowed when NODE_ENV=production",
     );
   }
+  // The image search (TASK-068): SerpAPI needs its key; the test provider
+  // outside development and tests means no search — the application starts.
+  if (parsed.IMAGE_SEARCH_PROVIDER === "serpapi" && !parsed.SERPAPI_API_KEY) {
+    environmentIssues.push("SERPAPI_API_KEY: required when IMAGE_SEARCH_PROVIDER=serpapi");
+  }
+  const imageSearchProvider: ImageSearchProviderName =
+    parsed.IMAGE_SEARCH_PROVIDER === "serpapi"
+      ? "serpapi"
+      : isLocal && parsed.IMAGE_SEARCH_PROVIDER !== undefined
+        ? parsed.IMAGE_SEARCH_PROVIDER
+        : isLocal
+          ? "test"
+          : "disabled";
   if (!isLocal && !parsed.PAYMENT_TOKEN_ENCRYPTION_KEY) {
     environmentIssues.push(
       `PAYMENT_TOKEN_ENCRYPTION_KEY: required when NODE_ENV=${parsed.NODE_ENV}`,
@@ -1018,6 +1064,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       url: parsed.MEILISEARCH_URL?.replace(/\/+$/, ""),
       apiKey: parsed.MEILISEARCH_API_KEY ?? parsed.MEILI_MASTER_KEY,
       index: parsed.MEILISEARCH_INDEX ?? "catalog_items",
+    },
+    imageSearch: {
+      provider: imageSearchProvider,
+      testMode: parsed.IMAGE_SEARCH_TEST_MODE,
+      serpApiKey: parsed.SERPAPI_API_KEY,
     },
     ignoredVariables: Object.keys(env)
       .filter((name) =>

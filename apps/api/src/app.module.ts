@@ -33,6 +33,7 @@ import { SignalsModule } from "./modules/signals";
 import { AdminHomeModule } from "./modules/admin-home";
 import { UsersModule } from "./modules/users";
 import { PriceImportsModule } from "./modules/price-imports";
+import { PhotoSearchModule } from "./modules/photo-search";
 import { ReviewsModule } from "./modules/reviews";
 import { RatingsModule } from "./modules/ratings";
 import { OfferViewsModule } from "./modules/offer-views";
@@ -194,6 +195,8 @@ export class AppModule implements NestModule {
         }),
         UsersModule.forRoot({ catalog, clubAccess, suppliers, reminders }),
         priceImports,
+        // The image search and photos of suppliers (TASK-068).
+        PhotoSearchModule.forRoot({ catalog }),
         // Must stay last: its catch-all route would otherwise shadow
         // every route declared above (see NotFoundModule).
         NotFoundModule,

@@ -1,3 +1,15 @@
+import {
+  catalogRequestPhotoSchema,
+  photoSearchOutcomeSchema,
+  photoSearchSkipReasonSchema,
+  photoSearchUnavailableDetailsSchema,
+  searchItemPhotosResponseSchema,
+  supplierItemPhotoSchema,
+  supplierModerationPhotoPageSchema,
+  supplierModerationPhotoSchema,
+  supplierOfferPhotosSchema,
+  supplierPhotoUploadResponseSchema,
+} from "./photo-search";
 import { z } from "zod";
 import {
   accountProfileSchema,
@@ -180,6 +192,7 @@ import {
   catalogPhotoInvalidReasonSchema,
   itemPhotoImageSchema,
   itemPhotoProposedBySchema,
+  itemPhotoSearchStateSchema,
   itemPhotoSourceTypeSchema,
   itemPhotoStatusSchema,
   photoDisplayModeSchema,
@@ -529,6 +542,18 @@ const componentSchemas: Record<string, z.ZodType> = {
   PushTokenResponse: pushTokenResponseSchema,
   NotificationAckResponse: notificationAckResponseSchema,
   OrderNotificationsAckResponse: orderNotificationsAckResponseSchema,
+  // Photo search and photos of suppliers (TASK-068).
+  ItemPhotoSearchState: itemPhotoSearchStateSchema,
+  SearchItemPhotosResponse: searchItemPhotosResponseSchema,
+  PhotoSearchOutcome: photoSearchOutcomeSchema,
+  PhotoSearchSkipReason: photoSearchSkipReasonSchema,
+  PhotoSearchUnavailableDetails: photoSearchUnavailableDetailsSchema,
+  SupplierItemPhoto: supplierItemPhotoSchema,
+  SupplierOfferPhotos: supplierOfferPhotosSchema,
+  SupplierPhotoUploadResponse: supplierPhotoUploadResponseSchema,
+  SupplierModerationPhoto: supplierModerationPhotoSchema,
+  SupplierModerationPhotoPage: supplierModerationPhotoPageSchema,
+  CatalogRequestPhoto: catalogRequestPhotoSchema,
 };
 
 type JsonObject = Record<string, unknown>;

@@ -4268,6 +4268,59 @@
         }
       }
     },
+    "/admin/catalog/items/{itemId}/photos/search": {
+      "post": {
+        "operationId": "searchItemPhotos",
+        "summary": "«Найти фото» (A-CAT-05): searches pictures of the item by brand, article and name; the manufacturer's and official catalogues' sites first, then the same picture on several independent sites. Each candidate is downloaded, checked by its content and waits for moderation; nothing is generated. Counted in photo_search_per_day",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "The photos of the item after the search, and what the search did",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchItemPhotosResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/catalog/items/{itemId}/status": {
       "post": {
         "operationId": "setCatalogItemStatus",
@@ -6831,7 +6884,8 @@
               "type": "string",
               "enum": [
                 "item_request",
-                "compatibility"
+                "compatibility",
+                "photo"
               ]
             }
           },
@@ -18684,6 +18738,100 @@
         }
       }
     },
+    "/supplier/catalog-requests/{requestId}/photos": {
+      "post": {
+        "operationId": "uploadCatalogRequestPhoto",
+        "summary": "A photo for the company's request to add an item while it waits (S-OFF-05, up to 3): the body is the picture itself; when the administrator makes the item of the request, the photos become its candidates",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perAccount": "supplier_photo_requests_per_account",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "The picture itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same picture was already sent with this request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPhotoUploadResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The photo is with the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPhotoUploadResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/catalog/brands": {
       "get": {
         "operationId": "listSupplierBrandSuggestions",
@@ -19618,6 +19766,70 @@
         }
       }
     },
+    "/supplier/moderation/photos": {
+      "get": {
+        "operationId": "listSupplierModerationPhotos",
+        "summary": "«Модерация → Фото» (S-MOD-01): the company's photos, newest first — «На рассмотрении» / «Фото принято» / «Отклонено: {причина}», «новое» for this employee",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of photos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierModerationPhotoPage"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/supplier/moderation/seen": {
       "post": {
         "operationId": "markSupplierModerationSeen",
@@ -20046,6 +20258,151 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupplierOfferResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/supplier/offers/{offerId}/photos": {
+      "get": {
+        "operationId": "getSupplierOfferPhotos",
+        "summary": "S-OFF-03 «У позиции нет фото — сфотографируйте деталь»: whether the item of the company's offer still needs a photo, and the photos the company sent for it with their statuses",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "responses": {
+          "200": {
+            "description": "The block of the offer card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierOfferPhotos"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadSupplierOfferPhoto",
+        "summary": "A photo of the real part for the item of the company's offer that has no approved photo (S-OFF-03): the body is the picture itself, checked by its content and stored without camera metadata; it waits for moderation. Limited per company per day",
+        "tags": [
+          "supplier"
+        ],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "supplier"
+        ],
+        "x-rate-limit": {
+          "perAccount": "supplier_photo_requests_per_account",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "The picture itself (JPEG, PNG or WebP)",
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/jpeg"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/png"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "contentMediaType": "image/webp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same picture was already sent; nothing was stored twice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPhotoUploadResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The photo waits for moderation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPhotoUploadResponse"
                 }
               }
             }
@@ -25122,6 +25479,12 @@
               "string",
               "null"
             ]
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogRequestPhoto"
+            }
           }
         },
         "required": [
@@ -25140,7 +25503,8 @@
           "createdAt",
           "source",
           "category",
-          "comment"
+          "comment",
+          "photos"
         ]
       },
       "AdminCatalogRequestListQuery": {
@@ -27713,6 +28077,42 @@
               "string",
               "null"
             ]
+          },
+          "supplier": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalogRequestId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -27737,7 +28137,9 @@
           "filesDeletedAt",
           "version",
           "image",
-          "originalUrl"
+          "originalUrl",
+          "supplier",
+          "catalogRequestId"
         ]
       },
       "AdminItemPhotosResponse": {
@@ -27769,6 +28171,9 @@
           },
           "displayMode": {
             "$ref": "#/components/schemas/PhotoDisplayMode"
+          },
+          "photoSearch": {
+            "$ref": "#/components/schemas/ItemPhotoSearchState"
           }
         },
         "required": [
@@ -27776,7 +28181,8 @@
           "names",
           "photos",
           "photo",
-          "displayMode"
+          "displayMode",
+          "photoSearch"
         ]
       },
       "AdminMaintenanceItem": {
@@ -28279,6 +28685,86 @@
               "string",
               "null"
             ]
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "thumbUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "originalUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sourceType": {
+                    "$ref": "#/components/schemas/ItemPhotoSourceType"
+                  },
+                  "sourceUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "proposedBy": {
+                    "$ref": "#/components/schemas/ItemPhotoProposedBy"
+                  },
+                  "aiScore": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "itemId",
+                  "version",
+                  "thumbUrl",
+                  "originalUrl",
+                  "sourceType",
+                  "sourceUrl",
+                  "proposedBy",
+                  "aiScore",
+                  "width",
+                  "height"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -28289,14 +28775,16 @@
           "source",
           "proposed",
           "item",
-          "vehicle"
+          "vehicle",
+          "photo"
         ]
       },
       "AdminModerationKind": {
         "type": "string",
         "enum": [
           "item_request",
-          "compatibility"
+          "compatibility",
+          "photo"
         ]
       },
       "AdminModerationPage": {
@@ -28358,7 +28846,8 @@
         "enum": [
           "price_import",
           "manual",
-          "cabinet"
+          "cabinet",
+          "search"
         ]
       },
       "AdminOrder": {
@@ -35521,6 +36010,63 @@
           "requestId"
         ]
       },
+      "CatalogRequestPhoto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ItemPhotoStatus"
+          },
+          "rejectionReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thumbUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "reviewedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "originalUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "rejectionReason",
+          "thumbUrl",
+          "uploadedAt",
+          "reviewedAt",
+          "originalUrl"
+        ]
+      },
       "CatalogRequestSource": {
         "type": "string",
         "enum": [
@@ -40220,6 +40766,9 @@
           "CATALOG_PHOTO_INVALID",
           "CATALOG_PHOTO_NOT_APPROVED",
           "CATALOG_PHOTO_FILES_DELETED",
+          "PHOTO_SEARCH_UNAVAILABLE",
+          "PHOTO_SEARCH_NOT_APPLICABLE",
+          "CATALOG_PHOTO_NOT_NEEDED",
           "VEHICLE_VERSION_CONFLICT",
           "VEHICLE_DUPLICATE",
           "VEHICLE_PARENT_ARCHIVED",
@@ -41015,6 +41564,40 @@
           "admin",
           "supplier",
           "ai"
+        ]
+      },
+      "ItemPhotoSearchState": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "applicable": {
+            "type": "boolean"
+          },
+          "lastSearchedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "searches": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "enabled",
+          "applicable",
+          "lastSearchedAt",
+          "searches"
         ]
       },
       "ItemPhotoSourceType": {
@@ -44858,6 +45441,77 @@
           "link"
         ]
       },
+      "PhotoSearchOutcome": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "candidates": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "$ref": "#/components/schemas/PhotoSearchSkipReason"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "reason",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "results",
+          "candidates",
+          "skipped"
+        ]
+      },
+      "PhotoSearchSkipReason": {
+        "type": "string",
+        "enum": [
+          "other_domain",
+          "duplicate",
+          "already_known",
+          "not_an_image",
+          "unsupported_format",
+          "broken",
+          "too_large",
+          "too_many_pixels",
+          "private_address",
+          "download_failed",
+          "over_limit"
+        ]
+      },
+      "PhotoSearchUnavailableDetails": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "provider"
+            ]
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
       "PlanVersionConflictDetails": {
         "type": "object",
         "properties": {
@@ -47291,6 +47945,9 @@
           "speech_requests_per_ip",
           "photo_requests_per_ip",
           "price_photo_requests_per_account",
+          "supplier_photo_requests_per_account",
+          "supplier_photos_per_supplier",
+          "photo_search_per_day",
           "vehicle_match_per_ip",
           "price_import_uploads_per_supplier",
           "price_export_per_member",
@@ -48483,6 +49140,53 @@
         "required": [
           "levels",
           "color"
+        ]
+      },
+      "SearchItemPhotosResponse": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "names": {
+            "$ref": "#/components/schemas/CatalogTexts"
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminItemPhoto"
+            }
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPhotoImage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "displayMode": {
+            "$ref": "#/components/schemas/PhotoDisplayMode"
+          },
+          "photoSearch": {
+            "$ref": "#/components/schemas/ItemPhotoSearchState"
+          },
+          "search": {
+            "$ref": "#/components/schemas/PhotoSearchOutcome"
+          }
+        },
+        "required": [
+          "itemId",
+          "names",
+          "photos",
+          "photo",
+          "displayMode",
+          "photoSearch",
+          "search"
         ]
       },
       "SearchSynonym": {
@@ -51408,6 +52112,12 @@
                 "type": "null"
               }
             ]
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierItemPhoto"
+            }
           }
         },
         "required": [
@@ -51424,7 +52134,8 @@
           "category",
           "comment",
           "isNew",
-          "offer"
+          "offer",
+          "photos"
         ]
       },
       "SupplierCatalogRequestPage": {
@@ -51872,6 +52583,56 @@
           "sent",
           "failed",
           "cancelled"
+        ]
+      },
+      "SupplierItemPhoto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ItemPhotoStatus"
+          },
+          "rejectionReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "thumbUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "reviewedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "rejectionReason",
+          "thumbUrl",
+          "uploadedAt",
+          "reviewedAt"
         ]
       },
       "SupplierLeadIdPath": {
@@ -52336,6 +53097,87 @@
           "suppliers"
         ]
       },
+      "SupplierModerationPhoto": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "$ref": "#/components/schemas/SupplierItemPhoto"
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OfferItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isNew": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "photo",
+          "item",
+          "request",
+          "isNew"
+        ]
+      },
+      "SupplierModerationPhotoPage": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierModerationPhoto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "total",
+          "nextCursor"
+        ]
+      },
       "SupplierModerationProposal": {
         "type": "object",
         "properties": {
@@ -52405,6 +53247,11 @@
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991
               },
+              "photos": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
               "total": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -52414,6 +53261,7 @@
             "required": [
               "requests",
               "compatibility",
+              "photos",
               "total"
             ]
           },
@@ -52636,6 +53484,24 @@
           "version",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "SupplierOfferPhotos": {
+        "type": "object",
+        "properties": {
+          "needed": {
+            "type": "boolean"
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SupplierItemPhoto"
+            }
+          }
+        },
+        "required": [
+          "needed",
+          "photos"
         ]
       },
       "SupplierOfferResponse": {
@@ -53446,6 +54312,21 @@
           "expYear",
           "expired",
           "linkedAt"
+        ]
+      },
+      "SupplierPhotoUploadResponse": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "$ref": "#/components/schemas/SupplierItemPhoto"
+          },
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "photo",
+          "created"
         ]
       },
       "SupplierProfileResponse": {

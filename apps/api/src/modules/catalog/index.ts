@@ -25,7 +25,7 @@ export { CatalogReadService } from "./catalog-read.service";
 export { CatalogSynonymsService } from "./catalog-synonyms.service";
 export { DevCatalogSeed, DevCatalogSeedError, devCatalogTree } from "./dev-catalog-seed";
 export type { DevCatalogSeedResult } from "./dev-catalog-seed";
-export { catalogTables } from "./schema";
+export { catalogTables, itemPhoto, photoSearch } from "./schema";
 export { CatalogJobsModule, TranslationRunner, TranslationWake } from "./translation-runner";
 export { catalogJobCatalog, translateJob, translationWakeJob } from "./translation-jobs";
 export { photoFileDeletionJob, photoJobCatalog, photoOrphanCleanupJob } from "./photo-jobs";
@@ -48,5 +48,6 @@ export {
   itemSearchSynonym,
   translation,
 } from "./schema";
-export type { AttributeRow, CatalogItemRow, CategoryRow } from "./schema";
-export { detectFormat } from "./photo-image";
+export type { AttributeRow, CatalogItemRow, CategoryRow, ItemPhotoRow } from "./schema";
+export { detectFormat, PhotoRejected, prepareImage } from "./photo-image";
+export type { PreparedImage } from "./photo-image";

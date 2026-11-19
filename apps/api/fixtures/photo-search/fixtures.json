@@ -1,0 +1,105 @@
+{
+  "about": "The test image search (TASK-068): made-up pages and pictures, no network. A query matches the first entry whose `match` it contains (the article as normalized, without spaces and dashes, upper case); `*` — any other query. `hosts` — what a name «resolves» to: the downloader refuses a private address as the real one would.",
+  "hosts": {
+    "www.geely.com": "93.184.216.34",
+    "parts.geely.com": "93.184.216.34",
+    "avtoshop-almaty.kz": "185.22.64.10",
+    "zapchasti-kz.com": "185.22.65.11",
+    "lonely-parts.kz": "185.22.66.12",
+    "aftermarket.zf.com": "93.184.216.35",
+    "www.shell.com": "93.184.216.36",
+    "intranet.avtoshop-almaty.kz": "10.0.0.7",
+    "metadata.shop.kz": "169.254.169.254",
+    "files.lonely-parts.kz": "185.22.66.13"
+  },
+  "queries": [
+    {
+      "match": "044650K090",
+      "results": [
+        {
+          "imageUrl": "https://avtoshop-almaty.kz/img/04465-0k090.jpg",
+          "pageUrl": "https://avtoshop-almaty.kz/catalog/geely-04465-0k090",
+          "title": "Колодки тормозные передние Geely 04465-0K090",
+          "file": "shop-pads.jpg"
+        },
+        {
+          "imageUrl": "https://www.geely.com/media/parts/04465-0k090.jpg",
+          "pageUrl": "https://www.geely.com/parts/brake-pads-04465-0k090",
+          "title": "Front brake pads 04465-0K090",
+          "file": "geely-front-pads.jpg"
+        },
+        {
+          "imageUrl": "https://lonely-parts.kz/upload/pads.jpg",
+          "pageUrl": "https://lonely-parts.kz/item/123",
+          "title": "Колодки",
+          "file": "lonely-shop.jpg"
+        },
+        {
+          "imageUrl": "https://zapchasti-kz.com/i/044650k090-480.jpg",
+          "pageUrl": "https://zapchasti-kz.com/p/044650k090",
+          "title": "04465-0K090 колодки Geely Atlas",
+          "file": "shop-pads-small.jpg"
+        },
+        {
+          "imageUrl": "https://parts.geely.com/pics/04465-0k090-broken.jpg",
+          "pageUrl": "https://parts.geely.com/04465-0k090",
+          "title": "04465-0K090",
+          "file": "broken.jpg"
+        },
+        {
+          "imageUrl": "http://intranet.avtoshop-almaty.kz/admin/pads.jpg",
+          "pageUrl": "https://avtoshop-almaty.kz/catalog/geely-04465-0k090",
+          "title": "Внутренний сервер",
+          "file": "shop-pads.jpg"
+        },
+        {
+          "imageUrl": "http://metadata.shop.kz/latest/meta-data/",
+          "pageUrl": "https://metadata.shop.kz/",
+          "title": "Метаданные облака",
+          "file": "not-an-image.jpg"
+        },
+        {
+          "imageUrl": "https://files.lonely-parts.kz/page.jpg",
+          "pageUrl": "https://lonely-parts.kz/item/124",
+          "title": "Не картинка",
+          "file": "not-an-image.jpg"
+        },
+        {
+          "imageUrl": "https://www.geely.com/media/parts/04465-0k090-copy.jpg",
+          "pageUrl": "https://www.geely.com/parts/atlas/brakes",
+          "title": "Atlas brakes",
+          "file": "geely-front-pads.jpg"
+        }
+      ]
+    },
+    {
+      "match": "GDB3534",
+      "results": [
+        {
+          "imageUrl": "https://aftermarket.zf.com/media/trw/gdb3534.png",
+          "pageUrl": "https://aftermarket.zf.com/catalog/trw/gdb3534",
+          "title": "TRW GDB3534",
+          "file": "trw-pads.png"
+        },
+        {
+          "imageUrl": "https://lonely-parts.kz/upload/vector.svg",
+          "pageUrl": "https://lonely-parts.kz/item/125",
+          "title": "Вектор",
+          "file": "vector.svg"
+        }
+      ]
+    },
+    {
+      "match": "HELIX",
+      "results": [
+        {
+          "imageUrl": "https://www.shell.com/motorist/oils/helix-hx8.webp",
+          "pageUrl": "https://www.shell.com/motorist/oils/helix-hx8",
+          "title": "Shell Helix HX8 5W-30",
+          "file": "shell-oil.webp"
+        }
+      ]
+    },
+    { "match": "*", "results": [] }
+  ]
+}

@@ -168,6 +168,9 @@ export const catalogItem = pgTable("catalog_item", {
   completeness: text("completeness").$type<ItemCompleteness>().notNull().default("complete"),
   /** The approved photo shown in lists (TASK-013); `null` — the client shows a placeholder. */
   primaryPhotoId: uuid("primary_photo_id"),
+  /** The last search for photos of the item and how many there were (TASK-068). */
+  photoSearchAt: timestamp("photo_search_at", { withTimezone: true }),
+  photoSearchCount: integer("photo_search_count").notNull().default(0),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -213,7 +216,13 @@ export const itemAnalog = pgTable(
  */
 export const itemPhoto = pgTable("item_photo", {
   id: uuid("id").primaryKey().defaultRandom(),
-  itemId: uuid("item_id").notNull(),
+  /** `null` only for a supplier's photo of a request whose item doesn't exist yet (TASK-068). */
+  itemId: uuid("item_id"),
+  catalogRequestId: uuid("catalog_request_id"),
+  supplierId: uuid("supplier_id"),
+  supplierMemberId: uuid("supplier_member_id"),
+  /** The decision on a supplier's photo was counted by the digest W-06. */
+  digestedAt: timestamp("digested_at", { withTimezone: true }),
   sourceType: text("source_type").$type<ItemPhotoSourceType>().notNull(),
   sourceUrl: text("source_url"),
   sourceEvidence: jsonb("source_evidence"),
@@ -249,6 +258,26 @@ export const itemPhotoFile = pgTable("item_photo_file", {
   width: integer("width").notNull(),
   height: integer("height").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One search for photos of one item (TASK-068; ARCHITECTURE 4.95). */
+export const photoSearch = pgTable("photo_search", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemId: uuid("item_id").notNull(),
+  trigger: text("trigger").$type<"admin" | "job">().notNull(),
+  requestedBy: uuid("requested_by"),
+  provider: text("provider").notNull(),
+  query: text("query").notNull(),
+  status: text("status")
+    .$type<"running" | "done" | "unavailable" | "failed">()
+    .notNull()
+    .default("running"),
+  results: integer("results"),
+  candidates: integer("candidates"),
+  skipped: jsonb("skipped"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
 export type CategoryRow = typeof category.$inferSelect;
@@ -294,4 +323,5 @@ export const catalogTables = [
   itemPhoto,
   itemPhotoFile,
   itemSearchSynonym,
+  photoSearch,
 ];

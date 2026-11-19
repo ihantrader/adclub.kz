@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { itemPhotoProposedBySchema, itemPhotoSourceTypeSchema } from "./catalog-photos";
 import { almatyDaySchema } from "./offer-views";
 
 /**
@@ -10,12 +11,16 @@ import { almatyDaySchema } from "./offer-views";
 // ------------------------------------------------ the moderation queue
 
 /** `item_request` — a request to add an item (A-MOD-01); `compatibility` — a compatibility proposal (A-MOD-02). */
-export const adminModerationKindSchema = z.enum(["item_request", "compatibility"]);
+export const adminModerationKindSchema = z.enum(["item_request", "compatibility", "photo"]);
 
 export type AdminModerationKind = z.infer<typeof adminModerationKindSchema>;
 
-/** Where it came from: a price list, the form «Запрос на добавление» by hand, the offer of the cabinet. */
-export const adminModerationSourceSchema = z.enum(["price_import", "manual", "cabinet"]);
+/**
+ * Where it came from: a price list, the form «Запрос на добавление» by hand,
+ * the offer of the cabinet; `search` — a candidate of the image search
+ * (TASK-068, [AI] on the screen).
+ */
+export const adminModerationSourceSchema = z.enum(["price_import", "manual", "cabinet", "search"]);
 
 export type AdminModerationSource = z.infer<typeof adminModerationSourceSchema>;
 
@@ -63,6 +68,27 @@ export const adminModerationEntrySchema = z.object({
     .nullable(),
   /** A compatibility proposal: the cars, in words («Geely Atlas · II (FX11) · 2023–»). */
   vehicle: z.string().nullable(),
+  /**
+   * A photo (A-MOD-03, TASK-068): the picture we stored, where it was found
+   * and who put it forward. «Подтвердить» / «Отклонить» are the same
+   * decisions as in «Фото» of the item (`setItemPhotoStatus`, with `version`).
+   * `null` for the other kinds.
+   */
+  photo: z
+    .object({
+      id: z.uuid(),
+      itemId: z.uuid(),
+      version: z.number().int(),
+      thumbUrl: z.string().nullable(),
+      originalUrl: z.string().nullable(),
+      sourceType: itemPhotoSourceTypeSchema,
+      sourceUrl: z.string().nullable(),
+      proposedBy: itemPhotoProposedBySchema,
+      aiScore: z.number().nullable(),
+      width: z.number().int(),
+      height: z.number().int(),
+    })
+    .nullable(),
 });
 
 export type AdminModerationEntry = z.infer<typeof adminModerationEntrySchema>;

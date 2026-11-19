@@ -30,6 +30,7 @@ import { ShowcaseModule } from "./modules/showcase";
 import { VehiclesModule } from "./modules/vehicles";
 import { MaintenanceModule } from "./modules/maintenance";
 import { ReminderJobsModule } from "./modules/reminders";
+import { PhotoSearchJobsModule } from "./modules/photo-search";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -94,6 +95,7 @@ export class WorkerModule {
         ModerationJobsModule,
         BillingJobsModule.forRoot(config),
         ReminderJobsModule.forRoot({ compatibility, showcase, maintenance }),
+        PhotoSearchJobsModule.forRoot({ catalog }),
         ...(hasDevJobs(config) ? [DevJobsModule] : []),
       ],
       providers: [JsonLoggerService],

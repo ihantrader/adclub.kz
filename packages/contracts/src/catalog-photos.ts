@@ -172,9 +172,28 @@ export const adminItemPhotoSchema = z.object({
   image: itemPhotoImageSchema.nullable(),
   /** A signed link to the full-size picture, for moderation only. */
   originalUrl: z.string().nullable(),
+  /** The company that sent it (`proposedBy: supplier`, TASK-068); `null` — anyone else. */
+  supplier: z.object({ id: z.uuid(), name: z.string() }).nullable(),
+  /** The request to add an item it came with (S-OFF-05), once the item was made of it. */
+  catalogRequestId: z.uuid().nullable(),
 });
 
 export type AdminItemPhoto = z.infer<typeof adminItemPhotoSchema>;
+
+/**
+ * The image search of the item (TASK-068; A-CAT-05 «Найти фото»):
+ * `enabled` — a search provider is configured here; `applicable` — the item
+ * is a product in the catalog (services and archived items aren't searched);
+ * the last search and how many there were.
+ */
+export const itemPhotoSearchStateSchema = z.object({
+  enabled: z.boolean(),
+  applicable: z.boolean(),
+  lastSearchedAt: z.iso.datetime().nullable(),
+  searches: z.number().int(),
+});
+
+export type ItemPhotoSearchState = z.infer<typeof itemPhotoSearchStateSchema>;
 
 /**
  * The answer of every photo route: the item's photos (any status, the
@@ -189,6 +208,7 @@ export const adminItemPhotosResponseSchema = z.object({
   photo: itemPhotoImageSchema.nullable(),
   /** `photo_display_mode` in effect for this answer. */
   displayMode: photoDisplayModeSchema,
+  photoSearch: itemPhotoSearchStateSchema,
 });
 
 export type AdminItemPhotosResponse = z.infer<typeof adminItemPhotosResponseSchema>;

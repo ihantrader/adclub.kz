@@ -219,6 +219,8 @@ export class CatalogRequestsService {
     await this.assertOpen(this.database.db, requestId, body.expectedVersion, false);
     const card = await this.items.create(body.item, actor, async (tx, created) => {
       await this.approve(tx, requestId, body.expectedVersion, created.item.id, "created", actor);
+      // The photos sent with the request become candidates of the item (TASK-068).
+      await this.photos.adoptRequestPhotos(tx, requestId, created.item.id, actor);
     });
     const db = this.database.db;
     const [request] = await this.describeAdmin(db, [await this.find(db, requestId)], lang);
@@ -243,6 +245,7 @@ export class CatalogRequestsService {
       }
       await tx.execute(sql`SELECT id FROM catalog_item WHERE id = ${body.itemId} FOR SHARE`);
       await this.approve(tx, requestId, body.expectedVersion, body.itemId, "existing", actor);
+      await this.photos.adoptRequestPhotos(tx, requestId, body.itemId, actor);
     });
     const db = this.database.db;
     const [request] = await this.describeAdmin(db, [await this.find(db, requestId)], lang);
@@ -271,6 +274,7 @@ export class CatalogRequestsService {
           updatedAt: now,
         })
         .where(eq(catalogRequest.id, requestId));
+      await this.photos.dropRequestPhotos(tx, requestId, body.reason);
       await this.audit.record(
         {
           action: auditActions.catalogRequestRejected,
@@ -448,7 +452,7 @@ export class CatalogRequestsService {
   ): Promise<SupplierCatalogRequest[]> {
     if (rows.length === 0) return [];
     const itemIds = rows.flatMap((row) => (row.resultItemId ? [row.resultItemId] : []));
-    const [items, offers, categories, seenAt] = await Promise.all([
+    const [items, offers, categories, seenAt, photos] = await Promise.all([
       describeOfferItems(executor, this.photos, itemIds, lang),
       itemIds.length === 0
         ? Promise.resolve([])
@@ -458,7 +462,18 @@ export class CatalogRequestsService {
             .where(and(eq(offer.supplierId, actor.supplierId), inArray(offer.itemId, itemIds))),
       this.categoryNames(executor, rows, lang),
       moderationSeenAt(executor, actor.memberId),
+      this.photos.requestPhotos(
+        executor,
+        rows.map((row) => row.id),
+      ),
     ]);
+    const described = new Map(
+      await Promise.all(
+        [...photos.entries()].map(
+          async ([id, list]) => [id, await this.photos.supplierPhotos(list)] as const,
+        ),
+      ),
+    );
     const offerOf = new Map(offers.map((row) => [row.itemId, row]));
     return rows.map((row) => {
       const own = row.resultItemId ? offerOf.get(row.resultItemId) : undefined;
@@ -477,6 +492,7 @@ export class CatalogRequestsService {
         comment: row.comment,
         isNew: row.decidedAt !== null && row.decidedAt > seenAt,
         offer: own ? { id: own.id, status: own.status } : null,
+        photos: described.get(row.id) ?? [],
       };
     });
   }
@@ -661,10 +677,21 @@ export class CatalogRequestsService {
     const importOf = new Map(imports.map((row) => [row.id, row]));
     const adminName = new Map(admins);
     const brandIds = [...new Set([...brands.values()].flat())];
-    const [brandNames, categories] = await Promise.all([
+    const [brandNames, categories, photoRows] = await Promise.all([
       this.brandNames(executor, brandIds),
       this.categoryNames(executor, rows, lang),
+      this.photos.requestPhotos(
+        executor,
+        rows.map((row) => row.id),
+      ),
     ]);
+    const photos = new Map(
+      await Promise.all(
+        [...photoRows.entries()].map(
+          async ([id, list]) => [id, await this.photos.requestPhotosForAdmin(list)] as const,
+        ),
+      ),
+    );
     return rows.map((row) => {
       const imported = row.importId ? importOf.get(row.importId) : undefined;
       const brandId = row.payload.brand
@@ -698,6 +725,7 @@ export class CatalogRequestsService {
         source: row.source,
         category: row.categoryId ? (categories.get(row.categoryId) ?? null) : null,
         comment: row.comment,
+        photos: photos.get(row.id) ?? [],
       };
     });
   }

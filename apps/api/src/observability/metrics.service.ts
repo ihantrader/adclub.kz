@@ -131,6 +131,18 @@ export class Metrics {
     "adclub_search_index_fallbacks_total",
     "Searches answered from PostgreSQL because the search index could not answer, by reason (unavailable, missing, refused)",
   );
+  private readonly photoSearches = this.registry.gauge(
+    "adclub_photo_searches_today",
+    "Searches for photos of items since the start of the Almaty day, by trigger (admin, job) and status (running, done, unavailable, failed) — from photo_search",
+  );
+  private readonly photoSearchCandidates = this.registry.gauge(
+    "adclub_photo_search_candidates_today",
+    "Candidates the image search put into moderation since the start of the Almaty day",
+  );
+  private readonly photosWaiting = this.registry.gauge(
+    "adclub_photos_waiting_moderation",
+    "Photos of items waiting in the moderation queue, by who proposed them (ai, supplier)",
+  );
   private readonly searchOutbox = this.registry.gauge(
     "adclub_search_outbox_pending",
     "Changes waiting to be applied to the search index (from search_outbox)",
@@ -292,6 +304,30 @@ export class Metrics {
 
   countAssistantUnavailable(reason: string): void {
     this.assistantUnavailable.increment({ reason });
+  }
+
+  /** The image search of the Almaty day and the photos waiting for moderation (TASK-068). */
+  setPhotoSearchState(state: {
+    searches: { trigger: string; status: string; count: number }[];
+    candidates: number;
+    waiting: { proposedBy: string; count: number }[];
+  }): void {
+    for (const row of state.searches) {
+      this.photoSearches.set({ trigger: row.trigger, status: row.status }, row.count);
+    }
+    this.photoSearchCandidates.set({}, state.candidates);
+    for (const row of state.waiting) {
+      this.photosWaiting.set({ proposed_by: row.proposedBy }, row.count);
+    }
+  }
+
+  /** Sampled from the database: the worker searches too, and its memory isn't served. */
+  collectPhotoSearch(collector: MetricCollector): void {
+    this.registry.collect("photo_search", collector, [
+      this.photoSearches,
+      this.photoSearchCandidates,
+      this.photosWaiting,
+    ]);
   }
 
   countSearchFallback(reason: "unavailable" | "missing" | "refused"): void {

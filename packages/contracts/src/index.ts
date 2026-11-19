@@ -413,6 +413,7 @@ export {
   itemPhotoImageSchema,
   itemPhotoPathSchema,
   itemPhotoProposedBySchema,
+  itemPhotoSearchStateSchema,
   itemPhotoSourceTypeSchema,
   itemPhotoStatusSchema,
   itemPhotoVariantSchema,
@@ -429,6 +430,7 @@ export type {
   ItemPhotoImage,
   ItemPhotoPath,
   ItemPhotoProposedBy,
+  ItemPhotoSearchState,
   ItemPhotoSourceType,
   ItemPhotoStatus,
   ItemPhotoVariant,
@@ -520,6 +522,7 @@ export * from "./reviews";
 export * from "./ratings";
 export * from "./offer-views";
 export * from "./moderation-stats";
+export * from "./photo-search";
 export * from "./users";
 export * from "./showcase";
 export * from "./search";

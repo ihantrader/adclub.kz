@@ -44,6 +44,8 @@ describe("upload routes", () => {
       "/supplier/price-imports/{importId}/photos/{pageNo}",
       "/catalog/part-photo",
       "/speech/transcribe",
+      "/supplier/offers/{offerId}/photos",
+      "/supplier/catalog-requests/{requestId}/photos",
     ]);
     expect(isUploadRoute(apiRoutes.uploadItemPhoto)).toBe(true);
     expect(isUploadRoute(apiRoutes.createCatalogItem)).toBe(false);

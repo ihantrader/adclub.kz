@@ -82,7 +82,11 @@ export class ModerationDigest implements PeriodicJobHandler {
         WHERE status <> 'new' AND digested_at IS NULL
       UNION
       SELECT supplier_id FROM item_compatibility_proposal
-        WHERE status <> 'pending' AND digested_at IS NULL AND supplier_id IS NOT NULL`);
+        WHERE status <> 'pending' AND digested_at IS NULL AND supplier_id IS NOT NULL
+      UNION
+      SELECT supplier_id FROM item_photo
+        WHERE supplier_id IS NOT NULL AND item_id IS NOT NULL AND reviewed_at IS NOT NULL
+          AND digested_at IS NULL`);
     let sent = 0;
     for (const { supplier_id: supplierId } of companies.rows) {
       if (context.signal.aborted) break;
@@ -132,8 +136,17 @@ export class ModerationDigest implements PeriodicJobHandler {
         UPDATE item_compatibility_proposal SET digested_at = now()
         WHERE supplier_id = ${supplierId} AND status <> 'pending' AND digested_at IS NULL
         RETURNING status
+      ), photos AS (
+        -- TASK-068: a supplier's photo of an item, decided — «добавлено» when
+        -- accepted, «отклонено» when refused or removed; the template is the same.
+        UPDATE item_photo SET digested_at = now()
+        WHERE supplier_id = ${supplierId} AND item_id IS NOT NULL AND reviewed_at IS NOT NULL
+          AND digested_at IS NULL
+        RETURNING CASE WHEN status = 'approved' THEN 'approved'
+                       WHEN status IN ('rejected', 'deleted') THEN 'rejected' ELSE status END AS status
       )
-      SELECT status FROM requests UNION ALL SELECT status FROM proposals`);
+      SELECT status FROM requests UNION ALL SELECT status FROM proposals
+      UNION ALL SELECT status FROM photos`);
     const counts = moderationDigestCounts(marked.rows);
     if (!moderationDigestDue(counts)) return false;
     const [digest] = await tx

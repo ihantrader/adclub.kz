@@ -120,6 +120,13 @@ import { clientPlatformSchema } from "./client";
  *   primary one or takes a place in the order.
  * - `CATALOG_PHOTO_FILES_DELETED` (409): the files of this photo were
  *   removed after their retention — nothing brings it back, upload again.
+ * - `PHOTO_SEARCH_UNAVAILABLE` (503): no image search here (`disabled`) or the
+ *   provider did not answer (`provider`); `details` is
+ *   `PhotoSearchUnavailableDetails` (TASK-068).
+ * - `PHOTO_SEARCH_NOT_APPLICABLE` (409): photos are searched for products of
+ *   the catalog only — not for services or archived items.
+ * - `CATALOG_PHOTO_NOT_NEEDED` (409): the item already has an approved photo,
+ *   or is a service — a supplier does not send one (S-OFF-03).
  *
  * The vehicle catalog (TASK-014, ARCHITECTURE 4.24):
  * - `VEHICLE_VERSION_CONFLICT` (409): the record was changed by someone
@@ -487,6 +494,10 @@ export const errorCodeSchema = z.enum([
   "CATALOG_PHOTO_INVALID",
   "CATALOG_PHOTO_NOT_APPROVED",
   "CATALOG_PHOTO_FILES_DELETED",
+  // Photo search and photos of suppliers (TASK-068, ARCHITECTURE 4.95).
+  "PHOTO_SEARCH_UNAVAILABLE",
+  "PHOTO_SEARCH_NOT_APPLICABLE",
+  "CATALOG_PHOTO_NOT_NEEDED",
   // The vehicle catalog (TASK-014, ARCHITECTURE 4.24).
   "VEHICLE_VERSION_CONFLICT",
   "VEHICLE_DUPLICATE",

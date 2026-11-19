@@ -1185,6 +1185,47 @@ const reviews = group({
   },
 });
 
+/** A domain as `photo_search_trusted_domains` keeps it: lower case, no scheme, no path. */
+const photoDomainSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^(?=.{3,253}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/, {
+    message: "Must be a domain like geely.com",
+  });
+
+const trustedPhotoDomainsSchema = z.record(
+  z
+    .string()
+    .trim()
+    .regex(/^[\p{Ll}\p{N}]{1,60}$/u, {
+      message: "The brand key is the brand in lower case, letters and digits only",
+    }),
+  z.strictObject({
+    manufacturer: z.array(photoDomainSchema).max(20),
+    official_catalog: z.array(photoDomainSchema).max(20),
+  }),
+);
+
+/**
+ * The manufacturers' own sites and their official catalogues (TASK-068,
+ * D-076): the brands of the first audience. Not checked live — the search
+ * has no key yet (ARCHITECTURE 4.95); the administrator corrects the list.
+ */
+const DEFAULT_TRUSTED_PHOTO_DOMAINS: z.infer<typeof trustedPhotoDomainsSchema> = {
+  geely: { manufacturer: ["geely.com", "geely.kz", "geely-motors.com"], official_catalog: [] },
+  chery: { manufacturer: ["chery.cn", "cheryinternational.com", "chery.kz"], official_catalog: [] },
+  shell: { manufacturer: ["shell.com", "shell.kz"], official_catalog: [] },
+  mobil: { manufacturer: ["mobil.com", "exxonmobil.com"], official_catalog: [] },
+  trw: { manufacturer: ["trwaftermarket.com", "zf.com"], official_catalog: ["aftermarket.zf.com"] },
+  mann: { manufacturer: ["mann-filter.com"], official_catalog: ["catalog.mann-filter.com"] },
+  ngk: { manufacturer: ["ngk.com", "ngkntk.com", "ngk.de"], official_catalog: [] },
+  febi: {
+    manufacturer: ["febi.com", "bilsteingroup.com"],
+    official_catalog: ["partsfinder.bilsteingroup.com"],
+  },
+};
+
 const photos = group({
   id: "photos",
   title: "Фото",
@@ -1234,6 +1275,59 @@ const photos = group({
       default: 24,
       description:
         "Через сколько часов удаляются файлы изображений, на которые нет записей (прерванная загрузка). 0 — при ближайшем проходе задачи; так проверяют уборку, но при этом может попасть под удаление загрузка, идущая прямо сейчас.",
+    }),
+    // TASK-068 (ARCHITECTURE 4.95): the image search and photos of suppliers.
+    photo_search_retry_days: define.duration({
+      unit: "days",
+      min: 1,
+      max: 365,
+      default: 30,
+      description:
+        "Через сколько дней фоновая задача снова ищет фото позиции, у которой его так и нет. Кнопка «Найти фото» администратора этим не ограничена.",
+    }),
+    photo_search_per_day: define.integer({
+      unit: "count",
+      min: 0,
+      max: 10_000,
+      default: 100,
+      description:
+        "Сколько поисков фото (запросов к поисковому провайдеру) можно сделать за сутки по Алматы — кнопкой администратора и фоновой задачей вместе. 0 — поиск не делается.",
+    }),
+    photo_search_candidates: define.integer({
+      unit: "count",
+      min: 1,
+      max: 10,
+      default: 5,
+      description: "Сколько кандидатов фото один поиск ставит в очередь модерации, не больше.",
+    }),
+    photo_search_trusted_domains: define.composite({
+      schema: trustedPhotoDomainsSchema,
+      default: DEFAULT_TRUSTED_PHOTO_DOMAINS,
+      description:
+        "Сайты производителей и официальных каталогов по брендам (ключ — бренд строчными буквами): фото с них — кандидаты первыми («Сайт производителя», «Официальный каталог»); поддомены считаются.",
+    }),
+    supplier_photos_per_supplier_day: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000,
+      default: 30,
+      description:
+        "Сколько фото деталей и фото к запросам на позицию сотрудники одного поставщика могут отправить за скользящие 24 часа; сверх — отказ с временем ожидания.",
+    }),
+    supplier_photo_requests_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000,
+      default: 20,
+      description:
+        "Сколько запросов загрузки фото (к предложению и к запросу на позицию) один сотрудник может сделать за окно; считаются до чтения файла, отказанные тоже.",
+    }),
+    supplier_photo_requests_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 600,
+      description: "Окно предела запросов загрузки фото одним сотрудником.",
     }),
   },
 });

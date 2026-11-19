@@ -225,6 +225,17 @@ export const rateLimitNameSchema = z.enum([
    * is counted apart, in the database.
    */
   "price_photo_requests_per_account",
+  /**
+   * Every request to upload a photo of a supplier (TASK-068: to an offer, to
+   * a request to add an item) of one person, refused ones included, counted
+   * before the body is read. The daily number of photos of a company is
+   * counted apart, in the database (`supplier_photos_per_supplier`).
+   */
+  "supplier_photo_requests_per_account",
+  /** The photos of one company in a rolling day (TASK-068), counted in the database. */
+  "supplier_photos_per_supplier",
+  /** Searches for photos of items in a day of Almaty (TASK-068), counted in the database. */
+  "photo_search_per_day",
   /** A car named by voice placed in the catalog (TASK-060): no AI, a limit by address against a loop. */
   "vehicle_match_per_ip",
   /**

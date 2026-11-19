@@ -2,6 +2,7 @@ import { z } from "zod";
 import { adminCatalogItemCardSchema, createCatalogItemBodySchema } from "./catalog-items";
 import { supplierCompatibilityProposalSchema } from "./compatibility";
 import { offerItemSchema } from "./offers";
+import { catalogRequestPhotoSchema, supplierItemPhotoSchema } from "./photo-search";
 import {
   parsedPriceRowSchema,
   priceImportPersonSchema,
@@ -384,6 +385,8 @@ export const supplierCatalogRequestSchema = z.object({
   offer: z
     .object({ id: z.uuid(), status: z.enum(["active", "withdrawn", "suspended"]) })
     .nullable(),
+  /** TASK-068: the photos sent with the request (up to `CATALOG_REQUEST_PHOTOS_MAX`). */
+  photos: z.array(supplierItemPhotoSchema),
 });
 
 export type SupplierCatalogRequest = z.infer<typeof supplierCatalogRequestSchema>;
@@ -432,6 +435,8 @@ export const adminCatalogRequestSchema = z.object({
   source: catalogRequestSourceSchema,
   category: catalogRequestCategorySchema.nullable(),
   comment: z.string().nullable(),
+  /** TASK-068: the photos the supplier sent with it (S-OFF-05); they become candidates of the item made of it. */
+  photos: z.array(catalogRequestPhotoSchema),
 });
 
 export type AdminCatalogRequest = z.infer<typeof adminCatalogRequestSchema>;
@@ -577,6 +582,8 @@ export const supplierModerationSummarySchema = z.object({
   unseen: z.object({
     requests: z.number().int(),
     compatibility: z.number().int(),
+    /** TASK-068: decisions on the company's photos; counted in `total`. */
+    photos: z.number().int(),
     total: z.number().int(),
   }),
   seenAt: z.iso.datetime(),

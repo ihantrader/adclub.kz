@@ -29,7 +29,8 @@
     "openapi:check": "tsx scripts/openapi.ts check",
     "openapi:compat": "tsx scripts/check-openapi-compat.ts",
     "release:mobile:snapshot": "tsx scripts/mobile-release-snapshot.ts",
-    "price-imports:samples": "tsx scripts/price-import-samples.ts"
+    "price-imports:samples": "tsx scripts/price-import-samples.ts",
+    "photo-search:samples": "tsx scripts/photo-search-fixtures.ts"
   },
   "dependencies": {
     "@adclub/contracts": "workspace:*",

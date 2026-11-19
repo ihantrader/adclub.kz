@@ -77,8 +77,27 @@ describe("loadConfig", () => {
       push: { provider: "test", testMode: "ok", fcm: undefined, apns: undefined },
       // No index without MEILISEARCH_URL: the search runs on PostgreSQL.
       search: { url: undefined, apiKey: undefined, index: "catalog_items" },
+      imageSearch: { provider: "test", testMode: "ok", serpApiKey: undefined },
       ignoredVariables: [],
     });
+  });
+
+  it("chooses the image search: the test one locally, none elsewhere unless SerpAPI is configured (TASK-068)", () => {
+    expect(loadConfig({ ...VALID_ENV, NODE_ENV: "test" }).imageSearch.provider).toBe("test");
+    expect(
+      loadConfig({ ...VALID_ENV, IMAGE_SEARCH_TEST_MODE: "unavailable" }).imageSearch.testMode,
+    ).toBe("unavailable");
+    const key = "serpapi-key-0123456789";
+    expect(
+      loadConfig({ ...VALID_ENV, IMAGE_SEARCH_PROVIDER: "serpapi", SERPAPI_API_KEY: key })
+        .imageSearch,
+    ).toEqual({ provider: "serpapi", testMode: "ok", serpApiKey: key });
+    expect(() => loadConfig({ ...VALID_ENV, IMAGE_SEARCH_PROVIDER: "serpapi" })).toThrow(
+      /SERPAPI_API_KEY: required when IMAGE_SEARCH_PROVIDER=serpapi/,
+    );
+    expect(() => loadConfig({ ...VALID_ENV, IMAGE_SEARCH_PROVIDER: "google" })).toThrow(
+      /IMAGE_SEARCH_PROVIDER/,
+    );
   });
 
   it("reads the search index: the address, the key (the master key without one), the index (TASK-045)", () => {
@@ -869,6 +888,23 @@ describe("loadConfig", () => {
         loadConfig({ ...DEPLOYED, NODE_ENV: "staging", PAYMENT_PROVIDER: "card_kz" }).payments
           .provider,
       ).toBe("card_kz");
+    });
+
+    it("starts without an image search outside development: the search is off, not refused (TASK-068)", () => {
+      expect(loadConfig({ ...DEPLOYED, NODE_ENV: "staging" }).imageSearch.provider).toBe(
+        "disabled",
+      );
+      expect(
+        loadConfig({ ...DEPLOYED, NODE_ENV: "staging", IMAGE_SEARCH_PROVIDER: "test" }).imageSearch
+          .provider,
+      ).toBe("disabled");
+      let production = "";
+      try {
+        loadConfig({ ...DEPLOYED, NODE_ENV: "production" });
+      } catch (error) {
+        production = (error as Error).message;
+      }
+      expect(production).not.toMatch(/IMAGE_SEARCH|SERPAPI/);
     });
 
     it("requires the key that seals the tokens outside development, and no webhook without a secret there", () => {

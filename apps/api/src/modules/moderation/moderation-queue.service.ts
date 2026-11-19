@@ -8,7 +8,12 @@ import type {
 import { inArray, sql, type SQL } from "drizzle-orm";
 import { ApiException } from "../../common/errors";
 import { DatabaseService, type DbExecutor } from "../../database";
+import { StorageService } from "../../storage";
+import { PhotoStorage } from "../catalog";
 import { describeAdminProposals, itemCompatibilityProposal } from "../compatibility";
+import { AppSettings } from "../settings";
+
+type AdminModerationPhoto = NonNullable<AdminModerationEntry["photo"]>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -52,17 +57,26 @@ function decodeCursor(cursor: string): { at: string; id: string } {
  */
 function waitingRows(filters: { kind?: AdminModerationKind; supplierId?: string }): SQL {
   const parts: SQL[] = [];
-  if (filters.kind !== "compatibility") {
+  if (!filters.kind || filters.kind === "item_request") {
     parts.push(sql`
       SELECT 'item_request'::text AS kind, r.id, r.created_at, r.supplier_id
       FROM catalog_request r
       WHERE r.status = 'new'`);
   }
-  if (filters.kind !== "item_request") {
+  if (!filters.kind || filters.kind === "compatibility") {
     parts.push(sql`
       SELECT 'compatibility'::text AS kind, p.id, p.created_at, p.supplier_id
       FROM item_compatibility_proposal p
       WHERE p.status = 'pending' AND p.supplier_id IS NOT NULL`);
+  }
+  // A-MOD-03 (TASK-068): candidates of the image search and suppliers' photos
+  // of an item. A photo the administrator uploaded waits on the item's card,
+  // not here; a photo of a request comes with the item made of it.
+  if (!filters.kind || filters.kind === "photo") {
+    parts.push(sql`
+      SELECT 'photo'::text AS kind, f.id, f.created_at, f.supplier_id
+      FROM item_photo f
+      WHERE f.status = 'proposed' AND f.proposed_by IN ('ai', 'supplier') AND f.item_id IS NOT NULL`);
   }
   const union = sql.join(parts, sql` UNION ALL `);
   return filters.supplierId
@@ -82,7 +96,96 @@ function waitingRows(filters: { kind?: AdminModerationKind; supplierId?: string 
 @Injectable()
 export class ModerationQueueService {
   // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
-  constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
+  private readonly storage: PhotoStorage;
+
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(StorageService) storage: StorageService,
+    @Inject(AppSettings) private readonly settings: AppSettings,
+  ) {
+    this.storage = new PhotoStorage(storage);
+  }
+
+  /**
+   * Photos of the queue (A-MOD-03): the item, where the picture was found and
+   * who proposed it, the thumbnail and the full-size picture we stored —
+   * always our copy, whatever `photo_display_mode` says (as «Фото» of the item).
+   */
+  private async describePhotos(
+    executor: DbExecutor,
+    ids: readonly string[],
+  ): Promise<Map<string, AdminModerationEntry>> {
+    const described = new Map<string, AdminModerationEntry>();
+    if (ids.length === 0) return described;
+    const ttlSeconds = (await this.settings.get("photo_link_ttl_minutes")) * 60;
+    const rows = await executor.execute<{
+      id: string;
+      item_id: string;
+      version: number;
+      created_at: Date | string;
+      source_type: AdminModerationPhoto["sourceType"];
+      source_url: string | null;
+      proposed_by: AdminModerationPhoto["proposedBy"];
+      ai_score: string | null;
+      width: number;
+      height: number;
+      supplier_id: string | null;
+      supplier_name: string | null;
+      article: string | null;
+      brand: string | null;
+      name: string | null;
+      thumb_key: string | null;
+      original_key: string | null;
+      files_deleted: boolean;
+    }>(sql`
+      SELECT f.id, f.item_id, f.version, f.created_at, f.source_type, f.source_url, f.proposed_by,
+             f.ai_score::text AS ai_score, f.width, f.height, f.supplier_id, s.name AS supplier_name,
+             i.article, (SELECT b.text FROM brand_spelling b WHERE b.brand_id = i.brand_id AND b.is_name LIMIT 1) AS brand,
+             (SELECT t.text FROM translation t WHERE t.entity_type = 'catalog_item'
+                AND t.entity_id = i.id AND t.field = 'name' AND t.lang = 'ru') AS name,
+             (SELECT k.storage_key FROM item_photo_file k WHERE k.photo_id = f.id AND k.variant = 'thumb') AS thumb_key,
+             (SELECT k.storage_key FROM item_photo_file k WHERE k.photo_id = f.id AND k.variant = 'original') AS original_key,
+             f.files_deleted_at IS NOT NULL AS files_deleted
+      FROM item_photo f
+      JOIN catalog_item i ON i.id = f.item_id
+      LEFT JOIN supplier s ON s.id = f.supplier_id
+      WHERE ${inArray(sql`f.id`, [...ids])}`);
+    for (const row of rows.rows) {
+      const sign = (key: string | null) =>
+        key && !row.files_deleted ? this.storage.signedUrl(key, ttlSeconds) : Promise.resolve(null);
+      const [thumbUrl, originalUrl] = await Promise.all([
+        sign(row.thumb_key),
+        sign(row.original_key),
+      ]);
+      described.set(row.id, {
+        kind: "photo",
+        id: row.id,
+        createdAt: new Date(row.created_at).toISOString(),
+        supplier:
+          row.supplier_id && row.supplier_name
+            ? { id: row.supplier_id, name: row.supplier_name }
+            : null,
+        source: row.proposed_by === "ai" ? "search" : "cabinet",
+        proposed: null,
+        item: { id: row.item_id, name: row.name, brand: row.brand, article: row.article },
+        vehicle: null,
+        photo: {
+          id: row.id,
+          itemId: row.item_id,
+          version: row.version,
+          thumbUrl,
+          originalUrl,
+          sourceType: row.source_type,
+          sourceUrl: row.source_url,
+          proposedBy: row.proposed_by,
+          aiScore: row.ai_score === null ? null : Number(row.ai_score),
+          width: row.width,
+          height: row.height,
+        },
+      });
+    }
+    return described;
+  }
 
   async count(
     filters: { kind?: AdminModerationKind; supplierId?: string } = {},
@@ -122,7 +225,8 @@ export class ModerationQueueService {
   ): Promise<AdminModerationEntry[]> {
     const requestIds = rows.filter((row) => row.kind === "item_request").map((row) => row.id);
     const proposalIds = rows.filter((row) => row.kind === "compatibility").map((row) => row.id);
-    const [requests, proposals] = await Promise.all([
+    const photoIds = rows.filter((row) => row.kind === "photo").map((row) => row.id);
+    const [requests, proposals, photos] = await Promise.all([
       requestIds.length === 0
         ? { rows: [] }
         : executor.execute<{
@@ -148,6 +252,7 @@ export class ModerationQueueService {
             .from(itemCompatibilityProposal)
             .where(inArray(itemCompatibilityProposal.id, proposalIds))
             .then((found) => describeAdminProposals(executor, found)),
+      this.describePhotos(executor, photoIds),
     ]);
     const requestOf = new Map(requests.rows.map((row) => [row.id, row]));
     const proposalOf = new Map(proposals.map((row) => [row.id, row]));
@@ -165,7 +270,11 @@ export class ModerationQueueService {
           proposed: { name: request.name, brand: request.brand, article: request.article },
           item: null,
           vehicle: null,
+          photo: null,
         };
+      }
+      if (row.kind === "photo") {
+        return photos.get(row.id)!;
       }
       const proposal = proposalOf.get(row.id)!;
       const label = proposal.label;
@@ -193,6 +302,7 @@ export class ModerationQueueService {
         ]
           .filter((part): part is string => Boolean(part))
           .join(" · "),
+        photo: null,
       };
     });
   }

@@ -16,6 +16,7 @@ import { billingJobCatalog } from "./modules/billing";
 import { reminderJobCatalog } from "./modules/reminders";
 import { supplierJobCatalog } from "./modules/suppliers";
 import { vehicleJobCatalog } from "./modules/vehicles";
+import { photoSearchJobCatalog } from "./modules/photo-search";
 
 /**
  * Every background job the application declares (ARCHITECTURE 13.2, 4.12).
@@ -43,6 +44,7 @@ export function backgroundJobCatalog(config: Pick<AppConfig, "nodeEnv">): JobDef
     ...moderationJobCatalog,
     ...billingJobCatalog,
     ...reminderJobCatalog,
+    ...photoSearchJobCatalog,
     ...(hasDevJobs(config) ? devJobCatalog : []),
   ];
 }

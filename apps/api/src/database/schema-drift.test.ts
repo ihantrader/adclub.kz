@@ -160,6 +160,7 @@ describe("ormTables", () => {
         "item_photo",
         "item_photo_file",
         "item_search_synonym",
+        "photo_search",
         "search_outbox",
         "search_index_state",
         "offer",

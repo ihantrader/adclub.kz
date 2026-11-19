@@ -13,6 +13,14 @@ import {
   type AccessContext,
 } from "./access";
 import {
+  catalogRequestIdPathSchema,
+  searchItemPhotosResponseSchema,
+  supplierModerationPhotoPageSchema,
+  supplierModerationPhotoQuerySchema,
+  supplierOfferPhotosSchema,
+  supplierPhotoUploadResponseSchema,
+} from "./photo-search";
+import {
   accountProfileSchema,
   completeRegistrationBodySchema,
   updateAccountProfileBodySchema,
@@ -6192,6 +6200,112 @@ const moderationStatsRoutes = {
     query: adminModerationQuerySchema,
     responses: {
       200: { description: "A page of the queue", schema: adminModerationPageSchema },
+    },
+  }),
+  // ------------- photo search and photos of suppliers (TASK-068, ARCHITECTURE 4.95)
+  searchItemPhotos: defineRoute({
+    operationId: "searchItemPhotos",
+    method: "POST",
+    path: "/admin/catalog/items/{itemId}/photos/search",
+    summary:
+      "«Найти фото» (A-CAT-05): searches pictures of the item by brand, article and name; the manufacturer's and official catalogues' sites first, then the same picture on several independent sites. Each candidate is downloaded, checked by its content and waits for moderation; nothing is generated. Counted in photo_search_per_day",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    pathParams: catalogItemIdPathSchema,
+    responses: {
+      200: {
+        description: "The photos of the item after the search, and what the search did",
+        schema: searchItemPhotosResponseSchema,
+      },
+    },
+  }),
+  getSupplierOfferPhotos: defineRoute({
+    operationId: "getSupplierOfferPhotos",
+    method: "GET",
+    path: "/supplier/offers/{offerId}/photos",
+    summary:
+      "S-OFF-03 «У позиции нет фото — сфотографируйте деталь»: whether the item of the company's offer still needs a photo, and the photos the company sent for it with their statuses",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: offerPathSchema,
+    responses: {
+      200: { description: "The block of the offer card", schema: supplierOfferPhotosSchema },
+    },
+  }),
+  uploadSupplierOfferPhoto: defineRoute({
+    operationId: "uploadSupplierOfferPhoto",
+    method: "POST",
+    path: "/supplier/offers/{offerId}/photos",
+    summary:
+      "A photo of the real part for the item of the company's offer that has no approved photo (S-OFF-03): the body is the picture itself, checked by its content and stored without camera metadata; it waits for moderation. Limited per company per day",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: offerPathSchema,
+    upload: {
+      description: "The picture itself (JPEG, PNG or WebP)",
+      contentTypes: PHOTO_CONTENT_TYPES,
+      maxBytes: PHOTO_MAX_UPLOAD_BYTES,
+    },
+    // Counted before the body is read, by the signed token (as TASK-064.A).
+    rateLimit: { perAccount: "supplier_photo_requests_per_account", whenUnavailable: "allow" },
+    responses: {
+      201: {
+        description: "The photo waits for moderation",
+        schema: supplierPhotoUploadResponseSchema,
+      },
+      200: {
+        description: "The same picture was already sent; nothing was stored twice",
+        schema: supplierPhotoUploadResponseSchema,
+      },
+    },
+  }),
+  uploadCatalogRequestPhoto: defineRoute({
+    operationId: "uploadCatalogRequestPhoto",
+    method: "POST",
+    path: "/supplier/catalog-requests/{requestId}/photos",
+    summary:
+      "A photo for the company's request to add an item while it waits (S-OFF-05, up to 3): the body is the picture itself; when the administrator makes the item of the request, the photos become its candidates",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    pathParams: catalogRequestIdPathSchema,
+    upload: {
+      description: "The picture itself (JPEG, PNG or WebP)",
+      contentTypes: PHOTO_CONTENT_TYPES,
+      maxBytes: PHOTO_MAX_UPLOAD_BYTES,
+    },
+    rateLimit: { perAccount: "supplier_photo_requests_per_account", whenUnavailable: "allow" },
+    responses: {
+      201: {
+        description: "The photo is with the request",
+        schema: supplierPhotoUploadResponseSchema,
+      },
+      200: {
+        description: "The same picture was already sent with this request",
+        schema: supplierPhotoUploadResponseSchema,
+      },
+    },
+  }),
+  listSupplierModerationPhotos: defineRoute({
+    operationId: "listSupplierModerationPhotos",
+    method: "GET",
+    path: "/supplier/moderation/photos",
+    summary:
+      "«Модерация → Фото» (S-MOD-01): the company's photos, newest first — «На рассмотрении» / «Фото принято» / «Отклонено: {причина}», «новое» for this employee",
+    tag: "supplier",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["supplier"],
+    query: supplierModerationPhotoQuerySchema,
+    responses: {
+      200: { description: "A page of photos", schema: supplierModerationPhotoPageSchema },
     },
   }),
   getSupplierStats: defineRoute({

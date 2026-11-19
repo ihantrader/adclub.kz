@@ -45,6 +45,7 @@ import { WorkerModule } from "../../worker.module";
 import { AiGateway, AiService, TestAiGateway, testTranslation, type TranslateInput } from "../ai";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
 import { TranslationQueue, TranslationRunner, TranslationWake } from ".";
+import { TranslationPriorityRunner } from "../offers";
 
 /**
  * TASK-012 end to end on a real PostgreSQL: the queue of automatic
@@ -703,6 +704,7 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
         ["put", `/admin/translations/category/${category.id}/name/kk`, { text: "Шиналар" }],
         ["post", `/admin/translations/category/${category.id}/name/kk/release`, undefined],
         ["post", `/admin/translations/category/${category.id}/name/kk/retranslate`, undefined],
+        ["post", "/admin/translations/retry-failed", {}],
       ];
       const mobile = await mobileToken();
       const cabinet = await cabinetToken();
@@ -1294,6 +1296,382 @@ describe("translation of the catalog (PostgreSQL + Redis)", () => {
   });
 
   // ============================================ TASK-053: the gateway itself
+
+  // ================================================ TASK-054: order and the page
+
+  describe("the order of the queue and the administrator's page (TASK-054)", () => {
+    const ALWAYS_OPEN = [1, 2, 3, 4, 5, 6, 7].map((day) => ({
+      day,
+      intervals: [{ from: "00:00", to: "24:00" }],
+    }));
+
+    /** A subcategory with two active items of a brand; tasks of everything are queued. */
+    async function catalogOfTwo() {
+      const node = await createCategory({ ru: "Тормоза" });
+      const pads = await createCategory({ ru: "Колодки" }, `pads_${randomUUID().slice(0, 6)}`, {
+        parentId: node.id,
+      });
+      const brand = await asAdmin("post", "/admin/catalog/brands", {
+        name: `Geely ${randomUUID().slice(0, 4)}`,
+        aliases: [],
+        isOem: true,
+      });
+      expect(brand.status, JSON.stringify(brand.body)).toBe(201);
+      const brandId = (brand.body as { brand: { id: string } }).brand.id;
+      const item = async (article: string, name: string) => {
+        const response = await asAdmin("post", "/admin/catalog/items", {
+          type: "part",
+          categoryId: pads.id,
+          brandId,
+          article,
+          names: { ru: name },
+        });
+        expect(response.status, JSON.stringify(response.body)).toBe(201);
+        return (response.body as { item: { id: string } }).item.id;
+      };
+      const other = await item("B-1", "Колодка без предложений");
+      const shown = await item("B-2", "Колодка в продаже");
+      await db.query("UPDATE catalog_item SET status = 'active' WHERE id = ANY($1::uuid[])", [
+        [other, shown],
+      ]);
+      return { node, pads, other, shown };
+    }
+
+    /** An offer users see on `itemId`: a supplier with an address and hours, an active offer. */
+    async function offerOnShowcase(itemId: string): Promise<void> {
+      const { supplierId } = await app
+        .get(OperatorService)
+        .createSupplier({ name: `Поставщик ${randomUUID().slice(0, 4)}`, city: "Алматы" });
+      await db.query(
+        "UPDATE supplier_location SET weekly_hours = $2::jsonb, address = 'ул. Абая, 1' WHERE supplier_id = $1",
+        [supplierId, JSON.stringify(ALWAYS_OPEN)],
+      );
+      await db.query(
+        `INSERT INTO offer (supplier_id, location_id, item_id, item_type, price, availability,
+           lead_days, pickup, delivery)
+         SELECT l.supplier_id, l.id, $2, 'part', 1000, 'in_stock', 0, true, false
+         FROM supplier_location l WHERE l.supplier_id = $1`,
+        [supplierId, itemId],
+      );
+    }
+
+    /** The order the provider was asked for texts in (batches of one). */
+    const askedOrder = (gateway: TestAiGateway) =>
+      gateway.requests.map((entry) => entry.input.items.map((item) => item.text).join("+"));
+
+    /** Every task waits as if put on the queue `ages` ago, the first oldest. */
+    async function age(entityIds: string[]): Promise<void> {
+      for (const [index, id] of entityIds.entries()) {
+        await db.query(
+          "UPDATE translation_task SET updated_at = now() - make_interval(hours => $2) WHERE entity_id = $1",
+          [id, entityIds.length - index],
+        );
+      }
+    }
+
+    const priorities = async () => {
+      const { rows } = await db.query<{ entity_id: string; priority: number }>(
+        "SELECT DISTINCT entity_id, priority FROM translation_task WHERE status = 'pending'",
+      );
+      return new Map(rows.map((row) => [row.entity_id, Number(row.priority)]));
+    };
+
+    it("translates structure, then items on the showcase, then the rest, the longest waiting first; an item that gains an offer rises (AC-1)", async () => {
+      await setSettings({ translation_batch_size: 1 });
+      const { node, pads, other, shown } = await catalogOfTwo();
+      // Only the subcategory and the two items wait — put on the queue in reverse order.
+      await db.query("DELETE FROM translation_task WHERE entity_id <> ALL($1::uuid[])", [
+        [pads.id, other, shown],
+      ]);
+      await age([other, shown, pads.id]);
+      expect(await priorities()).toEqual(
+        new Map([
+          [pads.id, 0],
+          [other, 2],
+          [shown, 2],
+        ]),
+      );
+
+      // The offer comes after the task: the minute job moves it up, and only it.
+      await offerOnShowcase(shown);
+      await startWorker();
+      expect(
+        await worker!
+          .get(TranslationPriorityRunner)
+          .run({ jobId: "test", attempt: 1, signal: new AbortController().signal }),
+      ).toEqual({ worked: true });
+      expect((await priorities()).get(shown)).toBe(1);
+      expect((await priorities()).get(other)).toBe(2);
+      // The age is kept: rising is not a new place at the end of the group.
+      const { rows } = await db.query<{ older: boolean }>(
+        `SELECT (SELECT max(updated_at) FROM translation_task WHERE entity_id = $1)
+              < (SELECT min(updated_at) FROM translation_task WHERE entity_id = $2) AS older`,
+        [shown, pads.id],
+      );
+      expect(rows[0]!.older).toBe(true);
+      // Nothing to move the second time.
+      expect(
+        await worker!
+          .get(TranslationPriorityRunner)
+          .run({ jobId: "test", attempt: 1, signal: new AbortController().signal }),
+      ).toEqual({ worked: false });
+
+      const gateway = worker!.get(AiGateway) as TestAiGateway;
+      await app.get(TranslationQueue).wake();
+      await drained();
+      expect(askedOrder(gateway)).toEqual([
+        "Колодки",
+        "Колодки",
+        "Колодка в продаже",
+        "Колодка в продаже",
+        "Колодка без предложений",
+        "Колодка без предложений",
+      ]);
+      expect(node.id).toBeDefined();
+    });
+
+    it("puts a text of an item on the showcase straight into its group, and lowers an item that left it", async () => {
+      const { other, shown } = await catalogOfTwo();
+      await offerOnShowcase(shown);
+      await asAdmin("patch", `/admin/catalog/items/${shown}`, {
+        expectedVersion: 1,
+        names: { ru: "Колодка в продаже, новая" },
+      });
+      await asAdmin("patch", `/admin/catalog/items/${other}`, {
+        expectedVersion: 1,
+        names: { ru: "Колодка без предложений, новая" },
+      });
+      expect((await priorities()).get(shown)).toBe(1);
+      expect((await priorities()).get(other)).toBe(2);
+      // The point has no hours any more (D-060): not on the showcase — the minute job lowers it.
+      await db.query("UPDATE supplier_location SET weekly_hours = NULL");
+      await startWorker();
+      expect(
+        await worker!
+          .get(TranslationPriorityRunner)
+          .run({ jobId: "test", attempt: 1, signal: new AbortController().signal }),
+      ).toEqual({ worked: true });
+      expect((await priorities()).get(shown)).toBe(2);
+    });
+
+    it("waits through a spent budget and an unavailable provider, then translates in the order of the queue (requirement 3)", async () => {
+      await setSettings({ translation_batch_size: 1, ai_daily_budget_usd: 0 });
+      const { pads, other, shown } = await catalogOfTwo();
+      await db.query("DELETE FROM translation_task WHERE entity_id <> ALL($1::uuid[])", [
+        [pads.id, other, shown],
+      ]);
+      await offerOnShowcase(shown);
+      await age([other, shown, pads.id]);
+      const gateway = await startWorker();
+      await worker!
+        .get(TranslationPriorityRunner)
+        .run({ jobId: "test", attempt: 1, signal: new AbortController().signal });
+      await app.get(TranslationQueue).wake();
+      await waitFor(
+        () => appLogText(output.text()).includes("AI daily budget exhausted"),
+        "the budget event",
+      );
+      expect(gateway.requests).toHaveLength(0);
+      expect(await count("translation_task", "status = 'pending'")).toBe(6);
+
+      // The budget is back, the provider is not: the tasks still wait, nothing is lost.
+      gateway.mode = "unavailable";
+      await setSettings({ ai_daily_budget_usd: 100, translation_retry_limit: 0 });
+      await app.get(TranslationQueue).wake();
+      await waitFor(
+        async () => (await count("translation_task", "last_error = 'unavailable'")) > 0,
+        "an unavailable provider",
+      );
+      expect(await count("translation_task", "status = 'pending'")).toBe(6);
+      expect(await count("translation", "origin = 'ai'")).toBe(0);
+
+      gateway.mode = "ok";
+      gateway.requests.length = 0;
+      await app.get(TranslationQueue).wake();
+      await drained();
+      expect(askedOrder(gateway)).toEqual([
+        "Колодки",
+        "Колодки",
+        "Колодка в продаже",
+        "Колодка в продаже",
+        "Колодка без предложений",
+        "Колодка без предложений",
+      ]);
+    });
+
+    it("never overwrites a text written by hand whatever the order, and flags it when the Russian one changes (requirement 3)", async () => {
+      const { shown } = await catalogOfTwo();
+      await offerOnShowcase(shown);
+      const manual = await asAdmin("put", `/admin/translations/catalog_item/${shown}/name/kk`, {
+        text: "Сатылымдағы қалып",
+      });
+      expect(manual.status, JSON.stringify(manual.body)).toBe(200);
+      await asAdmin("patch", `/admin/catalog/items/${shown}`, {
+        expectedVersion: 1,
+        names: { ru: "Колодка в продаже, другая" },
+      });
+      // Only English waits, and at the top of the items.
+      const { rows } = await db.query<{ lang: string; priority: number }>(
+        "SELECT lang, priority FROM translation_task WHERE entity_id = $1",
+        [shown],
+      );
+      expect(rows).toEqual([{ lang: "en", priority: 1 }]);
+      await startWorker();
+      await drained();
+      const texts = await names(shown, "catalog_item");
+      expect(texts.kk.translation).toMatchObject({
+        text: "Сатылымдағы қалып",
+        origin: "manual",
+        isSourceChanged: true,
+      });
+      expect(texts.en.translation).toMatchObject({ origin: "ai", isSourceChanged: false });
+    });
+
+    it("queues the name of an item made from a supplier's request and from the administrator's form, in Kazakh and English (requirement 3)", async () => {
+      const { pads } = await catalogOfTwo();
+      const cabinet = await cabinetToken();
+      const asked = await http()
+        .post("/supplier/catalog-requests")
+        .set("X-Client", SUPPLIER_WEB)
+        .set("Authorization", `Bearer ${cabinet}`)
+        .send({ name: "Колодка по запросу", article: "REQ-1", categoryId: pads.id });
+      expect(asked.status, JSON.stringify(asked.body)).toBe(201);
+      const requestId = (asked.body as { request: { id: string } }).request.id;
+      const card = await asAdmin("get", `/admin/catalog-requests/${requestId}`);
+      expect(card.status, JSON.stringify(card.body)).toBe(200);
+      const version = (card.body as { request: { version: number } }).request.version;
+      const brand = await asAdmin("post", "/admin/catalog/brands", {
+        name: "TRW",
+        aliases: [],
+        isOem: false,
+      });
+      const made = await asAdmin("post", `/admin/catalog-requests/${requestId}/create-item`, {
+        expectedVersion: version,
+        item: {
+          type: "part",
+          categoryId: pads.id,
+          brandId: (brand.body as { brand: { id: string } }).brand.id,
+          article: "REQ-1",
+          names: { ru: "Колодка по запросу" },
+        },
+      });
+      expect(made.status, JSON.stringify(made.body)).toBe(201);
+      const fromRequest = (made.body as { item: { item: { id: string } } }).item.item.id;
+      const fromForm = await asAdmin("post", "/admin/catalog/items", {
+        type: "part",
+        categoryId: pads.id,
+        brandId: (brand.body as { brand: { id: string } }).brand.id,
+        article: "FORM-1",
+        names: { ru: "Колодка из формы" },
+      });
+      expect(fromForm.status, JSON.stringify(fromForm.body)).toBe(201);
+      const formId = (fromForm.body as { item: { id: string } }).item.id;
+      for (const id of [fromRequest, formId]) {
+        expect((await tasksOf(id)).map((task) => [task.lang, task.status])).toEqual([
+          ["en", "pending"],
+          ["kk", "pending"],
+        ]);
+      }
+    });
+
+    it("lists the queue with the object, when and why, and retries every refused translation in one action, journaled (requirement 2)", async () => {
+      const { pads, attribute } = await (async () => {
+        const made = await catalogOfTwo();
+        const response = await asAdmin(
+          "post",
+          `/admin/catalog/categories/${made.pads.id}/attributes`,
+          {
+            code: "thickness",
+            valueType: "number",
+            names: { ru: "Толщина" },
+            unit: { ru: "мм" },
+            number: { integer: false, min: 1, max: 30 },
+          },
+        );
+        expect(response.status, JSON.stringify(response.body)).toBe(201);
+        return { ...made, attribute: (response.body as { attribute: { id: string } }).attribute };
+      })();
+      await db.query(
+        `UPDATE translation_task SET status = 'failed', failure = 'too_long'
+         WHERE entity_id = $1 OR (entity_id = $2 AND lang = 'en')`,
+        [attribute.id, pads.id],
+      );
+      await db.query(
+        "UPDATE translation_task SET attempts = 2, last_error = 'rejected' WHERE entity_id = $1 AND lang = 'kk'",
+        [pads.id],
+      );
+      const list = async (query: string) => {
+        const response = await asAdmin("get", `/admin/translations${query}`);
+        expect(response.status, JSON.stringify(response.body)).toBe(200);
+        return translationQueuePageSchema.parse(response.body);
+      };
+      const failed = await list("?state=failed&limit=50");
+      // The attribute's name and unit in two languages, the subcategory in English.
+      expect(failed.total).toBe(5);
+      expect(failed.counts.failed).toBe(5);
+      const unit = failed.items.find((item) => item.field === "unit" && item.lang === "kk")!;
+      expect(unit).toMatchObject({
+        entityType: "attribute",
+        entityName: "Толщина",
+        sourceText: "мм",
+        failure: "too_long",
+        parentId: null,
+        attempts: 0,
+        lastError: null,
+      });
+      expect(Date.parse(unit.updatedAt)).toBeGreaterThan(Date.now() - 60_000);
+      const waiting = (await list("?state=queued&entityType=category&lang=kk")).items.find(
+        (item) => item.entityId === pads.id,
+      )!;
+      expect(waiting).toMatchObject({ attempts: 2, lastError: "rejected", entityName: "Колодки" });
+
+      // Retried by the filters of the page: English only, then the rest.
+      const en = await asAdmin("post", "/admin/translations/retry-failed", { lang: "en" });
+      expect(en.status, JSON.stringify(en.body)).toBe(200);
+      expect(en.body).toEqual({ requeued: 3 });
+      expect((await list("?state=failed")).total).toBe(2);
+      const rest = await asAdmin("post", "/admin/translations/retry-failed", {});
+      expect(rest.body).toEqual({ requeued: 2 });
+      expect((await list("?state=failed")).total).toBe(0);
+      expect(await asAdmin("post", "/admin/translations/retry-failed", {})).toMatchObject({
+        status: 200,
+        body: { requeued: 0 },
+      });
+      // Asked by this administrator: the calls will be recorded as theirs.
+      expect(
+        await count(
+          "translation_task",
+          `entity_id = '${attribute.id}' AND requested_by IS NOT NULL AND status = 'pending'`,
+        ),
+      ).toBe(4);
+      const journal = auditLogPageSchema.parse(
+        (await asAdmin("get", "/admin/audit-log?action=catalog_translation.retried_failed")).body,
+      );
+      expect(journal.entries.map((entry) => entry.after)).toEqual([
+        { entityType: null, lang: null, requeued: 2 },
+        { entityType: null, lang: "en", requeued: 3 },
+      ]);
+    });
+
+    it("retries a long list of refusals in portions, all of them", async () => {
+      const category = await createCategory({ ru: "Много" });
+      await db.query(
+        `INSERT INTO translation_task (entity_type, entity_id, field, lang, source_hash, status, failure)
+         SELECT 'category', gen_random_uuid(), 'name', 'kk', 'x', 'failed', 'empty'
+         FROM generate_series(1, 1203)`,
+      );
+      const response = await asAdmin("post", "/admin/translations/retry-failed", {});
+      expect(response.body).toEqual({ requeued: 1203 });
+      expect(await count("translation_task", "status = 'failed'")).toBe(0);
+      const journal = auditLogPageSchema.parse(
+        (await asAdmin("get", "/admin/audit-log?action=catalog_translation.retried_failed")).body,
+      );
+      expect(
+        journal.entries.map((entry) => (entry.after as { requeued: number }).requeued).sort(),
+      ).toEqual([203, 500, 500]);
+      expect(category.id).toBeDefined();
+    });
+  });
 
   describe("the gateway through OpenRouter (the test provider stands in for it)", () => {
     /** The `ai_job` rows of the day, newest last. */

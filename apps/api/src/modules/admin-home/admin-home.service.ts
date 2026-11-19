@@ -128,6 +128,8 @@ export class AdminHomeService {
           0,
         ),
         itemsWithoutTranslation: itemsWithoutTranslation!,
+        // The same count as the tab «Отказано» of the translations queue (TASK-054).
+        translationsFailed: queue.counts.failed,
       },
       at: new Date().toISOString(),
     };

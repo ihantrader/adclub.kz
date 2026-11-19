@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
+import type { ShownItems } from "./translation-priority";
 
 /** A condition over one item: `item` is the SQL of its id. */
 export type ItemCondition = (item: SQL) => SQL;
@@ -24,6 +25,7 @@ export type OffersOnSaleCounts = (
 export class CatalogItemListRules {
   private withoutCompatibilityRule: ItemCondition | null = null;
   private offersRule: { onSale: ItemCondition; counts: OffersOnSaleCounts } | null = null;
+  private shownItemsRule: ShownItems | null = null;
 
   registerWithoutCompatibility(rule: ItemCondition): void {
     this.withoutCompatibilityRule = rule;
@@ -48,6 +50,22 @@ export class CatalogItemListRules {
   }
 
   /** Offers on sale per item; without the offers module (operator command) — none known. */
+  /**
+   * «На витрине» for the translation queue (TASK-054; ARCHITECTURE 4.97):
+   * the offers module's `shownOffers`, registered with the list rules.
+   */
+  registerShownItems(rule: ShownItems): void {
+    this.shownItemsRule = rule;
+  }
+
+  /** The items of `itemIds` with an offer on the showcase; `null` — the offers module is not here. */
+  async shownItems(executor: DbExecutor, itemIds: readonly string[]): Promise<Set<string> | null> {
+    if (!this.shownItemsRule) {
+      return null;
+    }
+    return itemIds.length === 0 ? new Set() : this.shownItemsRule(executor, itemIds);
+  }
+
   async offersOnSale(
     executor: DbExecutor,
     itemIds: readonly string[],

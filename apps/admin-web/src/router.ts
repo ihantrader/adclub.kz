@@ -26,6 +26,8 @@ export const routePaths = {
   catalogMaintenance: "/catalog/maintenance",
   // The check of AI matches of price lists (TASK-065, A-MOD-04); a row — `/catalog/match-audit/<id>`.
   catalogMatchAudit: "/catalog/match-audit",
+  // The translation queue of the whole catalog (TASK-054, A-CAT-05).
+  catalogTranslations: "/catalog/translations",
   // The vehicle catalog (TASK-035.B): makes, engines, the reference lists, imports.
   vehicles: "/vehicles",
   vehicleEngines: "/vehicles/engines",
@@ -264,6 +266,7 @@ export function menuOf(route: RouteKey): StaticRoute {
     route === "catalogMaintenance" ||
     route === "maintenancePlan" ||
     route === "catalogMatchAudit" ||
+    route === "catalogTranslations" ||
     route === "matchAudit"
   ) {
     return "catalog";

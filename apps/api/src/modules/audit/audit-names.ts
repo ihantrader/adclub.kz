@@ -210,6 +210,14 @@ function fieldOf(side: unknown, key: string): unknown {
     : undefined;
 }
 
+/**
+ * Objects that are not a row but a whole list (TASK-054: «Перевести заново
+ * все отказанные» acts on the refused translations of the catalog).
+ */
+const FIXED_NAMES: Record<string, string> = {
+  "catalog_translation:failed": "Отказанные переводы справочника",
+};
+
 /** The kind an entry's object is named as (a translation — as the thing it is of). */
 export function namedKind(entry: NamedEntry): string {
   if (entry.entityType === "catalog_translation") {
@@ -285,7 +293,9 @@ export class AuditNames {
     const entity = new Map<string, string>();
     const refs = new Map<string, string>();
     for (const entry of entries) {
-      const name = byKind.get(namedKind(entry))?.get(entry.entityId.toLowerCase());
+      const name =
+        FIXED_NAMES[`${entry.entityType}:${entry.entityId}`] ??
+        byKind.get(namedKind(entry))?.get(entry.entityId.toLowerCase());
       if (name) entity.set(`${entry.entityType}:${entry.entityId}`, name);
       for (const [kind, id] of referencesOf(entry)) {
         const ref = byKind.get(kind)?.get(id.toLowerCase());

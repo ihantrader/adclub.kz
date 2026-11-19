@@ -456,6 +456,12 @@ export const adminHomeSchema = z.object({
      * with `withoutTranslation=true&status=active` (TASK-035).
      */
     itemsWithoutTranslation: z.number().int(),
+    /**
+     * Translations refused for good — the `total` of the tab «Отказано» of
+     * «Справочник → Переводы» (`GET /admin/translations?state=failed`, one
+     * count; TASK-054). The card is not shown at zero.
+     */
+    translationsFailed: z.number().int(),
   }),
   /** When the counters were taken. */
   at: z.iso.datetime(),

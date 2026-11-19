@@ -4,6 +4,7 @@ import type { IconName } from "@adclub/ui-core";
 import { apiClient } from "../api";
 import { paymentsPath } from "../billing/billing-words";
 import { itemsLink } from "../catalog/item-filters";
+import { translationsLink } from "../catalog/translation-words";
 import { loadErrorText } from "../errors";
 import { formatMoment } from "../format";
 import { AppLink, Header } from "../layout/layout";
@@ -19,6 +20,8 @@ export interface HomeCard {
   value: number;
   note: string;
   href: string;
+  /** At zero the card is not shown at all, not even in «Без внимания» (TASK-054). */
+  hideAtZero?: boolean;
 }
 
 const SIGNAL_KINDS = [
@@ -157,6 +160,16 @@ export function homeCards(home: AdminHome): HomeCard[] {
       note: `Названия позиций без казахского или английского перевода; всего текстов справочника без перевода — ${quality.withoutTranslation.toLocaleString("ru-RU")}`,
       href: itemsLink(adminHomeCatalogFilters.itemsWithoutTranslation),
     },
+    {
+      // TASK-054: the `total` of the tab «Отказано» of «Справочник → Переводы» — one count.
+      key: "translationsFailed",
+      icon: "language",
+      title: "Переводы: отказано",
+      value: quality.translationsFailed,
+      note: "Автоперевод не прошёл проверку: пустой, длиннее поля, не на том языке или совпал с соседом",
+      href: translationsLink(),
+      hideAtZero: true,
+    },
   ];
 }
 
@@ -242,7 +255,7 @@ function Queue({ home }: { home: AdminHome }) {
   const outage = home.channelOutage;
   const cards = homeCards(home);
   const attention = cards.filter((card) => card.value > 0);
-  const calm = cards.filter((card) => card.value === 0);
+  const calm = cards.filter((card) => card.value === 0 && !card.hideAtZero);
   const budget = home.aiBudget;
   const share = budget.budgetUsd > 0 ? Math.min(1, budget.spentUsd / budget.budgetUsd) : 1;
 

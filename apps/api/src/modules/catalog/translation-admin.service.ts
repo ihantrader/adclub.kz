@@ -309,6 +309,43 @@ export class TranslationAdminService {
     });
   }
 
+  /**
+   * «Перевести заново все отказанные» (TASK-054): the refused translations
+   * the queue's filters show go back in the queue — the operator's path
+   * (`TranslationQueue.retryFailed`, in portions), asked for by this
+   * administrator, journaled once with the number. A text written by hand
+   * meanwhile has no task any more, so it can't be among them.
+   */
+  async retryFailed(
+    filters: { entityType?: TranslationEntityType; lang?: TranslationTargetLanguage },
+    actor: CatalogActor,
+  ): Promise<{ requeued: number }> {
+    // Each portion is journaled in its own transaction: the journal says
+    // exactly what went back, even if a later portion fails.
+    const result = await this.queue.retryFailed(
+      { ...filters, requestedBy: accountOf(actor) },
+      (tx, requeued) =>
+        this.audit.record(
+          {
+            action: auditActions.catalogTranslationRetriedFailed,
+            actor,
+            entityType: auditEntities.catalogTranslation,
+            entityId: "failed",
+            after: {
+              entityType: filters.entityType ?? null,
+              lang: filters.lang ?? null,
+              requeued,
+            },
+          },
+          tx,
+        ),
+    );
+    this.logger.log(
+      `Refused translations requested again requeued=${result.requeued} entityType=${filters.entityType ?? "any"} lang=${filters.lang ?? "any"}`,
+    );
+    return result;
+  }
+
   // ---------------------------------------------------------------- queue
 
   /** What waits for a translation or is out of date, with the volume by state. */
@@ -342,10 +379,36 @@ export class TranslationAdminService {
       current_origin: "source" | "ai" | "manual" | null;
       is_source_changed: boolean;
       failure: TranslationQueuePage["items"][number]["failure"];
+      entity_name: string;
+      parent_id: string | null;
+      updated_at: string;
+      attempts: number;
+      last_error: string | null;
     }>(sql`${classified}
-      SELECT * FROM classified WHERE state IS NOT NULL ${stateFilter} ${after}
-      ORDER BY entity_type, entity_id, field, lang
-      LIMIT ${query.limit + 1}`);
+      SELECT c.*,
+             coalesce(n.text, c.source_text) AS entity_name,
+             mpi.plan_id AS parent_id,
+             to_json(coalesce(k.updated_at, t.updated_at, s.updated_at)) #>> '{}' AS updated_at,
+             coalesce(k.attempts, 0) AS attempts,
+             k.last_error
+      FROM (
+        SELECT * FROM classified WHERE state IS NOT NULL ${stateFilter} ${after}
+        ORDER BY entity_type, entity_id, field, lang
+        LIMIT ${query.limit + 1}
+      ) c
+      -- What the row needs to be read (TASK-054): the object's Russian name,
+      -- when, the temporary failure of a waiting task, a plan element's plan.
+      LEFT JOIN translation n ON n.entity_type = c.entity_type AND n.entity_id = c.entity_id
+        AND n.field = 'name' AND n.lang = 'ru'
+      LEFT JOIN translation s ON s.entity_type = c.entity_type AND s.entity_id = c.entity_id
+        AND s.field = c.field AND s.lang = 'ru'
+      LEFT JOIN translation t ON t.entity_type = c.entity_type AND t.entity_id = c.entity_id
+        AND t.field = c.field AND t.lang = c.lang
+      LEFT JOIN translation_task k ON k.entity_type = c.entity_type AND k.entity_id = c.entity_id
+        AND k.field = c.field AND k.lang = c.lang
+      LEFT JOIN maintenance_plan_item mpi ON c.entity_type = 'maintenance_plan_item'
+        AND mpi.id = c.entity_id
+      ORDER BY c.entity_type, c.entity_id, c.field, c.lang`);
 
     const rows = page.rows.slice(0, query.limit);
     const last = rows.at(-1);
@@ -362,6 +425,11 @@ export class TranslationAdminService {
         currentOrigin: row.current_origin,
         isSourceChanged: row.is_source_changed,
         failure: row.failure,
+        entityName: row.entity_name,
+        parentId: row.parent_id,
+        updatedAt: new Date(row.updated_at).toISOString(),
+        attempts: Number(row.attempts),
+        lastError: row.last_error,
       })),
       total: Number(total.rows[0]?.n ?? 0),
       counts: {

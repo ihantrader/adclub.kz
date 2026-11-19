@@ -3,6 +3,8 @@ import { inArray, sql, type SQL } from "drizzle-orm";
 import type { DbExecutor } from "../../database";
 import { CatalogItemListRules } from "../catalog";
 import { SupplierListCounts } from "../suppliers";
+import { shownOffers } from "./offer-showcase";
+import { offer } from "./schema";
 
 /**
  * Statuses of an offer «в продаже» — the cabinet's tab «В продаже»
@@ -44,6 +46,24 @@ export async function offersOnSaleCounts(
     counts.set(row.item_id, Number(row.n));
   }
   return counts;
+}
+
+/**
+ * Which of `itemIds` have an offer users see now — `shownOffers`, the one
+ * rule of the showcase, over the offers of these items only (`offer_item_idx`).
+ * The order of the translation queue (TASK-054; ARCHITECTURE 4.97).
+ */
+export async function shownItemIds(
+  executor: DbExecutor,
+  itemIds: readonly string[],
+): Promise<Set<string>> {
+  if (itemIds.length === 0) {
+    return new Set();
+  }
+  const rows = await executor.execute<{ item_id: string }>(sql`
+    SELECT DISTINCT ${offer.itemId} AS item_id FROM ${offer}
+    WHERE ${inArray(offer.itemId, [...itemIds])} AND ${shownOffers()}`);
+  return new Set(rows.rows.map((row) => row.item_id));
 }
 
 interface SupplierCountRow extends Record<string, unknown> {
@@ -88,6 +108,7 @@ export class OfferListRule implements OnModuleInit {
 
   onModuleInit(): void {
     this.rules.registerOffersOnSale(itemHasOffersOnSale, offersOnSaleCounts);
+    this.rules.registerShownItems(shownItemIds);
     this.supplierCounts?.registerOffersOnSale(supplierOffersOnSaleCounts);
   }
 }

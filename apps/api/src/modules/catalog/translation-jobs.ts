@@ -41,4 +41,20 @@ export const translationWakeJob = definePeriodicJob({
   schedule: () => "*/5 * * * *",
 });
 
-export const catalogJobCatalog = [translateJob, translationWakeJob];
+/**
+ * The order of the queue follows the showcase (TASK-054; ARCHITECTURE
+ * 4.97): every minute the items whose translation waits are walked page by
+ * page and their tasks move between «on the showcase» (priority 1) and «the
+ * rest» (2) — an item that gained its first offer rises within a minute.
+ * The showcase is the offers module's rule (`shownOffers`), so the offers
+ * module handles this job; the catalog only defines it.
+ */
+export const translationPriorityJob = definePeriodicJob({
+  name: "catalog.translation-priority",
+  timeoutSeconds: 55,
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: () => "* * * * *",
+});
+
+export const catalogJobCatalog = [translateJob, translationWakeJob, translationPriorityJob];

@@ -12,6 +12,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "identity.erase-deleted-accounts",
   "catalog.translate",
   "catalog.translation-wake",
+  "catalog.translation-priority",
   "catalog.delete-photo-files",
   "catalog.cleanup-photo-files",
   "vehicles.analyze-import",
@@ -96,6 +97,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "catalog.delete-photo-files", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Photos of products on the showcase without one, by the image search (TASK-068): hourly.
   { name: "catalog.search-photos", cron: "41 * * * *", timezone: "Asia/Almaty" },
+  // The order of the translation queue follows the showcase (TASK-054): every minute.
+  { name: "catalog.translation-priority", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Safety net of automatic translation (TASK-012): every five minutes.
   { name: "catalog.translation-wake", cron: "*/5 * * * *", timezone: "Asia/Almaty" },
   // Development and tests only: daily at `billing_notify_hour` (10 by default).

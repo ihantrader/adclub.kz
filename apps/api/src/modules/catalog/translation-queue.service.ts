@@ -1,14 +1,23 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import type { CatalogLanguage, TranslationTargetLanguage } from "@adclub/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { DatabaseService, type DbExecutor } from "../../database";
 import { JobQueue } from "../../jobs";
 import { AppSettings } from "../settings";
 import { SOURCE_LANGUAGE, sourceHash, writeTexts, type StoredTexts } from "./catalog-texts";
+import { CatalogItemListRules } from "./item-list-rules";
 import { translateJob } from "./translation-jobs";
+import {
+  priorityOf,
+  TRANSLATION_PRIORITY,
+  type TranslationPriorityValue,
+} from "./translation-priority";
 import { translationTask, type TranslationEntityType, type TranslationField } from "./schema";
 
 const TARGETS: readonly TranslationTargetLanguage[] = ["kk", "en"];
+
+/** Tasks put back in the queue per transaction by `retryFailed`. */
+const RETRY_PORTION = 500;
 
 /**
  * The write side of automatic translation (TASK-012; ARCHITECTURE 4.19):
@@ -35,7 +44,31 @@ export class TranslationQueue {
     @Inject(JobQueue) private readonly queue: JobQueue,
     @Inject(AppSettings) private readonly settings: AppSettings,
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    // Absent in the worker's jobs module: there no text is written, and an item
+    // put on the queue without it waits at «the rest» until the minute job.
+    @Optional()
+    @Inject(CatalogItemListRules)
+    private readonly listRules: CatalogItemListRules | null = null,
   ) {}
+
+  /**
+   * The place of a new task in the queue (TASK-054; ARCHITECTURE 4.97):
+   * structure first, an item by whether it is on the showcase now — the
+   * offers module's rule, asked about this one item. Without the offers
+   * module (an operator command) an item starts at «the rest» and the
+   * minute job `catalog.translation-priority` moves it.
+   */
+  private async priorityFor(
+    executor: DbExecutor,
+    entityType: TranslationEntityType,
+    entityId: string,
+  ): Promise<TranslationPriorityValue> {
+    if (entityType !== "catalog_item") {
+      return priorityOf(entityType, false);
+    }
+    const shown = await this.listRules?.shownItems(executor, [entityId]);
+    return priorityOf(entityType, shown?.has(entityId) ?? false);
+  }
 
   /** `writeTexts` (catalog-texts.ts) plus the tasks the write asks for. */
   async writeTexts(
@@ -92,6 +125,7 @@ export class TranslationQueue {
     }
     const hash = sourceHash(source);
     const now = new Date();
+    const priority = await this.priorityFor(executor, entityType, entityId);
     await executor
       .insert(translationTask)
       .values(
@@ -102,6 +136,7 @@ export class TranslationQueue {
           lang,
           sourceHash: hash,
           requestedBy,
+          priority,
         })),
       )
       .onConflictDoUpdate({
@@ -118,6 +153,7 @@ export class TranslationQueue {
           attempts: 0,
           lastError: null,
           requestedBy,
+          priority,
           updatedAt: now,
         },
       });
@@ -171,9 +207,12 @@ export class TranslationQueue {
   async queueMissing(): Promise<{ queued: number }> {
     return this.database.db.transaction(async (tx) => {
       const result = await tx.execute<{ id: string }>(sql`
-        INSERT INTO translation_task (entity_type, entity_id, field, lang, source_hash)
+        INSERT INTO translation_task (entity_type, entity_id, field, lang, source_hash, priority)
         SELECT src.entity_type, src.entity_id, src.field, l.lang,
-               encode(sha256(convert_to(src.text, 'UTF8')), 'hex')
+               encode(sha256(convert_to(src.text, 'UTF8')), 'hex'),
+               -- Items start at «the rest»; the minute job raises the ones on the showcase.
+               CASE WHEN src.entity_type = 'catalog_item' THEN ${TRANSLATION_PRIORITY.other}::smallint
+                    ELSE ${TRANSLATION_PRIORITY.structure}::smallint END
         FROM translation src
         CROSS JOIN (VALUES ('kk'), ('en')) AS l(lang)
         WHERE src.origin = 'source' AND src.lang = 'ru'
@@ -190,19 +229,52 @@ export class TranslationQueue {
     });
   }
 
-  /** Puts every task refused for good back in the queue (operator command, after the cause is fixed). */
-  async retryFailed(): Promise<{ requeued: number }> {
-    return this.database.db.transaction(async (tx) => {
-      const result = await tx.execute<{ id: string }>(sql`
-        UPDATE translation_task
-        SET status = 'pending', failure = NULL, attempts = 0, last_error = NULL, updated_at = now()
-        WHERE status = 'failed'
-        RETURNING id`);
-      if (result.rows.length > 0) {
-        await this.wake(tx);
+  /**
+   * Puts the tasks refused for good back in the queue — the operator's
+   * `translations:retry-failed` and the administrator's «Перевести заново
+   * все отказанные» (TASK-054), one path. In portions of `RETRY_PORTION`,
+   * each its own short transaction, so a long list never holds the queue;
+   * `filters` narrow it as the queue's page is narrowed. `requestedBy` — the
+   * administrator who asked: the calls made for these are recorded as theirs.
+   * A task keeps its priority.
+   */
+  async retryFailed(
+    filters: {
+      entityType?: TranslationEntityType;
+      lang?: TranslationTargetLanguage;
+      requestedBy?: string | null;
+    } = {},
+    /** Called in the transaction of each portion that put something back (the journal). */
+    onPortion?: (tx: DbExecutor, requeued: number) => Promise<unknown>,
+  ): Promise<{ requeued: number }> {
+    let requeued = 0;
+    for (;;) {
+      const portion = await this.database.db.transaction(async (tx) => {
+        const result = await tx.execute<{ id: string }>(sql`
+          UPDATE translation_task
+          SET status = 'pending', failure = NULL, attempts = 0, last_error = NULL,
+              requested_by = ${filters.requestedBy ?? null}, updated_at = now()
+          WHERE id IN (
+            SELECT id FROM translation_task
+            WHERE status = 'failed'
+              ${filters.entityType ? sql`AND entity_type = ${filters.entityType}` : sql``}
+              ${filters.lang ? sql`AND lang = ${filters.lang}` : sql``}
+            ORDER BY id
+            LIMIT ${RETRY_PORTION}
+            FOR UPDATE SKIP LOCKED
+          )
+          RETURNING id`);
+        if (result.rows.length > 0) {
+          await onPortion?.(tx, result.rows.length);
+          await this.wake(tx);
+        }
+        return result.rows.length;
+      });
+      requeued += portion;
+      if (portion < RETRY_PORTION) {
+        return { requeued };
       }
-      return { requeued: result.rows.length };
-    });
+    }
   }
 
   /** For the operator: the queue in numbers, and the tasks refused for good. */

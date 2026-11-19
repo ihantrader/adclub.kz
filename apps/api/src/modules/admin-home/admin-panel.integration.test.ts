@@ -340,6 +340,29 @@ describe("admin panel (PostgreSQL + Redis)", () => {
       expect(home.catalog.withoutTranslation).toBe(
         translations.body.counts.missing + translations.body.counts.failed,
       );
+      // «Переводы: отказано» (TASK-054) is the «Всего» of the tab «Отказано»: none yet, then two.
+      const failedTab = async () =>
+        (await asAdmin("get", "/admin/translations?state=failed&limit=1", admin)).body as {
+          total: number;
+        };
+      expect(home.catalog.translationsFailed).toBe((await failedTab()).total);
+      const refused = await db.query<{ id: string }>(
+        `INSERT INTO translation_task (entity_type, entity_id, field, lang, source_hash, status, failure)
+         SELECT src.entity_type, src.entity_id, src.field, 'kk', 'x', 'failed', 'wrong_language'
+         FROM translation src
+         WHERE src.origin = 'source' AND src.lang = 'ru'
+           AND NOT EXISTS (SELECT 1 FROM translation_task k WHERE k.entity_type = src.entity_type
+             AND k.entity_id = src.entity_id AND k.field = src.field AND k.lang = 'kk')
+         ORDER BY src.entity_id LIMIT 2
+         RETURNING id`,
+      );
+      expect(refused.rows).toHaveLength(2);
+      const withFailed = adminHomeSchema.parse((await asAdmin("get", "/admin/home", admin)).body);
+      expect(withFailed.catalog.translationsFailed).toBe((await failedTab()).total);
+      expect(withFailed.catalog.translationsFailed).toBe(home.catalog.translationsFailed + 2);
+      await db.query("DELETE FROM translation_task WHERE id = ANY($1::uuid[])", [
+        refused.rows.map((row) => row.id),
+      ]);
       // No photo was approved in the seed: every active item lacks one.
       const active = await asAdmin("get", "/admin/catalog/items?status=active&limit=1", admin);
       expect(home.catalog.withoutPhoto).toBe(active.body.total);

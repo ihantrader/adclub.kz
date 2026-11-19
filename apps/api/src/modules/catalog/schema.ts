@@ -130,6 +130,12 @@ export const translationTask = pgTable("translation_task", {
   lastError: text("last_error"),
   /** The administrator who asked for this translation; `null` — nobody in particular (TASK-053). */
   requestedBy: uuid("requested_by"),
+  /**
+   * The place in the queue (TASK-054; ARCHITECTURE 4.97): 0 — the structure
+   * everyone sees, 1 — an item with an offer on the showcase, 2 — any other
+   * item. `TranslationPriority` in translation-priority.ts.
+   */
+  priority: smallint("priority").notNull().default(2),
   claimedUntil: timestamp("claimed_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

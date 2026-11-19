@@ -10,3 +10,5 @@ export { describeReceipt, receiptSchedules } from "./offer-receipt";
 export { servicePricings } from "./offer-pricing";
 export { offer, offerModelPrice, offerTables } from "./schema";
 export type { OfferRow } from "./schema";
+export { OfferJobsModule, TranslationPriorityRunner } from "./translation-priority-job";
+export { shownItemIds } from "./offer-list-rule";

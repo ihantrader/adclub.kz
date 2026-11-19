@@ -116,6 +116,12 @@ export const auditActions = {
   /** "Translate again" was asked for a language (or one without a translation). */
   catalogTranslationRequeued: "catalog_translation.requeued",
   /**
+   * «Перевести заново все отказанные» (TASK-054): every refused translation
+   * the queue's filters showed went back in the queue. No entity; `after`:
+   * the filters (`entityType`, `lang`) and `requeued` — how many.
+   */
+  catalogTranslationRetriedFailed: "catalog_translation.retried_failed",
+  /**
    * A photo was uploaded for an item and waits for approval (TASK-013).
    * `after`: source, size and checksum — never the picture itself.
    */

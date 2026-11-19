@@ -11572,6 +11572,60 @@
         }
       }
     },
+    "/admin/translations/retry-failed": {
+      "post": {
+        "operationId": "retryFailedTranslations",
+        "summary": "Translate again every translation refused for good that the queue's filters show (kind of entity, language): back in the queue in portions, journaled once with the number (TASK-054)",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "admin"
+        ],
+        "requestBody": {
+          "description": "The filters of the queue; none — every refused translation",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryFailedTranslationsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many went back in the queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryFailedTranslationsResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/users": {
       "get": {
         "operationId": "listAdminUsers",
@@ -28465,6 +28519,11 @@
                 "type": "integer",
                 "minimum": -9007199254740991,
                 "maximum": 9007199254740991
+              },
+              "translationsFailed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -28472,7 +28531,8 @@
               "incomplete",
               "withoutCompatibility",
               "withoutTranslation",
-              "itemsWithoutTranslation"
+              "itemsWithoutTranslation",
+              "translationsFailed"
             ]
           },
           "at": {
@@ -50554,6 +50614,30 @@
           "reason"
         ]
       },
+      "RetryFailedTranslationsBody": {
+        "type": "object",
+        "properties": {
+          "entityType": {
+            "$ref": "#/components/schemas/TranslationEntityType"
+          },
+          "lang": {
+            "$ref": "#/components/schemas/TranslationTargetLanguage"
+          }
+        }
+      },
+      "RetryFailedTranslationsResponse": {
+        "type": "object",
+        "properties": {
+          "requeued": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "requeued"
+        ]
+      },
       "RevealPhoneBody": {
         "type": "object",
         "properties": {
@@ -57660,6 +57744,37 @@
                 "type": "null"
               }
             ]
+          },
+          "entityName": {
+            "type": "string"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -57672,7 +57787,12 @@
           "currentText",
           "currentOrigin",
           "isSourceChanged",
-          "failure"
+          "failure",
+          "entityName",
+          "parentId",
+          "updatedAt",
+          "attempts",
+          "lastError"
         ]
       },
       "TranslationQueuePage": {

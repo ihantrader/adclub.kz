@@ -432,6 +432,8 @@ import {
   translationQueuePageSchema,
   translationQueueQuerySchema,
   translationTargetPathSchema,
+  retryFailedTranslationsBodySchema,
+  retryFailedTranslationsResponseSchema,
 } from "./translations";
 import {
   addSupplierLeadNoteBodySchema,
@@ -2526,6 +2528,27 @@ const coreApiRoutes = {
     pathParams: translationTargetPathSchema,
     responses: {
       200: { description: "The translations", schema: entityTranslationsResponseSchema },
+    },
+  }),
+  retryFailedTranslations: defineRoute({
+    operationId: "retryFailedTranslations",
+    method: "POST",
+    path: "/admin/translations/retry-failed",
+    summary:
+      "Translate again every translation refused for good that the queue's filters show (kind of entity, language): back in the queue in portions, journaled once with the number (TASK-054)",
+    tag: "admin",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["admin"],
+    requestBody: {
+      description: "The filters of the queue; none — every refused translation",
+      schema: retryFailedTranslationsBodySchema,
+    },
+    responses: {
+      200: {
+        description: "How many went back in the queue",
+        schema: retryFailedTranslationsResponseSchema,
+      },
     },
   }),
   getVehicleMakes: defineRoute({

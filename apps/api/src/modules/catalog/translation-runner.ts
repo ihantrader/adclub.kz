@@ -156,7 +156,14 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
     }
   }
 
-  /** The oldest pending tasks no run holds, now held by this one. */
+  /**
+   * The first pending tasks of the queue no run holds, now held by this
+   * one: by priority — structure, items on the showcase, the rest — and
+   * within it the longest waiting first (TASK-054; ARCHITECTURE 4.97). The
+   * order is the partial index `translation_task_claim_idx`, so the choice
+   * reads the index from its start and stops at `limit` free tasks; it
+   * never looks at offers.
+   */
   private async claim(limit: number): Promise<ClaimedTask[]> {
     const result = await this.database.db.execute<{
       id: string;
@@ -170,7 +177,7 @@ export class TranslationRunner implements JobHandler<Record<string, never>> {
       WHERE id IN (
         SELECT id FROM translation_task
         WHERE status = 'pending' AND (claimed_until IS NULL OR claimed_until < now())
-        ORDER BY updated_at, id
+        ORDER BY priority, updated_at, id
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       )

@@ -1,6 +1,7 @@
 import type { AuditActor, AuditActorRole } from "@adclub/contracts";
 import { monthName } from "@adclub/i18n";
 import { formatMoment } from "../format";
+import { translationsLink } from "../catalog/translation-words";
 import { ORDER_STATUS_TEXT } from "../orders/order-words";
 import { COMPLAINT_REASON_TEXT, HOLD_KIND_TEXT, REJECT_REASON_TEXT } from "../reviews/review-words";
 import { ASSISTANT_REASON_TEXT } from "../assistant/assistant-words";
@@ -95,6 +96,7 @@ const ACTIONS: Record<string, string> = {
   "catalog_translation.edited": "Перевод исправлен вручную",
   "catalog_translation.released": "Снята ручная правка перевода",
   "catalog_translation.requeued": "Перевод поставлен заново",
+  "catalog_translation.retried_failed": "Отказанные переводы поставлены заново",
   "catalog_item_photo.uploaded": "Загружено фото позиции",
   "catalog_item_photo.status_changed": "Изменён статус фото",
   "catalog_item_photo.reordered": "Изменён порядок фото",
@@ -443,6 +445,8 @@ export function entityLink(
     case "catalog_brand":
       return catalogLink(entityType, entityId);
     case "catalog_translation": {
+      // «Перевести заново все отказанные» (TASK-054): the queue's tab, not one text.
+      if (entityId === "failed") return translationsLink({ state: "failed" });
       const of = named(payload, "entityType");
       if (of === "catalog_item" && UUID.test(entityId))
         return catalogItemPath(entityId, "translations");

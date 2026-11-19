@@ -27,7 +27,18 @@ export { DevCatalogSeed, DevCatalogSeedError, devCatalogTree } from "./dev-catal
 export type { DevCatalogSeedResult } from "./dev-catalog-seed";
 export { catalogTables, itemPhoto, photoSearch } from "./schema";
 export { CatalogJobsModule, TranslationRunner, TranslationWake } from "./translation-runner";
-export { catalogJobCatalog, translateJob, translationWakeJob } from "./translation-jobs";
+export {
+  catalogJobCatalog,
+  translateJob,
+  translationPriorityJob,
+  translationWakeJob,
+} from "./translation-jobs";
+export {
+  TRANSLATION_PRIORITY,
+  walkItemPriorities,
+  type PriorityWalk,
+  type ShownItems,
+} from "./translation-priority";
 export { photoFileDeletionJob, photoJobCatalog, photoOrphanCleanupJob } from "./photo-jobs";
 export { TranslationQueue } from "./translation-queue.service";
 export { TranslationAdminService } from "./translation-admin.service";

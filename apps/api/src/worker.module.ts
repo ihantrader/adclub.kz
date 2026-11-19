@@ -31,6 +31,7 @@ import { VehiclesModule } from "./modules/vehicles";
 import { MaintenanceModule } from "./modules/maintenance";
 import { ReminderJobsModule } from "./modules/reminders";
 import { PhotoSearchJobsModule } from "./modules/photo-search";
+import { OfferJobsModule } from "./modules/offers";
 import { DevJobsModule, JobsModule, type JobsTuning } from "./jobs";
 import { backgroundJobCatalog, hasDevJobs } from "./background-jobs";
 
@@ -81,6 +82,7 @@ export class WorkerModule {
         }),
         IdentityJobsModule,
         CatalogJobsModule,
+        OfferJobsModule,
         VehicleJobsModule,
         MessagingJobsModule,
         NotificationJobsModule,

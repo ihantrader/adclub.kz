@@ -13,6 +13,7 @@ const TABS = [
   { key: "requests", label: "Запросы на позиции", href: routePaths.catalogRequests },
   { key: "maintenance", label: "Регламенты ТО", href: routePaths.catalogMaintenance },
   { key: "matchAudit", label: "Аудит сопоставлений", href: routePaths.catalogMatchAudit },
+  { key: "translations", label: "Переводы", href: routePaths.catalogTranslations },
 ] as const;
 
 export type CatalogTab = (typeof TABS)[number]["key"];

@@ -487,6 +487,8 @@ export {
   translationQueuePageSchema,
   translationQueueQuerySchema,
   translationQueueStateSchema,
+  retryFailedTranslationsBodySchema,
+  retryFailedTranslationsResponseSchema,
   translationTargetLanguageSchema,
   translationTargetPathSchema,
   translationTaskSchema,
@@ -494,6 +496,8 @@ export {
 } from "./translations";
 export type {
   EditTranslationBody,
+  RetryFailedTranslationsBody,
+  RetryFailedTranslationsResponse,
   EntityTranslationsResponse,
   TranslationEntityPath,
   TranslationEntityType,

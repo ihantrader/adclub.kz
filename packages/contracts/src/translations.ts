@@ -200,9 +200,53 @@ export const translationQueueItemSchema = z.object({
   currentOrigin: translationOriginSchema.nullable(),
   isSourceChanged: z.boolean(),
   failure: translationFailureSchema.nullable(),
+  /**
+   * The Russian name of the object the text belongs to — for a unit, the
+   * name of its attribute (TASK-054).
+   */
+  entityName: z.string(),
+  /**
+   * The object a maintenance plan element belongs to — its plan; `null`
+   * for the others (they are found by their own id). TASK-054.
+   */
+  parentId: z.uuid().nullable(),
+  /**
+   * When: a waiting or refused translation — when it was asked for or
+   * refused; an outdated one — when its text was written; a missing one —
+   * when the Russian text was. TASK-054.
+   */
+  updatedAt: z.iso.datetime(),
+  /** Runs of a waiting translation that failed for a temporary reason. TASK-054. */
+  attempts: z.number().int(),
+  /**
+   * The temporary reason of the last failed run of a waiting translation —
+   * `unavailable`, `model_unavailable`, `no_private_provider`, `rejected`
+   * (the provider refused the request), `invalid_output`, `not_configured`,
+   * `incomplete_answer`; new values may be added. `null` — none. TASK-054.
+   */
+  lastError: z.string().nullable(),
 });
 
 export type TranslationQueueItem = z.infer<typeof translationQueueItemSchema>;
+
+/**
+ * «Перевести заново все отказанные» (TASK-054): every translation refused
+ * for good that the list's filters show, back in the queue — in portions,
+ * the path of the operator's `translations:retry-failed`.
+ */
+export const retryFailedTranslationsBodySchema = z.object({
+  entityType: translationEntityTypeSchema.optional(),
+  lang: translationTargetLanguageSchema.optional(),
+});
+
+export type RetryFailedTranslationsBody = z.infer<typeof retryFailedTranslationsBodySchema>;
+
+export const retryFailedTranslationsResponseSchema = z.object({
+  /** How many translations went back in the queue. */
+  requeued: z.number().int(),
+});
+
+export type RetryFailedTranslationsResponse = z.infer<typeof retryFailedTranslationsResponseSchema>;
 
 export const translationQueuePageSchema = z.object({
   items: z.array(translationQueueItemSchema),

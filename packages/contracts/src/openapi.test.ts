@@ -154,6 +154,7 @@ describe("buildOpenApiDocument", () => {
       "/admin/suppliers/{supplierId}/views",
       "/admin/totp/backup-codes",
       "/admin/translations",
+      "/admin/translations/retry-failed",
       "/admin/translations/{entityType}/{entityId}",
       "/admin/translations/{entityType}/{entityId}/{field}/{lang}",
       "/admin/translations/{entityType}/{entityId}/{field}/{lang}/release",
@@ -604,6 +605,7 @@ describe("translations of the catalog (TASK-012)", () => {
   it("documents the admin routes, their contexts, and the new error codes", () => {
     for (const path of [
       "/admin/translations",
+      "/admin/translations/retry-failed",
       "/admin/translations/{entityType}/{entityId}",
       "/admin/translations/{entityType}/{entityId}/{field}/{lang}",
     ]) {

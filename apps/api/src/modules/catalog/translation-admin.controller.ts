@@ -2,6 +2,9 @@ import { Body, Controller, Inject, Param, Query } from "@nestjs/common";
 import {
   apiRoutes,
   editTranslationBodySchema,
+  retryFailedTranslationsBodySchema,
+  type RetryFailedTranslationsBody,
+  type RetryFailedTranslationsResponse,
   translationEntityPathSchema,
   translationQueueQuerySchema,
   translationTargetPathSchema,
@@ -30,6 +33,15 @@ export class TranslationAdminController {
     @Query(new ZodValidationPipe(translationQueueQuerySchema)) query: TranslationQueueQuery,
   ): Promise<TranslationQueuePage> {
     return this.translations.queueList(query);
+  }
+
+  @SessionRoute(apiRoutes.retryFailedTranslations)
+  retryFailed(
+    @Body(new ZodValidationPipe(retryFailedTranslationsBodySchema))
+    body: RetryFailedTranslationsBody,
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise<RetryFailedTranslationsResponse> {
+    return this.translations.retryFailed(body, adminActor(session));
   }
 
   @SessionRoute(apiRoutes.getEntityTranslations)

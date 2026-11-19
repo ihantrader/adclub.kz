@@ -21,7 +21,8 @@ import {
  */
 
 interface UploadMatcher {
-  route: Pick<ApiRouteDefinition, "method" | "upload" | "rateLimit">;
+  route: Pick<ApiRouteDefinition, "method" | "upload" | "rateLimit"> &
+    Partial<Pick<ApiRouteDefinition, "auth">>;
   pattern: RegExp;
 }
 
@@ -55,7 +56,10 @@ const matchers: readonly UploadMatcher[] = [
 export function uploadRouteFor(
   method: string,
   path: string,
-): Pick<ApiRouteDefinition, "method" | "upload" | "rateLimit"> | null {
+):
+  | (Pick<ApiRouteDefinition, "method" | "upload" | "rateLimit"> &
+      Partial<Pick<ApiRouteDefinition, "auth">>)
+  | null {
   const upper = method.toUpperCase();
   return (
     matchers.find((matcher) => matcher.route.method === upper && matcher.pattern.test(path))

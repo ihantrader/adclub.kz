@@ -108,15 +108,23 @@ export const NOT_BILLED: readonly AiFailureKind[] = [
  */
 export class AiGatewayError extends Error {
   readonly usage: AiUsage | undefined;
+  /**
+   * The call ran out of its time (TASK-064.A): an `unavailable` that is a
+   * property of the input — a page of small print the model can't finish —
+   * rather than of the provider. Set by `AiService` when any model of the
+   * call was cut by the time limit.
+   */
+  readonly timedOut: boolean;
 
   constructor(
     readonly kind: AiFailureKind,
     message: string,
-    options?: ErrorOptions & { usage?: AiUsage },
+    options?: ErrorOptions & { usage?: AiUsage; timedOut?: boolean },
   ) {
     super(message, options);
     this.name = "AiGatewayError";
     this.usage = options?.usage;
+    this.timedOut = options?.timedOut ?? false;
   }
 }
 

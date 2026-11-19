@@ -404,17 +404,18 @@ export class SessionService {
   }
 
   /**
-   * The access check of every protected request: a valid signature is not
-   * enough, the session row must exist, belong to the token's account and
-   * be neither ended nor expired. If the database can't answer, the
-   * request is refused as temporarily unavailable — never let through, and
-   * never answered as "signed out".
+   * The account a request's access token names, by its signature alone —
+   * no database (TASK-064.A; ARCHITECTURE 4.93): what a limit counted before
+   * the body is read goes by (`UploadRateLimitMiddleware`). A request
+   * without a valid token is refused here as `authenticate` would refuse it,
+   * so its body is never read. Whether the session still lives is the
+   * guard's to say afterwards.
    */
-  async authenticate(
-    authorization: string | string[] | undefined,
-    ip: string | null,
-    routeContexts: readonly AccessContext[],
-  ): Promise<AuthenticatedSession> {
+  signedAccountOf(authorization: string | string[] | undefined): string {
+    return this.signedClaims(authorization, new Date()).sub;
+  }
+
+  private signedClaims(authorization: string | string[] | undefined, now: Date) {
     if (authorization === undefined) {
       throw authRequiredException();
     }
@@ -424,7 +425,6 @@ export class SessionService {
       this.logger.warn("Access refused reason=malformed_authorization");
       throw authRequiredException();
     }
-    const now = new Date();
     const check = verifyAccessToken(
       this.config.session.tokenSecret,
       this.issuer,
@@ -438,8 +438,23 @@ export class SessionService {
     if (check.kind === "expired") {
       throw accessTokenExpiredException();
     }
+    return check.claims;
+  }
 
-    const { sid, sub, knd } = check.claims;
+  /**
+   * The access check of every protected request: a valid signature is not
+   * enough, the session row must exist, belong to the token's account and
+   * be neither ended nor expired. If the database can't answer, the
+   * request is refused as temporarily unavailable — never let through, and
+   * never answered as "signed out".
+   */
+  async authenticate(
+    authorization: string | string[] | undefined,
+    ip: string | null,
+    routeContexts: readonly AccessContext[],
+  ): Promise<AuthenticatedSession> {
+    const now = new Date();
+    const { sid, sub, knd } = this.signedClaims(authorization, now);
     const row = await this.withDatabase(() => this.store.findForAccess(sid));
     if (!row || row.accountId !== sub || row.kind !== knd) {
       this.logger.warn(

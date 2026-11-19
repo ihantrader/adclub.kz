@@ -397,6 +397,7 @@ export {
   photoPrice,
   photoText,
   pricePhotoPage,
+  pricePhotoRowKeys,
   pricePhotoRow,
   pricePhotoRowUncertain,
 } from "./price-import/price-photo";

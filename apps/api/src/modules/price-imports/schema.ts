@@ -32,6 +32,7 @@ import type {
   PricePhotoRow,
   PricePhotoUncertainty,
   PriceRowError,
+  PriceRowKey,
   PriceRowKeyKind,
 } from "@adclub/domain";
 
@@ -178,6 +179,11 @@ export const priceImportPhotoPage = pgTable(
     rowCount: integer("row_count"),
     droppedRows: integer("dropped_rows"),
     retakes: integer("retakes").notNull().default(0),
+    // TASK-064.A: attempts that ran out of time, the first reading kept for
+    // the second, the keys of the rows of every reading.
+    readAttempts: integer("read_attempts").notNull().default(0),
+    firstReading: jsonb("first_reading").$type<{ rows: PricePhotoRow[]; dropped: number }>(),
+    seenKeys: jsonb("seen_keys").$type<PriceRowKey[]>(),
     aiJobId: uuid("ai_job_id"),
     recognizedAt: timestamp("recognized_at", { withTimezone: true }),
     fileDeletedAt: timestamp("file_deleted_at", { withTimezone: true }),
@@ -198,6 +204,24 @@ export const priceImportPhotoRetake = pgTable("price_import_photo_retake", {
 });
 
 export type PriceImportPhotoPageRecord = typeof priceImportPhotoPage.$inferSelect;
+
+/** What the screens show of a page (`photoPagesOf`): never its rows or readings (TASK-064.A). */
+export type PhotoPageSummary = Pick<
+  PriceImportPhotoPageRecord,
+  "importId" | "pageNo" | "status" | "rowCount" | "byteSize" | "retakes"
+>;
+
+/**
+ * A file stored for an upload before the upload is written (TASK-064.A): the
+ * record goes in the transaction that makes the file an import's (or a
+ * page's); one left past `price_import_orphan_retention_hours` names a file
+ * nobody points at. A key ending in «/» is the prefix of a photographed import.
+ */
+export const priceFilePending = pgTable("price_file_pending", {
+  fileKey: text("file_key").primaryKey(),
+  supplierId: uuid("supplier_id").notNull(),
+  createdAt: createdAt(),
+});
 
 export const priceImportRow = pgTable(
   "price_import_row",
@@ -342,6 +366,7 @@ export const priceImportTables = [
   priceImportRefusal,
   priceImportPhotoPage,
   priceImportPhotoRetake,
+  priceFilePending,
   supplierSkuMapping,
   catalogRequest,
 ];

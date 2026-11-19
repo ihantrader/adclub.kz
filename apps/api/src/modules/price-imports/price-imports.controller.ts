@@ -24,6 +24,7 @@ import {
 } from "@adclub/contracts";
 import { ZodValidationPipe } from "../../common/validation";
 import { CurrentSession, SessionRoute, type AuthenticatedSession } from "../identity";
+import { RateLimitedRoute } from "../../rate-limit";
 import { PriceImportsService, type PriceImportActor } from "./price-imports.service";
 import { PricePhotosService } from "./price-photos.service";
 
@@ -62,7 +63,7 @@ export class PriceImportsController {
   }
 
   /** Photographed pages (TASK-064): the body is a form of pages, read as bytes by `UploadBodyMiddleware`. */
-  @SessionRoute(apiRoutes.uploadPricePhotos)
+  @RateLimitedRoute(apiRoutes.uploadPricePhotos)
   async uploadPhotos(
     @Req() request: Request,
     @CurrentSession() session: AuthenticatedSession,
@@ -77,7 +78,7 @@ export class PriceImportsController {
     };
   }
 
-  @SessionRoute(apiRoutes.retakePricePhoto)
+  @RateLimitedRoute(apiRoutes.retakePricePhoto)
   async retakePhoto(
     @Param(new ZodValidationPipe(pricePhotoPagePathSchema)) params: PricePhotoPagePath,
     @Req() request: Request,

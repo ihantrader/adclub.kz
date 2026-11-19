@@ -1,3 +1,4 @@
+import { PriceOrphanCleanup } from "./price-orphan-cleanup";
 import { Inject, Module, type DynamicModule, type OnModuleInit } from "@nestjs/common";
 import { JobRegistry } from "../../jobs";
 import { CatalogRequestsService } from "./catalog-requests.service";
@@ -5,6 +6,7 @@ import { PriceImportApplier } from "./price-apply-runner";
 import { PriceFileStorage } from "./price-file-storage";
 import {
   applyPriceImportJob,
+  cleanupOrphanPriceFilesJob,
   deletePriceFilesJob,
   expirePriceImportsJob,
   expirePriceReviewsJob,
@@ -94,6 +96,7 @@ export class PriceImportsModule {
     PriceReviewExpiry,
     PriceImportApplier,
     PricePhotoReader,
+    PriceOrphanCleanup,
   ],
 })
 export class PriceImportJobsModule implements OnModuleInit {
@@ -109,6 +112,7 @@ export class PriceImportJobsModule implements OnModuleInit {
     @Inject(PriceReviewExpiry) private readonly reviews: PriceReviewExpiry,
     @Inject(PriceImportApplier) private readonly applier: PriceImportApplier,
     @Inject(PricePhotoReader) private readonly photos: PricePhotoReader,
+    @Inject(PriceOrphanCleanup) private readonly orphans: PriceOrphanCleanup,
   ) {}
 
   onModuleInit(): void {
@@ -116,6 +120,7 @@ export class PriceImportJobsModule implements OnModuleInit {
     this.registry.handle(readPriceValuesJob, this.values);
     this.registry.handlePeriodic(expirePriceImportsJob, this.expiry);
     this.registry.sweep(deletePriceFilesJob, this.files);
+    this.registry.handlePeriodic(cleanupOrphanPriceFilesJob, this.orphans);
     this.registry.handle(matchPricesJob, this.match);
     this.registry.handle(matchPricesAiJob, this.matchAi);
     this.registry.handlePeriodic(wakePriceMatchingJob, this.wake);

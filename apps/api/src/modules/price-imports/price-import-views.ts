@@ -9,7 +9,7 @@ import type {
 } from "@adclub/contracts";
 import type { PriceCell, PriceRowError } from "@adclub/domain";
 import type {
-  PriceImportPhotoPageRecord,
+  PhotoPageSummary,
   PriceImportRecord,
   PriceImportRowRecord,
   PriceMatchError,
@@ -64,7 +64,7 @@ function describeMatch(record: PriceImportRecord): PriceImportMatch | null {
  */
 export function describePhoto(
   record: PriceImportRecord,
-  pages: readonly PriceImportPhotoPageRecord[] | null,
+  pages: readonly PhotoPageSummary[] | null,
 ): PriceImportPhoto | null {
   if (record.fileKind !== "photo") return null;
   const sorted = [...(pages ?? [])].sort((a, b) => a.pageNo - b.pageNo);
@@ -85,7 +85,7 @@ export function describeImport(
   record: PriceImportRecord,
   uploaderName: string | null,
   appliedByName: string | null = null,
-  pages: readonly PriceImportPhotoPageRecord[] | null = null,
+  pages: readonly PhotoPageSummary[] | null = null,
 ): PriceImport {
   const stats = record.stats;
   const photo = describePhoto(record, pages);

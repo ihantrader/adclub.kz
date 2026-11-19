@@ -19,19 +19,35 @@ export function rateLimitSettingKeys(limit: RateLimitName): [SettingKey, Setting
 }
 
 /**
- * Whether a route's limit is counted before its body is read
- * (`UploadRateLimitMiddleware`, TASK-059.A) rather than by the guard: a route
- * that takes a file — its body is read by a middleware, before any guard —
- * with a limit by address only. A limit that counts a session by its account
- * needs the session, which only the guards know; such a route keeps the guard.
+ * How a route's limit is counted before its body is read
+ * (`UploadRateLimitMiddleware`) rather than by the guard; `null` — by the
+ * guard. Only a route that takes a file: its body is read by a middleware,
+ * before any guard.
+ *
+ * - `address` (TASK-059.A) — a limit by address only;
+ * - `account` (TASK-064.A) — a session route counted `perAccount`: the
+ *   account is taken from the signature of the access token, without the
+ *   database, so a body of up to tens of megabytes is never read for a
+ *   request over its limit or without a valid token. A limit `perMember`
+ *   needs the membership, which only the guard knows; it keeps the guard.
  */
-export function countedBeforeBody(
-  route: Pick<ApiRouteDefinition, "upload" | "rateLimit">,
-): route is Pick<ApiRouteDefinition, "upload"> & {
-  rateLimit: NonNullable<ApiRouteDefinition["rateLimit"]> & { limit: RateLimitName };
-} {
+export function beforeBodyCount(
+  route: Pick<ApiRouteDefinition, "upload" | "rateLimit"> &
+    Partial<Pick<ApiRouteDefinition, "auth">>,
+): { by: "address" | "account"; limit: RateLimitName } | null {
   const spec = route.rateLimit;
-  return Boolean(route.upload && spec?.limit && !spec.perAccount && !spec.perMember);
+  if (!route.upload || !spec || spec.perMember) return null;
+  if (spec.limit && !spec.perAccount) return { by: "address", limit: spec.limit };
+  if (spec.perAccount && route.auth === "session") return { by: "account", limit: spec.perAccount };
+  return null;
+}
+
+/** Whether `UploadRateLimitMiddleware` counted the route's limit and the guard leaves it alone. */
+export function countedBeforeBody(
+  route: Pick<ApiRouteDefinition, "upload" | "rateLimit"> &
+    Partial<Pick<ApiRouteDefinition, "auth">>,
+): boolean {
+  return beforeBodyCount(route) !== null;
 }
 
 /**

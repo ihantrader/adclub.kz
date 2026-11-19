@@ -246,6 +246,7 @@ export class AiService {
     let failure: AiGatewayError | undefined;
     let result: AiResult | undefined;
     let tried = 0;
+    let timedOut = false;
     for (const [index, model] of models.entries()) {
       const isFallback = index > 0;
       const left =
@@ -255,6 +256,7 @@ export class AiService {
         failure ??= new AiGatewayError(
           "unavailable",
           `The AI call took longer than ${String(meta.deadlineMs)} ms in all`,
+          { timedOut: true },
         );
         break;
       }
@@ -281,6 +283,7 @@ export class AiService {
         };
       }
       failure = attempt.error;
+      timedOut ||= failure.timedOut;
       const more =
         index < models.length - 1 &&
         (operation.fallbackOn ?? FALLBACK_WORTHY).includes(failure.kind);
@@ -291,7 +294,16 @@ export class AiService {
         break;
       }
     }
-    const error = failure ?? new AiGatewayError("unavailable", "The AI call was not made");
+    let error = failure ?? new AiGatewayError("unavailable", "The AI call was not made");
+    if (timedOut && !error.timedOut) {
+      // A model ran out of time and its fallback failed otherwise: the input
+      // may well be what no model finishes, so the call says it timed out.
+      error = new AiGatewayError(error.kind, error.message, {
+        cause: error,
+        usage: error.usage,
+        timedOut: true,
+      });
+    }
     const text = this.safeText(error);
     await this.finish(jobId, startedAt, reservationUsd, {
       status: "failed",
@@ -398,7 +410,9 @@ export class AiService {
     const timeoutMs = Math.min(own, limitMs);
     const timer = setTimeout(() => {
       controller.abort(
-        new AiGatewayError("unavailable", `The AI call took longer than ${timeoutMs} ms`),
+        new AiGatewayError("unavailable", `The AI call took longer than ${timeoutMs} ms`, {
+          timedOut: true,
+        }),
       );
     }, timeoutMs);
     try {
@@ -554,11 +568,12 @@ export class AiService {
   }
 
   private asGatewayError(error: unknown, signal?: AbortSignal): AiGatewayError {
+    // Cut by the time limit: whatever the gateway made of the abort, it timed out (TASK-064.A).
+    if (signal?.aborted && signal.reason instanceof AiGatewayError) {
+      return error instanceof AiGatewayError && !signal.reason.timedOut ? error : signal.reason;
+    }
     if (error instanceof AiGatewayError) {
       return error;
-    }
-    if (signal?.aborted && signal.reason instanceof AiGatewayError) {
-      return signal.reason;
     }
     return new AiGatewayError("unavailable", `The AI call failed: ${describeError(error)}`, {
       cause: error,

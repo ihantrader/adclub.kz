@@ -78,6 +78,20 @@ export const expirePriceImportsJob = definePeriodicJob({
 export const deletePriceFilesJob = defineSweeperJob({ name: "prices.delete-files" });
 
 /**
+ * Hourly (TASK-064.A): files stored for an upload that was never written —
+ * a request cut off, a process that stopped between storing the file and
+ * writing the import — removed after `price_import_orphan_retention_hours`.
+ * Found by their record (`price_file_pending`), not by listing the storage.
+ */
+export const cleanupOrphanPriceFilesJob = definePeriodicJob({
+  name: "prices.cleanup-orphan-files",
+  timeoutSeconds: 300,
+  retry: { limit: 2, delaySeconds: 300, backoff: true },
+  singleton: true,
+  schedule: () => "23 * * * *",
+});
+
+/**
  * Matches the rows with the catalog without AI (TASK-047; ARCHITECTURE 12.1
  * step 4): the remembered matches, the exact article, the search by name;
  * then hands the rest to `prices.match-ai`, or ends the matching. Resumes
@@ -144,6 +158,7 @@ export const priceImportJobCatalog = [
   readPriceValuesJob,
   expirePriceImportsJob,
   deletePriceFilesJob,
+  cleanupOrphanPriceFilesJob,
   matchPricesJob,
   matchPricesAiJob,
   wakePriceMatchingJob,

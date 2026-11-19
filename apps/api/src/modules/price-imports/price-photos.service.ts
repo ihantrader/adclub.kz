@@ -8,10 +8,12 @@ import { JobQueue } from "../../jobs";
 import { AppSettings } from "../settings";
 import { DocumentImageRejected, prepareDocumentImage } from "../vehicle-document";
 import { PriceFileStorage, priceFileKey } from "./price-file-storage";
-import { importState, notFound, photoInvalid } from "./price-import-errors";
+import { photoFormPages } from "./photo-form";
+import { filesDeleted, importState, notFound, photoInvalid } from "./price-import-errors";
 import { readPricePhotosJob } from "./price-import-jobs";
 import { PriceImportsService, type PriceImportActor } from "./price-imports.service";
 import {
+  priceFilePending,
   priceImport,
   priceImportPhotoPage,
   priceImportPhotoRetake,
@@ -29,26 +31,6 @@ interface PreparedPage {
   width: number;
   height: number;
   checksum: string;
-}
-
-/**
- * The parts named `page` of a `multipart/form-data` body, in their order.
- * Read by the platform's own parser (`Response.formData`): no dependency,
- * and the body is already bounded by the contract's `maxBytes`.
- */
-async function formPages(contentType: string, body: Buffer): Promise<Buffer[]> {
-  let form: FormData;
-  try {
-    // The request's own bytes, not a copy (a form is up to 60 MB).
-    form = await new Response(body as unknown as Uint8Array<ArrayBuffer>, {
-      headers: { "content-type": contentType },
-    }).formData();
-  } catch {
-    throw photoInvalid(null, "malformed");
-  }
-  const parts = form.getAll("page");
-  if (parts.some((part) => typeof part === "string")) throw photoInvalid(null, "malformed");
-  return Promise.all(parts.map(async (part) => Buffer.from(await (part as Blob).arrayBuffer())));
 }
 
 /**
@@ -111,11 +93,12 @@ export class PricePhotosService {
     await this.imports.assertWithinLimit(this.database.db, actor.supplierId, limit);
     const prepared: PreparedPage[] = [];
     try {
-      const pages = await formPages(contentType, body);
+      // Bounded by the limits while it is walked: no part past them is taken (TASK-064.A).
+      const pages = photoFormPages(contentType, body, {
+        maxPages: values.price_photo_max_pages,
+        maxPageMb: values.price_photo_max_size_mb,
+      });
       if (pages.length === 0) throw photoInvalid(null, "no_pages");
-      if (pages.length > values.price_photo_max_pages) {
-        throw photoInvalid(null, "too_many_pages", values.price_photo_max_pages);
-      }
       for (const [index, bytes] of pages.entries()) {
         prepared.push(await this.prepare(bytes, index + 1, values.price_photo_max_size_mb));
       }
@@ -132,6 +115,11 @@ export class PricePhotosService {
     const stored: string[] = [];
     let created: PriceImportRecord;
     try {
+      // Recorded before anything is stored: an upload that never comes leaves
+      // a record the cleanup of orphans finds (`prices.cleanup-orphan-files`).
+      await this.database.db
+        .insert(priceFilePending)
+        .values({ fileKey: prefix, supplierId: actor.supplierId });
       // The pages first: a row never points at a picture that isn't there.
       for (const [index, page] of prepared.entries()) {
         await this.storage.put(keys[index]!, page.bytes);
@@ -178,11 +166,17 @@ export class PricePhotosService {
           })),
         );
         await this.queue.enqueue(readPricePhotosJob, { importId }, { tx, singletonKey: importId });
+        // The pages are the import's now.
+        await tx.delete(priceFilePending).where(eq(priceFilePending.fileKey, prefix));
         return row!;
       });
     } catch (error) {
       // Nothing points at the pages: they go, so the storage keeps no stranger.
       await Promise.all(stored.map((key) => this.storage.remove(key).catch(() => undefined)));
+      await this.database.db
+        .delete(priceFilePending)
+        .where(eq(priceFilePending.fileKey, prefix))
+        .catch(() => undefined);
       throw error;
     }
     this.logger.log(
@@ -206,6 +200,7 @@ export class PricePhotosService {
         "Pages can be taken again or left out only while the upload waits for it",
       );
     }
+    if (record.fileDeletedAt !== null) throw filesDeleted();
     const [page] = await tx
       .select()
       .from(priceImportPhotoPage)
@@ -230,6 +225,8 @@ export class PricePhotosService {
     // The import first: a stranger's id answers 404 before anything is counted.
     const current = await this.imports.own(this.database.db, actor.supplierId, importId);
     if (current.fileKind !== "photo") throw notFound();
+    // Checked again under the lock below; here, so nothing is stored for nothing.
+    if (current.fileDeletedAt !== null) throw filesDeleted();
     let prepared: PreparedPage;
     try {
       prepared = await this.prepare(bytes, pageNo, values.price_photo_max_size_mb);
@@ -249,6 +246,10 @@ export class PricePhotosService {
       pageNo,
       `${String(existing.retakes + 1)}-${randomUUID()}`,
     );
+    // Recorded first: a retake cut off before its transaction leaves no stranger (TASK-064.A).
+    await this.database.db
+      .insert(priceFilePending)
+      .values({ fileKey: key, supplierId: actor.supplierId });
     await this.storage.put(key, prepared.bytes);
     let previousKey: string;
     let updated: PriceImportRecord;
@@ -281,6 +282,10 @@ export class PricePhotosService {
             aiJobId: null,
             recognizedAt: null,
             retakes: page.retakes + 1,
+            // A new picture starts over: its attempts, readings and keys (TASK-064.A).
+            readAttempts: 0,
+            firstReading: null,
+            seenKeys: null,
             updatedAt: new Date(),
           })
           .where(
@@ -290,10 +295,15 @@ export class PricePhotosService {
             ),
           );
         const row = await this.resume(tx, importId);
+        await tx.delete(priceFilePending).where(eq(priceFilePending.fileKey, key));
         return { previousKey: page.fileKey, updated: row };
       }));
     } catch (error) {
       await this.storage.remove(key).catch(() => undefined);
+      await this.database.db
+        .delete(priceFilePending)
+        .where(eq(priceFilePending.fileKey, key))
+        .catch(() => undefined);
       throw error;
     }
     await this.storage.remove(previousKey).catch(() => undefined);

@@ -33,11 +33,12 @@ import {
 import {
   headerHash,
   priceImport,
+  priceFilePending,
   priceImportFormatTable,
   priceImportPhotoPage,
   priceImportRefusal,
   priceImportRow,
-  type PriceImportPhotoPageRecord,
+  type PhotoPageSummary,
   type PriceImportRecord,
   type StoredColumn,
 } from "./schema";
@@ -118,15 +119,26 @@ export function decodeCursor(cursor: string): { createdAt: string; id: string } 
   throw badCursor();
 }
 
-/** The photographed pages of imports, by import (TASK-064). */
+/**
+ * The photographed pages of imports, by import (TASK-064): what the screen
+ * shows of them — never their rows, the readings or the keys (TASK-064.A:
+ * this is read at every poll of the screen, every second and a half).
+ */
 export async function photoPagesOf(
   executor: DbExecutor,
   importIds: readonly string[],
-): Promise<Map<string, PriceImportPhotoPageRecord[]>> {
-  const pages = new Map<string, PriceImportPhotoPageRecord[]>();
+): Promise<Map<string, PhotoPageSummary[]>> {
+  const pages = new Map<string, PhotoPageSummary[]>();
   if (importIds.length === 0) return pages;
   const rows = await executor
-    .select()
+    .select({
+      importId: priceImportPhotoPage.importId,
+      pageNo: priceImportPhotoPage.pageNo,
+      status: priceImportPhotoPage.status,
+      rowCount: priceImportPhotoPage.rowCount,
+      byteSize: priceImportPhotoPage.byteSize,
+      retakes: priceImportPhotoPage.retakes,
+    })
     .from(priceImportPhotoPage)
     .where(inArray(priceImportPhotoPage.importId, [...importIds]))
     .orderBy(asc(priceImportPhotoPage.pageNo));
@@ -207,10 +219,15 @@ export class PriceImportsService {
     const checksum = createHash("sha256").update(bytes).digest("hex");
     const importId = randomUUID();
     const fileKey = priceFileKey(actor.supplierId, importId);
-    // The file first: a row never points at a file that isn't there.
-    await this.storage.put(fileKey, bytes);
+    // Recorded before it is stored (TASK-064.A): a file whose import never
+    // comes is found and removed by `prices.cleanup-orphan-files`.
+    await this.database.db
+      .insert(priceFilePending)
+      .values({ fileKey, supplierId: actor.supplierId });
     let created: PriceImportRecord;
     try {
+      // The file first: a row never points at a file that isn't there.
+      await this.storage.put(fileKey, bytes);
       created = await this.database.db.transaction(async (tx) => {
         // One company's uploads one at a time: the limit is counted exactly.
         await tx.execute(
@@ -248,11 +265,16 @@ export class PriceImportsService {
           })
           .returning();
         await this.queue.enqueue(parsePriceFileJob, { importId }, { tx });
+        await tx.delete(priceFilePending).where(eq(priceFilePending.fileKey, fileKey));
         return row!;
       });
     } catch (error) {
       // Nothing points at the file: it goes, so the storage keeps no stranger.
       await this.storage.remove(fileKey).catch(() => undefined);
+      await this.database.db
+        .delete(priceFilePending)
+        .where(eq(priceFilePending.fileKey, fileKey))
+        .catch(() => undefined);
       throw error;
     }
     this.logger.log(

@@ -218,6 +218,13 @@ export const rateLimitNameSchema = z.enum([
    * is read — as `speech_requests_per_ip`; the trial attempts are not touched.
    */
   "photo_requests_per_ip",
+  /**
+   * Every request to upload or take again a photographed price page of one
+   * person (TASK-064.A), refused ones included, counted before the body is
+   * read: the body is up to 60 MB. The hourly limit of a company's uploads
+   * is counted apart, in the database.
+   */
+  "price_photo_requests_per_account",
   /** A car named by voice placed in the catalog (TASK-060): no AI, a limit by address against a loop. */
   "vehicle_match_per_ip",
   /**

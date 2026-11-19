@@ -1,7 +1,7 @@
 import { normalizeArticle } from "../article/normalize-article";
 import type { PriceColumnRole } from "./column-headers";
-import { priceNameKey } from "./price-match";
-import { readAvailability, type PriceCell } from "./price-values";
+import { priceNameKey, priceRowKey, type PriceRowKey } from "./price-match";
+import { readArticle, readAvailability, readName, type PriceCell } from "./price-values";
 
 /**
  * A price list photographed (TASK-064; ARCHITECTURE 12.1 step 2, 4.93): a
@@ -223,6 +223,29 @@ export function agreePricePhotoPages(
   });
   if (agreed / first.rows.length < PRICE_PHOTO_AGREEMENT_MIN) return { kind: "unreadable" };
   return { kind: "rows", rows, dropped: first.dropped };
+}
+
+/**
+ * The keys of the rows a reading of a page gave (TASK-064.A): by their
+ * article, without one — their name, exactly as `priceRowKey` knows the row
+ * once it is read (`readPriceRow`). Taken from every reading, the agreed
+ * rows and the ones only one reading saw: an item printed on the photo is
+ * not «missing» from it because a reading left its row out — though such a
+ * row never becomes a row of the review.
+ */
+export function pricePhotoRowKeys(...pages: readonly PricePhotoPage[]): PriceRowKey[] {
+  const keys = new Map<string, PriceRowKey>();
+  for (const page of pages) {
+    if (page.kind !== "rows") continue;
+    for (const row of page.rows) {
+      const key = priceRowKey({
+        articleNorm: readArticle(row.cells[0] ?? null)?.articleNorm ?? null,
+        name: readName(row.cells[2] ?? null),
+      });
+      if (key) keys.set(`${key.kind}:${key.key}`, key);
+    }
+  }
+  return [...keys.values()];
 }
 
 /** A row read with doubt: never applied without the supplier's «Прочитано верно». */

@@ -21490,6 +21490,10 @@
         "x-access-contexts": [
           "supplier"
         ],
+        "x-rate-limit": {
+          "perAccount": "price_photo_requests_per_account",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "The photo of the page itself (JPEG, PNG or WebP)",
           "required": true,
@@ -22104,6 +22108,10 @@
         "x-access-contexts": [
           "supplier"
         ],
+        "x-rate-limit": {
+          "perAccount": "price_photo_requests_per_account",
+          "whenUnavailable": "allow"
+        },
         "requestBody": {
           "description": "multipart/form-data: the parts named «page», each a JPEG, PNG or WebP photo, in the order of the pages",
           "required": true,
@@ -40281,6 +40289,7 @@
           "PRICE_IMPORT_STATE",
           "PRICE_IMPORT_VERSION_CONFLICT",
           "PRICE_IMPORT_PHOTO_INVALID",
+          "PRICE_IMPORT_FILES_DELETED",
           "PRICE_IMPORT_ITEM_UNAVAILABLE",
           "PRICE_IMPORT_MISSING_CHOICE",
           "CATALOG_REQUEST_VERSION_CONFLICT",
@@ -47281,6 +47290,7 @@
           "speech_per_account",
           "speech_requests_per_ip",
           "photo_requests_per_ip",
+          "price_photo_requests_per_account",
           "vehicle_match_per_ip",
           "price_import_uploads_per_supplier",
           "price_export_per_member",

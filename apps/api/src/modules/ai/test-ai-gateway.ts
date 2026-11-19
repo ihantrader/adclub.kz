@@ -175,6 +175,12 @@ export class TestAiGateway extends AiGateway {
    * control strip (TASK-064: a model that reads one page differently twice).
    */
   readonly pricePhotoAnswers: PricePhotoOutput[] = [];
+  /**
+   * For the next readings of a price page, in order: `true` — the reading
+   * takes `delayMs` (and runs out of a shorter time limit); `false` or
+   * nothing left — as the mode says (TASK-064.A: a page AI can't finish).
+   */
+  readonly pricePhotoSlow: boolean[] = [];
 
   async translate(input: TranslateInput, model: string, signal: AbortSignal): Promise<AiResult> {
     this.requests.push({ input, model });
@@ -378,6 +384,7 @@ export class TestAiGateway extends AiGateway {
    */
   async readPricePhoto(input: PhotoInput, model: string, signal: AbortSignal): Promise<AiResult> {
     this.photoRequests.push({ kind: "price", bytes: input.image.length, model });
+    if (this.pricePhotoSlow.shift()) await this.wait(this.delayMs, signal);
     await this.photoFailures(model, signal);
     let output: unknown;
     const queued = this.pricePhotoAnswers.shift();

@@ -3,6 +3,7 @@ import {
   agreePricePhotoPages,
   pricePhotoPage,
   pricePhotoRow,
+  pricePhotoRowKeys,
   pricePhotoRowUncertain,
   PRICE_PHOTO_ROLES,
 } from "./price-photo";
@@ -144,6 +145,35 @@ describe("agreePricePhotoPages", () => {
     expect(agreePricePhotoPages(invented, other)).toEqual({ kind: "unreadable" });
     expect(agreePricePhotoPages(invented, { kind: "no_table" })).toEqual({ kind: "unreadable" });
     expect(agreePricePhotoPages({ kind: "no_table" }, invented)).toEqual({ kind: "no_table" });
+  });
+});
+
+describe("pricePhotoRowKeys", () => {
+  const list = (...rows: ReturnType<typeof row>[]) => pricePhotoPage({ kind: "price_list", rows });
+
+  it("gives the key of every row of every reading, once, as a read row knows it", () => {
+    const first = list(row(), row({ article: null, name: "Shell  Helix HX8, 4 л", price: 21_400 }));
+    // The second reading saw a row the first one left out.
+    const second = list(
+      row({ article: "04465 0k090" }),
+      row({ article: "GDB3534", price: 14_200 }),
+    );
+    expect(pricePhotoRowKeys(first, second)).toEqual([
+      { kind: "article", key: "044650K090" },
+      { kind: "name", key: "shell helix hx8 4 л" },
+      { kind: "article", key: "GDB3534" },
+    ]);
+    // The very key the import's row gets once its values are read.
+    const read = readPriceRow(
+      pricePhotoRow(row({ article: "04465 0k090" }))!.cells,
+      PRICE_PHOTO_ROLES,
+      LIMITS,
+    );
+    expect(read.parsed?.articleNorm).toBe("044650K090");
+  });
+
+  it("gives nothing for a page without rows", () => {
+    expect(pricePhotoRowKeys({ kind: "unreadable" }, { kind: "no_table" })).toEqual([]);
   });
 });
 

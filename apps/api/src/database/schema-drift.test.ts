@@ -103,6 +103,7 @@ describe("ormTables", () => {
         "price_import_refusal",
         "price_import_photo_page",
         "price_import_photo_retake",
+        "price_file_pending",
         "price_import_row",
         "supplier_sku_mapping",
         "catalog_request",

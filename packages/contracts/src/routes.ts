@@ -4057,6 +4057,8 @@ const coreApiRoutes = {
       contentTypes: PRICE_PHOTO_CONTENT_TYPES,
       maxBytes: PRICE_PHOTO_MAX_UPLOAD_BYTES,
     },
+    // Counted before the body is read, by the signed token (TASK-064.A).
+    rateLimit: { perAccount: "price_photo_requests_per_account", whenUnavailable: "allow" },
     responses: {
       201: { description: "The import, being recognised", schema: priceImportResponseSchema },
     },
@@ -4077,6 +4079,7 @@ const coreApiRoutes = {
       contentTypes: PRICE_PHOTO_PAGE_CONTENT_TYPES,
       maxBytes: PRICE_PHOTO_PAGE_MAX_UPLOAD_BYTES,
     },
+    rateLimit: { perAccount: "price_photo_requests_per_account", whenUnavailable: "allow" },
     responses: {
       200: { description: "The import, being recognised again", schema: priceImportResponseSchema },
     },

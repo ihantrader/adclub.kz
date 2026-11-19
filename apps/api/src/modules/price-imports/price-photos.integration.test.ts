@@ -20,6 +20,7 @@ import {
   priceImportPageSchema,
   priceImportPhotoInvalidDetailsSchema,
   priceImportResponseSchema,
+  priceMissingPageSchema,
   priceReviewRowsPageSchema,
   priceReviewSummarySchema,
   priceRowDecidedResponseSchema,
@@ -53,7 +54,7 @@ import { captureOutput, rememberCode, rememberSecret } from "../../testing/outpu
 import { TestSettings } from "../../testing/settings";
 import { authenticatorCode, authenticatorStep } from "../../testing/totp";
 import { WorkerModule } from "../../worker.module";
-import { TestAiGateway } from "../ai";
+import { AI_SERVICE_OPTIONS, TestAiGateway, type AiServiceOptions } from "../ai";
 import { DevCatalogSeed } from "../catalog";
 import { LoginCodeChannels, OperatorService, type TestLoginCodeChannels } from "../identity";
 import { photoEvalDirectory } from "../photo-eval";
@@ -217,6 +218,8 @@ describe("photographed price lists (PostgreSQL + Redis + MinIO)", () => {
     ai.priceMatchRequests.length = 0;
     ai.photoRequests.length = 0;
     ai.pricePhotoAnswers.length = 0;
+    ai.pricePhotoSlow.length = 0;
+    ai.delayMs = 5_000;
     await truncateAll(db);
     await redis.flushall();
     await settings.reload();
@@ -865,6 +868,12 @@ describe("photographed price lists (PostgreSQL + Redis + MinIO)", () => {
     expect(waits.photo!.recognized).toBe(0);
     ai.mode = "ok";
     await settled(of, uploaded.id, ["review"]);
+    // The provider out of reach is no attempt of the page (TASK-064.A).
+    const attempts = await db.query<{ read_attempts: number }>(
+      "SELECT read_attempts FROM price_import_photo_page WHERE import_id = $1",
+      [uploaded.id],
+    );
+    expect(attempts.rows).toEqual([{ read_attempts: 0 }]);
 
     await settings.set({ ai_daily_budget_usd: 0 });
     const second = await upload(of, [sample("list-tilt")]);
@@ -890,5 +899,241 @@ describe("photographed price lists (PostgreSQL + Redis + MinIO)", () => {
     }
     const kept = await settled(of, uploaded.id, ["review"], (found) => !found.fileKept);
     expect(kept.photo!.pages).toHaveLength(2);
+  });
+  // ------------------------------------------------- TASK-064.A: hardening
+
+  async function pageRow(importId: string, pageNo: number) {
+    const result = await db.query<{
+      status: string;
+      read_attempts: number;
+      first_reading: unknown;
+      rows: unknown;
+      seen_keys: { kind: string; key: string }[] | null;
+    }>(
+      "SELECT status, read_attempts, first_reading, rows, seen_keys FROM price_import_photo_page WHERE import_id = $1 AND page_no = $2",
+      [importId, pageNo],
+    );
+    return result.rows[0]!;
+  }
+
+  async function itemIdByArticle(article: string): Promise<string> {
+    const result = await db.query<{ id: string }>(
+      "SELECT id FROM catalog_item WHERE article_norm = $1",
+      [article.replace(/[^0-9A-Za-z]/g, "").toUpperCase()],
+    );
+    expect(result.rows).toHaveLength(1);
+    return result.rows[0]!.id;
+  }
+
+  it("gives up on a page AI runs out of time on after the attempts — the others go on, the first reading is never paid twice, a retake starts over", async () => {
+    const of = await company("Фото Семь");
+    await settings.set({ price_photo_read_attempts: 2 });
+    const options = worker.get<AiServiceOptions>(AI_SERVICE_OPTIONS);
+    const usual = options.timeoutMs;
+    options.timeoutMs = 300;
+    ai.delayMs = 3_000;
+    let uploaded!: PriceImport;
+    try {
+      // Page 1: the first reading answers, the second runs out of time
+      // (the main model and the fallback) — twice. Page 2 is read as usual.
+      ai.pricePhotoSlow.push(false, true, true, true, true);
+      uploaded = await upload(of, [sample("list-clean"), sample("two-pages-1")]);
+      const waits = await settled(of, uploaded.id, ["needs_retake"]);
+      expect(waits.photo!.pages.map((page) => [page.pageNo, page.status])).toEqual([
+        [1, "failed"],
+        [2, "read"],
+      ]);
+      // 1 + 2 + 2 calls for page 1 (the first reading once), 2 for page 2.
+      expect(ai.photoRequests.filter((call) => call.kind === "price")).toHaveLength(7);
+      const firstReadings = await db.query(
+        "SELECT 1 FROM ai_job WHERE kind = 'price_photo' AND input_ref->>'importId' = $1 AND (input_ref->>'page')::int = 1 AND (input_ref->>'reading')::int = 1",
+        [uploaded.id],
+      );
+      expect(firstReadings.rows).toHaveLength(1);
+      expect(await pageRow(uploaded.id, 1)).toMatchObject({
+        status: "failed",
+        read_attempts: 2,
+        first_reading: null,
+      });
+      // Nothing more is tried: no money goes on the page past its attempts.
+      await sleep(2_500);
+      expect(ai.photoRequests.filter((call) => call.kind === "price")).toHaveLength(7);
+    } finally {
+      options.timeoutMs = usual;
+    }
+
+    // «Переснять»: the new picture starts over and is read.
+    ai.photoRequests.length = 0;
+    await ok(
+      of
+        .as("put", `/supplier/price-imports/${uploaded.id}/photos/1`)
+        .set("Content-Type", "image/jpeg")
+        .send(sample("list-clean")),
+      (body) => priceImportResponseSchema.parse(body).import,
+    );
+    await settled(of, uploaded.id, ["review"]);
+    expect(ai.photoRequests.filter((call) => call.kind === "price")).toHaveLength(2);
+    const page = await pageRow(uploaded.id, 1);
+    expect(page).toMatchObject({ status: "read", read_attempts: 0, first_reading: null });
+    // The rows of the pages are cleared once the import's rows are written from them.
+    expect(page.rows).toBeNull();
+    expect((await pageRow(uploaded.id, 2)).rows).toBeNull();
+    expect(page.seen_keys).toContainEqual({ kind: "article", key: "044650K090" });
+    // What the screen asks of the pages carries none of it.
+    const answer = await of.as("get", `/supplier/price-imports/${uploaded.id}`);
+    expect(JSON.stringify(answer.body)).not.toContain("seenKeys");
+    expect(JSON.stringify(answer.body)).not.toContain("firstReading");
+  });
+
+  it("never makes «missing» an offer only one reading saw on the photo; the review keeps the agreed rows only", async () => {
+    const of = await company("Фото Восемь");
+    const offerOn = (itemId: string) =>
+      ok(
+        of.as("post", "/supplier/offers", {
+          itemId,
+          price: 10_000,
+          availability: "in_stock",
+          leadDays: 0,
+          pickup: true,
+          delivery: false,
+        }),
+        (body) => (body as { offer: { id: string } }).offer.id,
+        201,
+      );
+    await offerOn(await itemIdByArticle("04465-0K090"));
+    await offerOn(await itemIdByArticle("GDB3534"));
+    const rear = await offerOn(await itemIdByArticle("4050068800"));
+    const line = (article: string | null, name: string, price: number) => ({
+      text: `${article ?? "—"} | ${name} | ${String(price)}`,
+      article,
+      brand: null,
+      name,
+      price,
+      availability: "есть",
+      leadTime: null,
+      uncertain: [],
+    });
+    const pads = line("04465-0K090", "Колодки тормозные передние", 18_500);
+    const oil = line(null, "Shell Helix HX8 5W-30, 4 л", 21_400);
+    const mobil = line(null, "Mobil Super 3000 5W-40, 4 л", 19_800);
+    const trw = line("GDB3534", "Колодки тормозные передние TRW", 14_200);
+    // The second reading saw the TRW pads the first one left out.
+    ai.pricePhotoAnswers.push(
+      { kind: "price_list", rows: [pads, oil, mobil] },
+      { kind: "price_list", rows: [pads, oil, mobil, trw] },
+    );
+    const uploaded = await upload(of, [sample("list-clean")]);
+    await settled(of, uploaded.id, ["review"]);
+    const reviewRows = await allRows(of, uploaded.id);
+    expect(reviewRows).toHaveLength(3);
+    expect(JSON.stringify(reviewRows)).not.toContain("GDB3534");
+    // Only the rear pads, on no reading of the photo, are missing.
+    const review = await summary(of, uploaded.id);
+    expect(review.missing.offers).toBe(1);
+    const missing = await ok(
+      of.as("get", `/supplier/price-imports/${uploaded.id}/review/missing`),
+      (body) => priceMissingPageSchema.parse(body),
+    );
+    expect(missing.offers.map((entry) => entry.offerId)).toEqual([rear]);
+  });
+
+  it("counts the uploads of a person before reading their bodies; a form past its limits is refused at the part that breaks them", async () => {
+    const of = await company("Фото Девять");
+    await settings.set({ price_photo_requests_per_account: 3, price_photo_max_pages: 2 });
+    await new TestSettings(app).reload();
+    // A form of thousands of tiny pages stops at the third.
+    let many = of.as("post", "/supplier/price-imports/photos");
+    for (let index = 0; index < 2000; index++) {
+      many = many.attach("page", Buffer.from("x"), { filename: `p${String(index)}.jpg` });
+    }
+    const tooMany = await many;
+    expectError(tooMany, 400, "PRICE_IMPORT_PHOTO_INVALID");
+    expect(tooMany.body.details).toEqual({ page: null, reason: "too_many_pages", limit: 2 });
+    // Refused ones count: a malformed form and a page of the wrong kind.
+    expectError(
+      await of
+        .as("post", "/supplier/price-imports/photos")
+        .set("Content-Type", "multipart/form-data; boundary=nothing")
+        .send("not a form"),
+      400,
+      "PRICE_IMPORT_PHOTO_INVALID",
+    );
+    expectError(
+      await of
+        .as(
+          "put",
+          `/supplier/price-imports/${"0".repeat(8)}-0000-4000-8000-${"0".repeat(12)}/photos/1`,
+        )
+        .set("Content-Type", "image/jpeg")
+        .send(Buffer.from("x")),
+      404,
+      "NOT_FOUND",
+    );
+    const over = await photos(of, [sample("list-clean")]);
+    expectError(over, 429, "RATE_LIMITED");
+    expect(over.body.details).toMatchObject({ limit: "price_photo_requests_per_account" });
+    // Another person is counted apart.
+    const other = await company("Фото Десять");
+    await upload(other, [sample("list-clean")]);
+    // Without a valid token nothing is read or counted: 401 at once.
+    const anonymous = await http()
+      .post("/supplier/price-imports/photos")
+      .set("X-Client", SUPPLIER_WEB)
+      .set("X-Forwarded-For", nextIp())
+      .attach("page", sample("list-clean"), { filename: "p.jpg" });
+    expectError(anonymous, 401, "AUTH_REQUIRED");
+    const forged = await http()
+      .post("/supplier/price-imports/photos")
+      .set("X-Client", SUPPLIER_WEB)
+      .set("X-Forwarded-For", nextIp())
+      .set("Authorization", "Bearer x.y.z")
+      .attach("page", sample("list-clean"), { filename: "p.jpg" });
+    expectError(forged, 401, "AUTH_REQUIRED");
+  });
+
+  it("removes the files of uploads that were never written; a page is not taken again once the import's files are gone", async () => {
+    const of = await company("Фото Одиннадцать");
+    // A process that stopped between storing the files and writing the import.
+    const lostPrefix = `price-imports/${of.supplierId}/${"1".repeat(8)}-1111-4111-8111-${"1".repeat(12)}/`;
+    const lostFile = `price-imports/${of.supplierId}/${"2".repeat(8)}-2222-4222-8222-${"2".repeat(12)}`;
+    for (const key of [`${lostPrefix}page-1-0`, `${lostPrefix}page-2-0`, lostFile]) {
+      await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: Buffer.from("x") }));
+    }
+    await db.query(
+      "INSERT INTO price_file_pending (file_key, supplier_id, created_at) VALUES ($1, $3, now() - interval '25 hours'), ($2, $3, now() - interval '25 hours')",
+      [lostPrefix, lostFile, of.supplierId],
+    );
+    // A written upload leaves no record behind; a fresh one is not touched.
+    const uploaded = await upload(of, [sample("not-a-table"), sample("two-pages-1")]);
+    const pending = await db.query<{ file_key: string }>("SELECT file_key FROM price_file_pending");
+    expect(pending.rows.map((row) => row.file_key).sort()).toEqual([lostFile, lostPrefix].sort());
+    await worker.get(JobAdmin).runNow("prices.cleanup-orphan-files");
+    const until = Date.now() + 30_000;
+    while (
+      (await objects(lostPrefix)).length > 0 ||
+      (await objects(lostFile)).length > 0 ||
+      ((await db.query("SELECT 1 FROM price_file_pending")).rowCount ?? 0) > 0
+    ) {
+      if (Date.now() > until) throw new Error("The files of the lost uploads are still kept");
+      await sleep(200);
+    }
+    expect(await objects(`price-imports/${of.supplierId}/${uploaded.id}/`)).toHaveLength(2);
+
+    // The import waits for a retake when its files pass their retention.
+    await settled(of, uploaded.id, ["needs_retake"]);
+    await settings.set({ price_import_file_retention_days: 1 });
+    await db.query("UPDATE price_import SET created_at = now() - interval '2 days' WHERE id = $1", [
+      uploaded.id,
+    ]);
+    await worker.get(JobAdmin).runNow("prices.delete-files");
+    await settled(of, uploaded.id, ["needs_retake"], (found) => !found.fileKept);
+    const refused = await of
+      .as("put", `/supplier/price-imports/${uploaded.id}/photos/1`)
+      .set("Content-Type", "image/jpeg")
+      .send(sample("list-clean"));
+    expectError(refused, 409, "PRICE_IMPORT_FILES_DELETED");
+    // Nothing of the refused retake is kept.
+    expect(await objects(`price-imports/${of.supplierId}/${uploaded.id}/`)).toEqual([]);
+    expect((await db.query("SELECT 1 FROM price_file_pending")).rows).toHaveLength(0);
   });
 });

@@ -4,6 +4,8 @@ import {
   PRICE_PHOTO_FIELDS,
   PRICE_PHOTO_ROLES,
   pricePhotoPage,
+  pricePhotoRowKeys,
+  type PricePhotoPage,
 } from "@adclub/domain";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { DatabaseService } from "../../database";
@@ -46,6 +48,13 @@ const RETAKE: readonly PriceImportPhotoPageRecord["status"][] = [
  * values are read at once by `PriceValuesReader` — the very path of a file
  * with a remembered format: matching, the review and applying follow as for
  * any file.
+ *
+ * A page AI runs out of time on (TASK-064.A) counts its attempts: after
+ * `price_photo_read_attempts` it is «Не удалось распознать» and waits to be
+ * taken again, while the others go on. A provider out of reach and a spent
+ * budget cost no attempt — the import waits and goes on by itself (17.9a).
+ * The first reading of a page is kept until the second one is done, so a
+ * retry never pays for it again.
  */
 @Injectable()
 export class PricePhotoReader implements JobHandler<{ importId: string }> {
@@ -88,10 +97,11 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
     if (!claimed) return;
 
     const pages = await this.pages(importId);
+    const maxAttempts = await this.settings.get("price_photo_read_attempts");
     for (const page of pages) {
       if (page.status !== "waiting") continue;
       if (context.signal.aborted) throw new Error("Stopped while reading a photographed price");
-      const outcome = await this.readPage(importId, page);
+      const outcome = await this.readPage(importId, page, maxAttempts);
       if (outcome === "stop") return;
     }
 
@@ -124,10 +134,29 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
       .orderBy(asc(priceImportPhotoPage.pageNo));
   }
 
+  /** What is kept of a page while it is still being read (its own picture only). */
+  private async keep(
+    importId: string,
+    page: PriceImportPhotoPageRecord,
+    values: Partial<Pick<PriceImportPhotoPageRecord, "firstReading" | "readAttempts" | "aiJobId">>,
+  ): Promise<void> {
+    await this.database.db
+      .update(priceImportPhotoPage)
+      .set({ ...values, updatedAt: new Date() })
+      .where(
+        and(
+          eq(priceImportPhotoPage.importId, importId),
+          eq(priceImportPhotoPage.pageNo, page.pageNo),
+          eq(priceImportPhotoPage.fileKey, page.fileKey),
+        ),
+      );
+  }
+
   /** One page to AI; `stop` — the import waits for AI or failed. */
   private async readPage(
     importId: string,
     page: PriceImportPhotoPageRecord,
+    maxAttempts: number,
   ): Promise<"next" | "stop"> {
     const db = this.database.db;
     let image: Buffer;
@@ -148,7 +177,9 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
     let status: PriceImportPhotoPageRecord["status"];
     let rows = null;
     let dropped = null;
-    let jobId: string | null = null;
+    let jobId: string | null = page.aiJobId;
+    let seenKeys = page.seenKeys;
+    let attempts = page.readAttempts;
     try {
       const read = async (reading: number) => {
         // A sign of life before each call: this run still holds the import.
@@ -169,14 +200,30 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
           },
         );
       };
-      const answer = await read(1);
-      jobId = answer.jobId;
-      let verdict = pricePhotoPage(answer.output);
-      if (verdict.kind === "rows") {
+      let first: PricePhotoPage;
+      if (page.firstReading) {
+        // Read once already, the second reading ran out of time: not paid for again.
+        first = { kind: "rows", ...page.firstReading };
+      } else {
+        const answer = await read(1);
+        jobId = answer.jobId;
+        first = pricePhotoPage(answer.output);
+        if (first.kind === "rows") {
+          await this.keep(importId, page, {
+            firstReading: { rows: first.rows, dropped: first.dropped },
+            aiJobId: jobId,
+          });
+        }
+      }
+      let verdict = first;
+      seenKeys = pricePhotoRowKeys(first);
+      if (first.kind === "rows") {
         // Read twice, kept what both agree on (ARCHITECTURE 4.93): a page the
         // model can't read gives a made-up table, another one each time.
-        const again = await read(2);
-        verdict = agreePricePhotoPages(verdict, pricePhotoPage(again.output));
+        const second = pricePhotoPage((await read(2)).output);
+        verdict = agreePricePhotoPages(first, second);
+        // Every reading says what is printed on the page («Пропали из файла»).
+        seenKeys = pricePhotoRowKeys(first, second);
       }
       if (verdict.kind === "rows") {
         status = "read";
@@ -190,11 +237,24 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
         await this.wait(importId, "budget");
         return "stop";
       }
-      if (error instanceof AiGatewayError && FALLBACK_WORTHY.includes(error.kind)) {
+      const failure = error instanceof AiGatewayError ? error : null;
+      const outOfReach = failure !== null && FALLBACK_WORTHY.includes(failure.kind);
+      // Out of time — one attempt spent; the provider out of reach — none (17.9a).
+      const outOfTime = outOfReach && failure.timedOut;
+      if (outOfTime) attempts++;
+      if (outOfTime && attempts >= maxAttempts) {
+        // The page itself is what AI can't finish: retried, it would cost every minute.
+        this.logger.warn(
+          `AI ran out of time on a price photo import=${importId} page=${String(page.pageNo)} attempts=${String(attempts)}`,
+        );
+        status = "failed";
+      } else if (outOfReach) {
+        if (attempts !== page.readAttempts) {
+          await this.keep(importId, page, { readAttempts: attempts });
+        }
         await this.wait(importId, "unavailable");
         return "stop";
-      }
-      if (error instanceof AiGatewayError) {
+      } else if (error instanceof AiGatewayError) {
         // Refused, answered nonsense, no private endpoint: taking the page again is the way on.
         this.logger.warn(
           `AI could not read a price photo import=${importId} page=${String(page.pageNo)} error=${error.kind}`,
@@ -212,6 +272,9 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
         rowCount: rows?.length ?? null,
         droppedRows: dropped,
         aiJobId: jobId,
+        seenKeys,
+        firstReading: null,
+        readAttempts: attempts,
         recognizedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -302,6 +365,11 @@ export class PricePhotoReader implements JobHandler<{ importId: string }> {
           })),
         );
       }
+      // Nothing reads the rows of the pages any more: the import's rows are them.
+      await tx
+        .update(priceImportPhotoPage)
+        .set({ rows: null, updatedAt: new Date() })
+        .where(eq(priceImportPhotoPage.importId, importId));
       await tx
         .update(priceImport)
         .set({

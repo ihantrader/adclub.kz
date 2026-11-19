@@ -162,6 +162,9 @@ export function uploadErrorText(error: unknown, t: Translate, maxFileMb: number)
     }
     case "PRICE_IMPORT_PHOTO_INVALID":
       return photoErrorText(error.details, t);
+    case "PRICE_IMPORT_FILES_DELETED":
+      // «Переснять» after the photos' retention: a new upload is the way (TASK-064.A).
+      return t("price.error.filesDeleted");
     case "PAYLOAD_TOO_LARGE":
       return t("price.error.tooLarge", { mb: maxFileMb });
     case "UNSUPPORTED_MEDIA_TYPE":

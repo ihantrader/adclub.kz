@@ -886,6 +886,12 @@ function MissingOffers({
 
   return (
     <div className="stack-m">
+      {summary.import.format === "photo" && (
+        // A photo may hold only some pages of the price list (TASK-064.A).
+        <Banner tone="neutral" icon="info">
+          {t("review.missingPhotoHint")}
+        </Banner>
+      )}
       {summary.missing.withActiveOrders > 0 && (
         <Banner tone="warning" icon="alertTriangle">
           {missingOrdersText(summary.missing.withActiveOrders, t, lang)}

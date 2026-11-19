@@ -235,14 +235,25 @@ export function missingOffersQuery(
       JOIN price_import_row r ON r.import_id = ${record.id} AND r.match_key_kind = m.key_kind AND r.match_key = m.key
       WHERE m.supplier_id = ${record.supplierId} AND m.item_id IS NOT NULL
     UNION SELECT ci.id FROM catalog_item ci
-      JOIN price_import_row r ON r.import_id = ${record.id} AND r.match_key_kind = 'article' AND r.match_key = ci.article_norm`;
+      JOIN price_import_row r ON r.import_id = ${record.id} AND r.match_key_kind = 'article' AND r.match_key = ci.article_norm
+    -- A photographed page (TASK-064.A): what any reading of it saw is printed on
+    -- the photo, though only the agreed rows are rows of the review.
+    UNION SELECT m.item_id FROM supplier_sku_mapping m
+      JOIN seen s ON m.key_kind = s.kind AND m.key = s.key
+      WHERE m.supplier_id = ${record.supplierId} AND m.item_id IS NOT NULL
+    UNION SELECT ci.id FROM catalog_item ci
+      JOIN seen s ON s.kind = 'article' AND s.key = ci.article_norm`;
+  const seen = sql`
+    SELECT k->>'kind' AS kind, k->>'key' AS key
+    FROM price_import_photo_page p, jsonb_array_elements(p.seen_keys) k
+    WHERE p.import_id = ${record.id} AND p.seen_keys IS NOT NULL`;
   const missing = sql`
     FROM offer o
     WHERE o.supplier_id = ${record.supplierId} AND o.status = 'active' AND o.item_type <> 'service'
       AND NOT EXISTS (SELECT 1 FROM present p WHERE p.id = o.item_id)`;
   if (options.count) {
     return sql`
-      WITH present AS (${present})
+      WITH seen AS (${seen}), present AS (${present})
       SELECT count(*)::int AS offers,
         count(*) FILTER (WHERE EXISTS (
           SELECT 1 FROM customer_order co
@@ -251,7 +262,7 @@ export function missingOffersQuery(
       ${missing}`;
   }
   return sql`
-    WITH present AS (${present})
+    WITH seen AS (${seen}), present AS (${present})
     SELECT o.id, o.item_id, o.price, o.availability, o.supplier_sku, o.version,
       to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
       (SELECT count(*)::int FROM customer_order co

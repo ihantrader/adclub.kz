@@ -349,6 +349,9 @@ import { clientPlatformSchema } from "./client";
  * - `PRICE_IMPORT_PHOTO_INVALID` (400, TASK-064): a photographed page can't be
  *   taken (not a picture, too large, too many pages); `details` is
  *   `PriceImportPhotoInvalidDetails` — the page by its number.
+ * - `PRICE_IMPORT_FILES_DELETED` (409, TASK-064.A): a page of a photographed
+ *   import can't be taken again — the import's files were removed after
+ *   `price_import_file_retention_days`; the supplier uploads anew.
  * - `PRICE_IMPORT_ITEM_UNAVAILABLE` (409, TASK-047): the item chosen for a
  *   row can't take it; `details` is `PriceImportItemUnavailableDetails`.
  * - `PRICE_IMPORT_MISSING_CHOICE` (409, TASK-047): offers are missing in the
@@ -573,6 +576,7 @@ export const errorCodeSchema = z.enum([
   "PRICE_IMPORT_VERSION_CONFLICT",
   // A photographed price list (TASK-064, ARCHITECTURE 4.93).
   "PRICE_IMPORT_PHOTO_INVALID",
+  "PRICE_IMPORT_FILES_DELETED",
   // Matching and applying a price list, requests to add an item (TASK-047).
   "PRICE_IMPORT_ITEM_UNAVAILABLE",
   "PRICE_IMPORT_MISSING_CHOICE",

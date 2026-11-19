@@ -53,6 +53,15 @@ export function importState(status: PriceImportStatus, message: string): ApiExce
   return new ApiException(409, "PRICE_IMPORT_STATE", message, { details });
 }
 
+/** A page can't be taken again: the import's files are gone after their retention (TASK-064.A). */
+export function filesDeleted(): ApiException {
+  return new ApiException(
+    409,
+    "PRICE_IMPORT_FILES_DELETED",
+    "The photos of this upload were removed after their retention; upload the price list again",
+  );
+}
+
 export function validationError(path: string, message: string): ApiException {
   return new ApiException(400, "VALIDATION_ERROR", message, {
     details: [{ path, message }],

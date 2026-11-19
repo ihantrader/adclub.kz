@@ -90,6 +90,15 @@ describe("photographed price lists in the cabinet (TASK-064)", () => {
       details: { page: null, reason: "too_many_pages", limit: 10 },
     });
     expect(uploadErrorText(many, t, 20)).toBe("Не больше 10 страниц в одной загрузке");
+    const gone = new ApiError({
+      code: "PRICE_IMPORT_FILES_DELETED",
+      message: "x",
+      status: 409,
+      retryable: false,
+    });
+    expect(uploadErrorText(gone, t, 20)).toBe(
+      "Фото этой загрузки уже удалены по сроку хранения — загрузите прайс заново",
+    );
   });
 
   it("makes a photo no larger than the server keeps", () => {

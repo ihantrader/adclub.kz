@@ -61,7 +61,7 @@ export type {
   VehicleDocumentInput,
   VehicleDocumentOutput,
 } from "./ai-gateway";
-export { AiService } from "./ai.service";
+export { AI_SERVICE_OPTIONS, AiService } from "./ai.service";
 export type {
   AiBudgetState,
   AiCallMeta,

@@ -35,9 +35,10 @@ export { rateLimitSettingKeys };
  * requests is limited too. A route that takes a file (`upload`) has its
  * body read by a middleware before any guard, so a limit of such a route by
  * address only is counted there, before the body is read
- * (`UploadRateLimitMiddleware`, TASK-059.A), and this guard skips it; a route
- * that takes a file and counts by session (`perAccount`, `perMember`) is
- * still counted here, after its body is read (`countedBeforeBody`).
+ * (`UploadRateLimitMiddleware`, TASK-059.A), and this guard skips it; so is
+ * a session route that takes a file and counts `perAccount` — by the account
+ * of the signed token (TASK-064.A); a route that takes a file and counts
+ * `perMember` is still counted here, after its body is read (`countedBeforeBody`).
  *
  * Whose bucket a request falls into (`countedAs`):
  *

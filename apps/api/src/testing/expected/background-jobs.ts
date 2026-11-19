@@ -39,6 +39,7 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "prices.read-values",
   "prices.expire-stalled",
   "prices.delete-files",
+  "prices.cleanup-orphan-files",
   "prices.match",
   "prices.match-ai",
   "prices.match-wake",
@@ -124,6 +125,8 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "orders.watch-notice-channel", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The detector of a supplier no notice can reach (TASK-034, D-061).
   { name: "orders.watch-supplier-reach", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Files of price uploads that were never written (TASK-064.A): hourly.
+  { name: "prices.cleanup-orphan-files", cron: "23 * * * *", timezone: "Asia/Almaty" },
   // Files of price lists past their retention (TASK-046).
   { name: "prices.delete-files", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Reviews of price lists left longer than allowed (TASK-047).

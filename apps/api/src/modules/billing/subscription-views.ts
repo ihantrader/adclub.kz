@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type {
+  AdminStorePurchase,
   AdminSupplierBillingResponse,
   AdminUserSubscription,
   AdminUserSubscriptionResponse,
@@ -26,6 +27,7 @@ import {
   billingEvent,
   openAttemptStatuses,
   paymentAttempt,
+  storePurchase,
   subscription,
   type BillingEventRow,
   type PaymentAttemptRow,
@@ -400,11 +402,29 @@ export class SubscriptionViews {
         updatedAt: shown.updatedAt.toISOString(),
       };
     }
+    let store: AdminStorePurchase | null = null;
+    if (shown?.provider === "store") {
+      const [purchase] = await this.database.db
+        .select()
+        .from(storePurchase)
+        .where(eq(storePurchase.providerRef, shown.providerRef));
+      if (purchase) {
+        store = {
+          platform: purchase.platform,
+          environment: purchase.environment,
+          productId: purchase.productId,
+          lastWord: purchase.lastWord,
+          lastWordAt: purchase.lastWordAt?.toISOString() ?? null,
+          lastSyncAt: purchase.lastSyncAt?.toISOString() ?? null,
+        };
+      }
+    }
     return {
       subscription: view,
       history: history.map(historyEntry),
       access: sources.access,
       manualGrant: manualGrant(sources),
+      store,
     };
   }
 }

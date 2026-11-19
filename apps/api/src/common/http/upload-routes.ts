@@ -1,7 +1,10 @@
 import { apiRoutes, isUploadRoute, type ApiRouteDefinition } from "@adclub/contracts";
 import {
+  APPLE_STORE_WEBHOOK_PATH,
+  GOOGLE_STORE_WEBHOOK_PATH,
   PAYMENT_WEBHOOK_BODY,
   PAYMENT_WEBHOOK_PATH,
+  STORE_WEBHOOK_BODY,
   WHATSAPP_WEBHOOK_BODY,
   WHATSAPP_WEBHOOK_PATH,
 } from "./raw-body-routes";
@@ -44,6 +47,14 @@ const matchers: readonly UploadMatcher[] = [
   {
     route: { method: "POST" as const, upload: PAYMENT_WEBHOOK_BODY },
     pattern: patternOf(PAYMENT_WEBHOOK_PATH),
+  },
+  {
+    route: { method: "POST" as const, upload: STORE_WEBHOOK_BODY },
+    pattern: patternOf(APPLE_STORE_WEBHOOK_PATH),
+  },
+  {
+    route: { method: "POST" as const, upload: STORE_WEBHOOK_BODY },
+    pattern: patternOf(GOOGLE_STORE_WEBHOOK_PATH),
   },
 ];
 

@@ -174,6 +174,24 @@ export const adminUserSubscriptionSchema = mySubscriptionSchema.extend({
 export type AdminUserSubscription = z.infer<typeof adminUserSubscriptionSchema>;
 
 /**
+ * The store behind a subscription (A-USR-02, TASK-041): App Store or Google
+ * Play, the environment of the purchase, the product, the store's last word
+ * about it (its own name — `DID_RENEW`, `SUBSCRIPTION_STATE_IN_GRACE_PERIOD`,
+ * `status:1` — and when), and the last successful look at the purchase in
+ * the store's API.
+ */
+export const adminStorePurchaseSchema = z.object({
+  platform: z.enum(["ios", "android"]),
+  environment: z.enum(["production", "sandbox"]),
+  productId: z.string(),
+  lastWord: z.string().nullable(),
+  lastWordAt: z.iso.datetime().nullable(),
+  lastSyncAt: z.iso.datetime().nullable(),
+});
+
+export type AdminStorePurchase = z.infer<typeof adminStorePurchaseSchema>;
+
+/**
  * `GET /admin/users/{accountId}/subscription` — A-USR-02 «Клубный доступ»:
  * the subscription (the current one, or the last), its history, newest
  * first, and the grant by hand beside it.
@@ -185,7 +203,35 @@ export const adminUserSubscriptionResponseSchema = z.object({
   history: z.array(subscriptionHistoryEntrySchema),
   access: clubAccessStateSchema,
   manualGrant: z.object({ validUntil: z.iso.datetime() }).nullable(),
+  /** The store of `subscription` (TASK-041); absent or `null` — not a store's. */
+  store: adminStorePurchaseSchema.nullable().optional(),
 });
+
+/**
+ * `POST /billing/store/sync` (TASK-041; ARCHITECTURE 9.4.1 rule 1, 4.98):
+ * what the store gave the app after a purchase (or «Восстановить
+ * покупки»). The server checks it with the store itself — the client's
+ * word is never taken:
+ *
+ * - `ios` — the signed transaction of StoreKit 2 (`jwsRepresentation`): its
+ *   signature up to Apple's root, then the purchase's state in the App Store
+ *   Server API;
+ * - `android` — the purchase token and the product of Google Play Billing:
+ *   the state in the Play Developer API, acknowledged if it isn't yet.
+ */
+export const storeSyncBodySchema = z.discriminatedUnion("platform", [
+  z.object({
+    platform: z.literal("ios"),
+    signedTransaction: z.string().trim().min(20).max(20_000),
+  }),
+  z.object({
+    platform: z.literal("android"),
+    purchaseToken: z.string().trim().min(10).max(4096),
+    productId: z.string().trim().min(1).max(200),
+  }),
+]);
+
+export type StoreSyncBody = z.infer<typeof storeSyncBodySchema>;
 
 export type AdminUserSubscriptionResponse = z.infer<typeof adminUserSubscriptionResponseSchema>;
 

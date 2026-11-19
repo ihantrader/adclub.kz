@@ -68,6 +68,10 @@ import {
   applyBillingEventsJob,
   expireSubscriptionsJob,
   wakeBillingEventsJob,
+  applyStoreNotificationJob,
+  reconcileStoresJob,
+  watchStoresJob,
+  remindGraceJob,
 } from "./billing-jobs";
 import {
   ApplyPaymentWebhookHandler,
@@ -96,6 +100,9 @@ import { SubscriptionEvents, SubscriptionExpiry } from "./subscription-events";
 import { chargeView, SubscriptionViews } from "./subscription-views";
 import { TestPaymentProvider } from "./test-payment-provider";
 import { UnconfiguredPaymentProvider } from "./unconfigured-payment-provider";
+import { StoreFetch } from "./stores/store-fetch";
+import { StoreSubscriptions } from "./stores/store-subscriptions";
+import { StoreSyncController, StoreWebhookController } from "./stores/store.controllers";
 import { DatabaseService } from "../../database";
 import { eq, sql } from "drizzle-orm";
 import { subscription } from "./schema";
@@ -249,6 +256,8 @@ const billingCore: Provider[] = [
   PaymentCharger,
   CardBindings,
   PaymentWebhooks,
+  StoreFetch,
+  StoreSubscriptions,
 ];
 
 /**
@@ -275,6 +284,8 @@ export class BillingModule {
             AdminSubscriptionController,
             AdminBillingController,
             PaymentWebhookController,
+            StoreSyncController,
+            StoreWebhookController,
             ...(devCardPage ? [DevPaymentCardController] : []),
           ]
         : [],
@@ -297,8 +308,58 @@ export class BillingModule {
         BillingOperator,
         PaymentMethods,
         PaymentProvider,
+        StoreFetch,
+        StoreSubscriptions,
       ],
     };
+  }
+}
+
+/** `billing.apply-store-notification`: one delivery of a store. */
+@Injectable()
+export class StoreNotificationApply implements JobHandler<{ notificationId: string }> {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(StoreSubscriptions) private readonly stores: StoreSubscriptions) {}
+
+  async run(
+    { notificationId }: { notificationId: string },
+    _context: JobRunContext,
+  ): Promise<void> {
+    await this.stores.applyNotification(notificationId);
+  }
+}
+
+/** `billing.reconcile-stores`: purchases past their term without a word, asked in the stores. */
+@Injectable()
+export class StoresReconcile implements PeriodicJobHandler {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(StoreSubscriptions) private readonly stores: StoreSubscriptions) {}
+
+  async run(_context: JobRunContext): Promise<JobRunOutcome> {
+    const { asked } = await this.stores.reconcile();
+    return { worked: asked > 0 };
+  }
+}
+
+/** `billing.watch-stores`: the signal `store_sync_stale`, lost deliveries. */
+@Injectable()
+export class StoresWatch implements PeriodicJobHandler {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(StoreSubscriptions) private readonly stores: StoreSubscriptions) {}
+
+  async run(_context: JobRunContext): Promise<JobRunOutcome> {
+    return this.stores.watch();
+  }
+}
+
+/** `billing.remind-grace`: P-SUB-01 again before a store's grace ends. */
+@Injectable()
+export class GraceRemind implements PeriodicJobHandler {
+  // See HttpExceptionFilter (common/errors) for why `@Inject` is required.
+  constructor(@Inject(StoreSubscriptions) private readonly stores: StoreSubscriptions) {}
+
+  async run(_context: JobRunContext): Promise<JobRunOutcome> {
+    return { worked: (await this.stores.remindGrace()) > 0 };
   }
 }
 
@@ -350,6 +411,10 @@ export class BillingJobsModule implements OnModuleInit {
         DetachCardHandler,
         ExpireBindingsHandler,
         WatchProviderHandler,
+        StoreNotificationApply,
+        StoresReconcile,
+        StoresWatch,
+        GraceRemind,
       ],
     };
   }
@@ -370,6 +435,10 @@ export class BillingJobsModule implements OnModuleInit {
     @Inject(DetachCardHandler) private readonly detach: DetachCardHandler,
     @Inject(ExpireBindingsHandler) private readonly expireBindings: ExpireBindingsHandler,
     @Inject(WatchProviderHandler) private readonly watch: WatchProviderHandler,
+    @Inject(StoreNotificationApply) private readonly storeNotification: StoreNotificationApply,
+    @Inject(StoresReconcile) private readonly storesReconcile: StoresReconcile,
+    @Inject(StoresWatch) private readonly storesWatch: StoresWatch,
+    @Inject(GraceRemind) private readonly graceRemind: GraceRemind,
     @Inject(MessageSubjects) private readonly subjects: MessageSubjects,
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
@@ -387,6 +456,10 @@ export class BillingJobsModule implements OnModuleInit {
     this.registry.handle(detachCardJob, this.detach);
     this.registry.handlePeriodic(expireCardBindingsJob, this.expireBindings);
     this.registry.handlePeriodic(watchPaymentProviderJob, this.watch);
+    this.registry.handle(applyStoreNotificationJob, this.storeNotification);
+    this.registry.handlePeriodic(reconcileStoresJob, this.storesReconcile);
+    this.registry.handlePeriodic(watchStoresJob, this.storesWatch);
+    this.registry.handlePeriodic(remindGraceJob, this.graceRemind);
     // W-05 goes only while the subscription is still past due: one paid in
     // the meantime must not be told it failed.
     this.subjects.register(SUBSCRIPTION_SUBJECT, {

@@ -31,6 +31,11 @@ export interface NormalizedProviderEvent {
   periodEnd: Date | null;
   graceUntil: Date | null;
   platform: "ios" | "android" | null;
+  /**
+   * A store's product (TASK-041): an event that would start a subscription
+   * starts none when the product isn't one of the users' tariff in effect.
+   */
+  productId?: string | null;
 }
 
 /** A purchase the provider confirmed (the purchase routes of TASK-041). */

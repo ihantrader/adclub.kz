@@ -66,6 +66,10 @@ export const EXPECTED_JOB_NAMES: readonly string[] = [
   "billing.detach-card",
   "billing.expire-bindings",
   "billing.watch-provider",
+  "billing.apply-store-notification",
+  "billing.reconcile-stores",
+  "billing.watch-stores",
+  "billing.remind-grace",
   "garage.remind",
   "catalog.search-photos",
   "dev.always-fails",
@@ -85,12 +89,18 @@ export const EXPECTED_PERIODIC_SCHEDULES: readonly {
   { name: "billing.expire-bindings", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Time's events of subscriptions: a term without a word, its tolerance (TASK-040).
   { name: "billing.expire-subscriptions", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // Purchases of the stores past their term without a word, asked in the stores' APIs (TASK-041): hourly.
+  { name: "billing.reconcile-stores", cron: "29 * * * *", timezone: "Asia/Almaty" },
+  // The reminder P-SUB-01 before the end of a store's grace (TASK-041).
+  { name: "billing.remind-grace", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Charges the provider could not take, lost ones, deliveries nobody applied (TASK-042).
   { name: "billing.resolve-attempts", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Events of subscriptions whose job was lost, put back on the queue (TASK-040).
   { name: "billing.wake-events", cron: "* * * * *", timezone: "Asia/Almaty" },
   // The detector of an outage of the payment provider and the missing tariff (TASK-042).
   { name: "billing.watch-provider", cron: "* * * * *", timezone: "Asia/Almaty" },
+  // The signal `store_sync_stale` and store deliveries whose job was lost (TASK-041).
+  { name: "billing.watch-stores", cron: "* * * * *", timezone: "Asia/Almaty" },
   // Files of photos no record points at (TASK-013): hourly.
   { name: "catalog.cleanup-photo-files", cron: "17 * * * *", timezone: "Asia/Almaty" },
   // Files of removed photos, once their retention has passed (TASK-013).

@@ -212,6 +212,7 @@ describe("buildOpenApiDocument", () => {
       "/auth/sign-in/totp/setup/confirm",
       "/auth/supplier-context",
       "/auth/suppliers",
+      "/billing/store/sync",
       "/catalog/categories",
       "/catalog/categories/{categoryId}/attributes",
       "/catalog/categories/{categoryId}/items",

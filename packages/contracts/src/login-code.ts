@@ -170,6 +170,10 @@ export const rateLimitNameSchema = z.enum([
   "whatsapp_webhook_per_ip",
   /** The payment provider's webhook (TASK-042): an open route limited by address, protected by its signature. */
   "payment_webhook_per_ip",
+  /** The stores' notifications (TASK-041): open routes limited by address, protected by signatures. */
+  "store_webhook_per_ip",
+  /** `POST /billing/store/sync` (TASK-041): each call asks the store's API. */
+  "store_sync_per_account",
   /**
    * The admin panel (TASK-036.B): the search of the header and «Показать
    * номер», per administrator — against a loop and against reading the

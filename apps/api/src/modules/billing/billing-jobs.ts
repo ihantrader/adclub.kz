@@ -143,6 +143,57 @@ export const watchPaymentProviderJob = definePeriodicJob({
   schedule: () => EVERY_MINUTE,
 });
 
+/**
+ * The stores (TASK-041, ARCHITECTURE 4.98):
+ *
+ * - `billing.apply-store-notification` — one delivery of a store: Google's
+ *   needs the purchase's state from the Play Developer API (the notification
+ *   carries only the token); a store that can't be reached is retried with
+ *   a growing pause;
+ * - `billing.reconcile-stores` — hourly: purchases whose term or grace has
+ *   passed without a word, asked in the store's API, and one more if the
+ *   store hasn't answered for an hour; one store failing does not stop the
+ *   other;
+ * - `billing.watch-stores` — every minute: the signal `store_sync_stale`,
+ *   and deliveries whose job was lost put back;
+ * - `billing.remind-grace` — every minute: the reminder P-SUB-01
+ *   `user_billing_reminder_days` before the end of a store's grace, once per
+ *   grace.
+ */
+export const applyStoreNotificationJob = defineJob({
+  name: "billing.apply-store-notification",
+  payload: z.object({ notificationId: z.uuid() }),
+  timeoutSeconds: 60,
+  retry: { limit: 8, delaySeconds: 30, backoff: true },
+  singleton: true,
+  concurrency: 4,
+});
+
+export const reconcileStoresJob = definePeriodicJob({
+  name: "billing.reconcile-stores",
+  timeoutSeconds: 600,
+  // The next hour is the retry.
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: () => "29 * * * *",
+});
+
+export const watchStoresJob = definePeriodicJob({
+  name: "billing.watch-stores",
+  timeoutSeconds: 60,
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: () => EVERY_MINUTE,
+});
+
+export const remindGraceJob = definePeriodicJob({
+  name: "billing.remind-grace",
+  timeoutSeconds: 60,
+  retry: { limit: 0, delaySeconds: 0, backoff: false },
+  singleton: true,
+  schedule: () => EVERY_MINUTE,
+});
+
 export const billingJobCatalog = [
   applyBillingEventsJob,
   wakeBillingEventsJob,
@@ -156,4 +207,8 @@ export const billingJobCatalog = [
   detachCardJob,
   expireCardBindingsJob,
   watchPaymentProviderJob,
+  applyStoreNotificationJob,
+  reconcileStoresJob,
+  watchStoresJob,
+  remindGraceJob,
 ];

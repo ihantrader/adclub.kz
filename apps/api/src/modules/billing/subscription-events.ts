@@ -165,6 +165,18 @@ export class SubscriptionEvents implements OnModuleInit {
         subject: { type: "subscription", id: after.id },
         dedupeKey: `subscription:${after.id}:grace:v${String(after.version)}`,
       });
+      // TASK-041: a grace shorter than `user_billing_reminder_days` has its
+      // reminder due already — this push is it (`billing.remind-grace` skips it).
+      const reminderDays = await this.settings.get("user_billing_reminder_days");
+      if (
+        after.graceUntil &&
+        after.graceUntil.getTime() - reminderDays * 24 * HOUR_MS <= Date.now()
+      ) {
+        await tx
+          .update(subscription)
+          .set({ graceRemindedUntil: after.graceUntil })
+          .where(eq(subscription.id, after.id));
+      }
     }
   }
 
@@ -192,6 +204,7 @@ export class SubscriptionEvents implements OnModuleInit {
             ...(event.periodEnd && { periodEnd: event.periodEnd.toISOString() }),
             ...(event.graceUntil && { graceUntil: event.graceUntil.toISOString() }),
             ...(event.platform && { platform: event.platform }),
+            ...(event.productId && { productId: event.productId }),
           },
         })
         .onConflictDoNothing({ target: [billingEvent.provider, billingEvent.providerEventId] })
@@ -358,9 +371,14 @@ export class SubscriptionEvents implements OnModuleInit {
         };
       }
       if (!row.accountId) return refused("no_account");
+      const plan = await this.plans.inEffect("user", row.eventAt, tx);
+      // A store's purchase starts a subscription only for a product of the
+      // users' tariff (TASK-041); the test provider names no product.
+      if (row.payload.productId && !plan?.storeProductIds.includes(row.payload.productId)) {
+        return refused("unknown_product");
+      }
       const room = await this.makeRoom(tx, row.accountId, null, now, toleranceMs, changedBy, row);
       if (room === "already_active") return refused("already_active");
-      const plan = await this.plans.inEffect("user", row.eventAt, tx);
       const [created] = await tx
         .insert(subscription)
         .values({

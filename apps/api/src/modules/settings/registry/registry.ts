@@ -1936,6 +1936,44 @@ const billing = group({
       default: 24,
       description: "Сколько часов без успешного обращения к API стора до сигнала администратору.",
     }),
+    store_sync_per_account: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 20,
+      description:
+        "Сколько проверок покупки в сторе (после оплаты и «Восстановить покупки») один пользователь может запросить за окно; каждая — обращение к API стора.",
+    }),
+    store_sync_per_account_window_seconds: define.duration({
+      unit: "seconds",
+      min: 10,
+      max: DAY,
+      default: 600,
+      description: "Окно лимита проверок покупки в сторе.",
+    }),
+    store_webhook_per_ip: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1_000_000,
+      default: 600,
+      description:
+        "Сколько уведомлений App Store и Google Play принимается с одного адреса за окно; сверх — отказ с временем ожидания. Настоящая защита маршрутов — проверка подписи стора.",
+    }),
+    store_webhook_per_ip_window_seconds: define.duration({
+      unit: "seconds",
+      min: 1,
+      max: DAY,
+      default: 60,
+      description: "Окно лимита уведомлений сторов с одного адреса.",
+    }),
+    store_reconcile_batch: define.integer({
+      unit: "count",
+      min: 1,
+      max: 1000,
+      default: 100,
+      description:
+        "Сколько подписок каждого стора ежечасная сверка спрашивает у API стора за один запуск (у которых прошёл срок или льготный период без слова стора).",
+    }),
     user_billing_reminder_days: define.duration({
       unit: "days",
       min: 1,

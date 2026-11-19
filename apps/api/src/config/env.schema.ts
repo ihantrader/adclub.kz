@@ -190,6 +190,58 @@ export type PushTestMode = (typeof pushTestModes)[number];
 export const FCM_PUBLIC_URL = "https://fcm.googleapis.com";
 export const GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+/** The environments of the App Store (TASK-041): where a purchase was made. */
+export const appleEnvironments = ["production", "sandbox"] as const;
+export type AppleEnvironment = (typeof appleEnvironments)[number];
+
+/** The App Store Server API (Apple's documentation, 2026). */
+export const APPLE_API_URLS: Record<AppleEnvironment, string> = {
+  production: "https://api.storekit.apple.com",
+  sandbox: "https://api.storekit-sandbox.apple.com",
+};
+export const GOOGLE_PLAY_API_URL = "https://androidpublisher.googleapis.com";
+/** Google's keys that sign the OIDC tokens of Pub/Sub push. */
+export const GOOGLE_OIDC_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs";
+
+/**
+ * The stand-ins of development and tests (TASK-041): the bundle and the
+ * package the dev command and the tests sign for, the audience and the
+ * sender of the imitated Pub/Sub push.
+ */
+export const DEV_STORE_APP_ID = "kz.adclub.app";
+export const DEV_PUBSUB_AUDIENCE = "https://adclub.local/webhooks/stores/google";
+export const DEV_PUBSUB_SERVICE_ACCOUNT = "pubsub-dev@adclub-dev.iam.gserviceaccount.com";
+
+/** What a deployment knows about the App Store (TASK-041, ARCHITECTURE 4.98). */
+export interface AppleStoreConfig {
+  /** Every variable of the set is given. */
+  configured: boolean;
+  bundleId: string;
+  /** Checked against notifications from production; `null` — not known (development). */
+  appAppleId: number | null;
+  /** Where purchases and notifications may come from. */
+  environments: AppleEnvironment[];
+  /** The App Store Server API key; `null` — no API calls (the store answers «unavailable»). */
+  api: { issuerId: string; keyId: string; privateKey: string } | null;
+  apiUrls: Record<AppleEnvironment, string>;
+  /** Trust the local development chain beside Apple's root (development and tests only). */
+  devTrust: boolean;
+}
+
+/** What a deployment knows about Google Play (TASK-041, ARCHITECTURE 4.98). */
+export interface GoogleStoreConfig {
+  configured: boolean;
+  packageName: string;
+  /** The service account of the Play Developer API; `null` — no API calls. */
+  api: { clientEmail: string; privateKey: string; tokenUrl: string } | null;
+  apiUrl: string;
+  /** Whose OIDC token a Pub/Sub push must carry; `null` — no push is accepted. */
+  pubsub: { audience: string; serviceAccount: string } | null;
+  certsUrl: string;
+  /** Accept the local development key of OIDC tokens (development and tests only). */
+  devTrust: boolean;
+}
+
 /**
  * Where a supplier's card subscription is charged (TASK-042, ARCHITECTURE
  * 9.4.2, 4.77). `card_kz` is the card processor of Kazakhstan (Freedom Pay or
@@ -501,6 +553,70 @@ export const envSchema = z.object({
   ),
   // Where APNs is; development only (a local HTTP/2 server).
   APNS_API_URL: blankAsUndefined(z.url()),
+  // A user's subscription through the stores (ARCHITECTURE 9.4.1, 4.98;
+  // TASK-041). Each store is all or nothing: a part of a set refuses to
+  // start. Without a set the store's routes answer «unavailable» (production
+  // starts, a signal tells the administrator what is missing).
+  // App Store: the app's bundle id and its Apple ID (numeric, App Store
+  // Connect → App Information), the environment notifications and
+  // transactions must come from, and the App Store Server API key (Users and
+  // Access → Integrations → In-App Purchase: issuer id, key id, the `.p8` PEM,
+  // line breaks may be written as `\n`).
+  APPLE_BUNDLE_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/),
+  ),
+  APPLE_APP_APPLE_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^\d{1,15}$/),
+  ),
+  APPLE_ENVIRONMENT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(appleEnvironments).optional(),
+  ),
+  // Production also accepts sandbox purchases (App Review buys in the
+  // sandbox with the production build); off unless set.
+  APPLE_ALLOW_SANDBOX: z.stringbool().optional(),
+  // Apple's issuer ids look like UUIDs but are not RFC 4122 ones (no version or variant).
+  APPLE_ISSUER_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+  ),
+  APPLE_KEY_ID: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Z0-9]{10}$/),
+  ),
+  APPLE_PRIVATE_KEY: blankAsUndefined(z.string().trim().min(100)),
+  // Where the App Store Server API is; development only (a local server).
+  APPLE_API_BASE_URL: blankAsUndefined(z.url()),
+  // Google Play: the app's package name, the service account that reads
+  // purchases (Play Console → Users and permissions; its JSON key's
+  // `client_email` and `private_key`), and the Pub/Sub push subscription of
+  // Real-time Developer Notifications: the audience its OIDC token is minted
+  // for and the service account it is minted as.
+  GOOGLE_PLAY_PACKAGE_NAME: blankAsUndefined(
+    z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/),
+  ),
+  GOOGLE_PLAY_CLIENT_EMAIL: blankAsUndefined(z.email()),
+  GOOGLE_PLAY_PRIVATE_KEY: blankAsUndefined(z.string().trim().min(100)),
+  GOOGLE_PUBSUB_AUDIENCE: blankAsUndefined(z.string().trim().min(3).max(500)),
+  GOOGLE_PUBSUB_SERVICE_ACCOUNT: blankAsUndefined(z.email()),
+  // Where the Play Developer API, Google's token endpoint and Google's
+  // signing keys are; development only (a local server).
+  GOOGLE_PLAY_API_BASE_URL: blankAsUndefined(z.url()),
+  GOOGLE_PLAY_TOKEN_URL: blankAsUndefined(z.url()),
+  GOOGLE_OIDC_CERTS_URL: blankAsUndefined(z.url()),
   // A supplier's card subscription (ARCHITECTURE 9.4.2, 4.77; TASK-042).
   // Unset provider: `test`, which production refuses.
   PAYMENT_PROVIDER: z.preprocess(
@@ -678,6 +794,13 @@ export type AppConfig = {
           origin: string | undefined;
         }
       | undefined;
+  };
+  /** A user's subscription through the stores (TASK-041). */
+  stores: {
+    apple: AppleStoreConfig;
+    google: GoogleStoreConfig;
+    /** The variables a store lacks to be whole (for the administrator's signal); empty — whole. */
+    missing: { apple: string[]; google: string[] };
   };
   search: {
     /** Where Meilisearch is; `undefined` — no index, the search runs on PostgreSQL. */
@@ -903,6 +1026,62 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       );
     }
   }
+  // The stores (TASK-041): each set is whole or absent — a part of one is a
+  // mistake that would leave its purchases half checked. A deployment
+  // without a set starts; its store answers «unavailable».
+  const appleVariables = [
+    "APPLE_BUNDLE_ID",
+    "APPLE_APP_APPLE_ID",
+    "APPLE_ENVIRONMENT",
+    "APPLE_ISSUER_ID",
+    "APPLE_KEY_ID",
+    "APPLE_PRIVATE_KEY",
+  ] as const;
+  const googleVariables = [
+    "GOOGLE_PLAY_PACKAGE_NAME",
+    "GOOGLE_PLAY_CLIENT_EMAIL",
+    "GOOGLE_PLAY_PRIVATE_KEY",
+    "GOOGLE_PUBSUB_AUDIENCE",
+    "GOOGLE_PUBSUB_SERVICE_ACCOUNT",
+  ] as const;
+  const appleMissing = appleVariables.filter((name) => parsed[name] === undefined);
+  const googleMissing = googleVariables.filter((name) => parsed[name] === undefined);
+  for (const [store, variables, missing] of [
+    ["App Store", appleVariables, appleMissing],
+    ["Google Play", googleVariables, googleMissing],
+  ] as const) {
+    if (missing.length > 0 && missing.length < variables.length) {
+      environmentIssues.push(
+        `${missing.join(", ")}: required with the rest of the ${store} variables (a store is configured whole or not at all)`,
+      );
+    }
+  }
+  for (const name of [
+    "APPLE_API_BASE_URL",
+    "GOOGLE_PLAY_API_BASE_URL",
+    "GOOGLE_PLAY_TOKEN_URL",
+    "GOOGLE_OIDC_CERTS_URL",
+  ] as const) {
+    if (parsed[name] && !isLocal) {
+      environmentIssues.push(
+        `${name}: not allowed when NODE_ENV=${parsed.NODE_ENV} (purchases would be checked elsewhere)`,
+      );
+    }
+  }
+  const appleConfigured = appleMissing.length === 0;
+  const googleConfigured = googleMissing.length === 0;
+  const appleEnvironmentsAccepted: AppleEnvironment[] = appleConfigured
+    ? parsed.APPLE_ENVIRONMENT === "production" && parsed.APPLE_ALLOW_SANDBOX
+      ? ["production", "sandbox"]
+      : [parsed.APPLE_ENVIRONMENT!]
+    : isLocal
+      ? ["sandbox", "production"]
+      : [];
+  if (parsed.NODE_ENV === "production" && parsed.APPLE_ENVIRONMENT === "sandbox") {
+    environmentIssues.push(
+      "APPLE_ENVIRONMENT: sandbox is not allowed when NODE_ENV=production (use APPLE_ALLOW_SANDBOX for App Review)",
+    );
+  }
   // Cards of suppliers (TASK-042): the test provider charges nobody, so
   // production refuses it. `card_kz` starts (the application must), but until
   // the acquirer's class exists every call of it answers «unavailable» —
@@ -1059,6 +1238,51 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
               origin: parsed.APNS_API_URL?.replace(/\/+$/, ""),
             }
           : undefined,
+    },
+    stores: {
+      apple: {
+        configured: appleConfigured,
+        bundleId: parsed.APPLE_BUNDLE_ID ?? DEV_STORE_APP_ID,
+        appAppleId: parsed.APPLE_APP_APPLE_ID ? Number(parsed.APPLE_APP_APPLE_ID) : null,
+        environments: appleEnvironmentsAccepted,
+        api: appleConfigured
+          ? {
+              issuerId: parsed.APPLE_ISSUER_ID!,
+              keyId: parsed.APPLE_KEY_ID!,
+              privateKey: parsed.APPLE_PRIVATE_KEY!.replaceAll("\\n", "\n"),
+            }
+          : null,
+        apiUrls: parsed.APPLE_API_BASE_URL
+          ? {
+              production: parsed.APPLE_API_BASE_URL.replace(/\/+$/, ""),
+              sandbox: parsed.APPLE_API_BASE_URL.replace(/\/+$/, ""),
+            }
+          : APPLE_API_URLS,
+        devTrust: isLocal,
+      },
+      google: {
+        configured: googleConfigured,
+        packageName: parsed.GOOGLE_PLAY_PACKAGE_NAME ?? DEV_STORE_APP_ID,
+        api: googleConfigured
+          ? {
+              clientEmail: parsed.GOOGLE_PLAY_CLIENT_EMAIL!,
+              privateKey: parsed.GOOGLE_PLAY_PRIVATE_KEY!.replaceAll("\\n", "\n"),
+              tokenUrl: parsed.GOOGLE_PLAY_TOKEN_URL ?? GOOGLE_OAUTH_TOKEN_URL,
+            }
+          : null,
+        apiUrl: (parsed.GOOGLE_PLAY_API_BASE_URL ?? GOOGLE_PLAY_API_URL).replace(/\/+$/, ""),
+        pubsub: googleConfigured
+          ? {
+              audience: parsed.GOOGLE_PUBSUB_AUDIENCE!,
+              serviceAccount: parsed.GOOGLE_PUBSUB_SERVICE_ACCOUNT!,
+            }
+          : isLocal
+            ? { audience: DEV_PUBSUB_AUDIENCE, serviceAccount: DEV_PUBSUB_SERVICE_ACCOUNT }
+            : null,
+        certsUrl: parsed.GOOGLE_OIDC_CERTS_URL ?? GOOGLE_OIDC_CERTS_URL,
+        devTrust: isLocal,
+      },
+      missing: { apple: [...appleMissing], google: [...googleMissing] },
     },
     search: {
       url: parsed.MEILISEARCH_URL?.replace(/\/+$/, ""),

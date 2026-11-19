@@ -353,7 +353,7 @@ const USAGE = `Usage: operator <command> [arguments]
   review-login:disable [--phone <phone>] [--reason <text>]
   review-login:status
   subscription:status <phone>
-  billing:plan:add --audience user|supplier --code <code> --price <tenge> --from <YYYY-MM-DD | ISO time> --announce-days <n> --reason <text> [--to <YYYY-MM-DD | ISO time>]
+  billing:plan:add --audience user|supplier --code <code> --price <tenge> --from <YYYY-MM-DD | ISO time> --announce-days <n> --reason <text> [--to <YYYY-MM-DD | ISO time>] [--store-products <id,id>]
   billing:plan:list
   settings:list
   settings:get <key>
@@ -404,7 +404,8 @@ const USAGE = `Usage: operator <command> [arguments]
   dev:jobs:fail [--note <text>] [--on-query]
   dev:subscription:event <phone> <started|renewed|grace_started|suspended|cancelled|cancel_withdrawn|expired|refunded|revoked> [--until <YYYY-MM-DD | ISO time | +<n>d>] [--grace-until <…>] [--at <ISO time>] [--event-id <id>] [--ref <purchase>]
   dev:supplier:card <supplierId> --linked | --unlinked
-  dev:payments:webhook [--key <idempotency key of the charge>] [--status succeeded|declined] [--reason <decline reason>] [--twice] [--bad-signature]`;
+  dev:payments:webhook [--key <idempotency key of the charge>] [--status succeeded|declined] [--reason <decline reason>] [--twice] [--bad-signature]
+  dev:stores:notify <phone> --type <Apple notificationType | Google code> [--store apple|google] [--subtype <Apple subtype>] [--until <term end>] [--grace-until <grace end>] [--ref <original transaction id | purchase token>] [--product <id>] [--twice] [--bad-signature]`;
 
 function required(value: string | undefined, what: string): string {
   if (!value) {
@@ -609,6 +610,11 @@ async function run(
       only: { type: "string" },
       set: { type: "string" },
       lang: { type: "string" },
+      store: { type: "string" },
+      type: { type: "string" },
+      subtype: { type: "string" },
+      product: { type: "string" },
+      "store-products": { type: "string" },
     },
   });
   const [command, first, second] = positionals;
@@ -1121,6 +1127,12 @@ async function run(
             "--announce-days",
           )!,
           reason: required(values.reason, "--reason"),
+          ...(values["store-products"] !== undefined && {
+            storeProductIds: values["store-products"]
+              .split(",")
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0),
+          }),
         },
         { role: "operator" },
       );
@@ -1144,6 +1156,27 @@ async function run(
         ...(values.at !== undefined && { at: termEnd(values.at, "--at") }),
         ...(values["event-id"] !== undefined && { eventId: values["event-id"] }),
         ...(values.ref !== undefined && { ref: values.ref }),
+      });
+    }
+    case "dev:stores:notify": {
+      if (!devCommands) {
+        throw new OperatorCommandError(
+          "dev:stores:notify is available in development and tests only",
+        );
+      }
+      return billing.storeNotify({
+        phone: required(first, "<phone>"),
+        store: values.store ?? "apple",
+        type: required(values.type, "--type"),
+        ...(values.subtype !== undefined && { subtype: values.subtype }),
+        ...(values.until !== undefined && { until: termEnd(values.until, "--until") }),
+        ...(values["grace-until"] !== undefined && {
+          graceUntil: termEnd(values["grace-until"], "--grace-until"),
+        }),
+        ...(values.ref !== undefined && { ref: values.ref }),
+        ...(values.product !== undefined && { product: values.product }),
+        twice: values.twice === true,
+        badSignature: values["bad-signature"] === true,
       });
     }
     case "dev:payments:webhook": {

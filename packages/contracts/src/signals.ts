@@ -87,9 +87,22 @@ import type { CatalogItemListQuery } from "./catalog-items";
  *   closes by itself when the gap is gone; closed by an administrator, it
  *   opens again only at a lower conversion or a whole window later.
  *   Nothing is blocked and the supplier is told nothing.
+ * - `store_sync_stale` (TASK-041; ARCHITECTURE 9.4.1 rule 7, 4.98) — no
+ *   successful call of a store's API (App Store Server API, Play Developer
+ *   API) for longer than `store_outage_signal_hours` while subscriptions of
+ *   that store are current. One open signal per store (the subject is the
+ *   store — `APP_STORE_SUBJECT_ID`, `GOOGLE_PLAY_SUBJECT_ID`); it closes by
+ *   itself at the first successful call. A store not configured here names
+ *   the variables it lacks (`storeMissing`). Nobody loses access because of
+ *   it: the subscriptions keep the rule of `expired_unconfirmed`.
  *
  * Later tasks add the others (a spike of complaints).
  */
+
+/** App Store as the subject of `store_sync_stale` (TASK-041). */
+export const APP_STORE_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a6";
+/** Google Play as the subject of `store_sync_stale` (TASK-041). */
+export const GOOGLE_PLAY_SUBJECT_ID = "00000000-0000-4000-8000-00000000c4a7";
 
 export const adminSignalKindSchema = z.enum([
   "duplicate_after_late_close",
@@ -105,6 +118,7 @@ export const adminSignalKindSchema = z.enum([
   "push_fallback_high",
   "assistant_budget_exhausted",
   "views_orders_gap",
+  "store_sync_stale",
 ]);
 
 export type AdminSignalKind = z.infer<typeof adminSignalKindSchema>;
@@ -233,6 +247,18 @@ export const adminSignalPayloadSchema = z.object({
   windowDays: z.number().int().optional(),
   periodFrom: z.string().optional(),
   periodTo: z.string().optional(),
+  /**
+   * `store_sync_stale` (TASK-041): which store, the last successful call of
+   * its API (`null` — none ever), the last failure and its reason, how many
+   * current subscriptions are of this store, the variables the deployment
+   * lacks for it (empty — configured); `since`/`endedAt` as for the outage,
+   * `windowHours` — `store_outage_signal_hours`.
+   */
+  storePlatform: z.enum(["ios", "android"]).optional(),
+  storeLastSuccessAt: z.iso.datetime().nullable().optional(),
+  storeLastFailure: z.string().nullable().optional(),
+  storeSubscriptions: z.number().int().optional(),
+  storeMissing: z.array(z.string()).optional(),
 });
 
 export type AdminSignalPayload = z.infer<typeof adminSignalPayloadSchema>;

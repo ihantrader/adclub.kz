@@ -8805,7 +8805,8 @@
                 "billing_plan_missing",
                 "push_fallback_high",
                 "assistant_budget_exhausted",
-                "views_orders_gap"
+                "views_orders_gap",
+                "store_sync_stale"
               ]
             }
           },
@@ -15559,6 +15560,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SupplierMembershipListResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "$ref": "#/components/responses/ClientUpdateRequired"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/billing/store/sync": {
+      "post": {
+        "operationId": "syncStoreSubscription",
+        "summary": "After a purchase in App Store or Google Play (and «Восстановить покупки»): the server checks the purchase with the store itself — Apple's signature and the App Store Server API, the Play Developer API — and applies its state the way a store's notification is applied; the client's word is never taken. A purchase of another account is refused and stays there; the same call again changes nothing. The answer is the subscription as `GET /me/subscription` shows it",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ClientHeader"
+          },
+          {
+            "$ref": "#/components/parameters/AcceptLanguage"
+          }
+        ],
+        "security": [
+          {
+            "sessionAccessToken": []
+          }
+        ],
+        "x-access-contexts": [
+          "user"
+        ],
+        "x-rate-limit": {
+          "perAccount": "store_sync_per_account",
+          "whenUnavailable": "allow"
+        },
+        "requestBody": {
+          "description": "What the store gave the app: Apple's signed transaction, or Google's token and product",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreSyncBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The subscription after the store's word",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySubscriptionResponse"
                 }
               }
             }
@@ -31700,7 +31759,8 @@
           "billing_plan_missing",
           "push_fallback_high",
           "assistant_budget_exhausted",
-          "views_orders_gap"
+          "views_orders_gap",
+          "store_sync_stale"
         ]
       },
       "AdminSignalListQuery": {
@@ -31982,6 +32042,42 @@
           },
           "periodTo": {
             "type": "string"
+          },
+          "storePlatform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android"
+            ]
+          },
+          "storeLastSuccessAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "storeLastFailure": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storeSubscriptions": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "storeMissing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -32019,6 +32115,66 @@
           "order",
           "supplier",
           "channel"
+        ]
+      },
+      "AdminStorePurchase": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android"
+            ]
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "production",
+              "sandbox"
+            ]
+          },
+          "productId": {
+            "type": "string"
+          },
+          "lastWord": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastWordAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSyncAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "platform",
+          "environment",
+          "productId",
+          "lastWord",
+          "lastWordAt",
+          "lastSyncAt"
         ]
       },
       "AdminSupplierBillingResponse": {
@@ -34194,6 +34350,16 @@
                 "required": [
                   "validUntil"
                 ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "store": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminStorePurchase"
               },
               {
                 "type": "null"
@@ -42008,6 +42174,8 @@
           "CLUB_ACCESS_NOT_GRANTED",
           "SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT",
           "SUBSCRIPTION_ALREADY_ACTIVE",
+          "SUBSCRIPTION_PURCHASE_INVALID",
+          "SUBSCRIPTION_PRODUCT_UNKNOWN",
           "BILLING_NO_PLAN",
           "BILLING_NO_CARD",
           "BILLING_NOTHING_TO_PAY",
@@ -49687,6 +49855,8 @@
           "active_orders_per_account",
           "whatsapp_webhook_per_ip",
           "payment_webhook_per_ip",
+          "store_webhook_per_ip",
+          "store_sync_per_account",
           "admin_search_per_account",
           "phone_reveal_per_account",
           "maintenance_draft_per_admin_day",
@@ -53190,6 +53360,52 @@
         "required": [
           "binding",
           "redirectUrl"
+        ]
+      },
+      "StoreSyncBody": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "platform": {
+                "type": "string",
+                "const": "ios"
+              },
+              "signedTransaction": {
+                "type": "string",
+                "minLength": 20,
+                "maxLength": 20000
+              }
+            },
+            "required": [
+              "platform",
+              "signedTransaction"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "platform": {
+                "type": "string",
+                "const": "android"
+              },
+              "purchaseToken": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 4096
+              },
+              "productId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "platform",
+              "purchaseToken",
+              "productId"
+            ]
+          }
         ]
       },
       "SubmitSupplierLeadBody": {

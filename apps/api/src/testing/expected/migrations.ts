@@ -80,4 +80,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   "1792722000000_car-link-indexes",
   "1792723000000_photo-search-due-index",
   "1792724000000_translation-priority",
+  "1792725000000_store-subscriptions",
 ];

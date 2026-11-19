@@ -13,11 +13,18 @@ export {
   pushTestModes,
   WHATSAPP_API_VERSION,
   WHATSAPP_PUBLIC_URL,
+  appleEnvironments,
+  DEV_PUBSUB_AUDIENCE,
+  DEV_PUBSUB_SERVICE_ACCOUNT,
+  DEV_STORE_APP_ID,
 } from "./env.schema";
 export type {
   AiProviderName,
   AiTestMode,
   AppConfig,
+  AppleEnvironment,
+  AppleStoreConfig,
+  GoogleStoreConfig,
   LogLevel,
   LoginCodeChannelProvider,
   MessageProviderName,

@@ -53,6 +53,8 @@ export const subscription = pgTable("subscription", {
   graceUntil: timestamp("grace_until", { withTimezone: true }),
   unconfirmedSince: timestamp("unconfirmed_since", { withTimezone: true }),
   lastProviderEventAt: timestamp("last_provider_event_at", { withTimezone: true }),
+  /** The end of the grace the reminder P-SUB-01 was sent for (TASK-041): once per grace. */
+  graceRemindedUntil: timestamp("grace_reminded_until", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

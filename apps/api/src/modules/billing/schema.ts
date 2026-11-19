@@ -31,6 +31,8 @@ export const plan = pgTable("plan", {
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   cancelledByRole: text("cancelled_by_role").$type<"operator" | "admin">(),
   cancelReason: text("cancel_reason"),
+  /** The products of App Store and Google Play that pay for a users' tariff (TASK-041). */
+  storeProductIds: text("store_product_ids").array().notNull().default([]),
 });
 
 export type PlanRow = typeof plan.$inferSelect;
@@ -50,6 +52,8 @@ export interface BillingEventPayload {
   periodEnd?: string;
   graceUntil?: string;
   platform?: "ios" | "android";
+  /** A store's product (TASK-041): a purchase outside the tariff starts no subscription. */
+  productId?: string;
 }
 
 /** `billing_event`: every event that moves a subscription, and what it did. */
@@ -198,6 +202,57 @@ export const paymentWebhookEvent = pgTable("payment_webhook_event", {
 
 export type PaymentWebhookEventRow = typeof paymentWebhookEvent.$inferSelect;
 
+export type StorePlatform = "ios" | "android";
+export type StoreEnvironment = "production" | "sandbox";
+
+/**
+ * `store_purchase` (TASK-041, ARCHITECTURE 4.98): one purchase at a store,
+ * by our reference of it. The Play purchase token is kept here only — it is
+ * not a reference, never logged and never journaled.
+ */
+export const storePurchase = pgTable("store_purchase", {
+  providerRef: text("provider_ref").primaryKey(),
+  platform: text("platform").$type<StorePlatform>().notNull(),
+  environment: text("environment").$type<StoreEnvironment>().notNull(),
+  originalTransactionId: text("original_transaction_id"),
+  purchaseToken: text("purchase_token"),
+  productId: text("product_id").notNull(),
+  accountId: uuid("account_id").references(() => account.id),
+  lastWord: text("last_word"),
+  lastWordAt: timestamp("last_word_at", { withTimezone: true }),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type StorePurchaseRow = typeof storePurchase.$inferSelect;
+
+/** `store_notification`: a store's delivery, once by its id at the store; the body is not kept. */
+export const storeNotification = pgTable("store_notification", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  platform: text("platform").$type<StorePlatform>().notNull(),
+  notificationId: text("notification_id").notNull(),
+  notificationType: text("notification_type").notNull(),
+  providerRef: text("provider_ref"),
+  /** Google's token until the worker has read the purchase's state; then `null`. */
+  purchaseToken: text("purchase_token"),
+  eventAt: timestamp("event_at", { withTimezone: true }).notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  result: text("result"),
+});
+
+export type StoreNotificationRow = typeof storeNotification.$inferSelect;
+
+/** `store_api_health`: per store, the last successful and failed call of its API. */
+export const storeApiHealth = pgTable("store_api_health", {
+  platform: text("platform").$type<StorePlatform>().primaryKey(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+  lastFailure: text("last_failure"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Every table this module owns — checked against the migrated database. */
 export const billingTables = [
   plan,
@@ -206,4 +261,7 @@ export const billingTables = [
   cardBinding,
   paymentAttempt,
   paymentWebhookEvent,
+  storePurchase,
+  storeNotification,
+  storeApiHealth,
 ];

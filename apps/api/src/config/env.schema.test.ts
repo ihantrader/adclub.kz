@@ -78,7 +78,98 @@ describe("loadConfig", () => {
       // No index without MEILISEARCH_URL: the search runs on PostgreSQL.
       search: { url: undefined, apiKey: undefined, index: "catalog_items" },
       imageSearch: { provider: "test", testMode: "ok", serpApiKey: undefined },
+      // The stores (TASK-041): not configured — no API calls; development
+      // reads the notifications signed by the local chain.
+      stores: {
+        apple: expect.objectContaining({
+          configured: false,
+          bundleId: "kz.adclub.app",
+          api: null,
+          devTrust: true,
+          environments: ["sandbox", "production"],
+        }),
+        google: expect.objectContaining({ configured: false, api: null, devTrust: true }),
+        missing: {
+          apple: expect.arrayContaining(["APPLE_BUNDLE_ID", "APPLE_PRIVATE_KEY"]),
+          google: expect.arrayContaining(["GOOGLE_PLAY_PACKAGE_NAME"]),
+        },
+      },
       ignoredVariables: [],
+    });
+  });
+
+  describe("the stores (TASK-041)", () => {
+    const APPLE = {
+      APPLE_BUNDLE_ID: "kz.adclub.app",
+      APPLE_APP_APPLE_ID: "1234567890",
+      APPLE_ENVIRONMENT: "production",
+      APPLE_ISSUER_ID: "57246542-96fe-1a63-e053-0824d011072a",
+      APPLE_KEY_ID: "2X9R4HXF34",
+      APPLE_PRIVATE_KEY: `-----BEGIN PRIVATE KEY-----\\n${"A".repeat(120)}\\n-----END PRIVATE KEY-----`,
+    };
+    const GOOGLE = {
+      GOOGLE_PLAY_PACKAGE_NAME: "kz.adclub.app",
+      GOOGLE_PLAY_CLIENT_EMAIL: "play@adclub.iam.gserviceaccount.com",
+      GOOGLE_PLAY_PRIVATE_KEY: `-----BEGIN PRIVATE KEY-----\\n${"B".repeat(120)}\\n-----END PRIVATE KEY-----`,
+      GOOGLE_PUBSUB_AUDIENCE: "https://api.adclub.kz/webhooks/stores/google",
+      GOOGLE_PUBSUB_SERVICE_ACCOUNT: "pubsub@adclub.iam.gserviceaccount.com",
+    };
+
+    it("takes a whole set of each store, with its environment and keys", () => {
+      const stores = loadConfig({ ...VALID_ENV, ...APPLE, ...GOOGLE }).stores;
+      expect(stores.apple.configured).toBe(true);
+      expect(stores.apple.environments).toEqual(["production"]);
+      expect(stores.apple.appAppleId).toBe(1234567890);
+      expect(stores.apple.api?.privateKey).toContain("\n");
+      expect(stores.apple.apiUrls.production).toBe("https://api.storekit.apple.com");
+      expect(stores.google.configured).toBe(true);
+      expect(stores.google.pubsub).toEqual({
+        audience: GOOGLE.GOOGLE_PUBSUB_AUDIENCE,
+        serviceAccount: GOOGLE.GOOGLE_PUBSUB_SERVICE_ACCOUNT,
+      });
+      expect(stores.missing).toEqual({ apple: [], google: [] });
+      expect(
+        loadConfig({ ...VALID_ENV, ...APPLE, APPLE_ALLOW_SANDBOX: "true" }).stores.apple
+          .environments,
+      ).toEqual(["production", "sandbox"]);
+    });
+
+    it("refuses a part of a set, in any environment", () => {
+      const { APPLE_PRIVATE_KEY: _key, ...partApple } = APPLE;
+      expect(() => loadConfig({ ...VALID_ENV, ...partApple })).toThrow(
+        /APPLE_PRIVATE_KEY: required with the rest of the App Store variables/,
+      );
+      expect(() => loadConfig({ ...VALID_ENV, GOOGLE_PLAY_PACKAGE_NAME: "kz.adclub.app" })).toThrow(
+        /GOOGLE_PLAY_CLIENT_EMAIL.*required with the rest of the Google Play variables/,
+      );
+    });
+
+    it("starts a deployment without the stores: their routes answer «unavailable», nothing trusts the local keys", () => {
+      const stores = loadConfig({
+        ...VALID_ENV,
+        NODE_ENV: "staging",
+        SESSION_TOKEN_SECRET: "a-staging-session-secret-of-at-least-32-chars",
+        LOGIN_CODE_HASH_SECRET: "a-staging-login-code-secret-of-32-chars-at-least",
+        ADMIN_TOTP_ENCRYPTION_KEY: "a-staging-totp-key-of-at-least-32-characters",
+        PAYMENT_TOKEN_ENCRYPTION_KEY: "a-staging-payment-key-of-at-least-32-chars",
+        ADMIN_WEB_RELEASE_VERSION: "1.0.0",
+      }).stores;
+      expect(stores.apple).toMatchObject({ configured: false, environments: [], devTrust: false });
+      expect(stores.google).toMatchObject({ configured: false, pubsub: null, devTrust: false });
+    });
+
+    it("keeps the local addresses of the stores to development", () => {
+      expect(() =>
+        loadConfig({
+          ...VALID_ENV,
+          NODE_ENV: "staging",
+          APPLE_API_BASE_URL: "https://x.test",
+        }),
+      ).toThrow(/APPLE_API_BASE_URL: not allowed/);
+      expect(
+        loadConfig({ ...VALID_ENV, ...APPLE, APPLE_API_BASE_URL: "http://127.0.0.1:9/" }).stores
+          .apple.apiUrls,
+      ).toEqual({ production: "http://127.0.0.1:9", sandbox: "http://127.0.0.1:9" });
     });
   });
 

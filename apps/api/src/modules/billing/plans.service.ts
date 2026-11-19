@@ -33,6 +33,8 @@ export interface NewPlan {
   validTo: Date | null;
   announceBeforeDays: number;
   reason: string;
+  /** The products of App Store and Google Play that pay for a users' tariff (TASK-041). */
+  storeProductIds?: string[];
 }
 
 /** Who adds or cancels a tariff: the server's command, or an administrator of the panel. */
@@ -41,6 +43,8 @@ export type PlanActor =
 
 const CODE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PRICE_MAX = 1_000_000;
+/** A product id of App Store or Google Play (TASK-041). */
+const STORE_PRODUCT = /^[A-Za-z0-9._-]{1,200}$/;
 const DAY_MS = 86_400_000;
 
 function invalid(path: string, message: string, extra?: Record<string, unknown>): ApiException {
@@ -153,9 +157,37 @@ export class Plans {
     if (reason.length === 0) {
       throw invalid("reason", "Must not be empty");
     }
+    const products = input.storeProductIds;
+    if (products !== undefined) {
+      if (input.audience !== "user" && products.length > 0) {
+        throw invalid("storeProductIds", "Only a users' tariff is sold in the stores");
+      }
+      if (products.length > 20 || products.some((id) => !STORE_PRODUCT.test(id))) {
+        throw invalid(
+          "storeProductIds",
+          "Up to 20 product ids of the stores (letters, digits, . _ -)",
+        );
+      }
+    }
     return this.database.db.transaction(async (tx) => {
       await tx.execute(sql`SELECT ${PLAN_LOCK}`);
-      return this.insert(tx, { ...input, reason }, actor);
+      // A users' tariff names the stores' products; a new record (a rise)
+      // keeps those of the record before it unless it names its own (TASK-041).
+      let storeProductIds = products;
+      if (storeProductIds === undefined && input.audience === "user") {
+        const [previous] = await tx
+          .select({ ids: plan.storeProductIds })
+          .from(plan)
+          .where(and(eq(plan.audience, "user"), isNull(plan.cancelledAt)))
+          .orderBy(desc(plan.validFrom))
+          .limit(1);
+        storeProductIds = previous?.ids ?? [];
+      }
+      return this.insert(
+        tx,
+        { ...input, reason, storeProductIds: [...new Set(storeProductIds ?? [])] },
+        actor,
+      );
     });
   }
 
@@ -374,6 +406,7 @@ export class Plans {
         announceBeforeDays: input.announceBeforeDays,
         reason: input.reason,
         createdByRole: actor.role,
+        storeProductIds: input.storeProductIds ?? [],
       })
       .returning();
     await this.audit.record(

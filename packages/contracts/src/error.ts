@@ -236,6 +236,14 @@ import { clientPlatformSchema } from "./client";
  *   T-SUB-04) — it stays there; moving it is the administrator's act.
  * - `SUBSCRIPTION_ALREADY_ACTIVE` (409): the account pays for another
  *   purchase that still gives access («Подписка уже активна»).
+ * - `SUBSCRIPTION_PURCHASE_INVALID` (400, `POST /billing/store/sync`): the
+ *   store's data is not a purchase of this app's subscription — a broken or
+ *   forged signature, another app, another environment, not a subscription,
+ *   or a purchase the store doesn't know; `details.reason` names which.
+ * - `SUBSCRIPTION_PRODUCT_UNKNOWN` (409): the purchase is of a product the
+ *   users' tariff in effect doesn't sell; no subscription is started.
+ * - The store not reached, or not configured here, is `SERVICE_UNAVAILABLE`
+ *   (503) with `retryable: true`; existing access is not touched.
  *
  * A supplier's card subscription (TASK-042, ARCHITECTURE 4.77):
  * - `BILLING_NO_PLAN` (409): there is no tariff for suppliers recorded —
@@ -563,6 +571,9 @@ export const errorCodeSchema = z.enum([
   // Subscriptions (TASK-040, ARCHITECTURE 4.72; returned by TASK-041's purchase routes).
   "SUBSCRIPTION_LINKED_TO_ANOTHER_ACCOUNT",
   "SUBSCRIPTION_ALREADY_ACTIVE",
+  // A purchase of a store (TASK-041, ARCHITECTURE 4.98).
+  "SUBSCRIPTION_PURCHASE_INVALID",
+  "SUBSCRIPTION_PRODUCT_UNKNOWN",
   // A supplier's card subscription (TASK-042, ARCHITECTURE 4.77).
   "BILLING_NO_PLAN",
   "BILLING_NO_CARD",

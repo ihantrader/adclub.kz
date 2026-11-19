@@ -36,6 +36,22 @@ export const WHATSAPP_WEBHOOK_BODY: ApiUploadBodyDefinition = {
  */
 export const PAYMENT_WEBHOOK_PATH = "/webhooks/payments";
 
+/**
+ * The stores' notifications (TASK-041, ARCHITECTURE 4.98): App Store Server
+ * Notifications V2 (a JWS in `signedPayload`, checked up to Apple's root)
+ * and Google Play's Pub/Sub push (an OIDC token in `Authorization`, checked
+ * before the body is read). Outside the client contract like the other
+ * webhooks; the body is read as bytes and parsed only after the check.
+ */
+export const APPLE_STORE_WEBHOOK_PATH = "/webhooks/stores/apple";
+export const GOOGLE_STORE_WEBHOOK_PATH = "/webhooks/stores/google";
+
+export const STORE_WEBHOOK_BODY: ApiUploadBodyDefinition = {
+  description: "A store's notification, as sent (it is checked before it is read).",
+  contentTypes: ["application/json"],
+  maxBytes: 128 * 1024,
+};
+
 export const PAYMENT_WEBHOOK_BODY: ApiUploadBodyDefinition = {
   description: "The payment provider's webhook event, as sent (the signature is over these bytes).",
   contentTypes: ["application/json"],

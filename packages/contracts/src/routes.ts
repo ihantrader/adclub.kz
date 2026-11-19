@@ -252,6 +252,7 @@ import {
   adminSupplierBillingResponseSchema,
   adminUserSubscriptionResponseSchema,
   mySubscriptionResponseSchema,
+  storeSyncBodySchema,
   supplierSubscriptionResponseSchema,
 } from "./subscriptions";
 import {
@@ -1087,6 +1088,29 @@ const coreApiRoutes = {
     contexts: ["user"],
     responses: {
       200: { description: "The subscription", schema: mySubscriptionResponseSchema },
+    },
+  }),
+  syncStoreSubscription: defineRoute({
+    operationId: "syncStoreSubscription",
+    method: "POST",
+    path: "/billing/store/sync",
+    summary:
+      "After a purchase in App Store or Google Play (and «Восстановить покупки»): the server checks the purchase with the store itself — Apple's signature and the App Store Server API, the Play Developer API — and applies its state the way a store's notification is applied; the client's word is never taken. A purchase of another account is refused and stays there; the same call again changes nothing. The answer is the subscription as `GET /me/subscription` shows it",
+    tag: "account",
+    clientVersionCheck: "enforced",
+    auth: "session",
+    contexts: ["user"],
+    rateLimit: { perAccount: "store_sync_per_account", whenUnavailable: "allow" },
+    requestBody: {
+      description:
+        "What the store gave the app: Apple's signed transaction, or Google's token and product",
+      schema: storeSyncBodySchema,
+    },
+    responses: {
+      200: {
+        description: "The subscription after the store's word",
+        schema: mySubscriptionResponseSchema,
+      },
     },
   }),
   getAccountProfile: defineRoute({

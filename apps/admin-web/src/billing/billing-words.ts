@@ -111,6 +111,11 @@ export function userSubscriptionsPath(accountId: string): string {
   return withQuery(routePaths.billingUsers, { tab: "all", accountId });
 }
 
+/** «Открыть объект» of `store_sync_stale` (TASK-041): the current subscriptions of that store. */
+export function storeSubscriptionsPath(platform: "ios" | "android"): string {
+  return withQuery(routePaths.billingUsers, { tab: "active", platform, provider: "store" });
+}
+
 // --------------------------------------------------------- suppliers
 
 export const GROUP_TEXT: Record<SupplierBillingGroup, string> = {

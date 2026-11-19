@@ -48,6 +48,8 @@ import {
   SUBSCRIPTION_BY_TEXT,
   SUBSCRIPTION_EVENT_TEXT,
   SUBSCRIPTION_PROVIDER_TEXT,
+  storeText,
+  storeWordText,
   SUBSCRIPTION_STATUS_TEXT,
 } from "./subscription-words";
 import { AccessMark, USERS_CRUMB } from "./Users";
@@ -683,6 +685,14 @@ function Subscription({
                   {subscription.platform &&
                     ` · ${subscription.platform === "ios" ? "iOS" : "Android"}`}
                 </dd>
+                {data?.store && (
+                  <>
+                    <dt>Стор</dt>
+                    <dd>{storeText(data.store)}</dd>
+                    <dt>Последнее слово стора</dt>
+                    <dd>{storeWordText(data.store)}</dd>
+                  </>
+                )}
               </dl>
             </div>
           )}

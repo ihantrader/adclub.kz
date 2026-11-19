@@ -1,9 +1,30 @@
 import type {
+  AdminStorePurchase,
   ClubAccessState,
   SubscriptionHistoryEntry,
   SubscriptionProviderValue,
   SubscriptionStatusValue,
 } from "@adclub/contracts";
+import { formatMoment } from "../format";
+
+/** «App Store · песочница · kz.adclub.club.month» (TASK-041). */
+export function storeText(store: AdminStorePurchase): string {
+  return [
+    store.platform === "ios" ? "App Store" : "Google Play",
+    store.environment === "sandbox" ? "песочница" : null,
+    store.productId,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** «DID_RENEW, 20.11.2026 14:05 · сверка 20.11.2026 15:29» — the store's own name of what it said. */
+export function storeWordText(store: AdminStorePurchase): string {
+  const word = store.lastWord
+    ? `${store.lastWord}${store.lastWordAt ? `, ${formatMoment(store.lastWordAt)}` : ""}`
+    : "нет";
+  return store.lastSyncAt ? `${word} · сверка ${formatMoment(store.lastSyncAt)}` : word;
+}
 
 /**
  * The words of a subscription in the admin panel (TASK-040; A-USR-02
@@ -66,6 +87,8 @@ const DETAIL_TEXT: Record<string, string> = {
   no_subscription: "подписки с этой покупкой нет",
   no_account: "провайдер не назвал аккаунт",
   replaced_previous: "прежняя подписка закончилась",
+  // TASK-041.
+  unknown_product: "продукт стора не входит в тариф",
 };
 
 /** «применено», «без изменений: событие старше уже применённого». */

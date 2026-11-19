@@ -6,7 +6,7 @@ import type {
   PaymentDeclineReason,
 } from "@adclub/contracts";
 import { formatMoment } from "../format";
-import { paymentsPath } from "../billing/billing-words";
+import { paymentsPath, storeSubscriptionsPath } from "../billing/billing-words";
 import { orderExtensionsPath, orderPath, routePaths, supplierPath } from "../router";
 import { amountText, DECLINE_REASON_TEXT } from "../suppliers/billing-words";
 import { ratingNumber, thresholdNumber } from "../suppliers/rating-words";
@@ -35,12 +35,15 @@ export const KIND_TITLES: Record<AdminSignalKind, string> = {
   assistant_budget_exhausted: "Дневной бюджет ИИ исчерпан: помощник недоступен",
   // TASK-070.
   views_orders_gap: "Просмотров много, заявок мало",
+  // TASK-041.
+  store_sync_stale: "Стор не отвечает",
 };
 
 /** The kinds in the order of importance of A-HOME. */
 export const KIND_ORDER: readonly AdminSignalKind[] = [
   "whatsapp_outage",
   "payment_system_down",
+  "store_sync_stale",
   "supplier_unreachable",
   "push_fallback_high",
   "assistant_budget_exhausted",
@@ -195,6 +198,24 @@ export function subjectText(signal: Pick<AdminSignal, "kind" | "payload">): stri
     case "billing_plan_missing":
     case "assistant_budget_exhausted":
       return payload.since ? `с ${formatMoment(payload.since)}` : "";
+    case "store_sync_stale":
+      return [
+        payload.storePlatform ? STORE_NAMES[payload.storePlatform] : null,
+        payload.storeMissing && payload.storeMissing.length > 0
+          ? `не настроен: ${payload.storeMissing.join(", ")}`
+          : payload.storeLastSuccessAt
+            ? `последний ответ ${formatMoment(payload.storeLastSuccessAt)}`
+            : "ни одного ответа",
+        payload.storeLastFailure ? `ошибка: ${payload.storeLastFailure}` : null,
+        payload.storeSubscriptions !== undefined
+          ? count(payload.storeSubscriptions, "подписка", "подписки", "подписок")
+          : null,
+        payload.windowHours !== undefined
+          ? `порог ${count(payload.windowHours, "час", "часа", "часов")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
     case "push_fallback_high":
       return [
         payload.fallbacks !== undefined && payload.criticalPushes !== undefined
@@ -265,7 +286,9 @@ export function subjectLink(
             ? routePaths.billingPlans
             : signal.kind === "assistant_budget_exhausted"
               ? routePaths.settings
-              : null;
+              : signal.kind === "store_sync_stale" && signal.payload?.storePlatform
+                ? storeSubscriptionsPath(signal.payload.storePlatform)
+                : null;
   }
 }
 
@@ -297,6 +320,14 @@ export const KIND_HINTS: Record<AdminSignalKind, string> = {
     "Участники клуба часто смотрят предложения поставщика, а заявок мало — возможно, клиентов уводят мимо платформы. Посмотрите просмотры и заявки по дням и свяжитесь с поставщиком; решение — за человеком, поставщику ничего не сообщается. Сигнал закроется сам, когда расхождение уйдёт.",
   push_fallback_high:
     "Большая доля важных уведомлений пользователям уходит резервом в WhatsApp: приложение не подтверждает push. Проверьте провайдера push и последнюю версию приложения. Сигнал закроется сам, когда доля снизится.",
+  store_sync_stale:
+    "Сервер давно не получал ответа от API стора, а подписки этого стора действуют. Доступ у людей не отнимается сразу: подписка без подтверждения действует ещё store_lag_tolerance_hours. Проверьте ключи стора в окружении сервера и состояние стора. Сигнал закроется сам при первом ответе стора.",
+};
+
+/** The stores by the platform of a purchase (TASK-041). */
+export const STORE_NAMES: Record<"ios" | "android", string> = {
+  ios: "App Store",
+  android: "Google Play",
 };
 
 /** Who acted: the administrator's name or number, or the server itself. */

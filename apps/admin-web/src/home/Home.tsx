@@ -29,6 +29,7 @@ const SIGNAL_KINDS = [
   // TASK-042: the payment provider's silence and the missing tariff (a failed payment
   // of a supplier has its own card below, item 6 of SCREENS 7.1).
   "payment_system_down",
+  "store_sync_stale",
   "billing_plan_missing",
   "supply_overdue",
   "visit_unresolved",
